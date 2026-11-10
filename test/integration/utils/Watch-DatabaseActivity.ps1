@@ -7,7 +7,7 @@
 
 .DESCRIPTION
     Phase 0 of the PostgreSQL tuning experiments (#2834,
-    engineering/plans/doing/POSTGRESQL_TUNING_EXPERIMENTS.md) asks, for each Run Profile step, for what share of the
+    engineering/plans/done/POSTGRESQL_TUNING_EXPERIMENTS.md) asks, for each Run Profile step, for what share of the
     step the database was busy and what it was waiting on. This script records the raw material; the step windows
     come from the run's own logs afterwards.
 

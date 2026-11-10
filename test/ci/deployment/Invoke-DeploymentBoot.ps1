@@ -460,6 +460,14 @@ try {
     }
     Write-Step "PostgreSQL drops a session whose client has gone within two minutes: $keepalives"
 
+    # And with JIT compilation off: JIM's queries finish in milliseconds, where compiling them costs more than it
+    # saves (#2834). The compose files are checked on every pull request; this covers the Podman pod as well.
+    $jit = Invoke-Sql 'SHOW jit;'
+    if ($jit -ne 'off') {
+        throw "PostgreSQL runs with jit = $jit, not off"
+    }
+    Write-Step 'PostgreSQL runs with JIT compilation off'
+
     # 6. The key backup and restore that Backup & Disaster Recovery gives work as written, with JIM stopped as the page
     # and the upgrade guide have it, and fetch no image. Until #1949 the Docker ones ran an image JIM does not ship,
     # which an air-gapped host cannot fetch; until #1954 the Podman backup wrote an empty archive rootless, and said

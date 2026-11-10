@@ -151,6 +151,16 @@ The bundled PostgreSQL drops a connection whose client has gone within two minut
 
 Without these settings, PostgreSQL holds such a connection open for about two hours, Linux's default. On Podman that happens at every stop of JIM, because the pod's network goes before JIM's services close their connections. With your own PostgreSQL server, set the same three settings in its `postgresql.conf` to have it do the same.
 
+### JIT Compilation Off {#jit}
+
+The bundled PostgreSQL runs with JIT compilation off (`jit=off`). JIT compiles a query to machine code before running it, which pays off only for queries that read large tables for seconds at a time. JIM's queries finish in milliseconds, so compiling them costs more than it saves: in JIM's tests with 500,000 users, synchronisations ran up to 13% faster with it off, and never slower.
+
+With your own PostgreSQL server, turn it off for JIM's database alone, replacing `jim` with the name in `JIM_DB_NAME` if yours differs, then restart JIM's services so that their connections pick it up:
+
+```sql
+ALTER DATABASE jim SET jit = off;
+```
+
 ---
 
 ## :material-shield-key-outline: SSO / Authentication

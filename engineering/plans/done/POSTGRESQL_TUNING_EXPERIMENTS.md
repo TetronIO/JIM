@@ -1,6 +1,7 @@
 # PostgreSQL Tuning Measured Against JIM's Own Workloads
 
-- **Status:** Doing (Phases 0 to 3 complete: results on #2834; Phase 4 next)
+- **Status:** Done
+- **Note:** Only `jit=off` earned a change; the installer's memory sizing and every other setting stay as they were. The capped-memory runs (see Ordering) are separate work.
 - **Issue:** [#2834](https://github.com/TetronIO/JIM/issues/2834)
 - **Related:**
   - [#2669](https://github.com/TetronIO/JIM/issues/2669), the leaver-step measurements whose span breakdowns show where synchronisation time goes.
@@ -111,7 +112,7 @@ Combine the settings that helped, check the combination is no worse than its bes
 - **Decision:** adopt `jit=off`; keep `max_wal_size` as it is (at most 1 to 2% once warm, 5% slower on the first large load after an install, and 48 GB more disk).
 - **Scale1m60kGroups run not done:** the only setting adopted changes how queries are compiled, not memory or I/O, so a larger template has nothing different to show. The capped-memory runs and the next #2669 runs at 1m will run with it.
 
-## Phase 4: act on the results
+## Phase 4: act on the results ✅
 
 - **Customer installs:** change the installer's sizing rules (`size_database` in `deploy/setup.sh`) and the fixed settings in `docker-compose.yml` and `deploy/podman/jim-database.yaml`, keeping the deployment-boot CI check in step.
 - **Integration runs:** align `docker-compose.override.yml` and the runner's per-template profiles with what customers get, so scale measurements describe the product.
@@ -119,6 +120,8 @@ Combine the settings that helped, check the combination is no worse than its bes
 - **Changelog:** an entry for any change to what installs set.
 
 If no setting helps beyond the spread, that is the result: the settings stay, and the evidence says where the time goes instead.
+
+**Result:** `jit=off` is set in `docker-compose.yml`, `deploy/podman/jim-database.yaml`, `docker-compose.override.yml` (so integration runs match) and the devcontainer's `postgres-tune.sh`. The compose file tests and the deployment-boot check assert it on both runtimes. `docs/administration/configuration.md` (JIT Compilation Off) tells administrators with their own PostgreSQL server how to do the same, and `engineering/DATABASE_GUIDE.md` records why. No memory setting changed, so the installer's sizing, the prerequisites page and the runner's per-template profiles stay as they are.
 
 ## Success Criteria
 

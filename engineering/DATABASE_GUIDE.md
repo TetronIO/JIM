@@ -43,9 +43,10 @@ max_worker_processes=16
 max_parallel_workers_per_gather=4
 max_parallel_workers=16
 max_parallel_maintenance_workers=4
+jit=off
 ```
 
-The same command line also sets `statement_timeout=300000` (5 minutes, to stop runaway queries), `tcp_keepalives_idle=60`, `tcp_keepalives_interval=10` and `tcp_keepalives_count=6` (so the server drops a connection whose client has gone within two minutes, #1980; see Restoring from Backup below), `log_min_duration_statement` from `JIM_DB_LOG_MIN_DURATION` (default 1000ms, slow-query logging), and the `logging_collector` / `jsonlog` settings that write structured JSON logs to the shared log volume for the Logs page. `shm_size` comes from `JIM_DB_SHM_SIZE` (default `1280mb`); the installer sets it to `shared_buffers` and a quarter more.
+JIT compilation is off (`jit=off`): JIM's queries finish in milliseconds, where compiling them costs more than it saves: at 500k objects JIT spent 23 s compiling across a run and made the Target Full Synchronisation 13% slower (#2834). The same command line also sets `statement_timeout=300000` (5 minutes, to stop runaway queries), `tcp_keepalives_idle=60`, `tcp_keepalives_interval=10` and `tcp_keepalives_count=6` (so the server drops a connection whose client has gone within two minutes, #1980; see Restoring from Backup below), `log_min_duration_statement` from `JIM_DB_LOG_MIN_DURATION` (default 1000ms, slow-query logging), and the `logging_collector` / `jsonlog` settings that write structured JSON logs to the shared log volume for the Logs page. `shm_size` comes from `JIM_DB_SHM_SIZE` (default `1280mb`); the installer sets it to `shared_buffers` and a quarter more.
 
 ---
 

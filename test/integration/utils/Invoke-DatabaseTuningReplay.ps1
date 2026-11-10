@@ -8,7 +8,7 @@
 
 .DESCRIPTION
     A full Scale500k25kGroups run takes over an hour, and its heaviest database work is the Source Full
-    Synchronisation (about 17 minutes). Phase 1 of engineering/plans/doing/POSTGRESQL_TUNING_EXPERIMENTS.md
+    Synchronisation (about 17 minutes). Phase 1 of engineering/plans/done/POSTGRESQL_TUNING_EXPERIMENTS.md
     replays just that work from a snapshot, so each setting costs about 20 minutes instead of 65.
 
     -Action Snapshot runs the -PrepareRunProfile Run Profiles (by default both directories' scoped Full
