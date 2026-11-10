@@ -24,13 +24,17 @@ public class DriftHeldReferenceAnswerDatabaseTests
 {
     private string _connectionString = null!;
 
-    private JimDbContext NewContext()
+    private JimDbContext NewContext() => NewContext(options => options.UseNpgsql(_connectionString));
+
+    private static JimDbContext NewContext(NpgsqlConnection connection) => NewContext(options => options.UseNpgsql(connection));
+
+    private static JimDbContext NewContext(Action<DbContextOptionsBuilder<JimDbContext>> useNpgsql)
     {
-        var options = new DbContextOptionsBuilder<JimDbContext>()
-            .UseNpgsql(_connectionString)
+        var builder = new DbContextOptionsBuilder<JimDbContext>();
+        useNpgsql(builder);
+        return new JimDbContext(builder
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-        return new JimDbContext(options);
+            .Options);
     }
 
     [OneTimeSetUp]
@@ -151,6 +155,61 @@ public class DriftHeldReferenceAnswerDatabaseTests
                 "The expected values reach the plan as a constant array, which PostgreSQL hashes, not as a parameter it would scan per member");
             Assert.That(plan, Does.Not.Contain("Nested Loop Anti Join"), "No member is compared with the expected values one by one");
             Assert.That(plan, Does.Contain("SetOp"), "The expected values no member resolves to are a set operation");
+        }
+    }
+
+    /// <summary>
+    /// #2849: every question runs with JIT off, for the batch's own transaction and no longer, and turning it off raises
+    /// no warning in the database log (a <c>SET LOCAL</c> outside a transaction block logs one for every page). The value
+    /// the statement that turns it off returns is not read as the first question's answer.
+    /// </summary>
+    [Test]
+    public async Task GetDriftHeldReferenceAnswersAsync_Batch_RunsWithJitOffForItsOwnTransactionWithoutAWarningAsync()
+    {
+        var seed = await DriftComparisonSeed.CreateAsync(NewContext, _connectionString);
+        var users = Enumerable.Range(0, 6).Select(_ => (CsoId: Guid.NewGuid(), MvoId: (Guid?)Guid.NewGuid())).ToList();
+        await seed.AddUsersAsync(users);
+        var groups = Enumerable.Range(0, 3).Select(_ => (CsoId: Guid.NewGuid(), MvoId: (Guid?)Guid.NewGuid(), Status: ConnectedSystemObjectStatus.Normal)).ToList();
+        await seed.AddGroupsAsync(groups);
+        for (var g = 0; g < groups.Count; g++)
+            await seed.AddMemberRowsAsync(groups[g].CsoId, users.Skip(g).Take(3)
+                .Select(u => new DriftComparisonSeed.MemberRow(Guid.NewGuid(), ReferenceValueId: u.CsoId, UnresolvedReferenceValue: $"uid={u.CsoId:N}")).ToList());
+
+        // Each group is expected to hold the first three users: the first agrees, the others disagree both ways.
+        var questions = groups.Select(group => new DriftHeldReferenceQuestion(group.CsoId, seed.MemberAttributeId, 99,
+            users.Take(3).Select(u => u.MvoId!.Value).ToList())).ToList();
+
+        await using var recorder = await StatementPlanRecorder.OpenAsync(_connectionString);
+        Assert.That(await recorder.ShowAsync("jit"), Is.EqualTo("on"), "precondition: JIT is on outside the batch, or the test proves nothing");
+
+        List<DriftHeldReferenceAnswer> answers;
+        await using (var ctx = NewContext(recorder.Connection))
+            answers = await new PostgresDataRepository(ctx).Sync.GetDriftHeldReferenceAnswersAsync(questions);
+
+        var jitAfterwards = await recorder.ShowAsync("jit");
+        var expectedAnswers = await ComputeFromTheValuesAsync(questions);
+        var plans = recorder.PlansOf("WITH held AS MATERIALIZED");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recorder.Notices.Where(n => n.InvariantSeverity == "WARNING").Select(n => n.MessageText), Is.Empty,
+                "turning JIT off raises no warning");
+            Assert.That(plans, Has.Count.EqualTo(questions.Count), "every question's plan is recorded");
+            Assert.That(plans, Has.All.Contains("jit = 'off'"), "every question runs with JIT off");
+            Assert.That(jitAfterwards, Is.EqualTo("on"), "JIT is off for the batch's transaction only");
+
+            Assert.That(answers, Has.Count.EqualTo(questions.Count));
+            for (var i = 0; i < questions.Count; i++)
+            {
+                var (actual, expected) = (answers[i], expectedAnswers[i]);
+                Assert.That(actual.Question, Is.SameAs(questions[i]), $"answer {i} is to question {i}");
+                Assert.That(actual.HeldNotExpected, Is.EqualTo(expected.HeldNotExpected), $"group {i}: held but not expected");
+                Assert.That(actual.ExpectedNotHeld, Is.EquivalentTo(expected.ExpectedNotHeld), $"group {i}: expected but not held");
+                Assert.That(actual.HeldValueCount, Is.EqualTo(expected.HeldValueCount), $"group {i}: values held");
+                Assert.That(actual.HoldsReference, Is.EqualTo(expected.HoldsReference), $"group {i}: holds a reference");
+            }
+
+            Assert.That(answers[0].HeldNotExpected, Is.Empty, "the first group agrees");
+            Assert.That(answers[2].HeldNotExpected, Has.Count.EqualTo(2), "the last group holds two users it should not");
         }
     }
 

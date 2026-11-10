@@ -648,7 +648,8 @@ public partial class SyncRepository
         // 3. Join the temp table to the target side for the resolutions, with the same case-exact rule.
         // Steps 1 and 3 run with JIT off: their estimates are the misestimates above, and on the inflated ones the
         // planner compiles every expression to save time it will not spend (125 ms of compilation to read three rows on
-        // a 3.3 million value test table). SET LOCAL holds for the command's own implicit transaction and no longer.
+        // a 3.3 million value test table). Each of the two batches turns it off first (TransactionJit), which holds for
+        // the batch's own implicit transaction and no longer, so the UPDATEs below run with it on again.
         //
         // The resolutions are applied by primary key in bounded batches, so each statement stays well inside the bulk
         // command timeout however large the backlog (294,000 outstanding values were recorded when the LOWER() indexes
@@ -683,9 +684,8 @@ public partial class SyncRepository
         {
             // The id test is what makes a value outstanding, so this only ever fills in a missing id and never replaces
             // one. Every value belongs to a CSO, so the scalar subquery always returns exactly one row.
-            outstandingCount = await ExecuteReferenceFixupScalarAsync(npgsqlConn, connectedSystemId, $"""
+            outstandingCount = await ExecuteReferenceFixupCountWithJitOffAsync(npgsqlConn, connectedSystemId, $"""
                 {dropTempTablesSql}
-                SET LOCAL jit = off;
                 CREATE TEMP TABLE "{outstandingTableName}" AS
                 SELECT av."Id" AS av_id, av."UnresolvedReferenceValue" AS reference_value, LOWER(av."UnresolvedReferenceValue") AS lower_value
                 FROM "ConnectedSystemObjectAttributeValues" av
@@ -699,10 +699,9 @@ public partial class SyncRepository
 
             if (outstandingCount > 0)
             {
-                candidateCount = await ExecuteReferenceFixupScalarAsync(npgsqlConn, connectedSystemId, $"""
+                candidateCount = await ExecuteReferenceFixupCountWithJitOffAsync(npgsqlConn, connectedSystemId, $"""
                     CREATE INDEX ON "{outstandingTableName}" (lower_value);
                     ANALYZE "{outstandingTableName}";
-                    SET LOCAL jit = off;
                     CREATE TEMP TABLE "{resolutionsTableName}" AS
                     SELECT row_number() OVER () AS rn, s.av_id, s.target_id
                     FROM (
@@ -795,6 +794,28 @@ public partial class SyncRepository
     {
         await using var command = NewReferenceFixupCommand(connection, connectedSystemId, sql);
         return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    /// <summary>
+    /// As <see cref="ExecuteReferenceFixupScalarAsync"/>, with JIT off for the batch's own implicit transaction
+    /// (<see cref="TransactionJit"/>): the statement turning it off is sent first, and its result is stepped past, so
+    /// the count is the one result after it with columns, the batch's final <c>SELECT COUNT(*)</c>.
+    /// </summary>
+    private static async Task<long> ExecuteReferenceFixupCountWithJitOffAsync(NpgsqlConnection connection, int connectedSystemId, string sql)
+    {
+        await using var command = NewReferenceFixupCommand(connection, connectedSystemId, $"{TransactionJit.DisableSql};\n{sql}");
+        await using var reader = await command.ExecuteReaderAsync();
+        if (await TransactionJit.SkipDisableResultAsync(reader))
+        {
+            do
+            {
+                if (reader.FieldCount > 0 && await reader.ReadAsync())
+                    return reader.GetInt64(0);
+            }
+            while (await reader.NextResultAsync());
+        }
+
+        throw new InvalidOperationException("The reference fix-up's batch returned no count.");
     }
 
     private static NpgsqlCommand NewReferenceFixupCommand(NpgsqlConnection connection, int connectedSystemId, string sql)
