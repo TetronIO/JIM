@@ -122,17 +122,20 @@ answers:
   - { from: day, to: expired, label: "yes" }
 ```
 
-Each queued change stands in one of these states:
+Each change JIM queues for Exchange stands in one of these states:
 
 | State | What it means | What to do |
 |---|---|---|
 | Queued | Waiting for its first attempt | Nothing |
 | Delivering | Exchange is applying it now | Nothing |
+| Delivered | Exchange made the change | Nothing |
 | Retrying | A failure that may clear by itself; JIM tries again at the next attempt time | Nothing, or **Retry** once the cause is fixed |
 | Parked | JIM has stopped trying: Exchange refused it, the account lacks the role, or failures went on for 24 hours | Fix the cause, then **Retry** |
 | Held | Its Connected System does not manage Exchange recipients | Tick **Manage Exchange recipients** |
 | Refused | JIM refused the declaration before asking Exchange, such as a type that does not fit the object | Change what is declared |
 | Not made | It would change an existing recipient's type | Change what is declared, or convert the recipient in Exchange |
+| Replaced | A newer declaration for the account took its place | Nothing |
+| Withdrawn | Nobody is owed it any more, so JIM never asked Exchange | Nothing |
 
 A change cannot be cancelled. To stop or correct one, change what is declared (the source data or the Attribute Flow), and the newer state replaces it. A change nobody is owed any more, because its account or its Synchronisation Rule was removed or the declaration moved on, is withdrawn without asking Exchange. A failed change never rolls back or hides the directory write: the account stays as the export wrote it, and JIM treats the recipient as made only once an import reads it back. Run an import after the export, as you would to confirm any export.
 
