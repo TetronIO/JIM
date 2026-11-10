@@ -25,6 +25,7 @@
         "ExchangeLab Missing"; for everyone else nothing, so Exchange chooses.
       - Exchange Alias: first and last name, lower case, so a surname change is an alias change.
       - Exchange External Address: first.last@partner.example, for a mail user only.
+      - mail: a mail user's external address, which is what Exchange writes there; everyone else's HR address.
       - userAccountControl: Scenario 001's flow, extended so shared, room and equipment mailboxes are written
         disabled, which Exchange requires and the LDAP Connector enforces before creating the account.
 
@@ -185,6 +186,19 @@ try {
         $flowMappingIds[$name] = $mapping.id
         Write-Host "  ✓ $name" -ForegroundColor Green
     }
+
+    # A mail user's mail is its external address: Exchange writes that there when it mail-enables the account, so a
+    # mail flow carrying the HR address would fight Exchange (the confirming import reads back the external address).
+    # Setup-Scenario-001.ps1 flows Email to mail as an attribute mapping, which cannot become an expression in place,
+    # so it is replaced. Everyone else keeps the HR address, which is what Exchange's address policy gives a mailbox.
+    $mailAttribute = @($userType.attributes) | Where-Object { $_.name -eq 'mail' } | Select-Object -First 1
+    $mailMapping = @(Get-JIMSyncRuleMapping -SyncRuleId $exportRule.id) |
+        Where-Object { $_.targetConnectedSystemAttributeId -eq $mailAttribute.id } | Select-Object -First 1
+    if (-not $mailMapping) { throw "Could not find the mail Attribute Flow Setup-Scenario-001.ps1 creates." }
+    Remove-JIMSyncRuleMapping -SyncRuleId $exportRule.id -MappingId $mailMapping.id -Force | Out-Null
+    $mailExpression = 'IIF(Eq(mv["Job Title"], "MailUser"), ' + $flows["Exchange External Address"] + ', mv["Email"])'
+    New-JIMSyncRuleMapping -SyncRuleId $exportRule.id -TargetConnectedSystemAttributeId $mailAttribute.id -Expression $mailExpression | Out-Null
+    Write-Host "  ✓ mail carries a mail user's external address, and everyone else's HR address" -ForegroundColor Green
 
     # Resource mailboxes live on disabled accounts. Scenario 001 flows userAccountControl enabled for everyone not
     # Archived, so for those three types the flow writes it disabled instead; the Connector refuses to create one

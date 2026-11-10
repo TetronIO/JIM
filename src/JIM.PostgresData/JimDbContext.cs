@@ -1133,7 +1133,14 @@ public class JimDbContext : DbContext
             .HasFilter(@"""ConnectedSystemObjectId"" IS NOT NULL")
             .HasDatabaseName("IX_PendingExports_ConnectedSystemObjectId_Unique");
 
-        // MetaverseObjectAttributeValue: index for attribute lookups by value
+        // MetaverseObjectAttributeValue: index for attribute lookups by value. Since #2864 it also serves every text lookup
+        // (the sign-in identifier, Object Matching on text), there being no single-column StringValue index. Unlike its
+        // Connected System Object twin it is NOT partial on StringValue IS NOT NULL, and must stay whole (#2868): it is
+        // the only index led by AttributeId that holds every value row, and readers find values by the attribute alone.
+        // The impact checks before a Metaverse Attribute is deleted, unassigned or retyped count the objects holding a
+        // value of it of any type (WHERE AttributeId = @id), and so does the foreign-key cascade when one is deleted. A
+        // partial index cannot serve those, and each would read the whole table. Plan coverage:
+        // MetaverseObjectAttributeValuePartialIndexDatabaseTests.
         modelBuilder.Entity<MetaverseObjectAttributeValue>()
             .HasIndex(moav => new { moav.AttributeId, moav.StringValue })
             .HasDatabaseName("IX_MetaverseObjectAttributeValues_AttributeId_StringValue");
@@ -1177,9 +1184,31 @@ public class JimDbContext : DbContext
             .HasIndex("ConnectedSystemObjectId", "AttributeId")
             .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId");
 
-        // Partial index on UnresolvedReferenceValue — only indexes rows where the value is set.
-        // Keeps the index small and allows the cross-batch reference fixup UPDATE to locate
-        // unresolved rows efficiently without scanning the entire table.
+        // The referenced object's foreign key, partial (ReferenceValueId IS NOT NULL) (#2868). Only a reference value has
+        // an id, so a whole index held a NULL entry for every other value row, which every import COPY and optimistic
+        // export apply paid to maintain. Every reader compares the column with = or = ANY, or joins on it: reference
+        // recall's and reconciliation's probes by id, synchronisation's question of which candidates name an object on
+        // the page, the clean-up when a referenced object is deleted, and PostgreSQL's foreign-key check on that delete
+        // (WHERE $1 = col), run once per object deleted. Each implies IS NOT NULL, so the planner still proves the partial
+        // index applies; the readers asking for ReferenceValueId IS NULL ask for outstanding references, which the two
+        // partial indexes on outstanding values below serve. Plan coverage:
+        // ConnectedSystemObjectAttributeValueReferenceIndexDatabaseTests.
+        modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()
+            .HasIndex(av => av.ReferenceValueId)
+            .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_ReferenceValueId")
+            .HasFilter("\"ReferenceValueId\" IS NOT NULL");
+
+        // The reference text, over resolved and unresolved values alike. A value keeps the text it was imported as once it
+        // resolves, so this holds a DN per group membership ever imported, and it keeps the resolved values on purpose
+        // (#2868): reconciliation's probe looks a staged member up by its exact DN through it (ReconciliationProbeValuesSql,
+        // the exact arm, asked for case-exact reference attributes), and a change naming no object matches a resolved row
+        // by the DN it keeps (SyncEngine.ReferenceRowMatches). Narrowed to outstanding values, that arm would read every
+        // member of the group instead. The outstanding-only readers (the cross-batch fix-up, the Connected System page's
+        // counts) do not use it: IX_..._CsoId_Unresolved below, and the raw-SQL IX_CsoAttrVal_Lower_UnresolvedRef
+        // (migration 20260322150822), hold exactly those values. Its cost, measured by
+        // ConnectedSystemObjectAttributeValueCopyBenchmarkDatabaseTests: about 5% of an import COPY's time and 16% of its
+        // write-ahead log. The database stores it as IX_ConnectedSystemObjectAttributeValues_UnresolvedReferenceValu, cut
+        // to PostgreSQL's 63-character limit.
         modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()
             .HasIndex(av => av.UnresolvedReferenceValue)
             .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_UnresolvedReferenceValue")

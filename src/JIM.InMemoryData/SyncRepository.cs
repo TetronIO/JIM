@@ -3119,6 +3119,21 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(released);
     }
 
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithQueuedExchangeHoldsAsync(int connectedSystemId)
+    {
+        var queued = _pendingExchangeChanges.Values
+            .Where(c => c.ConnectedSystemObjectId.HasValue)
+            .Select(c => c.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+        var held = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.ConnectedSystemObjectId.HasValue
+                         && queued.Contains(pe.ConnectedSystemObjectId.Value)
+                         && pe.AttributeValueChanges.Any(c => c.AwaitsExchange && c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation))
+            .Select(pe => pe.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+        return Task.FromResult(held);
+    }
+
     public async Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId,
         DateTime exportsInFlightSince)
     {

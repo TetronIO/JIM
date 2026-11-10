@@ -118,6 +118,83 @@ public static class ParallelBatchWriter
     }
 
     /// <summary>
+    /// The number of rows a call must write before the bulk writers spread it across parallel connections. Rows, not
+    /// objects: the cost of a bulk write is in its rows (each one COPY'd and checked against its foreign keys), and a
+    /// page of 500 groups can carry 650,000 membership values. Fixed, not scaled by the core count: the old gate,
+    /// <c>objects &gt;= parallelism * 50</c>, meant the larger the host the less it wrote in parallel, and a
+    /// 500-object synchronisation page never went parallel on 11 or more cores (#2872).
+    /// </summary>
+    /// <remarks>
+    /// Set from <c>ParallelBulkWriteBenchmarkDatabaseTests</c> (Metaverse Object create, values carrying their contributing
+    /// Connected System and Synchronisation Rule as synchronisation's do; median of three, single connection against 4
+    /// connections, on a 4-core host shared with PostgreSQL, two runs). At 2,500 rows parallel gained nothing measurable
+    /// (1.03x to 1.10x). At 5,500 to 6,500 rows it varied between runs from no gain to 1.6x, a saving of 50 to 90 ms at
+    /// best. From 21,500 rows it gained consistently: 1.33x to 1.45x at 21,500 rows, 1.5x to 1.8x at 51,500, 1.4x to 1.7x
+    /// at 151,500, and 1.4x (21 s to 15 s) for a page of 500 groups carrying 650,000 members. The other two writers were
+    /// measured at the sizes imports and synchronisation give them (seven runs each, the first three under heavy load from
+    /// other work on the host), since under the old gate a Full Import's batches of 2,000 objects went parallel on a
+    /// 16-core host and now do not. Connected System Object create, 2,000 objects of 6 values (14,000 rows): 1.00x to
+    /// 1.19x, never consistently ahead, at best 60 ms of a 400 ms batch; 1,000 of 6 (7,000 rows): 0.75x to 1.52x; 2,000
+    /// of 20 (42,000 rows): 1.35x to 1.76x in every run. Execution item flush, an import's 2,000 items with an outcome
+    /// each (4,000 rows): 0.90x to 1.31x for the items and outcomes, and 0.95x to 1.09x once the change records written
+    /// beside them are counted; a synchronisation page's 500 items with three outcomes each (2,000 rows): 0.52x to 1.24x,
+    /// usually slower. Neither has a size below this one at which parallel reliably pays, so all three writers share
+    /// it. The threshold sits where the
+    /// gain becomes reliable rather than where it first appears, because a parallel write commits in phases and on
+    /// several connections, and so is held to its callers' expectations by removing what it wrote when it fails (see
+    /// <c>SyncRepository.RemoveRowsOfFailedParallelWriteAsync</c>) rather than by one transaction: below this size the
+    /// few milliseconds it might save do not buy that.
+    /// </remarks>
+    public const int MinimumRowsForParallelWrite = 20_000;
+
+    /// <summary>
+    /// Whether a bulk write of <paramref name="rowCount"/> rows goes across parallel connections (#2872). It does only
+    /// when it is large enough to gain from it, there is more than one connection to use, the repository has a
+    /// connection string to open them with, and the caller holds no transaction on its own context: writes on
+    /// connections of their own cannot join that transaction, so they would commit whatever the caller later rolls back
+    /// and could wait forever on rows the caller has written and not yet committed.
+    /// </summary>
+    /// <param name="rowCount">Every row the call writes: objects plus their attribute values, or execution items plus
+    /// their outcomes.</param>
+    /// <param name="parallelism">The connections available (<see cref="GetWriteParallelism"/>).</param>
+    /// <param name="connectionString">The connection string parallel connections are opened with; null when the
+    /// repository could not build one.</param>
+    /// <param name="callerHoldsTransaction">Whether the caller's context has a transaction open.</param>
+    /// <param name="rowThreshold">The threshold; <see cref="MinimumRowsForParallelWrite"/> unless a test or benchmark
+    /// needs another.</param>
+    public static bool ShouldWriteInParallel(
+        int rowCount,
+        int parallelism,
+        string? connectionString,
+        bool callerHoldsTransaction,
+        int rowThreshold = MinimumRowsForParallelWrite)
+        => parallelism > 1
+           && connectionString != null
+           && !callerHoldsTransaction
+           && rowCount >= rowThreshold;
+
+    /// <summary>
+    /// Flattens each owner's values into (owner id, value) rows, owner by owner and each owner's values in order, so the
+    /// rows can be partitioned evenly across connections by <see cref="Partition{T}"/>. Partitioning the owners instead
+    /// puts every value of one owner on one connection, which for a large group is most of the page (#2872).
+    /// </summary>
+    public static List<(Guid OwnerId, TValue Value)> FlattenValueRows<TOwner, TValue>(
+        IEnumerable<TOwner> owners,
+        Func<TOwner, Guid> ownerId,
+        Func<TOwner, IEnumerable<TValue>> valuesOf)
+    {
+        var rows = new List<(Guid OwnerId, TValue Value)>();
+        foreach (var owner in owners)
+        {
+            var id = ownerId(owner);
+            foreach (var value in valuesOf(owner))
+                rows.Add((id, value));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
     /// Gets the configured write parallelism from the JIM_WRITE_PARALLELISM environment variable.
     /// Defaults to <see cref="Environment.ProcessorCount"/> (minimum 2).
     /// </summary>

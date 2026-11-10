@@ -42,6 +42,13 @@ public class SyncImportTaskProcessor
     private readonly string? _initiatedByName;
     private readonly JIM.Models.Activities.Activity _activity;
     private readonly List<ActivityRunProfileExecutionItem> _activityRunProfileExecutionItems;
+
+    // The holds standing when the Connector began reading (#2021, #2039): the objects with a change awaiting Exchange still
+    // on the Exchange queue, and the Metaverse Objects still owed an Initial Password. A delivery made while the import
+    // runs removes its row after the import may already have read the object, so what the import shows can predate it;
+    // anything held at the start stays held until the next import. Empty until RecordHoldsStandingAtImportStartAsync runs.
+    private IReadOnlySet<Guid> _exchangeHoldsQueuedAtImportStart = new HashSet<Guid>();
+    private IReadOnlySet<Guid> _metaverseObjectsOwedPasswordAtImportStart = new HashSet<Guid>();
     private readonly IDbContextFactory<JIM.PostgresData.JimDbContext>? _dbContextFactory;
 
     /// <summary>
@@ -526,6 +533,8 @@ public class SyncImportTaskProcessor
         // while it may record what it reached. Each way out below that drops watermarkToRecord says why here; the first
         // reason found is the one kept.
         string? reasonToRecordNoWatermark = null;
+
+        await RecordHoldsStandingAtImportStartAsync();
 
         // The fetching step is entered by each branch below, once the work it names is about to
         // start: a call-based import connects first, and entering the later step here would close
@@ -7072,6 +7081,10 @@ public class SyncImportTaskProcessor
             ? new HashSet<Guid>()
             : await _syncRepo.GetMetaverseObjectIdsOwedPasswordAsync(_connectedSystem.Id, metaverseObjectIds);
 
+        // Still owed when the import began reading: delivered since, so the values JIM holds may predate it. The next
+        // import judges it.
+        owed.UnionWith(_metaverseObjectsOwedPasswordAtImportStart);
+
         // Only the objects with nothing owed are loaded and judged; a change still owed a password stays exactly as it is,
         // which is what judging it would do, so the ordinary case loads nothing more.
         var metaverseObjectIdByConnectedSystemObjectId = unreconciled
@@ -7135,6 +7148,10 @@ public class SyncImportTaskProcessor
 
         var reconciledIds = reconciledConnectedSystemObjects.Select(cso => cso.Id).ToHashSet();
         released.ExceptWith(reconciledIds);
+
+        // Still queued when the import began reading: delivered since, so the values JIM holds may predate it. The next
+        // import judges it.
+        released.ExceptWith(_exchangeHoldsQueuedAtImportStart);
         if (released.Count == 0)
             return;
 
@@ -7190,6 +7207,35 @@ public class SyncImportTaskProcessor
     }
 
     /// <summary>
+    /// Records the holds standing before the Connector reads anything (#2021, #2039): which objects have a change awaiting
+    /// Exchange still on the Exchange queue, and which Metaverse Objects are still owed an Initial Password. The lanes run
+    /// alongside the import, so a delivery can land after the import has read an object and before reconciliation asks
+    /// whether it is still owed; judging the change then would compare it with values read before the delivery (the AD
+    /// lab saw a shared mailbox reported unconfirmed this way). Reconciliation and the after-import judges keep holding
+    /// anything held at this point, and the next import judges it against what the delivery wrote. Two set-based reads,
+    /// each answered from a partial index on its flag, so a Connected System with nothing held pays only those.
+    /// </summary>
+    private async Task RecordHoldsStandingAtImportStartAsync()
+    {
+        _exchangeHoldsQueuedAtImportStart = await _syncRepo.GetConnectedSystemObjectIdsWithQueuedExchangeHoldsAsync(_connectedSystem.Id);
+
+        var passwordHolds = await _syncRepo.GetInitialPasswordHoldSummariesAsync(_connectedSystem.Id);
+        var heldMetaverseObjectIds = passwordHolds
+            .Where(hold => hold.MetaverseObjectId.HasValue)
+            .Select(hold => hold.MetaverseObjectId!.Value)
+            .Distinct()
+            .ToList();
+        _metaverseObjectsOwedPasswordAtImportStart = heldMetaverseObjectIds.Count == 0
+            ? new HashSet<Guid>()
+            : await _syncRepo.GetMetaverseObjectIdsOwedPasswordAsync(_connectedSystem.Id, heldMetaverseObjectIds);
+
+        if (_exchangeHoldsQueuedAtImportStart.Count > 0 || _metaverseObjectsOwedPasswordAtImportStart.Count > 0)
+            Log.Debug("RecordHoldsStandingAtImportStartAsync: Connected System {ConnectedSystemId} starts its import with {ExchangeHolds} object(s) " +
+                "holding a change Exchange still owes and {PasswordHolds} Metaverse Object(s) still owed an Initial Password; they stay held this import",
+                _connectedSystem.Id, _exchangeHoldsQueuedAtImportStart.Count, _metaverseObjectsOwedPasswordAtImportStart.Count);
+    }
+
+    /// <summary>
     /// The objects among this page's that still have a change on the Exchange queue (#2021), for the engine to hold or
     /// judge a connector-defined change awaiting Exchange. Queries only when the page holds such a change, so a page
     /// (and a Connected System) with none never pays for the lookup; returns null then, which the engine never reads
@@ -7207,7 +7253,10 @@ public class SyncImportTaskProcessor
         if (csoIdsWithAFlaggedChange.Count == 0)
             return null;
 
-        return await _syncRepo.GetConnectedSystemObjectIdsWithExchangeChangeAsync(_connectedSystem.Id, csoIdsWithAFlaggedChange);
+        // Queued now, or queued when the import began reading: a change delivered since may postdate what was read.
+        var queued = await _syncRepo.GetConnectedSystemObjectIdsWithExchangeChangeAsync(_connectedSystem.Id, csoIdsWithAFlaggedChange);
+        queued.UnionWith(_exchangeHoldsQueuedAtImportStart);
+        return queued;
     }
 
     /// <summary>
@@ -7236,6 +7285,9 @@ public class SyncImportTaskProcessor
         if (metaverseObjectIds.Count == 0)
             return new HashSet<Guid>();
 
-        return await _syncRepo.GetMetaverseObjectIdsOwedPasswordAsync(_connectedSystem.Id, metaverseObjectIds);
+        // Owed now, or owed when the import began reading: a password delivered since may postdate what was read.
+        var owed = await _syncRepo.GetMetaverseObjectIdsOwedPasswordAsync(_connectedSystem.Id, metaverseObjectIds);
+        owed.UnionWith(_metaverseObjectsOwedPasswordAtImportStart);
+        return owed;
     }
 }

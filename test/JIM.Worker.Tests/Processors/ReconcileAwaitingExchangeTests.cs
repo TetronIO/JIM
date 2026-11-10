@@ -140,6 +140,65 @@ public class ReconcileAwaitingExchangeTests
             "reconciliation has already judged what this import returned");
     }
 
+    [Test]
+    public async Task ReconcilePendingExports_ChangeQueuedWhenTheImportStartedAndDeliveredSince_StillHoldsItAsync()
+    {
+        // The race the AD lab found (Scenario 034): Exchange delivered the change after the import read the object, so
+        // the import shows the old values, but before reconciliation asked the queue, which no longer has it. What the
+        // import read predates Exchange acting, so the change is held for the next import, not judged against it.
+        var fixture = BuildFixture(awaitsExchange: true, importedRecipientType: ExchangeRecipientTypes.None);
+        await fixture.Repository.StageExchangeChangesAsync([Queued(fixture.Cso, PendingExchangeChangeStatus.Pending)]);
+        await InvokeRecordHoldsAtImportStartAsync(fixture);
+        await DeliverEveryQueuedChangeAsync(fixture.Repository);
+
+        await InvokeReconcileAsync(fixture);
+
+        var change = fixture.Repository.PendingExports[fixture.PendingExportId].AttributeValueChanges.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(fixture.Repository.PendingExchangeChanges, Is.Empty, "the fixture delivered the change mid-import");
+            Assert.That(change.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+            Assert.That(change.AwaitsExchange, Is.True);
+            Assert.That(ExecutionItems(fixture.Processor), Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task JudgeUnreconciledExchangeHolds_ChangeQueuedWhenTheImportStartedAndDeliveredSince_LeavesItAsync()
+    {
+        var fixture = BuildFixture(awaitsExchange: true, importedRecipientType: ExchangeRecipientTypes.None);
+        await fixture.Repository.StageExchangeChangesAsync([Queued(fixture.Cso, PendingExchangeChangeStatus.Pending)]);
+        await InvokeRecordHoldsAtImportStartAsync(fixture);
+        await DeliverEveryQueuedChangeAsync(fixture.Repository);
+
+        await InvokeJudgeUnreconciledAsync(fixture);
+
+        var change = fixture.Repository.PendingExports[fixture.PendingExportId].AttributeValueChanges.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+            Assert.That(change.AwaitsExchange, Is.True, "the next import judges it against what Exchange stamped");
+        }
+    }
+
+    private static async Task DeliverEveryQueuedChangeAsync(SyncRepository repository)
+    {
+        // As the Exchange delivery lane does: claim, act, delete.
+        const string lane = "exchange-lane";
+        var claimed = await repository.ClaimDueExchangeChangesAsync(ConnectedSystemId, lane, DateTime.UtcNow.AddMinutes(1), TimeSpan.FromMinutes(5), 100);
+        await repository.DeleteExchangeChangesAsync(claimed.Select(c => c.Id), lane);
+    }
+
+    private static async Task InvokeRecordHoldsAtImportStartAsync(Fixture fixture)
+    {
+        const string methodName = "RecordHoldsStandingAtImportStartAsync";
+        var method = typeof(SyncImportTaskProcessor).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException(
+                $"SyncImportTaskProcessor.{methodName} was not found. Update this fixture to invoke the current production method.");
+
+        await (Task)method.Invoke(fixture.Processor, [])!;
+    }
+
     private static PendingExchangeChange Queued(ConnectedSystemObject cso, PendingExchangeChangeStatus status) => new()
     {
         Id = Guid.NewGuid(),

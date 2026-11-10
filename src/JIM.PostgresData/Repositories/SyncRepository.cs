@@ -37,12 +37,91 @@ public partial class SyncRepository : ISyncRepository
     private readonly JimDbContext _context;
 
     /// <summary>
-    /// Connection string for parallel writes via independent NpgsqlConnection instances.
-    /// Built directly from environment variables rather than from the EF DbContext, because
-    /// <c>GetConnectionString()</c> can return null when the context is created via
-    /// <c>DbContextFactory</c> with <c>DbContextOptions</c>.
+    /// The connection string parallel writes open their own <see cref="NpgsqlConnection"/>s with. Built from the
+    /// environment rather than from the EF DbContext, because <c>GetConnectionString()</c> can return null when the
+    /// context is created via <c>DbContextFactory</c> with <c>DbContextOptions</c>; null when the environment cannot
+    /// supply one, which keeps every write on the context's own connection. A test or benchmark points it at its own
+    /// database, whose port the environment cannot carry.
     /// </summary>
-    private readonly string? _connectionStringForParallelWrites;
+    internal string? ConnectionStringForParallelWrites { get; set; }
+
+    /// <summary>
+    /// The connections a parallel write uses; <see cref="ParallelBatchWriter.GetWriteParallelism"/> unless a test or
+    /// benchmark sets it.
+    /// </summary>
+    internal int? WriteParallelismOverride { get; set; }
+
+    /// <summary>
+    /// The rows a call must write before it goes parallel (#2872); <see cref="ParallelBatchWriter.MinimumRowsForParallelWrite"/>
+    /// unless a test or benchmark sets it.
+    /// </summary>
+    internal int ParallelWriteRowThreshold { get; set; } = ParallelBatchWriter.MinimumRowsForParallelWrite;
+
+    private int WriteParallelism => WriteParallelismOverride ?? ParallelBatchWriter.GetWriteParallelism();
+
+    /// <summary>
+    /// Whether a bulk write of <paramref name="rowCount"/> rows goes across parallel connections (#2872); see
+    /// <see cref="ParallelBatchWriter.ShouldWriteInParallel"/>.
+    /// </summary>
+    internal bool ShouldWriteInParallel(int rowCount)
+        => ParallelBatchWriter.ShouldWriteInParallel(rowCount, WriteParallelism, ConnectionStringForParallelWrites,
+            callerHoldsTransaction: _context.Database.CurrentTransaction != null, ParallelWriteRowThreshold);
+
+    /// <summary>
+    /// Rows of one table that a failed parallel write committed and must remove (#2872), found by the given key column:
+    /// the table's own <c>Id</c>, or the column naming the object a value row belongs to.
+    /// </summary>
+    /// <param name="Table">The table, always a name fixed in code, never anything a caller supplies.</param>
+    /// <param name="KeyColumn">The column matched against <paramref name="Ids"/>, likewise fixed in code.</param>
+    /// <param name="Ids">The keys of the rows the failed write committed.</param>
+    private sealed record ParallelWriteRemoval(string Table, string KeyColumn, Guid[] Ids);
+
+    /// <summary>
+    /// Removes what a failed parallel write committed before it failed, so that the caller, which is about to receive
+    /// the failure, finds nothing of the write: what the single-connection path's rollback leaves (#2872). A parallel
+    /// write commits on each of its connections separately, and in phases, because rows on one connection must be
+    /// committed before another connection's rows can reference them; a failure part-way is otherwise left behind as
+    /// objects without their values. Runs on a connection of its own, in one transaction, the removals in the order
+    /// given. Callers remove an object's attribute values before the object, rather than leaving them to the cascade:
+    /// a value referencing another object of the same write (a group's member on the same page) holds a foreign key
+    /// that PostgreSQL checks before the cascade has removed the value, so deleting both objects in one statement
+    /// fails. Never throws: a removal that fails is logged as an error
+    /// naming what remains, and the write's own failure is what propagates. What it cannot cover is the process
+    /// itself dying between a commit and this removal; that leaves the same kind of remnant a crash between a
+    /// synchronisation page's separately committed flush steps already can.
+    /// </summary>
+    private static async Task RemoveRowsOfFailedParallelWriteAsync(
+        string connectionString,
+        string writer,
+        IReadOnlyList<ParallelWriteRemoval> removals)
+    {
+        var total = removals.Sum(r => r.Ids.Length);
+        try
+        {
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            await using var transaction = await connection.BeginTransactionAsync();
+            foreach (var removal in removals.Where(r => r.Ids.Length > 0))
+            {
+                await using var command = new NpgsqlCommand(
+                    $"""DELETE FROM "{removal.Table}" WHERE "{removal.KeyColumn}" = ANY(@ids)""", connection, transaction);
+                command.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
+                command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = removal.Ids });
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await transaction.CommitAsync();
+            Log.Warning("{Writer}: the parallel write failed; removed the {Count} row(s) it had committed ({Tables}) so nothing of it remains",
+                writer, total, string.Join(", ", removals.Select(r => $"{r.Ids.Length} from {r.Table}")));
+        }
+        catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException or TimeoutException)
+        {
+            Log.Error(ex, "{Writer}: the parallel write failed, and the {Count} row(s) it had committed could not be removed ({Tables}). " +
+                "They remain without the rest of the write; first ids: {Ids}",
+                writer, total, string.Join(", ", removals.Select(r => $"{r.Ids.Length} in {r.Table}")),
+                string.Join(", ", removals.SelectMany(r => r.Ids).Take(20)));
+        }
+    }
 
     public SyncRepository(PostgresDataRepository repo)
     {
@@ -54,11 +133,11 @@ public partial class SyncRepository : ISyncRepository
         // single-connection mode when the connection string is null.
         try
         {
-            _connectionStringForParallelWrites = JimDbContext.BuildConnectionString();
+            ConnectionStringForParallelWrites = JimDbContext.BuildConnectionString();
         }
         catch
         {
-            _connectionStringForParallelWrites = null;
+            ConnectionStringForParallelWrites = null;
         }
     }
 

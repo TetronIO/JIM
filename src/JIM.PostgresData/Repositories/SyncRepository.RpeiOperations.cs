@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Collections.Concurrent;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
@@ -61,9 +62,6 @@ public partial class SyncRepository
         var previousTimeout = _context.Database.GetCommandTimeout();
         _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
 
-        var parallelism = ParallelBatchWriter.GetWriteParallelism();
-        var connectionString = _connectionStringForParallelWrites;
-
         // Flatten sync outcomes upfront (before any persistence) so we can count them.
         var allOutcomes = rpeis.SelectMany(r => FlattenSyncOutcomes(r)).ToList();
 
@@ -95,92 +93,129 @@ public partial class SyncRepository
         // outcomes, upserted alongside the batch so the Activity stats read stays O(counter rows).
         var counterDeltas = ActivityStatCounterCalculator.CalculateRpeiInsertDeltas(rpeis, allOutcomes);
 
-        // Use parallel writes for large batches; fall back to single connection for small ones.
-        var useParallel = rpeis.Count >= parallelism * 50 && connectionString != null;
+        // Parallel writes only for calls with rows enough to gain from them, counted as what the COPYs write (the items
+        // and their outcomes), not as the number of items (#2872).
+        var useParallel = ShouldWriteInParallel(rowsToInsert.Count + allOutcomes.Count);
 
         if (useParallel)
         {
-            // Step 1: Insert RPEIs in parallel (no FK dependencies on other new rows)
+            var parallelism = WriteParallelism;
+            var connectionString = ConnectionStringForParallelWrites!;
             Log.Information("BulkInsertRpeisAsync: Writing {RpeiCount} RPEIs and {OutcomeCount} outcomes across {Parallelism} parallel connections",
                 rpeis.Count, allOutcomes.Count, parallelism);
 
-            if (rowsToInsert.Count > 0)
+            // The items and their outcomes are written on connections of their own, each committing separately, and
+            // the CSO change records the outcomes reference must commit before the outcomes can: the write is not one
+            // transaction, as the single-connection path's is. A failure at any step therefore removes everything the
+            // call committed before it propagates (#2872), so the caller finds nothing of the batch, as after the
+            // single-connection path's rollback: the CSO change records, the outcomes, then the items, whose deletion
+            // takes their causal edges and match candidates with them. Everything written on the main connection that
+            // depends on nothing later (the rows written already, brought up to date; the edges; the candidates; the
+            // stat counters) is written last, in one transaction, so a failure before it leaves none of it behind.
+            var committedRpeiIds = new ConcurrentQueue<Guid>();
+            var committedOutcomeIds = new ConcurrentQueue<Guid>();
+            var csoChangesCommitted = false;
+            var written = false;
+            try
             {
-                await ParallelBatchWriter.ExecuteAsync(
-                    rowsToInsert,
-                    parallelism,
-                    connectionString,
-                    async (connection, partition) =>
+                // Step 1: Insert RPEIs in parallel (no FK dependencies on other new rows)
+                if (rowsToInsert.Count > 0)
+                {
+                    await ParallelBatchWriter.ExecuteAsync(
+                        rowsToInsert,
+                        parallelism,
+                        connectionString,
+                        async (connection, partition) =>
+                        {
+                            await using var tx = await connection!.BeginTransactionAsync();
+                            await BulkInsertRpeisOnConnectionAsync(connection, tx, partition.ToList());
+                            await tx.CommitAsync();
+                            foreach (var rpei in partition)
+                                committedRpeiIds.Enqueue(rpei.Id);
+                        });
+                }
+
+                // Step 2: Persist CSO change records via raw SQL (same approach as PersistRpeiCsoChangesAsync), in a
+                // transaction of their own that commits before the outcomes referencing them are written elsewhere.
+                // EF AddRange + SaveChangesAsync is not safe here: it traverses navigation properties into
+                // shared ConnectedSystemObjectTypeAttribute entities causing identity conflicts at scale,
+                // and SaveChangesAsync flushes all dirty entities in the tracker (not just CSO changes).
+                if (outcomeCsoChanges.Count > 0)
+                {
+                    await using (var changeTransaction = await _context.Database.BeginTransactionAsync())
                     {
-                        await using var tx = await connection!.BeginTransactionAsync();
-                        await BulkInsertRpeisOnConnectionAsync(connection, tx, partition.ToList());
-                        await tx.CommitAsync();
-                    });
-            }
+                        await InsertCsoChangeHierarchyRawAsync(outcomeCsoChanges);
+                        await changeTransaction.CommitAsync();
+                    }
 
-            // Step 1b: bring the rows written already up to date, on the main EF connection. Its temporary table lives
-            // for one transaction, so the update has one of its own unless the caller holds one.
-            if (rowsToUpdate.Count > 0)
+                    csoChangesCommitted = true;
+                    foreach (var outcome in allOutcomes.Where(o => o.ConnectedSystemObjectChange != null))
+                        outcome.ConnectedSystemObjectChangeId = outcome.ConnectedSystemObjectChange!.Id;
+                }
+
+                // Step 3: Insert sync outcomes in parallel (RPEIs and CSO changes now exist).
+                // Outcomes have a self-referencing FK (ParentSyncOutcomeId) forming a tree per RPEI.
+                // We must partition by RPEI to keep each outcome tree on one connection; otherwise
+                // a child on connection 2 may commit before its parent on connection 1, causing
+                // an FK violation. An item carries a handful of outcomes, never one per value, so
+                // partitioning by item is balanced.
+                if (allOutcomes.Count > 0)
+                {
+                    var outcomesByRpei = allOutcomes
+                        .GroupBy(o => o.ActivityRunProfileExecutionItemId)
+                        .Select(g => g.ToList())
+                        .ToList();
+
+                    await ParallelBatchWriter.ExecuteAsync(
+                        outcomesByRpei,
+                        parallelism,
+                        connectionString,
+                        async (connection, partition) =>
+                        {
+                            var flatOutcomes = partition.SelectMany(g => g).ToList();
+                            await using var tx = await connection!.BeginTransactionAsync();
+                            await BulkInsertSyncOutcomesOnConnectionAsync(connection, tx, flatOutcomes);
+                            await tx.CommitAsync();
+                            foreach (var outcome in flatOutcomes)
+                                committedOutcomeIds.Enqueue(outcome.Id);
+                        });
+                }
+
+                // Step 4: on the main EF connection, in one transaction: the rows written already brought up to date
+                // (their temporary table lives for one transaction), the causal edges and ambiguous match candidates
+                // (#2052), whose only foreign key is to the RPEIs step 1 committed, and the batch's stat counter deltas.
+                await using (var finalTransaction = await _context.Database.BeginTransactionAsync())
+                {
+                    if (rowsToUpdate.Count > 0)
+                        await BulkUpdateRpeiFieldsRawAsync(rowsToUpdate);
+
+                    if (allEdges.Count > 0)
+                        await BulkInsertCausalEdgesAsync(allEdges);
+
+                    if (allCandidates.Count > 0)
+                        await BulkInsertMatchCandidatesAsync(allCandidates);
+
+                    await ActivityStatCounterWriter.UpsertDeltasAsync(_context, counterDeltas);
+                    await finalTransaction.CommitAsync();
+                }
+
+                written = true;
+            }
+            finally
             {
-                await using var updateTransaction = _context.Database.CurrentTransaction == null
-                    ? await _context.Database.BeginTransactionAsync()
-                    : null;
-                await BulkUpdateRpeiFieldsRawAsync(rowsToUpdate);
-                if (updateTransaction != null)
-                    await updateTransaction.CommitAsync();
+                // The outcomes by id as well as by cascade from their items, because those of the items a deletion's
+                // transaction wrote already (#2807) belong to rows this call did not insert and must not remove.
+                if (!written && (csoChangesCommitted || !committedRpeiIds.IsEmpty || !committedOutcomeIds.IsEmpty))
+                {
+                    await RemoveRowsOfFailedParallelWriteAsync(connectionString, nameof(BulkInsertRpeisAsync),
+                    [
+                        new ParallelWriteRemoval("ConnectedSystemObjectChanges", "Id",
+                            csoChangesCommitted ? [.. outcomeCsoChanges.Select(c => c.Id)] : []),
+                        new ParallelWriteRemoval("ActivityRunProfileExecutionItemSyncOutcomes", "Id", [.. committedOutcomeIds]),
+                        new ParallelWriteRemoval("ActivityRunProfileExecutionItems", "Id", [.. committedRpeiIds])
+                    ]);
+                }
             }
-
-            // Step 2: Persist CSO change records via raw SQL (same approach as PersistRpeiCsoChangesAsync).
-            // EF AddRange + SaveChangesAsync is not safe here: it traverses navigation properties into
-            // shared ConnectedSystemObjectTypeAttribute entities causing identity conflicts at scale,
-            // and SaveChangesAsync flushes all dirty entities in the tracker (not just CSO changes).
-            if (outcomeCsoChanges.Count > 0)
-            {
-                await InsertCsoChangeHierarchyRawAsync(outcomeCsoChanges);
-                foreach (var outcome in allOutcomes.Where(o => o.ConnectedSystemObjectChange != null))
-                    outcome.ConnectedSystemObjectChangeId = outcome.ConnectedSystemObjectChange!.Id;
-            }
-
-            // Step 3: Insert sync outcomes in parallel (RPEIs and CSO changes now exist).
-            // Outcomes have a self-referencing FK (ParentSyncOutcomeId) forming a tree per RPEI.
-            // We must partition by RPEI to keep each outcome tree on one connection — otherwise
-            // a child on connection 2 may commit before its parent on connection 1, causing
-            // an FK violation.
-            if (allOutcomes.Count > 0)
-            {
-                var outcomesByRpei = allOutcomes
-                    .GroupBy(o => o.ActivityRunProfileExecutionItemId)
-                    .Select(g => g.ToList())
-                    .ToList();
-
-                await ParallelBatchWriter.ExecuteAsync(
-                    outcomesByRpei,
-                    parallelism,
-                    connectionString,
-                    async (connection, partition) =>
-                    {
-                        var flatOutcomes = partition.SelectMany(g => g).ToList();
-                        await using var tx = await connection!.BeginTransactionAsync();
-                        await BulkInsertSyncOutcomesOnConnectionAsync(connection, tx, flatOutcomes);
-                        await tx.CommitAsync();
-                    });
-            }
-
-            // Step 4: Insert causal edges on the main EF connection. Their only foreign key is to the RPEIs,
-            // which step 1 has already committed, so the targets exist. Like the counter upsert below, this is
-            // not transactional with the COPY partitions; a crash between the two loses provenance for the
-            // batch, which degrades an explanation rather than corrupting synchronisation state.
-            if (allEdges.Count > 0)
-                await BulkInsertCausalEdgesAsync(allEdges);
-
-            // Step 4b: Insert ambiguous match candidates (#2052), on the same terms as the edges.
-            if (allCandidates.Count > 0)
-                await BulkInsertMatchCandidatesAsync(allCandidates);
-
-            // Step 5: Upsert the batch's stat counter deltas on the main EF connection. Not
-            // transactional with the COPY partitions (which have already committed); a crash
-            // between the two leaves advisory drift that completion-time finalisation reconciles.
-            await ActivityStatCounterWriter.UpsertDeltasAsync(_context, counterDeltas);
         }
         else
         {

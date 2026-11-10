@@ -46,15 +46,14 @@ public sealed class ParallelWritePathScope : IDisposable
         if (string.IsNullOrEmpty(dbName))
             Assert.Ignore("JIM_TEST_RESET_DB not set; skipping parallel write path test.");
 
-        // JimDbContext.BuildConnectionString has no port setting, so the parallel path can only reach a
-        // database on the default port. Ignoring here keeps a non-default port an explicit skip rather than a
-        // run that quietly writes RPEIs into whichever database is listening on 5432.
+        // JimDbContext.BuildConnectionString has no port setting of its own, so a non-default port travels in the
+        // host name, which Npgsql reads as host:port. Without it the parallel path would write into whichever
+        // database listens on the default port instead of the fixture's.
+        var host = Environment.GetEnvironmentVariable("JIM_TEST_RESET_HOST") ?? "localhost";
         var port = Environment.GetEnvironmentVariable("JIM_TEST_RESET_PORT");
-        if (!string.IsNullOrEmpty(port) && port != "5432")
-            Assert.Ignore($"JIM_TEST_RESET_PORT is {port}; the parallel write path can only reach the default port.");
 
         var scope = new ParallelWritePathScope();
-        scope.Set(Constants.Config.DatabaseHostname, Environment.GetEnvironmentVariable("JIM_TEST_RESET_HOST") ?? "localhost");
+        scope.Set(Constants.Config.DatabaseHostname, string.IsNullOrEmpty(port) || port == "5432" ? host : $"{host}:{port}");
         scope.Set(Constants.Config.DatabaseName, dbName);
         scope.Set(Constants.Config.DatabaseUsername, Environment.GetEnvironmentVariable("JIM_TEST_RESET_USER") ?? "postgres");
         scope.Set(Constants.Config.DatabasePassword, Environment.GetEnvironmentVariable("JIM_TEST_RESET_PASSWORD") ?? "postgres");
@@ -62,21 +61,25 @@ public sealed class ParallelWritePathScope : IDisposable
     }
 
     /// <summary>
-    /// Asserts the parallel path will actually be taken for a batch of the given size. This is the same
-    /// predicate the write paths themselves use, so a test that calls it can no longer pass by falling back.
+    /// Asserts the parallel path will actually be taken for a call writing the given number of rows (objects plus
+    /// their values, or execution items plus their outcomes; #2872). This is the same threshold the write paths
+    /// themselves use, so a test that calls it can no longer pass by falling back.
     /// </summary>
-    public static void AssertEngaged(int itemCount)
+    public static void AssertEngaged(int rowCount)
     {
         Assert.That(() => JimDbContext.BuildConnectionString(), Throws.Nothing,
             "the repository builds its own connection string for parallel writes; without one it silently uses the single-connection path");
-        Assert.That(itemCount, Is.GreaterThanOrEqualTo(ParallelBatchWriter.GetWriteParallelism() * 50),
-            "the batch is below the threshold at which the parallel path engages");
+        Assert.That(ParallelBatchWriter.GetWriteParallelism(), Is.GreaterThan(1),
+            "with one connection there is nothing to write in parallel");
+        Assert.That(rowCount, Is.GreaterThanOrEqualTo(ParallelBatchWriter.MinimumRowsForParallelWrite),
+            "the call writes fewer rows than the threshold at which the parallel path engages");
     }
 
     /// <summary>
-    /// The batch size at which the parallel path engages, for tests that need to build one that crosses it.
+    /// The rows at which the parallel path engages. Every execution item and every object writes a row of its own,
+    /// so a test building this many crosses it.
     /// </summary>
-    public static int Threshold => ParallelBatchWriter.GetWriteParallelism() * 50;
+    public static int Threshold => ParallelBatchWriter.MinimumRowsForParallelWrite;
 
     private void Set(string name, string? value)
     {

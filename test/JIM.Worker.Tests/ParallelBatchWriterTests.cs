@@ -177,6 +177,145 @@ public class ParallelBatchWriterTests
     }
 
     [Test]
+    public void ShouldWriteInParallel_BelowRowThreshold_ReturnsFalse()
+    {
+        var result = ParallelBatchWriter.ShouldWriteInParallel(
+            ParallelBatchWriter.MinimumRowsForParallelWrite - 1, parallelism: 16, connectionString: "Host=db", callerHoldsTransaction: false);
+
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void ShouldWriteInParallel_AtRowThreshold_ReturnsTrue()
+    {
+        var result = ParallelBatchWriter.ShouldWriteInParallel(
+            ParallelBatchWriter.MinimumRowsForParallelWrite, parallelism: 16, connectionString: "Host=db", callerHoldsTransaction: false);
+
+        Assert.That(result, Is.True);
+    }
+
+    /// <summary>
+    /// The gate used to be <c>objects &gt;= parallelism * 50</c>, so the more cores a host had the less it wrote in
+    /// parallel: a 500-object synchronisation page never went parallel on 11 or more cores (#2872). The row threshold
+    /// must give the same answer whatever the parallelism.
+    /// </summary>
+    [TestCase(2)]
+    [TestCase(4)]
+    [TestCase(16)]
+    [TestCase(64)]
+    public void ShouldWriteInParallel_RowThreshold_DoesNotScaleWithParallelism(int parallelism)
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ParallelBatchWriter.ShouldWriteInParallel(
+                ParallelBatchWriter.MinimumRowsForParallelWrite - 1, parallelism, "Host=db", callerHoldsTransaction: false), Is.False);
+            Assert.That(ParallelBatchWriter.ShouldWriteInParallel(
+                ParallelBatchWriter.MinimumRowsForParallelWrite, parallelism, "Host=db", callerHoldsTransaction: false), Is.True);
+        }
+    }
+
+    /// <summary>
+    /// The page that motivated #2872: 500 groups carrying 649,735 membership values, written on one connection on a
+    /// 16-core host because the gate counted the 500 objects and not the rows.
+    /// </summary>
+    [Test]
+    public void ShouldWriteInParallel_PageOfFewObjectsCarryingManyValues_ReturnsTrueOnLargeHost()
+    {
+        var result = ParallelBatchWriter.ShouldWriteInParallel(
+            rowCount: 500 + 649_735, parallelism: 16, connectionString: "Host=db", callerHoldsTransaction: false);
+
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void ShouldWriteInParallel_ParallelismOfOne_ReturnsFalse()
+    {
+        var result = ParallelBatchWriter.ShouldWriteInParallel(
+            1_000_000, parallelism: 1, connectionString: "Host=db", callerHoldsTransaction: false);
+
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void ShouldWriteInParallel_NoConnectionString_ReturnsFalse()
+    {
+        var result = ParallelBatchWriter.ShouldWriteInParallel(
+            1_000_000, parallelism: 16, connectionString: null, callerHoldsTransaction: false);
+
+        Assert.That(result, Is.False);
+    }
+
+    /// <summary>
+    /// Writes on connections of their own cannot join a transaction the caller holds on its context: they would commit
+    /// whatever the caller later rolls back, and could wait forever on rows that transaction has written and not yet
+    /// committed. A caller holding a transaction is written on its own connection, inside it.
+    /// </summary>
+    [Test]
+    public void ShouldWriteInParallel_CallerHoldsTransaction_ReturnsFalse()
+    {
+        var result = ParallelBatchWriter.ShouldWriteInParallel(
+            1_000_000, parallelism: 16, connectionString: "Host=db", callerHoldsTransaction: true);
+
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public void ShouldWriteInParallel_ExplicitRowThreshold_IsHonoured()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ParallelBatchWriter.ShouldWriteInParallel(9, 4, "Host=db", false, rowThreshold: 10), Is.False);
+            Assert.That(ParallelBatchWriter.ShouldWriteInParallel(10, 4, "Host=db", false, rowThreshold: 10), Is.True);
+        }
+    }
+
+    [Test]
+    public void FlattenValueRows_PreservesOwnerOrderThenValueOrder_AndPairsEachValueWithItsOwner()
+    {
+        var owners = new List<(Guid Id, List<string> Values)>
+        {
+            (Guid.NewGuid(), ["a1", "a2"]),
+            (Guid.NewGuid(), []),
+            (Guid.NewGuid(), ["c1", "c2", "c3"])
+        };
+
+        var rows = ParallelBatchWriter.FlattenValueRows(owners, o => o.Id, o => o.Values);
+
+        Assert.That(rows, Is.EqualTo(new List<(Guid, string)>
+        {
+            (owners[0].Id, "a1"), (owners[0].Id, "a2"),
+            (owners[2].Id, "c1"), (owners[2].Id, "c2"), (owners[2].Id, "c3")
+        }));
+    }
+
+    /// <summary>
+    /// A synchronisation page of groups is a few very large objects and many small ones. Partitioned by object, the
+    /// largest group's values all land on one connection, which then writes alone long after the others finish (#2872).
+    /// Partitioned by value row, every connection gets an equal share, the largest group spreads across all of them,
+    /// and each row is written exactly once, in order.
+    /// </summary>
+    [Test]
+    public void Partition_ValueRowsOfPageWithOneLargeGroup_SpreadsTheGroupEvenlyAndWritesEveryRowOnceInOrder()
+    {
+        var owners = new List<(Guid Id, List<int> Values)> { (Guid.NewGuid(), Enumerable.Range(0, 200_000).ToList()) };
+        for (var i = 0; i < 499; i++)
+            owners.Add((Guid.NewGuid(), Enumerable.Range(0, 3).ToList()));
+        var rows = ParallelBatchWriter.FlattenValueRows(owners, o => o.Id, o => o.Values);
+
+        var partitions = ParallelBatchWriter.Partition(rows, 8);
+
+        var sizes = partitions.Select(p => p.Count).ToList();
+        var largeGroupRowsPerPartition = partitions.Select(p => p.Count(r => r.OwnerId == owners[0].Id)).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(partitions, Has.Count.EqualTo(8));
+            Assert.That(sizes.Max() - sizes.Min(), Is.LessThanOrEqualTo(1), "every connection gets an equal share of rows");
+            Assert.That(largeGroupRowsPerPartition, Has.All.GreaterThan(0), "the large group spreads across every connection");
+            Assert.That(partitions.SelectMany(p => p).ToList(), Is.EqualTo(rows), "every row exactly once, in order");
+        }
+    }
+
+    [Test]
     public void GetWriteParallelism_DefaultsToProcessorCount()
     {
         // Clear env var to test default
