@@ -1337,11 +1337,14 @@ Describe 'The Exchange servers (#2021)' {
             }
         }
 
-        It 'reads the outcome past a banner the remote shell printed before it' -TestCases @(
-            @{ Banner = "$([char]0x1b)[?1h$([char]0x1b)=" }
-            @{ Banner = [string][char]0xFEFF }
+        # The banner is named, not carried, in the test case: a control character in test data is written into the
+        # results XML, where it is not a legal character, and fails the whole Pester run's report.
+        It 'reads the outcome past a <Kind> the remote shell printed before it' -TestCases @(
+            @{ Kind = 'terminal control sequence' }
+            @{ Kind = 'byte order mark' }
         ) {
-            param($Banner)
+            param($Kind)
+            $Banner = if ($Kind -eq 'byte order mark') { [string][char]0xFEFF } else { "$([char]0x1b)[?1h$([char]0x1b)=" }
             # Scenario 034 run 42744084998: the host's output began with a character that is not JSON, and the raw
             # ConvertFrom-Json failed the scenario before Exchange had been touched.
             Mock Invoke-LabControl { "$Banner{`"name`":`"exchange-primary`",`"state`":`"Unreachable`",`"detail`":`"IIS is Stopped`",`"elapsedSeconds`":3}" }
