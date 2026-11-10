@@ -4,6 +4,7 @@
 using System.Collections.Concurrent;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -39,59 +40,20 @@ public partial class SyncRepository
         if (rpeis.Count == 0)
             return true;
 
-        // Pre-generate IDs for all RPEIs (bypasses EF ValueGeneratedOnAdd); time-ordered, so the rows land on the
-        // growing end of each index rather than a random page of it (#2807).
-        foreach (var rpei in rpeis)
-        {
-            if (rpei.Id == Guid.Empty)
-                rpei.Id = ChangeRecordIds.New();
-        }
-
-        // Items whose own rows a deletion's transaction wrote already (#2807): everything else of theirs is written here
-        // as for any other item, and their rows only brought up to date, since outcomes were added after the delete.
-        var rowsToInsert = rpeis;
-        List<ActivityRunProfileExecutionItem> rowsToUpdate = [];
-        if (rowsAlreadyWritten is { Count: > 0 })
-        {
-            rowsToInsert = rpeis.Where(r => !rowsAlreadyWritten.Contains(r.Id)).ToList();
-            rowsToUpdate = rpeis.Where(r => rowsAlreadyWritten.Contains(r.Id)).ToList();
-        }
+        // Everything the write needs, collected and given its ids before anything is written: the items' ids, time-ordered
+        // so the rows land on the growing end of each index (#2807); their outcome trees, flattened; their causal edges
+        // (#1223) and ambiguous match candidates (#2052); the change records the outcomes carry; and the stat counter
+        // deltas (#1078). The same collection, written by the same writer, is what a synchronisation's history write
+        // takes (#2874).
+        var batch = CollectExecutionItemHistory(rpeis, rowsAlreadyWritten, [], [], [], page: 0, totalPages: 0);
+        var (rowsToInsert, rowsToUpdate) = SplitRowsAlreadyWritten(batch);
+        var allOutcomes = AsList(batch.Outcomes);
+        var outcomeCsoChanges = AsList(batch.OutcomeChangeRecords);
 
         // Increase command timeout for large RPEI persistence. With 5K+ RPEIs, the bulk
         // insert of RPEIs, sync outcomes, and CSO change records can exceed the default 30s.
         var previousTimeout = _context.Database.GetCommandTimeout();
         _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
-
-        // Flatten sync outcomes upfront (before any persistence) so we can count them.
-        var allOutcomes = rpeis.SelectMany(r => FlattenSyncOutcomes(r)).ToList();
-
-        // Causal edges buffered on the RPEIs by the cascade seams (#1223). Collected here, after the RPEI and
-        // outcome ids have been assigned, because a seam knows neither: an RPEI is created without an id and an
-        // outcome likewise, so the edge names its effect by reference and the flush resolves both. Doing it in
-        // one place covers both flush paths, mirroring how an outcome's own ConnectedSystemObjectChangeId is
-        // resolved below.
-        var allEdges = new List<CausalEdge>();
-        foreach (var rpei in rpeis.Where(r => r.CausalEdges.Count > 0))
-        {
-            foreach (var edge in rpei.CausalEdges)
-                edge.ResolveTransientReferences(rpei.Id);
-
-            allEdges.AddRange(rpei.CausalEdges);
-        }
-
-        // Ambiguous match candidates buffered on the RPEIs (#2052), written beside the edges for the same reason.
-        var allCandidates = CollectMatchCandidates(rpeis);
-
-        // Persist CSO change records linked to sync outcomes (PendingExportCreated snapshots)
-        // on the main EF connection — this is a small subset and needs EF AddRange.
-        var outcomeCsoChanges = allOutcomes
-            .Where(o => o.ConnectedSystemObjectChange != null)
-            .Select(o => o.ConnectedSystemObjectChange!)
-            .ToList();
-
-        // Stat counter deltas for this batch (#1078): computed once from the in-memory RPEIs and
-        // outcomes, upserted alongside the batch so the Activity stats read stays O(counter rows).
-        var counterDeltas = ActivityStatCounterCalculator.CalculateRpeiInsertDeltas(rpeis, allOutcomes);
 
         // Parallel writes only for calls with rows enough to gain from them, counted as what the COPYs write (the items
         // and their outcomes), not as the number of items (#2872).
@@ -139,7 +101,8 @@ public partial class SyncRepository
                 // transaction of their own that commits before the outcomes referencing them are written elsewhere.
                 // EF AddRange + SaveChangesAsync is not safe here: it traverses navigation properties into
                 // shared ConnectedSystemObjectTypeAttribute entities causing identity conflicts at scale,
-                // and SaveChangesAsync flushes all dirty entities in the tracker (not just CSO changes).
+                // and SaveChangesAsync flushes all dirty entities in the tracker (not just CSO changes). The outcomes
+                // were pointed at the records' ids when the batch was collected.
                 if (outcomeCsoChanges.Count > 0)
                 {
                     await using (var changeTransaction = await _context.Database.BeginTransactionAsync())
@@ -149,8 +112,6 @@ public partial class SyncRepository
                     }
 
                     csoChangesCommitted = true;
-                    foreach (var outcome in allOutcomes.Where(o => o.ConnectedSystemObjectChange != null))
-                        outcome.ConnectedSystemObjectChangeId = outcome.ConnectedSystemObjectChange!.Id;
                 }
 
                 // Step 3: Insert sync outcomes in parallel (RPEIs and CSO changes now exist).
@@ -189,13 +150,13 @@ public partial class SyncRepository
                     if (rowsToUpdate.Count > 0)
                         await BulkUpdateRpeiFieldsRawAsync(rowsToUpdate);
 
-                    if (allEdges.Count > 0)
-                        await BulkInsertCausalEdgesAsync(allEdges);
+                    if (batch.CausalEdges.Count > 0)
+                        await BulkInsertCausalEdgesAsync(AsList(batch.CausalEdges));
 
-                    if (allCandidates.Count > 0)
-                        await BulkInsertMatchCandidatesAsync(allCandidates);
+                    if (batch.MatchCandidates.Count > 0)
+                        await BulkInsertMatchCandidatesAsync(AsList(batch.MatchCandidates));
 
-                    await ActivityStatCounterWriter.UpsertDeltasAsync(_context, counterDeltas);
+                    await ActivityStatCounterWriter.UpsertDeltasAsync(_context, batch.CounterDeltas);
                     await finalTransaction.CommitAsync();
                 }
 
@@ -219,12 +180,10 @@ public partial class SyncRepository
         }
         else
         {
-            // Small batch: single-connection path. Writes RPEI rows then sync outcome rows via COPY
-            // binary import on the EF connection's own transaction, reusing the same on-connection
-            // writers the parallel branch above uses (BulkInsertRpeisOnConnectionAsync,
-            // BulkInsertSyncOutcomesOnConnectionAsync) rather than opening N independent connections.
-            // COPY binary is markedly faster than parameterised multi-row INSERT even on a single
-            // connection.
+            // Small batch: single-connection path, on the EF connection's own transaction, or the caller's when it holds
+            // one. The same writer a synchronisation's history write uses (#2874): COPY binary for the item and outcome
+            // rows, reusing the on-connection writers the parallel branch above uses, which is markedly faster than
+            // parameterised multi-row INSERT even on a single connection.
             IDbContextTransaction? transaction = null;
             var existingTransaction = _context.Database.CurrentTransaction;
             if (existingTransaction == null)
@@ -232,35 +191,7 @@ public partial class SyncRepository
 
             try
             {
-                var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
-                await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
-                var npgsqlTx = (NpgsqlTransaction)_context.Database.CurrentTransaction!.GetDbTransaction();
-
-                if (rowsToInsert.Count > 0)
-                    await BulkInsertRpeisOnConnectionAsync(npgsqlConn, npgsqlTx, rowsToInsert);
-
-                // The rows a deletion's transaction wrote already, brought up to date (#2807).
-                if (rowsToUpdate.Count > 0)
-                    await BulkUpdateRpeiFieldsRawAsync(rowsToUpdate);
-
-                if (outcomeCsoChanges.Count > 0)
-                {
-                    // Use raw SQL INSERT (see parallel path comment for explanation)
-                    await InsertCsoChangeHierarchyRawAsync(outcomeCsoChanges);
-                    foreach (var outcome in allOutcomes.Where(o => o.ConnectedSystemObjectChange != null))
-                        outcome.ConnectedSystemObjectChangeId = outcome.ConnectedSystemObjectChange!.Id;
-                }
-
-                if (allOutcomes.Count > 0)
-                    await BulkInsertSyncOutcomesOnConnectionAsync(npgsqlConn, npgsqlTx, allOutcomes);
-
-                if (allEdges.Count > 0)
-                    await BulkInsertCausalEdgesAsync(allEdges);
-
-                if (allCandidates.Count > 0)
-                    await BulkInsertMatchCandidatesAsync(allCandidates);
-
-                await ActivityStatCounterWriter.UpsertDeltasAsync(_context, counterDeltas);
+                await WriteExecutionItemHistoryAsync(batch);
 
                 if (transaction != null)
                     await transaction.CommitAsync();
@@ -272,21 +203,174 @@ public partial class SyncRepository
             }
         }
 
-        // Empty the edge buffers now they are written, so a later flush of the same RPEI objects (confirming
-        // imports revisit them) cannot re-insert the same edges and fail on the primary key. Only reached on
+        // Empty the edge and candidate buffers now they are written, so a later flush of the same RPEI objects
+        // (confirming imports revisit them) cannot re-insert the same rows and fail on the primary key. Only reached on
         // success: a throw above leaves the buffers intact, which is what a retry needs.
-        if (allEdges.Count > 0)
-        {
-            foreach (var rpei in rpeis.Where(r => r.CausalEdges.Count > 0))
-                rpei.CausalEdges.Clear();
-        }
-
-        foreach (var rpei in rpeis.Where(r => r.MatchCandidates.Count > 0))
-            rpei.MatchCandidates.Clear();
+        DrainCausalEdgeAndMatchCandidateBuffers(rpeis);
 
         _context.Database.SetCommandTimeout(previousTimeout);
         return true; // Raw SQL used — RPEIs persisted outside EF change tracker
     }
+
+    /// <summary>
+    /// Collects what a write of the given execution items records, and assigns every id it needs (#2874): the items'
+    /// own (time-ordered, #2807), their outcome trees' (flattened, each node pointed at its item and parent), the change
+    /// records the outcomes carry (and the outcomes pointed at them), their causal edges' (each reference resolved to an
+    /// id, #1223) and their match candidates' (#2052); then the stat counter deltas (#1078), read while the items still
+    /// name the objects they describe. Writes nothing, and leaves the items' buffers as they are.
+    /// </summary>
+    private static SynchronisationHistoryBatch CollectExecutionItemHistory(
+        IReadOnlyList<ActivityRunProfileExecutionItem> rpeis,
+        IReadOnlySet<Guid>? rowsAlreadyWritten,
+        IReadOnlyList<ConnectedSystemObjectChange> itemChangeRecords,
+        IReadOnlyList<MetaverseObjectChange> newMetaverseObjectChanges,
+        IReadOnlyList<MetaverseObjectChange> metaverseObjectChangeAppends,
+        int page,
+        int totalPages)
+    {
+        foreach (var rpei in rpeis.Where(r => r.Id == Guid.Empty))
+            rpei.Id = ChangeRecordIds.New();
+
+        var allOutcomes = rpeis.SelectMany(FlattenSyncOutcomes).ToList();
+
+        // Causal edges buffered on the RPEIs by the cascade seams (#1223). Collected here, after the RPEI and
+        // outcome ids have been assigned, because a seam knows neither: an RPEI is created without an id and an
+        // outcome likewise, so the edge names its effect by reference and the collection resolves both, mirroring
+        // how an outcome's own ConnectedSystemObjectChangeId is resolved below.
+        var allEdges = new List<CausalEdge>();
+        foreach (var rpei in rpeis.Where(r => r.CausalEdges.Count > 0))
+        {
+            foreach (var edge in rpei.CausalEdges)
+                edge.ResolveTransientReferences(rpei.Id);
+
+            allEdges.AddRange(rpei.CausalEdges);
+        }
+
+        // Ambiguous match candidates buffered on the RPEIs (#2052), written beside the edges for the same reason.
+        var allCandidates = CollectMatchCandidates(rpeis);
+
+        // The change records the outcomes carry (PendingExportCreated snapshots), given their ids now (time-ordered, so
+        // the rows land on the growing end of each index, #2669) so each outcome can name its record by id.
+        var outcomeCsoChanges = allOutcomes
+            .Where(o => o.ConnectedSystemObjectChange != null)
+            .Select(o => o.ConnectedSystemObjectChange!)
+            .ToList();
+        foreach (var change in outcomeCsoChanges)
+            ChangeRecordIds.AssignMissing(change);
+        foreach (var outcome in allOutcomes.Where(o => o.ConnectedSystemObjectChange != null))
+            outcome.ConnectedSystemObjectChangeId = outcome.ConnectedSystemObjectChange!.Id;
+
+        return new SynchronisationHistoryBatch
+        {
+            Items = rpeis,
+            ItemIdsWrittenWithDeletion = rowsAlreadyWritten ?? new HashSet<Guid>(),
+            Outcomes = allOutcomes,
+            OutcomeChangeRecords = outcomeCsoChanges,
+            ItemChangeRecords = itemChangeRecords,
+            CausalEdges = allEdges,
+            MatchCandidates = allCandidates,
+            MetaverseObjectChanges = newMetaverseObjectChanges,
+            MetaverseObjectChangeAppends = metaverseObjectChangeAppends,
+            // Stat counter deltas for this batch (#1078): computed once from the in-memory RPEIs and outcomes, upserted
+            // alongside the batch so the Activity stats read stays O(counter rows).
+            CounterDeltas = ActivityStatCounterCalculator.CalculateRpeiInsertDeltas(rpeis, allOutcomes),
+            Page = page,
+            TotalPages = totalPages
+        };
+    }
+
+    /// <summary>
+    /// The batch's items split into those to insert and those a deletion's transaction wrote already (#2807), whose rows
+    /// are only brought up to date, since outcomes were added after the delete.
+    /// </summary>
+    private static (List<ActivityRunProfileExecutionItem> RowsToInsert, List<ActivityRunProfileExecutionItem> RowsToUpdate) SplitRowsAlreadyWritten(
+        SynchronisationHistoryBatch batch)
+    {
+        if (batch.ItemIdsWrittenWithDeletion.Count == 0)
+            return (AsList(batch.Items), []);
+
+        return (batch.Items.Where(r => !batch.ItemIdsWrittenWithDeletion.Contains(r.Id)).ToList(),
+            batch.Items.Where(r => batch.ItemIdsWrittenWithDeletion.Contains(r.Id)).ToList());
+    }
+
+    /// <summary>
+    /// Writes the execution item part of a collected batch on the context's connection, inside the transaction the
+    /// caller holds: the items' rows (and the rows a deletion wrote already, brought up to date), the change records the
+    /// outcomes carry, the outcomes, the causal edges, the match candidates and the stat counter deltas, in that order,
+    /// each written after what it references.
+    /// </summary>
+    private async Task WriteExecutionItemHistoryAsync(SynchronisationHistoryBatch batch)
+    {
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction)(_context.Database.CurrentTransaction?.GetDbTransaction()
+            ?? throw new InvalidOperationException("WriteExecutionItemHistoryAsync: the caller must hold the transaction the rows are written in."));
+        var (rowsToInsert, rowsToUpdate) = SplitRowsAlreadyWritten(batch);
+
+        using (var rowsSpan = MvoActivitySource.StartActivity("RpeiHistory.Rows"))
+        {
+            rowsSpan?.SetTag("rowCount", rowsToInsert.Count);
+            rowsSpan?.SetTag("updatedRowCount", rowsToUpdate.Count);
+            if (rowsToInsert.Count > 0)
+                await BulkInsertRpeisOnConnectionAsync(npgsqlConn, npgsqlTx, rowsToInsert);
+
+            // The rows a deletion's transaction wrote already, brought up to date (#2807).
+            if (rowsToUpdate.Count > 0)
+                await BulkUpdateRpeiFieldsRawAsync(rowsToUpdate);
+        }
+
+        if (batch.OutcomeChangeRecords.Count > 0)
+        {
+            // Raw SQL rather than EF AddRange: see the parallel path's comment in BulkInsertRpeisAsync.
+            using var changesSpan = MvoActivitySource.StartActivity("RpeiHistory.CsoChanges");
+            changesSpan?.SetTag("rowCount", batch.OutcomeChangeRecords.Count);
+            await InsertCsoChangeHierarchyRawAsync(AsList(batch.OutcomeChangeRecords));
+        }
+
+        if (batch.Outcomes.Count > 0)
+        {
+            using var outcomesSpan = MvoActivitySource.StartActivity("RpeiHistory.Outcomes");
+            outcomesSpan?.SetTag("rowCount", batch.Outcomes.Count);
+            await BulkInsertSyncOutcomesOnConnectionAsync(npgsqlConn, npgsqlTx, AsList(batch.Outcomes));
+        }
+
+        if (batch.CausalEdges.Count > 0)
+        {
+            using var edgesSpan = MvoActivitySource.StartActivity("RpeiHistory.Edges");
+            edgesSpan?.SetTag("rowCount", batch.CausalEdges.Count);
+            await BulkInsertCausalEdgesAsync(AsList(batch.CausalEdges));
+        }
+
+        if (batch.MatchCandidates.Count > 0)
+        {
+            using var candidatesSpan = MvoActivitySource.StartActivity("RpeiHistory.Candidates");
+            candidatesSpan?.SetTag("rowCount", batch.MatchCandidates.Count);
+            await BulkInsertMatchCandidatesAsync(AsList(batch.MatchCandidates));
+        }
+
+        using (var countersSpan = MvoActivitySource.StartActivity("RpeiHistory.Counters"))
+        {
+            countersSpan?.SetTag("rowCount", batch.CounterDeltas.Count);
+            await ActivityStatCounterWriter.UpsertDeltasAsync(_context, batch.CounterDeltas);
+        }
+    }
+
+    /// <summary>
+    /// Empties the items' causal edge and match candidate buffers once what they held is written, or owned by a batch,
+    /// so a later flush of the same items (confirming imports revisit them) cannot write them a second time.
+    /// </summary>
+    private static void DrainCausalEdgeAndMatchCandidateBuffers(IEnumerable<ActivityRunProfileExecutionItem> rpeis)
+    {
+        foreach (var rpei in rpeis)
+        {
+            if (rpei.CausalEdges.Count > 0)
+                rpei.CausalEdges.Clear();
+            if (rpei.MatchCandidates.Count > 0)
+                rpei.MatchCandidates.Clear();
+        }
+    }
+
+    private static List<T> AsList<T>(IReadOnlyList<T> source) => source as List<T> ?? [.. source];
 
     /// <inheritdoc />
     public async Task InsertRpeiRowsAsync(List<ActivityRunProfileExecutionItem> rpeis)
@@ -403,8 +487,22 @@ public partial class SyncRepository
             ? await _context.Database.BeginTransactionAsync()
             : null;
 
+        await WriteCsoChangeRecordsAsync(changes);
+
+        if (transaction != null)
+            await transaction.CommitAsync();
+        _context.Database.SetCommandTimeout(previousTimeout);
+    }
+
+    /// <summary>
+    /// Writes Connected System Object change records whose ids are all assigned, with their attribute and value rows, in
+    /// the transaction the caller holds: <see cref="PersistCsoChangesAsync"/>'s, or a synchronisation history write's
+    /// (#2874).
+    /// </summary>
+    private async Task WriteCsoChangeRecordsAsync(IReadOnlyList<ConnectedSystemObjectChange> changes)
+    {
         // Step 1: INSERT parent ConnectedSystemObjectChange rows
-        await BulkInsertCsoChangesRawAsync(changes);
+        await BulkInsertCsoChangesRawAsync(AsList(changes));
 
         // Step 2: INSERT ConnectedSystemObjectChangeAttribute rows
         var allAttrChanges = changes
@@ -422,10 +520,6 @@ public partial class SyncRepository
 
         if (allValueChanges.Count > 0)
             await BulkInsertCsoChangeAttributeValuesRawAsync(allValueChanges);
-
-        if (transaction != null)
-            await transaction.CommitAsync();
-        _context.Database.SetCommandTimeout(previousTimeout);
     }
 
     /// <remarks>
@@ -984,7 +1078,7 @@ public partial class SyncRepository
     /// The ambiguous match candidates buffered on <paramref name="rpeis"/> (#2052), each pointed at its item and given an
     /// id. The items' own ids exist by now; the candidates were recorded before them.
     /// </summary>
-    private static List<ActivityRunProfileExecutionItemMatchCandidate> CollectMatchCandidates(List<ActivityRunProfileExecutionItem> rpeis)
+    private static List<ActivityRunProfileExecutionItemMatchCandidate> CollectMatchCandidates(IReadOnlyList<ActivityRunProfileExecutionItem> rpeis)
     {
         var candidates = new List<ActivityRunProfileExecutionItemMatchCandidate>();
         foreach (var rpei in rpeis.Where(r => r.MatchCandidates.Count > 0))

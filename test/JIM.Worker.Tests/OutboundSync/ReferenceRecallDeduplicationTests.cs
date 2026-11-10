@@ -298,6 +298,7 @@ public class ReferenceRecallDeduplicationTests
         // provenance was captured. Causal capture has its own fixture (ReferenceRecallCausalEdgeTests).
         public void CallStageDeferredRecallRpei(PendingExport pendingExport, string? displayName) => StageDeferredRecallRpei(pendingExport, displayName, []);
 
-        public Task CallFlushDeferredRecallRpeisAsync() => FlushDeferredRecallRpeisAsync();
+        // Within a run, as the processor always flushes: the run holds the history writer the flush records through (#2874).
+        public Task CallFlushDeferredRecallRpeisAsync() => RunWithHistoryWriterAsync(FlushDeferredRecallRpeisAsync);
     }
 }

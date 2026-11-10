@@ -3,6 +3,8 @@
 
 using System.Reflection;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
@@ -49,6 +51,39 @@ public class ReadOnlySyncRepositoryGuardTests
         }
 
         innerScope.Verify(s => s.Dispose(), Times.Once);
+    }
+
+    [Test]
+    public void WriteSynchronisationHistoryAsync_IsAWrite_Throws()
+    {
+        var batch = new SynchronisationHistoryBatch
+        {
+            Items = [], ItemIdsWrittenWithDeletion = new HashSet<Guid>(), Outcomes = [], OutcomeChangeRecords = [], ItemChangeRecords = [],
+            CausalEdges = [], MatchCandidates = [], MetaverseObjectChanges = [], MetaverseObjectChangeAppends = [],
+            CounterDeltas = new Dictionary<ActivityStatCounterKey, long>()
+        };
+
+        Assert.That(() => _guard.WriteSynchronisationHistoryAsync(batch),
+            Throws.InstanceOf<PreviewWriteAttemptedException>().With.Message.Contain(nameof(ISyncRepository.WriteSynchronisationHistoryAsync)));
+    }
+
+    [Test]
+    public void SynchronisationHistoryQueries_WriteNothing_DelegateToTheWrappedRepository()
+    {
+        // Preparing readies objects in memory and writes nothing; the two properties only describe the repository.
+        _inner.Setup(r => r.SupportsConcurrentHistoryWrites).Returns(true);
+        _inner.Setup(r => r.HasOpenTransaction).Returns(true);
+
+        _guard.PrepareSynchronisationHistory([], null, false, [], [], 1, 1);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_guard.SupportsConcurrentHistoryWrites, Is.True);
+            Assert.That(_guard.HasOpenTransaction, Is.True);
+        }
+
+        _inner.Verify(r => r.PrepareSynchronisationHistory(It.IsAny<IReadOnlyList<ActivityRunProfileExecutionItem>>(), null, false,
+            It.IsAny<IReadOnlyList<MetaverseObjectChange>>(), It.IsAny<IReadOnlyList<MetaverseObjectChange>>(), 1, 1), Times.Once);
     }
 
     [Test]

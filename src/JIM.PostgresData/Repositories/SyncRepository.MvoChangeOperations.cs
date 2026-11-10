@@ -58,6 +58,29 @@ public partial class SyncRepository
             : null;
         persistSpan?.SetTag("joinedCallerTransaction", transaction == null);
 
+        var (attributeCount, valueCount) = await WriteMvoChangeRecordsAsync(newChanges, attributeAppendsToExistingChanges);
+
+        if (transaction != null)
+        {
+            using (MvoActivitySource.StartActivity("MvoChange.Persist.Commit"))
+                await transaction.CommitAsync();
+        }
+        _context.Database.SetCommandTimeout(previousTimeout);
+
+        Log.Debug("PersistPendingMvoChangesAsync: Persisted {NewCount} new MVO changes and appended children to {AppendCount} existing; {AttrCount} attribute changes, {ValueCount} value changes",
+            newChanges.Count, attributeAppendsToExistingChanges.Count, attributeCount, valueCount);
+    }
+
+    /// <summary>
+    /// Writes Metaverse Object change records whose ids are all assigned, in the transaction the caller holds:
+    /// <see cref="PersistPendingMvoChangesAsync"/>'s, or a synchronisation history write's (#2874). New records are
+    /// written with their attribute and value rows; appends write only their rows, under the record each extends.
+    /// </summary>
+    /// <returns>The attribute and value rows written.</returns>
+    private async Task<(int AttributeCount, int ValueCount)> WriteMvoChangeRecordsAsync(
+        IReadOnlyList<MetaverseObjectChange> newChanges,
+        IReadOnlyList<MetaverseObjectChange> attributeAppendsToExistingChanges)
+    {
         if (newChanges.Count > 0)
         {
             using var changesSpan = MvoActivitySource.StartActivity("MvoChange.Persist.Changes");
@@ -92,21 +115,13 @@ public partial class SyncRepository
             await BulkInsertMvoChangeAttributeValuesRawAsync(allValueChanges);
         }
 
-        if (transaction != null)
-        {
-            using (MvoActivitySource.StartActivity("MvoChange.Persist.Commit"))
-                await transaction.CommitAsync();
-        }
-        _context.Database.SetCommandTimeout(previousTimeout);
-
-        Log.Debug("PersistPendingMvoChangesAsync: Persisted {NewCount} new MVO changes and appended children to {AppendCount} existing; {AttrCount} attribute changes, {ValueCount} value changes",
-            newChanges.Count, attributeAppendsToExistingChanges.Count, allAttrChanges.Count, allValueChanges.Count);
+        return (allAttrChanges.Count, allValueChanges.Count);
     }
 
     /// <summary>
     /// Bulk inserts MetaverseObjectChange rows using COPY binary import.
     /// </summary>
-    private async Task BulkInsertMvoChangesRawAsync(List<MetaverseObjectChange> changes)
+    private async Task BulkInsertMvoChangesRawAsync(IReadOnlyList<MetaverseObjectChange> changes)
     {
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);

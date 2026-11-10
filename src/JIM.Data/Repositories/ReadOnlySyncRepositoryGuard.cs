@@ -765,6 +765,25 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task InsertRpeiRowsAsync(List<ActivityRunProfileExecutionItem> rpeis)
         => throw new PreviewWriteAttemptedException(nameof(InsertRpeiRowsAsync));
 
+    // Readies objects in memory and writes nothing, so it delegates; the write it prepares for is refused below.
+    public SynchronisationHistoryBatch PrepareSynchronisationHistory(
+        IReadOnlyList<ActivityRunProfileExecutionItem> items,
+        IReadOnlySet<Guid>? itemIdsWrittenWithDeletion,
+        bool includeItemChangeRecords,
+        IReadOnlyList<MetaverseObjectChange> newMetaverseObjectChanges,
+        IReadOnlyList<MetaverseObjectChange> metaverseObjectChangeAppends,
+        int page,
+        int totalPages)
+        => _inner.PrepareSynchronisationHistory(items, itemIdsWrittenWithDeletion, includeItemChangeRecords,
+            newMetaverseObjectChanges, metaverseObjectChangeAppends, page, totalPages);
+
+    public Task<bool> WriteSynchronisationHistoryAsync(SynchronisationHistoryBatch batch)
+        => throw new PreviewWriteAttemptedException(nameof(WriteSynchronisationHistoryAsync));
+
+    public bool SupportsConcurrentHistoryWrites => _inner.SupportsConcurrentHistoryWrites;
+
+    public bool HasOpenTransaction => _inner.HasOpenTransaction;
+
     public Task BulkUpdateRpeiOutcomesAsync(List<ActivityRunProfileExecutionItem> rpeis, List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes)
         => throw new PreviewWriteAttemptedException(nameof(BulkUpdateRpeiOutcomesAsync));
 

@@ -1,6 +1,6 @@
 # Delta Sync Flow
 
-> Last updated: 2026-10-29, JIM v0.17.0
+> Last updated: 2026-11-09, JIM v0.17.0
 
 This diagram shows how Delta Synchronisation differs from Full Synchronisation. Both use identical per-CSO processing logic; the only difference is CSO selection and a few lifecycle steps.
 
@@ -44,7 +44,7 @@ flowchart TD
     Pass1 --> Pass2[Pass 2: non-obsolete CSOs<br/>ProcessActiveConnectedSystemObjectAsync<br/>Identical to Full Sync:<br/>join, project, Attribute Flow, drift]
     Pass2 --> CsoLoop
 
-    CsoLoop -->|No| PageFlush[Page flush pipeline:<br/>1. Deferred reference attributes<br/>2. PersistPendingMetaverseObjectsAsync:<br/>join states clear SynchronisationPending<br/>in the same statement, then one guarded<br/>clear of both marks, then held-back<br/>objects kept marked #2343, then scope flags<br/>3. Generated value assignments: stale<br/>ones deleted, the page's committed #242<br/>4. CreatePendingMvoChangeObjectsAsync<br/>5. EvaluateQueuedDriftAsync<br/>6. EvaluatePendingExportsAsync<br/>7. FlushPendingExportOperationsAsync<br/>8. ResolvePendingExportReferenceSnapshotsAsync<br/>9. FlushObsoleteCsoOperationsAsync<br/>10. FlushPendingMvoDeletionsAsync<br/>11. FlushRpeisAsync: bulk-insert via raw SQL<br/>12. FlushPendingMvoChangesAsync<br/>13. Clear change tracker and page<br/>identity map, update progress]
+    CsoLoop -->|No| PageFlush[Page flush pipeline:<br/>1. Deferred reference attributes, then wait<br/>for the previous page's history write #2874<br/>2. PersistPendingMetaverseObjectsAsync:<br/>join states clear SynchronisationPending<br/>in the same statement, then one guarded<br/>clear of both marks, then held-back<br/>objects kept marked #2343, then scope flags<br/>3. Generated value assignments: stale<br/>ones deleted, the page's committed #242<br/>4. CreatePendingMvoChangeObjectsAsync<br/>5. EvaluateQueuedDriftAsync<br/>6. EvaluatePendingExportsAsync<br/>7. FlushPendingExportOperationsAsync<br/>8. ResolvePendingExportReferenceSnapshotsAsync<br/>9. FlushObsoleteCsoOperationsAsync<br/>10. FlushPendingMvoDeletionsAsync<br/>11. FlushPageHistoryAsync: prepare the page's<br/>RPEIs and change records and hand them to<br/>the history writer, which writes them while<br/>the next page loads, see Full Sync flow<br/>12. Clear change tracker and page<br/>identity map, update progress]
     PageFlush --> PageLoop
 
     PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>in batches bounded by objects and<br/>reference values #2492<br/>Merge reference-attribute changes under<br/>the existing MvoChange parent RPEI<br/>Re-run persist/flush pipeline]
