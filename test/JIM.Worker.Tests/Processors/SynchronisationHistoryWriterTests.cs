@@ -388,6 +388,59 @@ public class SynchronisationHistoryWriterTests
         }
     }
 
+    /// <summary>
+    /// #2895: the run's end-of-run line gives the time waited at each barrier, so it is kept per barrier, and the
+    /// barriers' totals add up to the total waited for.
+    /// </summary>
+    [Test]
+    public async Task WaitAsync_AtDifferentBarriers_KeepsTheTimeWaitedPerBarrierAsync()
+    {
+        await using var writer = NewWriter();
+
+        var gate = Gate();
+        await writer.HandOffAsync(Batch(1));
+        var waitAtPageState = writer.WaitAsync(SynchronisationHistoryBarrier.PageStateFlush);
+        await Task.Delay(40);
+        gate.SetResult(true);
+        await waitAtPageState;
+
+        await writer.HandOffAsync(Batch(2));
+        await writer.WaitAsync(SynchronisationHistoryBarrier.PageLoopExit);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(writer.WaitTime(SynchronisationHistoryBarrier.PageStateFlush), Is.GreaterThanOrEqualTo(TimeSpan.FromMilliseconds(30)));
+            Assert.That(writer.WaitTime(SynchronisationHistoryBarrier.PageLoopExit), Is.LessThan(TimeSpan.FromMilliseconds(30)),
+                "a write already complete is barely waited for");
+            Assert.That(writer.WaitTime(SynchronisationHistoryBarrier.AwaitedFlush), Is.EqualTo(TimeSpan.Zero), "nothing waited there");
+            Assert.That(writer.TotalWaitTime, Is.EqualTo(
+                writer.WaitTime(SynchronisationHistoryBarrier.PageStateFlush)
+                + writer.WaitTime(SynchronisationHistoryBarrier.PageLoopExit)
+                + writer.WaitTime(SynchronisationHistoryBarrier.AwaitedFlush)));
+        }
+    }
+
+    /// <summary>
+    /// #2895: the run times each history preparation and each page flush on its own thread and records them here, so the
+    /// end-of-run line gives their totals beside the writes and waits.
+    /// </summary>
+    [Test]
+    public async Task RecordPreparationAndFlush_SeveralTimes_SumsEachAsync()
+    {
+        await using var writer = NewWriter();
+
+        writer.RecordPreparation(TimeSpan.FromMilliseconds(3));
+        writer.RecordPreparation(TimeSpan.FromMilliseconds(4));
+        writer.RecordFlush(TimeSpan.FromMilliseconds(10));
+        writer.RecordFlush(TimeSpan.FromMilliseconds(12));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(writer.TotalPrepareTime, Is.EqualTo(TimeSpan.FromMilliseconds(7)));
+            Assert.That(writer.TotalFlushTime, Is.EqualTo(TimeSpan.FromMilliseconds(22)));
+        }
+    }
+
     [Test]
     public async Task DisposeAsync_WriteInFlight_WaitsForItThenReleasesTheScopeAsync()
     {

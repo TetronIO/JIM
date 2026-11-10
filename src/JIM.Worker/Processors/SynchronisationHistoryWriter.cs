@@ -46,6 +46,9 @@ internal sealed class SynchronisationHistoryWriter : IAsyncDisposable
     private bool _disposed;
     private long _writeTicks;
     private long _waitTicks;
+    private readonly Dictionary<SynchronisationHistoryBarrier, long> _waitTicksByBarrier = [];
+    private long _prepareTicks;
+    private long _flushTicks;
 
     /// <param name="runRepository">The run's own repository. The writer opens a repository of its own from it
     /// (<see cref="ISyncRepository.OpenIsolatedScope"/>), which it owns and disposes, and refuses a hand-off while the
@@ -74,6 +77,51 @@ internal sealed class SynchronisationHistoryWriter : IAsyncDisposable
 
     /// <summary>The time the run spent waiting for writes, in total.</summary>
     public TimeSpan TotalWaitTime => TimeSpan.FromTicks(_waitTicks);
+
+    /// <summary>The time the run spent waiting for writes at one barrier, in total (#2895).</summary>
+    /// <param name="barrier">The barrier.</param>
+    public TimeSpan WaitTime(SynchronisationHistoryBarrier barrier) =>
+        TimeSpan.FromTicks(_waitTicksByBarrier.GetValueOrDefault(barrier));
+
+    /// <summary>The time the run spent preparing history for the writer, in total (#2895).</summary>
+    public TimeSpan TotalPrepareTime => TimeSpan.FromTicks(_prepareTicks);
+
+    /// <summary>The time the run spent flushing page history on its own thread, preparation included, in total (#2895).</summary>
+    public TimeSpan TotalFlushTime => TimeSpan.FromTicks(_flushTicks);
+
+    /// <summary>
+    /// Adds the time the run took to prepare a batch of history to the totals the end-of-run line reports (#2895).
+    /// </summary>
+    public void RecordPreparation(TimeSpan elapsed) => _prepareTicks += elapsed.Ticks;
+
+    /// <summary>
+    /// Adds the time the run took to flush a page's history on its own thread to the totals the end-of-run line
+    /// reports (#2895).
+    /// </summary>
+    public void RecordFlush(TimeSpan elapsed) => _flushTicks += elapsed.Ticks;
+
+    /// <summary>
+    /// Writes the run's history totals to the log as the run ends: the batches written, the time writing them, the time
+    /// waited for them in all and at each barrier, and the time preparing and flushing them on the run's own thread.
+    /// </summary>
+    /// <param name="connectedSystemName">The Connected System synchronised.</param>
+    public void LogRunTotals(string connectedSystemName)
+    {
+        if (BatchesWritten == 0)
+            return;
+
+        var hidden = TotalWriteTime - TotalWaitTime;
+        Log.Information("SynchronisationHistoryWriter: {Mode} history for Connected System {ConnectedSystemName}: {Batches} batches, " +
+            "{WriteSeconds:F1}s writing, {WaitSeconds:F1}s waited for ({PageStateFlushWaitSeconds:F1}s at page state flushes, " +
+            "{PageLoopExitWaitSeconds:F1}s at page loop exits, {AwaitedFlushWaitSeconds:F1}s at awaited flushes), " +
+            "{HiddenSeconds:F1}s hidden behind the run's own work; {PrepareSeconds:F1}s preparing, {FlushSeconds:F1}s flushing pages",
+            Mode, LogSanitiser.Sanitise(connectedSystemName), BatchesWritten,
+            TotalWriteTime.TotalSeconds, TotalWaitTime.TotalSeconds,
+            WaitTime(SynchronisationHistoryBarrier.PageStateFlush).TotalSeconds,
+            WaitTime(SynchronisationHistoryBarrier.PageLoopExit).TotalSeconds,
+            WaitTime(SynchronisationHistoryBarrier.AwaitedFlush).TotalSeconds,
+            Math.Max(0, hidden.TotalSeconds), TotalPrepareTime.TotalSeconds, TotalFlushTime.TotalSeconds);
+    }
 
     /// <summary>
     /// Hands a prepared batch to the writer: writes it before returning (<see cref="SynchronisationHistoryWriteMode.Inline"/>)
@@ -132,6 +180,7 @@ internal sealed class SynchronisationHistoryWriter : IAsyncDisposable
         await ((Task)write).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         stopwatch.Stop();
         _waitTicks += stopwatch.Elapsed.Ticks;
+        _waitTicksByBarrier[barrier] = _waitTicksByBarrier.GetValueOrDefault(barrier) + stopwatch.Elapsed.Ticks;
         span.SetTag("waitedMs", stopwatch.Elapsed.TotalMilliseconds);
 
         _writeInFlight = null;

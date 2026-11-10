@@ -138,6 +138,43 @@ public enum ExportPhase
 }
 
 /// <summary>
+/// Why an export run's parallel batches took the shared gate on the run's own database context (#2895), so the time
+/// spent waiting for it and holding it can be told apart by purpose.
+/// </summary>
+public enum ExportContextGatePurpose
+{
+    /// <summary>
+    /// Selecting the next batch to execute.
+    /// </summary>
+    NextBatch,
+
+    /// <summary>
+    /// Writing a batch's execution items and their change history.
+    /// </summary>
+    ExecutionItems,
+
+    /// <summary>
+    /// Reporting the run's progress after a batch.
+    /// </summary>
+    Progress,
+
+    /// <summary>
+    /// Recording a Connector's own progress narration.
+    /// </summary>
+    ConnectorProgress,
+
+    /// <summary>
+    /// Reading the exports of a batch that could not be loaded, to describe its failure.
+    /// </summary>
+    DescribeFailedBatch,
+
+    /// <summary>
+    /// Saving what a Connector returned as its connection closed.
+    /// </summary>
+    ConnectorData
+}
+
+/// <summary>
 /// Why a reference attribute change on a Pending Export has not been written yet (issue #1398).
 /// </summary>
 public enum UnresolvedReferenceReason

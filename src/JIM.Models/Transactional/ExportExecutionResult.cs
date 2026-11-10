@@ -308,6 +308,12 @@ public class ExportExecutionResult
     public int PartitionRecordingFailedCount { get; set; }
 
     #endregion
+
+    /// <summary>
+    /// The run's time on the gate its parallel batches share to use the run's own database context (#2895), by purpose:
+    /// waiting for it and holding it. Empty when the batches ran one at a time. For the end-of-run log.
+    /// </summary>
+    public ExportContextGateTimings ContextGateTimings { get; } = new();
 }
 
 /// <summary>

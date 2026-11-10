@@ -1151,8 +1151,12 @@ public class InitialPasswordStagingTests
         }
     }
 
+    /// <summary>
+    /// Which rules ask for an Initial Password is a setting of the run (#2895): read for the first batch that names a
+    /// rule and remembered, so the second batch from the same rule reads nothing and is decided the same way.
+    /// </summary>
     [Test]
-    public async Task ExecuteExportsAsync_TwoBatches_LooksUpTheRulesOncePerBatchAsync()
+    public async Task ExecuteExportsAsync_TwoBatches_LooksUpTheRulesOnceForTheRunAsync()
     {
         var (system, _, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
         ArrangeProvisioningCreate(initialPasswordEnabled: true);
@@ -1162,9 +1166,51 @@ public class InitialPasswordStagingTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(handedToConnector, Has.Count.EqualTo(2), "precondition: one Create per batch");
-            Assert.That(SyncRepo.GetSyncRuleIdsWithInitialPasswordEnabledCallCount, Is.EqualTo(2));
+            Assert.That(SyncRepo.GetSyncRuleIdsWithInitialPasswordEnabledCallCount, Is.EqualTo(1));
             Assert.That(handedToConnector.Select(pe => pe.InitialPasswordFollows), Is.All.True);
             Assert.That(result.InitialPasswordsStagedCount, Is.EqualTo(2));
+        }
+    }
+
+    /// <summary>
+    /// A later batch naming a rule the run has not read yet reads that rule, and only that rule (#2895); both batches are
+    /// decided exactly as a read of their own would decide them.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_LaterBatchNamesAnotherRule_LooksUpOnlyThatRuleAsync()
+    {
+        var (system, _, passwordExport) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        var (_, _, otherExport) = ArrangeProvisioningCreate(initialPasswordEnabled: false, syncRuleId: OtherProvisioningRuleId);
+
+        var (result, handedToConnector) = await ExportCapturingAsync(system, new ExportExecutionOptions { BatchSize = 1 });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(handedToConnector, Has.Count.EqualTo(2), "precondition: one Create per batch");
+            Assert.That(SyncRepo.GetSyncRuleIdsWithInitialPasswordEnabledCallCount, Is.EqualTo(2), "one read per rule, each the first time it is met");
+            Assert.That(handedToConnector.Single(pe => pe.Id == passwordExport.Id).InitialPasswordFollows, Is.True);
+            Assert.That(handedToConnector.Single(pe => pe.Id == otherExport.Id).InitialPasswordFollows, Is.False);
+            Assert.That(result.InitialPasswordsStagedCount, Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// A failed lookup is not remembered (#2895): each batch tries again, and each is contained as before.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_RuleLookupFailsForTwoBatches_TriesAgainForEachBatchAsync()
+    {
+        var (system, _, _) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        ArrangeProvisioningCreate(initialPasswordEnabled: true);
+        SyncRepo.FailInitialPasswordRuleLookupWith = new InvalidOperationException("The database could not be reached.");
+
+        var (result, handedToConnector) = await ExportCapturingAsync(system, new ExportExecutionOptions { BatchSize = 1 });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.GetSyncRuleIdsWithInitialPasswordEnabledCallCount, Is.EqualTo(2));
+            Assert.That(handedToConnector.Select(pe => pe.InitialPasswordFollows), Is.All.False);
+            Assert.That(result.InitialPasswordStagingFailedCount, Is.EqualTo(2));
         }
     }
 

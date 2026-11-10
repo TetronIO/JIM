@@ -477,6 +477,105 @@ public class OptimisticExportApplyDatabaseTests
         await AssertObjectUnchangedAsync(csoId, existingId, "old@example.com", stamp);
     }
 
+    /// <summary>
+    /// #2895: an object with no import stamp, as every provisioned object is, has nothing for the import-state update to
+    /// clear, so its row is not rewritten (its row version is unchanged); the values are still applied.
+    /// </summary>
+    [Test]
+    public async Task ApplyExportedAttributeValuesAsync_UnstampedCso_DoesNotRewriteTheObjectRowAsync()
+    {
+        var (attr, csoId) = await SeedCsoAsync("old@example.com");
+        var rowVersionBefore = await RowVersionAsync(csoId);
+
+        await using (var ctx = NewContext())
+        {
+            var existing = await ctx.ConnectedSystemObjectAttributeValues.AsNoTracking()
+                .SingleAsync(av => av.ConnectedSystemObject.Id == csoId);
+            var cso = await ctx.ConnectedSystemObjects.AsNoTracking().SingleAsync(c => c.Id == csoId);
+            var addition = new ConnectedSystemObjectAttributeValue
+            {
+                Id = Guid.NewGuid(), ConnectedSystemObject = cso, AttributeId = attr.Id, StringValue = "new@example.com"
+            };
+            await new PostgresDataRepository(ctx).Sync.ApplyExportedAttributeValuesAsync([addition], [existing.Id], [csoId]);
+        }
+
+        await using var verify = NewContext();
+        var storedValues = await verify.ConnectedSystemObjectAttributeValues.AsNoTracking()
+            .Where(av => av.ConnectedSystemObject.Id == csoId).Select(av => av.StringValue).ToListAsync();
+        var storedCso = await verify.ConnectedSystemObjects.AsNoTracking().SingleAsync(c => c.Id == csoId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(storedValues, Is.EquivalentTo(new[] { "new@example.com" }));
+            Assert.That(storedCso.ImportStateHash, Is.Null);
+            Assert.That(storedCso.ImportStateFingerprint, Is.Null);
+            Assert.That(await RowVersionAsync(csoId), Is.EqualTo(rowVersionBefore), "an update with nothing to clear must not rewrite the row");
+        }
+    }
+
+    /// <summary>
+    /// #2895: the same for the external ID update after a successful export (<c>UpdateConnectedSystemObjectsWithNewAttributeValuesAsync</c>):
+    /// an unstamped object's row is not rewritten, a stamped one is cleared as before, and both get their new values.
+    /// </summary>
+    [Test]
+    public async Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync_UnstampedAndStampedCsos_RewritesOnlyTheStampedRowAsync()
+    {
+        var (attr, unstampedId) = await SeedCsoAsync();
+        Guid stampedId;
+        await using (var seed = NewContext())
+        {
+            var template = await seed.ConnectedSystemObjects.AsNoTracking().SingleAsync(c => c.Id == unstampedId);
+            stampedId = Guid.NewGuid();
+            seed.ConnectedSystemObjects.Add(new ConnectedSystemObject
+            {
+                Id = stampedId, ConnectedSystemId = template.ConnectedSystemId, TypeId = template.TypeId,
+                Status = ConnectedSystemObjectStatus.Normal, ExternalIdAttributeId = attr.Id
+            });
+            await seed.SaveChangesAsync();
+        }
+        await using (var stampCtx = NewContext())
+            await new PostgresDataRepository(stampCtx).Sync.StampImportStateAsync([(stampedId, Guid.NewGuid(), Guid.NewGuid())]);
+
+        var unstampedVersionBefore = await RowVersionAsync(unstampedId);
+        var stampedVersionBefore = await RowVersionAsync(stampedId);
+
+        await using (var ctx = NewContext())
+        {
+            var objects = await ctx.ConnectedSystemObjects.AsNoTracking().Where(c => c.Id == unstampedId || c.Id == stampedId).ToListAsync();
+            var updates = objects.Select(cso => (cso, new List<ConnectedSystemObjectAttributeValue>
+            {
+                new() { Id = Guid.NewGuid(), ConnectedSystemObject = cso, AttributeId = attr.Id, StringValue = $"{cso.Id}@example.com" }
+            })).ToList();
+            await new PostgresDataRepository(ctx).Sync.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(updates);
+        }
+
+        await using var verify = NewContext();
+        var stored = await verify.ConnectedSystemObjects.AsNoTracking().Include(c => c.AttributeValues)
+            .Where(c => c.Id == unstampedId || c.Id == stampedId).ToDictionaryAsync(c => c.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Values.Select(c => c.AttributeValues.Single().StringValue),
+                Is.EquivalentTo(new[] { $"{unstampedId}@example.com", $"{stampedId}@example.com" }));
+            Assert.That(stored.Values.Select(c => c.ImportStateHash), Is.All.Null);
+            Assert.That(stored.Values.Select(c => c.ImportStateFingerprint), Is.All.Null);
+            Assert.That(await RowVersionAsync(unstampedId), Is.EqualTo(unstampedVersionBefore),
+                "an unstamped object has nothing to clear, so its row must not be rewritten");
+            Assert.That(await RowVersionAsync(stampedId), Is.Not.EqualTo(stampedVersionBefore), "a stamped object's stamp is cleared");
+        }
+    }
+
+    /// <summary>
+    /// The row's version (<c>xmin</c>): any rewrite of the row, even one setting the values it already holds, changes it.
+    /// </summary>
+    private async Task<long> RowVersionAsync(Guid csoId)
+    {
+        await using var connection = new Npgsql.NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var command = new Npgsql.NpgsqlCommand(
+            @"SELECT xmin::text::bigint FROM ""ConnectedSystemObjects"" WHERE ""Id"" = @id", connection);
+        command.Parameters.AddWithValue("id", csoId);
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
     private async Task<Guid> SingleValueIdAsync(Guid csoId)
     {
         await using var verify = NewContext();

@@ -4755,12 +4755,15 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
 
             // SPEC-1082 D9: same rationale as the singular overload above - this writes attribute
             // values outside the Full Import stamp path, so null the stored hash/fingerprint for
-            // every affected CSO, set-based, in the same operation.
+            // every affected CSO, set-based, in the same operation. Only rows with a stamp to clear (#2895): import stamping
+            // is the only writer that sets either column, so a provisioned object, whose external ID this records, has
+            // none, and rewriting its row would leave a dead row version for nothing.
             var affectedCsoIds = updates.Where(u => u.newAttributeValues.Count > 0).Select(u => u.cso.Id).Distinct().ToArray();
             if (affectedCsoIds.Length > 0)
             {
                 await Repository.Database.Database.ExecuteSqlRawAsync(
-                    @"UPDATE ""ConnectedSystemObjects"" SET ""ImportStateHash"" = NULL, ""ImportStateFingerprint"" = NULL WHERE ""Id"" = ANY({0})",
+                    @"UPDATE ""ConnectedSystemObjects"" SET ""ImportStateHash"" = NULL, ""ImportStateFingerprint"" = NULL
+                      WHERE ""Id"" = ANY({0}) AND (""ImportStateHash"" IS NOT NULL OR ""ImportStateFingerprint"" IS NOT NULL)",
                     affectedCsoIds);
             }
         }

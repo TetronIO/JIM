@@ -537,13 +537,19 @@ public partial class SyncRepository
     /// SPEC-1082 D9: sets ImportStateHash and ImportStateFingerprint to NULL for the given CSO IDs,
     /// via a single set-based UPDATE. Never touches LastUpdated.
     /// </summary>
+    /// <remarks>
+    /// Only rows with a stamp to clear are updated (#2895). Import stamping (<c>StampImportStateAsync</c>) is the only
+    /// writer that sets either column, so a provisioned object's are always NULL, and an unconditional update rewrote every
+    /// Create's row for nothing: a dead row version per object, a million over a 500,000-object initial load.
+    /// </remarks>
     private async Task NullImportStateForCsosAsync(IReadOnlyCollection<Guid> csoIds)
     {
         if (csoIds.Count == 0)
             return;
 
         await _context.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""ConnectedSystemObjects"" SET ""ImportStateHash"" = NULL, ""ImportStateFingerprint"" = NULL WHERE ""Id"" = ANY({0})",
+            @"UPDATE ""ConnectedSystemObjects"" SET ""ImportStateHash"" = NULL, ""ImportStateFingerprint"" = NULL
+              WHERE ""Id"" = ANY({0}) AND (""ImportStateHash"" IS NOT NULL OR ""ImportStateFingerprint"" IS NOT NULL)",
             csoIds.ToArray());
     }
 

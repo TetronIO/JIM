@@ -254,6 +254,8 @@ public class SyncExportTaskProcessor
                     _cancellationTokenSource.Token,
                     async progressInfo =>
                     {
+                        // #2895: under the export's shared context gate when batches run in parallel, so timed too.
+                        using var progressSpan = Diagnostics.Sync.StartSpan("ReportExportProgress");
                         // The counters are what the portal renders the count, rate and time remaining
                         // from, so the Connector's message travels on its own; repeating the counts
                         // in it printed the same numbers twice on the Activity.
@@ -293,7 +295,12 @@ public class SyncExportTaskProcessor
                     {
                         // Stream RPEI creation per-batch instead of accumulating 100K+ items
                         // across the entire run. This bounds memory to batch size (~100 items).
+                        // #2895: the execution items and their change history, written under the export's shared
+                        // context gate when batches run in parallel, which is what makes this worth a span of its own.
+                        using var persistSpan = Diagnostics.Sync.StartSpan("PersistBatchExecutionItems")
+                            .SetTag("itemCount", batchItems.Count);
                         await PersistBatchRpeisAsync(batchItems, _connectedSystem.Id);
+                        persistSpan.SetSuccess();
                     },
                     uniqueValueReservations: _uniqueValueReservations,
                     containersCreated: RecordContainersCreated,

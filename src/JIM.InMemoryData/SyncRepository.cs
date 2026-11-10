@@ -3140,7 +3140,7 @@ public partial class SyncRepository : ISyncRepository
 
     /// <summary>
     /// How many times <see cref="GetSyncRuleIdsWithInitialPasswordEnabledAsync"/> has been called, so a test can prove
-    /// the export run reads which rules ask for an Initial Password once per batch (#2039).
+    /// the export run reads which rules ask for an Initial Password once per run (#2039, #2895).
     /// </summary>
     public int GetSyncRuleIdsWithInitialPasswordEnabledCallCount { get; private set; }
 
@@ -3847,8 +3847,15 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    /// <summary>
+    /// How many times <see cref="GetAttributesByIdsAsync"/> has been called, so a test can prove the export run reads the
+    /// attribute definitions it records external IDs with once per run, not once per batch (#2895).
+    /// </summary>
+    public int GetAttributesByIdsCallCount { get; private set; }
+
     public Task<Dictionary<int, ConnectedSystemObjectTypeAttribute>> GetAttributesByIdsAsync(IEnumerable<int> ids)
     {
+        GetAttributesByIdsCallCount++;
         var idSet = ids.ToHashSet();
         var result = new Dictionary<int, ConnectedSystemObjectTypeAttribute>();
 
