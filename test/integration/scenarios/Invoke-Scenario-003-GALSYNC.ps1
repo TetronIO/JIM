@@ -173,15 +173,13 @@ function Start-Profile {
 }
 
 function Wait-ForExchangeQueuesToSettle {
-    # Both forests' Exchange changes delivered (gone from the queue) or stopped (parked, refused, not made).
+    # Both forests' Exchange changes delivered (gone from the queue) or stopped (parked, refused, not made). The queue
+    # summary counts every Connected System's changes, which here are exactly the two forests'.
     param([int]$TimeoutSeconds = 900)
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ($true) {
-        $moving = 0
-        foreach ($systemId in $config.LDAPSystemId, $config.SourceLDAPSystemId) {
-            $summary = Get-JIMPendingExchangeChange -ConnectedSystemId $systemId -Summary
-            $moving += [int]$summary.queuedCount + [int]$summary.deliveringCount + [int]$summary.retryingCount
-        }
+        $summary = Get-JIMPendingExchangeChange -Summary
+        $moving = [int]$summary.queuedCount + [int]$summary.deliveringCount + [int]$summary.retryingCount
         if ($moving -eq 0) { return }
         if ((Get-Date) -gt $deadline) { throw "$moving Exchange change(s) were still moving after $TimeoutSeconds seconds." }
         Start-Sleep -Seconds 5
