@@ -968,6 +968,9 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _repo.ConnectedSystems.GetRemainingDeferredExportIdsAsync(connectedSystemId, afterCreatedAt, afterId);
 
+    public Task<DeferredExportOrderingSummary> GetDeferredExportOrderingSummaryAsync(int connectedSystemId, IReadOnlyCollection<Guid> pendingExportIds)
+        => _repo.ConnectedSystems.GetDeferredExportOrderingSummaryAsync(connectedSystemId, pendingExportIds);
+
     public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _repo.ConnectedSystems.AnyExecutableNonDeferredExportsAfterAsync(connectedSystemId, afterCreatedAt, afterId);
 

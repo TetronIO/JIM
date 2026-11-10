@@ -3812,7 +3812,11 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(objects.ToDictionary(pair => pair.Key, pair => pair.Value.NameOrId ?? pair.Value.Id.ToString()));
     }
 
-    public Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(
+    /// <summary>
+    /// What references to the given Metaverse Objects are written as in a Connected System. Virtual for test-support
+    /// subclasses, which simulate an anchor that arrives only once its object has been written.
+    /// </summary>
+    public virtual Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(
         IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
     {
         var result = new Dictionary<Guid, ReferenceAnchorSummary>();
@@ -3955,6 +3959,60 @@ public partial class SyncRepository : ISyncRepository
             .Select(pe => pe.Id)
             .ToList();
         return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// What the deferred pass orders the given exports by (#2905), mirroring the Postgres implementation: each export's
+    /// change count, and each export referencing the object of another export among them that supplies that object's
+    /// anchor (the object holds none yet, or the export, not being a Create, changes an external ID attribute). Virtual
+    /// for test-support subclasses.
+    /// </summary>
+    public virtual Task<DeferredExportOrderingSummary> GetDeferredExportOrderingSummaryAsync(int connectedSystemId, IReadOnlyCollection<Guid> pendingExportIds)
+    {
+        var exports = pendingExportIds
+            .Distinct()
+            .Select(id => _pendingExports.TryGetValue(id, out var pe) ? pe : null)
+            .Where(pe => pe != null && pe.ConnectedSystemId == connectedSystemId)
+            .Select(pe => pe!)
+            .ToList();
+
+        // The exports of the pass that supply their object's anchor, by the Metaverse Object a reference names.
+        var suppliersByMetaverseObject = exports
+            .Select(export => (Export: export,
+                Object: export.ConnectedSystemObjectId is { } csoId && _csos.TryGetValue(csoId, out var held) ? held : export.ConnectedSystemObject))
+            .Where(pair => pair.Object?.MetaverseObjectId != null && SuppliesItsAnchor(pair.Export, pair.Object!))
+            .GroupBy(pair => pair.Object!.MetaverseObjectId!.Value, pair => pair.Export.Id)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        var dependencies = exports
+            .SelectMany(export => export.AttributeValueChanges
+                .Select(change => Guid.TryParse(change.UnresolvedReferenceValue, out var referenced) ? referenced : (Guid?)null)
+                .Where(referenced => referenced.HasValue && suppliersByMetaverseObject.ContainsKey(referenced.Value))
+                .SelectMany(referenced => suppliersByMetaverseObject[referenced!.Value])
+                .Where(targetId => targetId != export.Id)
+                .Distinct()
+                .Select(targetId => new DeferredExportDependency(export.Id, targetId)))
+            .ToList();
+
+        return Task.FromResult(new DeferredExportOrderingSummary
+        {
+            ChangeCounts = exports.ToDictionary(export => export.Id, export => export.AttributeValueChanges.Count),
+            Dependencies = dependencies
+        });
+    }
+
+    /// <summary>
+    /// Whether <paramref name="export"/> supplies its object's anchor: the object holds none yet, or the export, not being
+    /// a Create, changes an external ID attribute.
+    /// </summary>
+    private bool SuppliesItsAnchor(PendingExport export, ConnectedSystemObject connectedSystemObject)
+    {
+        FixupCsoNavigationProperties(connectedSystemObject);
+        if (ReferenceAnchorSummary.Of(connectedSystemObject).AnchorValue == null)
+            return true;
+
+        return export.ChangeType != PendingExportChangeType.Create
+            && export.AttributeValueChanges.Any(change => change.Attribute is { } attribute && (attribute.IsExternalId || attribute.IsSecondaryExternalId));
     }
 
     /// <summary>

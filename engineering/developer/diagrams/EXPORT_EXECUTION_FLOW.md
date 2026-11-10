@@ -80,7 +80,8 @@ flowchart TD
     CollectRest --> HasDeferred
 
     %% --- Deferred exports, a chunk at a time ---
-    HasDeferred{Deferred<br/>exports collected?} -->|Yes| LoadChunk[Load the next chunk of deferred<br/>exports by id, 2,000 at a time,<br/>DeferredChunkSize<br/>Fetch what each referenced MVO's<br/>object is written as in one<br/>Summary-tier query, ReferenceAnchorSummary]
+    HasDeferred{Deferred<br/>exports collected?} -->|Yes| PlanPass[Plan the pass, #2905<br/>one Summary-tier read: each export's<br/>change count, and which wait on another<br/>export of the pass for their anchor<br/>Largest first within a stage; an export<br/>waiting on one queued before it goes<br/>in a later stage; chunks and batches<br/>cut by count and by weight]
+    PlanPass --> LoadChunk[Load the next chunk of deferred<br/>exports by id, up to 2,000 at a time,<br/>DeferredChunkSize<br/>Fetch what each referenced MVO's<br/>object is written as in one<br/>Summary-tier query, ReferenceAnchorSummary]
     LoadChunk --> ResolveRefs[For each deferred export:<br/>Try to resolve MVO references<br/>to target system anchors]
     ResolveRefs --> Resolved{References<br/>resolved?}
     Resolved -->|Yes, or something<br/>writable now, #1398| PersistRefs[Persist the chunk's resolutions BEFORE<br/>its batches run, #994<br/>a parallel batch loads its own copy and<br/>would otherwise export raw MVO IDs]
@@ -88,7 +89,9 @@ flowchart TD
     Resolved -->|No, nothing writable| MarkDeferred[Mark as deferred<br/>Attempted again next run]
     ExportResolved --> MoreChunks{More<br/>chunks?}
     MarkDeferred --> MoreChunks
-    MoreChunks -->|Yes| LoadChunk
+    MoreChunks -->|Yes, same stage| LoadChunk
+    MoreChunks -->|Yes, next stage| StageBarrier[Parallel path: wait for every<br/>batch of the stage to finish]
+    StageBarrier --> LoadChunk
     MoreChunks -->|No| CaptureContainers
 
     HasDeferred -->|No| CaptureContainers
@@ -206,6 +209,11 @@ flowchart TD
 ## Key Design Decisions
 
 - **Two-pass export**<br /> Exports without unresolved references are executed first (immediate). Exports with unresolved MVO references are deferred, collected by id only, then executed in a second pass a chunk at a time (`DeferredChunkSize`, 2,000): each chunk is loaded, its references resolved against one Summary-tier anchor query (`GetReferenceAnchorsByMetaverseObjectIdsAsync`), its resolutions saved, and its batches handed out before the next chunk is prepared. Loading, resolving and saving the whole deferred set before writing any of it left a 790,000-object export at 0% for six minutes and held most of the Worker's memory; a later chunk also resolves against objects an earlier chunk wrote.
+
+- **The deferred pass starts with the largest work (#2905)**<br /> With several workers the pass finishes no sooner than its longest batch, and reaches that floor only when the longest batch starts early enough for the others to overlap it. In `(CreatedAt, Id)` order where the largest groups fell was arbitrary: at 500,000 objects the largest group's batch (126 s) was in the 13th and last chunk and ran alone for about 138 s at the end. `DeferredExportScheduler` now plans the pass from one Summary-tier read (`GetDeferredExportOrderingSummaryAsync`): each export's attribute value change count, and which exports wait on another export of the pass for their object's anchor.
+  - **Why dependencies matter, and only some.** A chunk is resolved against the referenced objects' anchors as it is loaded, before any of it is written. An object that already holds its anchor (an LDAP object holds the DN it was provisioned with) is resolvable wherever its referrer falls, so it orders nothing; an LDAP directory's nested groups therefore impose no order at all. An object whose anchor the target system generates (a database identity, a SCIM id) has none until its own Create is written, and a rename (an Update changing an external ID attribute) changes it; a reference to such an object resolves within the run only once that export has been written. Queue order wrote it first only when it was queued earlier, in an earlier chunk.
+  - **Stages.** An export waiting on an export of the pass queued before it goes in a later stage than that export; a reference to an export queued later never resolved within the run in queue order, so it imposes nothing. Within a stage exports run largest first, ties in queue order. Stages run one after another: the sequential path loads a chunk only once the batches before it are written, and the parallel path runs the workers once per stage, so a stage starts only once every batch before it has finished. Queue order on the parallel path gave no such promise: the next chunk was resolved as soon as the last batch before it was taken, not finished, so a reference to an export in the previous chunk resolved only if that batch happened to finish first. Every reference queue order could resolve within the run therefore still resolves, and one to an export in the same chunk now resolves too.
+  - **Bounded as before.** Ids only; the pass still holds one chunk at a time. Chunks are cut by count (`DeferredChunkSize`) and by weight, no heavier than the heaviest chunk queue order loaded, so gathering the heaviest exports together never loads more at once than queue order did. Batches are cut by count (`BatchSize`) and by weight, the batch size's worth of the average export and no more than queue order's heaviest batch, so the heaviest exports are spread over batches of their own rather than packed into one that would outlast the rest; an export heavier than the budget takes a batch to itself. Where every export weighs the same, both cut exactly where the count does, as before.
 
 - **Run Profile export limits (#1618, #1629)**<br /> An Export Run Profile may carry Max creates, Max updates and Max deletes. When any is set, the executable Pending Exports are counted per change type once at the start of the run, and `ExportChangeLimitLedger` withholds in full any type whose count exceeds its limit: never a head of the queue, so a frequent Schedule cannot trickle a wrong mass change through. Withheld exports stay `Pending` and untouched (not marked, not failed, given no RPEI), withheld types are excluded from the paging query, and one ledger is shared by both passes and both connector shapes. The Activity records the withheld counts and completes with a warning naming the limit and the remedy. An uncapped run does no extra database work.
 

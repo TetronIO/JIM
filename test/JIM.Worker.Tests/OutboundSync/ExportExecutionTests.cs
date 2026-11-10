@@ -4266,6 +4266,231 @@ public class ExportExecutionTests
     }
 
     /// <summary>
+    /// #2905: with several workers the deferred pass finishes no sooner than its longest batch, and only reaches that floor
+    /// when the longest batch starts early enough for the others to overlap it. In queue order the largest group of the
+    /// 500k load fell in the last chunk and ran alone for over two minutes at the end. The largest deferred export must be
+    /// in the first wave of batches the workers start, wherever it falls in the queue.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredPass_LargestExportStartsInTheFirstWaveOfBatchesAsync()
+    {
+        // Arrange
+        var repo = new SyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: repo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+        var textAttributes = targetUserType.Attributes
+            .Where(a => a.Type == AttributeDataType.Text && !a.IsExternalId && !a.IsSecondaryExternalId)
+            .ToList();
+        Assume.That(textAttributes, Has.Count.GreaterThanOrEqualTo(4), "enough attributes to make one export the largest");
+
+        const int maxParallelism = 2;
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+        PendingExport? largest = null;
+        for (var i = 0; i < 8; i++)
+        {
+            var mvoId = Guid.NewGuid();
+            repo.SeedMetaverseObject(new MetaverseObject { Id = mvoId });
+            repo.SeedConnectedSystemObject(new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(), ConnectedSystemId = targetSystem.Id, Type = targetUserType, TypeId = targetUserType.Id, MetaverseObjectId = mvoId,
+                AttributeValues = [new() { Id = Guid.NewGuid(), Attribute = objectGuidAttr, AttributeId = objectGuidAttr.Id, GuidValue = Guid.NewGuid() }]
+            });
+
+            var pe = CreateSeededCreateExport(targetSystem, targetUserType, baseTime.AddMilliseconds(i), hasUnresolvedReferences: true);
+            pe.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+            {
+                Id = Guid.NewGuid(), PendingExportId = pe.Id, ChangeType = PendingExportAttributeChangeType.Add,
+                AttributeId = managerAttr.Id, Attribute = managerAttr, UnresolvedReferenceValue = mvoId.ToString(),
+                Status = PendingExportAttributeChangeStatus.Pending
+            });
+
+            // The last in the queue carries by far the most work.
+            if (i == 7)
+            {
+                foreach (var change in TextChanges(pe, textAttributes))
+                    pe.AttributeValueChanges.Add(change);
+                largest = pe;
+            }
+            repo.SeedPendingExport(pe);
+        }
+
+        // The first wave's batches are held until every worker has started one, so no worker can finish its first batch and
+        // start another before a slower worker reaches its first: the first calls are exactly the first wave.
+        var batchesStarted = new List<List<Guid>>();
+        var firstWaveStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Mock<IConnector> CreateRecordingConnector()
+        {
+            var mock = new Mock<IConnector>();
+            mock.Setup(c => c.Name).Returns("Recording Test Connector");
+            mock.As<IConnectorExportUsingCalls>()
+                .Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+                .Returns(async (IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+                {
+                    lock (batchesStarted)
+                    {
+                        batchesStarted.Add(exports.Select(pe => pe.Id).ToList());
+                        if (batchesStarted.Count == maxParallelism)
+                            firstWaveStarted.TrySetResult();
+                    }
+                    await firstWaveStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
+                    return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+                });
+            return mock;
+        }
+
+        var options = new ExportExecutionOptions { BatchSize = 2, MaxParallelism = maxParallelism, DeferredChunkSize = 2 };
+
+        // Act
+        var result = await jim.ExportExecution.ExecuteExportsAsync(targetSystem, CreateRecordingConnector().Object, SyncRunMode.PreviewAndSync,
+            options, CancellationToken.None, progressCallback: null,
+            connectorFactory: () => CreateRecordingConnector().Object,
+            repositoryFactory: () => new JIM.Data.Repositories.SyncRepositoryScope(repo));
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(8));
+            Assert.That(batchesStarted.Take(maxParallelism).Any(batch => batch.Contains(largest!.Id)), Is.True,
+                $"the largest export must start in the first wave. Batches in the order started: " +
+                string.Join(" | ", batchesStarted.Select(batch => string.Join(",", batch.Select(id => id == largest!.Id ? "LARGEST" : "x")))));
+        }
+    }
+
+    /// <summary>
+    /// A change adding a value to each of the given text attributes, to make an export heavier than the others.
+    /// </summary>
+    private static IEnumerable<PendingExportAttributeValueChange> TextChanges(PendingExport pe, IEnumerable<ConnectedSystemObjectTypeAttribute> attributes) =>
+        attributes.Select(attribute => new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(), PendingExportId = pe.Id, ChangeType = PendingExportAttributeChangeType.Add,
+            AttributeId = attribute.Id, Attribute = attribute, StringValue = $"value {attribute.Name}",
+            Status = PendingExportAttributeChangeStatus.Pending
+        }).ToList();
+
+    /// <summary>
+    /// Resolves the referenced objects as the in-memory store does, except that one object's anchor exists only once its
+    /// own Create has been written: an anchor the target system generates, as a database's identity column does.
+    /// </summary>
+    private sealed class GeneratedAnchorSyncRepository(Guid generatedAnchorMvoId, Guid generatedAnchorCsoId) : SyncRepository
+    {
+        private volatile bool _written;
+
+        public const string GeneratedAnchor = "generated-anchor-of-the-referenced-group";
+
+        public void MarkWritten() => _written = true;
+
+        public override async Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(
+            IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
+        {
+            var anchors = await base.GetReferenceAnchorsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
+            if (metaverseObjectIds.Contains(generatedAnchorMvoId))
+                anchors[generatedAnchorMvoId] = new ReferenceAnchorSummary(generatedAnchorCsoId, _written ? GeneratedAnchor : null, IsSecondaryExternalId: false);
+            return anchors;
+        }
+    }
+
+    /// <summary>
+    /// #2905: largest first must not resolve fewer references within the run. An export referencing another export of the
+    /// pass whose anchor the target system generates can resolve only once that export has been written. Queue order wrote
+    /// it first when it was queued first, but with several workers the next chunk was resolved as soon as the last batch
+    /// before it was taken, not finished, so the reference resolved only if that batch happened to finish first. The waiting
+    /// export, though larger, must be resolved after the export it waits on has been written.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredPass_ExportWaitingOnAnotherForItsAnchor_ResolvesWithinTheRunAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+        var textAttributes = targetUserType.Attributes
+            .Where(a => a.Type == AttributeDataType.Text && !a.IsExternalId && !a.IsSecondaryExternalId)
+            .ToList();
+
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+
+        // The referenced export: a Create whose object has no anchor until it is written, itself waiting on a user whose
+        // anchor is held, so it is deferred and resolves in its chunk.
+        var targetMvoId = Guid.NewGuid();
+        var target = CreateSeededCreateExport(targetSystem, targetUserType, baseTime, hasUnresolvedReferences: true);
+        target.ConnectedSystemObject!.MetaverseObjectId = targetMvoId;
+
+        var repo = new GeneratedAnchorSyncRepository(targetMvoId, target.ConnectedSystemObject.Id);
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: repo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+
+        var userMvoId = Guid.NewGuid();
+        repo.SeedMetaverseObject(new MetaverseObject { Id = userMvoId });
+        repo.SeedMetaverseObject(new MetaverseObject { Id = targetMvoId });
+        repo.SeedConnectedSystemObject(new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(), ConnectedSystemId = targetSystem.Id, Type = targetUserType, TypeId = targetUserType.Id, MetaverseObjectId = userMvoId,
+            AttributeValues = [new() { Id = Guid.NewGuid(), Attribute = objectGuidAttr, AttributeId = objectGuidAttr.Id, GuidValue = Guid.NewGuid() }]
+        });
+        target.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(), PendingExportId = target.Id, ChangeType = PendingExportAttributeChangeType.Add,
+            AttributeId = managerAttr.Id, Attribute = managerAttr, UnresolvedReferenceValue = userMvoId.ToString(),
+            Status = PendingExportAttributeChangeStatus.Pending
+        });
+        repo.SeedPendingExport(target);
+
+        // The waiting export, queued after it and larger, so largest first alone would put it ahead.
+        var waiting = CreateSeededCreateExport(targetSystem, targetUserType, baseTime.AddMilliseconds(1), hasUnresolvedReferences: true);
+        waiting.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(), PendingExportId = waiting.Id, ChangeType = PendingExportAttributeChangeType.Add,
+            AttributeId = managerAttr.Id, Attribute = managerAttr, UnresolvedReferenceValue = targetMvoId.ToString(),
+            Status = PendingExportAttributeChangeStatus.Pending
+        });
+        foreach (var change in TextChanges(waiting, textAttributes))
+            waiting.AttributeValueChanges.Add(change);
+        repo.SeedPendingExport(waiting);
+
+        var managerSent = new System.Collections.Concurrent.ConcurrentDictionary<Guid, string?>();
+        Mock<IConnector> CreateConnector()
+        {
+            var mock = new Mock<IConnector>();
+            mock.Setup(c => c.Name).Returns("Generating Test Connector");
+            mock.As<IConnectorExportUsingCalls>()
+                .Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+                .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+                {
+                    foreach (var pe in exports)
+                    {
+                        managerSent[pe.Id] = pe.AttributeValueChanges.SingleOrDefault(a => a.AttributeId == managerAttr.Id)?.StringValue;
+                        if (pe.Id == target.Id)
+                            repo.MarkWritten();
+                    }
+                    return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+                });
+            return mock;
+        }
+
+        var options = new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 2, DeferredChunkSize = 1 };
+
+        // Act
+        await jim.ExportExecution.ExecuteExportsAsync(targetSystem, CreateConnector().Object, SyncRunMode.PreviewAndSync,
+            options, CancellationToken.None, progressCallback: null,
+            connectorFactory: () => CreateConnector().Object,
+            repositoryFactory: () => new JIM.Data.Repositories.SyncRepositoryScope(repo));
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(managerSent.Keys, Is.EquivalentTo(new[] { target.Id, waiting.Id }), "both exports are written");
+            Assert.That(managerSent[waiting.Id], Is.EqualTo(GeneratedAnchorSyncRepository.GeneratedAnchor),
+                "the waiting export's reference resolves against the anchor its target's write generated, within the run");
+        }
+    }
+
+    /// <summary>
     /// Guard for keyset tie-handling (issue #985): exports sharing a single CreatedAt instant
     /// must all be collected exactly once when paging splits the tie across batches.
     /// </summary>
