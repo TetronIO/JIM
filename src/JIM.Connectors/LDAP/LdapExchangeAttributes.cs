@@ -85,17 +85,19 @@ internal static class LdapExchangeAttributes
 
     /// <summary>
     /// Where the recipient type is read when Exchange stamped no <c>msExchRecipientTypeDetails</c>: it does not on a group
-    /// it mail-enables, which carries only <c>msExchRecipientDisplayType</c>.
+    /// or a contact it mail-enables, which carry only <c>msExchRecipientDisplayType</c>.
     /// </summary>
     private const string RecipientDisplayTypeSource = "msExchRecipientDisplayType";
 
     /// <summary>
-    /// Exchange's <c>msExchRecipientDisplayType</c> values for the mail-enabled groups JIM manages, read only where a
-    /// group has no <c>msExchRecipientTypeDetails</c>. Any other display type is a recipient JIM does not manage.
+    /// Exchange's <c>msExchRecipientDisplayType</c> values for the mail-enabled groups and mail contacts JIM manages, read
+    /// only where an object has no <c>msExchRecipientTypeDetails</c>. Any other display type is a recipient JIM does not
+    /// manage. A mail user also carries display type 6, but Exchange stamps its details, which win.
     /// </summary>
-    private static readonly Dictionary<long, string> GroupDisplayTypes = new()
+    private static readonly Dictionary<long, string> DisplayTypes = new()
     {
         [1] = ExchangeRecipientTypes.MailEnabledGroup,          // a mail-enabled distribution group
+        [6] = ExchangeRecipientTypes.MailContact,               // a mail contact
         [1073741833] = ExchangeRecipientTypes.MailEnabledGroup  // a mail-enabled security group
     };
 
@@ -162,10 +164,10 @@ internal static class LdapExchangeAttributes
                 ? recipientType
                 : ExchangeRecipientTypes.Unmanaged;
 
-        // A group Exchange mail-enabled carries a display type and no details.
+        // A group or contact Exchange mail-enabled carries a display type and no details.
         if (displayTypes.Count > 0)
-            return long.TryParse(displayTypes[0], out var displayType) && GroupDisplayTypes.TryGetValue(displayType, out var groupType)
-                ? groupType
+            return long.TryParse(displayTypes[0], out var displayType) && DisplayTypes.TryGetValue(displayType, out var displayedType)
+                ? displayedType
                 : ExchangeRecipientTypes.Unmanaged;
 
         return ExchangeRecipientTypes.None;

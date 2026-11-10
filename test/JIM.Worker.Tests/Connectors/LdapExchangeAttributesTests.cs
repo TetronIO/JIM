@@ -85,14 +85,18 @@ public class LdapExchangeAttributesTests
 
     [TestCase("1073741833", "MailEnabledGroup")]
     [TestCase("1", "MailEnabledGroup")]
-    [TestCase("6", "Unmanaged")]
-    public void Derive_GroupWithNoRecipientTypeDetails_IsReadFromRecipientDisplayType(string recipientDisplayType, string expected)
+    [TestCase("6", "MailContact")]
+    [TestCase("0", "Unmanaged")]
+    [TestCase("7", "Unmanaged")]
+    public void Derive_NoRecipientTypeDetails_IsReadFromRecipientDisplayType(string recipientDisplayType, string expected)
     {
-        // Exchange does not stamp msExchRecipientTypeDetails on a group it mail-enables: the AD lab's mail-enabled
-        // universal security group carried only msExchRecipientDisplayType 1073741833 (Scenario 003 run 42744901343), and
-        // read as None, so its declared MailEnabledGroup was reported unconfirmed. The display type stands in where the
-        // details are absent: 1 is a mail-enabled distribution group, 1073741833 a mail-enabled security group, and any
-        // other value is a recipient JIM does not manage.
+        // Exchange stamps msExchRecipientTypeDetails on the user objects it makes recipients, not on a group it
+        // mail-enables or a contact it mail-enables: the AD lab's mail-enabled universal security group carried only
+        // msExchRecipientDisplayType 1073741833 (Scenario 003 run 42744901343), and a mail contact JIM made in the GAL
+        // read as Unmanaged rather than MailContact (Scenario 003 run 42769078688), so each declared type was reported
+        // unconfirmed. The display type stands in where the details are absent: 1 is a mail-enabled distribution group,
+        // 1073741833 a mail-enabled security group, 6 a mail contact, and any other value is a recipient JIM does not
+        // manage.
         var derived = LdapExchangeAttributes.Derive(Read(("msExchRecipientDisplayType", recipientDisplayType)), [LdapExchangeAttributes.RecipientType]);
 
         Assert.That(Values(derived, LdapExchangeAttributes.RecipientType), Is.EqualTo(new[] { expected }));
