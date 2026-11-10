@@ -490,13 +490,14 @@ public class ExportBatchLeanLoadDatabaseTests
 
     /// <summary>
     /// The batch as the load read it before #2816: every value of every object, with its attribute. The reference the
-    /// lean load is held to.
+    /// lean load is held to. Each export's changes in id order, as the load returns them (#2884): the split Include
+    /// otherwise orders them by their export alone, leaving their order within it to the plan.
     /// </summary>
     private static Task<List<PendingExport>> LoadWholeAsTheLoadDidBefore2816Async(JimDbContext context, IReadOnlyCollection<Guid> ids) =>
         context.PendingExports
             .AsNoTrackingWithIdentityResolution()
             .AsSplitQuery()
-            .Include(pe => pe.AttributeValueChanges).ThenInclude(avc => avc.Attribute)
+            .Include(pe => pe.AttributeValueChanges.OrderBy(avc => avc.Id)).ThenInclude(avc => avc.Attribute)
             .Include(pe => pe.ConnectedSystemObject).ThenInclude(cso => cso!.Type)
             .Include(pe => pe.ConnectedSystemObject).ThenInclude(cso => cso!.AttributeValues).ThenInclude(av => av.Attribute)
             .Where(pe => ids.Contains(pe.Id))
