@@ -28,7 +28,7 @@ using JIM.Worker.Models;
 
 namespace JIM.Worker.Processors;
 
-public class SyncImportTaskProcessor
+public partial class SyncImportTaskProcessor
 {
     private readonly JimApplication _jim;
     private readonly ISyncRepository _syncRepo;
@@ -56,10 +56,11 @@ public class SyncImportTaskProcessor
     /// not track phases get a reporter that records nothing.
     /// </summary>
     private readonly ActivityPhaseReporter _phases;
-    // Lightweight RPEI lookup for reconciliation. Populated during the update-phase flush
-    // so that ReconcilePendingExportsAsync can merge outcomes onto already-persisted RPEIs.
-    // Only contains RPEIs for updated CSOs (not created CSOs, which can't have Pending Exports).
-    private readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _reconciliationRpeiLookup = new();
+    // The objects this run's batch hydration loaded whole and matched to an imported object, by instance (#2908). Only these
+    // can be reconciled from the values the import holds once their batch is saved; any other object in the update list
+    // (one found deleted, one found by another route, one loaded in part) is reloaded for reconciliation. Each batch's
+    // entries are removed once it is reconciled, so the set holds nothing for long.
+    private readonly HashSet<ConnectedSystemObject> _connectedSystemObjectsLoadedWhole = new(ReferenceEqualityComparer.Instance);
     // Companion ID set for the connectedSystemObjectsToBeUpdated list, giving O(1) membership
     // checks. The previous linear List.Any scan per existing object was O(n^2) across the import:
     // ~1.4x10^11 Guid comparisons at Scale500k25kGroups (524,997 existing CSOs). Maintain this set
@@ -70,8 +71,9 @@ public class SyncImportTaskProcessor
     /// <summary>
     /// Batch size for create and update phases of full import. Limits EF change tracker pressure
     /// and enables per-batch progress reporting. Chosen to balance throughput vs memory usage.
+    /// Settable at construction only so a test can make a run cross batches.
     /// </summary>
-    private const int ImportBatchSize = 2000;
+    internal int ImportBatchSize { get; init; } = 2000;
 
     /// <summary>
     /// When true, the Connected System has no existing CSOs, so all imported objects are known to be new.
@@ -984,6 +986,7 @@ public class SyncImportTaskProcessor
             System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
         await _phases.EnterAsync(RunPhaseKeys.ImportSave);
         var savePhaseSw = System.Diagnostics.Stopwatch.StartNew();
+        PendingExportReconciliationRun? reconciliation = null;
         using (var persistSpan = Diagnostics.Database.StartSpan("PersistConnectedSystemObjects"))
         {
             persistSpan.SetTag("createCount", createdCount);
@@ -1112,9 +1115,14 @@ public class SyncImportTaskProcessor
             // child entity changes (attribute value adds/deletes). At 100K CSOs this creates millions of
             // tracked entities consuming GBs if done at once. Batching ensures SaveChangesAsync processes
             // only ~2K entities at a time and progress is reported after each batch.
-            // Note: unlike the create phase, we don't RemoveRange here because the reconciliation phase
-            // (ReconcilePendingExportsAsync) needs the full CSO list with updated attribute values.
+            // Note: unlike the create phase, we don't RemoveRange here because the holds judged after the
+            // save phase (JudgeUnreconciled*HoldsAsync) need the full list of updated CSO ids.
             var totalToUpdate = connectedSystemObjectsToBeUpdated.Count;
+
+            // Pending Export reconciliation runs as each update batch is saved (#2908), judging each object from the values
+            // the import holds for it, exactly as saved, before they are released below. Reloading every object after the
+            // save phase cost the 500,000-object confirming import 79 s.
+            reconciliation = await BeginPendingExportReconciliationAsync(totalToUpdate, pendingExportsTask);
 
             _activity.ObjectsProcessed = createdCount;
             await _syncRepo.UpdateActivityAsync(_activity);
@@ -1133,23 +1141,37 @@ public class SyncImportTaskProcessor
                     .Where(r => r.ConnectedSystemObjectId.HasValue && batchCsoIds.Contains(r.ConnectedSystemObjectId.Value))
                     .ToList();
 
-                await _syncServer.UpdateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
+                // What each object reconciliation may judge from memory holds before the save, so that afterwards it can be
+                // shown to hold exactly what was written (#2908). Not taken once cancellation is requested: the batches
+                // still saved are left to the next import to reconcile, as the whole run's were before.
+                var reconcileThisBatch = reconciliation != null && !_cancellationTokenSource.IsCancellationRequested;
+                var valuesBeforeSave = reconcileThisBatch ? CaptureValuesBeforeSave(reconciliation!, csoBatch) : null;
+
+                using (Diagnostics.Sync.StartSpan("UpdateConnectedSystemObjectsBatch").SetTag("csoCount", batchSize))
+                {
+                    await _syncServer.UpdateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
+                }
 
                 // SPEC-1082 D7: stamp this update batch's requested hashes now that its attribute
                 // value writes have committed, and BEFORE ReleaseHydratedAttributeValues below.
                 await StampBatchImportStateAsync(csoBatch, batchRpeis);
 
-                // Populate the reconciliation RPEI lookup before flushing.
-                // Only update-phase RPEIs are needed — created CSOs can't have Pending Exports.
-                foreach (var rpei in batchRpeis)
-                {
-                    if (rpei.ConnectedSystemObjectId.HasValue)
-                        _reconciliationRpeiLookup.TryAdd(rpei.ConnectedSystemObjectId.Value, rpei);
-                }
+                // The execution items reconciliation merges its outcomes onto, taken before the flush empties the list: an
+                // object's first. Only update-phase items are needed; a created object has no Pending Export.
+                var importItemsByCsoId = new Dictionary<Guid, ActivityRunProfileExecutionItem>(batchRpeis.Count);
+                foreach (var rpei in batchRpeis.Where(r => r.ConnectedSystemObjectId.HasValue))
+                    importItemsByCsoId.TryAdd(rpei.ConnectedSystemObjectId!.Value, rpei);
 
                 // Remove batch RPEIs from the main list and flush them
                 _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObjectId.HasValue && batchCsoIds.Contains(r.ConnectedSystemObjectId.Value));
                 await FlushImportRpeisAsync(batchRpeis);
+
+                // Reconcile this batch's Pending Exports while the import still holds its objects' values, and write the
+                // outcomes it merges onto the items just flushed, so neither the values nor the outcomes accumulate.
+                if (reconcileThisBatch)
+                    await ReconcileSavedBatchAsync(reconciliation!, csoBatch, valuesBeforeSave!, importItemsByCsoId, crossBatchFixed > 0);
+                foreach (var cso in csoBatch)
+                    _connectedSystemObjectsLoadedWhole.Remove(cso);
 
                 // Release this batch's hydrated AttributeValues now that it's been persisted. See
                 // ReleaseHydratedAttributeValues for why this is safe (#1079 Regression B: an OOM
@@ -1178,35 +1200,35 @@ public class SyncImportTaskProcessor
         Log.Information("PerformImportAsync: PHASE TIMING — Save (create + update): {SavePhaseSeconds:F1}s ({Creates} creates, {Updates} updates)",
             savePhaseSw.Elapsed.TotalSeconds, createdCount, connectedSystemObjectsToBeUpdated.Count);
 
-        // CSO → RPEI lookup for reconciliation was populated during the update-phase flush.
-        // Only updated CSOs can have Pending Exports, so create-RPEIs are not included.
-        var importRpeisByCsoId = _reconciliationRpeiLookup;
-
-        // Reconcile Pending Exports against imported values (confirming import)
-        // This confirms exported attribute changes or marks them for retry
+        // Pending Export reconciliation (the confirming import) ran as each update batch was saved, above. What it decided
+        // for the batches it reached stands, and the execution items it raised for objects the import did not change are
+        // recorded whatever happens next, so no Pending Export it deleted goes unreported.
         if (_cancellationTokenSource.IsCancellationRequested)
         {
-            Log.Information("PerformImportAsync: Cancellation requested. Skipping reconciliation.");
+            Log.Information("PerformImportAsync: Cancellation requested. Skipping the rest of reconciliation.");
+            if (reconciliation != null)
+            {
+                CompletePendingExportReconciliation(reconciliation);
+                await FlushImportRpeisAsync(reconciliation.RaisedItems);
+            }
             return;
         }
 
         // Note: connectedSystemObjectsToBeUpdated's CSOs no longer have populated AttributeValues
         // at this point - ReleaseHydratedAttributeValues cleared each batch's above, once
-        // persisted, to bound memory at scale (#1079 Regression B). This is safe: reconciliation
-        // below only needs each CSO's Id from this list (allPendingExportsByCsoId lookup) and
-        // reloads fresh AttributeValues from the database per page via
-        // GetConnectedSystemObjectsCoreByIdsNoTrackingAsync - see ReconcilePendingExportsAsync.
-        // We don't call ClearChangeTracker() again here: these CSOs were hydrated with
-        // AsNoTrackingWithIdentityResolution and persisted via raw SQL, so nothing here was ever
-        // added to the change tracker in the first place.
+        // persisted and reconciled, to bound memory at scale (#1079 Regression B). Only the holds
+        // below read this list, and only for each CSO's Id.
 
-        _activity.ObjectsToProcess = connectedSystemObjectsToBeUpdated.Count;
-        _activity.ObjectsProcessed = 0;
+        _activity.ObjectsToProcess = reconciliation?.ReconciledCount ?? 0;
+        _activity.ObjectsProcessed = _activity.ObjectsToProcess;
         await _phases.EnterAsync(RunPhaseKeys.ImportReconcile);
         var reconcileSw = System.Diagnostics.Stopwatch.StartNew();
-        using (Diagnostics.Sync.StartSpan("ReconcilePendingExports"))
+        if (reconciliation != null)
         {
-            await ReconcilePendingExportsAsync(connectedSystemObjectsToBeUpdated, importRpeisByCsoId, _connectedSystem.Id, pendingExportsTask);
+            using (Diagnostics.Sync.StartSpan("CompletePendingExportReconciliation"))
+            {
+                CompletePendingExportReconciliation(reconciliation);
+            }
         }
 
         // A change held until its Initial Password is delivered is judged at every import, not only one that returns its
@@ -3328,7 +3350,12 @@ public class SyncImportTaskProcessor
 
                     // #2817: the earlier page may have loaded it in part for its own values; this page compares it with its own.
                     if (supersededHeldCso != null)
+                    {
                         TakeThisPagesViewOfPartiallyLoadedAttributes(supersededHeldCso, hydratedCsoPage);
+
+                        // #2908: compared on two pages, so reconciliation reloads it rather than reason about both.
+                        _connectedSystemObjectsLoadedWhole.Remove(supersededHeldCso);
+                    }
                 }
 
                 // Handle delete requests from delta imports (e.g., LDAP changelog)
@@ -3629,6 +3656,14 @@ public class SyncImportTaskProcessor
                     if (_csoIdsQueuedForUpdate.Add(connectedSystemObject.Id))
                     {
                         connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
+
+                        // #2908: the instance this page's batch hydration loaded whole, compared here and in no other way,
+                        // is one Pending Export reconciliation can judge from memory once saved. An earlier page's copy put
+                        // back (#2074), or an object found by another route, is reloaded instead.
+                        if (supersededHeldCso == null && !connectedSystemObject.IsPartiallyLoaded &&
+                            hydratedCsoPage.TryGetValue(connectedSystemObject.Id, out var hydrated) &&
+                            ReferenceEquals(hydrated, connectedSystemObject))
+                            _connectedSystemObjectsLoadedWhole.Add(connectedSystemObject);
                     }
                     else
                     {
@@ -3746,8 +3781,8 @@ public class SyncImportTaskProcessor
     /// at scale otherwise retain every attribute value touched by the update path in memory for
     /// the rest of the run (through reconciliation), which caused an OOM kill in production on
     /// 2026-07-21 with 524,997 updated CSOs holding ~9.8M attribute value objects (#1079
-    /// Regression B). Nothing downstream needs the in-memory values: reconciliation reloads CSOs
-    /// fresh from the database per page (see ReconcilePendingExportsAsync), deletion detection
+    /// Regression B). Nothing downstream needs the in-memory values: Pending Export reconciliation
+    /// has read them by then, as each batch is saved (see ReconcileSavedBatchAsync), deletion detection
     /// queries the database directly, and reference resolution reads
     /// PendingAttributeValueAdditions, which is already applied and cleared by
     /// ProcessConnectedSystemObjectAttributeValueChanges before this runs.
@@ -6495,570 +6530,6 @@ public class SyncImportTaskProcessor
             public Dictionary<decimal, ConnectedSystemObject>? SecondaryDecimalLookup { get; set; }
             public Dictionary<Guid, ConnectedSystemObject>? SecondaryGuidLookup { get; set; }
         }
-    }
-
-    /// <summary>
-    /// Reconciles Pending Exports against imported CSO values.
-    /// This is the "confirming import" step that validates exported attribute changes were persisted in the Connected System.
-    /// Merges reconciliation outcomes (ExportConfirmed, ExportFailed) onto existing import RPEIs when available,
-    /// or creates new RPEIs for CSOs that had no import RPEI (pure confirming import with no attribute changes).
-    /// Uses batched database operations for better performance, processing CSOs in pages using the sync page size setting.
-    /// </summary>
-    /// <param name="updatedCsos">The CSOs that were updated during this import run.</param>
-    /// <param name="importRpeisByCsoId">Lookup of already-persisted import RPEIs keyed by ConnectedSystemObjectId.</param>
-    /// <summary>
-    /// Records which export execution a confirmation confirms (#1223).
-    /// </summary>
-    /// <remarks>
-    /// This hop cannot be reconstructed afterwards, which is why it earns an edge where the other same-item
-    /// hops do not. Reconciliation pairs a Pending Export with an imported object by Connected System Object id
-    /// alone, and an object cycles through export and import repeatedly, so a later attempt to pair a
-    /// confirmation with its export by object id can land on the wrong cycle and report a confirmation against
-    /// an export that did not produce it. The Pending Export row IS the cycle, and this reconciliation is about
-    /// to delete it, so the link is recorded here or not at all.
-    ///
-    /// No reason code: the effect outcome already distinguishes confirmed from failed, and cohorts are computed
-    /// per effect, so a code here would add nothing to group on.
-    /// </remarks>
-    private void RecordExportConfirmationCause(
-        ActivityRunProfileExecutionItem item,
-        ActivityRunProfileExecutionItemSyncOutcome? confirmedOutcome,
-        PendingExport? pendingExport,
-        ConnectedSystemObject cso)
-    {
-        if (pendingExport == null)
-            return;
-
-        item.CausalEdges.Add(new CausalCause
-        {
-            PendingExportId = pendingExport.Id,
-            ConnectedSystemObjectId = cso.Id,
-            // Named from the object being confirmed, so the chain still reads once the Connected System Object
-            // is gone; the Pending Export itself is deleted moments from now and can never supply a name.
-            DisplayName = cso.Name,
-            ConnectedSystemId = _connectedSystem.Id,
-            ConnectedSystemName = _connectedSystem.Name
-        }.ToEdge(CausalEdgeType.ExportCausedImportConfirmation, confirmedOutcome));
-    }
-
-    private async Task ReconcilePendingExportsAsync(
-        IReadOnlyCollection<ConnectedSystemObject> updatedCsos,
-        Dictionary<Guid, ActivityRunProfileExecutionItem> importRpeisByCsoId,
-        int connectedSystemId,
-        Task<Dictionary<Guid, PendingExport>>? preLoadedPendingExportsTask = null)
-    {
-        if (updatedCsos.Count == 0)
-            return;
-
-        // Use pre-loaded Pending Exports if available (loaded in parallel during import processing
-        // on a separate DbContext). Otherwise, fall back to loading them now.
-        Dictionary<Guid, PendingExport> allPendingExportsByCsoId;
-        if (preLoadedPendingExportsTask != null)
-        {
-            await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling Pending Exports - awaiting pre-loaded data");
-            using (Diagnostics.Sync.StartSpan("AwaitPreLoadedPendingExports"))
-            {
-                allPendingExportsByCsoId = await preLoadedPendingExportsTask;
-            }
-            Log.Information("ReconcilePendingExportsAsync: Using pre-loaded Pending Exports ({Count} loaded in background)",
-                allPendingExportsByCsoId.Count);
-        }
-        else
-        {
-            await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling Pending Exports - loading Pending Exports");
-            using (Diagnostics.Sync.StartSpan("BulkLoadPendingExports"))
-            {
-                allPendingExportsByCsoId = await _syncRepo
-                    .GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId);
-            }
-        }
-
-        if (allPendingExportsByCsoId.Count == 0)
-        {
-            Log.Debug("ReconcilePendingExportsAsync: No Pending Exports found for Connected System {ConnectedSystemId}. Skipping reconciliation",
-                connectedSystemId);
-
-            // Mark progress as complete so the UI doesn't stay stuck at "0 / N"
-            _activity.ObjectsProcessed = _activity.ObjectsToProcess;
-            await _syncRepo.UpdateActivityAsync(_activity);
-            return;
-        }
-
-        Log.Information("ReconcilePendingExportsAsync: {PendingExportCount} Pending Exports pre-loaded",
-            allPendingExportsByCsoId.Count);
-
-        // Filter to only CSOs that have Pending Exports
-        var csoList = updatedCsos.Where(c => allPendingExportsByCsoId.ContainsKey(c.Id)).ToList();
-
-        // Update progress counter to reflect the filtered count (only CSOs with Pending Exports)
-        _activity.ObjectsToProcess = csoList.Count;
-        _activity.ObjectsProcessed = 0;
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Reconciling Pending Exports");
-        await _syncRepo.UpdateActivityAsync(_activity);
-
-        Log.Debug("ReconcilePendingExportsAsync: {FilteredCount} of {TotalCount} CSOs have Pending Exports",
-            csoList.Count, updatedCsos.Count);
-
-        var totalConfirmed = 0;
-        var totalRetry = 0;
-        var totalHeld = 0;
-        var totalHeldForExchange = 0;
-        var totalReleased = 0;
-        var exportsDeleted = 0;
-
-        // Use sync page size for batching database persistence operations
-        var pageSize = await _syncServer.GetSyncPageSizeAsync();
-        var totalPages = (int)Math.Ceiling((double)csoList.Count / pageSize);
-
-        Log.Information("ReconcilePendingExportsAsync: Processing {CsoCount} CSOs with Pending Exports in {PageCount} pages of {PageSize}",
-            csoList.Count, totalPages, pageSize);
-
-        var processedCount = 0;
-
-        // Once per run (#2669): reconciliation asks the database to match references ignoring case only when its lower()
-        // folds case as JIM's identifier comparison does; otherwise those references are loaded and compared in .NET.
-        var databaseFoldsCaseLikeIdentifierKey = await _syncRepo.DoesDatabaseFoldCaseLikeIdentifierKeyAsync();
-        if (!databaseFoldsCaseLikeIdentifierKey)
-            Log.Warning("ReconcilePendingExportsAsync: The database's lower() does not fold case as JIM does; references compared " +
-                "ignoring case are loaded in full for reconciliation rather than probed");
-
-        // Track existing import RPEIs that had reconciliation outcomes merged onto them.
-        // Keyed by RPEI Id to deduplicate when a CSO has both confirmed + failed changes.
-        var modifiedExistingRpeis = new System.Collections.Concurrent.ConcurrentDictionary<Guid, ActivityRunProfileExecutionItem>();
-
-        for (var page = 0; page < totalPages; page++)
-        {
-            var pageCsoIds = csoList.Skip(page * pageSize).Take(pageSize).Select(c => c.Id).ToList();
-
-            // Probe rather than load the values of large multi-valued references (#2669): a group's member attribute would
-            // otherwise bring every member's value for a handful of changes (761,000 and 1.73 million values on two pages
-            // of a 500,000-user, 25,000-group run). The planner decides which attributes of which objects can be asked
-            // about exactly; the database returns the rows that could match each change and, where a verdict depends on
-            // it, the value count capped at two; the engine judges them with the same comparison it applies to a full load.
-            // What is probed is left out of the load below, decided from the answers so the two can never disagree.
-            var probePlan = SyncEngine.PlanReconciliationProbes(
-                pageCsoIds.Select(id => allPendingExportsByCsoId.GetValueOrDefault(id)).OfType<JIM.Models.Transactional.PendingExport>(),
-                databaseFoldsCaseLikeIdentifierKey);
-            var probedValuesByCsoId = new Dictionary<Guid, Dictionary<int, ProbedAttributeValues>>();
-            using (var probeSpan = Diagnostics.Sync.StartSpan("ReconcileProbeValues"))
-            {
-                var answers = probePlan.Questions.Count == 0
-                    ? []
-                    : await _syncRepo.GetReconciliationProbeValuesAsync(probePlan.Questions);
-                foreach (var answer in answers)
-                {
-                    if (!probedValuesByCsoId.TryGetValue(answer.ConnectedSystemObjectId, out var byAttributeId))
-                    {
-                        byAttributeId = new Dictionary<int, ProbedAttributeValues>();
-                        probedValuesByCsoId[answer.ConnectedSystemObjectId] = byAttributeId;
-                    }
-
-                    if (!byAttributeId.TryAdd(answer.AttributeId, answer))
-                        throw new ReconciliationProbeIncompleteException(
-                            $"The reconciliation probe answered attribute {answer.AttributeId} of Connected System Object {answer.ConnectedSystemObjectId} twice.");
-                }
-
-                var unanswered = probePlan.Questions.FirstOrDefault(q =>
-                    !probedValuesByCsoId.TryGetValue(q.ConnectedSystemObjectId, out var byAttributeId) || !byAttributeId.ContainsKey(q.AttributeId));
-                if (unanswered != null)
-                    throw new ReconciliationProbeIncompleteException(
-                        $"The reconciliation probe returned no answer for attribute {unanswered.AttributeId} of Connected System Object {unanswered.ConnectedSystemObjectId}.");
-
-                probeSpan.SetTag("probedPairs", probePlan.Questions.Count);
-                probeSpan.SetTag("fullLoadPairs", probePlan.FullLoadPairCount);
-                probeSpan.SetTag("tuples", probePlan.Questions.Sum(q => q.TupleCount));
-                probeSpan.SetTag("candidateRows", answers.Sum(a => a.CandidateValues.Count));
-                probeSpan.SetSuccess();
-
-                // Why a page's Pending Exports took the full load (#2809): once per page that loaded any pair in full, so
-                // a run's log says why its reconciliation read whole groups, without a line per object.
-                if (probePlan.FullLoadPairCount > 0)
-                {
-                    Log.Information("ReconcilePendingExportsAsync: Page {Page} of {PageCount}: {FullLoadPairs} multi-valued reference " +
-                        "attribute(s) loaded in full rather than probed ({Reasons}); {ProbedPairs} probed with {Tuples} tuple(s), " +
-                        "{CandidateRows} candidate row(s)",
-                        page + 1, totalPages, probePlan.FullLoadPairCount,
-                        string.Join(", ", probePlan.FullLoadPairCountsByReason.OrderBy(r => r.Key).Select(r => $"{r.Key}={r.Value}")),
-                        probePlan.Questions.Count, probePlan.Questions.Sum(q => q.TupleCount), answers.Sum(a => a.CandidateValues.Count));
-                }
-            }
-
-            // Reload CSOs with fresh AttributeValues from the database for this page.
-            // The in-memory CSOs may have stale/empty AttributeValues if the change tracker
-            // was cleared between save-phase batches (which detaches entities and EF fixup
-            // clears navigation collections). AsNoTracking avoids polluting the tracker.
-            // The Core load leaves out the objects a reference names (#2669): reconciliation compares a reference by
-            // its id and string only, and a group would otherwise bring every member's object with it.
-            // Objects are loaded in groups sharing the attributes left out of them: usually one group with the member
-            // attribute left out and one with nothing left out.
-            var pageCsos = new List<ConnectedSystemObject>(pageCsoIds.Count);
-            using (var loadSpan = Diagnostics.Sync.StartSpan("ReconcileLoadPageCsos"))
-            {
-                var loadGroups = pageCsoIds
-                    .GroupBy(id => probedValuesByCsoId.TryGetValue(id, out var byAttributeId)
-                        ? string.Join(",", byAttributeId.Keys.Order())
-                        : string.Empty)
-                    .ToList();
-                foreach (var loadGroup in loadGroups)
-                {
-                    var groupIds = loadGroup.ToList();
-                    var excludedAttributeIds = loadGroup.Key.Length == 0 ? null : probedValuesByCsoId[groupIds[0]].Keys.ToList();
-                    pageCsos.AddRange(await _syncRepo.GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(
-                        _connectedSystem.Id, groupIds, excludedAttributeIds));
-                }
-
-                // The Core load leaves out the Object Type; an execution item reconciliation raises names it, as every
-                // other import item does, so it is attached from the Connected System's own types (#2908).
-                AttachObjectTypes(pageCsos);
-
-                loadSpan.SetTag("loadGroupCount", loadGroups.Count);
-                loadSpan.SetTag("csoCount", pageCsos.Count);
-                loadSpan.SetTag("attributeValueCount", pageCsos.Sum(cso => cso.AttributeValues.Count));
-                loadSpan.SetSuccess();
-            }
-
-            // Which of this page's accounts are still owed a password, read only when the page holds a change written
-            // with an interim value until an Initial Password is delivered (#2039): the engine holds such a change while
-            // one is owed and releases it once none is. Null otherwise, and then never read.
-            //
-            // Which of this page's objects still have a change on the Exchange queue, read only when the page holds a
-            // connector-defined change awaiting Exchange (#2021): the engine holds such a change while one is queued and
-            // judges it as any other once none is. Null otherwise, and then never read.
-            IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword;
-            IReadOnlySet<Guid>? connectedSystemObjectIdsWithExchangeChange;
-            using (var lookupsSpan = Diagnostics.Sync.StartSpan("ReconcilePageLookups"))
-            {
-                metaverseObjectIdsOwedPassword = await GetMetaverseObjectIdsOwedPasswordForPageAsync(pageCsos, allPendingExportsByCsoId);
-                connectedSystemObjectIdsWithExchangeChange = await GetConnectedSystemObjectIdsWithExchangeChangeForPageAsync(pageCsos, allPendingExportsByCsoId);
-                lookupsSpan.SetTag("owedPasswordCount", metaverseObjectIdsOwedPassword?.Count ?? 0);
-                lookupsSpan.SetTag("exchangeChangeCount", connectedSystemObjectIdsWithExchangeChange?.Count ?? 0);
-                lookupsSpan.SetSuccess();
-            }
-
-            // Thread-safe batch collections for deferred database operations (per page)
-            var pendingExportsToDelete = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExport>();
-            var pendingExportsToUpdate = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExport>();
-            var confirmedAttrChangesToDelete = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExportAttributeValueChange>();
-            var pageExecutionItems = new System.Collections.Concurrent.ConcurrentBag<ActivityRunProfileExecutionItem>();
-            var probeFailures = new System.Collections.Concurrent.ConcurrentQueue<ReconciliationProbeIncompleteException>();
-
-            // Process CSOs in parallel - reconciliation is pure in-memory comparison.
-            // All Pending Exports are already loaded; no database queries per CSO in this loop.
-            // Thread safety:
-            // - allPendingExportsByCsoId: read-only dictionary (concurrent reads are safe)
-            // - Each CSO gets its own PendingExportReconciliationResult (no sharing)
-            // - Each Pending Export is unique per CSO (no cross-CSO contention)
-            // - SyncEngine reconciliation methods are stateless (pure logic, no instance state)
-            // - Shared collections use ConcurrentBag, counters use Interlocked
-            // Timing diagnostics for the first page to identify bottlenecks
-            var isFirstPage = page == 0;
-            long reconcileTicksTotal = 0;
-            long rpeiTicksTotal = 0;
-
-            using (Diagnostics.Sync.StartSpan("ProcessReconciliation").SetTag("csoCount", pageCsos.Count))
-            {
-                Parallel.ForEach(pageCsos, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, cso =>
-                {
-                    try
-                    {
-                        var perCsoSw = isFirstPage ? Stopwatch.StartNew() : null;
-
-                        // Get the pre-loaded Pending Export for this CSO (if any)
-                        allPendingExportsByCsoId.TryGetValue(cso.Id, out var pendingExport);
-
-                        // Perform in-memory reconciliation (no database operations)
-                        var result = new PendingExportReconciliationResult();
-                        _syncEngine.ReconcileCsoAgainstPendingExport(cso, pendingExport, result, metaverseObjectIdsOwedPassword,
-                            connectedSystemObjectIdsWithExchangeChange, probedValuesByCsoId.GetValueOrDefault(cso.Id));
-
-                        if (isFirstPage)
-                        {
-                            Interlocked.Add(ref reconcileTicksTotal, perCsoSw!.ElapsedTicks);
-                            perCsoSw.Restart();
-                        }
-
-                        // A held change changes nothing and raises no item (#2039); it is counted for the summary only.
-                        Interlocked.Add(ref totalHeld, result.HeldChanges.Count);
-                        // Likewise a change Exchange still owes (#2021).
-                        Interlocked.Add(ref totalHeldForExchange, result.HeldForExchangeChanges.Count);
-
-                        if (result.HasChanges)
-                        {
-                            Interlocked.Add(ref totalConfirmed, result.ConfirmedChanges.Count);
-                            Interlocked.Add(ref totalRetry, result.RetryChanges.Count);
-                            // A release is persisted with the Pending Export below, but raises no item: the interim
-                            // value was written on purpose, so it is not an unconfirmed export (#2039).
-                            Interlocked.Add(ref totalReleased, result.ReleasedChanges.Count);
-
-                            // Collect Pending Exports for batch operations
-                            if (result.PendingExportToDelete != null)
-                            {
-                                pendingExportsToDelete.Add(result.PendingExportToDelete);
-                                Interlocked.Increment(ref exportsDeleted);
-                            }
-                            else if (result.PendingExportToUpdate != null)
-                            {
-                                pendingExportsToUpdate.Add(result.PendingExportToUpdate);
-
-                                // With AsNoTracking, EF Core won't detect collection removals.
-                                // Explicitly collect confirmed attribute changes for batch deletion.
-                                foreach (var confirmedChange in result.ConfirmedChanges)
-                                    confirmedAttrChangesToDelete.Add(confirmedChange);
-                            }
-
-                            // Try to find an existing import RPEI for this CSO to merge outcomes onto.
-                            // If found, we add reconciliation outcomes to the existing RPEI (one-RPEI-per-CSO rule).
-                            // If not found (pure confirming import with no attribute changes), create a new RPEI.
-                            importRpeisByCsoId.TryGetValue(cso.Id, out var existingRpei);
-
-                            // Add ExportConfirmed outcome for successfully confirmed changes
-                            if (result.ConfirmedChanges.Count > 0)
-                            {
-                                if (existingRpei != null)
-                                {
-                                    ActivityRunProfileExecutionItemSyncOutcome? confirmedOutcome = null;
-                                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-                                    {
-                                        confirmedOutcome = SyncOutcomeBuilder.AddRootOutcome(existingRpei,
-                                            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed,
-                                            detailCount: result.ConfirmedChanges.Count);
-                                    }
-                                    RecordExportConfirmationCause(existingRpei, confirmedOutcome, pendingExport, cso);
-                                    modifiedExistingRpeis.TryAdd(existingRpei.Id, existingRpei);
-                                }
-                                else
-                                {
-                                    var executionItem = new ActivityRunProfileExecutionItem
-                                    {
-                                        Activity = _activity,
-                                        ConnectedSystemObject = cso,
-                                        ConnectedSystemObjectId = cso.Id,
-                                        ObjectChangeType = ObjectChangeType.Updated
-                                    };
-                                    executionItem.SnapshotCsoDisplayFields(cso);
-
-                                    ActivityRunProfileExecutionItemSyncOutcome? confirmedOutcome = null;
-                                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-                                    {
-                                        confirmedOutcome = SyncOutcomeBuilder.AddRootOutcome(executionItem,
-                                            ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed,
-                                            detailCount: result.ConfirmedChanges.Count);
-                                    }
-                                    RecordExportConfirmationCause(executionItem, confirmedOutcome, pendingExport, cso);
-
-                                    pageExecutionItems.Add(executionItem);
-                                }
-                            }
-
-                            // Add ExportFailed outcome for changes not confirmed: reported at every import that misses them (#2119)
-                            if (result.RetryChanges.Count > 0)
-                            {
-                                var retryAttrNames = string.Join(", ", result.RetryChanges
-                                    .GroupBy(c => c.Attribute?.Name ?? "unknown")
-                                    .Select(g => g.Count() > 1 ? $"{g.Key} (x{g.Count()})" : g.Key));
-
-                                if (existingRpei != null)
-                                {
-                                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-                                    {
-                                        SyncOutcomeBuilder.AddRootOutcome(existingRpei,
-                                            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed,
-                                            detailCount: result.RetryChanges.Count);
-                                    }
-                                    // Set error fields only if the existing RPEI doesn't already have an error
-                                    if (existingRpei.ErrorType is null or ActivityRunProfileExecutionItemErrorType.NotSet)
-                                    {
-                                        existingRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed;
-                                        existingRpei.ErrorMessage = $"We exported a change, but did not get confirmation of it when a confirming import was performed. Details: {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will attempt to reassert the change on the next export run.";
-
-                                    }
-                                    modifiedExistingRpeis.TryAdd(existingRpei.Id, existingRpei);
-                                }
-                                else
-                                {
-                                    var executionItem = new ActivityRunProfileExecutionItem
-                                    {
-                                        Activity = _activity,
-                                        ConnectedSystemObject = cso,
-                                        ConnectedSystemObjectId = cso.Id,
-                                        ObjectChangeType = ObjectChangeType.Updated,
-                                        ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
-                                        ErrorMessage = $"We exported a change, but did not get confirmation of it when a confirming import was performed. Details: {result.RetryChanges.Count} attribute(s): {retryAttrNames}. Will attempt to reassert the change on the next export run.",
-
-                                    };
-                                    executionItem.SnapshotCsoDisplayFields(cso);
-
-                                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-                                    {
-                                        SyncOutcomeBuilder.AddRootOutcome(executionItem,
-                                            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed,
-                                            detailCount: result.RetryChanges.Count);
-                                    }
-
-                                    pageExecutionItems.Add(executionItem);
-                                }
-                            }
-                        }
-
-                        if (isFirstPage && result.HasChanges)
-                            Interlocked.Add(ref rpeiTicksTotal, perCsoSw!.ElapsedTicks);
-
-                        Interlocked.Increment(ref processedCount);
-                    }
-                    catch (ReconciliationProbeIncompleteException ex)
-                    {
-                        // A defect in planning the probe, never a state of the data (#2669): collected and rethrown below,
-                        // before anything of this page is persisted, so the Activity fails rather than leave a change unjudged.
-                        probeFailures.Enqueue(ex);
-                        Interlocked.Increment(ref processedCount);
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Error(ex, "ReconcilePendingExportsAsync: Error reconciling Pending Exports for CSO {CsoId}", cso.Id);
-                        Interlocked.Increment(ref processedCount);
-                    }
-                });
-
-                if (probeFailures.TryPeek(out var firstProbeFailure))
-                {
-                    Log.Error(firstProbeFailure, "ReconcilePendingExportsAsync: {Count} Connected System Object(s) on page {Page} had a change their " +
-                        "probed values could not answer; failing the import", probeFailures.Count, page + 1);
-                    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(firstProbeFailure).Throw();
-                }
-
-                if (isFirstPage)
-                {
-                    var tickFreq = (double)Stopwatch.Frequency;
-                    Log.Information("ReconcilePendingExportsAsync: Page 1 timing breakdown — " +
-                        "Reconcile: {ReconcileMs:F1}ms, RPEI/Outcome: {RpeiMs:F1}ms (thread-aggregated across {CsoCount} CSOs)",
-                        reconcileTicksTotal / tickFreq * 1000.0,
-                        rpeiTicksTotal / tickFreq * 1000.0,
-                        pageCsos.Count);
-                }
-
-                // Update progress after parallel processing completes
-                _activity.ObjectsProcessed = processedCount;
-                await _syncRepo.UpdateActivityAsync(_activity);
-
-                // Transfer execution items from thread-safe collection to main list
-                foreach (var item in pageExecutionItems)
-                    _activityRunProfileExecutionItems.Add(item);
-            }
-
-            // Batch persist Pending Export changes for this page.
-            // Uses ID-based and tracker-aware methods to avoid conflicts with entities
-            // already tracked from the per-CSO processing phase (AsNoTracking loads separate instances).
-            var flushSw = isFirstPage ? Stopwatch.StartNew() : null;
-            using (Diagnostics.Sync.StartSpan("FlushPendingExportChanges")
-                .SetTag("deleteCount", pendingExportsToDelete.Count)
-                .SetTag("updateCount", pendingExportsToUpdate.Count)
-                .SetTag("confirmedAttrChangeDeleteCount", confirmedAttrChangesToDelete.Count))
-            {
-                if (pendingExportsToDelete.Count > 0)
-                {
-                    await _syncRepo.DeleteUntrackedPendingExportsAsync(pendingExportsToDelete);
-                    if (isFirstPage)
-                        Log.Information("ReconcilePendingExportsAsync: Page 1 flush — DeletePEs: {ElapsedMs:F0}ms ({Count} PEs)",
-                            flushSw!.ElapsedMilliseconds, pendingExportsToDelete.Count);
-                }
-
-                // Delete confirmed attribute changes before updating (AsNoTracking requires explicit child deletion)
-                if (confirmedAttrChangesToDelete.Count > 0)
-                {
-                    var attrSw = isFirstPage ? Stopwatch.StartNew() : null;
-                    await _syncRepo.DeleteUntrackedPendingExportAttributeValueChangesAsync(confirmedAttrChangesToDelete);
-                    if (isFirstPage)
-                        Log.Information("ReconcilePendingExportsAsync: Page 1 flush — DeleteAttrChanges: {ElapsedMs:F0}ms ({Count} changes)",
-                            attrSw!.ElapsedMilliseconds, confirmedAttrChangesToDelete.Count);
-                }
-
-                if (pendingExportsToUpdate.Count > 0)
-                {
-                    var updateSw = isFirstPage ? Stopwatch.StartNew() : null;
-                    await _syncRepo.UpdateUntrackedPendingExportsAsync(pendingExportsToUpdate);
-                    if (isFirstPage)
-                        Log.Information("ReconcilePendingExportsAsync: Page 1 flush — UpdatePEs: {ElapsedMs:F0}ms ({Count} PEs, tracker: {TrackerCount})",
-                            updateSw!.ElapsedMilliseconds, pendingExportsToUpdate.Count, _syncRepo.GetChangeTrackerEntityCount());
-                }
-            }
-            if (isFirstPage)
-                Log.Information("ReconcilePendingExportsAsync: Page 1 flush total: {ElapsedMs:F0}ms", flushSw!.ElapsedMilliseconds);
-
-            // Update activity progress after each page. The counters set above are what the portal
-            // renders the count from; the step's own name says the rest.
-            await _syncRepo.UpdateActivityMessageAsync(_activity, string.Empty);
-            await _syncRepo.UpdateActivityAsync(_activity);
-        }
-
-        // Persist reconciliation outcomes merged onto existing import RPEIs.
-        // These RPEIs were already bulk-inserted during the import phase; we now update their
-        // OutcomeSummary and error fields, and insert the new sync outcome nodes.
-        if (modifiedExistingRpeis.Count > 0)
-        {
-            var modifiedRpeiList = modifiedExistingRpeis.Values.ToList();
-
-            // Rebuild OutcomeSummary to include the newly added reconciliation outcomes
-            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-            {
-                foreach (var rpei in modifiedRpeiList)
-                    SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
-            }
-
-            // Collect only the NEW outcomes (those not yet persisted).
-            // Already-persisted outcomes have non-empty IDs assigned by FlattenSyncOutcomes during the first flush.
-            // New outcomes added during reconciliation have Id == Guid.Empty.
-            var newOutcomes = new List<ActivityRunProfileExecutionItemSyncOutcome>();
-            foreach (var rpei in modifiedRpeiList)
-            {
-                var rpeiNewOutcomes = rpei.SyncOutcomes
-                    .Where(o => o.ParentSyncOutcome == null && o.ParentSyncOutcomeId == null && o.Id == Guid.Empty)
-                    .ToList();
-                foreach (var outcome in rpeiNewOutcomes)
-                {
-                    if (outcome.Id == Guid.Empty)
-                        outcome.Id = ChangeRecordIds.New();
-                    outcome.ActivityRunProfileExecutionItemId = rpei.Id;
-                    newOutcomes.Add(outcome);
-                }
-            }
-
-            using (var persistSpan = Diagnostics.Sync.StartSpan("ReconcilePersistRpeiOutcomes")
-                .SetTag("rpeiCount", modifiedRpeiList.Count)
-                .SetTag("outcomeCount", newOutcomes.Count))
-            {
-                await _syncRepo.BulkUpdateRpeiOutcomesAsync(modifiedRpeiList, newOutcomes);
-                persistSpan.SetSuccess();
-            }
-
-            Log.Debug("ReconcilePendingExportsAsync: Updated {RpeiCount} existing RPEIs with {OutcomeCount} new reconciliation outcomes",
-                modifiedRpeiList.Count, newOutcomes.Count);
-        }
-
-        // Store the confirmed count on the activity for stats reporting
-        _activity.PendingExportsConfirmed = exportsDeleted;
-
-        if (totalConfirmed > 0 || totalRetry > 0 || totalHeld > 0 || totalReleased > 0 || totalHeldForExchange > 0)
-        {
-            Log.Information("ReconcilePendingExportsAsync: Reconciliation complete. Confirmed: {Confirmed}, Retry: {Retry}, " +
-                "Held awaiting Initial Password: {Held}, Released (no Initial Password owed): {Released}, " +
-                "Held awaiting Exchange: {HeldForExchange}, Exports deleted: {Deleted}",
-                totalConfirmed, totalRetry, totalHeld, totalReleased, totalHeldForExchange, exportsDeleted);
-        }
-    }
-
-    /// <summary>
-    /// Gives each object loaded without its Object Type the Connected System's own instance of it, so an execution item
-    /// raised for it snapshots the type's name (#2908). An object whose type the Connected System does not hold is left as
-    /// it is.
-    /// </summary>
-    private void AttachObjectTypes(IEnumerable<ConnectedSystemObject> connectedSystemObjects)
-    {
-        var objectTypesById = _connectedSystem.ObjectTypes?.ToDictionary(type => type.Id);
-        if (objectTypesById == null)
-            return;
-
-        foreach (var cso in connectedSystemObjects.Where(cso => cso.Type == null && objectTypesById.ContainsKey(cso.TypeId)))
-            cso.Type = objectTypesById[cso.TypeId];
     }
 
     /// <summary>

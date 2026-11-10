@@ -88,7 +88,10 @@ public partial class SyncEngine
         // Build a lookup of CSO attribute values by attribute ID once per CSO.
         // This avoids repeated O(n) LINQ scans of cso.AttributeValues for each pending attribute change.
         // At 100K CSOs × ~10 attribute changes each, this eliminates millions of collection scans.
+        // A probed attribute's values are left out: it is judged from its probe alone (below), and an object whose values
+        // the import still holds carries all of them, a large group's every member included (#2908).
         var attrValuesByAttrId = connectedSystemObject.AttributeValues
+            .Where(av => probedValuesByAttributeId == null || !probedValuesByAttributeId.ContainsKey(av.AttributeId))
             .GroupBy(av => av.AttributeId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
@@ -264,6 +267,68 @@ public partial class SyncEngine
             FullLoadPairCount = fullLoadPairCount,
             FullLoadPairCountsByReason = fullLoadPairCountsByReason
         };
+    }
+
+    /// <summary>
+    /// Answers reconciliation's probe questions from values the import still holds as it saved them (#2908), rather than
+    /// asking the database (<c>ISyncRepository.GetReconciliationProbeValuesAsync</c>). The answer is the one the database
+    /// gives, so each change is judged, and its last imported value recorded, exactly as a probe would leave them: for each
+    /// question, every held row of the attribute that names one of its objects by id, and every outstanding (unresolved) row
+    /// when it seeks a string, as the database's two kinds of arm return them; and the value count capped at two when a
+    /// change depends on it.
+    /// </summary>
+    /// <remarks>
+    /// The rows are a superset of what could match, which the answer's contract allows (see
+    /// <see cref="ProbedAttributeValues.CandidateValues"/>): an outstanding row is offered whatever its string, so no
+    /// difference between the database's and .NET's folding of case can leave out a row the engine would match. Each row
+    /// is copied with only the columns the database returns (id, attribute id, <c>ReferenceValueId</c> and
+    /// <c>UnresolvedReferenceValue</c>), so the engine is given exactly what a probe gives it.
+    /// </remarks>
+    /// <param name="questions">The questions <see cref="PlanReconciliationProbes"/> put for the objects.</param>
+    /// <param name="heldValuesByConnectedSystemObjectId">Every value each object holds, as saved. Every question's object
+    /// must have an entry.</param>
+    public static List<ProbedAttributeValues> AnswerReconciliationProbes(IEnumerable<ReconciliationProbeQuestion> questions,
+        IReadOnlyDictionary<Guid, IReadOnlyList<ConnectedSystemObjectAttributeValue>> heldValuesByConnectedSystemObjectId)
+    {
+        var answers = new List<ProbedAttributeValues>();
+        foreach (var question in questions)
+        {
+            if (!heldValuesByConnectedSystemObjectId.TryGetValue(question.ConnectedSystemObjectId, out var heldValues))
+                throw new ReconciliationProbeIncompleteException(
+                    $"No values are held for Connected System Object {question.ConnectedSystemObjectId}, so its probe question on attribute " +
+                    $"{question.AttributeId} cannot be answered from them.");
+
+            var referenceIds = question.ReferenceIds as IReadOnlySet<Guid> ?? question.ReferenceIds.ToHashSet();
+            var seeksStrings = question.ExactValues.Count + question.CaseInsensitiveValues.Count > 0;
+            var candidates = new List<ConnectedSystemObjectAttributeValue>();
+            var count = 0;
+            foreach (var row in heldValues.Where(row => row.AttributeId == question.AttributeId))
+            {
+                count++;
+                var isCandidate = row.ReferenceValueId is { } referenceId
+                    ? referenceIds.Contains(referenceId)
+                    : seeksStrings && row.UnresolvedReferenceValue != null;
+                if (isCandidate)
+                    candidates.Add(new ConnectedSystemObjectAttributeValue
+                    {
+                        Id = row.Id,
+                        AttributeId = row.AttributeId,
+                        ReferenceValueId = row.ReferenceValueId,
+                        UnresolvedReferenceValue = row.UnresolvedReferenceValue
+                    });
+            }
+
+            answers.Add(new ProbedAttributeValues
+            {
+                ConnectedSystemObjectId = question.ConnectedSystemObjectId,
+                AttributeId = question.AttributeId,
+                ProbedChangeIds = question.ChangeIds,
+                CandidateValues = candidates,
+                CappedValueCount = question.NeedsCount ? Math.Min(count, 2) : null
+            });
+        }
+
+        return answers;
     }
 
     private static bool IsAwaitingConfirmation(PendingExportAttributeValueChange change) =>

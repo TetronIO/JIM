@@ -193,7 +193,7 @@ public class FullSyncTests
     /// A Full Sync no longer performs Pending Export confirmation itself, even when the CSO's current
     /// attribute values fully match what the Pending Export asserts. That job belongs entirely to import
     /// reconciliation (<c>SyncEngine.ReconcileCsoAgainstPendingExport</c>, driven by
-    /// <c>SyncImportTaskProcessor.ReconcilePendingExportsAsync</c>) now: every change to a CSO's values
+    /// <c>SyncImportTaskProcessor.ReconcileSavedBatchAsync</c>) now: every change to a CSO's values
     /// arrives through an import, so the import has already reconciled anything a sync could see. Before
     /// this fix a matching sync deleted the Pending Export outright.
     /// </summary>

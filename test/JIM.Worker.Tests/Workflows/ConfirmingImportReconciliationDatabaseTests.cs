@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using JIM.Application;
 using JIM.Application.Servers;
+using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -108,10 +109,13 @@ public class ConfirmingImportReconciliationDatabaseTests
         await SeedPendingExportsAsync();
     }
 
-    [Test]
-    public async Task FullImport_ConfirmingAMixOfExports_LeavesExactlyTheCharacterisedOutcomeAsync()
+    /// <param name="importBatchSize">The save phase's batch size: the default, which saves every object in one batch, or
+    /// three, so reconciliation runs once per batch as the save crosses four (#2908).</param>
+    [TestCase(2000)]
+    [TestCase(3)]
+    public async Task FullImport_ConfirmingAMixOfExports_LeavesExactlyTheCharacterisedOutcomeAsync(int importBatchSize)
     {
-        var activity = await RunConfirmingFullImportAsync();
+        var (activity, _) = await RunConfirmingFullImportAsync(importBatchSize);
 
         var snapshot = await SnapshotAsync(activity.Id);
 
@@ -128,7 +132,7 @@ public class ConfirmingImportReconciliationDatabaseTests
     [Test]
     public async Task FullImport_ExportJudgedOnAnObjectTheImportDidNotChange_SnapshotsItsObjectTypeAsync()
     {
-        var activity = await RunConfirmingFullImportAsync();
+        var (activity, _) = await RunConfirmingFullImportAsync();
 
         await using var ctx = NewContext();
         var snapshots = await ctx.ActivityRunProfileExecutionItems.AsNoTracking()
@@ -144,6 +148,33 @@ public class ConfirmingImportReconciliationDatabaseTests
         {
             Assert.That(snapshots, Is.EqualTo(new[] { "user", "user" }));
             Assert.That(usersCounted, Is.EqualTo(7), "ada, grace, dorothy, mary, zelda, hedy and joan");
+        }
+    }
+
+    /// <summary>
+    /// The save phase's objects are reconciled as each batch is saved, from the values the import holds for them, never
+    /// reloaded (#2908): only Beta is read back, because it held an outstanding reference the run's cross-batch fix-up
+    /// resolved after it was loaded. Nothing is probed in the database: Alpha's member changes are answered from the
+    /// members the import holds. And the outcomes merged onto each batch's execution items are written with that batch,
+    /// not all at the end: the batches of three hold Ada and Grace, then Dorothy, then Alpha and Beta.
+    /// </summary>
+    [Test]
+    public async Task FullImport_ConfirmingAcrossSaveBatches_JudgesHeldObjectsWithoutReloadingAndWritesOutcomesPerBatchAsync()
+    {
+        var (_, recorder) = await RunConfirmingFullImportAsync(importBatchSize: 3);
+
+        var calls = recorder.Calls.ToList();
+        var reloaded = calls.Where(c => c.Method == nameof(ISyncRepository.GetConnectedSystemObjectsCoreByIdsNoTrackingAsync))
+            .SelectMany(c => c.Ids[1]!).ToList();
+        var probes = calls.Count(c => c.Method == nameof(ISyncRepository.GetReconciliationProbeValuesAsync));
+        var outcomeWrites = calls.Where(c => c.Method == nameof(ISyncRepository.BulkUpdateRpeiOutcomesAsync))
+            .Select(c => c.CollectionCounts[0]).ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(reloaded, Is.EqualTo(new[] { Beta }), "only Beta is read back for reconciliation");
+            Assert.That(probes, Is.Zero, "Alpha's member changes are answered from the values the import holds");
+            Assert.That(outcomeWrites, Is.EqualTo(new int?[] { 2, 1, 2 }), "one write per save batch with merged outcomes");
         }
     }
 
@@ -210,10 +241,10 @@ public class ConfirmingImportReconciliationDatabaseTests
           mary: Deleted error=NotSet summary=DeletionDetected:1 snapshots=[mary|Mary Jackson|user]
             outcome DeletionDetected ordinal=0 detail=- parent=-
           zelda: Added error=NotSet summary=CsoAdded:1 snapshots=[zelda|Zelda Fitzgerald|user]
-            outcome CsoAdded ordinal=0 detail=2 parent=-
+            outcome CsoAdded ordinal=0 detail=3 parent=-
         Activity:
           confirmed=4 errors=1 added=1 updated=5 deleted=1 created=0 processed=10/10
-          message: Import complete: 10 objects (1 created, 5 updated, 4 unchanged, 1 error) in (elapsed); 1 no longer found and marked as deleted
+          message: Import complete: 10 objects (1 created, 5 updated, 4 unchanged, 1 error); 1 no longer found and marked as deleted
         Stat counters:
           ObjectChangeType 1=1
           ObjectChangeType 2=7
@@ -251,24 +282,26 @@ public class ConfirmingImportReconciliationDatabaseTests
         var group = new ConnectedSystemObjectType { Name = "group", ConnectedSystem = system, Selected = true };
 
         ConnectedSystemObjectTypeAttribute Attribute(ConnectedSystemObjectType type, string name, AttributeDataType dataType,
-            AttributePlurality plurality = AttributePlurality.SingleValued, bool externalId = false)
+            AttributePlurality plurality = AttributePlurality.SingleValued, bool externalId = false, bool secondaryExternalId = false)
         {
             var attribute = new ConnectedSystemObjectTypeAttribute
             {
                 Name = name, ConnectedSystemObjectType = type, Type = dataType, AttributePlurality = plurality,
-                Selected = true, IsExternalId = externalId
+                Selected = true, IsExternalId = externalId, IsSecondaryExternalId = secondaryExternalId
             };
             type.Attributes.Add(attribute);
             return attribute;
         }
 
         Attribute(user, "id", AttributeDataType.Text, externalId: true);
+        Attribute(user, "uid", AttributeDataType.Text, secondaryExternalId: true);
         Attribute(user, "displayName", AttributeDataType.Text);
         Attribute(user, "mail", AttributeDataType.Text);
         Attribute(user, "employeeNumber", AttributeDataType.Number);
         Attribute(user, "proxyAddresses", AttributeDataType.Text, AttributePlurality.MultiValued);
         Attribute(user, "manager", AttributeDataType.Reference);
         Attribute(group, "id", AttributeDataType.Text, externalId: true);
+        Attribute(group, "uid", AttributeDataType.Text, secondaryExternalId: true);
         Attribute(group, "displayName", AttributeDataType.Text);
         Attribute(group, "member", AttributeDataType.Reference, AttributePlurality.MultiValued);
 
@@ -305,6 +338,9 @@ public class ConfirmingImportReconciliationDatabaseTests
                 Status = status, Created = created
             };
             cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = _attributeIds[$"{type}.id"], StringValue = externalId });
+            // References name objects by this, the Secondary External ID, as a directory's distinguished names do.
+            cso.SecondaryExternalIdAttributeId = _attributeIds[$"{type}.uid"];
+            cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = _attributeIds[$"{type}.uid"], StringValue = externalId });
             return cso;
         }
 
@@ -457,8 +493,9 @@ public class ConfirmingImportReconciliationDatabaseTests
         static ConnectedSystemImportObjectAttribute Reference(string name, params string[] values) =>
             new() { Name = name, Type = AttributeDataType.Reference, ReferenceValues = [.. values] };
 
+        // Every object carries its Secondary External ID, the same as its External ID.
         static ConnectedSystemImportObject Object(string type, params ConnectedSystemImportObjectAttribute[] attributes) =>
-            new() { ObjectType = type, ChangeType = ObjectChangeType.NotSet, Attributes = [.. attributes] };
+            new() { ObjectType = type, ChangeType = ObjectChangeType.NotSet, Attributes = [.. attributes, Text("uid", attributes[0].StringValues[0])] };
 
         return
         [
@@ -482,7 +519,7 @@ public class ConfirmingImportReconciliationDatabaseTests
     }
 
     /// <summary>Runs the confirming Full Import on its own tracking context, as the Worker does.</summary>
-    private async Task<Activity> RunConfirmingFullImportAsync()
+    private async Task<(Activity Activity, RecordingSyncRepository Recorder)> RunConfirmingFullImportAsync(int importBatchSize = 2000)
     {
         await using var ctx = NewContext(trackAll: true);
         var repository = new PostgresDataRepository(ctx);
@@ -502,11 +539,15 @@ public class ConfirmingImportReconciliationDatabaseTests
         {
             Id = Guid.NewGuid(), Status = WorkerTaskStatus.Processing, Activity = activity
         };
-        var processor = new SyncImportTaskProcessor(jim, jim.SyncRepository, new SyncServer(jim), new SyncEngine(),
-            new PagedImportConnector(DirectoryPages()), system, runProfile, workerTask, new CancellationTokenSource());
+        var (syncRepository, recorder) = RecordingSyncRepository.Wrap(jim.SyncRepository);
+        var processor = new SyncImportTaskProcessor(jim, syncRepository, new SyncServer(jim), new SyncEngine(),
+            new PagedImportConnector(DirectoryPages()), system, runProfile, workerTask, new CancellationTokenSource())
+        {
+            ImportBatchSize = importBatchSize
+        };
         await processor.PerformImportAsync();
         await jim.SyncRepository.UpdateActivityAsync(activity);
-        return activity;
+        return (activity, recorder);
     }
 
     /// <summary>
@@ -574,7 +615,7 @@ public class ConfirmingImportReconciliationDatabaseTests
             $"updated={activity.TotalUpdated} deleted={activity.TotalDeleted} created={activity.TotalCreated} " +
             $"processed={activity.ObjectsProcessed}/{activity.ObjectsToProcess}");
         // The message ends with the run's throughput, which differs from run to run.
-        text.AppendLine($"  message: {Regex.Replace(activity.Message ?? "-", @" in [^()]+ \(avg [^)]+\)", " in (elapsed)")}");
+        text.AppendLine($"  message: {Regex.Replace(activity.Message ?? "-", @" in [^()]+ \(avg [^)]+\)", "")}");
 
         text.AppendLine("Stat counters:");
         foreach (var counter in (await ctx.ActivityStatCounters.AsNoTracking().Where(c => c.ActivityId == activityId).ToListAsync())

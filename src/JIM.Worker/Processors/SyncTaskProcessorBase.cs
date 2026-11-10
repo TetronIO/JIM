@@ -1462,7 +1462,7 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Pass 1: Processes obsolete CSO teardown for a single Connected System Object. Pending Export
     /// confirmation is not part of synchronisation: every change to a CSO's values arrives through an
-    /// import, which confirms Pending Exports against them (<c>SyncImportTaskProcessor.ReconcilePendingExportsAsync</c>).
+    /// import, which confirms Pending Exports against them (<c>SyncImportTaskProcessor.ReconcileSavedBatchAsync</c>).
     /// This must run for ALL CSOs in the page BEFORE Pass 2 (ProcessActiveConnectedSystemObjectAsync) runs,
     /// so that all disconnections are recorded in _pendingDisconnectedMvoIds before any join attempts.
     /// Without this ordering guarantee, a new CSO processed before an obsolete CSO (due to GUID ordering)

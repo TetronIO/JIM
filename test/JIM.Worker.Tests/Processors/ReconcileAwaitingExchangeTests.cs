@@ -211,16 +211,8 @@ public class ReconcileAwaitingExchangeTests
         ActivityId = Guid.NewGuid()
     };
 
-    private static async Task InvokeReconcileAsync(Fixture fixture)
-    {
-        const string methodName = "ReconcilePendingExportsAsync";
-        var method = typeof(SyncImportTaskProcessor).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException(
-                $"SyncImportTaskProcessor.{methodName} was not found. Update this fixture to invoke the current production method.");
-
-        await (Task)method.Invoke(fixture.Processor,
-            [new List<ConnectedSystemObject> { fixture.Cso }, new Dictionary<Guid, ActivityRunProfileExecutionItem>(), ConnectedSystemId, null])!;
-    }
+    private static Task InvokeReconcileAsync(Fixture fixture) =>
+        ImportReconciliationInvoker.ReconcileAsync(fixture.Processor, [fixture.Cso]);
 
     private static async Task InvokeJudgeUnreconciledAsync(Fixture fixture, List<ConnectedSystemObject>? reconciled = null)
     {

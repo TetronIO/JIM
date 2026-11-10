@@ -27,7 +27,7 @@ namespace JIM.Worker.Tests.Workflows;
 /// <c>Activities/ConfirmingImportOutcomeTests</c>: exports run for real via
 /// <c>Jim.ExportExecution.ExecuteExportsAsync</c>, then the confirming import runs for real via
 /// <c>SyncImportTaskProcessor.PerformImportAsync</c> - which reconciles Pending Exports as part of
-/// the same run (<c>ReconcilePendingExportsAsync</c>), so no separate reconciliation call is made.
+/// the same run (<c>ReconcileSavedBatchAsync</c>), so no separate reconciliation call is made.
 /// </summary>
 public class OptimisticExportApplyWorkflowTests
 {
@@ -276,7 +276,7 @@ public class OptimisticExportApplyWorkflowTests
         var activity = await RunConfirmingImportAsync(importObject);
 
         // Assert 2: SyncImportTaskProcessor.PerformImportAsync reconciles Pending Exports as part
-        // of the SAME run (ReconcilePendingExportsAsync), merging ExportConfirmed outcomes onto the
+        // of the SAME run (ReconcileSavedBatchAsync), merging ExportConfirmed outcomes onto the
         // RPEI created for the status transition. No CsoUpdated outcome must appear (the attribute
         // values already matched), and LastUpdated IS stamped - this is the one legitimate restamp
         // case, since PendingProvisioning -> Normal is itself a genuine status transition.
