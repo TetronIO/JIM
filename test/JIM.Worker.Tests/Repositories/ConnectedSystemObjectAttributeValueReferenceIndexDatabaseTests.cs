@@ -19,7 +19,9 @@ namespace JIM.Worker.Tests.Repositories;
 /// plan of a reader of that column against a production-shaped table (users with a text and a Guid value, a group whose
 /// member values are resolved and keep their DN) and asserts it still seeks through the index; a partial index serves
 /// only a predicate the planner can prove implies its own. <c>IX_ConnectedSystemObjectAttributeValues_UnresolvedReferenceValue</c>
-/// stays as it is, over resolved rows too, because reconciliation's probe finds a resolved member by its DN through it.
+/// is gone (#2871): it held the DN of every reference ever imported, resolved or not, for one reader, reconciliation's
+/// probe finding a resolved member by its exact DN. That probe now seeks outstanding values only, through the lowered
+/// index on outstanding values every other string reader already uses.
 /// </summary>
 [TestFixture]
 [Category("RequiresPostgres")]
@@ -28,9 +30,14 @@ public class ConnectedSystemObjectAttributeValueReferenceIndexDatabaseTests
     private const int UserCount = 5000;
     private const string ReferenceIndex = "IX_ConnectedSystemObjectAttributeValues_ReferenceValueId";
 
-    // The model's name, IX_ConnectedSystemObjectAttributeValues_UnresolvedReferenceValue, is 64 characters, so PostgreSQL
+    // The model's name, IX_ConnectedSystemObjectAttributeValues_UnresolvedReferenceValue, was 64 characters, so PostgreSQL
     // stored it cut to its 63-character identifier limit.
     private const string UnresolvedReferenceIndex = "IX_ConnectedSystemObjectAttributeValues_UnresolvedReferenceValu";
+
+    // The lowered reference text of outstanding values (migration 20260322150822).
+    private const string LoweredOutstandingReferenceIndex = "IX_CsoAttrVal_Lower_UnresolvedRef";
+
+    private const int OutstandingMemberCount = 5000;
 
     private string _connectionString = null!;
 
@@ -65,7 +72,7 @@ public class ConnectedSystemObjectAttributeValueReferenceIndexDatabaseTests
     public async Task SetUp() => await PostgresTestDatabase.ResetAsync(_connectionString);
 
     [Test]
-    public async Task ReferenceIndexes_IdIndexHoldsOnlyResolvedRowsAndDnIndexKeepsThemAsync()
+    public async Task ReferenceIndexes_IdIndexHoldsOnlyResolvedRowsAndNoIndexHoldsEveryDnAsync()
     {
         await using var connection = await OpenAsync();
         await using var command = new NpgsqlCommand("""
@@ -85,8 +92,8 @@ public class ConnectedSystemObjectAttributeValueReferenceIndexDatabaseTests
         {
             Assert.That(definitions.GetValueOrDefault(ReferenceIndex), Does.EndWith("(\"ReferenceValueId\") WHERE (\"ReferenceValueId\" IS NOT NULL)"),
                 $"{ReferenceIndex} must hold only the rows with a referenced object");
-            Assert.That(definitions.GetValueOrDefault(UnresolvedReferenceIndex), Does.EndWith("(\"UnresolvedReferenceValue\") WHERE (\"UnresolvedReferenceValue\" IS NOT NULL)"),
-                $"{UnresolvedReferenceIndex} must keep the resolved rows' DNs, which reconciliation's probe looks up by exact text");
+            Assert.That(definitions, Does.Not.ContainKey(UnresolvedReferenceIndex),
+                $"{UnresolvedReferenceIndex} held a DN per reference ever imported; nothing reads resolved rows by their DN any more");
         }
     }
 
@@ -172,20 +179,22 @@ public class ConnectedSystemObjectAttributeValueReferenceIndexDatabaseTests
     }
 
     [Test]
-    public async Task ReconciliationProbe_ExactDnOfAResolvedMember_FindsItThroughTheUnresolvedReferenceValueIndexAsync()
+    public async Task ReconciliationProbe_ExactDn_FindsOnlyOutstandingValuesThroughTheLoweredIndexAsync()
     {
-        // Why IX_ConnectedSystemObjectAttributeValues_UnresolvedReferenceValue still covers resolved rows (#2868). On a
-        // case-exact reference attribute the probe asks for a staged member's DN exactly, and a change naming no object
-        // matches a resolved row by the DN it keeps (SyncEngine.ReferenceRowMatches). Narrowed to unresolved rows, the
-        // index could not serve that arm, which would read every member of the group to find one.
+        // The exact arm, asked for case-exact reference attributes, finds outstanding values only (#2871): a resolved row
+        // names its object by id alone for a change naming one too (SyncEngine.ReferenceRowMatches), and the planner loads
+        // a pair in full for a change naming none. It seeks the lowered index on outstanding values by the lowered DN and
+        // compares the DN exactly on what that returns, so it reads neither the group's members nor its outstanding values
+        // to find one.
         var seeded = await LargeGroupImportSeed.SeedAsync(() => NewContext(), _connectionString, UserCount, UserCount);
+        await SeedOutstandingMembersAsync();
         var question = new ReconciliationProbeQuestion
         {
             ConnectedSystemObjectId = seeded.GroupCsoId,
             AttributeId = seeded.MemberAttributeId,
             ChangeIds = new HashSet<Guid>(),
             ReferenceIds = [],
-            ExactValues = [LargeGroupImportSeed.UserDn(7)],
+            ExactValues = [LargeGroupImportSeed.UserDn(7), PendingDn(42), PendingDn(43).ToUpperInvariant()],
             CaseInsensitiveValues = [],
             NeedsCount = false
         };
@@ -193,16 +202,56 @@ public class ConnectedSystemObjectAttributeValueReferenceIndexDatabaseTests
         await using (var ctx = NewContext())
         {
             var answers = await new PostgresDataRepository(ctx).Sync.GetReconciliationProbeValuesAsync([question]);
-            Assert.That(answers.Single().CandidateValues.Select(v => v.Id), Is.EqualTo(new[] { LargeGroupImportSeed.MemberValueId(7) }),
-                "The resolved member is found by the DN it keeps");
+            Assert.That(answers.Single().CandidateValues.Select(v => v.Id), Is.EqualTo(new[] { PendingValueId(42) }),
+                "Only the outstanding value holding the DN exactly; not the resolved member keeping its DN, nor a case variant");
         }
 
         await using var connection = await OpenAsync();
         await using var explain = new NpgsqlCommand("EXPLAIN " + SyncRepository.ReconciliationProbeValuesSql, connection);
         SyncRepository.AddReconciliationProbeValuesParameters(explain, [seeded.GroupCsoId], [seeded.MemberAttributeId],
-            [], [LargeGroupImportSeed.UserDn(7)], []);
+            [], [PendingDn(42)], []);
+        var plan = await PlanAsync(explain);
+        var planText = string.Join("\n", plan);
 
-        AssertSeeksThrough(await PlanAsync(explain), "UnresolvedReferenceValue", UnresolvedReferenceIndex);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(plan.Any(line => line.Contains("Seq Scan on \"ConnectedSystemObjectAttributeValues\"")), Is.False,
+                $"The probe scans every attribute value.\n{planText}");
+            Assert.That(plan.Any(line => line.Contains("\"IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId\"")), Is.False,
+                $"The probe reads every member of the group.\n{planText}");
+            Assert.That(plan.Any(line => line.Contains("\"IX_ConnectedSystemObjectAttributeValues_CsoId_Unresolved\"")), Is.False,
+                $"The probe reads every outstanding value of the group.\n{planText}");
+            Assert.That(plan.Where(line => line.Contains("Filter:")).Any(line => line.Contains("lower(")), Is.False,
+                $"The lowered DN must drive the index, not filter what a scan returns.\n{planText}");
+        }
+
+        AssertSeeksThrough(plan, "UnresolvedReferenceValue", LoweredOutstandingReferenceIndex);
+    }
+
+    private static string PendingDn(int n) => $"uid=pending{n},ou=People,dc=glitterband,dc=local";
+
+    private static Guid PendingValueId(int n) => LargeGroupImportSeed.DeterministicGuid("pending" + n);
+
+    /// <summary>
+    /// Gives the group <see cref="OutstandingMemberCount"/> members still outstanding: their DN held, no object named.
+    /// </summary>
+    private async Task SeedOutstandingMembersAsync()
+    {
+        await using var connection = await OpenAsync();
+        await using var populate = new NpgsqlCommand("""
+            INSERT INTO "ConnectedSystemObjectAttributeValues"
+            SELECT (jsonb_populate_record(av, jsonb_build_object(
+                'Id', md5('pending' || n)::uuid,
+                'ReferenceValueId', NULL,
+                'UnresolvedReferenceValue', 'uid=pending' || n || ',ou=People,dc=glitterband,dc=local'))).*
+            FROM "ConnectedSystemObjectAttributeValues" AS av, generate_series(1, @count) AS n
+            WHERE av."Id" = @templateValueId;
+
+            ANALYZE "ConnectedSystemObjectAttributeValues";
+            """, connection);
+        populate.Parameters.AddWithValue("count", OutstandingMemberCount);
+        populate.Parameters.AddWithValue("templateValueId", LargeGroupImportSeed.MemberValueId(0));
+        await populate.ExecuteNonQueryAsync();
     }
 
     private static void AssertSeeksThrough(IReadOnlyList<string> plan, string column, string index)

@@ -404,6 +404,7 @@ public class ReferenceRecallCausalEdgeTests
         public void CallStageDeferredRecallRpei(PendingExport pendingExport, string? displayName, IReadOnlyCollection<CausalCause> causes)
             => StageDeferredRecallRpei(pendingExport, displayName, causes);
 
-        public Task CallFlushDeferredRecallRpeisAsync() => FlushDeferredRecallRpeisAsync();
+        // Within a run, as the processor always flushes: the run holds the history writer the flush records through (#2874).
+        public Task CallFlushDeferredRecallRpeisAsync() => RunWithHistoryWriterAsync(FlushDeferredRecallRpeisAsync);
     }
 }

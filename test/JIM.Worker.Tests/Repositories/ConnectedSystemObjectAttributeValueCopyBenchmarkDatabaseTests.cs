@@ -22,16 +22,18 @@ namespace JIM.Worker.Tests.Repositories;
 /// is timed in turn on the same seeded objects, three times over, with the table emptied and checkpointed between runs:
 /// <list type="bullet">
 /// <item>before #2868: <c>IX_..._ReferenceValueId</c> over every row;</item>
-/// <item>#2868: that index partial (<c>ReferenceValueId IS NOT NULL</c>);</item>
-/// <item>the option #2868 did not take: also <c>IX_..._UnresolvedReferenceValue</c> narrowed to outstanding values, which
-/// would need reconciliation's probe to stop finding resolved members by exact DN.</item>
+/// <item>#2868: that index partial (<c>ReferenceValueId IS NOT NULL</c>), and <c>IX_..._UnresolvedReferenceValue</c> over
+/// every reference's DN;</item>
+/// <item>the option #2871 weighed: <c>IX_..._UnresolvedReferenceValue</c> narrowed to outstanding values;</item>
+/// <item>#2871: <c>IX_..._UnresolvedReferenceValue</c> dropped, reconciliation's probe seeking outstanding values by the
+/// lowered index alone.</item>
 /// </list>
 /// The schema is put back as migrated afterwards. Explicit, because it writes millions of rows and exists to be read,
 /// not to guard; the numbers go to the test output.
 /// </summary>
 [TestFixture]
 [Category("RequiresPostgres")]
-[Explicit("Benchmark: writes about a million attribute value rows nine times; run on demand")]
+[Explicit("Benchmark: writes about a million attribute value rows twelve times; run on demand")]
 public class ConnectedSystemObjectAttributeValueCopyBenchmarkDatabaseTests
 {
     private const int UserCount = 100_000;
@@ -87,14 +89,20 @@ public class ConnectedSystemObjectAttributeValueCopyBenchmarkDatabaseTests
                 {MigratedShapeSql}
                 DROP INDEX "{ReferenceIndex}";
                 CREATE INDEX "{ReferenceIndex}" ON "ConnectedSystemObjectAttributeValues" ("ReferenceValueId");
+                CREATE INDEX "{UnresolvedReferenceIndex}" ON "ConnectedSystemObjectAttributeValues" ("UnresolvedReferenceValue")
+                    WHERE "UnresolvedReferenceValue" IS NOT NULL;
                 """),
-            ("#2868 (ReferenceValueId index partial)", MigratedShapeSql),
-            ("option: DN index narrowed to outstanding values too", $"""
+            ("#2868 (ReferenceValueId index partial)", $"""
                 {MigratedShapeSql}
-                DROP INDEX "{UnresolvedReferenceIndex}";
+                CREATE INDEX "{UnresolvedReferenceIndex}" ON "ConnectedSystemObjectAttributeValues" ("UnresolvedReferenceValue")
+                    WHERE "UnresolvedReferenceValue" IS NOT NULL;
+                """),
+            ("option: DN index narrowed to outstanding values", $"""
+                {MigratedShapeSql}
                 CREATE INDEX "{UnresolvedReferenceIndex}" ON "ConnectedSystemObjectAttributeValues" ("UnresolvedReferenceValue")
                     WHERE "UnresolvedReferenceValue" IS NOT NULL AND "ReferenceValueId" IS NULL;
-                """)
+                """),
+            ("#2871 (DN index dropped)", MigratedShapeSql)
         };
 
         var results = new List<(string Shape, int Round, double Seconds, long WalBytes, long Rows, IReadOnlyDictionary<string, long> IndexBytes)>();
@@ -134,13 +142,11 @@ public class ConnectedSystemObjectAttributeValueCopyBenchmarkDatabaseTests
         Assert.That(results.Select(r => r.Rows).Distinct().Single(), Is.EqualTo(UserCount * (2L + UserTextAttributes.Length) + GroupCount * (2L + MembersPerGroup)));
     }
 
-    /// <summary>The two reference indexes as the migrations leave them.</summary>
+    /// <summary>The reference indexes as the migrations leave them: the id index partial, and no index on the DN alone.</summary>
     private static readonly string MigratedShapeSql = $"""
         DROP INDEX IF EXISTS "{ReferenceIndex}";
         CREATE INDEX "{ReferenceIndex}" ON "ConnectedSystemObjectAttributeValues" ("ReferenceValueId") WHERE "ReferenceValueId" IS NOT NULL;
         DROP INDEX IF EXISTS "{UnresolvedReferenceIndex}";
-        CREATE INDEX "{UnresolvedReferenceIndex}" ON "ConnectedSystemObjectAttributeValues" ("UnresolvedReferenceValue")
-            WHERE "UnresolvedReferenceValue" IS NOT NULL;
         """;
 
     private static double Median(IEnumerable<double> values)

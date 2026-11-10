@@ -1605,6 +1605,75 @@ public interface ISyncRepository
     Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis, IReadOnlySet<Guid>? rowsAlreadyWritten = null);
 
     /// <summary>
+    /// Prepares a synchronisation flush's history for <see cref="WriteSynchronisationHistoryAsync"/> (#2874): the
+    /// execution items with their outcome trees, change records, causal edges and match candidates, the Metaverse Object
+    /// change records, and the stat counter deltas, every id assigned. Synchronous and CPU-only: it reads and readies the
+    /// objects the run holds, and writes nothing to the database.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The batch it returns owns what it holds, and these rules keep a write of it from meeting the run that goes on
+    /// working while it is written:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item>Every id the write needs, or anything later in the run needs, is assigned here: the items', the outcomes'
+    ///     (which a later causal edge may name as its cause), the change records' and their rows', the edges' and the
+    ///     candidates'. Ids on navigations are copied into the scalars the writers read.</item>
+    ///   <item>The items' causal edge and match candidate buffers are emptied: the batch holds them now, so a later flush
+    ///     of the same items cannot write them again.</item>
+    ///   <item>After preparing, the caller does not touch the batch's objects until the write has been waited for, and
+    ///     the write touches nothing outside the batch.</item>
+    /// </list>
+    /// <para>
+    /// Every item must already carry its Activity's id and the fields only knowable once the page's objects are saved
+    /// (the processor's own preparation); this does not read the Activity.
+    /// </para>
+    /// </remarks>
+    /// <param name="items">The flush's execution items.</param>
+    /// <param name="itemIdsWrittenWithDeletion">The ids of items whose rows (and change records) a Connected System
+    /// Object deletion wrote in its own transaction (#2807); null when there are none.</param>
+    /// <param name="includeItemChangeRecords">Whether the items' own change records are written: Connected System Object
+    /// change tracking is on.</param>
+    /// <param name="newMetaverseObjectChanges">New Metaverse Object change records. Copied: the caller may clear its
+    /// list.</param>
+    /// <param name="metaverseObjectChangeAppends">Rows appended to change records an earlier flush wrote, each carrying
+    /// that record's id. Copied likewise.</param>
+    /// <param name="page">The 1-based page the flush records, or 0 for one outside the page loop.</param>
+    /// <param name="totalPages">The pages the run expects, or 0.</param>
+    SynchronisationHistoryBatch PrepareSynchronisationHistory(
+        IReadOnlyList<ActivityRunProfileExecutionItem> items,
+        IReadOnlySet<Guid>? itemIdsWrittenWithDeletion,
+        bool includeItemChangeRecords,
+        IReadOnlyList<MetaverseObjectChange> newMetaverseObjectChanges,
+        IReadOnlyList<MetaverseObjectChange> metaverseObjectChangeAppends,
+        int page,
+        int totalPages);
+
+    /// <summary>
+    /// Writes a batch <see cref="PrepareSynchronisationHistory"/> prepared, in one transaction of this repository's own
+    /// (#2874): the items (bringing up to date those a deletion wrote), the outcomes' change records, the outcomes, the
+    /// causal edges, the match candidates and the stat counters, then the items' change records and the Metaverse Object
+    /// change records. A failure rolls the whole batch back. Assigns no id, and throws <see cref="InvalidOperationException"/>
+    /// for any it finds missing; throws likewise if the repository already holds a transaction.
+    /// </summary>
+    /// <returns>True when the items were written outside any change tracking, so the caller releases them; false when
+    /// the store keeps them on the Activity (the in-memory store, for test assertions).</returns>
+    Task<bool> WriteSynchronisationHistoryAsync(SynchronisationHistoryBatch batch);
+
+    /// <summary>
+    /// Whether <see cref="WriteSynchronisationHistoryAsync"/> may run on a repository of its own (<see cref="OpenIsolatedScope"/>)
+    /// while this one carries on with the run (#2874): true for a database, false for the in-memory store, whose
+    /// collections are not safe to use from two threads at once.
+    /// </summary>
+    bool SupportsConcurrentHistoryWrites { get; }
+
+    /// <summary>
+    /// Whether this repository holds a database transaction (#2874). A history write on another connection must never be
+    /// waited for while one is open: it could wait for ever on rows this one has written and not committed.
+    /// </summary>
+    bool HasOpenTransaction { get; }
+
+    /// <summary>
     /// Writes only the items' own rows (#2807): no outcomes, edges, match candidates, change records or stat counters.
     /// For items that must exist in the same transaction as something else, such as the execution items of a
     /// synchronisation's Connected System Object deletion, which its Deleted change records belong to. Joins the
@@ -2246,7 +2315,8 @@ public interface ISyncRepository
     /// this repository's change tracker and transaction untouched (#2598): a preview evaluating a whole system page by
     /// page while its caller saves progress on this repository. A synchronisation page holds its Metaverse Objects
     /// untracked under tracked Connected System Objects, which is safe only while nothing saves on that context with
-    /// change detection on; a walk on its own context never meets its caller's saves. Disposing the scope disposes
+    /// change detection on; a walk on its own context never meets its caller's saves. A synchronisation also writes its
+    /// history on one (#2874), in transactions of its own that never meet the run's. Disposing the scope disposes
     /// the context. Repositories with no context of their own (in memory) return a scope over themselves.
     /// </summary>
     ISyncRepositoryScope OpenIsolatedScope();

@@ -648,7 +648,8 @@ public partial class SyncRepository
         // 3. Join the temp table to the target side for the resolutions, with the same case-exact rule.
         // Steps 1 and 3 run with JIT off: their estimates are the misestimates above, and on the inflated ones the
         // planner compiles every expression to save time it will not spend (125 ms of compilation to read three rows on
-        // a 3.3 million value test table). SET LOCAL holds for the command's own implicit transaction and no longer.
+        // a 3.3 million value test table). Each of the two batches turns it off first (TransactionJit), which holds for
+        // the batch's own implicit transaction and no longer, so the UPDATEs below run with it on again.
         //
         // The resolutions are applied by primary key in bounded batches, so each statement stays well inside the bulk
         // command timeout however large the backlog (294,000 outstanding values were recorded when the LOWER() indexes
@@ -683,9 +684,8 @@ public partial class SyncRepository
         {
             // The id test is what makes a value outstanding, so this only ever fills in a missing id and never replaces
             // one. Every value belongs to a CSO, so the scalar subquery always returns exactly one row.
-            outstandingCount = await ExecuteReferenceFixupScalarAsync(npgsqlConn, connectedSystemId, $"""
+            outstandingCount = await ExecuteReferenceFixupCountWithJitOffAsync(npgsqlConn, connectedSystemId, $"""
                 {dropTempTablesSql}
-                SET LOCAL jit = off;
                 CREATE TEMP TABLE "{outstandingTableName}" AS
                 SELECT av."Id" AS av_id, av."UnresolvedReferenceValue" AS reference_value, LOWER(av."UnresolvedReferenceValue") AS lower_value
                 FROM "ConnectedSystemObjectAttributeValues" av
@@ -699,10 +699,9 @@ public partial class SyncRepository
 
             if (outstandingCount > 0)
             {
-                candidateCount = await ExecuteReferenceFixupScalarAsync(npgsqlConn, connectedSystemId, $"""
+                candidateCount = await ExecuteReferenceFixupCountWithJitOffAsync(npgsqlConn, connectedSystemId, $"""
                     CREATE INDEX ON "{outstandingTableName}" (lower_value);
                     ANALYZE "{outstandingTableName}";
-                    SET LOCAL jit = off;
                     CREATE TEMP TABLE "{resolutionsTableName}" AS
                     SELECT row_number() OVER () AS rn, s.av_id, s.target_id
                     FROM (
@@ -795,6 +794,28 @@ public partial class SyncRepository
     {
         await using var command = NewReferenceFixupCommand(connection, connectedSystemId, sql);
         return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    /// <summary>
+    /// As <see cref="ExecuteReferenceFixupScalarAsync"/>, with JIT off for the batch's own implicit transaction
+    /// (<see cref="TransactionJit"/>): the statement turning it off is sent first, and its result is stepped past, so
+    /// the count is the one result after it with columns, the batch's final <c>SELECT COUNT(*)</c>.
+    /// </summary>
+    private static async Task<long> ExecuteReferenceFixupCountWithJitOffAsync(NpgsqlConnection connection, int connectedSystemId, string sql)
+    {
+        await using var command = NewReferenceFixupCommand(connection, connectedSystemId, $"{TransactionJit.DisableSql};\n{sql}");
+        await using var reader = await command.ExecuteReaderAsync();
+        if (await TransactionJit.SkipDisableResultAsync(reader))
+        {
+            do
+            {
+                if (reader.FieldCount > 0 && await reader.ReadAsync())
+                    return reader.GetInt64(0);
+            }
+            while (await reader.NextResultAsync());
+        }
+
+        throw new InvalidOperationException("The reference fix-up's batch returned no count.");
     }
 
     private static NpgsqlCommand NewReferenceFixupCommand(NpgsqlConnection connection, int connectedSystemId, string sql)
@@ -2459,13 +2480,14 @@ public partial class SyncRepository
     /// <remarks>
     /// Three arms, each led by the predicate an index answers, the shape <see cref="CsoReferenceValueMatchSql"/> takes
     /// for the same reason (#2669): held in one OR, no index could serve the string comparisons, and PostgreSQL would read
-    /// every member of every group asked about. The referenced ids are looked up in the <c>ReferenceValueId</c> index;
-    /// exact strings in <c>IX_ConnectedSystemObjectAttributeValues_UnresolvedReferenceValue</c>, over resolved and
-    /// unresolved rows alike; lowered strings in <c>IX_CsoAttrVal_Lower_UnresolvedRef</c>, whose predicate the arm repeats
-    /// so the partial index applies, and which therefore finds unresolved rows only. That is all a change naming an
-    /// object can match by string ignoring case, since a resolved row names its object by id alone
-    /// (<c>SyncEngine.ReferenceRowMatches</c>); the planner sends no other case-insensitive question. Both sides are
-    /// lowered in the database, and the planner asks only for ASCII strings, and only once
+    /// every member of every group asked about. The referenced ids are looked up in the <c>ReferenceValueId</c> index.
+    /// Both string arms look strings up in <c>IX_CsoAttrVal_Lower_UnresolvedRef</c>, by their lowered form, repeating its
+    /// predicate so the partial index applies, and so find unresolved rows only. That is all a change naming an object can
+    /// match by string, since a resolved row names its object by id alone (<c>SyncEngine.ReferenceRowMatches</c>); the
+    /// planner sends a change naming no object, which matches a resolved row by the string it keeps, to the full load
+    /// instead (#2871), so no index holds a resolved row's string. The exact arm then compares the string exactly; a
+    /// string equal to another is equal lowered too, whatever the database's folding, so the lowered lookup misses
+    /// nothing it should find. The case-insensitive arm asks only for ASCII strings, and only once
     /// <see cref="DoesDatabaseFoldCaseLikeIdentifierKeyAsync"/> has confirmed the database folds the non-ASCII characters
     /// JIM folds into ASCII as JIM does. The arms may overlap and match across the objects and attributes of one
     /// statement, so the caller keeps each row once, under the question for its own object and attribute.
@@ -2479,8 +2501,10 @@ public partial class SyncRepository
           UNION ALL
           SELECT ""Id"", ""ConnectedSystemObjectId"", ""AttributeId"", ""ReferenceValueId"", ""UnresolvedReferenceValue""
           FROM ""ConnectedSystemObjectAttributeValues""
-          WHERE ""UnresolvedReferenceValue"" = ANY(@exactValues)
+          WHERE LOWER(""UnresolvedReferenceValue"") = ANY(ARRAY(SELECT lower(v) FROM unnest(@exactValues) AS v))
+            AND ""UnresolvedReferenceValue"" = ANY(@exactValues)
             AND ""UnresolvedReferenceValue"" IS NOT NULL
+            AND ""ReferenceValueId"" IS NULL
             AND ""ConnectedSystemObjectId"" = ANY(@csoIds)
             AND ""AttributeId"" = ANY(@attributeIds)
           UNION ALL

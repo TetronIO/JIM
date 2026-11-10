@@ -3795,10 +3795,6 @@ namespace JIM.PostgresData.Migrations
                         .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_ReferenceValueId")
                         .HasFilter("\"ReferenceValueId\" IS NOT NULL");
 
-                    b.HasIndex("UnresolvedReferenceValue")
-                        .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_UnresolvedReferenceValue")
-                        .HasFilter("\"UnresolvedReferenceValue\" IS NOT NULL");
-
                     b.HasIndex("AttributeId", "DateTimeValue")
                         .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_DateTimeValue")
                         .HasFilter("\"DateTimeValue\" IS NOT NULL");

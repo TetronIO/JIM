@@ -1708,7 +1708,7 @@ public class Worker : BackgroundService
         var objectLevelErrorCount = 0;
         try
         {
-            // Summary stats are accumulated incrementally during FlushRpeisAsync calls.
+            // Summary stats are accumulated incrementally during FlushHistoryAsync calls.
             // In test environments (EF fallback), RPEIs may remain in the Activity's collection —
             // recompute stats from them to ensure consistency (assignment overwrites incremental values).
             if (activity.RunProfileExecutionItems.Count > 0)

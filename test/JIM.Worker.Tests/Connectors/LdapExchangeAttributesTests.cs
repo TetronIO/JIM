@@ -83,6 +83,34 @@ public class LdapExchangeAttributesTests
         Assert.That(Values(derived, LdapExchangeAttributes.RecipientType), Is.EqualTo(new[] { expected }));
     }
 
+    [TestCase("1073741833", "MailEnabledGroup")]
+    [TestCase("1", "MailEnabledGroup")]
+    [TestCase("6", "MailContact")]
+    [TestCase("0", "Unmanaged")]
+    [TestCase("7", "Unmanaged")]
+    public void Derive_NoRecipientTypeDetails_IsReadFromRecipientDisplayType(string recipientDisplayType, string expected)
+    {
+        // Exchange stamps msExchRecipientTypeDetails on the user objects it makes recipients, not on a group it
+        // mail-enables or a contact it mail-enables: the AD lab's mail-enabled universal security group carried only
+        // msExchRecipientDisplayType 1073741833 (Scenario 003 run 42744901343), and a mail contact JIM made in the GAL
+        // read as Unmanaged rather than MailContact (Scenario 003 run 42769078688), so each declared type was reported
+        // unconfirmed. The display type stands in where the details are absent: 1 is a mail-enabled distribution group,
+        // 1073741833 a mail-enabled security group, 6 a mail contact, and any other value is a recipient JIM does not
+        // manage.
+        var derived = LdapExchangeAttributes.Derive(Read(("msExchRecipientDisplayType", recipientDisplayType)), [LdapExchangeAttributes.RecipientType]);
+
+        Assert.That(Values(derived, LdapExchangeAttributes.RecipientType), Is.EqualTo(new[] { expected }));
+    }
+
+    [Test]
+    public void Derive_RecipientTypeDetailsPresent_WinsOverTheDisplayType()
+    {
+        var derived = LdapExchangeAttributes.Derive(Read(("msExchRecipientTypeDetails", "1"), ("msExchRecipientDisplayType", "1073741824")),
+            [LdapExchangeAttributes.RecipientType]);
+
+        Assert.That(Values(derived, LdapExchangeAttributes.RecipientType), Is.EqualTo(new[] { ExchangeRecipientTypes.Mailbox }));
+    }
+
     [TestCase("2147483648")]
     [TestCase("2")]
     [TestCase("not a number")]
@@ -133,7 +161,8 @@ public class LdapExchangeAttributesTests
     public void SourceAttributes_NamesWhatEachAttributeIsDerivedFrom()
     {
         Assert.That(LdapExchangeAttributes.SourceAttributes([LdapExchangeAttributes.RecipientType, LdapExchangeAttributes.ExternalAddress]),
-            Is.EquivalentTo(new[] { "msExchRecipientTypeDetails", "targetAddress" }));
+            Is.EquivalentTo(new[] { "msExchRecipientTypeDetails", "msExchRecipientDisplayType", "targetAddress" }),
+            "a group's recipient type is read from its display type, where Exchange stamps no details");
     }
 
     private static Func<string, IReadOnlyList<string>> Read(params (string Name, string? Value)[] values) =>

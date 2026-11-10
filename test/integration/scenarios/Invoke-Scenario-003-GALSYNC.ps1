@@ -86,8 +86,10 @@ $resurgamExchange = Get-ActiveDirectoryLabExchangeConfig -Instance ExchangeSourc
 $script:TestResults = @()
 $startTime = Get-Date
 
-# Exchange's msExchRecipientTypeDetails for a mail contact.
-$mailContactDetails = '64'
+# Exchange's msExchRecipientDisplayType for a mail contact. Exchange stamps no msExchRecipientTypeDetails on a contact
+# it mail-enables (Scenario 003 run 42780578451 read display type 6 and no details), which is why JIM reads the type
+# from the display type.
+$mailContactDisplayType = '6'
 
 $people = [ordered]@{
     Carol = @{ EmployeeId = 'GAL000001'; FirstName = 'Carol'; LastName = 'Panoplygal'; Forest = 'PANOPLY'; Domain = $panoply.Domain }
@@ -186,6 +188,25 @@ function Wait-ForExchangeQueuesToSettle {
     }
 }
 
+function Write-RecipientState {
+    # What the directory holds for the test group and for Rita's contact in PANOPLY once Exchange has acted, before the
+    # import reads them: what JIM derives each one's Exchange Recipient Type from, printed so a confirming import that
+    # disagrees can be explained.
+    param([string]$Label)
+    $attributes = @('msExchRecipientTypeDetails', 'msExchRecipientDisplayType', 'mailNickname', 'mail', 'targetAddress')
+    $subjects = [ordered]@{
+        $testGroup.Sam = { Find-DirectoryEntry -DirectoryConfig $panoply -Filter "(&(objectClass=group)(sAMAccountName=$($testGroup.Sam)))" -Attributes $attributes }
+        "Rita's contact" = { Find-DirectoryEntry -DirectoryConfig $panoply -BaseDn $panoplyExchange.ContactOuDn `
+            -Filter "(&(objectClass=contact)(displayName=$(ConvertTo-LdapFilterValue -Value (Get-DisplayName $people.Rita))))" -Attributes $attributes }
+    }
+    foreach ($subject in $subjects.GetEnumerator()) {
+        $entry = @(& $subject.Value) | Select-Object -First 1
+        if (-not $entry) { Write-Host "  [diagnostic] $($subject.Key) ($Label): not in PANOPLY" -ForegroundColor DarkGray; continue }
+        $read = foreach ($name in $attributes) { $v = @($entry[$name]); "$name $(if ($v.Count -eq 0) { '(none)' } else { [string]$v[0] })" }
+        Write-Host "  [diagnostic] $($subject.Key) ($Label): $($read -join ', ')" -ForegroundColor DarkGray
+    }
+}
+
 function Invoke-GalCycle {
     <#
         One round of GAL synchronisation: HR in; both forests exported (accounts, groups, contacts) and their Exchange
@@ -200,6 +221,7 @@ function Invoke-GalCycle {
         RESURGAM = Start-Profile -SystemId $config.SourceLDAPSystemId -ProfileId $config.SourceLDAPExportProfileId -Name "RESURGAM Export ($Label)" -Export
     }
     Wait-ForExchangeQueuesToSettle
+    Write-RecipientState -Label $Label
     Start-Profile -SystemId $config.LDAPSystemId -ProfileId $config.LDAPDeltaImportProfileId -Name "PANOPLY Delta Import ($Label)" | Out-Null
     Start-Profile -SystemId $config.SourceLDAPSystemId -ProfileId $config.SourceLDAPDeltaImportProfileId -Name "RESURGAM Delta Import ($Label)" | Out-Null
     Start-Profile -SystemId $config.LDAPSystemId -ProfileId $config.LDAPDeltaSyncProfileId -Name "PANOPLY Delta Synchronisation ($Label)" | Out-Null
@@ -223,7 +245,7 @@ function Find-GalContact {
     # The contact named $Name in a forest's GALSync OU, or nothing.
     param([hashtable]$Forest, [string]$ContactOuDn, [string]$Name)
     return @(Find-DirectoryEntry -DirectoryConfig $Forest -BaseDn $ContactOuDn -Filter "(&(objectClass=contact)(displayName=$(ConvertTo-LdapFilterValue -Value $Name)))" `
-            -Attributes @('displayName', 'targetAddress', 'proxyAddresses', 'msExchRecipientTypeDetails')) | Select-Object -First 1
+            -Attributes @('displayName', 'targetAddress', 'proxyAddresses', 'msExchRecipientDisplayType')) | Select-Object -First 1
 }
 
 function Get-LegacyExchangeDn {
@@ -238,13 +260,13 @@ function Test-GalContact {
     # A mail contact whose mail goes to the source's address and which carries the source's X500: proxy.
     param([string]$Label, $Contact, $Source)
     if (-not $Contact) { Add-TestResult -Name $Label -Passed $false -Detail "No such contact."; return }
-    $details = [string](@($Contact['msExchRecipientTypeDetails']) | Select-Object -First 1)
+    $displayType = [string](@($Contact['msExchRecipientDisplayType']) | Select-Object -First 1)
     $target = [string](@($Contact['targetAddress']) | Select-Object -First 1)
     $proxies = @($Contact['proxyAddresses'])
     $x500 = "X500:$($Source.LegacyExchangeDn)"
     Add-TestResult -Name $Label `
-        -Passed ($details -eq $mailContactDetails -and $target -ieq "SMTP:$($Source.Mail)" -and ($proxies -ccontains $x500) -and -not [string]::IsNullOrEmpty($Source.LegacyExchangeDn)) `
-        -Detail "msExchRecipientTypeDetails $details (expected $mailContactDetails), targetAddress $target (expected SMTP:$($Source.Mail)), X500 proxy $(if ($proxies -ccontains $x500) { 'present' } else { "missing (expected $x500; has $($proxies -join ', '))" })"
+        -Passed ($displayType -eq $mailContactDisplayType -and $target -ieq "SMTP:$($Source.Mail)" -and ($proxies -ccontains $x500) -and -not [string]::IsNullOrEmpty($Source.LegacyExchangeDn)) `
+        -Detail "msExchRecipientDisplayType $displayType (expected $mailContactDisplayType), targetAddress $target (expected SMTP:$($Source.Mail)), X500 proxy $(if ($proxies -ccontains $x500) { 'present' } else { "missing (expected $x500; has $($proxies -join ', '))" })"
 }
 
 Write-TestSection "Scenario 003: GAL synchronisation between PANOPLY and RESURGAM"

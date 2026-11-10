@@ -476,6 +476,43 @@ public class ExchangeChangeStagingTests
     }
 
     /// <summary>
+    /// Correcting one value of a parked change keeps the rest of what was declared. The account is not yet a recipient (its
+    /// mailbox parked on a database that does not exist), and its Pending Export still holds the earlier Mailbox and
+    /// database changes for Exchange; the export now writes only the corrected database. The declared state is still a
+    /// mailbox, in the corrected database, and it replaces the parked change. Before, staging read the recipient type the
+    /// import saw (None), decided the account was not a recipient, and queued nothing (found by Scenario 034's Replace).
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParkedMailboxWhoseDatabaseIsCorrected_ReplacesItWithTheMailboxInTheNewDatabaseAsync()
+    {
+        var account = Arrange("user", PendingExportChangeType.Update,
+            imported: type => [Imported(type, ExchangeRecipientAttributes.RecipientType, ExchangeRecipientTypes.None)],
+            changes: (type, rule) =>
+            [
+                Held(Change(type, ExchangeRecipientAttributes.RecipientType, ExchangeRecipientTypes.Mailbox, rule)),
+                Held(Change(type, ExchangeRecipientAttributes.Database, "MDB-Missing", rule)),
+                Change(type, ExchangeRecipientAttributes.Database, "MDB02", rule)
+            ]);
+        var parked = await SeedQueuedAsync(account.Cso, alias: null, PendingExchangeChangeStatus.Parked);
+        var parkedId = parked.Id;
+
+        var result = await ExportAsync();
+
+        var row = SyncRepo.PendingExchangeChanges.Values.Single();
+        var databaseChanges = account.Export.AttributeValueChanges.Where(c => c.Attribute.Name == ExchangeRecipientAttributes.Database).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.Id, Is.EqualTo(parkedId), "the parked change is replaced in place");
+            Assert.That(row.RecipientType, Is.EqualTo(ExchangeRecipientTypes.Mailbox), "the declared type the export did not rewrite is kept");
+            Assert.That(row.Database, Is.EqualTo("MDB02"));
+            Assert.That(row.Status, Is.EqualTo(PendingExchangeChangeStatus.Pending));
+            Assert.That(result.ExchangeChangesSupersededCount, Is.EqualTo(1));
+            Assert.That(databaseChanges.Single(c => c.StringValue == "MDB02").AwaitsExchange, Is.True,
+                "the corrected database is Exchange's to deliver, so the confirming import holds it");
+        }
+    }
+
+    /// <summary>
     /// Re-staging the change already queued is the same change, not a new one: its Activity already says what became of
     /// it, so the export writes no follow-up for it again.
     /// </summary>
@@ -697,6 +734,15 @@ public class ExchangeChangeStagingTests
             Id = Guid.NewGuid(), Attribute = attribute, AttributeId = attribute.Id, StringValue = value, ChangeType = changeType,
             SyncRuleId = syncRuleId, Status = PendingExportAttributeChangeStatus.Pending
         };
+    }
+
+    /// <summary>A change an earlier export wrote that the Exchange queue still owes: sent, unconfirmed, and held.</summary>
+    private static PendingExportAttributeValueChange Held(PendingExportAttributeValueChange change)
+    {
+        change.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        change.AwaitsExchange = true;
+        change.ExportAttemptCount = 1;
+        return change;
     }
 
     private static PendingExportAttributeValueChange ChangeNumber(ConnectedSystemObjectType type, string name, int value, int syncRuleId)

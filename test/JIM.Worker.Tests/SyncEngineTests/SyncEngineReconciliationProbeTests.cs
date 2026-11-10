@@ -59,7 +59,8 @@ public class SyncEngineReconciliationProbeTests
     /// A group holding, on its case-insensitive member attribute: Alice resolved; a row resolved to Bob whose retained DN
     /// is Carol's in capitals; Dave unresolved in capitals; Erin unresolved; and two unresolved DNs whose non-ASCII
     /// characters JIM folds into ASCII (the dotted capital I in Nick, the Kelvin sign in Kate). On its case-exact member
-    /// attribute: Alice resolved and Frank unresolved, both lower case, and a non-ASCII DN.
+    /// attribute: Alice resolved and Frank unresolved, both lower case, a non-ASCII DN, and a row resolved to Bob whose
+    /// retained DN is Carol's, exactly.
     /// </summary>
     private static ConnectedSystemObject NewGroup()
     {
@@ -80,6 +81,7 @@ public class SyncEngineReconciliationProbeTests
         Add(CaseExactMember, AliceId, Dn("alice"));
         Add(CaseExactMember, null, Dn("frank"));
         Add(CaseExactMember, null, Dn("josé"));
+        Add(CaseExactMember, BobId, Dn("carol"));
         return cso;
     }
 
@@ -111,8 +113,21 @@ public class SyncEngineReconciliationProbeTests
         ("case-exact add alice, unresolved change", Change(CaseExactMember, PendingExportAttributeChangeType.Add, unresolvedValue: Dn("alice")), true),
         ("case-exact remove alice in capitals, unresolved change", Change(CaseExactMember, PendingExportAttributeChangeType.Remove, unresolvedValue: Dn("alice").ToUpperInvariant()), true),
         ("case-exact add frank, resolved", Change(CaseExactMember, PendingExportAttributeChangeType.Add, FrankId, Dn("frank")), true),
-        ("case-exact remove jose, non-ASCII", Change(CaseExactMember, PendingExportAttributeChangeType.Remove, unresolvedValue: Dn("josé")), false)
+        ("case-exact remove jose, non-ASCII", Change(CaseExactMember, PendingExportAttributeChangeType.Remove, unresolvedValue: Dn("josé")), false),
+        ("case-exact remove alice, resolved, DN in capitals", Change(CaseExactMember, PendingExportAttributeChangeType.Remove, AliceId, Dn("alice").ToUpperInvariant()), false),
+        ("case-exact add frank, resolved, DN in capitals", Change(CaseExactMember, PendingExportAttributeChangeType.Add, FrankId, Dn("frank").ToUpperInvariant()), false),
+        ("case-exact add carol, resolved; only a row resolved to Bob retains her DN", Change(CaseExactMember, PendingExportAttributeChangeType.Add, CarolId, Dn("carol")), false),
+        ("case-exact remove jose, resolved, non-ASCII", Change(CaseExactMember, PendingExportAttributeChangeType.Remove, ErinId, Dn("josé")), false)
     ];
+
+    /// <summary>
+    /// Whether a change names no object but carries a string on a case-exact attribute: it matches a resolved row by the DN
+    /// the row keeps (<see cref="SyncEngine.ReferenceRowMatches"/>), which the probe does not seek (#2871), so its pair
+    /// loads in full.
+    /// </summary>
+    private static bool NamesNoObjectOnCaseExact(PendingExportAttributeValueChange change) =>
+        change.Attribute.CaseExact && !change.ResolvedReferenceCsoId.HasValue &&
+        (!string.IsNullOrEmpty(change.UnresolvedReferenceValue) || !string.IsNullOrEmpty(change.StringValue));
 
     private static PendingExport PendingExportFor(Guid csoId, IEnumerable<PendingExportAttributeValueChange> changes) => new()
     {
@@ -122,7 +137,7 @@ public class SyncEngineReconciliationProbeTests
 
     /// <summary>
     /// Stands in for the database: answers each question as the probe's SQL does, by the referenced object's id among
-    /// resolved rows, by exact string among all rows and by lowered string among unresolved rows (folding as a database
+    /// resolved rows, and by exact string and by lowered string among unresolved rows (folding as a database
     /// whose <c>lower()</c> passed the once-per-run check does), with the count capped at two when asked. With
     /// <paramref name="everyRow"/> it returns every row of the attribute instead: the widest superset.
     /// </summary>
@@ -139,7 +154,7 @@ public class SyncEngineReconciliationProbeTests
                 ? rows
                 : rows.Where(r =>
                     (r.ReferenceValueId.HasValue && question.ReferenceIds.Contains(r.ReferenceValueId.Value)) ||
-                    (r.UnresolvedReferenceValue != null && question.ExactValues.Contains(r.UnresolvedReferenceValue)) ||
+                    (r.ReferenceValueId == null && r.UnresolvedReferenceValue != null && question.ExactValues.Contains(r.UnresolvedReferenceValue)) ||
                     (r.ReferenceValueId == null && r.UnresolvedReferenceValue != null &&
                      question.CaseInsensitiveValues.Any(v => Lower(v) == Lower(r.UnresolvedReferenceValue)))).ToList();
 
@@ -178,7 +193,8 @@ public class SyncEngineReconciliationProbeTests
     /// <summary>
     /// For every change in the catalogue, alone and all together, reconciliation over the probed values reaches the
     /// verdict the full load reaches, whether the probe returns exactly what its SQL would or every row of the attribute.
-    /// The planner probes every one of them: none needs the full load.
+    /// The planner probes every one of them but a case-exact change naming no object, whose pair, and only that pair,
+    /// loads in full (#2871).
     /// </summary>
     [Test]
     public void ReconcileCsoAgainstPendingExport_OverProbedValues_SameVerdictsAsFullLoad([Values] bool everyRow)
@@ -212,11 +228,14 @@ public class SyncEngineReconciliationProbeTests
                 probedValuesByAttributeId: answers);
 
             var expectedConfirmed = catalogue.Where(e => batch.Contains(e.Name) && e.Confirmed).Select(e => e.Change.Id);
+            var inBatch = catalogue.Where(e => batch.Contains(e.Name)).Select(e => e.Change).ToList();
+            var fullLoadAttributeIds = inBatch.Where(NamesNoObjectOnCaseExact).Select(c => c.AttributeId).ToHashSet();
             var label = string.Join("; ", batch);
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(plan.FullLoadPairCount, Is.Zero, label);
-                Assert.That(plan.Questions.SelectMany(q => q.ChangeIds), Is.EquivalentTo(batch.Select(name => catalogue.Single(e => e.Name == name).Change.Id)), label);
+                Assert.That(plan.FullLoadPairCount, Is.EqualTo(fullLoadAttributeIds.Count), label);
+                Assert.That(plan.Questions.SelectMany(q => q.ChangeIds),
+                    Is.EquivalentTo(inBatch.Where(c => !fullLoadAttributeIds.Contains(c.AttributeId)).Select(c => c.Id)), label);
                 Assert.That(overFull.ConfirmedChanges.Select(c => c.Id), Is.EquivalentTo(expectedConfirmed), "Full load: " + label);
                 Assert.That(overProbe.ConfirmedChanges.Select(c => c.Id), Is.EquivalentTo(overFull.ConfirmedChanges.Select(c => c.Id)), "Confirmed: " + label);
                 Assert.That(overProbe.RetryChanges.Select(c => c.Id), Is.EquivalentTo(overFull.RetryChanges.Select(c => c.Id)), "Retried: " + label);
@@ -384,7 +403,7 @@ public class SyncEngineReconciliationProbeTests
         var nonAscii = Plan(true, Change(CaseInsensitiveMember, PendingExportAttributeChangeType.Remove, AliceId, Dn("josé")));
         var disagrees = Plan(false,
             Change(CaseInsensitiveMember, PendingExportAttributeChangeType.Remove, AliceId, Dn("alice")),
-            Change(CaseExactMember, PendingExportAttributeChangeType.Remove, unresolvedValue: Dn("josé")));
+            Change(CaseExactMember, PendingExportAttributeChangeType.Remove, FrankId, Dn("josé")));
 
         using (Assert.EnterMultipleScope())
         {
@@ -393,6 +412,57 @@ public class SyncEngineReconciliationProbeTests
             Assert.That(disagrees.Questions.Select(q => q.AttributeId), Is.EquivalentTo(new[] { CaseExactMemberId }));
             Assert.That(disagrees.Questions.Single().ExactValues, Is.EquivalentTo(new[] { Dn("josé") }));
             Assert.That(disagrees.FullLoadPairCount, Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// A change naming no object matches resolved rows by the DN they keep (<see cref="SyncEngine.ReferenceRowMatches"/>), on
+    /// a case-exact attribute as on any other, and the probe seeks strings among unresolved rows only (#2871): so its
+    /// attribute loads in full for that object, its other changes with it, whichever of its strings it carries.
+    /// </summary>
+    [Test]
+    public void PlanReconciliationProbes_CaseExactChangeNamingNoObject_LoadsThePairInFull()
+    {
+        var unresolved = Plan(true,
+            Change(CaseExactMember, PendingExportAttributeChangeType.Add, FrankId, Dn("frank")),
+            Change(CaseExactMember, PendingExportAttributeChangeType.Remove, unresolvedValue: Dn("alice")));
+        var stringOnly = Plan(true, Change(CaseExactMember, PendingExportAttributeChangeType.Remove, stringValue: Dn("alice")));
+
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var plan in new[] { unresolved, stringOnly })
+            {
+                Assert.That(plan.Questions, Is.Empty);
+                Assert.That(plan.FullLoadPairCount, Is.EqualTo(1));
+                Assert.That(plan.FullLoadPairCountsByReason, Is.EquivalentTo(new Dictionary<ReconciliationProbeFallbackReason, int>
+                {
+                    [ReconciliationProbeFallbackReason.NamesNoObject] = 1
+                }));
+            }
+        }
+    }
+
+    /// <summary>
+    /// A case-exact change naming an object is asked about by that object's id and by its strings exactly, whatever their
+    /// characters and however the database folds case, since nothing is compared ignoring case.
+    /// </summary>
+    [Test]
+    public void PlanReconciliationProbes_CaseExactChangesNamingObjects_AskByIdAndExactDn()
+    {
+        var add = Change(CaseExactMember, PendingExportAttributeChangeType.Add, AliceId, Dn("alice"));
+        var remove = Change(CaseExactMember, PendingExportAttributeChangeType.Remove, FrankId, Dn("josé"));
+
+        var plan = Plan(false, add, remove);
+
+        Assert.That(plan.Questions, Has.Count.EqualTo(1));
+        var question = plan.Questions[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(question.ChangeIds, Is.EquivalentTo(new[] { add.Id, remove.Id }));
+            Assert.That(question.ReferenceIds, Is.EquivalentTo(new[] { AliceId, FrankId }));
+            Assert.That(question.ExactValues, Is.EquivalentTo(new[] { Dn("alice"), Dn("josé") }));
+            Assert.That(question.CaseInsensitiveValues, Is.Empty);
+            Assert.That(plan.FullLoadPairCount, Is.Zero);
         }
     }
 
