@@ -121,7 +121,36 @@ public class ConfirmingImportReconciliationDatabaseTests
     }
 
     /// <summary>
-    /// Taken from reconciliation as it ran before #2908. Names stand in for ids, which differ from run to run.
+    /// An object no attribute changed has no execution item from the import, so reconciliation raises its own to record the
+    /// confirmation (Hedy) or the miss (Joan). It must name the object's type as every other item does: the Activity's
+    /// breakdown by Object Type counts items by it, and left out it counted 5 of the run's 7 users.
+    /// </summary>
+    [Test]
+    public async Task FullImport_ExportJudgedOnAnObjectTheImportDidNotChange_SnapshotsItsObjectTypeAsync()
+    {
+        var activity = await RunConfirmingFullImportAsync();
+
+        await using var ctx = NewContext();
+        var snapshots = await ctx.ActivityRunProfileExecutionItems.AsNoTracking()
+            .Where(i => i.ActivityId == activity.Id && (i.ConnectedSystemObjectId == Hedy || i.ConnectedSystemObjectId == Joan))
+            .Select(i => i.ObjectTypeSnapshot)
+            .ToListAsync();
+        var usersCounted = await ctx.ActivityStatCounters.AsNoTracking()
+            .Where(c => c.ActivityId == activity.Id && c.Dimension == ActivityStatDimension.ObjectTypeName && c.Key == "user")
+            .Select(c => c.Count)
+            .SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(snapshots, Is.EqualTo(new[] { "user", "user" }));
+            Assert.That(usersCounted, Is.EqualTo(7), "ada, grace, dorothy, mary, zelda, hedy and joan");
+        }
+    }
+
+    /// <summary>
+    /// Taken from reconciliation as it ran before #2908, with the one correction made beside it: the execution items
+    /// reconciliation raises for Hedy and Joan name their Object Type (see the test above). Names stand in for ids, which
+    /// differ from run to run.
     /// </summary>
     private const string ExpectedSnapshot = """
         Pending Exports:
@@ -172,10 +201,10 @@ public class ConfirmingImportReconciliationDatabaseTests
             outcome CsoUpdated ordinal=0 detail=2 parent=-
             outcome ExportConfirmed ordinal=1 detail=1 parent=-
             edge ExportCausedImportConfirmation reason=NotSet export=grace:Update object=grace display=Grace Brewster Hopper system=Target Directory effect=ExportConfirmed
-          hedy: Updated error=NotSet summary=ExportConfirmed:1 snapshots=[hedy|Hedy Lamarr|-]
+          hedy: Updated error=NotSet summary=ExportConfirmed:1 snapshots=[hedy|Hedy Lamarr|user]
             outcome ExportConfirmed ordinal=0 detail=1 parent=-
             edge ExportCausedImportConfirmation reason=NotSet export=hedy:Update object=hedy display=Hedy Lamarr system=Target Directory effect=ExportConfirmed
-          joan: Updated error=ExportNotConfirmed summary=ExportFailed:1 snapshots=[joan|Joan Clarke|-]
+          joan: Updated error=ExportNotConfirmed summary=ExportFailed:1 snapshots=[joan|Joan Clarke|user]
             message: We exported a change, but did not get confirmation of it when a confirming import was performed. Details: 1 attribute(s): mail. Will attempt to reassert the change on the next export run.
             outcome ExportFailed ordinal=0 detail=1 parent=-
           mary: Deleted error=NotSet summary=DeletionDetected:1 snapshots=[mary|Mary Jackson|user]
@@ -190,7 +219,7 @@ public class ConfirmingImportReconciliationDatabaseTests
           ObjectChangeType 2=7
           ObjectChangeType 3=1
           ObjectTypeName group=2
-          ObjectTypeName user=5
+          ObjectTypeName user=7
           ErrorType 9=1
           OutcomeType 0=1
           OutcomeType 1=5

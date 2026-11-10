@@ -6707,6 +6707,10 @@ public class SyncImportTaskProcessor
                         _connectedSystem.Id, groupIds, excludedAttributeIds));
                 }
 
+                // The Core load leaves out the Object Type; an execution item reconciliation raises names it, as every
+                // other import item does, so it is attached from the Connected System's own types (#2908).
+                AttachObjectTypes(pageCsos);
+
                 loadSpan.SetTag("loadGroupCount", loadGroups.Count);
                 loadSpan.SetTag("csoCount", pageCsos.Count);
                 loadSpan.SetTag("attributeValueCount", pageCsos.Sum(cso => cso.AttributeValues.Count));
@@ -7040,6 +7044,21 @@ public class SyncImportTaskProcessor
                 "Held awaiting Exchange: {HeldForExchange}, Exports deleted: {Deleted}",
                 totalConfirmed, totalRetry, totalHeld, totalReleased, totalHeldForExchange, exportsDeleted);
         }
+    }
+
+    /// <summary>
+    /// Gives each object loaded without its Object Type the Connected System's own instance of it, so an execution item
+    /// raised for it snapshots the type's name (#2908). An object whose type the Connected System does not hold is left as
+    /// it is.
+    /// </summary>
+    private void AttachObjectTypes(IEnumerable<ConnectedSystemObject> connectedSystemObjects)
+    {
+        var objectTypesById = _connectedSystem.ObjectTypes?.ToDictionary(type => type.Id);
+        if (objectTypesById == null)
+            return;
+
+        foreach (var cso in connectedSystemObjects.Where(cso => cso.Type == null && objectTypesById.ContainsKey(cso.TypeId)))
+            cso.Type = objectTypesById[cso.TypeId];
     }
 
     /// <summary>
