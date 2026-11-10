@@ -64,12 +64,20 @@ public partial class SyncRepository
 
         // The include shape and tracking of GetPendingExportLightweightByConnectedSystemObjectIdAsync's own query, so a
         // prefetched instance is exactly what that method would have returned: tracked, and so resolving its
-        // attributes to the instances already tracked rather than to duplicates of them.
-        var loaded = await _context.PendingExports
-            .Include(pe => pe.AttributeValueChanges)
-                .ThenInclude(avc => avc.Attribute)
+        // attributes to the instances already tracked rather than to duplicates of them. The changes and their attributes
+        // are read on their own (GetPendingExportChangesAsync, #2884): Included, the changes are reached through a join
+        // the planner answers by reading every change in the table once its statistics say the table is empty, and they
+        // say so after every Export. Tracked, EF Core hangs each change on its export as it loads it; the attach covers a
+        // context that does not track by default.
+        var loaded = await ConnectedSystemRepository.WithChangesForTestDoubles(_context, _context.PendingExports)
             .Where(pe => pe.ConnectedSystemObjectId != null && toLoad.Contains(pe.ConnectedSystemObjectId.Value))
             .ToListAsync();
+        if (loaded.Count > 0)
+        {
+            var (changes, _) = await ConnectedSystemRepository.GetPendingExportChangesAsync(_context, loaded.Select(pe => pe.Id),
+                tracking: null);
+            ConnectedSystemRepository.AttachPendingExportChanges(loaded, changes);
+        }
 
         foreach (var csoId in toLoad)
             prefetched[csoId] = null;

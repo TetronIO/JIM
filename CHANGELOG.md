@@ -116,6 +116,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ Imports write group memberships faster: JIM no longer indexes the distinguished name of every reference it has ever imported, one entry per membership, making an import's writes of those values about 10% faster and its database log about 11% smaller. (#2871)
 - ⚡ Synchronisation writes large groups faster on servers with many cores: a page is now spread across several database connections according to how many values it holds rather than how many objects, so a page of groups with 650,000 members, once written on one connection, is written about 30% faster. (#2872)
 - ⚡ Full and Delta Synchronisation record each page's history while the next page is read and processed, rather than before it, shortening large runs; each page's history is now written all at once, so a run that fails leaves none of that page's history half-written. (#2874)
+- ⚡ An export run straight after the synchronisation that queued its changes no longer slows down while the database's statistics catch up: each batch reads only its own Pending Exports' changes, not every queued change, which cost 20 seconds of a 500,000-person leaver export. Synchronisation reads queued changes the same way. (#2884)
 
 ### Removed
 

@@ -6865,10 +6865,18 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // fetched PendingExport, but for a large group's CSO/MVO those value collections can run into
         // the hundreds of thousands of rows (see the heavy GetPendingExportByConnectedSystemObjectIdAsync
         // above, which this call site used before this fix).
-        return await Repository.Database.PendingExports
-            .Include(pe => pe.AttributeValueChanges)
-                .ThenInclude(avc => avc.Attribute)
+        // The changes and their attributes are read on their own (GetPendingExportChangesAsync, #2884): Included, the
+        // changes are reached through a join the planner answers by reading every change in the table once its statistics
+        // say the table is empty, as they do after every Export; asked per object on the synchronisation path wherever
+        // the batch prefetch has not answered first.
+        var pendingExport = await WithChangesForTestDoubles(Repository.Database, Repository.Database.PendingExports)
             .FirstOrDefaultAsync(pe => pe.ConnectedSystemObjectId == connectedSystemObjectId);
+        if (pendingExport == null)
+            return null;
+
+        var (changes, _) = await GetPendingExportChangesAsync(Repository.Database, [pendingExport.Id], tracking: null);
+        AttachPendingExportChanges([pendingExport], changes);
+        return pendingExport;
     }
 
     public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
@@ -6883,12 +6891,19 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // below and the deferred-export reconciliation both already assume it), and tracked
         // Pending Exports on the worker's long-lived context become a hazard once raw SQL
         // deletes their rows (see DeletePendingExportsByConnectedSystemObjectIdsAsync).
-        var pendingExports = await Repository.Database.PendingExports
-            .AsNoTracking()
-            .Include(pe => pe.AttributeValueChanges)
-                .ThenInclude(avc => avc.Attribute)
+        // The changes and their attributes are read on their own (GetPendingExportChangesAsync, #2884) rather than
+        // Included through a join the planner answers by reading every change in the table once its statistics say the
+        // table is empty, as they do after every Export. Asked once per synchronisation page, so that whole-table read was
+        // paid page after page. One instance of each attribute, as the reconciliation pre-load below shares them.
+        var pendingExports = await WithChangesForTestDoubles(Repository.Database, Repository.Database.PendingExports.AsNoTracking())
             .Where(pe => pe.ConnectedSystemObjectId != null && csoIdList.Contains(pe.ConnectedSystemObjectId.Value))
             .ToListAsync();
+        if (pendingExports.Count > 0)
+        {
+            var (changes, _) = await GetPendingExportChangesAsync(Repository.Database, pendingExports.Select(pe => pe.Id),
+                QueryTrackingBehavior.NoTracking);
+            AttachPendingExportChanges(pendingExports, changes);
+        }
 
         // Build dictionary mapping CSO ID to Pending Export using the FK property (no navigation needed).
         // If duplicates are found (indicating a previous data integrity issue), self-heal by keeping
