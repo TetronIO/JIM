@@ -1,11 +1,11 @@
 # PostgreSQL Tuning Measured Against JIM's Own Workloads
 
-- **Status:** Doing (Phases 0 and 1 complete: results on #2834; Phase 2 under way)
+- **Status:** Doing (Phases 0 to 3 complete: results on #2834; Phase 4 next)
 - **Issue:** [#2834](https://github.com/TetronIO/JIM/issues/2834)
 - **Related:**
   - [#2669](https://github.com/TetronIO/JIM/issues/2669), the leaver-step measurements whose span breakdowns show where synchronisation time goes.
   - [#1943](https://github.com/TetronIO/JIM/issues/1943), which introduced the installer's sizing of the bundled PostgreSQL to the host.
-- **Last Updated:** 2026-11-08
+- **Last Updated:** 2026-11-10
 
 ## Overview
 
@@ -81,7 +81,7 @@ Phase 0 decided what to replay. The later steps (joiners, movers, leavers) take 
 
 The Export and the later steps are not replayed; Phase 3's full runs check every setting there.
 
-## Phase 2: one setting at a time, well beyond the formula
+## Phase 2: one setting at a time, well beyond the formula ✅
 
 Each row is replayed at least twice, more where the effect is inside the baseline's spread. Phase 0's findings decide the order and may drop rows. The first sweep runs three rounds of single-setting replays, rotating the order each round with a baseline in every round so drift cannot favour one setting: `jit` off, `work_mem` 256 MB, `max_wal_size` 64 GB, `wal_compression` off, `wal_buffers` 64 MB, `synchronous_commit` off, and one check of `shared_buffers` at 16 GB. Parallel workers are dropped from the replay (Phase 1 showed no effect on the Full Synchronisations) and left to Phase 3's full runs.
 
@@ -99,9 +99,17 @@ Each row is replayed at least twice, more where the effect is inside the baselin
 
 Each replay records every step's wall time and the same resource figures as Phase 0. A crash, an out-of-memory kill or a run that gets slower is recorded as the result, with the database log kept.
 
-## Phase 3: combine and confirm
+**Result** (27 replays, [results on #2834](https://github.com/TetronIO/JIM/issues/2834)): only `jit=off` helped outside the baseline's spread (-12% on the Target Full Synchronisation). `synchronous_commit=off` showed commit waits cost about 6% of the Source step and 17% of the Target step; that is a code question (commit in fewer, larger batches), not a setting. Memory settings, `wal_buffers` and `wal_compression` made no measurable difference. `max_wal_size=64GB` was slower because the replay had to create its WAL files, so the replay tool gained `-PrewarmWalGB` to create them beforehand, as on a long-running server.
+
+## Phase 3: combine and confirm ✅
 
 Combine the settings that helped, check the combination is no worse than its best single setting, and confirm it on two full Scale500k25kGroups runs and one Scale1m60kGroups run, against the baseline from Phase 1. The full runs are the only measure that counts: the replay could miss an effect on the initial load.
+
+**Result** ([results on #2834](https://github.com/TetronIO/JIM/issues/2834)):
+- **Replays with WAL files in place** (13, on a new snapshot after #2841): `jit=off` -1.8% Source and -12.9% Target; `max_wal_size=64GB` inside the spread; the two together -3.4% Source and -15.4% Target.
+- **Full Scale500k25kGroups runs** (two baselines, one `jit=off`, two with both settings): `jit=off` was never slower in any step, and took 6 s off each of the Target and confirming Full Synchronisations, plus the 23 s JIT spends compiling per run. With both settings the Source Full Synchronisation was 5% slower, twice over: a freshly reset database has no WAL files, and at 64 GB no checkpoint recycles any, so the run creates and zero-fills about 50 GB of them on the commit path.
+- **Decision:** adopt `jit=off`; keep `max_wal_size` as it is (at most 1 to 2% once warm, 5% slower on the first large load after an install, and 48 GB more disk).
+- **Scale1m60kGroups run not done:** the only setting adopted changes how queries are compiled, not memory or I/O, so a larger template has nothing different to show. The capped-memory runs and the next #2669 runs at 1m will run with it.
 
 ## Phase 4: act on the results
 
