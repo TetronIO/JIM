@@ -23,10 +23,13 @@ public class LdapExportConcurrencyAutoTuneTests
     }
 
     [Test]
-    public void RecommendedExportConcurrency_OpenLDAP_Returns16()
+    public void RecommendedExportConcurrency_OpenLDAP_Returns8()
     {
+        // Issue #2897: 4 batches of 8 beat 2 batches of 16 against OpenLDAP at the same 32
+        // operations in flight, so OpenLDAP is tuned to 8 and the parallelism recommendation
+        // then runs 4 batches at once.
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
-        Assert.That(rootDse.RecommendedExportConcurrency, Is.EqualTo(16));
+        Assert.That(rootDse.RecommendedExportConcurrency, Is.EqualTo(8));
     }
 
     [Test]
@@ -66,14 +69,14 @@ public class LdapExportConcurrencyAutoTuneTests
     }
 
     [Test]
-    public void AutoTuneExportConcurrency_OpenLDAP_DefaultValue_TunedTo16()
+    public void AutoTuneExportConcurrency_OpenLDAP_DefaultValue_TunedTo8()
     {
         var settings = CreateSettingsWithExportConcurrency(LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY);
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
 
         LdapConnector.AutoTuneExportConcurrency(settings, rootDse, Logger);
 
-        Assert.That(GetExportConcurrencyValue(settings), Is.EqualTo(16));
+        Assert.That(GetExportConcurrencyValue(settings), Is.EqualTo(8));
     }
 
     [Test]
@@ -125,6 +128,19 @@ public class LdapExportConcurrencyAutoTuneTests
     {
         var settings = CreateSettingsWithExportConcurrency(16);
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.SambaAD };
+
+        LdapConnector.AutoTuneExportConcurrency(settings, rootDse, Logger);
+
+        Assert.That(GetExportConcurrencyValue(settings), Is.EqualTo(16));
+    }
+
+    [Test]
+    public void AutoTuneExportConcurrency_OpenLDAPAlreadyAt16_StaysAt16()
+    {
+        // An OpenLDAP Connected System auto-tuned to 16 before issue #2897 (or set to 16 by an
+        // administrator) is no longer at the default, so a later schema import leaves it alone.
+        var settings = CreateSettingsWithExportConcurrency(16);
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
 
         LdapConnector.AutoTuneExportConcurrency(settings, rootDse, Logger);
 

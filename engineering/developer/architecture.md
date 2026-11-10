@@ -174,10 +174,10 @@ The two axes multiply: each parallel batch pipeline gets its own connector insta
 A Connected System's Max Export Parallelism resolves via `ExportParallelismResolver` (`JIM.Worker.Processors`) in this order:
 
 1. An explicit Max Export Parallelism value on the Connected System always wins, respecting the administrator's choice.
-2. Otherwise, if the connector implements `IConnectorRecommendedExportParallelism`, its recommendation is used, clamped to 1-16. The LDAP Connector recommends a deliberately conservative 2 when the system's Export Concurrency signals a capable directory (8 or above; the auto-tune only sets 16, for Active Directory and OpenLDAP), keeping the multiplied total mild (2 x 16 = 32 in-flight operations); otherwise it makes no recommendation.
+2. Otherwise, if the connector implements `IConnectorRecommendedExportParallelism`, its recommendation is used, clamped to 1-16. When the system's Export Concurrency signals a capable directory (8 or above), the LDAP Connector recommends the parallelism that holds the multiplied total at 32 in-flight operations: 32 / Export Concurrency, clamped to 2-4. The auto-tune sets 16 for Active Directory and 389 Directory Server (2 x 16) and 8 for OpenLDAP (4 x 8), which export-only replays of the 500k initial load showed 19.5% faster than 2 x 16 at the same load (#2897); below 8 it makes no recommendation.
 3. Otherwise, JIM falls back to 1 (sequential), the pre-existing default.
 
-Note that for directories with a single-writer storage backend (for example OpenLDAP's mdb), higher batch parallelism does not translate into proportionally higher write throughput; the recommendation is a starting point, not a guarantee.
+Note that for directories with a single-writer storage backend (for example OpenLDAP's mdb), higher batch parallelism does not translate into proportionally higher write throughput. What more batches buy at the same total load is overlap: one batch's database work proceeds while other batches' directory writes are in flight. The recommendation is a starting point, not a guarantee.
 
 ## Process Diagrams
 
