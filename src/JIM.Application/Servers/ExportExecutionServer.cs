@@ -127,9 +127,11 @@ public class ExportExecutionServer
     /// <param name="progressCallback">Optional callback for progress reporting</param>
     /// <param name="connectorFactory">Optional factory to create additional connector instances for parallel batches</param>
     /// <param name="repositoryFactory">Optional factory to create disposable per-batch repository scopes for parallel batches; each batch disposes its scope on completion, releasing the scope's DbContext and pooled connection</param>
-    /// <param name="batchCompletedCallback">Optional callback invoked after each batch with processed export items.
-    /// Enables streaming RPEI creation per-batch instead of accumulating all items across the entire run.
-    /// When provided, ProcessedExportItems on the result will be empty — items are consumed per-batch via this callback.</param>
+    /// <param name="batchCompletedCallback">Optional callback invoked after each batch with processed export items and
+    /// the repository to write them on. Enables streaming RPEI creation per-batch instead of accumulating all items across
+    /// the entire run. When provided, ProcessedExportItems on the result will be empty; items are consumed per-batch via
+    /// this callback. Parallel batches call it at the same time, each with its own batch's repository (#2902), so it must
+    /// write only through the repository it is handed, and guard anything else it shares across batches.</param>
     /// <param name="uniqueValueReservations">The worker's process-wide reservation set, which values Collision
     /// Remediation draws are claimed in (Unique Value Generation, #242, release 4); a run-local set when null.</param>
     /// <param name="containersCreated">Optional callback naming the containers the export created.</param>
@@ -145,7 +147,7 @@ public class ExportExecutionServer
         Func<ExportProgressInfo, Task>? progressCallback = null,
         Func<IConnector>? connectorFactory = null,
         Func<ISyncRepositoryScope>? repositoryFactory = null,
-        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
+        Func<List<ProcessedExportItem>, ISyncRepository, Task>? batchCompletedCallback = null,
         UniqueValueReservationSet? uniqueValueReservations = null,
         Action<IReadOnlyList<string>>? containersCreated = null,
         Guid? activityId = null)
@@ -278,7 +280,7 @@ public class ExportExecutionServer
         {
             var remainingItems = result.ProcessedExportItems;
             result.ProcessedExportItems = [];
-            await batchCompletedCallback(remainingItems);
+            await batchCompletedCallback(remainingItems, SyncRepo);
         }
 
         // Run Profile Safeguards (#1618): copy the ledger's final withheld counts onto the result.
@@ -623,7 +625,7 @@ public class ExportExecutionServer
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
         Func<ISyncRepositoryScope>? repositoryFactory,
-        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
+        Func<List<ProcessedExportItem>, ISyncRepository, Task>? batchCompletedCallback = null)
     {
         // Check if connector supports export using calls
         if (connector is IConnectorExportUsingCalls callsConnector)
@@ -750,7 +752,7 @@ public class ExportExecutionServer
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
         Func<ISyncRepositoryScope>? repositoryFactory,
-        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
+        Func<List<ProcessedExportItem>, ISyncRepository, Task>? batchCompletedCallback = null)
     {
         try
         {
@@ -957,9 +959,10 @@ public class ExportExecutionServer
                         {
                             var next = await ReadNextImmediateBatchAsync();
 
-                            // Each batch is loaded by the worker that runs it; the selection here read summaries only.
-                            // Clear the change tracker anyway, so what the per-batch callbacks leave on the caller's
-                            // context does not grow across the run (see the sequential loop below).
+                            // Each batch is loaded by the worker that runs it, and writes its execution items on its own
+                            // context (#2902); the selection here read summaries only. Clear the change tracker anyway, so
+                            // whatever else the run leaves on the caller's context does not grow across it (see the
+                            // sequential loop below).
                             SyncRepo.ClearChangeTracker();
                             return next;
                         },
@@ -1061,7 +1064,7 @@ public class ExportExecutionServer
                         {
                             var batchItems = result.ProcessedExportItems;
                             result.ProcessedExportItems = [];
-                            await batchCompletedCallback(batchItems);
+                            await batchCompletedCallback(batchItems, SyncRepo);
                         }
 
                         // Clear the change tracker between batches to prevent O(n²) degradation.
@@ -1085,7 +1088,7 @@ public class ExportExecutionServer
                     {
                         var deferredItems = result.ProcessedExportItems;
                         result.ProcessedExportItems = [];
-                        await batchCompletedCallback(deferredItems);
+                        await batchCompletedCallback(deferredItems, SyncRepo);
                     }
                 }
 
@@ -1153,11 +1156,12 @@ public class ExportExecutionServer
     /// Hands on the execution items still held when the run stops early (#2083): those of a batch that failed when nothing
     /// after it handed them on, and what the deferred pass records for the exports it did not write, which it hands on only
     /// once it ends. Without this a run cancelled or failing part-way through would never record them. Never throws, so it
-    /// cannot mask the exception that is unwinding.
+    /// cannot mask the exception that is unwinding. Written on the caller's own repository: every parallel batch has
+    /// finished by now.
     /// </summary>
-    private static async Task HandOnProcessedExportItemsAsync(
+    private async Task HandOnProcessedExportItemsAsync(
         ExportExecutionResult result,
-        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback,
+        Func<List<ProcessedExportItem>, ISyncRepository, Task>? batchCompletedCallback,
         string connectedSystemName)
     {
         if (batchCompletedCallback == null || result.ProcessedExportItems.Count == 0)
@@ -1168,7 +1172,7 @@ public class ExportExecutionServer
         result.ProcessedExportItems = [];
         try
         {
-            await batchCompletedCallback(items);
+            await batchCompletedCallback(items, SyncRepo);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -1199,7 +1203,7 @@ public class ExportExecutionServer
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
         Func<ISyncRepositoryScope>? repositoryFactory,
-        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback)
+        Func<List<ProcessedExportItem>, ISyncRepository, Task>? batchCompletedCallback)
     {
         var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null
             && deferredExportIds.Count > options.BatchSize;
@@ -1574,7 +1578,7 @@ public class ExportExecutionServer
         IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null,
         Action<int>? batchExecuted = null,
         Func<int>? passProcessedOffset = null,
-        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
+        Func<List<ProcessedExportItem>, ISyncRepository, Task>? batchCompletedCallback = null)
     {
         // Snapshot the counts from the immediate export phase. ProcessBatchSuccessAsync
         // increments result.SuccessCount/FailedCount for deferred batches too, so using
@@ -1656,7 +1660,7 @@ public class ExportExecutionServer
             {
                 var batchItems = result.ProcessedExportItems;
                 result.ProcessedExportItems = [];
-                await batchCompletedCallback(batchItems);
+                await batchCompletedCallback(batchItems, SyncRepo);
             }
 
             // Reported once the batch is recorded, as the parallel path does: reported before it, the pass's last report
@@ -1724,9 +1728,13 @@ public class ExportExecutionServer
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Everything that touches the caller's own DbContext (taking the next batch, progress, the connector's narration, the
-    /// per-batch callback and persisting what a connector returns at close) goes through one gate, so the caller's context
-    /// is never used by two workers at once.
+    /// Everything that touches the caller's own DbContext (taking the next batch, progress, the connector's narration,
+    /// describing a batch that could not be loaded and persisting what a connector returns at close) goes through one
+    /// gate, so the caller's context is never used by two workers at once. A batch's execution items are not among them
+    /// (#2902): the per-batch callback is handed the batch's own repository and writes them there, outside the gate, so
+    /// the workers write their items at the same time rather than one after another. The order within a batch stands:
+    /// its results are recorded, then its items written, then its progress reported. Progress is reported by one worker
+    /// at a time, the latest counts winning, so a worker whose report another is already making does not wait for it.
     /// </para>
     /// <para>
     /// Batches are taken on demand rather than read ahead: each worker starts on a batch of its own, taken in order so the
@@ -1756,7 +1764,7 @@ public class ExportExecutionServer
         Func<ISyncRepositoryScope> repositoryFactory,
         string spanName,
         int processedExportsOffset = 0,
-        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
+        Func<List<ProcessedExportItem>, ISyncRepository, Task>? batchCompletedCallback = null,
         int? passTotal = null,
         IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null,
         Action<int>? batchExecuted = null,
@@ -1768,6 +1776,12 @@ public class ExportExecutionServer
         var processedCount = 0;
         var stopTaking = 0;
         var batchCounter = 0;
+
+        // Progress is reported by one worker at a time (see RecordBatchExecutedAsync): whether a report is wanted, whether
+        // a worker is making one, and the size of the batch that last finished, for the report.
+        var progressWanted = 0;
+        var progressReporting = 0;
+        var latestBatchSize = 0;
 
         // Sub-phase narration from the batch connectors, on the same gate as everything else that reaches the caller's
         // DbContext, so that concurrent batches cannot report through it at once. Not cancelled with the run: a progress
@@ -1878,6 +1892,10 @@ public class ExportExecutionServer
             // individual exports may still have failed); false when the batch failed as a whole.
             async Task<bool> ExecuteBatchAsync(int batchIndex, List<ExecutableExportSummary> callersBatch)
             {
+                // Set once the batch is loaded. From then on a failure is either recorded by the batch's own catches below
+                // or fails the run, as on the sequential path; the catch for a batch that could not be loaded must never
+                // take it, as it would report every export of a batch whose results are already recorded as failed again.
+                var batchLoaded = false;
                 try
                 {
                     // A per-batch repository scope with its own context; disposing it when the batch completes releases
@@ -1888,6 +1906,7 @@ public class ExportExecutionServer
 
                     // Load this batch's Pending Exports on the batch's own context
                     var batch = await LoadExportBatchAsync(callersBatch, batchRepo, $"ProcessBatchesInParallelAsync: Batch {batchIndex}");
+                    batchLoaded = true;
                     if (batch.Count == 0)
                         return true;
 
@@ -1896,7 +1915,7 @@ public class ExportExecutionServer
                     // Null until the batch is marked: one whose Connector could not be opened was never touched.
                     ExecutingBatchMark? executingMark = null;
                     var batchResult = new ExportExecutionResult();
-                    var batchResultMerged = false;
+                    var executed = true;
 
                     try
                     {
@@ -1948,20 +1967,6 @@ public class ExportExecutionServer
                                 connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, _stageExchangeChanges,
                                 unresolvedReferenceNotes);
                         }
-
-                        // Aggregate results into shared result (thread-safe)
-                        lock (resultLock)
-                        {
-                            AccumulateBatchResult(result, batchResult, includeItems: batchCompletedCallback == null);
-                        }
-                        batchResultMerged = true;
-
-                        // Stream processed items per batch, through the caller's context
-                        if (batchCompletedCallback != null && batchResult.ProcessedExportItems.Count > 0)
-                            await UnderCallerContextGateAsync(ExportContextGatePurpose.ExecutionItems, async () => { await batchCompletedCallback(batchResult.ProcessedExportItems); return true; });
-
-                        await RecordBatchExecutedAsync(batch.Count);
-                        return true;
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                     {
@@ -1974,34 +1979,29 @@ public class ExportExecutionServer
                     {
                         // A failed attempt at this batch (#2083), recorded through the batch's own repository while its scope
                         // is alive: its Pending Exports still Executing get one failed attempt each, with an execution item
-                        // naming their object. Results this batch already merged stand; the failure is reported on a result
-                        // of its own.
+                        // naming their object. Whatever results the batch recorded before it failed stand beside them.
                         Log.Error(ex, "ProcessBatchesInParallelAsync: Batch {BatchIndex} failed", batchIndex);
-                        var failureResult = batchResultMerged ? new ExportExecutionResult() : batchResult;
-                        await RecordBatchFailureAsync(batch, executingMark, ex, failureResult, batchRepo, connectedSystem.Name);
-
-                        lock (resultLock)
-                        {
-                            AccumulateBatchResult(result, failureResult, includeItems: batchCompletedCallback == null);
-                        }
-
-                        if (batchCompletedCallback != null && failureResult.ProcessedExportItems.Count > 0)
-                        {
-                            try
-                            {
-                                await UnderCallerContextGateAsync(ExportContextGatePurpose.ExecutionItems, async () => { await batchCompletedCallback(failureResult.ProcessedExportItems); return true; });
-                            }
-                            catch (Exception callbackEx) when (callbackEx is not OperationCanceledException)
-                            {
-                                Log.Error(callbackEx, "ProcessBatchesInParallelAsync: Could not record the execution items of failed batch {BatchIndex}", batchIndex);
-                            }
-                        }
-
-                        await RecordBatchExecutedAsync(batch.Count);
-                        return false;
+                        await RecordBatchFailureAsync(batch, executingMark, ex, batchResult, batchRepo, connectedSystem.Name);
+                        executed = false;
                     }
+
+                    // Aggregate results into shared result (thread-safe)
+                    lock (resultLock)
+                    {
+                        AccumulateBatchResult(result, batchResult, includeItems: batchCompletedCallback == null);
+                    }
+
+                    // The batch's execution items, now its results are recorded, written on the batch's own repository and
+                    // outside the caller's context gate (#2902), so the workers write theirs at the same time. A failure to
+                    // write them fails the run, as on the sequential path: the batch's results are recorded, so it is not
+                    // a failed attempt at the batch, and carrying on would leave the run without the batch's items.
+                    if (batchCompletedCallback != null && batchResult.ProcessedExportItems.Count > 0)
+                        await batchCompletedCallback(batchResult.ProcessedExportItems, batchRepo);
+
+                    await RecordBatchExecutedAsync(batch.Count);
+                    return executed;
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+                catch (Exception ex) when (!batchLoaded && (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested))
                 {
                     // Reached when the batch could not even be loaded (its repository scope or the load failed), so no
                     // Pending Export of it was touched; a batch that was loaded records its own failure above. Its
@@ -2072,25 +2072,43 @@ public class ExportExecutionServer
                 if (progressCallback == null)
                     return;
 
-                await UnderCallerContextGateAsync(ExportContextGatePurpose.Progress, async () =>
+                // One worker reports at a time, and reports the counts as they stand when it does (#2902): a worker that
+                // finishes while another is reporting leaves its report wanted and carries on, and the reporting worker
+                // makes it before it stops. Whoever sees a report wanted and nobody reporting takes it on, so the last
+                // report is always made, and made by a worker, which the run waits for.
+                Volatile.Write(ref latestBatchSize, batchCount);
+                Interlocked.Exchange(ref progressWanted, 1);
+                while (Volatile.Read(ref progressWanted) == 1 && Interlocked.CompareExchange(ref progressReporting, 1, 0) == 0)
                 {
-                    // Read under the gate, not from the add above: two workers finishing together would otherwise report
-                    // in either order, and the later count could reach the Activity first and then be overwritten by the
-                    // earlier one.
-                    var processedSoFar = Volatile.Read(ref processedCount);
-                    await progressCallback(new ExportProgressInfo
+                    try
                     {
-                        Phase = ExportPhase.Executing,
-                        TotalExports = result.TotalPendingExports,
-                        ProcessedExports = processedExportsOffset + processedSoFar,
-                        PassTotal = passTotal,
-                        PassProcessed = passTotal.HasValue ? processedSoFar + (passProcessedOffset?.Invoke() ?? 0) : null,
-                        CurrentBatchSize = batchCount,
-                        Message = passTotal.HasValue ? "Exporting deferred" : "Exporting"
-                    });
-                    return true;
-                });
+                        while (Interlocked.Exchange(ref progressWanted, 0) == 1)
+                            await ReportProgressUnderGateAsync();
+                    }
+                    finally
+                    {
+                        // A full fence, so a report wanted just before it is seen by the check above or by its own worker.
+                        Interlocked.Exchange(ref progressReporting, 0);
+                    }
+                }
             }
+
+            Task<bool> ReportProgressUnderGateAsync() => UnderCallerContextGateAsync(ExportContextGatePurpose.Progress, async () =>
+            {
+                // Read under the gate, by the one worker reporting, so the counts only ever go up on the Activity.
+                var processedSoFar = Volatile.Read(ref processedCount);
+                await progressCallback!(new ExportProgressInfo
+                {
+                    Phase = ExportPhase.Executing,
+                    TotalExports = result.TotalPendingExports,
+                    ProcessedExports = processedExportsOffset + processedSoFar,
+                    PassTotal = passTotal,
+                    PassProcessed = passTotal.HasValue ? processedSoFar + (passProcessedOffset?.Invoke() ?? 0) : null,
+                    CurrentBatchSize = Volatile.Read(ref latestBatchSize),
+                    Message = passTotal.HasValue ? "Exporting deferred" : "Exporting"
+                });
+                return true;
+            });
 
             // Lets go of this worker's connector. The primary is only forgotten (the caller closes it); a connector of the
             // worker's own is closed and disposed, what it created captured first and what it returns at close persisted.

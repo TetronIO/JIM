@@ -361,11 +361,12 @@ public class ExportExecutionParallelBatchTests
     }
 
     /// <summary>
-    /// #1820: the per-batch callback and progress both write through the caller's DbContext, which is not safe for two
-    /// workers at once, so they are never run concurrently; and every batch's items reach the callback exactly once.
+    /// #1820: progress writes through the caller's DbContext, which is not safe for two workers at once, so it is never
+    /// run concurrently; and every batch's items reach the callback exactly once, each on its own batch's repository
+    /// (#2902), never the caller's.
     /// </summary>
     [Test]
-    public async Task ExecuteExportsAsync_ParallelImmediateBatches_NeverRunTheCallbackOrProgressConcurrentlyAsync()
+    public async Task ExecuteExportsAsync_ParallelImmediateBatches_NeverReportProgressConcurrentlyAndHandEachItemOnOnceAsync()
     {
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
         var exports = SeedFreshExports(targetSystem, 9);
@@ -381,9 +382,11 @@ public class ExportExecutionParallelBatchTests
         }
 
         var streamedIds = new System.Collections.Concurrent.ConcurrentBag<Guid?>();
-        Func<List<ProcessedExportItem>, Task> batchCompleted = async items =>
+        var writtenOn = new System.Collections.Concurrent.ConcurrentBag<ISyncRepository>();
+        Func<List<ProcessedExportItem>, ISyncRepository, Task> batchCompleted = async (items, repository) =>
         {
-            await UseCallerContextAsync();
+            await Task.Delay(5);
+            writtenOn.Add(repository);
             foreach (var item in items)
                 streamedIds.Add(item.PendingExportId);
         };
@@ -403,9 +406,178 @@ public class ExportExecutionParallelBatchTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.SuccessCount, Is.EqualTo(9));
-            Assert.That(overlaps, Is.EqualTo(0), "the callback and progress must never run at the same time as each other");
+            Assert.That(overlaps, Is.EqualTo(0), "progress must never be reported by two workers at once");
             Assert.That(streamedIds, Is.EquivalentTo(exports.Select(pe => (Guid?)pe.Id)), "every export's item is streamed exactly once");
+            Assert.That(writtenOn, Has.None.SameAs(SyncRepo), "every batch's items are written on the batch's own repository");
+            Assert.That(writtenOn.Distinct().Count(), Is.EqualTo(9), "each batch has a repository of its own");
         }
+    }
+
+    /// <summary>
+    /// #2902: each parallel batch writes its execution items on its own repository, so two batches' writes run at the
+    /// same time rather than queueing for the caller's context one at a time.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelBatches_WriteTheirItemsAtTheSameTimeAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        SeedFreshExports(targetSystem, 4);
+
+        var inFlight = 0;
+        var mostInFlight = 0;
+        var anotherWriteStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Func<List<ProcessedExportItem>, ISyncRepository, Task> batchCompleted = async (_, _) =>
+        {
+            var writing = Interlocked.Increment(ref inFlight);
+            InterlockedMax(ref mostInFlight, writing);
+            if (writing > 1)
+                anotherWriteStarted.TrySetResult();
+
+            // Held open until another batch's write starts, or long enough to show that none can while this one runs.
+            await Task.WhenAny(anotherWriteStarted.Task, Task.Delay(TimeSpan.FromSeconds(2)));
+            Interlocked.Decrement(ref inFlight);
+        };
+
+        Task<List<ConnectedSystemExportResult>> Succeed(IList<PendingExport> sent) =>
+            Task.FromResult(sent.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, CreateAsyncScriptedConnector(Succeed).Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 2 }, CancellationToken.None,
+            connectorFactory: () => CreateAsyncScriptedConnector(Succeed).Object, repositoryFactory: repositoryFactory,
+            batchCompletedCallback: batchCompleted);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(4));
+            Assert.That(mostInFlight, Is.GreaterThan(1), "a second batch's items are written while the first batch's are");
+        }
+    }
+
+    /// <summary>
+    /// #2902: progress is reported while a batch's execution items are still being written; it no longer queues behind
+    /// them for the caller's context.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelBatches_ReportProgressWhileABatchsItemsAreBeingWrittenAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        SeedFreshExports(targetSystem, 4);
+
+        var writes = 0;
+        var firstWriteOpen = 0;
+        var reportedDuringTheFirstWrite = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstWriteSawAReport = false;
+        Func<List<ProcessedExportItem>, ISyncRepository, Task> batchCompleted = async (_, _) =>
+        {
+            if (Interlocked.Increment(ref writes) != 1)
+                return;
+
+            // The first batch's write stays open until progress is reported for another batch, or long enough to show
+            // that none can be while it is open.
+            Volatile.Write(ref firstWriteOpen, 1);
+            firstWriteSawAReport = await Task.WhenAny(reportedDuringTheFirstWrite.Task, Task.Delay(TimeSpan.FromSeconds(2))) == reportedDuringTheFirstWrite.Task;
+            Volatile.Write(ref firstWriteOpen, 0);
+        };
+        Func<ExportProgressInfo, Task> progress = info =>
+        {
+            if (info.Phase == ExportPhase.Executing && Volatile.Read(ref firstWriteOpen) == 1)
+                reportedDuringTheFirstWrite.TrySetResult();
+            return Task.CompletedTask;
+        };
+
+        Task<List<ConnectedSystemExportResult>> Succeed(IList<PendingExport> sent) =>
+            Task.FromResult(sent.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, CreateAsyncScriptedConnector(Succeed).Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 2 }, CancellationToken.None, progress,
+            connectorFactory: () => CreateAsyncScriptedConnector(Succeed).Object, repositoryFactory: repositoryFactory,
+            batchCompletedCallback: batchCompleted);
+
+        Assert.That(firstWriteSawAReport, Is.True, "another batch's progress is reported while the first batch's items are written");
+    }
+
+    /// <summary>
+    /// #2902: the run's context gate summary has no execution item writes in it: they are made on each batch's own
+    /// repository, and only taking the next batch and reporting progress use the caller's context.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelBatches_TakeTheContextGateOnlyForTheNextBatchAndProgressAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        SeedFreshExports(targetSystem, 6);
+
+        Task<List<ConnectedSystemExportResult>> Succeed(IList<PendingExport> sent) =>
+            Task.FromResult(sent.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, CreateAsyncScriptedConnector(Succeed).Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 3 }, CancellationToken.None, _ => Task.CompletedTask,
+            connectorFactory: () => CreateAsyncScriptedConnector(Succeed).Object, repositoryFactory: repositoryFactory,
+            batchCompletedCallback: (_, _) => Task.CompletedTask);
+
+        Assert.That(result.ContextGateTimings.Snapshot().Select(t => t.Purpose),
+            Is.SubsetOf(new[] { ExportContextGatePurpose.NextBatch, ExportContextGatePurpose.Progress }));
+    }
+
+    /// <summary>
+    /// #2902: a parallel batch whose execution items cannot be written fails the run, as on the sequential path, rather
+    /// than being taken for a failed attempt at a batch whose results are already recorded and the run carrying on
+    /// without its items.
+    /// </summary>
+    [Test]
+    public void ExecuteExportsAsync_ParallelBatchsItemsCannotBeWritten_FailsTheRun()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        SeedFreshExports(targetSystem, 6);
+
+        var writes = 0;
+        Func<List<ProcessedExportItem>, ISyncRepository, Task> batchCompleted = (_, _) => Interlocked.Increment(ref writes) == 2
+            ? throw new InvalidOperationException("The execution items could not be written")
+            : Task.CompletedTask;
+
+        Task<List<ConnectedSystemExportResult>> Succeed(IList<PendingExport> sent) =>
+            Task.FromResult(sent.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        var thrown = Assert.ThrowsAsync<InvalidOperationException>(async () => await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, CreateAsyncScriptedConnector(Succeed).Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 2 }, CancellationToken.None,
+            connectorFactory: () => CreateAsyncScriptedConnector(Succeed).Object, repositoryFactory: repositoryFactory,
+            batchCompletedCallback: batchCompleted));
+
+        Assert.That(thrown!.Message, Is.EqualTo("The execution items could not be written"));
+    }
+
+    /// <summary>
+    /// #2902: the execution items reporting a failed parallel batch, when they cannot be written, fail the run as on the
+    /// sequential path; they were logged and lost, and the run completed as though every failure had been recorded.
+    /// </summary>
+    [Test]
+    public void ExecuteExportsAsync_ParallelFailedBatchsItemsCannotBeWritten_FailsTheRun()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        SeedFreshExports(targetSystem, 4);
+
+        Func<List<ProcessedExportItem>, ISyncRepository, Task> batchCompleted = (items, _) => items.Any(item => !item.Succeeded)
+            ? throw new InvalidOperationException("The execution items could not be written")
+            : Task.CompletedTask;
+
+        Task<List<ConnectedSystemExportResult>> Succeed(IList<PendingExport> sent) =>
+            Task.FromResult(sent.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        var thrown = Assert.ThrowsAsync<InvalidOperationException>(async () => await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, CreateAsyncScriptedConnector(Succeed).Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 2 }, CancellationToken.None,
+            connectorFactory: () => CreateAsyncScriptedConnector(_ => throw new InvalidOperationException("The directory went away")).Object,
+            repositoryFactory: repositoryFactory, batchCompletedCallback: batchCompleted));
+
+        Assert.That(thrown!.Message, Is.EqualTo("The execution items could not be written"));
     }
 
     /// <summary>
@@ -1177,7 +1349,7 @@ public class ExportExecutionParallelBatchTests
 
         Assert.ThrowsAsync<OperationCanceledException>(async () => await Jim.ExportExecution.ExecuteExportsAsync(
             targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 3 }, cts.Token,
-            batchCompletedCallback: items => { recorded.AddRange(items); return Task.CompletedTask; }));
+            batchCompletedCallback: (items, _) => { recorded.AddRange(items); return Task.CompletedTask; }));
 
         using (Assert.EnterMultipleScope())
         {
@@ -1214,7 +1386,7 @@ public class ExportExecutionParallelBatchTests
 
         Assert.ThrowsAsync<OperationCanceledException>(async () => await Jim.ExportExecution.ExecuteExportsAsync(
             targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 1 }, cts.Token,
-            batchCompletedCallback: items => { recorded.AddRange(items); return Task.CompletedTask; }));
+            batchCompletedCallback: (items, _) => { recorded.AddRange(items); return Task.CompletedTask; }));
 
         var written = exports.Where(pe => pe.Status == PendingExportStatus.Exported).ToList();
         var interrupted = exports.Except(written).ToList();
@@ -1246,7 +1418,7 @@ public class ExportExecutionParallelBatchTests
 
         var result = await Jim.ExportExecution.ExecuteExportsAsync(
             targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 1 }, CancellationToken.None,
-            batchCompletedCallback: items => { recorded.AddRange(items); return Task.CompletedTask; });
+            batchCompletedCallback: (items, _) => { recorded.AddRange(items); return Task.CompletedTask; });
 
         var failed = exports.Where(pe => pe.Status != PendingExportStatus.Exported).ToList();
         using (Assert.EnterMultipleScope())
@@ -1320,7 +1492,7 @@ public class ExportExecutionParallelBatchTests
             new ExportExecutionOptions { BatchSize = 2, MaxParallelism = maxParallelism }, CancellationToken.None,
             connectorFactory: () => CreateScriptedConnector(Succeed).Object,
             repositoryFactory: () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData)),
-            batchCompletedCallback: items => { handedOn.Enqueue(items); return Task.CompletedTask; });
+            batchCompletedCallback: (items, _) => { handedOn.Enqueue(items); return Task.CompletedTask; });
 
         using (Assert.EnterMultipleScope())
         {
@@ -1359,7 +1531,7 @@ public class ExportExecutionParallelBatchTests
             new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 2 }, CancellationToken.None,
             connectorFactory: () => CreateScriptedConnector(SucceedThenFail).Object,
             repositoryFactory: () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData)),
-            batchCompletedCallback: items => { foreach (var item in items) handedOn.Enqueue(item); return Task.CompletedTask; });
+            batchCompletedCallback: (items, _) => { foreach (var item in items) handedOn.Enqueue(item); return Task.CompletedTask; });
 
         var failed = exports.Where(pe => pe.Status != PendingExportStatus.Exported).Select(pe => (Guid?)pe.Id).ToList();
         using (Assert.EnterMultipleScope())

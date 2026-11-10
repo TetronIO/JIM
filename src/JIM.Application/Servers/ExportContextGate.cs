@@ -8,8 +8,9 @@ namespace JIM.Application.Servers;
 
 /// <summary>
 /// The one gate on an export run's own database context while its batches run in parallel (#2895): only one batch at a
-/// time uses that context, to take the next batch, write execution items and their change history, report progress and
-/// so on. Every pass through it is timed, as a span for the wait and a span for the hold, each tagged with its purpose,
+/// time uses that context, to take the next batch, report progress and so on. A batch's execution items and their change
+/// history are written on the batch's own context, outside the gate (#2902). Every pass through it is timed, as a span
+/// for the wait and a span for the hold, each tagged with its purpose,
 /// and added to the run's totals (<see cref="ExportContextGateTimings"/>), because the gate is serial across workers and
 /// so caps what more workers can gain.
 /// </summary>

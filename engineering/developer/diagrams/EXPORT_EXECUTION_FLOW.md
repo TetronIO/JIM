@@ -175,15 +175,15 @@ When `MaxParallelism > 1` and there is more than one batch, both passes (the imm
 
 ```mermaid
 flowchart TD
-    Caller[Export Processor<br/>caller context] --> Gate[Caller-context gate<br/>SemaphoreSlim 1,1<br/>reading the next batch, progress,<br/>connector narration, the per-batch<br/>callback, persisting close data]
+    Caller[Export Processor<br/>caller context] --> Gate[Caller-context gate<br/>SemaphoreSlim 1,1<br/>reading the next batch, progress,<br/>connector narration, persisting<br/>close data]
 
     Gate --> W1[Worker 0<br/>the primary connector<br/>takes the first batch]
     Gate --> W2[Worker 1<br/>own connector, opened<br/>on its first batch]
     Gate --> W3[Worker N-1<br/>own connector, opened<br/>on its first batch]
 
-    W1 --> B1[Each batch: own DbContext<br/>Re-loads its PEs by ID<br/>Disposed as the batch completes]
-    W2 --> B2[Each batch: own DbContext<br/>Re-loads its PEs by ID<br/>Disposed as the batch completes]
-    W3 --> B3[Each batch: own DbContext<br/>Re-loads its PEs by ID<br/>Disposed as the batch completes]
+    W1 --> B1[Each batch: own DbContext<br/>Re-loads its PEs by ID<br/>Writes its own RPEIs<br/>Disposed as the batch completes]
+    W2 --> B2[Each batch: own DbContext<br/>Re-loads its PEs by ID<br/>Writes its own RPEIs<br/>Disposed as the batch completes]
+    W3 --> B3[Each batch: own DbContext<br/>Re-loads its PEs by ID<br/>Writes its own RPEIs<br/>Disposed as the batch completes]
 
     B1 --> ResultLock[Result Lock<br/>thread-safe aggregation]
     B2 --> ResultLock
@@ -196,7 +196,9 @@ flowchart TD
 
 - **Batches are taken on demand** - each worker starts on a batch of its own, taken in order so the primary connector gets the first, then takes the next whenever it is free; nothing is read ahead, so nothing is read and left unsent
 - **Batch IDs are captured** when a batch is taken - the worker re-loads its exports from the batch's own DbContext by ID
-- **The caller-context gate** serialises everything that touches the caller's shared DbContext: reading the next page, progress, connector narration, the per-batch RPEI callback and persisting what a connector returns at close
+- **The caller-context gate** (`ExportContextGate`) serialises everything that touches the caller's shared DbContext: reading the next page, progress, connector narration, describing a batch that could not be loaded and persisting what a connector returns at close. Every pass through it is timed by purpose, and the run's end logs the totals (#2895)
+- **Each batch writes its own RPEIs (#2902)**: the per-batch callback is handed the batch's own repository and writes the batch's RPEIs, outcomes, causal edges and CSO change records there, outside the gate, so the workers write theirs at the same time; at 500,000 objects with four workers the gate had been held 188 s for these writes and waited on for 351 s. Within a batch the order stands: its results, then its RPEIs, then its progress. Only adding the batch to the Activity's in-memory totals is shared, under a lock of the processor's own; the stat counters are upserted per batch with `ON CONFLICT ... DO UPDATE SET Count = Count + EXCLUDED.Count` in a fixed key order, so concurrent batches neither lose an increment nor deadlock. A batch whose RPEIs cannot be written fails the run, as on the sequential path
+- **Progress is reported by one worker at a time**, with the counts as they stand when it reports: a worker finishing while another reports leaves its report wanted and carries on, and the reporting worker makes it before stopping, so the last report is never lost
 - **Result aggregation** uses a lock for thread-safe counter updates
 - **Connector instances** belong to workers, not batches: a worker's own connector is created via the factory on its first batch and kept for every batch it runs; a connector whose batch fails is discarded (containers it created captured, its close data persisted) and the worker opens a fresh one for its next batch
 - **A failed batch** stops further batches being taken on the first pass, while the batches already running finish and are recorded, as the sequential path stops at a failed batch; on the deferred pass the other batches carry on

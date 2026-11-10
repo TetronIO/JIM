@@ -20,13 +20,13 @@ public class ExportContextGateTimingsTests
     {
         var timings = new ExportContextGateTimings();
 
-        timings.Record(ExportContextGatePurpose.ExecutionItems, TimeSpan.FromMilliseconds(5), TimeSpan.FromMilliseconds(40));
-        timings.Record(ExportContextGatePurpose.ExecutionItems, TimeSpan.FromMilliseconds(15), TimeSpan.FromMilliseconds(60));
+        timings.Record(ExportContextGatePurpose.ConnectorProgress, TimeSpan.FromMilliseconds(5), TimeSpan.FromMilliseconds(40));
+        timings.Record(ExportContextGatePurpose.ConnectorProgress, TimeSpan.FromMilliseconds(15), TimeSpan.FromMilliseconds(60));
 
         var entry = timings.Snapshot().Single();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(entry.Purpose, Is.EqualTo(ExportContextGatePurpose.ExecutionItems));
+            Assert.That(entry.Purpose, Is.EqualTo(ExportContextGatePurpose.ConnectorProgress));
             Assert.That(entry.Count, Is.EqualTo(2));
             Assert.That(entry.TotalWait, Is.EqualTo(TimeSpan.FromMilliseconds(20)));
             Assert.That(entry.TotalHeld, Is.EqualTo(TimeSpan.FromMilliseconds(100)));
@@ -76,12 +76,12 @@ public class ExportContextGateTimingsTests
         var timings = new ExportContextGateTimings();
 
         timings.Record(ExportContextGatePurpose.Progress, TimeSpan.Zero, TimeSpan.FromMilliseconds(5));
-        timings.Record(ExportContextGatePurpose.ExecutionItems, TimeSpan.Zero, TimeSpan.FromMilliseconds(50));
+        timings.Record(ExportContextGatePurpose.ConnectorProgress, TimeSpan.Zero, TimeSpan.FromMilliseconds(50));
         timings.Record(ExportContextGatePurpose.NextBatch, TimeSpan.Zero, TimeSpan.FromMilliseconds(20));
 
         Assert.That(timings.Snapshot().Select(e => e.Purpose), Is.EqualTo(new[]
         {
-            ExportContextGatePurpose.ExecutionItems, ExportContextGatePurpose.NextBatch, ExportContextGatePurpose.Progress
+            ExportContextGatePurpose.ConnectorProgress, ExportContextGatePurpose.NextBatch, ExportContextGatePurpose.Progress
         }));
     }
 
@@ -98,7 +98,7 @@ public class ExportContextGateTimingsTests
         Parallel.For(0, threads, _ =>
         {
             for (var i = 0; i < perThread; i++)
-                timings.Record(ExportContextGatePurpose.ExecutionItems, TimeSpan.FromTicks(1), TimeSpan.FromTicks(2));
+                timings.Record(ExportContextGatePurpose.ConnectorProgress, TimeSpan.FromTicks(1), TimeSpan.FromTicks(2));
         });
 
         var entry = timings.Snapshot().Single();
