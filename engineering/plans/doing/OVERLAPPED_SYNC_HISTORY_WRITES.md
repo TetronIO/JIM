@@ -1,6 +1,6 @@
 # Overlapped Synchronisation History Writes
 
-- **Status:** Doing (Phases 1 and 2 complete)
+- **Status:** Doing (Phases 1 to 3 complete; Phase 4's documentation and changelog done, its integration and scale validation outstanding)
 - **Issue:** [#2874](https://github.com/TetronIO/JIM/issues/2874) (blocked by [#2872](https://github.com/TetronIO/JIM/issues/2872))
 
 ## Overview
@@ -242,7 +242,7 @@ Where the code differs from the design above, and why:
 - **Spans:** `SyncHistoryPrepare` (processor), `SyncHistoryWrite` and `SyncHistoryWait` (writer), and `RpeiHistory.Rows`, `.CsoChanges`, `.Outcomes`, `.Edges`, `.Candidates`, `.Counters`, `.ItemCsoChanges` and `.Commit` (repository), beside the existing `MvoChange.Persist.*`. The page loops' `FlushRpeis` and `FlushPendingMvoChanges` spans are now one `FlushHistory` span.
 - **Foreign keys the write meets**, beyond those listed under Current state: `MetaverseObjectChanges.ActivityId` (Activities), `SyncRuleId` and `ContributedBySyncRuleId` (Synchronisation Rules), the change attribute rows' `AttributeId`, and `DeletedObjectTypeId`. All point at the Activity or configuration, as the locking section assumes.
 
-### Phase 3: Overlap in the page loops
+### Phase 3: Overlap in the page loops ✅
 
 1. Red tests:
    - The fixture asserts that Overlapped output equals the baseline and equals Inline output.
@@ -262,6 +262,17 @@ Where the code differs from the design above, and why:
 2. Implement the barriers, the fault probe, the navigation cut, stats applied at the barrier, `DrainOnExitAsync`, and the end-of-run log.
 
 **Acceptance:** all of the above green, and no change to any existing test's expectations.
+
+### As built in Phase 3
+
+- **Mode:** `RunWithHistoryWriterAsync` chooses Overlapped when `SupportsConcurrentHistoryWrites`, Inline otherwise, with the internal `HistoryWriteModeForTests` override; every RequiresPostgres workflow test therefore runs Overlapped. Inline runs every flush, the page loops' included, exactly as Phase 2 did, so the in-memory suite is unchanged.
+- **Two flushes, one preparation:** the page loops call `FlushPageHistoryAsync(page, totalPages)` (prepare, release, cut, hand off, no wait); every other caller keeps `FlushHistoryAsync`, which hands off and waits at once (`AwaitedFlush`). Both go through one `PrepareHistory`, which now clears the Metaverse Object change queues as it takes them rather than after the write.
+- **Release before the write completes:** an Overlapped hand-off releases the items (Activity cleared, detached, the deletion-row bookkeeping, the page lookups) at once; the totals are counted at the barrier that finds the write succeeded (`CountWrittenHistory`), or by the drain when another failure is ending the run. `ItemsWrittenOutsideTracking` is kept and asserted there: a store that kept the items would have had them released under it, which only a store that cannot run Overlapped does. The in-memory store's "keep the items on the Activity" behaviour stays where it was, so its tests read what they read before.
+- **The navigation cut** is `SynchronisationHistoryBatch.ReleaseRunObjects`: each item's `ConnectedSystemObject`, every causal edge's cause and effect navigations, and each Connected System Object and Metaverse Object change record's `ActivityRunProfileExecutionItem`. Outcome navigations (`ParentSyncOutcome`, `ConnectedSystemObjectChange`) are left: they reach only the batch's own objects. The item's `Activity` is left too: it is the run's, and the writer reads only the item's `ActivityId`. `PreparedBatch_ReachesNoLiveObjectGraphAsync` walks every field of every handed-off batch.
+- **Span parent:** rather than resetting `Activity.Current`, `FlushPageHistoryAsync` hands off after its `FlushHistory` span has ended, so `SyncHistoryWrite` parents to `ProcessConnectedSystemObjects` / `ProcessModifiedConnectedSystemObjects` (asserted). The page loops' `FlushHistory` span now covers prepare and release only.
+- **Barriers:** `WaitForPreviousPageHistoryAsync` is the first statement of each page's `try` (its catch already lets `SyncPersistenceException` through); `ThrowIfHistoryWriteFailed` precedes each page load; `WaitForPageLoopHistoryAsync` follows the page loop's `finally`, on completion and on cancellation alike. A failure in a page's own work leaves the loop without reaching that barrier, and the drain takes over.
+- **Drain:** `RunWithHistoryWriterAsync` observes the exception ending the run with a filter that returns false, so it is never caught, then calls `DrainOnExitAsync`, which now returns the drained write (its totals are counted) and records no second warning when the exception ending the run is the history failure itself, or wraps it or its cause. The end-of-run log line gives batches, writing, waiting and hidden seconds.
+- **Tests:** `SynchronisationHistoryOverlapDatabaseTests` holds a history write back with a lock on `ActivityRunProfileExecutionItems` taken from the test's own connection (no production hook) and injects the failure with a trigger on `MetaverseObjectChangeAttributeValues`. The equivalence fixture runs Inline and Overlapped against the one baseline. The hand-off guard's test is Phase 2's `HandOffAsync_RunRepositoryHoldsATransaction_ThrowsAndWritesNothingAsync`.
 
 ### Phase 4: Validation, documentation, changelog
 

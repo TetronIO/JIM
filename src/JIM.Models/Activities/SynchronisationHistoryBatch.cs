@@ -97,6 +97,41 @@ public sealed class SynchronisationHistoryBatch
     public bool IsEmpty => Items.Count == 0 && MetaverseObjectChanges.Count == 0 && MetaverseObjectChangeAppends.Count == 0;
 
     /// <summary>
+    /// Cuts the batch's references into the objects the run is still working on, once it has been prepared and its items
+    /// released (#2874): each item's Connected System Object, each causal edge's references to the items and outcomes it
+    /// links, and each change record's reference to its item. Every one is already named by id, which is all a writer
+    /// reads, so what is written does not change; the run's loaded objects can then be collected while the batch is
+    /// written, and the writer cannot reach them.
+    /// </summary>
+    /// <remarks>
+    /// For a batch written while the run goes on. A run that waits for each write keeps the references, which the
+    /// in-memory store's tests read.
+    /// </remarks>
+    public void ReleaseRunObjects()
+    {
+        foreach (var item in Items)
+        {
+            if (item.ConnectedSystemObjectId == null && item.ConnectedSystemObject is { } cso && cso.Id != Guid.Empty)
+                item.ConnectedSystemObjectId = cso.Id;
+            item.ConnectedSystemObject = null;
+        }
+
+        foreach (var edge in CausalEdges)
+        {
+            edge.EffectRunProfileExecutionItem = null!;
+            edge.EffectSyncOutcome = null;
+            edge.CauseRunProfileExecutionItem = null;
+            edge.CauseSyncOutcome = null;
+        }
+
+        foreach (var change in OutcomeChangeRecords.Concat(ItemChangeRecords))
+            change.ActivityRunProfileExecutionItem = null;
+
+        foreach (var change in MetaverseObjectChanges.Concat(MetaverseObjectChangeAppends))
+            change.ActivityRunProfileExecutionItem = null;
+    }
+
+    /// <summary>
     /// Throws <see cref="InvalidOperationException"/> when any row the batch holds has no id: a writer assigns none, so
     /// the batch was not prepared, or was changed after it was. Writers call this before writing anything.
     /// </summary>

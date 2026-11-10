@@ -413,6 +413,19 @@ public abstract class SyncTaskProcessorBase
     internal Action<ConnectedSystemObject>? OnConnectedSystemObjectProcessedInPass2 { get; set; }
 
     /// <summary>
+    /// Test hook: how the run writes its history (#2874), in place of the mode the run's repository decides
+    /// (<see cref="ISyncRepository.SupportsConcurrentHistoryWrites"/>), so a test can compare the two on one database.
+    /// Null in production.
+    /// </summary>
+    internal SynchronisationHistoryWriteMode? HistoryWriteModeForTests { get; set; }
+
+    /// <summary>
+    /// Test hook: invoked with each history batch as it is handed to the writer (#2874), after the run has released what
+    /// it held of it, so a test can inspect exactly what the writer is given. No-op in production (null by default).
+    /// </summary>
+    internal Action<SynchronisationHistoryBatch>? OnHistoryHandedOffForTests { get; set; }
+
+    /// <summary>
     /// Test hook: the page identity map's cumulative absorption count (#1612). Production code never reads
     /// this directly; tests use it to assert that a same-page identity split was actually absorbed by the
     /// map rather than reaching <see cref="QueueMvoForUpdate"/> as a second instance.
@@ -1014,30 +1027,121 @@ public abstract class SyncTaskProcessorBase
             trackerCount, trackerCountBeforeClear, crossPageRefCount, rpeiCount);
     }
 
+
     /// <summary>
     /// Runs the synchronisation with a history writer of its own (#2874): one per run, writing on a repository of its own,
-    /// disposed as the run ends however it ends.
+    /// drained and disposed as the run ends however it ends.
     /// </summary>
+    /// <remarks>
+    /// The run overlaps each page's history write with the next page's load and processing when its repository can write
+    /// history on a connection of its own (PostgreSQL), and writes every flush before going on otherwise (the in-memory
+    /// store, whose collections are not safe to use from two threads). As the run ends, whatever is in flight is waited
+    /// for: a history failure then fails a run that was completing or cancelling, and is recorded beside any other failure
+    /// already ending it (<see cref="SynchronisationHistoryWriter.DrainOnExitAsync"/>).
+    /// </remarks>
     protected async Task RunWithHistoryWriterAsync(Func<Task> run)
     {
-        // Inline: every flush is written before the run goes on, as it always has been. Writing a page's history while
-        // the next page loads and processes is the plan's next phase.
-        _historyWriter = new SynchronisationHistoryWriter(_syncRepo, SynchronisationHistoryWriteMode.Inline, _activity, _connectedSystem.Name);
+        var mode = HistoryWriteModeForTests
+            ?? (_syncRepo.SupportsConcurrentHistoryWrites ? SynchronisationHistoryWriteMode.Overlapped : SynchronisationHistoryWriteMode.Inline);
+        var writer = new SynchronisationHistoryWriter(_syncRepo, mode, _activity, _connectedSystem.Name);
+        _historyWriter = writer;
+
+        // The exception ending the run, observed by the filter below as it passes and never caught, so it propagates with
+        // its own stack and detail.
+        Exception? primary = null;
+        bool Observe(Exception exception)
+        {
+            primary = exception;
+            return false;
+        }
+
         try
         {
-            await run();
+            try
+            {
+                await run();
+            }
+            catch (Exception exception) when (Observe(exception))
+            {
+                // Never reached: the filter returns false.
+                throw;
+            }
+            finally
+            {
+                // A page's history still in flight was written while the run ended (a failure elsewhere), so its totals
+                // count; a history failure surfaces here unless another failure is already ending the run.
+                var drained = await writer.DrainOnExitAsync(primary);
+                if (drained != null)
+                    CountWrittenHistory(drained);
+            }
         }
         finally
         {
-            await _historyWriter.DisposeAsync();
+            if (writer.BatchesWritten > 0)
+            {
+                var hidden = writer.TotalWriteTime - writer.TotalWaitTime;
+                Log.Information("SynchronisationHistoryWriter: {Mode} history for Connected System {ConnectedSystemName}: {Batches} batches, " +
+                    "{WriteSeconds:F1}s writing, {WaitSeconds:F1}s waited for, {HiddenSeconds:F1}s hidden behind the run's own work",
+                    writer.Mode, LogSanitiser.Sanitise(_connectedSystem.Name), writer.BatchesWritten,
+                    writer.TotalWriteTime.TotalSeconds, writer.TotalWaitTime.TotalSeconds, Math.Max(0, hidden.TotalSeconds));
+            }
+
+            await writer.DisposeAsync();
             _historyWriter = null;
         }
     }
 
     /// <summary>
-    /// Records the run's history so far (#2874): the execution items on the Activity, with their outcomes, change records,
-    /// causal edges and match candidates, and the Metaverse Object change records queued since the last flush, all in one
-    /// transaction. Then accumulates the items' summary stats and releases them from memory.
+    /// Records a page's history at the end of its page loop iteration (#2874). Overlapped, the history is prepared and
+    /// released here, then written while the next page loads and is processed; the next page waits for it before saving
+    /// any of its own changes (<see cref="WaitForPreviousPageHistoryAsync"/>), and the page loop's end waits for the last
+    /// (<see cref="WaitForPageLoopHistoryAsync"/>). Inline, it is written before this returns, as any other flush is.
+    /// </summary>
+    /// <remarks>
+    /// Released means the run holds none of it: the Activity's items are cleared and detached, the page lookups cleared,
+    /// and the batch's references into the objects the run is still working on cut, ids having been copied into scalars
+    /// by the preparation. The batch's totals are counted only once its write has succeeded.
+    /// </remarks>
+    /// <param name="page">The 1-based page the flush records.</param>
+    /// <param name="totalPages">The pages the run expects.</param>
+    protected async Task FlushPageHistoryAsync(int page, int totalPages)
+    {
+        var writer = RequireHistoryWriter();
+        if (writer.Mode == SynchronisationHistoryWriteMode.Inline)
+        {
+            using (Diagnostics.Sync.StartSpan("FlushHistory"))
+                await FlushHistoryAsync(page, totalPages);
+            return;
+        }
+
+        SynchronisationHistoryBatch batch;
+        using (Diagnostics.Sync.StartSpan("FlushHistory"))
+        {
+            var prepared = PrepareHistory(page, totalPages);
+            if (prepared == null)
+                return;
+
+            (batch, var pageRpeis) = prepared.Value;
+            if (pageRpeis.Count > 0)
+            {
+                ReleaseWrittenItems(pageRpeis, batch);
+                ClearPageExecutionItemLookups();
+            }
+
+            batch.ReleaseRunObjects();
+            OnHistoryHandedOffForTests?.Invoke(batch);
+        }
+
+        // Handed off once the flush's span has ended, so the write, which outlives it, is timed under the run's page loop
+        // rather than under a flush that has already finished.
+        await writer.HandOffAsync(batch);
+    }
+
+    /// <summary>
+    /// Records the run's history so far (#2874) and waits for it: the execution items on the Activity, with their
+    /// outcomes, change records, causal edges and match candidates, and the Metaverse Object change records queued since
+    /// the last flush, all in one transaction. Then accumulates the items' summary stats and releases them from memory.
+    /// For every flush outside the page loops, which go on only once their history is written.
     ///
     /// IMPORTANT: This method MUST be called BEFORE any SaveChangesAsync that might trigger
     /// DetectChanges() while RPEIs are in Activity.RunProfileExecutionItems. DetectChanges()
@@ -1055,12 +1159,97 @@ public abstract class SyncTaskProcessorBase
     /// <param name="totalPages">The pages the run expects, or 0.</param>
     protected async Task FlushHistoryAsync(int page = 0, int totalPages = 0)
     {
-        var pageRpeis = _activity.RunProfileExecutionItems.ToList();
-        if (pageRpeis.Count == 0 && _pendingMvoChangesToPersist.Count == 0 && _pendingMvoChangeAttributesToPersist.Count == 0)
+        var writer = RequireHistoryWriter();
+        var prepared = PrepareHistory(page, totalPages);
+        if (prepared == null)
             return;
 
-        var writer = _historyWriter
-            ?? throw new InvalidOperationException("FlushHistoryAsync: history is recorded only within a run (RunWithHistoryWriterAsync).");
+        var (batch, pageRpeis) = prepared.Value;
+
+        // Handed off and waited for at once: a failure propagates here, as it is, where the flush's caller attributes it.
+        OnHistoryHandedOffForTests?.Invoke(batch);
+        await writer.HandOffAsync(batch);
+        var written = await writer.WaitAsync(SynchronisationHistoryBarrier.AwaitedFlush);
+
+        if (pageRpeis.Count == 0)
+            return;
+
+        if (written!.ItemsWrittenOutsideTracking)
+        {
+            // Production: accumulate summary stats from this batch before clearing RPEIs.
+            // Stats are computed incrementally per-flush, eliminating the need to keep all RPEIs
+            // in memory for a final calculation (which caused OOM at 100K+ objects).
+            Worker.AccumulateActivitySummaryStats(_activity, pageRpeis);
+            ReleaseWrittenItems(pageRpeis, batch);
+        }
+        // Tests (the in-memory store): RPEIs stay in Activity.RunProfileExecutionItems for test
+        // assertions. Stats are computed at activity completion by CalculateActivitySummaryStats
+        // in CompleteActivityBasedOnExecutionResultsAsync (assignment, not accumulation).
+
+        ClearPageExecutionItemLookups();
+    }
+
+    /// <summary>
+    /// Waits, before a page saves any of its changes, for the previous page's history (#2874): at most one write is then
+    /// in flight, it never runs alongside the run's own writes, and a failure stops the run before another page's changes
+    /// are saved. The written page's totals are counted here.
+    /// </summary>
+    /// <exception cref="SynchronisationHistoryPersistenceException">The previous page's history, or an earlier page's,
+    /// was not written.</exception>
+    protected Task WaitForPreviousPageHistoryAsync() => WaitForHistoryAsync(SynchronisationHistoryBarrier.PageStateFlush);
+
+    /// <summary>
+    /// Waits, as the page loop ends however it ends, for the last page's history (#2874), before the steps that follow read
+    /// what the pages recorded. The written page's totals are counted here.
+    /// </summary>
+    /// <exception cref="SynchronisationHistoryPersistenceException">A page's history was not written.</exception>
+    protected Task WaitForPageLoopHistoryAsync() => WaitForHistoryAsync(SynchronisationHistoryBarrier.PageLoopExit);
+
+    /// <summary>
+    /// Throws if a page's history write has already failed, without waiting for one in flight (#2874): for the page loop
+    /// to check before it loads another page, so a run whose history is failing loads nothing more.
+    /// </summary>
+    /// <exception cref="SynchronisationHistoryPersistenceException">A page's history was not written.</exception>
+    protected void ThrowIfHistoryWriteFailed() => RequireHistoryWriter().ThrowIfFaulted();
+
+    private async Task WaitForHistoryAsync(SynchronisationHistoryBarrier barrier)
+    {
+        var written = await RequireHistoryWriter().WaitAsync(barrier);
+        if (written != null)
+            CountWrittenHistory(written);
+    }
+
+    /// <summary>
+    /// Counts an overlapped batch's items in the Activity's totals once its write has succeeded, so a page whose history
+    /// was not written is never counted.
+    /// </summary>
+    private void CountWrittenHistory(SynchronisationHistoryWriteResult written)
+    {
+        if (written.Batch.Items.Count == 0)
+            return;
+
+        // The items were released when the batch was handed off, which only a store writing them outside its change
+        // tracking allows; only such a store is ever written to concurrently (SupportsConcurrentHistoryWrites).
+        if (!written.ItemsWrittenOutsideTracking)
+            throw new InvalidOperationException(
+                "Overlapped synchronisation history writes need a store that writes execution items outside its change tracking, " +
+                "since the run releases them as it hands them off; this store kept them.");
+
+        Worker.AccumulateActivitySummaryStats(_activity, written.Batch.Items);
+    }
+
+    private SynchronisationHistoryWriter RequireHistoryWriter() => _historyWriter
+        ?? throw new InvalidOperationException("Synchronisation history is recorded only within a run (RunWithHistoryWriterAsync).");
+
+    /// <summary>
+    /// Prepares the history recorded since the last flush, on the run's thread: every id assigned, the Metaverse Object
+    /// change queues taken. Null when there is nothing to record.
+    /// </summary>
+    private (SynchronisationHistoryBatch Batch, List<ActivityRunProfileExecutionItem> PageRpeis)? PrepareHistory(int page, int totalPages)
+    {
+        var pageRpeis = _activity.RunProfileExecutionItems.ToList();
+        if (pageRpeis.Count == 0 && _pendingMvoChangesToPersist.Count == 0 && _pendingMvoChangeAttributesToPersist.Count == 0)
+            return null;
 
         SynchronisationHistoryBatch batch;
         using (var prepareSpan = Diagnostics.Sync.StartSpan("SyncHistoryPrepare"))
@@ -1089,38 +1278,33 @@ public abstract class SyncTaskProcessorBase
                     .Sum(c => c.AttributeChanges.Sum(a => a.ValueChanges.Count)));
         }
 
-        // Handed off and waited for at once: a failure propagates here, as it is, where the flush's caller attributes it.
-        await writer.HandOffAsync(batch);
-        var written = await writer.WaitAsync(SynchronisationHistoryBarrier.AwaitedFlush);
+        // The batch holds copies of the queues, so they start afresh for whatever the run records next.
         _pendingMvoChangesToPersist.Clear();
         _pendingMvoChangeAttributesToPersist.Clear();
+        return (batch, pageRpeis);
+    }
 
-        if (pageRpeis.Count == 0)
-            return;
+    /// <summary>
+    /// Releases a batch's items from the run: cleared from the Activity's collection and detached from the change tracker
+    /// so no later SaveChangesAsync inserts them again, and no later flush passes them again.
+    /// </summary>
+    private void ReleaseWrittenItems(List<ActivityRunProfileExecutionItem> pageRpeis, SynchronisationHistoryBatch batch)
+    {
+        _activity.RunProfileExecutionItems.Clear();
+        _syncRepo.DetachRpeisFromChangeTracker(pageRpeis);
+        _hasRawSqlSupport = true;
 
-        if (written!.ItemsWrittenOutsideTracking)
-        {
-            // Production: accumulate summary stats from this batch before clearing RPEIs.
-            // Stats are computed incrementally per-flush, eliminating the need to keep all RPEIs
-            // in memory for a final calculation (which caused OOM at 100K+ objects).
-            Worker.AccumulateActivitySummaryStats(_activity, pageRpeis);
+        // Released from the Activity, so no later flush passes them again. With the in-memory store they stay on the
+        // Activity, and so in the set, for every later flush to skip as this one did.
+        if (batch.ItemIdsWrittenWithDeletion.Count > 0)
+            _rpeiIdsWrittenWithDeletion.ExceptWith(batch.ItemIdsWrittenWithDeletion);
+    }
 
-            // Clear from Activity's collection and detach from change tracker so no
-            // subsequent SaveChangesAsync re-inserts them.
-            _activity.RunProfileExecutionItems.Clear();
-            _syncRepo.DetachRpeisFromChangeTracker(pageRpeis);
-            _hasRawSqlSupport = true;
-
-            // Released from the Activity, so no later flush passes them again. With the in-memory store they stay on the
-            // Activity, and so in the set, for every later flush to skip as this one did.
-            if (batch.ItemIdsWrittenWithDeletion.Count > 0)
-                _rpeiIdsWrittenWithDeletion.ExceptWith(batch.ItemIdsWrittenWithDeletion);
-        }
-        // Tests (the in-memory store): RPEIs stay in Activity.RunProfileExecutionItems for test
-        // assertions. Stats are computed at activity completion by CalculateActivitySummaryStats
-        // in CompleteActivityBasedOnExecutionResultsAsync (assignment, not accumulation).
-
-        // Clear per-page MVO→RPEI lookup (only used within a single page's processing)
+    /// <summary>
+    /// Clears the per-page Metaverse Object to execution item lookups, used only within one page's processing.
+    /// </summary>
+    private void ClearPageExecutionItemLookups()
+    {
         _mvoIdToRpei.Clear();
         _mvoIdsChangedByExportEvaluation.Clear();
         _deferredMvoRpeiMappings.Clear();

@@ -309,6 +309,52 @@ public class SynchronisationHistoryWriterTests
     }
 
     [Test]
+    public async Task DrainOnExitAsync_WriteInFlightSucceeds_ReturnsItSoItsTotalsCanBeCountedAsync()
+    {
+        // A run ending on another failure while a page's history is in flight still wrote that history, so its totals
+        // belong on the Activity.
+        await using var writer = NewWriter();
+        await writer.HandOffAsync(Batch(4));
+
+        var drained = await writer.DrainOnExitAsync(new InvalidOperationException("the run's own failure"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(drained?.Batch.Page, Is.EqualTo(4));
+            Assert.That(await writer.DrainOnExitAsync(null), Is.Null, "nothing is drained twice");
+        }
+    }
+
+    [Test]
+    public async Task DrainOnExitAsync_TheHistoryFailureEndedTheRun_RecordsNoSecondWarningAsync()
+    {
+        // The failure ending the run is the history failure itself, found at a barrier: it is the error reported, so it
+        // is not reported again as a warning.
+        await using var writer = NewWriter();
+        Gate().SetException(new TimeoutException("the write timed out"));
+        await writer.HandOffAsync(Batch(2, 3));
+        var failure = Assert.ThrowsAsync<SynchronisationHistoryPersistenceException>(() => writer.WaitAsync(SynchronisationHistoryBarrier.PageStateFlush));
+
+        Assert.That(() => writer.DrainOnExitAsync(failure), Throws.Nothing);
+        Assert.That(_activity.WarningMessage, Is.Null.Or.Empty);
+    }
+
+    [Test]
+    public async Task DrainOnExitAsync_AnAwaitedFlushFailureEndedTheRun_RecordsNoSecondWarningAsync()
+    {
+        // An awaited flush's failure propagates as it is, and the code around it may wrap it; either way it is the
+        // history failure, already the error reported.
+        await using var writer = NewWriter(SynchronisationHistoryWriteMode.Inline);
+        var cause = new InvalidOperationException("the database refused the write");
+        Gate().SetException(cause);
+        await writer.HandOffAsync(Batch(0, 0));
+        Assert.ThrowsAsync<InvalidOperationException>(() => writer.WaitAsync(SynchronisationHistoryBarrier.AwaitedFlush));
+
+        Assert.That(() => writer.DrainOnExitAsync(new SyncPersistenceException("the page's changes were not saved", cause, 0, 0, "HR")), Throws.Nothing);
+        Assert.That(_activity.WarningMessage, Is.Null.Or.Empty);
+    }
+
+    [Test]
     public async Task HandOffAndWait_EmitTheirSpansWithTheirTagsAsync()
     {
         var spans = new List<System.Diagnostics.Activity>();

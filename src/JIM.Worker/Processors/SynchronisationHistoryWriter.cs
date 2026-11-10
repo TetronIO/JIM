@@ -171,13 +171,18 @@ internal sealed class SynchronisationHistoryWriter : IAsyncDisposable
     /// Waits for whatever is in flight as the run ends, however it ends. With a history failure: when the run is ending
     /// normally or because it was cancelled, the failure is thrown (a run that lost history fails rather than completes or
     /// cancels); when another failure is ending it, that failure is left to propagate, with its detail intact, and the
-    /// history failure is recorded on the Activity as a warning and logged.
+    /// history failure is recorded on the Activity as a warning and logged, unless that failure is the history failure
+    /// itself (found at a barrier, or propagating from an awaited flush, wrapped or not), which is already the error
+    /// reported.
     /// </summary>
     /// <param name="primary">The exception ending the run, or null when it is ending normally.</param>
+    /// <returns>The write that was in flight, once it has succeeded, so the run can count its totals; null when nothing
+    /// was in flight or it failed.</returns>
     /// <exception cref="SynchronisationHistoryPersistenceException">A write failed and nothing else is ending the run, or
     /// only its cancellation is.</exception>
-    public async Task DrainOnExitAsync(Exception? primary)
+    public async Task<SynchronisationHistoryWriteResult?> DrainOnExitAsync(Exception? primary)
     {
+        SynchronisationHistoryWriteResult? drained = null;
         if (_writeInFlight != null)
         {
             var batch = _batchInFlight!;
@@ -186,21 +191,47 @@ internal sealed class SynchronisationHistoryWriter : IAsyncDisposable
             _writeInFlight = null;
             _batchInFlight = null;
             if (write.IsCompletedSuccessfully)
+            {
                 BatchesWritten++;
+                drained = new SynchronisationHistoryWriteResult(batch, write.Result);
+            }
             else
+            {
                 RecordFailure(batch, write);
+            }
         }
 
         if (_failure == null)
-            return;
+            return drained;
 
         if (primary == null || primary is OperationCanceledException)
             throw _failure;
+
+        if (IsOrWraps(primary, _failure) || IsOrWraps(primary, _failure.InnerException))
+            return drained;
 
         var warning = _failure.Message;
         _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage) ? warning : $"{_activity.WarningMessage}\n{warning}";
         Log.Error(_failure.InnerException, "SynchronisationHistoryWriter: {Message} The run is failing for another reason, which is the error reported: {Primary}",
             warning, LogSanitiser.Sanitise(primary.Message));
+        return drained;
+    }
+
+    /// <summary>
+    /// Whether the exception is the one sought, or carries it somewhere in its chain of inner exceptions.
+    /// </summary>
+    private static bool IsOrWraps(Exception exception, Exception? sought)
+    {
+        if (sought == null)
+            return false;
+
+        for (var current = exception; current != null; current = current.InnerException)
+        {
+            if (ReferenceEquals(current, sought))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>

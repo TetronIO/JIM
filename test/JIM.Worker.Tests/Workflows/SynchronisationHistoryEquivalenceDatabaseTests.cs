@@ -73,6 +73,9 @@ public class SynchronisationHistoryEquivalenceDatabaseTests
     private readonly Dictionary<Guid, string> _objectLabels = new();
     private readonly Dictionary<Guid, string> _activityStatuses = new();
 
+    // How the runs write their history; null leaves it to the run, which overlaps on PostgreSQL.
+    private SynchronisationHistoryWriteMode? _historyWriteMode;
+
     private JimDbContext NewContext(bool trackAll = false)
     {
         var builder = new DbContextOptionsBuilder<JimDbContext>()
@@ -102,17 +105,22 @@ public class SynchronisationHistoryEquivalenceDatabaseTests
     {
         _objectLabels.Clear();
         _activityStatuses.Clear();
+        _historyWriteMode = null;
         await PostgresTestDatabase.ResetAsync(_connectionString);
     }
 
     /// <summary>
     /// The history a run records over a mixed set of pages is the history recorded before the history writes were
-    /// restructured, item for item and row for row.
+    /// restructured, item for item and row for row, whether each page's history is written before the run goes on or
+    /// while the next page loads and is processed (#2874): both modes match the one baseline, and so each other.
     /// </summary>
-    [TestCase(ConnectedSystemRunType.FullSynchronisation)]
-    [TestCase(ConnectedSystemRunType.DeltaSynchronisation)]
-    public async Task Synchronisation_MixedPages_RecordsTheBaselineHistoryAsync(ConnectedSystemRunType runType)
+    [TestCase(ConnectedSystemRunType.FullSynchronisation, SynchronisationHistoryWriteMode.Inline)]
+    [TestCase(ConnectedSystemRunType.FullSynchronisation, SynchronisationHistoryWriteMode.Overlapped)]
+    [TestCase(ConnectedSystemRunType.DeltaSynchronisation, SynchronisationHistoryWriteMode.Inline)]
+    [TestCase(ConnectedSystemRunType.DeltaSynchronisation, SynchronisationHistoryWriteMode.Overlapped)]
+    public async Task Synchronisation_MixedPages_RecordsTheBaselineHistoryAsync(ConnectedSystemRunType runType, SynchronisationHistoryWriteMode mode)
     {
+        _historyWriteMode = mode;
         await ArrangeAsync();
 
         await RunAsync(runType);
@@ -474,12 +482,12 @@ public class SynchronisationHistoryEquivalenceDatabaseTests
         if (runType == ConnectedSystemRunType.FullSynchronisation)
         {
             await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(jim), jim.SyncRepository,
-                system, runProfile, activity, new CancellationTokenSource()).PerformFullSyncAsync();
+                system, runProfile, activity, new CancellationTokenSource()) { HistoryWriteModeForTests = _historyWriteMode }.PerformFullSyncAsync();
         }
         else
         {
             await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(jim), jim.SyncRepository,
-                system, runProfile, activity, new CancellationTokenSource()).PerformDeltaSyncAsync();
+                system, runProfile, activity, new CancellationTokenSource()) { HistoryWriteModeForTests = _historyWriteMode }.PerformDeltaSyncAsync();
         }
 
         var counts = await jim.Activities.GetActivityRpeiErrorCountsAsync(activity.Id);

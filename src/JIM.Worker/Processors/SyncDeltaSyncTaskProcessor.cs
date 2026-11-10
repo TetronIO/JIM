@@ -249,6 +249,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 // for why: the page's untracked Metaverse Objects hang off its tracked Connected System Objects.
                 _syncRepo.SetAutoDetectChangesEnabled(false);
 
+                // A run whose history has already failed to write loads nothing more (#2874).
+                ThrowIfHistoryWriteFailed();
+
                 PagedResultSet<ConnectedSystemObject>? csoPagedResult;
                 using (var loadSpan = Diagnostics.Sync.StartSpan("LoadModifiedCsoPage"))
                 {
@@ -330,6 +333,10 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 // page's tracker is cleared, below.
                 try
                 {
+                    // The previous page's history is waited for before any of this page's changes are saved (#2874); see
+                    // SyncFullSyncTaskProcessor.
+                    await WaitForPreviousPageHistoryAsync();
+
                     // Batch persist all MVOs collected during this page.
                     // See SyncFullSyncTaskProcessor for design notes on why progress updates
                     // cannot be decoupled from batch persistence boundaries.
@@ -369,10 +376,10 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                     // batch delete MVOs marked for immediate deletion (0-grace-period)
                     await FlushPendingMvoDeletionsAsync();
 
-                    // Record this page's history (its RPEIs and their change records, and its MVO change records) before
-                    // updating progress and clearing the change tracker
-                    using (Diagnostics.Sync.StartSpan("FlushHistory"))
-                        await FlushHistoryAsync(page, totalCsoPages);
+                    // Record this page's history (its RPEIs and their change records, and its MVO change records): prepared
+                    // and released before updating progress and clearing the change tracker, and written while the next
+                    // page loads and is processed (#2874)
+                    await FlushPageHistoryAsync(page, totalCsoPages);
 
                     // Clear the change tracker (and the page identity map, #1612) unconditionally at every page
                     // boundary. See SyncFullSyncTaskProcessor for detailed explanation. The tracker's size before the
@@ -420,6 +427,10 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             ClearPageTrackingState();
             _syncRepo.SetAutoDetectChangesEnabled(true);
         }
+
+        // The last page's history is waited for whether the loop finished or was cancelled, before the steps below read
+        // what the pages recorded (#2874); see SyncFullSyncTaskProcessor.
+        await WaitForPageLoopHistoryAsync();
 
         // Skip post-processing on cancellation: cross-page references target unprocessed pages,
         // and the watermark must NOT advance so the next sync re-processes everything.
