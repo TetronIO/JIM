@@ -86,8 +86,10 @@ $resurgamExchange = Get-ActiveDirectoryLabExchangeConfig -Instance ExchangeSourc
 $script:TestResults = @()
 $startTime = Get-Date
 
-# Exchange's msExchRecipientTypeDetails for a mail contact.
-$mailContactDetails = '64'
+# Exchange's msExchRecipientDisplayType for a mail contact. Exchange stamps no msExchRecipientTypeDetails on a contact
+# it mail-enables (Scenario 003 run 42780578451 read display type 6 and no details), which is why JIM reads the type
+# from the display type.
+$mailContactDisplayType = '6'
 
 $people = [ordered]@{
     Carol = @{ EmployeeId = 'GAL000001'; FirstName = 'Carol'; LastName = 'Panoplygal'; Forest = 'PANOPLY'; Domain = $panoply.Domain }
@@ -243,7 +245,7 @@ function Find-GalContact {
     # The contact named $Name in a forest's GALSync OU, or nothing.
     param([hashtable]$Forest, [string]$ContactOuDn, [string]$Name)
     return @(Find-DirectoryEntry -DirectoryConfig $Forest -BaseDn $ContactOuDn -Filter "(&(objectClass=contact)(displayName=$(ConvertTo-LdapFilterValue -Value $Name)))" `
-            -Attributes @('displayName', 'targetAddress', 'proxyAddresses', 'msExchRecipientTypeDetails')) | Select-Object -First 1
+            -Attributes @('displayName', 'targetAddress', 'proxyAddresses', 'msExchRecipientDisplayType')) | Select-Object -First 1
 }
 
 function Get-LegacyExchangeDn {
@@ -258,13 +260,13 @@ function Test-GalContact {
     # A mail contact whose mail goes to the source's address and which carries the source's X500: proxy.
     param([string]$Label, $Contact, $Source)
     if (-not $Contact) { Add-TestResult -Name $Label -Passed $false -Detail "No such contact."; return }
-    $details = [string](@($Contact['msExchRecipientTypeDetails']) | Select-Object -First 1)
+    $displayType = [string](@($Contact['msExchRecipientDisplayType']) | Select-Object -First 1)
     $target = [string](@($Contact['targetAddress']) | Select-Object -First 1)
     $proxies = @($Contact['proxyAddresses'])
     $x500 = "X500:$($Source.LegacyExchangeDn)"
     Add-TestResult -Name $Label `
-        -Passed ($details -eq $mailContactDetails -and $target -ieq "SMTP:$($Source.Mail)" -and ($proxies -ccontains $x500) -and -not [string]::IsNullOrEmpty($Source.LegacyExchangeDn)) `
-        -Detail "msExchRecipientTypeDetails $details (expected $mailContactDetails), targetAddress $target (expected SMTP:$($Source.Mail)), X500 proxy $(if ($proxies -ccontains $x500) { 'present' } else { "missing (expected $x500; has $($proxies -join ', '))" })"
+        -Passed ($displayType -eq $mailContactDisplayType -and $target -ieq "SMTP:$($Source.Mail)" -and ($proxies -ccontains $x500) -and -not [string]::IsNullOrEmpty($Source.LegacyExchangeDn)) `
+        -Detail "msExchRecipientDisplayType $displayType (expected $mailContactDisplayType), targetAddress $target (expected SMTP:$($Source.Mail)), X500 proxy $(if ($proxies -ccontains $x500) { 'present' } else { "missing (expected $x500; has $($proxies -join ', '))" })"
 }
 
 Write-TestSection "Scenario 003: GAL synchronisation between PANOPLY and RESURGAM"
