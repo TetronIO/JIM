@@ -488,57 +488,83 @@ public partial class SyncRepository
     /// why <c>LastUpdated</c> must stay untouched here (it is what keeps a no-op confirming import
     /// out of the next Delta Synchronisation).
     /// </summary>
+    /// <remarks>
+    /// The delete, the COPY and the import-state update are one transaction (#2894): the caller's, when it holds one,
+    /// otherwise this method's own. Each used to commit on its own, so a COPY or update that failed after the delete left
+    /// the object with its superseded values removed and its new ones unwritten, and everything reading it before the
+    /// confirming import (a Delta Synchronisation, drift detection, the portal) saw a partial set of values. Tracked
+    /// instances of the removed values are detached only once the statements have run, so a failed apply leaves the
+    /// tracker matching the rows it left in place.
+    /// </remarks>
     public async Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds)
     {
         if (additions.Count == 0 && removalValueIds.Count == 0)
             return;
 
-        if (removalValueIds.Count > 0)
-            await DeleteCsoAttributeValuesByIdAsync(removalValueIds);
-
-        if (additions.Count > 0)
+        var relational = _context.Database.IsRelational();
+        await using (var ownTransaction = relational && _context.Database.CurrentTransaction == null
+            ? await _context.Database.BeginTransactionAsync()
+            : null)
         {
-            var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
-            await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
-            // COPY joins the connection's current transaction, as the import writer does.
-            await BulkInsertCsoAttributeValuesOnConnectionAsync(connection,
-                additions.Select(value => (value.ConnectedSystemObject.Id, value)).ToList(), partitionCsoIds: null);
+            if (removalValueIds.Count > 0)
+                await DeleteCsoAttributeValuesByIdAsync(removalValueIds);
+
+            if (additions.Count > 0)
+            {
+                var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+                await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+                // COPY joins the connection's current transaction (this method's, or the caller's), as the import writer does.
+                await BulkInsertCsoAttributeValuesOnConnectionAsync(connection,
+                    additions.Select(value => (value.ConnectedSystemObject.Id, value)).ToList(), partitionCsoIds: null);
+            }
+
+            // SPEC-1082 D9: null the import state hash/fingerprint for every mutated CSO, set-based,
+            // in the same transaction. Deliberately does NOT touch LastUpdated (see the class remarks above).
+            if (affectedCsoIds.Count > 0)
+                await NullImportStateForCsosAsync(affectedCsoIds);
+
+            if (ownTransaction != null)
+                await ownTransaction.CommitAsync();
         }
 
-        // SPEC-1082 D9: null the import state hash/fingerprint for every mutated CSO, set-based,
-        // in the same call. Deliberately does NOT touch LastUpdated (see the class remarks above).
-        if (affectedCsoIds.Count > 0)
-            await NullImportStateForCsosAsync(affectedCsoIds);
+        // Only now that the removals are written (committed, or in the caller's transaction): a failure above leaves
+        // the rows, and so their tracked instances, as they were.
+        if (removalValueIds.Count > 0)
+            DetachTrackedEntities<ConnectedSystemObjectAttributeValue>(removalValueIds.ToHashSet(), av => av.Id);
     }
 
     /// <summary>
     /// SPEC-1082 D9: sets ImportStateHash and ImportStateFingerprint to NULL for the given CSO IDs,
     /// via a single set-based UPDATE. Never touches LastUpdated.
     /// </summary>
+    /// <remarks>
+    /// Only rows with a stamp to clear are updated (#2895). Import stamping (<c>StampImportStateAsync</c>) is the only
+    /// writer that sets either column, so a provisioned object's are always NULL, and an unconditional update rewrote every
+    /// Create's row for nothing: a dead row version per object, a million over a 500,000-object initial load.
+    /// </remarks>
     private async Task NullImportStateForCsosAsync(IReadOnlyCollection<Guid> csoIds)
     {
         if (csoIds.Count == 0)
             return;
 
         await _context.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""ConnectedSystemObjects"" SET ""ImportStateHash"" = NULL, ""ImportStateFingerprint"" = NULL WHERE ""Id"" = ANY({0})",
+            @"UPDATE ""ConnectedSystemObjects"" SET ""ImportStateHash"" = NULL, ""ImportStateFingerprint"" = NULL
+              WHERE ""Id"" = ANY({0}) AND (""ImportStateHash"" IS NOT NULL OR ""ImportStateFingerprint"" IS NOT NULL)",
             csoIds.ToArray());
     }
 
     /// <summary>
-    /// Deletes <see cref="ConnectedSystemObjectAttributeValue"/> rows by Id, first detaching any tracked
-    /// instance of them (the raw-SQL rule in <c>src/CLAUDE.md</c>; see
-    /// <see cref="DetachTrackedEntities{T}"/>'s remarks for the <c>DbUpdateConcurrencyException</c> a
-    /// tracked instance left behind causes). Whether anything is tracked depends on the caller's context:
-    /// the worker's long-lived context tracks by default, and the parallel export path re-loads each batch
-    /// tracked, so a batch holding a large group tracks every one of its member values. The detach is
-    /// set-based, so it costs one pass over the tracker however many values are removed (#2813: matching
-    /// against a list of the removed ids took seconds per batch).
+    /// Deletes <see cref="ConnectedSystemObjectAttributeValue"/> rows by Id. The caller detaches any tracked instance of
+    /// them once its transaction's statements have run (the raw-SQL rule in <c>src/CLAUDE.md</c>; see
+    /// <see cref="DetachTrackedEntities{T}"/>'s remarks for the <c>DbUpdateConcurrencyException</c> a tracked instance
+    /// left behind causes). Whether anything is tracked depends on the caller's context: the worker's long-lived context
+    /// tracks by default, and the parallel export path re-loads each batch tracked, so a batch holding a large group
+    /// tracks every one of its member values. The detach is set-based, so it costs one pass over the tracker however
+    /// many values are removed (#2813: matching against a list of the removed ids took seconds per batch).
     /// </summary>
     private async Task DeleteCsoAttributeValuesByIdAsync(List<Guid> removalValueIds)
     {
         var removalValueIdSet = removalValueIds.ToHashSet();
-        DetachTrackedEntities<ConnectedSystemObjectAttributeValue>(removalValueIdSet, av => av.Id);
 
         if (_context.Database.IsRelational())
         {

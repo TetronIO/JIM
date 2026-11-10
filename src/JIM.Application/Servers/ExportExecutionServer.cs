@@ -86,6 +86,16 @@ public class ExportExecutionServer
     /// </summary>
     private ConnectedSystemPartitionPlacement? _partitionPlacement;
 
+    /// <summary>
+    /// #2895: the settings the current export run reads once rather than once per batch (which Synchronisation Rules ask
+    /// for an Initial Password, and the data types of the attributes external IDs are recorded in), shared by every batch
+    /// the run processes, its parallel batches included. Null between runs.
+    /// </summary>
+    private ExportRunSettings? _runSettings;
+
+    private ExportRunSettings RunSettings => _runSettings
+        ?? throw new InvalidOperationException("An export run's settings are read only within a run (ExecuteExportsAsync).");
+
     internal ExportExecutionServer(JimApplication application, ISyncRepository syncRepo)
     {
         Application = application;
@@ -236,6 +246,8 @@ public class ExportExecutionServer
         // Connector, so it would place every object the same way; preparing once is what spares each batch the parsing.
         var partitionPlacement = ConnectedSystemPartitionPlacement.Prepare(connector, connectedSystem.Partitions);
         _partitionPlacement = partitionPlacement;
+        using var runSettings = new ExportRunSettings();
+        _runSettings = runSettings;
         try
         {
             // Execute exports using the connector with batch-loading
@@ -254,6 +266,7 @@ public class ExportExecutionServer
             _containersCreated = null;
             _stageExchangeChanges = false;
             _partitionPlacement = null;
+            _runSettings = null;
         }
 
         // Second pass: retry any exports with deferred references that might now be resolvable
@@ -284,6 +297,18 @@ public class ExportExecutionServer
             "{UnresolvedCount} Reference values left unresolved",
             connectedSystem.Name, result.OptimisticApplyAppliedCount, result.OptimisticApplySkippedCount,
             result.OptimisticApplyFailedCount, result.UnrecordedExportCount, result.OptimisticApplyUnresolvedReferenceCount);
+
+        // #2895: the parallel batches' serial section, the gate on the run's own context, by purpose. Only when batches ran
+        // in parallel; a sequential run takes no gate.
+        if (result.ContextGateTimings.Count > 0)
+        {
+            var byPurpose = string.Join(", ", result.ContextGateTimings.Snapshot().Select(t => string.Create(CultureInfo.InvariantCulture,
+                $"{t.Purpose} {t.Count}x waited {t.TotalWait.TotalSeconds:F1}s held {t.TotalHeld.TotalSeconds:F1}s")));
+            Log.Information("ExecuteExportsAsync: Shared context gate for {SystemName}: taken {GateCount} times, {WaitSeconds:F1}s waited for, " +
+                "{HeldSeconds:F1}s held; by purpose: {GateByPurpose}",
+                connectedSystem.Name, result.ContextGateTimings.Count, result.ContextGateTimings.TotalWait.TotalSeconds,
+                result.ContextGateTimings.TotalHeld.TotalSeconds, byPurpose);
+        }
 
         // #1121: only worth a line when the run actually provisioned accounts owed a password; every other
         // deployment would otherwise get a pair of zeroes on every export.
@@ -1739,15 +1764,21 @@ public class ExportExecutionServer
         Action<int>? batchExecuted = null,
         Func<int>? passProcessedOffset = null)
     {
-        // The one gate on the caller's DbContext; see the remarks above.
-        using var callerContextGate = new SemaphoreSlim(1, 1);
+        // The one gate on the caller's DbContext; see the remarks above. Each pass through it is timed by purpose into the
+        // run's totals (#2895), which the end-of-run log reports.
+        using var callerContextGate = new ExportContextGate(result.ContextGateTimings);
         var processedCount = 0;
         var stopTaking = 0;
         var batchCounter = 0;
 
         // Sub-phase narration from the batch connectors, on the same gate as everything else that reaches the caller's
-        // DbContext, so that concurrent batches cannot report through it at once.
-        using var connectorProgress = CreateConnectorProgress(progressCallback, subPhase => new ExportProgressInfo
+        // DbContext, so that concurrent batches cannot report through it at once. Not cancelled with the run: a progress
+        // emit is not a cancellation point (ConnectorProgress).
+        Func<ExportProgressInfo, Task>? gatedConnectorProgress = progressCallback == null
+            ? null
+            : info => callerContextGate.RunAsync(ExportContextGatePurpose.ConnectorProgress,
+                async () => { await progressCallback(info); return true; }, CancellationToken.None);
+        using var connectorProgress = CreateConnectorProgress(gatedConnectorProgress, subPhase => new ExportProgressInfo
         {
             Phase = ExportPhase.Executing,
             TotalExports = result.TotalPendingExports,
@@ -1755,30 +1786,20 @@ public class ExportExecutionServer
             PassTotal = passTotal,
             PassProcessed = passTotal.HasValue ? Volatile.Read(ref processedCount) + (passProcessedOffset?.Invoke() ?? 0) : null,
             Message = subPhase
-        }, callerContextGate);
+        });
 
         // Lock for thread-safe result aggregation
         var resultLock = new object();
 
-        async Task<T> UnderCallerContextGateAsync<T>(Func<Task<T>> action)
-        {
-            await callerContextGate.WaitAsync(cancellationToken);
-            try
-            {
-                return await action();
-            }
-            finally
-            {
-                callerContextGate.Release();
-            }
-        }
+        Task<T> UnderCallerContextGateAsync<T>(ExportContextGatePurpose purpose, Func<Task<T>> action) =>
+            callerContextGate.RunAsync(purpose, action, cancellationToken);
 
         async Task<List<ExecutableExportSummary>?> TakeNextBatchAsync()
         {
             if (Volatile.Read(ref stopTaking) == 1)
                 return null;
 
-            return await UnderCallerContextGateAsync(async () =>
+            return await UnderCallerContextGateAsync(ExportContextGatePurpose.NextBatch, async () =>
             {
                 // Checked again under the gate: a worker may have stopped the run while this one waited for it.
                 if (Volatile.Read(ref stopTaking) == 1)
@@ -1939,7 +1960,7 @@ public class ExportExecutionServer
 
                         // Stream processed items per batch, through the caller's context
                         if (batchCompletedCallback != null && batchResult.ProcessedExportItems.Count > 0)
-                            await UnderCallerContextGateAsync(async () => { await batchCompletedCallback(batchResult.ProcessedExportItems); return true; });
+                            await UnderCallerContextGateAsync(ExportContextGatePurpose.ExecutionItems, async () => { await batchCompletedCallback(batchResult.ProcessedExportItems); return true; });
 
                         await RecordBatchExecutedAsync(batch.Count);
                         return true;
@@ -1970,7 +1991,7 @@ public class ExportExecutionServer
                         {
                             try
                             {
-                                await UnderCallerContextGateAsync(async () => { await batchCompletedCallback(failureResult.ProcessedExportItems); return true; });
+                                await UnderCallerContextGateAsync(ExportContextGatePurpose.ExecutionItems, async () => { await batchCompletedCallback(failureResult.ProcessedExportItems); return true; });
                             }
                             catch (Exception callbackEx) when (callbackEx is not OperationCanceledException)
                             {
@@ -2011,7 +2032,7 @@ public class ExportExecutionServer
                 Dictionary<Guid, PendingExport> loaded;
                 try
                 {
-                    loaded = (await UnderCallerContextGateAsync(() => SyncRepo.GetPendingExportsByIdsAsync(unloaded.Select(pe => pe.Id).ToList())))
+                    loaded = (await UnderCallerContextGateAsync(ExportContextGatePurpose.DescribeFailedBatch, () => SyncRepo.GetPendingExportsByIdsAsync(unloaded.Select(pe => pe.Id).ToList())))
                         .ToDictionary(pe => pe.Id);
                 }
                 catch (Exception describeEx) when (describeEx is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -2053,7 +2074,7 @@ public class ExportExecutionServer
                 if (progressCallback == null)
                     return;
 
-                await UnderCallerContextGateAsync(async () =>
+                await UnderCallerContextGateAsync(ExportContextGatePurpose.Progress, async () =>
                 {
                     // Read under the gate, not from the add above: two workers finishing together would otherwise report
                     // in either order, and the later count could reach the Activity first and then be overwritten by the
@@ -2123,7 +2144,7 @@ public class ExportExecutionServer
 
                 try
                 {
-                    await UnderCallerContextGateAsync(async () =>
+                    await UnderCallerContextGateAsync(ExportContextGatePurpose.ConnectorData, async () =>
                     {
                         await Application.ConnectedSystems.UpdateConnectedSystemPersistedConnectorDataAsync(connectedSystem, closeReturn);
                         return true;
@@ -3098,6 +3119,9 @@ public class ExportExecutionServer
     /// batch's answer. Each lookup is made at most once per batch, and only when it can matter: the rule lookup when the
     /// batch holds a Create from a provisioning rule, and the owed lookup when it holds an Update to an account joined to a
     /// Metaverse Object and the Connector can set passwords (one that cannot has no password queued to complete anything).
+    /// Which rules ask for a password is a setting of the run (#2895): a rule is read the first time a batch names it and
+    /// remembered for the run (<see cref="ExportRunSettings"/>). Who is owed a password changes as the run goes, so that
+    /// is read for each batch.
     /// </para>
     /// <para>
     /// A failed lookup is contained, as it was when staging made it. A failed rule lookup flags no Create, so each is sent
@@ -3106,7 +3130,7 @@ public class ExportExecutionServer
     /// without the flag. Failing the batch instead would stop an export over a question about passwords.
     /// </para>
     /// </summary>
-    private static async Task<IReadOnlySet<int>?> FlagExportsFollowedByAPasswordAsync(
+    private async Task<IReadOnlySet<int>?> FlagExportsFollowedByAPasswordAsync(
         List<PendingExport> batch,
         ISyncRepository repository,
         ConnectedSystem connectedSystem,
@@ -3156,14 +3180,15 @@ public class ExportExecutionServer
     /// Which of the given Synchronisation Rules ask for an Initial Password, or null when that could not be read; see
     /// <see cref="FlagExportsFollowedByAPasswordAsync"/> for why a failure is contained.
     /// </summary>
-    private static async Task<HashSet<int>?> TryReadRulesAskingForAPasswordAsync(
+    private async Task<HashSet<int>?> TryReadRulesAskingForAPasswordAsync(
         List<int> provisioningRuleIds,
         ISyncRepository repository,
         string connectedSystemName)
     {
         try
         {
-            return await repository.GetSyncRuleIdsWithInitialPasswordEnabledAsync(provisioningRuleIds);
+            // #2895: read once per run, through the batch's repository the first time a batch names the rule.
+            return await RunSettings.GetRulesAskingForAnInitialPasswordAsync(provisioningRuleIds, repository);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -4052,14 +4077,15 @@ public class ExportExecutionServer
                 attributeIds.Add(cso.SecondaryExternalIdAttributeId.Value);
         }
 
-        // Pre-fetch all attribute definitions in a single query
-        Dictionary<int, ConnectedSystemObjectTypeAttribute> attributeLookup;
+        // The attributes' data types, a setting of the run (#2895): read the first time a batch needs them, through its
+        // repository, and remembered for the run's later batches.
+        IReadOnlyDictionary<int, AttributeDataType> attributeTypes;
         using (Diagnostics.Diagnostics.Database.StartSpan("GetAttributesByIds")
             .SetTag("attributeCount", attributeIds.Count))
         {
-            attributeLookup = attributeIds.Count > 0
-                ? await repository.GetAttributesByIdsAsync(attributeIds)
-                : new Dictionary<int, ConnectedSystemObjectTypeAttribute>();
+            attributeTypes = attributeIds.Count > 0
+                ? await RunSettings.GetAttributeTypesAsync(attributeIds, repository)
+                : new Dictionary<int, AttributeDataType>();
         }
 
         // Apply changes to each CSO in-memory
@@ -4073,7 +4099,7 @@ public class ExportExecutionServer
             // Populate external ID attribute if provided in the export result
             if (!string.IsNullOrEmpty(exportResult.ExternalId) && cso.ExternalIdAttributeId > 0)
             {
-                attributeLookup.TryGetValue(cso.ExternalIdAttributeId, out var externalIdAttribute);
+                AttributeDataType? externalIdAttributeType = attributeTypes.TryGetValue(cso.ExternalIdAttributeId, out var foundType) ? foundType : null;
 
                 var externalIdAttrValue = cso.AttributeValues
                     .FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
@@ -4089,11 +4115,11 @@ public class ExportExecutionServer
                     newAttributeValues.Add(externalIdAttrValue);
                 }
 
-                ApplyExternalIdToAttributeValue(externalIdAttrValue, externalIdAttribute?.Type, exportResult.ExternalId, cso.Id);
+                ApplyExternalIdToAttributeValue(externalIdAttrValue, externalIdAttributeType, exportResult.ExternalId, cso.Id);
 
                 needsUpdate = true;
                 Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId} (type: {AttrType})",
-                    cso.Id, LogSanitiser.Sanitise(exportResult.ExternalId), externalIdAttribute?.Type.ToString() ?? "Unknown");
+                    cso.Id, LogSanitiser.Sanitise(exportResult.ExternalId), externalIdAttributeType?.ToString() ?? "Unknown");
             }
 
             // Update secondary external ID if provided

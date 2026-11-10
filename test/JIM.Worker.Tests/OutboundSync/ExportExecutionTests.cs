@@ -1079,6 +1079,100 @@ public class ExportExecutionTests
     }
 
     /// <summary>
+    /// #2895: the anchor attribute's definition is a setting of the run, read for the first batch that records an external
+    /// ID and remembered: a second batch reads nothing, and still stores its key in the typed slot.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_NumberTypedAnchorAcrossTwoBatches_ReadsTheAttributeDefinitionOnceForTheRunAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        var idAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 998,
+            Name = "ID",
+            Type = AttributeDataType.Number,
+            ConnectedSystemObjectType = targetUserType
+        };
+        targetUserType.Attributes.Add(idAttr);
+        ConnectedSystemAttributesData.Add(idAttr);
+        SyncRepo.SeedObjectType(targetUserType);
+
+        var csos = new List<ConnectedSystemObject>();
+        var mvo = MetaverseObjectsData[0];
+        for (var person = 1; person <= 2; person++)
+        {
+            var cso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                ConnectedSystem = targetSystem,
+                Type = targetUserType,
+                TypeId = targetUserType.Id,
+                MetaverseObject = mvo,
+                MetaverseObjectId = mvo.Id,
+                JoinType = ConnectedSystemObjectJoinType.Provisioned,
+                Status = ConnectedSystemObjectStatus.PendingProvisioning,
+                DateJoined = DateTime.UtcNow,
+                ExternalIdAttributeId = idAttr.Id,
+                AttributeValues = new()
+            };
+            csos.Add(cso);
+            ConnectedSystemObjectsData.Add(cso);
+            SyncRepo.SeedConnectedSystemObject(cso);
+
+            var pendingExport = new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                ConnectedSystem = targetSystem,
+                ConnectedSystemObject = cso,
+                ConnectedSystemObjectId = cso.Id,
+                SourceMetaverseObjectId = mvo.Id,
+                Status = PendingExportStatus.Pending,
+                ChangeType = PendingExportChangeType.Create,
+                CreatedAt = DateTime.UtcNow,
+                AttributeValueChanges = new()
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        ChangeType = PendingExportAttributeChangeType.Add,
+                        AttributeId = displayNameAttr.Id,
+                        Attribute = displayNameAttr,
+                        StringValue = $"Person {person}",
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    }
+                }
+            };
+            PendingExportsData.Add(pendingExport);
+            SyncRepo.SeedPendingExport(pendingExport);
+        }
+
+        var nextKey = 1000039;
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Successful Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+                exports.Select(_ => ConnectedSystemExportResult.Succeeded((nextKey++).ToString(System.Globalization.CultureInfo.InvariantCulture))).ToList());
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, mockConnector.Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 1 }, CancellationToken.None);
+
+        var anchors = csos.Select(cso => cso.AttributeValues.Single(av => av.AttributeId == idAttr.Id)).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(2), "precondition: both batches exported");
+            Assert.That(SyncRepo.GetAttributesByIdsCallCount, Is.EqualTo(1), "read for the first batch, remembered for the second");
+            Assert.That(anchors.Select(av => av.IntValue), Is.EquivalentTo(new int?[] { 1000039, 1000040 }),
+                "both batches store the key in the typed slot, as the definition read for each would");
+            Assert.That(anchors.Select(av => av.StringValue), Is.All.Null);
+        }
+    }
+
+    /// <summary>
     /// Tests that ErrorCount is incremented exactly once when an export fails.
     /// This verifies the fix for a bug where ErrorCount was being incremented twice:
     /// once in the connector's catch block and once in ExportExecutionServer.MarkExportFailed.

@@ -1077,14 +1077,7 @@ public abstract class SyncTaskProcessorBase
         }
         finally
         {
-            if (writer.BatchesWritten > 0)
-            {
-                var hidden = writer.TotalWriteTime - writer.TotalWaitTime;
-                Log.Information("SynchronisationHistoryWriter: {Mode} history for Connected System {ConnectedSystemName}: {Batches} batches, " +
-                    "{WriteSeconds:F1}s writing, {WaitSeconds:F1}s waited for, {HiddenSeconds:F1}s hidden behind the run's own work",
-                    writer.Mode, LogSanitiser.Sanitise(_connectedSystem.Name), writer.BatchesWritten,
-                    writer.TotalWriteTime.TotalSeconds, writer.TotalWaitTime.TotalSeconds, Math.Max(0, hidden.TotalSeconds));
-            }
+            writer.LogRunTotals(_connectedSystem.Name);
 
             await writer.DisposeAsync();
             _historyWriter = null;
@@ -1107,10 +1100,13 @@ public abstract class SyncTaskProcessorBase
     protected async Task FlushPageHistoryAsync(int page, int totalPages)
     {
         var writer = RequireHistoryWriter();
+        // #2895: the page flush's time on the run's own thread, for the writer's end-of-run line.
+        var flushStopwatch = System.Diagnostics.Stopwatch.StartNew();
         if (writer.Mode == SynchronisationHistoryWriteMode.Inline)
         {
             using (Diagnostics.Sync.StartSpan("FlushHistory"))
                 await FlushHistoryAsync(page, totalPages);
+            writer.RecordFlush(flushStopwatch.Elapsed);
             return;
         }
 
@@ -1119,7 +1115,10 @@ public abstract class SyncTaskProcessorBase
         {
             var prepared = PrepareHistory(page, totalPages);
             if (prepared == null)
+            {
+                writer.RecordFlush(flushStopwatch.Elapsed);
                 return;
+            }
 
             (batch, var pageRpeis) = prepared.Value;
             if (pageRpeis.Count > 0)
@@ -1131,6 +1130,7 @@ public abstract class SyncTaskProcessorBase
             batch.ReleaseRunObjects();
             OnHistoryHandedOffForTests?.Invoke(batch);
         }
+        writer.RecordFlush(flushStopwatch.Elapsed);
 
         // Handed off once the flush's span has ended, so the write, which outlives it, is timed under the run's page loop
         // rather than under a flush that has already finished.
@@ -1252,6 +1252,7 @@ public abstract class SyncTaskProcessorBase
             return null;
 
         SynchronisationHistoryBatch batch;
+        var prepareStopwatch = System.Diagnostics.Stopwatch.StartNew();
         using (var prepareSpan = Diagnostics.Sync.StartSpan("SyncHistoryPrepare"))
         {
             // Items the obsolete CSO deletion wrote with their Deleted change records (#2807): their rows and records exist,
@@ -1277,6 +1278,7 @@ public abstract class SyncTaskProcessorBase
                 .SetTag("mvoChangeValueCount", batch.MetaverseObjectChanges.Concat(batch.MetaverseObjectChangeAppends)
                     .Sum(c => c.AttributeChanges.Sum(a => a.ValueChanges.Count)));
         }
+        RequireHistoryWriter().RecordPreparation(prepareStopwatch.Elapsed);
 
         // The batch holds copies of the queues, so they start afresh for whatever the run records next.
         _pendingMvoChangesToPersist.Clear();
