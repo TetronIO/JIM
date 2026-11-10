@@ -33,8 +33,9 @@
          database's WAL, checkpoints, temporary files and JIT time across the whole replay.
     Each replay's sampler output goes to its own directory beside results.tsv.
 
-    Directory state is not restored. The default Run Profiles only synchronise, which never touches the
-    directories, so a replay depends on the database alone.
+    Directory state is restored only for the -DirectoryContainer containers. The default Run Profiles only synchronise, which
+    never touches the directories, so those replays depend on the database alone. To replay an Export, take the
+    snapshot with -DirectoryContainer as well, so every replay starts from the directory as it was then.
 
     Run it from the repository root of the checkout that started the stack, with COMPOSE_PROJECT_NAME set
     as it was for the runner. It stops and recreates containers: never point it at a stack another run owns.
@@ -73,8 +74,26 @@
     running a while does. The snapshot holds few, so without this a setting that keeps more WAL (a larger
     max_wal_size) pays for creating its files inside the timed replay. 0, the default, skips it.
 
+.PARAMETER DirectoryContainer
+    Directory containers whose data volumes go with the snapshot, such as openldap-primary. Snapshot: each is
+    stopped and its volumes copied into volumes named after -SnapshotVolume. Replay: they are restored before
+    each replay. Needed for any Run Profile that writes to a directory, such as an Export. The connector files
+    volume is left alone.
+
+.PARAMETER ConnectedSystemSetting
+    Replay only: Connected System settings to apply after the snapshot is restored and before the Run
+    Profiles run, keyed by Connected System name. Each value is a hashtable of setting name to value, where
+    MaxExportParallelism sets that property and any other name is a Connector setting (such as
+    'Export Concurrency'), given as an integer, a boolean or a string to match its type.
+
 .EXAMPLE
     pwsh ./test/integration/utils/Invoke-DatabaseTuningReplay.ps1 -Action Replay -DatabaseSetting @{ jit = 'off' } -Repeat 2
+
+.EXAMPLE
+    ./test/integration/utils/Invoke-DatabaseTuningReplay.ps1 -Action Replay -DirectoryContainer openldap-primary -SnapshotVolume jim-db-volume-export-snapshot -ReplayRunProfile 'Glitterband EMEA|Export' -ConnectedSystemSetting @{ 'Glitterband EMEA' = @{ MaxExportParallelism = 4; 'Export Concurrency' = 8 } }
+
+    Replays the Target Export from a snapshot taken with the same -DirectoryContainer, with four export workers of eight
+    operations each.
 #>
 param(
     [Parameter(Mandatory = $true)]
@@ -100,7 +119,11 @@ param(
     [string[]]$ReplayRunProfile = @('Yellowstone APAC|Full Sync', 'Glitterband EMEA|Full Sync'),
 
     [ValidateRange(0, 128)]
-    [int]$PrewarmWalGB = 0
+    [int]$PrewarmWalGB = 0,
+
+    [string[]]$DirectoryContainer = @(),
+
+    [hashtable]$ConnectedSystemSetting = @{}
 )
 
 $ErrorActionPreference = 'Stop'
@@ -143,12 +166,73 @@ function Stop-Database {
     if ($exitCode -ne '0') { throw "$databaseContainer did not shut down cleanly (exit code $exitCode)." }
 }
 
-function Copy-DatabaseVolume([string]$From, [string]$To) {
+function Copy-Volume([string]$From, [string]$To) {
     # The database's own image does the copy: it is always present, unlike the harness's busybox.
     $image = docker inspect $databaseContainer --format '{{.Config.Image}}'
     docker volume create $To | Out-Null
     $output = docker run --rm --user 0 --entrypoint sh -v "${From}:/from:ro" -v "${To}:/to" $image -c 'find /to -mindepth 1 -delete && cp -a /from/. /to/' 2>&1
     if ($LASTEXITCODE -ne 0) { throw "Copying volume $From to $To failed: $output" }
+}
+
+function Get-DirectoryVolume {
+    # The named data volumes of the -DirectoryContainer containers, each with its snapshot volume's name.
+    foreach ($container in $DirectoryContainer) {
+        $names = docker inspect $container --format '{{if .State.Running}}{{range .Mounts}}{{if eq .Type "volume"}}{{println .Name}}{{end}}{{end}}{{end}}' 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $names) { throw "Directory container $container is not running." }
+        foreach ($volume in @($names -split "`n" | Where-Object { $_ -and $_ -ne $lane.ConnectorFilesVolume })) {
+            [pscustomobject]@{ Container = $container; Volume = $volume; Snapshot = "$SnapshotVolume.$volume" }
+        }
+    }
+}
+
+function Copy-DirectoryVolume([switch]$Restore) {
+    $volumes = @(Get-DirectoryVolume)
+    if (-not $volumes) { throw "The directory containers $($DirectoryContainer -join ', ') have no data volume to snapshot or restore." }
+    foreach ($group in ($volumes | Group-Object Container)) {
+        docker stop -t 300 $group.Name | Out-Null
+        foreach ($entry in $group.Group) {
+            if ($Restore) {
+                docker volume inspect $entry.Snapshot 2>&1 | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw "There is no directory snapshot volume $($entry.Snapshot); take the snapshot with -DirectoryContainer." }
+                Copy-Volume -From $entry.Snapshot -To $entry.Volume
+            }
+            else { Copy-Volume -From $entry.Volume -To $entry.Snapshot }
+            Write-Host "  Directory volume $($entry.Volume) $(if ($Restore) { 'restored from' } else { 'copied to' }) $($entry.Snapshot)"
+        }
+        docker start $group.Name | Out-Null
+        $deadline = (Get-Date).AddMinutes(10)
+        while ((docker inspect $group.Name --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}healthy{{end}}') -ne 'healthy') {
+            if ((Get-Date) -gt $deadline) { throw "$($group.Name) did not become healthy within 10 minutes." }
+            Start-Sleep -Seconds 3
+        }
+    }
+}
+
+function Set-ReplayConnectedSystemSetting {
+    foreach ($systemName in $ConnectedSystemSetting.Keys) {
+        $system = Get-JIMConnectedSystem | Where-Object { $_.name -eq $systemName }
+        if (-not $system) { throw "No Connected System named '$systemName'." }
+        $detail = Get-JIMConnectedSystem -Id $system.id
+        $definition = Get-JIMConnectorDefinition -Id $detail.connector.id
+        $settingValues = @{}
+        foreach ($name in $ConnectedSystemSetting[$systemName].Keys) {
+            $value = $ConnectedSystemSetting[$systemName][$name]
+            if ($name -eq 'MaxExportParallelism') {
+                Set-JIMConnectedSystem -Id $system.id -MaxExportParallelism ([int]$value) | Out-Null
+            }
+            else {
+                $setting = $definition.settings | Where-Object { $_.name -eq $name }
+                if (-not $setting) { throw "Connector '$($detail.connector.name)' has no setting named '$name'." }
+                $settingValues[$setting.id] = switch ($value) {
+                    { $_ -is [bool] } { @{ checkboxValue = $value }; break }
+                    { $_ -is [int] } { @{ intValue = $value }; break }
+                    default { @{ stringValue = "$value" } }
+                }
+            }
+            Write-Host "  $systemName`: $name = $value"
+        }
+        if ($settingValues.Count -gt 0) { Set-JIMConnectedSystem -Id $system.id -SettingValues $settingValues | Out-Null }
+    }
 }
 
 function Connect-JimForReplay {
@@ -201,7 +285,8 @@ if ($Action -eq 'Snapshot') {
     }
     docker compose @composeArgs stop @applicationServices | Out-Null
     Stop-Database
-    Copy-DatabaseVolume -From $databaseVolume -To $SnapshotVolume
+    Copy-Volume -From $databaseVolume -To $SnapshotVolume
+    if ($DirectoryContainer) { Copy-DirectoryVolume }
     docker compose @composeArgs start jim.database | Out-Null
     Wait-Database
     docker compose @composeArgs start @applicationServices | Out-Null
@@ -230,7 +315,8 @@ for ($iteration = 1; $iteration -le $Repeat; $iteration++) {
     # 1. The database, restored from the snapshot, on the runner's profile for the template plus the experiment's settings.
     docker compose @composeArgs stop @applicationServices | Out-Null
     Stop-Database
-    Copy-DatabaseVolume -From $SnapshotVolume -To $databaseVolume
+    Copy-Volume -From $SnapshotVolume -To $databaseVolume
+    if ($DirectoryContainer) { Copy-DirectoryVolume -Restore }
     $env:JIM_DB_SHARED_BUFFERS = $databaseProfile.SharedBuffers
     $env:JIM_DB_EFFECTIVE_CACHE_SIZE = $databaseProfile.EffectiveCache
     $env:JIM_DB_SHM_SIZE = $databaseProfile.ShmSize
@@ -267,6 +353,7 @@ for ($iteration = 1; $iteration -le $Repeat; $iteration++) {
     # 3. JIM, the sampler, and the timed Run Profiles.
     docker compose @composeArgs start @applicationServices | Out-Null
     Connect-JimForReplay
+    Set-ReplayConnectedSystemSetting
     $runProfiles = @($ReplayRunProfile | ForEach-Object { Resolve-RunProfile $_ })
     $samplerDirectory = Join-Path $OutputDirectory ("{0}-{1}-{2}" -f $started.ToString('yyyyMMdd_HHmmss'), $Label, $iteration)
     $stopFile = "$samplerDirectory.stop"
