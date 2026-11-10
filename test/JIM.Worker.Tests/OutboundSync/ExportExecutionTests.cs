@@ -4582,10 +4582,12 @@ public class ExportExecutionTests
 
     /// <summary>
     /// #2605: a chunk prepared ahead, off the gate, that fails to prepare fails the run, exactly as a chunk failing to
-    /// prepare on demand always has, and leaves no task behind whose failure nobody observed.
+    /// prepare on demand always has, and leaves no task behind whose failure nobody observed. In chunks of one, the chunk
+    /// that fails is the second worker's first batch, taken while the first worker is already running.
     /// </summary>
-    [Test]
-    public async Task ExecuteExportsAsync_ParallelDeferredPass_ChunkFailsToPrepare_FailsTheRunAsync()
+    [TestCase(2, 3)]
+    [TestCase(1, 1)]
+    public async Task ExecuteExportsAsync_ParallelDeferredPass_ChunkFailsToPrepare_FailsTheRunAsync(int chunkSize, int failingExport)
     {
         // Arrange
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
@@ -4598,14 +4600,14 @@ public class ExportExecutionTests
         using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
         var managerMvoId = SeedAnchoredUser(repo, targetSystem, targetUserType, objectGuidAttr);
         var exports = SeedDeferredExportsReferringTo(repo, targetSystem, targetUserType, managerAttr, managerMvoId, count: 4);
-        repo.FailLoadOf = exports[3].Id;
+        repo.FailLoadOf = exports[failingExport].Id;
 
         var unobserved = 0;
         void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e) => Interlocked.Increment(ref unobserved);
         TaskScheduler.UnobservedTaskException += OnUnobserved;
         try
         {
-            var options = new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 2, DeferredChunkSize = 2 };
+            var options = new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 2, DeferredChunkSize = chunkSize };
 
             // Act
             var thrown = Assert.ThrowsAsync<InvalidOperationException>(() => jim.ExportExecution.ExecuteExportsAsync(targetSystem,
@@ -4679,6 +4681,64 @@ public class ExportExecutionTests
     }
 
     /// <summary>
+    /// #2605: each worker starts on its first batch as soon as that batch is taken, not once every worker's first batch has
+    /// been taken. At 500,000 objects the largest export, alone in the first chunk, was ready 16.5 seconds in but waited
+    /// 14.5 seconds more while the second chunk was prepared for the second worker's first batch. Here the second chunk's
+    /// load is held until the first worker has started writing the largest export.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredPass_FirstWorkerStartsWhileTheNextWorkersFirstBatchIsTakenAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+        var textAttributes = targetUserType.Attributes
+            .Where(a => a.Type == AttributeDataType.Text && !a.IsExternalId && !a.IsSecondaryExternalId)
+            .ToList();
+
+        var repo = new ChunkLoadSyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: repo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+        var managerMvoId = SeedAnchoredUser(repo, targetSystem, targetUserType, objectGuidAttr);
+
+        // Queue order: three small exports, then the largest.
+        var exports = SeedDeferredExportsReferringTo(repo, targetSystem, targetUserType, managerAttr, managerMvoId, count: 4);
+        foreach (var change in TextChanges(exports[3], textAttributes))
+            exports[3].AttributeValueChanges.Add(change);
+        repo.HoldLoadOf = exports[0].Id;
+
+        var largestStartedWhileTheNextChunkWasHeld = false;
+        Task OnExport(IList<PendingExport> batch)
+        {
+            if (batch.Any(pe => pe.Id == exports[3].Id))
+            {
+                largestStartedWhileTheNextChunkWasHeld = repo.HeldLoadEntered.Task.IsCompleted && !repo.HeldLoadFinished;
+                repo.ReleaseHeldLoad.TrySetResult();
+            }
+            return Task.CompletedTask;
+        }
+
+        // A chunk per export: the largest first, then the small ones in queue order.
+        var options = new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 2, DeferredChunkSize = 1 };
+
+        // Act
+        var result = await jim.ExportExecution.ExecuteExportsAsync(targetSystem, CreateSucceedingConnector(OnExport).Object,
+            SyncRunMode.PreviewAndSync, options, CancellationToken.None, progressCallback: null,
+            connectorFactory: () => CreateSucceedingConnector(OnExport).Object,
+            repositoryFactory: () => new JIM.Data.Repositories.SyncRepositoryScope(repo));
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(4));
+            Assert.That(largestStartedWhileTheNextChunkWasHeld, Is.True,
+                "the first worker started the largest export while the second worker's first batch was still being prepared");
+        }
+    }
+
+    /// <summary>
     /// Records every Metaverse Object id whose reference anchor is asked for.
     /// </summary>
     private sealed class AnchorRequestRecordingSyncRepository : SyncRepository
@@ -4719,7 +4779,14 @@ public class ExportExecutionTests
 
             if (HoldLoadOf is { } holdOn && pendingExportIds.Contains(holdOn) && HeldLoadEntered.TrySetResult())
             {
-                await ReleaseHeldLoad.Task.WaitAsync(TimeSpan.FromSeconds(30));
+                try
+                {
+                    await ReleaseHeldLoad.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                }
+                catch (TimeoutException)
+                {
+                    // Never released: carry on, and the test's assertions say so.
+                }
                 var loaded = await base.GetPendingExportsByIdsAsync(pendingExportIds);
                 HeldLoadFinished = true;
                 return loaded;

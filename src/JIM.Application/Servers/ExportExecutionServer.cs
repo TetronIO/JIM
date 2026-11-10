@@ -1991,7 +1991,7 @@ public class ExportExecutionServer
     /// </para>
     /// <para>
     /// Batches are taken on demand rather than read ahead: each worker starts on a batch of its own, taken in order so the
-    /// primary connector gets the first, then takes the next one whenever it is free. With
+    /// primary connector gets the first, as soon as that batch is taken, then takes the next one whenever it is free. With
     /// <paramref name="stopOnBatchFailure"/> set, a failed batch stops every worker taking another; batches already running
     /// finish and are recorded, and nothing is read that is not then sent, exactly as when the sequential path stops at
     /// a failed batch.
@@ -2083,22 +2083,40 @@ public class ExportExecutionServer
             });
         }
 
-        // Each worker starts on a batch of its own, taken in order, so worker 0 (on the primary connector) runs the first.
-        var firstBatches = new List<List<ExecutableExportSummary>>();
-        for (var i = 0; i < options.MaxParallelism; i++)
+        // Each worker starts on a batch of its own, taken in order, so worker 0 (on the primary connector) runs the first;
+        // and starts on it as soon as it is taken (#2605). Starting none until every worker's first batch had been taken kept
+        // the largest export of a 500,000-object deferred pass, ready 16.5 seconds in, waiting 14.5 seconds more while the
+        // next chunk was prepared for the second worker.
+        var workers = new List<Task>();
+        try
         {
-            var batch = await TakeNextBatchAsync();
-            if (batch == null)
-                break;
-            firstBatches.Add(batch);
+            for (var workerIndex = 0; workerIndex < options.MaxParallelism; workerIndex++)
+            {
+                var firstBatch = await TakeNextBatchAsync();
+                if (firstBatch == null)
+                    break;
+
+                var index = workerIndex;
+                workers.Add(Task.Run(() => RunWorkerAsync(index, firstBatch), cancellationToken));
+            }
+        }
+        catch (Exception) when (workers.Count > 0)
+        {
+            // A worker's first batch could not be taken (or the run was cancelled meanwhile). The workers already running take
+            // no more, finish their batches and are awaited, so none outlives the run; then the failure goes on. Their own
+            // failures, if any, are logged here: the one unwinding takes precedence.
+            Volatile.Write(ref stopTaking, 1);
+            var running = Task.WhenAll(workers);
+            await ((Task)running).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            if (running.Exception is { } workerFailure)
+            {
+                Log.Error(workerFailure, "ProcessBatchesInParallelAsync: A worker failed while the batches were stopping because a first batch could not be taken");
+            }
+            throw;
         }
 
         Log.Information("ProcessBatchesInParallelAsync: Processing batches with up to {Workers} worker(s) (MaxParallelism={MaxParallelism}, stop on a failed batch: {StopOnBatchFailure})",
-            firstBatches.Count, options.MaxParallelism, stopOnBatchFailure);
-
-        var workers = firstBatches
-            .Select((firstBatch, workerIndex) => Task.Run(() => RunWorkerAsync(workerIndex, firstBatch), cancellationToken))
-            .ToList();
+            workers.Count, options.MaxParallelism, stopOnBatchFailure);
 
         await Task.WhenAll(workers);
 
