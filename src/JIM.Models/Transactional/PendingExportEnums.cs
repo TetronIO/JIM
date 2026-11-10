@@ -149,11 +149,6 @@ public enum ExportContextGatePurpose
     NextBatch,
 
     /// <summary>
-    /// Writing a batch's execution items and their change history.
-    /// </summary>
-    ExecutionItems,
-
-    /// <summary>
     /// Reporting the run's progress after a batch.
     /// </summary>
     Progress,

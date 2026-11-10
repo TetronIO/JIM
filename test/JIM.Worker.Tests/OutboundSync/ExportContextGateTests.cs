@@ -19,7 +19,7 @@ public class ExportContextGateTests
         var timings = new ExportContextGateTimings();
         using var gate = new ExportContextGate(timings);
 
-        var answer = await gate.RunAsync(ExportContextGatePurpose.ExecutionItems, async () =>
+        var answer = await gate.RunAsync(ExportContextGatePurpose.ConnectorProgress, async () =>
         {
             await Task.Delay(30);
             return 42;
@@ -29,7 +29,7 @@ public class ExportContextGateTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(answer, Is.EqualTo(42));
-            Assert.That(entry.Purpose, Is.EqualTo(ExportContextGatePurpose.ExecutionItems));
+            Assert.That(entry.Purpose, Is.EqualTo(ExportContextGatePurpose.ConnectorProgress));
             Assert.That(entry.Count, Is.EqualTo(1));
             Assert.That(entry.TotalHeld, Is.GreaterThanOrEqualTo(TimeSpan.FromMilliseconds(25)));
         }
@@ -55,7 +55,7 @@ public class ExportContextGateTests
             return true;
         }
 
-        var first = gate.RunAsync(ExportContextGatePurpose.ExecutionItems, Hold, CancellationToken.None);
+        var first = gate.RunAsync(ExportContextGatePurpose.ConnectorProgress, Hold, CancellationToken.None);
         await holding.Task;
         var second = gate.RunAsync(ExportContextGatePurpose.NextBatch, async () =>
         {
@@ -77,7 +77,7 @@ public class ExportContextGateTests
             Assert.That(maxConcurrentHolders, Is.EqualTo(1));
             Assert.That(byPurpose[ExportContextGatePurpose.NextBatch].TotalWait, Is.GreaterThanOrEqualTo(TimeSpan.FromMilliseconds(30)),
                 "the wait for the gate is the second caller's, under its own purpose");
-            Assert.That(byPurpose[ExportContextGatePurpose.ExecutionItems].TotalHeld, Is.GreaterThanOrEqualTo(TimeSpan.FromMilliseconds(30)));
+            Assert.That(byPurpose[ExportContextGatePurpose.ConnectorProgress].TotalHeld, Is.GreaterThanOrEqualTo(TimeSpan.FromMilliseconds(30)));
         }
     }
 
@@ -105,7 +105,7 @@ public class ExportContextGateTests
         using var gate = new ExportContextGate(timings);
         var release = new TaskCompletionSource();
         var holding = new TaskCompletionSource();
-        var first = gate.RunAsync(ExportContextGatePurpose.ExecutionItems, async () =>
+        var first = gate.RunAsync(ExportContextGatePurpose.ConnectorProgress, async () =>
         {
             holding.SetResult();
             await release.Task;
@@ -120,7 +120,7 @@ public class ExportContextGateTests
         release.SetResult();
         await first;
 
-        Assert.That(timings.Snapshot().Select(e => e.Purpose), Is.EqualTo(new[] { ExportContextGatePurpose.ExecutionItems }),
+        Assert.That(timings.Snapshot().Select(e => e.Purpose), Is.EqualTo(new[] { ExportContextGatePurpose.ConnectorProgress }),
             "a caller that never took the gate held nothing");
     }
 }

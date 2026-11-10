@@ -291,15 +291,15 @@ public class SyncExportTaskProcessor
                     },
                     connectorFactory: CreateConnectorForParallelBatch,
                     repositoryFactory: _syncRepoFactory,
-                    batchCompletedCallback: async batchItems =>
+                    batchCompletedCallback: async (batchItems, repository) =>
                     {
                         // Stream RPEI creation per-batch instead of accumulating 100K+ items
                         // across the entire run. This bounds memory to batch size (~100 items).
-                        // #2895: the execution items and their change history, written under the export's shared
-                        // context gate when batches run in parallel, which is what makes this worth a span of its own.
+                        // #2902: written on the repository the export hands over, which for a parallel batch is the
+                        // batch's own, so parallel batches write their items at the same time, each on its own context.
                         using var persistSpan = Diagnostics.Sync.StartSpan("PersistBatchExecutionItems")
                             .SetTag("itemCount", batchItems.Count);
-                        await PersistBatchRpeisAsync(batchItems, _connectedSystem.Id);
+                        await PersistBatchRpeisAsync(batchItems, repository, _connectedSystem.Id);
                         persistSpan.SetSuccess();
                     },
                     uniqueValueReservations: _uniqueValueReservations,
@@ -359,17 +359,44 @@ public class SyncExportTaskProcessor
     /// updates and never pay for the lookup. Includes disabled rules deliberately; the decision was made when
     /// the rule was enabled, and the chain must still name it.
     /// </summary>
-    private Dictionary<int, string>? _provisioningRuleNames;
+    private volatile Dictionary<int, string>? _provisioningRuleNames;
 
-    private async Task<string?> ResolveProvisioningRuleNameAsync(int? provisioningSyncRuleId)
+    /// <summary>
+    /// Held while the provisioning rule names are first loaded: parallel batches write their execution items at the same
+    /// time (#2902), so the first two to meet a create would otherwise both load them.
+    /// </summary>
+    private readonly SemaphoreSlim _provisioningRuleNamesLoad = new(1, 1);
+
+    /// <summary>
+    /// Held while a batch's execution items are added to the Activity's totals, or, where the repository keeps them in
+    /// memory, to its item list: parallel batches write their items at the same time (#2902), and both are the run's.
+    /// </summary>
+    private readonly Lock _activityTotalsLock = new();
+
+    /// <param name="provisioningSyncRuleId">The rule that provisioned the object, if the export is a create.</param>
+    /// <param name="repository">The repository the batch is written on, which the names are loaded through: the
+    /// caller's context is not this batch's to use while parallel batches run.</param>
+    private async Task<string?> ResolveProvisioningRuleNameAsync(int? provisioningSyncRuleId, ISyncRepository repository)
     {
         if (!provisioningSyncRuleId.HasValue)
             return null;
 
-        _provisioningRuleNames ??= (await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, includeDisabled: true))
-            .ToDictionary(rule => rule.Id, rule => rule.Name);
+        var names = _provisioningRuleNames;
+        if (names == null)
+        {
+            await _provisioningRuleNamesLoad.WaitAsync();
+            try
+            {
+                names = _provisioningRuleNames ??= (await repository.GetSyncRulesAsync(_connectedSystem.Id, includeDisabled: true))
+                    .ToDictionary(rule => rule.Id, rule => rule.Name);
+            }
+            finally
+            {
+                _provisioningRuleNamesLoad.Release();
+            }
+        }
 
-        return _provisioningRuleNames.GetValueOrDefault(provisioningSyncRuleId.Value);
+        return names.GetValueOrDefault(provisioningSyncRuleId.Value);
     }
 
     /// <summary>
@@ -377,11 +404,18 @@ public class SyncExportTaskProcessor
     /// Called per-batch via the batchCompletedCallback, bounding memory to batch size (~100 items)
     /// instead of accumulating 100K+ items across the entire export run.
     /// </summary>
-    private async Task PersistBatchRpeisAsync(List<ProcessedExportItem> batchItems, int connectedSystemId)
+    /// <remarks>
+    /// Parallel batches call this at the same time (#2902), each with its own batch's repository: the items are built in
+    /// a list of the batch's own and written through <paramref name="repository"/> alone, and only adding them to the
+    /// Activity's totals touches what the batches share, under <see cref="_activityTotalsLock"/>. The totals are sums, so
+    /// the order the batches add theirs in makes no difference to them.
+    /// </remarks>
+    private async Task PersistBatchRpeisAsync(List<ProcessedExportItem> batchItems, ISyncRepository repository, int connectedSystemId)
     {
         if (batchItems.Count == 0)
             return;
 
+        var batchRpeis = new List<ActivityRunProfileExecutionItem>(batchItems.Count);
         foreach (var exportItem in batchItems)
         {
             // A value Collision Remediation corrected (#242, release 4) wrote nothing either: the export stays queued
@@ -486,7 +520,7 @@ public class SyncExportTaskProcessor
             // to make; the synchronisation that put this one in the queue ran in a different Activity, and the
             // Pending Export carrying the link is deleted moments from now.
             ExportCausalEdgeBuilder.RecordQueueingCause(executionItem, exportItem, exportOutcome, _connectedSystem,
-                await ResolveProvisioningRuleNameAsync(exportItem.ProvisioningSyncRuleId));
+                await ResolveProvisioningRuleNameAsync(exportItem.ProvisioningSyncRuleId, repository));
 
             // Create CSO change record for export change history
             if (_csoChangeTrackingEnabled && exportItem.AttributeValueChanges.Count > 0)
@@ -507,40 +541,41 @@ public class SyncExportTaskProcessor
                 executionItem.ConnectedSystemObjectChange = change;
             }
 
-            _activity.RunProfileExecutionItems.Add(executionItem);
+            batchRpeis.Add(executionItem);
         }
 
         // Bulk insert this batch's RPEIs
-        var batchRpeis = _activity.RunProfileExecutionItems.ToList();
-        if (batchRpeis.Count > 0)
+        foreach (var rpei in batchRpeis)
+        {
+            rpei.ActivityId = _activity.Id;
+            if (rpei.Id == Guid.Empty)
+                rpei.Id = ChangeRecordIds.New();
+            if (rpei.ConnectedSystemObjectChange != null)
+                rpei.ConnectedSystemObjectChange.ActivityRunProfileExecutionItemId = rpei.Id;
+            if (rpei.ConnectedSystemObject != null)
+                rpei.SnapshotCsoDisplayFields(rpei.ConnectedSystemObject);
+        }
+
+        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
         {
             foreach (var rpei in batchRpeis)
-            {
-                rpei.ActivityId = _activity.Id;
-                if (rpei.Id == Guid.Empty)
-                    rpei.Id = ChangeRecordIds.New();
-                if (rpei.ConnectedSystemObjectChange != null)
-                    rpei.ConnectedSystemObjectChange.ActivityRunProfileExecutionItemId = rpei.Id;
-                if (rpei.ConnectedSystemObject != null)
-                    rpei.SnapshotCsoDisplayFields(rpei.ConnectedSystemObject);
-            }
+                SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
+        }
 
-            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-            {
-                foreach (var rpei in batchRpeis)
-                    SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
-            }
+        var hasRawSqlSupport = await repository.BulkInsertRpeisAsync(batchRpeis);
 
-            var hasRawSqlSupport = await _syncRepo.BulkInsertRpeisAsync(batchRpeis);
+        if (_csoChangeTrackingEnabled)
+            await repository.PersistRpeiCsoChangesAsync(batchRpeis);
 
-            if (_csoChangeTrackingEnabled)
-                await _syncRepo.PersistRpeiCsoChangesAsync(batchRpeis);
-
+        lock (_activityTotalsLock)
+        {
+            // Written by raw SQL, the items are counted into the Activity's totals now and go no further. A repository
+            // without it (the in-memory one tests use) keeps them on the Activity, whose totals are counted from them when
+            // the run completes.
             if (hasRawSqlSupport)
-            {
                 Worker.AccumulateActivitySummaryStats(_activity, batchRpeis);
-                _activity.RunProfileExecutionItems.Clear();
-            }
+            else
+                _activity.RunProfileExecutionItems.AddRange(batchRpeis);
         }
     }
 

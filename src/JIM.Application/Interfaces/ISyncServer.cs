@@ -356,7 +356,7 @@ public interface ISyncServer
         Func<ExportProgressInfo, Task>? progressCallback = null,
         Func<IConnector>? connectorFactory = null,
         Func<ISyncRepositoryScope>? repositoryFactory = null,
-        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
+        Func<List<ProcessedExportItem>, ISyncRepository, Task>? batchCompletedCallback = null,
         JIM.Application.UniqueValues.UniqueValueReservationSet? uniqueValueReservations = null,
         Action<IReadOnlyList<string>>? containersCreated = null,
         Guid? activityId = null);

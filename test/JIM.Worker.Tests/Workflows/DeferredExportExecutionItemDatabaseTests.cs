@@ -29,7 +29,9 @@ namespace JIM.Worker.Tests.Workflows;
 /// Real-PostgreSQL export whose every change waits on the deferred pass (#2852): each deferred batch's Run Profile
 /// Execution Items, with their change records, outcomes and causal edges, are written as the batch completes, as the
 /// first pass's are, rather than all at once when the run ends. Runs the real export processor, sequentially and with
-/// parallel batches on contexts of their own, as the Worker does, through the Mock Call Connector.
+/// parallel batches on contexts of their own, as the Worker does, through the Mock Call Connector. Parallel batches
+/// write those items on their own contexts, at the same time (#2902), so the fixture also proves they write exactly
+/// what one worker writes, on either pass, and that a batch whose items cannot be written fails the run.
 /// </summary>
 /// <remarks>
 /// At Scale500k25kGroups the deferred pass's items were written in one statement at the step's last moment (a 19.1 s
@@ -146,6 +148,82 @@ public class DeferredExportExecutionItemDatabaseTests
         }
     }
 
+    /// <summary>
+    /// #2902: four workers, each writing its batches' items on its own context at the same time, write exactly what one
+    /// worker writes: the same items, outcomes, causal edges and change records, the same stat counters and the same
+    /// Activity totals, on the first pass and the deferred pass alike, failures included.
+    /// </summary>
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task Export_FourWorkers_WritesExactlyWhatOneWorkerWritesAsync(bool deferred)
+    {
+        ConnectedSystemExportResult Answer(PendingExport pe) => _usersByExportId[pe.Id].Index % 9 == 0
+            ? ConnectedSystemExportResult.Failed("The directory refused the change")
+            : ConnectedSystemExportResult.Succeeded();
+
+        await SeedAsync(maxExportParallelism: 1, deferred);
+        var oneWorker = await ReadRunAsync((await ExportAsync(Answer)).Id);
+
+        await PostgresTestDatabase.ResetAsync(_connectionString);
+        await SeedAsync(maxExportParallelism: 4, deferred);
+        var fourWorkers = await ReadRunAsync((await ExportAsync(Answer)).Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(oneWorker.Items, Has.Count.EqualTo(UserCount));
+            Assert.That(oneWorker.Items.Count(item => item.Contains("The directory refused the change")), Is.EqualTo(28),
+                "every ninth change was refused");
+            Assert.That(fourWorkers.Items, Is.EqualTo(oneWorker.Items), "the same items, outcomes, causal edges and change records");
+            Assert.That(fourWorkers.Counters, Is.EqualTo(oneWorker.Counters), "the same stat counters");
+            Assert.That(fourWorkers.Totals, Is.EqualTo(oneWorker.Totals), "the same Activity totals");
+        }
+    }
+
+    /// <summary>
+    /// #2902: a batch whose execution items cannot be written fails the run, with the error on the Activity, and leaves
+    /// none of its items behind; the other batches' items are written whole or not at all. With parallel batches the
+    /// failure was taken for a failed attempt at a batch whose results were already recorded, and the run completed
+    /// without the batch's items.
+    /// </summary>
+    [TestCase(1)]
+    [TestCase(4)]
+    public async Task Export_ABatchsItemsCannotBeWritten_FailsTheRunAndLeavesNoneOfThemAsync(int maxExportParallelism)
+    {
+        const string refusal = "The execution items could not be written";
+        await SeedAsync(maxExportParallelism, deferred: false);
+        await ExecuteSqlAsync(
+            $@"CREATE FUNCTION jim_test_refuse_execution_item() RETURNS trigger AS $$ BEGIN
+                 IF NEW.""DisplayNameSnapshot"" = '{UserName(150)}' THEN RAISE EXCEPTION '{refusal}'; END IF;
+                 RETURN NEW;
+               END $$ LANGUAGE plpgsql;
+               CREATE TRIGGER jim_test_refuse_execution_item BEFORE INSERT ON ""ActivityRunProfileExecutionItems""
+                 FOR EACH ROW EXECUTE FUNCTION jim_test_refuse_execution_item();");
+
+        Activity? activity = null;
+        try
+        {
+            var thrown = Assert.CatchAsync(async () => await ExportAsync(_ => ConnectedSystemExportResult.Succeeded(), started => activity = started));
+            Assert.That(thrown!.Message, Does.Contain(refusal));
+        }
+        finally
+        {
+            await ExecuteSqlAsync(@"DROP TRIGGER jim_test_refuse_execution_item ON ""ActivityRunProfileExecutionItems"";
+                                    DROP FUNCTION jim_test_refuse_execution_item();");
+        }
+
+        await using var ctx = NewContext();
+        var persisted = await ctx.Activities.AsNoTracking().SingleAsync(a => a.Id == activity!.Id);
+        var written = (await ReadItemsAsync(activity!.Id)).Select(item => int.Parse(item[5..8])).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.Status, Is.EqualTo(ActivityStatus.FailedWithError));
+            Assert.That(persisted.ErrorMessage, Does.Contain(refusal), "the failure is recorded on the Activity");
+            Assert.That(written.Where(index => index is >= 100 and < 200), Is.Empty, "none of the refused batch's items are written");
+            Assert.That(written.Count(index => index < 100), Is.EqualTo(100).Or.EqualTo(0), "the first batch's items are written whole or not at all");
+            Assert.That(written.Count(index => index >= 200), Is.EqualTo(50).Or.EqualTo(0), "the last batch's items are written whole or not at all");
+        }
+    }
+
     #region Harness
 
     private JimDbContext NewContext(bool trackAll = false)
@@ -163,9 +241,10 @@ public class DeferredExportExecutionItemDatabaseTests
     /// One Connected System of users named by DN, a manager joined to a Metaverse Object, and <see cref="UserCount"/>
     /// users each with an Update queued by its Metaverse Object: a display name, and the manager by the manager's
     /// Metaverse Object id, as a synchronisation stages a reference whose object it has not looked up. Every export
-    /// therefore waits on the deferred pass, which resolves the manager to its DN.
+    /// therefore waits on the deferred pass, which resolves the manager to its DN. Not <paramref name="deferred"/>, each
+    /// Update carries the display name alone, and is written by the first pass.
     /// </summary>
-    private async Task SeedAsync(int maxExportParallelism)
+    private async Task SeedAsync(int maxExportParallelism, bool deferred = true)
     {
         await using var seed = NewContext();
 
@@ -220,18 +299,21 @@ public class DeferredExportExecutionItemDatabaseTests
             var export = new PendingExport
             {
                 Id = Guid.NewGuid(), ConnectedSystemId = system.Id, ConnectedSystemObjectId = userCsos[i].Id, SourceMetaverseObjectId = userMvos[i].Id,
-                ChangeType = PendingExportChangeType.Update, Status = PendingExportStatus.Pending, HasUnresolvedReferences = true,
+                ChangeType = PendingExportChangeType.Update, Status = PendingExportStatus.Pending, HasUnresolvedReferences = deferred,
                 CreatedAt = queuedAt.AddMilliseconds(i)
             };
             export.AttributeValueChanges.Add(new PendingExportAttributeValueChange
             {
                 Id = Guid.NewGuid(), AttributeId = displayName.Id, ChangeType = PendingExportAttributeChangeType.Update, StringValue = UserName(i)
             });
-            export.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+            if (deferred)
             {
-                Id = Guid.NewGuid(), AttributeId = manager.Id, ChangeType = PendingExportAttributeChangeType.Update,
-                UnresolvedReferenceValue = managerMvo.Id.ToString()
-            });
+                export.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+                {
+                    Id = Guid.NewGuid(), AttributeId = manager.Id, ChangeType = PendingExportAttributeChangeType.Update,
+                    UnresolvedReferenceValue = managerMvo.Id.ToString()
+                });
+            }
             seed.PendingExports.Add(export);
             _usersByExportId[export.Id] = (i, userCsos[i].Id, userMvos[i].Id);
         }
@@ -249,7 +331,9 @@ public class DeferredExportExecutionItemDatabaseTests
     /// Runs one export as the Worker does: on its own tracking context, with each parallel batch on a context of its own
     /// and a Connector of its own, each answering every change through <paramref name="answer"/>.
     /// </summary>
-    private async Task<Activity> ExportAsync(Func<PendingExport, ConnectedSystemExportResult> answer)
+    /// <param name="answer">How every change is answered.</param>
+    /// <param name="started">Told of the run's Activity once it exists, for a test whose export throws.</param>
+    private async Task<Activity> ExportAsync(Func<PendingExport, ConnectedSystemExportResult> answer, Action<Activity>? started = null)
     {
         await using var ctx = NewContext(trackAll: true);
         var repository = new PostgresDataRepository(ctx);
@@ -264,6 +348,7 @@ public class DeferredExportExecutionItemDatabaseTests
         };
         ctx.Activities.Add(activity);
         await ctx.SaveChangesAsync();
+        started?.Invoke(activity);
 
         var workerTask = new SynchronisationWorkerTask(system.Id, runProfile.Id) { Id = Guid.NewGuid(), Status = WorkerTaskStatus.Processing, Activity = activity };
         var processor = new SyncExportTaskProcessor(new SyncServer(jim), jim.SyncRepository,
@@ -282,6 +367,34 @@ public class DeferredExportExecutionItemDatabaseTests
     {
         public IConnector Create(string connectorName, ICredentialProtection? credentialProtection = null, ICertificateProvider? certificateProvider = null) =>
             new MockCallConnector().WithConnectedSystemExportResultFactory(answer);
+    }
+
+    /// <summary>
+    /// What a run wrote: its items as <see cref="ReadItemsAsync"/> reads them, its stat counters, and its Activity's
+    /// totals as persisted.
+    /// </summary>
+    private async Task<(List<string> Items, List<string> Counters, string Totals)> ReadRunAsync(Guid activityId)
+    {
+        var items = await ReadItemsAsync(activityId);
+
+        await using var ctx = NewContext();
+        var counters = (await ctx.ActivityStatCounters.AsNoTracking().Where(c => c.ActivityId == activityId).ToListAsync())
+            .Select(c => $"{c.Dimension}/{c.Key}={c.Count}")
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        var a = await ctx.Activities.AsNoTracking().SingleAsync(x => x.Id == activityId);
+        var totals = $"exported={a.TotalExported} deprovisioned={a.TotalDeprovisioned} pending={a.TotalPendingExports} errors={a.TotalErrors} " +
+                     $"added={a.TotalAdded} updated={a.TotalUpdated} deleted={a.TotalDeleted} created={a.TotalCreated} " +
+                     $"processed={a.ObjectsProcessed}/{a.ObjectsToProcess}";
+        return (items, counters, totals);
+    }
+
+    private async Task ExecuteSqlAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
     }
 
     /// <summary>How many execution items the export has written so far, read on a connection of the test's own.</summary>
