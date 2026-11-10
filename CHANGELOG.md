@@ -72,6 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 A deleted Connected System Object's history no longer includes the deletion of another object that once held the same external ID. (#2669)
 - 🐛 After an export, JIM records a group's members by the object each one names, not by distinguished name, so a member sharing a stale or recreated object's name, or differing from it only in letter case, is recorded correctly and not exported again. (#2803)
 - 🐛 Deleting a Metaverse Object, from any source, or a Connected System Object during synchronisation now writes the deletion and its change history record together, so a failure part-way can no longer leave an object deleted with no record of it. (#2669, #2807)
+- 🐛 After a successful export, JIM now records a Connected System Object's exported values all at once or not at all. A failure part-way through could leave the object without its old values or its new ones until the next confirming import, so a synchronisation, drift detection or the portal could see some values missing. (#2894)
 - 🐛 `Register-JIMIdentityProvider` run as a Keycloak service account now says what Keycloak 26.8.2 and later need, the `kc-admin-api` client scope on that client, instead of failing with a bare 401; the Keycloak guide covers the step. (#2785)
 
 ### Security

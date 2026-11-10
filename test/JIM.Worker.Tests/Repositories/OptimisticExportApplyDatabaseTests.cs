@@ -361,6 +361,145 @@ public class OptimisticExportApplyDatabaseTests
     }
 
     /// <summary>
+    /// #2894: the delete, the COPY and the import-state update are one transaction. A COPY that fails after the delete
+    /// has run (here an addition naming an attribute that does not exist, which the foreign key refuses) must leave the
+    /// object exactly as it was: the superseded value still present, nothing new written, the import stamp intact, and
+    /// the tracked instance of the value it meant to remove still tracked, since its row is still there.
+    /// </summary>
+    [Test]
+    public async Task ApplyExportedAttributeValuesAsync_CopyFailsAfterDelete_LeavesSupersededValuesAndWritesNothingAsync()
+    {
+        var (attr, csoId) = await SeedCsoAsync("old@example.com");
+        var stamp = (Hash: Guid.NewGuid(), Fingerprint: Guid.NewGuid());
+        await using (var stampCtx = NewContext())
+            await new PostgresDataRepository(stampCtx).Sync.StampImportStateAsync([(csoId, stamp.Hash, stamp.Fingerprint)]);
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+        var trackedCso = await ctx.ConnectedSystemObjects.Include(c => c.AttributeValues).SingleAsync(c => c.Id == csoId);
+        var existing = trackedCso.AttributeValues.Single();
+
+        var validAddition = new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), ConnectedSystemObject = trackedCso, AttributeId = attr.Id, StringValue = "new@example.com"
+        };
+        var invalidAddition = new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), ConnectedSystemObject = trackedCso, AttributeId = attr.Id + 999_999, StringValue = "broken@example.com"
+        };
+
+        Assert.That(async () => await repository.Sync.ApplyExportedAttributeValuesAsync(
+                [validAddition, invalidAddition], [existing.Id], [csoId]),
+            Throws.InstanceOf<Npgsql.PostgresException>().With.Property(nameof(Npgsql.PostgresException.SqlState)).EqualTo("23503"));
+
+        await AssertObjectUnchangedAsync(csoId, existing.Id, "old@example.com", stamp);
+        Assert.That(ctx.Entry(existing).State, Is.EqualTo(EntityState.Unchanged),
+            "the value's row survived the failed apply, so its tracked instance must stay tracked as it was");
+        Assert.That(ctx.Database.CurrentTransaction, Is.Null, "the apply's own transaction must not outlive the call");
+    }
+
+    /// <summary>
+    /// #2894: as above, but with the failure in the last statement, the import-state update, after both the delete and the
+    /// COPY have run. A trigger on the object table refuses the update for the length of the test.
+    /// </summary>
+    [Test]
+    public async Task ApplyExportedAttributeValuesAsync_ImportStateUpdateFailsAfterDeleteAndCopy_LeavesObjectAsItWasAsync()
+    {
+        var (attr, csoId) = await SeedCsoAsync("old@example.com");
+        var stamp = (Hash: Guid.NewGuid(), Fingerprint: Guid.NewGuid());
+        await using (var stampCtx = NewContext())
+            await new PostgresDataRepository(stampCtx).Sync.StampImportStateAsync([(csoId, stamp.Hash, stamp.Fingerprint)]);
+
+        await using (var triggerCtx = NewContext())
+            await triggerCtx.Database.ExecuteSqlRawAsync("""
+                CREATE OR REPLACE FUNCTION test_2894_refuse_update() RETURNS trigger LANGUAGE plpgsql AS
+                $$ BEGIN RAISE EXCEPTION 'refused by test 2894' USING ERRCODE = 'P2894'; END $$;
+                CREATE TRIGGER test_2894_refuse_update BEFORE UPDATE ON "ConnectedSystemObjects"
+                    FOR EACH ROW EXECUTE FUNCTION test_2894_refuse_update();
+                """);
+        try
+        {
+            await using var ctx = NewContext();
+            var repository = new PostgresDataRepository(ctx);
+            var existing = await ctx.ConnectedSystemObjectAttributeValues.AsNoTracking()
+                .SingleAsync(av => av.ConnectedSystemObject.Id == csoId);
+            var cso = await ctx.ConnectedSystemObjects.AsNoTracking().SingleAsync(c => c.Id == csoId);
+            var addition = new ConnectedSystemObjectAttributeValue
+            {
+                Id = Guid.NewGuid(), ConnectedSystemObject = cso, AttributeId = attr.Id, StringValue = "new@example.com"
+            };
+
+            Assert.That(async () => await repository.Sync.ApplyExportedAttributeValuesAsync([addition], [existing.Id], [csoId]),
+                Throws.InstanceOf<Npgsql.PostgresException>().With.Property(nameof(Npgsql.PostgresException.SqlState)).EqualTo("P2894"));
+        }
+        finally
+        {
+            await using var dropCtx = NewContext();
+            await dropCtx.Database.ExecuteSqlRawAsync("""
+                DROP TRIGGER IF EXISTS test_2894_refuse_update ON "ConnectedSystemObjects";
+                DROP FUNCTION IF EXISTS test_2894_refuse_update();
+                """);
+        }
+
+        var existingId = await SingleValueIdAsync(csoId);
+        await AssertObjectUnchangedAsync(csoId, existingId, "old@example.com", stamp);
+    }
+
+    /// <summary>
+    /// #2894: inside a transaction the caller already holds, the apply enlists in it rather than committing on its own,
+    /// so the caller's rollback undoes the whole apply.
+    /// </summary>
+    [Test]
+    public async Task ApplyExportedAttributeValuesAsync_InsideCallerTransaction_EnlistsAndRollsBackWithItAsync()
+    {
+        var (attr, csoId) = await SeedCsoAsync("old@example.com");
+        var stamp = (Hash: Guid.NewGuid(), Fingerprint: Guid.NewGuid());
+        await using (var stampCtx = NewContext())
+            await new PostgresDataRepository(stampCtx).Sync.StampImportStateAsync([(csoId, stamp.Hash, stamp.Fingerprint)]);
+        var existingId = await SingleValueIdAsync(csoId);
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            var cso = await ctx.ConnectedSystemObjects.AsNoTracking().SingleAsync(c => c.Id == csoId);
+            var addition = new ConnectedSystemObjectAttributeValue
+            {
+                Id = Guid.NewGuid(), ConnectedSystemObject = cso, AttributeId = attr.Id, StringValue = "new@example.com"
+            };
+
+            await using var callerTransaction = await ctx.Database.BeginTransactionAsync();
+            await repository.Sync.ApplyExportedAttributeValuesAsync([addition], [existingId], [csoId]);
+            Assert.That(ctx.Database.CurrentTransaction, Is.SameAs(callerTransaction),
+                "the apply must enlist in the caller's transaction, not end it");
+            await callerTransaction.RollbackAsync();
+        }
+
+        await AssertObjectUnchangedAsync(csoId, existingId, "old@example.com", stamp);
+    }
+
+    private async Task<Guid> SingleValueIdAsync(Guid csoId)
+    {
+        await using var verify = NewContext();
+        return await verify.ConnectedSystemObjectAttributeValues.AsNoTracking()
+            .Where(av => av.ConnectedSystemObject.Id == csoId).Select(av => av.Id).SingleAsync();
+    }
+
+    private async Task AssertObjectUnchangedAsync(Guid csoId, Guid expectedValueId, string expectedValue, (Guid Hash, Guid Fingerprint) stamp)
+    {
+        await using var verify = NewContext();
+        var storedValues = await verify.ConnectedSystemObjectAttributeValues.AsNoTracking()
+            .Where(av => av.ConnectedSystemObject.Id == csoId).ToListAsync();
+        var storedCso = await verify.ConnectedSystemObjects.AsNoTracking().SingleAsync(c => c.Id == csoId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(storedValues.Select(v => (v.Id, v.StringValue)), Is.EquivalentTo(new[] { (expectedValueId, (string?)expectedValue) }),
+                "the superseded value must still be present and nothing new written");
+            Assert.That(storedCso.ImportStateHash, Is.EqualTo(stamp.Hash), "the import stamp must be left as it was");
+            Assert.That(storedCso.ImportStateFingerprint, Is.EqualTo(stamp.Fingerprint), "the import stamp must be left as it was");
+        }
+    }
+
+    /// <summary>
     /// Seeds a Connected System with one USER object type carrying a single-valued Reference
     /// attribute, plus a "referenced" CSO (the resolution target) and a "source" CSO (the one the
     /// Pending Export is against).
