@@ -78,7 +78,7 @@ JIM detects the directory type from the Root DSE during schema discovery and adj
 - **Values already in place**<br /> Adding a value the directory already holds (a member already in the group) or removing one it no longer holds counts as done, and every other change in the same export is still applied. See [Values already in place](jim-ldap-connector-values-in-use.md#values-already-in-place).
 - **Container provisioning**<br /> Optionally create organisational units (OUs) on demand when provisioning objects to new locations.
 - **Group placeholder members**<br /> Automatic handling of the `groupOfNames` MUST member constraint for OpenLDAP directories.
-- **Exchange recipients**<br /> On Active Directory, JIM can ask Exchange to make the objects it provisions into recipients, as their export Synchronisation Rules declare. Writing `homeMDB` and Exchange's other stamps makes none, so they are discovered read-only. See [LDAP Connector Exchange Recipients](jim-ldap-connector-exchange.md).
+- **Exchange recipients**<br /> On Active Directory, JIM asks Exchange to make the recipients its export Synchronisation Rules declare; Exchange's own stamps, such as `homeMDB`, are read-only. See [LDAP Connector Exchange Recipients](jim-ldap-connector-exchange.md).
 
 ### Schema Discovery
 
