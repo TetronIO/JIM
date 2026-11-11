@@ -6430,9 +6430,10 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                 FROM "PendingExports" pe
                 WHERE pe."ConnectedSystemId" = {0}
                   AND pe."ChangeType" = {1}
-                  AND pe."Status" <> {2}
+                  AND pe."Status" NOT IN ({2}, {3})
                 """,
-                connectedSystemId, (int)PendingExportChangeType.Update, (int)PendingExportStatus.Executing)
+                connectedSystemId, (int)PendingExportChangeType.Update, (int)PendingExportStatus.Executing,
+                (int)PendingExportStatus.Staging)
             .ToListAsync();
         if (queued.Count == 0)
             return [];
@@ -6494,9 +6495,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             @"DELETE FROM ""PendingExports"" pe
               WHERE pe.""Id"" = ANY({0})
                 AND pe.""ChangeType"" = {1}
-                AND pe.""Status"" <> {2}
+                AND pe.""Status"" NOT IN ({2}, {3})
                 AND NOT EXISTS (SELECT 1 FROM ""PendingExportAttributeValueChanges"" c WHERE c.""PendingExportId"" = pe.""Id"")",
-            pendingExportIds, (int)PendingExportChangeType.Update, (int)PendingExportStatus.Executing);
+            pendingExportIds, (int)PendingExportChangeType.Update, (int)PendingExportStatus.Executing, (int)PendingExportStatus.Staging);
 
         return (changesWithdrawn, pendingExportsDeleted);
     }

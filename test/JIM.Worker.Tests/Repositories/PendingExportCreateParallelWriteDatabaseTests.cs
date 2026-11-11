@@ -432,7 +432,7 @@ public class PendingExportCreateParallelWriteDatabaseTests
         long changesCommittedWhileOneWaits;
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(3));
+            Assert.That(await WaitForASessionBlockedOnALockAsync(), Is.True, "sanity: the write reaches the held change and waits");
             exportsCommittedWhileOneWaits = await CountAsync("PendingExports", "Id", exports.Select(pe => pe.Id));
             changesCommittedWhileOneWaits = await CountAsync("PendingExportAttributeValueChanges", "Id", changeIds.Where(id => id != heldId));
         }
@@ -448,6 +448,27 @@ public class PendingExportCreateParallelWriteDatabaseTests
             Assert.That(changesCommittedWhileOneWaits, Is.Zero, "nor any change");
             Assert.That(await CountAsync("PendingExportAttributeValueChanges", "Id", changeIds), Is.EqualTo(changeIds.Count));
         }
+    }
+
+    /// <summary>
+    /// Waits until some session of the test database is waiting on a lock: the write reaching the change another
+    /// session holds. False after 30 seconds.
+    /// </summary>
+    private async Task<bool> WaitForASessionBlockedOnALockAsync()
+    {
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'""", connection);
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (DateTime.UtcNow < deadline)
+        {
+            if ((long)(await command.ExecuteScalarAsync())! > 0)
+                return true;
+            await Task.Delay(50);
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -475,6 +496,32 @@ public class PendingExportCreateParallelWriteDatabaseTests
     #region Failure leaves nothing of the call, and nothing of another's is removed
 
     /// <summary>
+    /// Runs a call that must fail with <paramref name="sqlState"/>, and returns how many of its exports and changes were
+    /// in the database (in whatever state) when it began removing itself: so a test can show the failure came after rows
+    /// had committed, and cannot pass because nothing was ever written.
+    /// </summary>
+    private async Task<(long Exports, long Changes)> RunFailingCallAsync(List<PendingExport> exports, string sqlState,
+        IReadOnlySet<Guid>? exportIdsOwnedElsewhere = null, IReadOnlySet<Guid>? changeIdsOwnedElsewhere = null)
+    {
+        long exportsBeforeRemoval = -1, changesBeforeRemoval = -1;
+        await using var context = NewContext();
+        var repository = Repository(context, WritePath.Parallel, Rows(exports));
+        repository.PendingExportCreateStepReached = async step =>
+        {
+            if (step != SyncRepository.StepRemovingFailedCall)
+                return;
+            exportsBeforeRemoval = await CountAsync("PendingExports", "Id",
+                exports.Select(pe => pe.Id).Where(id => exportIdsOwnedElsewhere?.Contains(id) != true));
+            changesBeforeRemoval = await CountAsync("PendingExportAttributeValueChanges", "Id",
+                ChangeIds(exports).Where(id => changeIdsOwnedElsewhere?.Contains(id) != true));
+        };
+
+        Assert.That(async () => await repository.CreatePendingExportsAsync(exports),
+            Throws.InstanceOf<PostgresException>().With.Property(nameof(PostgresException.SqlState)).EqualTo(sqlState));
+        return (exportsBeforeRemoval, changesBeforeRemoval);
+    }
+
+    /// <summary>
     /// The changes fail (two with one id, in different partitions) after every export and part of the changes have
     /// committed. The call must throw and leave nothing of itself; the other call's exports stay exactly as they were.
     /// </summary>
@@ -488,11 +535,12 @@ public class PendingExportCreateParallelWriteDatabaseTests
         changes[^1].Id = changes[0].Id;
         var before = await SnapshotAsync();
 
-        await using (var context = NewContext())
+        var committed = await RunFailingCallAsync(exports, PostgresErrorCodes.UniqueViolation);
+
+        using (Assert.EnterMultipleScope())
         {
-            var repository = Repository(context, WritePath.Parallel, Rows(exports));
-            Assert.That(async () => await repository.CreatePendingExportsAsync(exports),
-                Throws.InstanceOf<PostgresException>().With.Property(nameof(PostgresException.SqlState)).EqualTo(PostgresErrorCodes.UniqueViolation));
+            Assert.That(committed.Exports, Is.EqualTo(exports.Count), "sanity: every export had committed before the failure");
+            Assert.That(committed.Changes, Is.GreaterThan(0), "sanity: and some of the changes");
         }
 
         await AssertNothingOfTheCallRemainsAsync(exports, before);
@@ -500,7 +548,7 @@ public class PendingExportCreateParallelWriteDatabaseTests
 
     /// <summary>
     /// One change takes the id of a change another call already committed, so its partition fails while the exports and
-    /// the other partitions' changes commit. What the call committed is removed by the exports it wrote, never by the
+    /// the other partitions' changes commit. What the call wrote is removed by the exports it wrote, never by the
     /// changes' ids: the other call's change, which holds the id the failed call tried to reuse, survives.
     /// </summary>
     [Test]
@@ -512,23 +560,25 @@ public class PendingExportCreateParallelWriteDatabaseTests
         var exports = BuildBatch(s);
         exports.Last(pe => pe.AttributeValueChanges.Count > 0).AttributeValueChanges[^1].Id = takenChangeId;
         var before = await SnapshotAsync();
+        var ownedElsewhere = new HashSet<Guid> { takenChangeId };
 
-        await using (var context = NewContext())
+        var committed = await RunFailingCallAsync(exports, PostgresErrorCodes.UniqueViolation, changeIdsOwnedElsewhere: ownedElsewhere);
+
+        using (Assert.EnterMultipleScope())
         {
-            var repository = Repository(context, WritePath.Parallel, Rows(exports));
-            Assert.That(async () => await repository.CreatePendingExportsAsync(exports),
-                Throws.InstanceOf<PostgresException>().With.Property(nameof(PostgresException.SqlState)).EqualTo(PostgresErrorCodes.UniqueViolation));
+            Assert.That(committed.Exports, Is.EqualTo(exports.Count), "sanity: every export had committed before the failure");
+            Assert.That(committed.Changes, Is.GreaterThan(0), "sanity: and some of the changes");
         }
 
-        await AssertNothingOfTheCallRemainsAsync(exports, before, changeIdsOwnedElsewhere: new HashSet<Guid> { takenChangeId });
+        await AssertNothingOfTheCallRemainsAsync(exports, before, changeIdsOwnedElsewhere: ownedElsewhere);
         Assert.That(await CountAsync("PendingExportAttributeValueChanges", "Id", [takenChangeId]), Is.EqualTo(1),
             "the other call's change, whose id the failed call reused, survives");
     }
 
     /// <summary>
     /// The exports fail: the last one takes the id of an export another call already committed, so its partition fails
-    /// while the other partitions' exports commit, and no change is written. The exports the call committed are removed,
-    /// and only those: the other call's export with that id, and its changes, survive.
+    /// while the other partitions' exports commit, and no change is written. The call removes by every id it tried to
+    /// write, but only rows still being written, so the other call's export with that id, and its changes, survive.
     /// </summary>
     [Test]
     public async Task CreatePendingExportsAsync_ExportIdOwnedByAnotherCall_RemovesOnlyTheExportsTheCallCommittedAsync()
@@ -539,15 +589,12 @@ public class PendingExportCreateParallelWriteDatabaseTests
         var exports = BuildBatch(s);
         exports[^1].Id = takenExportId;
         var before = await SnapshotAsync();
+        var ownedElsewhere = new HashSet<Guid> { takenExportId };
 
-        await using (var context = NewContext())
-        {
-            var repository = Repository(context, WritePath.Parallel, Rows(exports));
-            Assert.That(async () => await repository.CreatePendingExportsAsync(exports),
-                Throws.InstanceOf<PostgresException>().With.Property(nameof(PostgresException.SqlState)).EqualTo(PostgresErrorCodes.UniqueViolation));
-        }
+        var committed = await RunFailingCallAsync(exports, PostgresErrorCodes.UniqueViolation, exportIdsOwnedElsewhere: ownedElsewhere);
 
-        await AssertNothingOfTheCallRemainsAsync(exports, before, exportIdsOwnedElsewhere: new HashSet<Guid> { takenExportId });
+        Assert.That(committed.Exports, Is.GreaterThan(0), "sanity: the other partitions' exports had committed before the failure");
+        await AssertNothingOfTheCallRemainsAsync(exports, before, exportIdsOwnedElsewhere: ownedElsewhere);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(await CountAsync("PendingExports", "Id", [takenExportId]), Is.EqualTo(1),
@@ -570,14 +617,232 @@ public class PendingExportCreateParallelWriteDatabaseTests
         exports[^1].ConnectedSystemId = int.MaxValue;
         var before = await SnapshotAsync();
 
+        var committed = await RunFailingCallAsync(exports, PostgresErrorCodes.ForeignKeyViolation);
+
+        Assert.That(committed.Exports, Is.GreaterThan(0), "sanity: the other partitions' exports had committed before the failure");
+        await AssertNothingOfTheCallRemainsAsync(exports, before);
+    }
+
+    /// <summary>
+    /// The last step fails: making the exports live meets the unique index on their object, because another session
+    /// committed a Pending Export for one of them while the call was writing. Every export and change had committed;
+    /// none may remain, and the other session's export is untouched.
+    /// </summary>
+    [Test]
+    public async Task CreatePendingExportsAsync_MakingLiveFails_ThrowsAndLeavesNothingOfTheCallAsync()
+    {
+        var s = await SeedAsync();
+        var exports = BuildBatch(s);
+        var contestedObject = exports[0].ConnectedSystemObjectId!.Value;
+        var rival = Guid.NewGuid();
+
+        long exportsBeforeRemoval = -1, changesBeforeRemoval = -1;
         await using (var context = NewContext())
         {
             var repository = Repository(context, WritePath.Parallel, Rows(exports));
+            repository.PendingExportCreateStepReached = async step =>
+            {
+                if (step == SyncRepository.StepChangesStaged)
+                {
+                    await using var connection = new NpgsqlConnection(_connectionString);
+                    await connection.OpenAsync();
+                    await using var command = new NpgsqlCommand(
+                        """
+                        INSERT INTO "PendingExports" ("Id", "ConnectedSystemId", "ConnectedSystemObjectId", "ChangeType", "Status", "ErrorCount", "HasUnresolvedReferences", "CreatedAt")
+                            VALUES (@id, @system, @object, 1, 0, 0, false, now())
+                        """, connection);
+                    command.Parameters.AddWithValue("id", rival);
+                    command.Parameters.AddWithValue("system", s.SystemId);
+                    command.Parameters.AddWithValue("object", contestedObject);
+                    await command.ExecuteNonQueryAsync();
+                }
+                else if (step == SyncRepository.StepRemovingFailedCall)
+                {
+                    exportsBeforeRemoval = await CountAsync("PendingExports", "Id", exports.Select(pe => pe.Id));
+                    changesBeforeRemoval = await CountAsync("PendingExportAttributeValueChanges", "Id", ChangeIds(exports));
+                }
+            };
+
             Assert.That(async () => await repository.CreatePendingExportsAsync(exports),
-                Throws.InstanceOf<PostgresException>().With.Property(nameof(PostgresException.SqlState)).EqualTo(PostgresErrorCodes.ForeignKeyViolation));
+                Throws.InstanceOf<PostgresException>().With.Property(nameof(PostgresException.SqlState)).EqualTo(PostgresErrorCodes.UniqueViolation));
         }
 
-        await AssertNothingOfTheCallRemainsAsync(exports, before);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exportsBeforeRemoval, Is.EqualTo(exports.Count), "sanity: every export had committed before the failure");
+            Assert.That(changesBeforeRemoval, Is.EqualTo(ChangeIds(exports).Count), "sanity: and every change");
+            Assert.That(await CountAsync("PendingExports", "Id", exports.Select(pe => pe.Id)), Is.Zero, "no export of the call remains");
+            Assert.That(await CountAsync("PendingExportAttributeValueChanges", "Id", ChangeIds(exports)), Is.Zero, "nor any change");
+            Assert.That(await CountAsync("PendingExports", "Id", [rival]), Is.EqualTo(1), "the other session's export is untouched");
+        }
+    }
+
+    #endregion
+
+    #region No reader sees the call until it is whole
+
+    private sealed record ReaderView(long Written, int Selected, int Executable, int Counted, int FoundByObject, int FoundForImport,
+        int WithdrawalCandidates);
+
+    /// <summary>
+    /// What the readers that act on Pending Exports see of the call, each on a context of its own as another task would:
+    /// the export run's batch selection and its count (Run Profile Safeguards read the same query), the count the portal
+    /// shows, the lookups staging and merging make by object, the confirming import's read by Connected System, and the
+    /// confirming import's search for queued changes to withdraw (#2915). Beside them, how many of the call's exports are in the table at all, in whatever state.
+    /// </summary>
+    private async Task<ReaderView> WhatReadersSeeAsync(Seeded s, List<PendingExport> call)
+    {
+        var callIds = call.Select(pe => pe.Id).ToHashSet();
+        var objectIds = call.Where(pe => pe.ConnectedSystemObjectId.HasValue).Select(pe => pe.ConnectedSystemObjectId!.Value).ToList();
+        await using var context = NewContext();
+        var sync = new PostgresDataRepository(context).Sync;
+        var selected = await sync.GetExecutableExportBatchSummaryAsync(s.SystemId, 10_000, null, null);
+        var byObject = await sync.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(objectIds);
+        var oneByObject = await sync.GetPendingExportLightweightByConnectedSystemObjectIdAsync(objectIds[0]);
+        var forImport = await sync.GetPendingExportsLightweightByConnectedSystemIdAsync(s.SystemId);
+        var withdrawal = await sync.GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(s.SystemId, []);
+        return new ReaderView(
+            await CountAsync("PendingExports", "Id", callIds),
+            selected.Count(x => callIds.Contains(x.Id)),
+            await sync.GetExecutableExportCountAsync(s.SystemId),
+            await sync.GetPendingExportsCountAsync(s.SystemId),
+            byObject.Values.Count(pe => callIds.Contains(pe.Id)) + (oneByObject != null && callIds.Contains(oneByObject.Id) ? 1 : 0),
+            forImport.Values.Count(pe => callIds.Contains(pe.Id)),
+            withdrawal.Count(pe => callIds.Contains(pe.Id)));
+    }
+
+    /// <summary>
+    /// Between the steps of a parallel create (every export written, then every change), no reader sees anything of the
+    /// call, although its rows are committed; once it returns, every reader sees all of it. An export run between the
+    /// steps would otherwise send a Create with none of its attributes, or a group with part of its members.
+    /// </summary>
+    [Test]
+    public async Task CreatePendingExportsAsync_ParallelPath_NoReaderSeesTheCallUntilItIsWholeAsync()
+    {
+        var s = await SeedAsync();
+        var exports = BuildBatch(s);
+        var seen = new Dictionary<string, ReaderView>();
+
+        await using (var context = NewContext())
+        {
+            var repository = Repository(context, WritePath.Parallel, Rows(exports));
+            repository.PendingExportCreateStepReached = async step => seen[step] = await WhatReadersSeeAsync(s, exports);
+            await repository.CreatePendingExportsAsync(exports);
+        }
+
+        var after = await WhatReadersSeeAsync(s, exports);
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var step in new[] { SyncRepository.StepExportsStaged, SyncRepository.StepChangesStaged })
+            {
+                Assert.That(seen[step].Written, Is.EqualTo(exports.Count), $"{step}: sanity, the call's exports are committed");
+                Assert.That(seen[step] with { Written = 0 }, Is.EqualTo(new ReaderView(0, 0, 0, 0, 0, 0, 0)), $"{step}: no reader sees any of them");
+            }
+
+            Assert.That(after.Selected, Is.EqualTo(exports.Count), "afterwards the export run selects every export");
+            Assert.That(after.Counted, Is.EqualTo(exports.Count), "the portal counts every export");
+            Assert.That(after.FoundByObject, Is.EqualTo(exports.Count + 1), "staging finds every export by its object");
+            Assert.That(after.FoundForImport, Is.EqualTo(exports.Count), "the confirming import reads every one");
+            Assert.That(after.WithdrawalCandidates, Is.EqualTo(exports.Count(pe => pe.ChangeType == PendingExportChangeType.Update)),
+                "and weighs every queued Update for withdrawal (their changes' Synchronisation Rule maps nothing)");
+        }
+    }
+
+    #endregion
+
+    #region What a Worker that stops part-way leaves
+
+    /// <summary>
+    /// A call stopped part-way, as a Worker that dies between its steps leaves it: every export and change committed,
+    /// nothing made live, nothing removed. What it leaves is selected for no export and counted nowhere, holds no place
+    /// against the next staging for the same objects, and is removed when the Worker next starts. The stopped call, were
+    /// it to carry on, finds its rows gone and fails rather than make anything live.
+    /// </summary>
+    [Test]
+    public async Task CreatePendingExportsAsync_StoppedPartWay_LeavesNothingAnyReaderActsOnAndIsRemovedAtStartAsync()
+    {
+        var s = await SeedAsync();
+        var stopped = BuildBatch(s);
+        var reachedStop = new TaskCompletionSource();
+        var carryOn = new TaskCompletionSource();
+
+        await using var stoppedContext = NewContext();
+        var stoppedRepository = Repository(stoppedContext, WritePath.Parallel, Rows(stopped));
+        stoppedRepository.PendingExportCreateStepReached = async step =>
+        {
+            if (step != SyncRepository.StepChangesStaged)
+                return;
+            reachedStop.SetResult();
+            await carryOn.Task;
+        };
+        var stoppedCall = Task.Run(() => stoppedRepository.CreatePendingExportsAsync(stopped));
+        await reachedStop.Task.WaitAsync(TimeSpan.FromSeconds(60));
+
+        var leftover = await WhatReadersSeeAsync(s, stopped);
+
+        // The next synchronisation stages the same objects again.
+        var next = BuildBatch(s, seed: 3);
+        await using (var context = NewContext())
+            await Repository(context, WritePath.Parallel, Rows(next)).CreatePendingExportsAsync(next);
+
+        int removedAtStart;
+        await using (var context = NewContext())
+            removedAtStart = await new PostgresDataRepository(context).Sync.RemoveUnfinishedPendingExportStagingAsync();
+
+        carryOn.SetResult();
+        Assert.That(async () => await stoppedCall, Throws.InstanceOf<InvalidOperationException>(),
+            "the stopped call, carrying on, finds its rows gone and fails rather than making anything live");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(leftover.Written, Is.EqualTo(stopped.Count), "sanity: the stopped call's exports were committed");
+            Assert.That(leftover with { Written = 0 }, Is.EqualTo(new ReaderView(0, 0, 0, 0, 0, 0, 0)),
+                "no reader sees what it left: nothing is selected for export, counted or found by object");
+            Assert.That(removedAtStart, Is.EqualTo(stopped.Count), "the Worker's start removes every export it left");
+            Assert.That(await CountAsync("PendingExports", "Id", stopped.Select(pe => pe.Id)), Is.Zero, "none remains");
+            Assert.That(await CountAsync("PendingExportAttributeValueChanges", "Id", ChangeIds(stopped)), Is.Zero, "nor any change");
+            Assert.That(await CountAsync("PendingExports", "Id", next.Select(pe => pe.Id)), Is.EqualTo(next.Count),
+                "the next staging for the same objects was not held back by it, and is left alone");
+            Assert.That((await WhatReadersSeeAsync(s, next)).Selected, Is.EqualTo(next.Count), "and is live");
+        }
+    }
+
+    #endregion
+
+    #region Pending Export batch scope
+
+    /// <summary>
+    /// Inside a Pending Export batch (#2492) with a delete queued for every object the call stages again, the parallel
+    /// path executes the queued deletes before its exports take their objects, as the single-connection path does: the
+    /// replacements are live and the originals gone.
+    /// </summary>
+    [Test]
+    public async Task CreatePendingExportsAsync_ParallelPathInsideABatchWithQueuedDeletes_ReplacesTheQueuedExportsAsync()
+    {
+        var s = await SeedAsync();
+        var originals = BuildBatch(s);
+        await using (var context = NewContext())
+            await Repository(context, WritePath.SingleConnection, Rows(originals)).CreatePendingExportsAsync(originals);
+
+        var replacements = BuildBatch(s, seed: 3);
+        await using (var context = NewContext())
+        {
+            var repository = Repository(context, WritePath.Parallel, Rows(replacements));
+            repository.BeginPendingExportBatch();
+            foreach (var original in originals)
+                await repository.DeletePendingExportForMergeAsync(original);
+            await repository.CreatePendingExportsAsync(replacements);
+            await repository.FlushPendingExportBatchAsync();
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await CountAsync("PendingExports", "Id", originals.Select(pe => pe.Id)), Is.Zero, "the queued originals are gone");
+            Assert.That(await CountAsync("PendingExportAttributeValueChanges", "Id", ChangeIds(originals)), Is.Zero, "with their changes");
+            Assert.That((await WhatReadersSeeAsync(s, replacements)).Selected, Is.EqualTo(replacements.Count), "every replacement is live");
+            Assert.That(await CountAsync("PendingExportAttributeValueChanges", "Id", ChangeIds(replacements)),
+                Is.EqualTo(ChangeIds(replacements).Count), "with every change");
+        }
     }
 
     #endregion

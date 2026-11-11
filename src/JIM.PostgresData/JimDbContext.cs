@@ -944,6 +944,14 @@ public class JimDbContext : DbContext
             .HasIndex(cso => new { cso.ConnectedSystemId, cso.TypeId, cso.Id })
             .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_TypeId_Id");
 
+        // A Pending Export still being written across the parallel connections (PendingExportStatus.Staging, #2919) is
+        // not yet a Pending Export, so no query through the model sees it: not the export queue, not a count, not a list.
+        // Raw SQL readers do not pass through this filter; each keys on the Connected System Object (which a staging row
+        // does not carry yet) or on a status Staging is not, and the ones that did neither (change withdrawal, #2915)
+        // exclude it themselves.
+        modelBuilder.Entity<PendingExport>()
+            .HasQueryFilter(pe => pe.Status != PendingExportStatus.Staging);
+
         // PendingExport: composite index for export queries by system and status
         modelBuilder.Entity<PendingExport>()
             .HasIndex(pe => new { pe.ConnectedSystemId, pe.Status })

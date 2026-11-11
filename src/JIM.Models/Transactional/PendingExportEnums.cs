@@ -92,7 +92,20 @@ public enum PendingExportStatus
     /// Generation release 4). A Parked export is not attempted, and not counted as a failure; it clears once
     /// the decision is made.
     /// </summary>
-    Parked = 5
+    Parked = 5,
+    /// <summary>
+    /// The Pending Export is still being written and is not yet in effect: no export run, import, count or list sees it.
+    /// Once every one of its changes is written it takes its real status, at the same moment as the others written beside
+    /// it; if the write fails it is removed.
+    /// </summary>
+    /// <remarks>
+    /// A large staging call writes its Pending Exports and their changes across several database connections, each
+    /// committing its part (#2919). Written in this status, and without their Connected System Object, the exports stay
+    /// out of every reader's way (queries through the model filter the status out; the raw ones key on the object, or
+    /// on a status this is not) and out of the unique index on the object, until one statement makes them live. One left
+    /// behind by a Worker that stopped mid-write is removed when the Worker next starts.
+    /// </remarks>
+    Staging = 6
 }
 
 /// <summary>

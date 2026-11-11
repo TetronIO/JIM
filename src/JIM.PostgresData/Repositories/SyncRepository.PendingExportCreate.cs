@@ -1,7 +1,6 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Collections.Concurrent;
 using JIM.Models.Transactional;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -120,21 +119,48 @@ public partial class SyncRepository
     }
 
     /// <summary>
-    /// A call large enough to gain from parallel connections (#2919), written in two phases, each across the parallel
-    /// connections, each connection committing its own part, as the Connected System Object create writes its objects
-    /// and their values (#2872):
-    /// <list type="number">
-    /// <item>The Pending Export rows. Every one is committed before any change is written, because each change holds a
-    /// foreign key to its export: a change written on one connection may belong to an export another connection
-    /// wrote.</item>
-    /// <item>The changes, partitioned by row rather than by export, so a large group's member changes spread across every
-    /// connection.</item>
-    /// </list>
-    /// The phases commit separately, so unlike the single-connection path the call is not one transaction. A failure in
-    /// either therefore waits for every connection to finish, then removes what the call committed before it propagates:
-    /// the caller is told the staging failed and finds nothing of it, as after the single-connection path's rollback,
-    /// rather than exports holding some of their changes, which the next export run would send as they are.
+    /// Where a parallel create has got to, for <see cref="PendingExportCreateStepReached"/>.
     /// </summary>
+    internal const string StepExportsStaged = "ExportsStaged";
+
+    /// <inheritdoc cref="StepExportsStaged"/>
+    internal const string StepChangesStaged = "ChangesStaged";
+
+    /// <inheritdoc cref="StepExportsStaged"/>
+    internal const string StepRemovingFailedCall = "RemovingFailedCall";
+
+    /// <summary>
+    /// Called as a parallel create reaches each step (<see cref="StepExportsStaged"/>, <see cref="StepChangesStaged"/>,
+    /// <see cref="StepRemovingFailedCall"/>), for a test to look at the database between them; null otherwise.
+    /// </summary>
+    internal Func<string, Task>? PendingExportCreateStepReached { get; set; }
+
+    /// <summary>
+    /// A call large enough to gain from parallel connections (#2919), written in three steps:
+    /// <list type="number">
+    /// <item>The Pending Export rows, across the parallel connections, each committing its part, as
+    /// <see cref="PendingExportStatus.Staging"/> and without their Connected System Object. Every one is committed before
+    /// any change is written, because each change holds a foreign key to its export and may be written on a connection
+    /// other than the one that wrote the export.</item>
+    /// <item>The changes, across the parallel connections, partitioned by row rather than by export, so a large group's
+    /// member changes spread across every connection.</item>
+    /// <item>One statement, in one transaction, giving every export its own status and Connected System Object.</item>
+    /// </list>
+    /// Until the last step commits, no reader sees any of the call: a Staging export is filtered out of every query
+    /// through the model, has no Connected System Object for a raw query to find it by, and holds no place in the unique
+    /// index on the object. So an export run, an import, a count or another staging sees the call's exports all at once
+    /// and complete, or not at all, exactly as after the single-connection path's one transaction; never an export with
+    /// some of its changes, which an export run would send as it found it.
+    /// </summary>
+    /// <remarks>
+    /// On any failure the call waits for every connection to finish, then removes what is left of it before the failure
+    /// propagates: every change and export of the call's own ids that is still Staging. By the call's ids, so nothing of
+    /// another call is touched; whether or not a connection's commit was acknowledged, since a row whose commit was lost
+    /// is still found. Still Staging, so an export another call holds under the same id (which is why this call's insert
+    /// failed) is left alone, and nothing is removed once the last step has made the exports live. A Worker that stops
+    /// part-way leaves Staging rows no reader sees; <see cref="RemoveUnfinishedPendingExportStagingAsync"/> removes them
+    /// when it next starts.
+    /// </remarks>
     private async Task CreatePendingExportsInParallelAsync(
         List<PendingExport> exports,
         List<(Guid PendingExportId, PendingExportAttributeValueChange Change)> changeRows)
@@ -144,7 +170,6 @@ public partial class SyncRepository
         Log.Information("CreatePendingExportsAsync: Writing {Count} Pending Exports and {ChangeCount} attribute value changes across {Parallelism} parallel connections",
             exports.Count, changeRows.Count, parallelism);
 
-        var committedExportIds = new ConcurrentQueue<Guid>();
         var written = false;
         try
         {
@@ -155,12 +180,12 @@ public partial class SyncRepository
                 await ParallelBatchWriter.ExecuteAsync(exports, parallelism, connectionString, async (connection, partition) =>
                 {
                     await using var transaction = await connection!.BeginTransactionAsync();
-                    await BulkInsertPendingExportsOnConnectionAsync(connection, transaction, partition);
+                    await BulkInsertPendingExportsOnConnectionAsync(connection, transaction, partition, staged: true);
                     await transaction.CommitAsync();
-                    foreach (var pe in partition)
-                        committedExportIds.Enqueue(pe.Id);
                 });
             }
+
+            await StepReachedAsync(StepExportsStaged);
 
             if (changeRows.Count > 0)
             {
@@ -176,29 +201,108 @@ public partial class SyncRepository
                 });
             }
 
+            await StepReachedAsync(StepChangesStaged);
+
+            using (var liveSpan = MvoActivitySource.StartActivity("PendingExport.Create.Live"))
+            {
+                liveSpan?.SetTag("rowCount", exports.Count);
+                await MakeStagedPendingExportsLiveAsync(exports);
+            }
+
             written = true;
         }
         finally
         {
-            // Only what this call committed: the exports by the ids their partitions committed (an export whose id was
-            // already in the table failed its partition, so it is not in the list, and the export that already held it is
-            // left alone), and their changes by the export they belong to, never by their own ids, which a change of
-            // another call may hold. ParallelBatchWriter waits for every partition before it throws, so nothing of the
-            // call is still being written while it is removed.
-            if (!written && !committedExportIds.IsEmpty)
+            if (!written)
+            {
+                await StepReachedAsync(StepRemovingFailedCall);
                 await RemoveRowsOfFailedParallelWriteAsync(connectionString, nameof(CreatePendingExportsAsync),
-                    PendingExportRemovals([.. committedExportIds]));
+                    StagedPendingExportRemovals([.. exports.Select(pe => pe.Id)]));
+            }
         }
     }
 
+    private Task StepReachedAsync(string step) => PendingExportCreateStepReached?.Invoke(step) ?? Task.CompletedTask;
+
     /// <summary>
-    /// What removing the Pending Exports a failed parallel write committed takes: their changes first, by the export they
-    /// belong to, then the exports. The changes' foreign key would take them by cascade; removing them first keeps the
-    /// order the other writers' removals use (see <see cref="RemoveRowsOfFailedParallelWriteAsync"/>).
+    /// The last step of a parallel create: on the context's connection, in one transaction, every staged export takes its
+    /// own status and Connected System Object, so all of them come into effect at once. Only rows still Staging are
+    /// touched, and every one must be: a row missing (removed by another hand) fails the call, which then removes the
+    /// rest. Taking the object can meet the unique index on it exactly where the single-connection insert would have.
     /// </summary>
-    private static ParallelWriteRemoval[] PendingExportRemovals(Guid[] committedExportIds) =>
-    [
-        new ParallelWriteRemoval("PendingExportAttributeValueChanges", "PendingExportId", committedExportIds),
-        new ParallelWriteRemoval("PendingExports", "Id", committedExportIds)
-    ];
+    private async Task MakeStagedPendingExportsLiveAsync(List<PendingExport> exports)
+    {
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        var npgsqlTransaction = (NpgsqlTransaction)transaction.GetDbTransaction();
+
+        // A status mark and the one foreign key withheld while staging, set from values the call holds: the
+        // targeted-mutation exemption of the raw SQL column-list rules, not a PendingExportBulkColumns writer.
+        await using var command = new NpgsqlCommand(
+            """
+            UPDATE "PendingExports" AS pe
+            SET "Status" = live.status, "ConnectedSystemObjectId" = live.cso_id
+            FROM unnest(@ids, @statuses, @csoIds) AS live(id, status, cso_id)
+            WHERE pe."Id" = live.id AND pe."Status" = @staging
+            """, connection, npgsqlTransaction);
+        command.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
+        command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+        {
+            Value = exports.Select(pe => pe.Id).ToArray()
+        });
+        command.Parameters.Add(new NpgsqlParameter("statuses", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+        {
+            Value = exports.Select(pe => (int)pe.Status).ToArray()
+        });
+        command.Parameters.Add(new NpgsqlParameter("csoIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+        {
+            Value = exports.Select(pe => pe.ConnectedSystemObjectId).ToArray()
+        });
+        command.Parameters.Add(new NpgsqlParameter("staging", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportStatus.Staging });
+
+        var madeLive = await command.ExecuteNonQueryAsync();
+        if (madeLive != exports.Count)
+            throw new InvalidOperationException(
+                $"CreatePendingExportsAsync: {exports.Count} Pending Exports were written to be made live together, but only {madeLive} were still " +
+                "waiting; nothing of the call is kept.");
+
+        await transaction.CommitAsync();
+    }
+
+    /// <summary>
+    /// What removing a failed parallel create takes: by every id the call wrote under, the changes of its exports that are
+    /// still Staging, then those exports (see <see cref="CreatePendingExportsInParallelAsync"/> for why by every id and
+    /// only Staging). The changes would go by their foreign key's cascade; removing them first keeps the order the other
+    /// writers' removals use (see <see cref="RemoveRowsOfFailedParallelWriteAsync"/>).
+    /// </summary>
+    private static ParallelWriteRemoval[] StagedPendingExportRemovals(Guid[] exportIds)
+    {
+        var staging = (int)PendingExportStatus.Staging;
+        return
+        [
+            new ParallelWriteRemoval("PendingExportAttributeValueChanges", "PendingExportId", exportIds,
+                $"""EXISTS (SELECT 1 FROM "PendingExports" pe WHERE pe."Id" = "PendingExportAttributeValueChanges"."PendingExportId" AND pe."Status" = {staging})"""),
+            new ParallelWriteRemoval("PendingExports", "Id", exportIds, $"\"Status\" = {staging}")
+        ];
+    }
+
+    /// <summary>
+    /// Removes every Pending Export still <see cref="PendingExportStatus.Staging"/>, with its changes: what a Worker that
+    /// stopped part-way through a parallel create left behind (#2919). For the Worker's start, when nothing can be
+    /// writing one; no reader sees them meanwhile, and none holds a place in the unique index on its object.
+    /// </summary>
+    /// <returns>The Pending Exports removed.</returns>
+    public async Task<int> RemoveUnfinishedPendingExportStagingAsync()
+    {
+        var staging = (int)PendingExportStatus.Staging;
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+        await _context.Database.ExecuteSqlRawAsync(
+            """
+            DELETE FROM "PendingExportAttributeValueChanges"
+            WHERE "PendingExportId" IN (SELECT "Id" FROM "PendingExports" WHERE "Status" = {0})
+            """, staging);
+        var removed = await _context.Database.ExecuteSqlRawAsync("""DELETE FROM "PendingExports" WHERE "Status" = {0}""", staging);
+        await transaction.CommitAsync();
+        return removed;
+    }
 }

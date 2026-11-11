@@ -1603,10 +1603,14 @@ public partial class SyncRepository
     /// context's own on the single-connection path of <see cref="CreatePendingExportsAsync"/>, or a parallel connection's
     /// own on its parallel path (#2919). The only insert path for this table, at any batch size.
     /// </summary>
+    /// <param name="staged">Writes each export as <see cref="PendingExportStatus.Staging"/> and without its Connected
+    /// System Object, for the parallel path to make live once its changes are written; its own status and object are
+    /// written then.</param>
     private static async Task BulkInsertPendingExportsOnConnectionAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        IReadOnlyList<PendingExport> exports)
+        IReadOnlyList<PendingExport> exports,
+        bool staged = false)
     {
         // Writer order below MUST match PendingExportBulkColumns.PendingExports exactly.
         await using var writer = await connection.BeginBinaryImportAsync(
@@ -1621,12 +1625,12 @@ public partial class SyncRepository
             await writer.StartRowAsync();
             await writer.WriteAsync(pe.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
             await writer.WriteAsync(pe.ConnectedSystemId, NpgsqlTypes.NpgsqlDbType.Integer);
-            if (pe.ConnectedSystemObjectId.HasValue)
+            if (pe.ConnectedSystemObjectId.HasValue && !staged)
                 await writer.WriteAsync(pe.ConnectedSystemObjectId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
             else
                 await writer.WriteNullAsync();
             await writer.WriteAsync((int)pe.ChangeType, NpgsqlTypes.NpgsqlDbType.Integer);
-            await writer.WriteAsync((int)pe.Status, NpgsqlTypes.NpgsqlDbType.Integer);
+            await writer.WriteAsync((int)(staged ? PendingExportStatus.Staging : pe.Status), NpgsqlTypes.NpgsqlDbType.Integer);
             await writer.WriteAsync(pe.ErrorCount, NpgsqlTypes.NpgsqlDbType.Integer);
             if (pe.FailingSince.HasValue)
                 await writer.WriteAsync(pe.FailingSince.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
