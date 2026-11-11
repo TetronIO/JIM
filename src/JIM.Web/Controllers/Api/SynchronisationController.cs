@@ -1577,6 +1577,7 @@ public class SynchronisationController(
     /// <returns>A paginated set of Pending Export headers.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/pending-exports", Name = "GetPendingExports")]
     [ProducesResponseType(typeof(PaginatedResponse<PendingExportHeader>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetPendingExportsAsync(
         int connectedSystemId,
@@ -1587,6 +1588,9 @@ public class SynchronisationController(
         [FromQuery] PendingExportChangeType? changeType = null,
         [FromQuery] PendingExportStatus? status = null)
     {
+        if (status == PendingExportStatus.Incomplete)
+            return BadRequest(ApiErrorResponse.BadRequest(IncompleteStatusFilterRefusal));
+
         if (page < 1) page = 1;
         if (pageSize < 1) pageSize = 50;
         if (pageSize > 100) pageSize = 100;
@@ -1608,6 +1612,13 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Why a list or count of Pending Exports filtered by Incomplete is refused (#2919): a Pending Export is Incomplete
+    /// only while JIM is still writing it, and no list or count includes one, so the answer could only ever be none.
+    /// </summary>
+    private const string IncompleteStatusFilterRefusal =
+        "Incomplete is not a status Pending Exports can be listed or counted by: a Pending Export is Incomplete only while JIM is still writing it, and is not listed until it is whole.";
+
+    /// <summary>
     /// Get the Pending Export count for a Connected System
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
@@ -1617,6 +1628,7 @@ public class SynchronisationController(
     /// <returns>The count of matching Pending Export objects.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/pending-exports/count", Name = "GetPendingExportsCount")]
     [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetPendingExportsCountAsync(
         int connectedSystemId,
@@ -1624,6 +1636,9 @@ public class SynchronisationController(
         [FromQuery] PendingExportStatus? status = null,
         [FromQuery] bool failing = false)
     {
+        if (status == PendingExportStatus.Incomplete)
+            return BadRequest(ApiErrorResponse.BadRequest(IncompleteStatusFilterRefusal));
+
         _logger.LogDebug("Getting Pending Exports count for Connected System {ConnectedSystemId} (ChangeType: {ChangeType}, Status: {Status}, Failing: {Failing})",
             connectedSystemId, changeType, status, failing);
         var count = await _application.ConnectedSystems.GetPendingExportsFilteredCountAsync(

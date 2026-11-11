@@ -33,7 +33,10 @@ public class PendingExportStatusOrdinalTests
 
         // Unique Value Generation (#242, release 4): the export is held back for an administrator's decision on
         // its generated value.
-        [PendingExportStatus.Parked] = 5
+        [PendingExportStatus.Parked] = 5,
+
+        // A Pending Export still being written across the parallel connections, not yet in effect (#2919).
+        [PendingExportStatus.Incomplete] = 6
     };
 
     [Test]

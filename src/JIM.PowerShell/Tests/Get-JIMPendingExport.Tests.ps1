@@ -93,10 +93,14 @@ Describe 'Get-JIMPendingExport' {
         }
 
         It 'Should accept every Pending Export status the API can filter by for -Status' {
-            # The API binds the status filter to PendingExportStatus by name, so the set must name every member.
+            # The API binds the status filter to PendingExportStatus by name, so the set must name every member an
+            # administrator can see. Incomplete is the one they cannot: a Pending Export still being written, which no
+            # query returns (#2919), so filtering by it could only ever find nothing.
             $enumSource = Get-Content -Raw (Join-Path $PSScriptRoot '..' '..' 'JIM.Models' 'Transactional' 'PendingExportEnums.cs')
             $enumBody = [regex]::Match($enumSource, 'public enum PendingExportStatus\s*\{(?<body>[^}]*)\}').Groups['body'].Value
-            $expected = [regex]::Matches($enumBody, '(?m)^\s*(?<name>[A-Za-z]+)\s*=\s*\d+') | ForEach-Object { $_.Groups['name'].Value }
+            $expected = [regex]::Matches($enumBody, '(?m)^\s*(?<name>[A-Za-z]+)\s*=\s*\d+') |
+                ForEach-Object { $_.Groups['name'].Value } |
+                Where-Object { $_ -ne 'Incomplete' }
             $expected | Should -Not -BeNullOrEmpty
 
             $validateSet = $command.Parameters['Status'].Attributes |

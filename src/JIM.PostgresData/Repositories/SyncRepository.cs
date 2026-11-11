@@ -74,7 +74,10 @@ public partial class SyncRepository : ISyncRepository
     /// <param name="Table">The table, always a name fixed in code, never anything a caller supplies.</param>
     /// <param name="KeyColumn">The column matched against <paramref name="Ids"/>, likewise fixed in code.</param>
     /// <param name="Ids">The keys of the rows the failed write committed.</param>
-    private sealed record ParallelWriteRemoval(string Table, string KeyColumn, Guid[] Ids);
+    /// <param name="Condition">A further condition a row must meet to be removed, likewise fixed in code; null for none.
+    /// The Pending Export create (#2919) removes by every id it tried to write, and this keeps it to the rows still in the
+    /// state it wrote them in.</param>
+    private sealed record ParallelWriteRemoval(string Table, string KeyColumn, Guid[] Ids, string? Condition = null);
 
     /// <summary>
     /// Removes what a failed parallel write committed before it failed, so that the caller, which is about to receive
@@ -104,7 +107,8 @@ public partial class SyncRepository : ISyncRepository
             foreach (var removal in removals.Where(r => r.Ids.Length > 0))
             {
                 await using var command = new NpgsqlCommand(
-                    $"""DELETE FROM "{removal.Table}" WHERE "{removal.KeyColumn}" = ANY(@ids)""", connection, transaction);
+                    $"""DELETE FROM "{removal.Table}" WHERE "{removal.KeyColumn}" = ANY(@ids){(removal.Condition == null ? "" : $" AND ({removal.Condition})")}""",
+                    connection, transaction);
                 command.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
                 command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = removal.Ids });
                 await command.ExecuteNonQueryAsync();
