@@ -133,7 +133,7 @@ public partial class ActivityRepository
             FROM fi
             JOIN "ActivityRunProfileExecutionItemSyncOutcomes" o ON o."ActivityRunProfileExecutionItemId" = fi.item_id
                 AND o."OutcomeType" = ANY(@pending_export_outcome_types)
-            JOIN "PendingExports" pe ON pe."Id" = o."TargetEntityId"
+            JOIN "PendingExports" pe ON pe."Id" = o."TargetEntityId" AND pe."Status" <> @incomplete_status
             LEFT JOIN "ConnectedSystems" pcs ON pcs."Id" = pe."ConnectedSystemId"
             WHERE NOT EXISTS (
                 SELECT 1 FROM "CausalEdges" x
@@ -147,7 +147,7 @@ public partial class ActivityRepository
                    NULL, pe."Id", NULL, fi.display_name, pe."CreatedAt", NULL::timestamptz, FALSE
             FROM fi
             JOIN "CausalEdges" q ON q."EffectRunProfileExecutionItemId" = fi.item_id AND q."EdgeType" = @queueing_edge
-            JOIN "PendingExports" pe ON pe."Id" = q."CausePendingExportId"
+            JOIN "PendingExports" pe ON pe."Id" = q."CausePendingExportId" AND pe."Status" <> @incomplete_status
             LEFT JOIN "ConnectedSystems" pcs ON pcs."Id" = pe."ConnectedSystemId"
             WHERE NOT EXISTS (
                 SELECT 1 FROM "CausalEdges" x
@@ -451,6 +451,8 @@ public partial class ActivityRepository
             },
             NpgsqlDbType.Array | NpgsqlDbType.Integer);
         AddParameter(command, "scheduled_outcome_type", (int)ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled, NpgsqlDbType.Integer);
+        // A Pending Export still being written (#2919) is not yet a Pending Export, so it is no outstanding consequence.
+        AddParameter(command, "incomplete_status", (int)PendingExportStatus.Incomplete, NpgsqlDbType.Integer);
         AddParameter(command, "queueing_edge", (int)CausalEdgeType.PendingExportQueueingCausedExportExecution, NpgsqlDbType.Integer);
         AddParameter(command, "confirmation_edge", (int)CausalEdgeType.ExportCausedImportConfirmation, NpgsqlDbType.Integer);
         AddParameter(command, "reason_not_set", (int)CausalReasonCode.NotSet, NpgsqlDbType.Integer);

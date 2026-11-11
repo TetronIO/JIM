@@ -36,7 +36,7 @@ public class PendingExportStatusOrdinalTests
         [PendingExportStatus.Parked] = 5,
 
         // A Pending Export still being written across the parallel connections, not yet in effect (#2919).
-        [PendingExportStatus.Staging] = 6
+        [PendingExportStatus.Incomplete] = 6
     };
 
     [Test]

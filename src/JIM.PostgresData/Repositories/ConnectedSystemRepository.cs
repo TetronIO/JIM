@@ -6433,7 +6433,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                   AND pe."Status" NOT IN ({2}, {3})
                 """,
                 connectedSystemId, (int)PendingExportChangeType.Update, (int)PendingExportStatus.Executing,
-                (int)PendingExportStatus.Staging)
+                (int)PendingExportStatus.Incomplete)
             .ToListAsync();
         if (queued.Count == 0)
             return [];
@@ -6497,7 +6497,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                 AND pe.""ChangeType"" = {1}
                 AND pe.""Status"" NOT IN ({2}, {3})
                 AND NOT EXISTS (SELECT 1 FROM ""PendingExportAttributeValueChanges"" c WHERE c.""PendingExportId"" = pe.""Id"")",
-            pendingExportIds, (int)PendingExportChangeType.Update, (int)PendingExportStatus.Executing, (int)PendingExportStatus.Staging);
+            pendingExportIds, (int)PendingExportChangeType.Update, (int)PendingExportStatus.Executing, (int)PendingExportStatus.Incomplete);
 
         return (changesWithdrawn, pendingExportsDeleted);
     }

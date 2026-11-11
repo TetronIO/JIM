@@ -105,7 +105,7 @@ public enum PendingExportStatus
     /// on a status this is not) and out of the unique index on the object, until one statement makes them live. One left
     /// behind by a Worker that stopped mid-write is removed when the Worker next starts.
     /// </remarks>
-    Staging = 6
+    Incomplete = 6
 }
 
 /// <summary>

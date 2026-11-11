@@ -648,6 +648,34 @@ public class CsoDetailAndPaginationTests
         Assert.That(result!.Value, Is.EqualTo(12));
     }
 
+    /// <summary>
+    /// Incomplete is the status of a Pending Export still being written (#2919), which no list or count returns, so
+    /// asking for it could only ever answer nothing: the request is refused rather than answered with an empty result
+    /// that reads as "none queued".
+    /// </summary>
+    [Test]
+    public async Task GetPendingExportsCountAsync_WithIncompleteStatus_ReturnsBadRequestAsync()
+    {
+        var result = await _controller.GetPendingExportsCountAsync(1, status: PendingExportStatus.Incomplete);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.GetPendingExportsFilteredCountAsync(
+            It.IsAny<int>(), It.IsAny<PendingExportChangeType?>(), It.IsAny<PendingExportStatus?>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    /// <inheritdoc cref="GetPendingExportsCountAsync_WithIncompleteStatus_ReturnsBadRequestAsync"/>
+    [Test]
+    public async Task GetPendingExportsAsync_WithIncompleteStatus_ReturnsBadRequestAsync()
+    {
+        var result = await _controller.GetPendingExportsAsync(1, status: PendingExportStatus.Incomplete);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.GetPendingExportHeadersAsync(
+            It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<IEnumerable<PendingExportStatus>?>(),
+            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<bool>(),
+            It.IsAny<IEnumerable<PendingExportChangeType>?>()), Times.Never);
+    }
+
     #endregion
 
     private ConnectedSystemObject CreateTestCso(Guid id, int connectedSystemId)

@@ -350,6 +350,34 @@ public class CausalConsequenceReadDatabaseTests
         Assert.That(cohort.Tuple.PendingExportStatus, Is.EqualTo(PendingExportStatus.Exported));
     }
 
+    /// <summary>
+    /// A Pending Export still being written (Incomplete, #2919) is not yet a Pending Export, so it is no outstanding
+    /// consequence: not of the item that staged it, nor of an export item whose queueing edge names it. A live one beside
+    /// it still is.
+    /// </summary>
+    [Test]
+    public async Task GetCausalConsequenceLevelAsync_PendingExportStillBeingWritten_IsNotOutstandingAsync()
+    {
+        var target = await SeedConnectedSystemAsync("Glitterband EMEA");
+        var sync = await SeedActivityAsync(null, ConnectedSystemRunType.NotSet, T0);
+        var item = await SeedItemAsync(sync, ObjectChangeType.AttributeFlow, "Tina Adams", "User");
+        var waiting = await SeedPendingExportAsync(target.SystemId, PendingExportStatus.Pending);
+        var beingWritten = await SeedPendingExportAsync(target.SystemId, PendingExportStatus.Incomplete);
+        foreach (var pendingExportId in new[] { waiting, beingWritten })
+            await SeedOutcomeAsync(item, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, pendingExportId);
+
+        var export = await SeedActivityAsync(target.SystemId, ConnectedSystemRunType.Export, T0);
+        var exportItem = await SeedItemAsync(export, ObjectChangeType.Exported, "Jo Bloggs", "user");
+        var beingWrittenViaEdge = await SeedPendingExportAsync(target.SystemId, PendingExportStatus.Incomplete);
+        await SeedEdgeAsync(exportItem, CausalEdgeType.PendingExportQueueingCausedExportExecution, pendingExportId: beingWrittenViaEdge);
+
+        var level = await ReadLevelAsync([new(item, 0), new(exportItem, 1)]);
+
+        var outstanding = level.Cohorts.Where(c => c.Tuple.HopKind == CausalConsequenceHopKind.OutstandingPendingExport).ToList();
+        Assert.That(outstanding.SelectMany(c => c.Members).Select(m => m.PendingExportId), Is.EquivalentTo(new[] { waiting }),
+            "only the live export is outstanding");
+    }
+
     [Test]
     public async Task GetCausalConsequenceLevelAsync_DeletionStillScheduledByTheItem_IsOutstandingWithItsDueDateAsync()
     {

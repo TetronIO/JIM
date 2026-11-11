@@ -425,6 +425,7 @@ public class PendingExportCreateParallelWriteDatabaseTests
         await HoldChangeIdAsync(blockerConnection, blockerTransaction, s, heldId);
 
         await using var context = NewContext();
+        var writePid = await OpenAndGetBackendPidAsync(context);
         var repository = Repository(context, WritePath.SingleConnection, Rows(exports));
         var write = Task.Run(() => repository.CreatePendingExportsAsync(exports));
 
@@ -432,7 +433,7 @@ public class PendingExportCreateParallelWriteDatabaseTests
         long changesCommittedWhileOneWaits;
         try
         {
-            Assert.That(await WaitForASessionBlockedOnALockAsync(), Is.True, "sanity: the write reaches the held change and waits");
+            Assert.That(await WaitUntilBlockedAsync(writePid), Is.True, "sanity: the write reaches the held change and waits");
             exportsCommittedWhileOneWaits = await CountAsync("PendingExports", "Id", exports.Select(pe => pe.Id));
             changesCommittedWhileOneWaits = await CountAsync("PendingExportAttributeValueChanges", "Id", changeIds.Where(id => id != heldId));
         }
@@ -451,19 +452,29 @@ public class PendingExportCreateParallelWriteDatabaseTests
     }
 
     /// <summary>
-    /// Waits until some session of the test database is waiting on a lock: the write reaching the change another
-    /// session holds. False after 30 seconds.
+    /// Opens the context's connection, so that everything the context does runs on it, and returns its server process.
     /// </summary>
-    private async Task<bool> WaitForASessionBlockedOnALockAsync()
+    private static async Task<int> OpenAndGetBackendPidAsync(JimDbContext context)
+    {
+        await context.Database.OpenConnectionAsync();
+        await using var command = new NpgsqlCommand("SELECT pg_backend_pid()", (NpgsqlConnection)context.Database.GetDbConnection());
+        return (int)(await command.ExecuteScalarAsync())!;
+    }
+
+    /// <summary>
+    /// Waits until the session with server process <paramref name="pid"/> is waiting on a lock another session holds.
+    /// False after 30 seconds. Scoped to the one session, so no other session's wait can satisfy it.
+    /// </summary>
+    private async Task<bool> WaitUntilBlockedAsync(int pid)
     {
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            """SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'""", connection);
+        await using var command = new NpgsqlCommand("SELECT cardinality(pg_blocking_pids(@pid)) > 0", connection);
+        command.Parameters.AddWithValue("pid", pid);
         var deadline = DateTime.UtcNow.AddSeconds(30);
         while (DateTime.UtcNow < deadline)
         {
-            if ((long)(await command.ExecuteScalarAsync())! > 0)
+            if ((bool)(await command.ExecuteScalarAsync())!)
                 return true;
             await Task.Delay(50);
         }
@@ -642,7 +653,7 @@ public class PendingExportCreateParallelWriteDatabaseTests
             var repository = Repository(context, WritePath.Parallel, Rows(exports));
             repository.PendingExportCreateStepReached = async step =>
             {
-                if (step == SyncRepository.StepChangesStaged)
+                if (step == SyncRepository.StepChangesWritten)
                 {
                     await using var connection = new NpgsqlConnection(_connectionString);
                     await connection.OpenAsync();
@@ -733,7 +744,7 @@ public class PendingExportCreateParallelWriteDatabaseTests
         var after = await WhatReadersSeeAsync(s, exports);
         using (Assert.EnterMultipleScope())
         {
-            foreach (var step in new[] { SyncRepository.StepExportsStaged, SyncRepository.StepChangesStaged })
+            foreach (var step in new[] { SyncRepository.StepExportsWritten, SyncRepository.StepChangesWritten })
             {
                 Assert.That(seen[step].Written, Is.EqualTo(exports.Count), $"{step}: sanity, the call's exports are committed");
                 Assert.That(seen[step] with { Written = 0 }, Is.EqualTo(new ReaderView(0, 0, 0, 0, 0, 0, 0)), $"{step}: no reader sees any of them");
@@ -770,7 +781,7 @@ public class PendingExportCreateParallelWriteDatabaseTests
         var stoppedRepository = Repository(stoppedContext, WritePath.Parallel, Rows(stopped));
         stoppedRepository.PendingExportCreateStepReached = async step =>
         {
-            if (step != SyncRepository.StepChangesStaged)
+            if (step != SyncRepository.StepChangesWritten)
                 return;
             reachedStop.SetResult();
             await carryOn.Task;
@@ -787,7 +798,7 @@ public class PendingExportCreateParallelWriteDatabaseTests
 
         int removedAtStart;
         await using (var context = NewContext())
-            removedAtStart = await new PostgresDataRepository(context).Sync.RemoveUnfinishedPendingExportStagingAsync();
+            removedAtStart = await new PostgresDataRepository(context).Sync.RemoveIncompletePendingExportsAsync();
 
         carryOn.SetResult();
         Assert.That(async () => await stoppedCall, Throws.InstanceOf<InvalidOperationException>(),
@@ -804,6 +815,51 @@ public class PendingExportCreateParallelWriteDatabaseTests
             Assert.That(await CountAsync("PendingExports", "Id", next.Select(pe => pe.Id)), Is.EqualTo(next.Count),
                 "the next staging for the same objects was not held back by it, and is left alone");
             Assert.That((await WhatReadersSeeAsync(s, next)).Selected, Is.EqualTo(next.Count), "and is live");
+        }
+    }
+
+    #endregion
+
+    #region The start-up removal and a call made live at the same moment
+
+    /// <summary>
+    /// The Worker's start-up removal runs while a call's exports are being made live: they have been given their status,
+    /// and that has not committed. The removal must wait for them, and then leave them, with every one of their changes.
+    /// Removing the changes of Incomplete exports in a statement of its own would take them before it waited.
+    /// </summary>
+    [Test]
+    public async Task RemoveIncompletePendingExportsAsync_WhileACallIsMadeLive_LeavesItsExportsWholeAsync()
+    {
+        var s = await SeedAsync();
+        var exports = BuildBatch(s);
+
+        await using var sweepContext = NewContext();
+        var sweepPid = await OpenAndGetBackendPidAsync(sweepContext);
+        var sweep = new PostgresDataRepository(sweepContext).Sync;
+        Task<int>? sweeping = null;
+        var sweepWaited = false;
+
+        await using (var context = NewContext())
+        {
+            var repository = Repository(context, WritePath.Parallel, Rows(exports));
+            repository.PendingExportCreateStepReached = async step =>
+            {
+                if (step != SyncRepository.StepMakingLive)
+                    return;
+                sweeping = Task.Run(() => sweep.RemoveIncompletePendingExportsAsync());
+                sweepWaited = await WaitUntilBlockedAsync(sweepPid);
+            };
+            await repository.CreatePendingExportsAsync(exports);
+        }
+
+        var removed = await sweeping!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sweepWaited, Is.True, "sanity: the removal reached the exports being made live and waited for them");
+            Assert.That(removed, Is.Zero, "the removal removes no export that was made live");
+            Assert.That(await CountAsync("PendingExports", "Id", exports.Select(pe => pe.Id)), Is.EqualTo(exports.Count), "every export remains");
+            Assert.That(await CountAsync("PendingExportAttributeValueChanges", "Id", ChangeIds(exports)), Is.EqualTo(ChangeIds(exports).Count),
+                "with every one of its changes");
         }
     }
 

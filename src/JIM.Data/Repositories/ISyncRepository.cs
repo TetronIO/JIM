@@ -2331,13 +2331,13 @@ public interface ISyncRepository
     Task<int> RecoverStrandedExecutingPendingExportsAsync();
 
     /// <summary>
-    /// Removes every Pending Export a Worker left Staging (#2919), with its changes: a large staging call writes its
+    /// Removes every Pending Export a Worker left Incomplete (#2919), with its changes: a large staging call writes its
     /// Pending Exports and their changes across several connections and makes them live together at the end, so one that
     /// stopped part-way leaves rows no reader sees and nothing will finish. Called once at Worker startup, alongside
     /// <see cref="RecoverStrandedExecutingPendingExportsAsync"/>, under the same single-worker assumption.
     /// </summary>
     /// <returns>The number of Pending Exports removed.</returns>
-    Task<int> RemoveUnfinishedPendingExportStagingAsync();
+    Task<int> RemoveIncompletePendingExportsAsync();
 
     /// <summary>
     /// Loads Pending Exports by id for execution (#2813): the one load of an export's graph that export execution

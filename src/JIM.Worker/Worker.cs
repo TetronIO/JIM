@@ -155,9 +155,9 @@ public class Worker : BackgroundService
 
             // Remove Pending Exports a large staging call was still writing when the Worker stopped (#2919). They are not
             // yet in effect: no reader sees them and nothing would finish them.
-            var unfinishedStagingCount = await mainLoopJim.ExportExecution.RemoveUnfinishedPendingExportStagingAsync();
-            if (unfinishedStagingCount > 0)
-                Log.Warning("ExecuteAsync: Removed {Count} Pending Export(s) left unfinished by a previous crash", unfinishedStagingCount);
+            var incompleteCount = await mainLoopJim.ExportExecution.RemoveIncompletePendingExportsAsync();
+            if (incompleteCount > 0)
+                Log.Warning("ExecuteAsync: Removed {Count} Pending Export(s) left unfinished by a previous crash", incompleteCount);
         });
 
         // The same liveness as the health-check heartbeat file, written to the database for administrators: the

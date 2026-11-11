@@ -5227,9 +5227,9 @@ public class ExportExecutionServer
 
     /// <summary>
     /// Removes the Pending Exports a Worker that stopped part-way through writing them left unfinished. Called once at
-    /// Worker startup; see <see cref="ISyncRepository.RemoveUnfinishedPendingExportStagingAsync"/>.
+    /// Worker startup; see <see cref="ISyncRepository.RemoveIncompletePendingExportsAsync"/>.
     /// </summary>
     /// <returns>The number of Pending Exports removed.</returns>
-    public Task<int> RemoveUnfinishedPendingExportStagingAsync()
-        => SyncRepo.RemoveUnfinishedPendingExportStagingAsync();
+    public Task<int> RemoveIncompletePendingExportsAsync()
+        => SyncRepo.RemoveIncompletePendingExportsAsync();
 }

@@ -4123,9 +4123,9 @@ public partial class SyncRepository : ISyncRepository
     }
 
     /// <summary>
-    /// Nothing to remove: this store writes every Pending Export in one step, so none is ever left Staging.
+    /// Nothing to remove: this store writes every Pending Export in one step, so none is ever left Incomplete.
     /// </summary>
-    public Task<int> RemoveUnfinishedPendingExportStagingAsync() => Task.FromResult(0);
+    public Task<int> RemoveIncompletePendingExportsAsync() => Task.FromResult(0);
 
     public Task<int> RecoverStrandedExecutingPendingExportsAsync()
     {
