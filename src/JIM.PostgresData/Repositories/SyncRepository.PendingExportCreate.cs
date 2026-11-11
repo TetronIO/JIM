@@ -70,9 +70,9 @@ public partial class SyncRepository
         span?.SetTag("count", exports.Count);
         span?.SetTag("changeCount", changeRows.Count);
 
-        // Gated on every row the call writes, as the other bulk writers are (#2872), and given connections in proportion
-        // to them (#2669): both phases use the same count, so a people page's staging takes four and a group page's every
-        // one.
+        // Gated on every row the call writes, as the other bulk writers are (#2872). Each parallel step then takes the
+        // connections its own rows earn (#2669), so a people page's 5,500 changes take four, a group page's every one, and
+        // either page's few hundred exports one: spread across five, a people page's exports cost 23 ms for a 2.2 ms COPY.
         var connections = ConnectionsForWrite(exports.Count + changeRows.Count);
         if (connections > 1)
         {
@@ -183,9 +183,12 @@ public partial class SyncRepository
         {
             using (var exportsSpan = MvoActivitySource.StartActivity("PendingExport.Create.Exports"))
             {
+                // Still on connections of its own, never the context's: each change's foreign key names its export, and
+                // the changes are written on other connections, so every export must be committed first.
+                var exportConnections = Math.Min(parallelism, ConnectionsForWrite(exports.Count));
                 exportsSpan?.SetTag("rowCount", exports.Count);
-                exportsSpan?.SetTag("connections", Math.Min(parallelism, exports.Count));
-                await ParallelBatchWriter.ExecuteAsync(exports, parallelism, connectionString, async (connection, partition) =>
+                exportsSpan?.SetTag("connections", exportConnections);
+                await ParallelBatchWriter.ExecuteAsync(exports, exportConnections, connectionString, async (connection, partition) =>
                 {
                     await using var transaction = await connection!.BeginTransactionAsync();
                     await BulkInsertPendingExportsOnConnectionAsync(connection, transaction, partition, incomplete: true);
@@ -199,9 +202,10 @@ public partial class SyncRepository
             {
                 // Every export is committed now, so a change may belong to one any connection wrote.
                 using var changesSpan = MvoActivitySource.StartActivity("PendingExport.Create.Changes");
+                var changeConnections = Math.Min(parallelism, ConnectionsForWrite(changeRows.Count));
                 changesSpan?.SetTag("rowCount", changeRows.Count);
-                changesSpan?.SetTag("connections", Math.Min(parallelism, changeRows.Count));
-                await ParallelBatchWriter.ExecuteAsync(changeRows, parallelism, connectionString, async (connection, partition) =>
+                changesSpan?.SetTag("connections", changeConnections);
+                await ParallelBatchWriter.ExecuteAsync(changeRows, changeConnections, connectionString, async (connection, partition) =>
                 {
                     await using var transaction = await connection!.BeginTransactionAsync();
                     await BulkInsertPendingExportAttributeValueChangesOnConnectionAsync(connection, transaction, partition);
