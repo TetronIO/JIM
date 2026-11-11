@@ -247,22 +247,239 @@ public class ObjectMatchingServer
     /// <see cref="ObjectMatchingRule.MetaverseObjectType"/> (simple mode) or the caller must set it
     /// from the Synchronisation Rule before passing (advanced mode).</param>
     /// <returns>The match, or null if no rule found one.</returns>
+    /// <param name="prefetched">The page's batch (<see cref="PrefetchJoinMatchesForPageAsync"/>), consulted before the
+    /// database; what it did not cover is looked up as before. Null to look everything up.</param>
     /// <exception cref="MultipleMatchesException">A rule's values find more than one Metaverse Object.</exception>
     /// <exception cref="ObjectMatchingRuleFailedException">A rule could not be worked out for this object.</exception>
     public Task<ImportMatch?> FindMatchingMetaverseObjectAsync(
         ConnectedSystemObject connectedSystemObject,
-        List<ObjectMatchingRule> matchingRules)
-        => FindMatchingMetaverseObjectAsync(Application.SyncRepo, connectedSystemObject, matchingRules);
+        List<ObjectMatchingRule> matchingRules,
+        JoinMatchCandidates? prefetched = null)
+        => FindMatchingMetaverseObjectAsync(Application.SyncRepo, connectedSystemObject, matchingRules, prefetched);
 
     /// <summary>
-    /// As <see cref="FindMatchingMetaverseObjectAsync(ConnectedSystemObject, List{ObjectMatchingRule})"/>, against the
+    /// The most Metaverse Objects an import join's lookup asks for: one more than an ambiguous match lists, so it can tell
+    /// when there are more to count.
+    /// </summary>
+    private const int JoinLookupTake = ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded + 1;
+
+    /// <summary>
+    /// Looks up, for a page of unjoined Connected System Objects at once, everything their import joins will ask the
+    /// database (#2020): the Metaverse Objects their Object Matching Rules' values find, each Metaverse Object a join will
+    /// settle on, and how many objects of the Connected System are joined to it already. One query per distinct lookup
+    /// key per round, one load and one count, instead of up to three round trips per object: at Scale500k25kGroups the
+    /// per-object lookup alone cost about 90 s of a first Full Synchronisation, of which the database spent 4.0 s.
+    /// <para>
+    /// Each object's rules are walked exactly as <see cref="FindMatchingMetaverseObjectAsync(ConnectedSystemObject, List{ObjectMatchingRule}, JoinMatchCandidates?)"/>
+    /// walks them, in <see cref="ObjectMatchingRule.Order"/>: a rule with no Metaverse Object Type or no value passes to
+    /// the next, one that cannot be worked out or finds more than one Metaverse Object stops, one that finds none passes
+    /// to the next, and one that finds exactly one settles. Each round looks up the rule every unsettled object has
+    /// reached, so the rounds number at most the rules of the longest list, whatever the page holds, and no rule an
+    /// object would not reach is resolved.
+    /// </para>
+    /// <para>
+    /// The batch reads the database as the page's per-object lookups would: nothing on the synchronisation path writes
+    /// Metaverse Objects, their values or the join columns until the page flush. What the page changes in memory
+    /// (pending disconnections, joins queued earlier in the page) the caller applies on top, as before. Deliberately
+    /// uncaught: a failed batch fails the page rather than leaving every object to a slower path silently.
+    /// </para>
+    /// </summary>
+    /// <param name="joins">Each unjoined object with the Object Matching Rules one of its joins will try, each rule
+    /// carrying the Metaverse Object Type it searches. An object may appear once per list it will try (one per import
+    /// Synchronisation Rule in Synchronisation Rule mode). Covering more than the joins try is harmless.</param>
+    /// <param name="connectedSystemId">The Connected System being synchronised, whose joins are counted.</param>
+    public async Task<JoinMatchCandidates> PrefetchJoinMatchesForPageAsync(
+        IReadOnlyList<(ConnectedSystemObject ConnectedSystemObject, IReadOnlyList<ObjectMatchingRule> MatchingRules)> joins,
+        int connectedSystemId)
+    {
+        var repository = Application.SyncRepo;
+        var candidates = new JoinMatchCandidates();
+        using var span = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("Join.Prefetch");
+        span.SetTag("joinCount", joins.Count);
+
+        var rules = joins.Select(join => join.MatchingRules.OrderBy(rule => rule.Order).ToList()).ToList();
+        var positions = new int[joins.Count];
+        var pending = Enumerable.Range(0, joins.Count).Where(i => rules[i].Count > 0).ToList();
+        var settled = new HashSet<Guid>();
+        var rounds = 0;
+        var lookupQueries = 0;
+        var valuesSought = 0;
+
+        while (pending.Count > 0)
+        {
+            // Resolve the rule each unsettled object has reached, passing over those an object's per-object walk passes over.
+            // An object whose walk ends without a lookup (no rule left, or one that cannot be worked out) drops out, as does
+            // one the batch leaves to its own join (see ResolveNextLookupForBatch).
+            var awaiting = new List<(int Join, JoinMatchLookupKey Key, IReadOnlyList<object> Values)>();
+            foreach (var i in pending)
+            {
+                var lookup = ResolveNextLookupForBatch(joins[i].ConnectedSystemObject, rules[i], ref positions[i]);
+                if (lookup is { } reached)
+                    awaiting.Add((i, reached.Key, reached.Values));
+            }
+
+            var sought = new Dictionary<JoinMatchLookupKey, HashSet<object>>();
+            foreach (var (_, key, values) in awaiting)
+            {
+                if (!sought.TryGetValue(key, out var keyValues))
+                {
+                    keyValues = [];
+                    sought[key] = keyValues;
+                }
+
+                keyValues.UnionWith(values.Where(value => !candidates.HasLookedUp(key, value)));
+            }
+
+            if (awaiting.Count == 0)
+                break;
+            rounds++;
+
+            foreach (var (key, keyValues) in sought.Where(entry => entry.Value.Count > 0))
+            {
+                // A database failure here is left to fail the page: unlike a fault in one object's rule, it is an
+                // infrastructure fault (the database unreachable or refusing the statement) that every object's own lookup
+                // would meet as well. Nothing an object holds can cause it, since a value the database cannot take never
+                // reaches the batch (ResolveNextLookupForBatch).
+                IReadOnlyList<(object Value, Guid MetaverseObjectId)> found;
+                using (var lookupSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("Join.MatchLookup"))
+                {
+                    found = await repository.FindMetaverseObjectIdsByEachMatchValueAsync(
+                        key.MetaverseObjectTypeId, key.MetaverseAttributeId, key.ValueType, [.. keyValues], key.CaseSensitive, JoinLookupTake);
+                    lookupSpan.SetTag("batched", true);
+                    lookupSpan.SetTag("valueCount", keyValues.Count);
+                    lookupSpan.SetTag("matchCount", found.Count);
+                }
+
+                lookupQueries++;
+                valuesSought += keyValues.Count;
+                var idsByValue = found.ToLookup(row => row.Value, row => row.MetaverseObjectId);
+                foreach (var value in keyValues)
+                    candidates.AddLookedUp(key, value, idsByValue[value].ToList());
+            }
+
+            // A rule finding nothing passes to the next; finding one settles; finding more stops, as ambiguous.
+            var next = new List<int>();
+            foreach (var (i, key, values) in awaiting)
+            {
+                var ids = candidates.GetMetaverseObjectIds(key, values, JoinLookupTake)!;
+                if (ids.Count == 0)
+                {
+                    positions[i]++;
+                    next.Add(i);
+                }
+                else if (ids.Count == 1)
+                {
+                    settled.Add(ids[0]);
+                }
+            }
+
+            pending = next;
+        }
+
+        if (settled.Count > 0)
+        {
+            IReadOnlyDictionary<Guid, MetaverseObject> loaded;
+            using (var loadSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("Join.LoadMatches"))
+            {
+                loaded = await repository.GetMetaverseObjectsForJoinMatchAsync(settled);
+                loadSpan.SetTag("mvoCount", loaded.Count);
+            }
+
+            foreach (var id in settled)
+                candidates.AddLoaded(id, loaded.GetValueOrDefault(id));
+
+            if (loaded.Count > 0)
+            {
+                IReadOnlyDictionary<Guid, int> counts;
+                using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("Join.ExistingJoinCounts"))
+                    counts = await repository.GetConnectedSystemObjectCountsByMvoAsync(connectedSystemId, [.. loaded.Keys]);
+                foreach (var id in loaded.Keys)
+                    candidates.AddJoinCount(id, counts.GetValueOrDefault(id));
+            }
+        }
+
+        span.SetTag("rounds", rounds);
+        span.SetTag("lookupQueries", lookupQueries);
+        span.SetTag("valuesSought", valuesSought);
+        span.SetTag("settledCount", settled.Count);
+        span.SetSuccess();
+        Log.Debug("PrefetchJoinMatchesForPageAsync: {JoinCount} join(s), {Rounds} round(s), {LookupQueries} lookup quer(ies) for {ValuesSought} value(s), {SettledCount} Metaverse Object(s) settled on",
+            joins.Count, rounds, lookupQueries, valuesSought, settled.Count);
+        return candidates;
+    }
+
+    /// <summary>
+    /// <see cref="ResolveNextLookup"/> for the page's batch, which must not let one object stop the page. Before the batch,
+    /// a rule that threw for one object made one UnhandledError item, and only when the object was in scope for its
+    /// Synchronisation Rule; the batch resolves before scope is known, outside the per-object catch. So anything that
+    /// goes wrong for an object here leaves it to its own join, which fails, or does not, exactly as it always did:
+    /// null, logged at Debug only, since that join reports it if the object reaches the rule. A Text value holding a NUL
+    /// character is left to the object's own join too: PostgreSQL refuses it in any statement, so it would fail the
+    /// batch for every object on the page rather than the one lookup that carries it.
+    /// </summary>
+    private (JoinMatchLookupKey Key, IReadOnlyList<object> Values)? ResolveNextLookupForBatch(
+        ConnectedSystemObject connectedSystemObject, List<ObjectMatchingRule> rules, ref int position)
+    {
+        try
+        {
+            var lookup = ResolveNextLookup(connectedSystemObject, rules, ref position);
+            if (lookup is { } reached && reached.Values.Any(value => value is string text && text.Contains('\0')))
+            {
+                Log.Debug("PrefetchJoinMatchesForPageAsync: CSO {CsoId}'s Object Matching Rule {RuleId} computes a value holding a NUL character; its join looks it up itself",
+                    connectedSystemObject.Id, rules[position].Id);
+                return null;
+            }
+
+            return lookup;
+        }
+        // A fallback to the object's own join, not a recovery: the join meets the same fault and reports it.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Debug(ex, "PrefetchJoinMatchesForPageAsync: Object Matching Rule {RuleId} could not be resolved for CSO {CsoId}; its join resolves it itself",
+                rules.ElementAtOrDefault(position)?.Id, connectedSystemObject.Id);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The lookup the next rule an object's join reaches will make, from <paramref name="position"/> on, advancing past
+    /// each rule its per-object walk passes over (no Metaverse Object Type, or no value). Null when the walk ends there:
+    /// no rule is left, or one cannot be worked out, which stops the object.
+    /// </summary>
+    private (JoinMatchLookupKey Key, IReadOnlyList<object> Values)? ResolveNextLookup(
+        ConnectedSystemObject connectedSystemObject, List<ObjectMatchingRule> rules, ref int position)
+    {
+        for (; position < rules.Count; position++)
+        {
+            var rule = rules[position];
+            if (rule.MetaverseObjectType == null)
+                continue;
+
+            var resolution = _matchValueResolver.Resolve(rule, connectedSystemObject.AttributeValues, connectedSystemObject.Type);
+            if (resolution.Kind == MatchValueResolutionKind.Failed)
+                return null;
+            if (resolution.Kind == MatchValueResolutionKind.NoValue)
+                continue;
+
+            return (LookupKey(rule.MetaverseObjectType.Id, rule, resolution), resolution.Values);
+        }
+
+        return null;
+    }
+
+    private static JoinMatchLookupKey LookupKey(int metaverseObjectTypeId, ObjectMatchingRule rule, MatchValueResolution resolution) =>
+        new(metaverseObjectTypeId, rule.TargetMetaverseAttribute!.Id, resolution.ValueType, rule.CaseSensitive);
+
+    /// <summary>
+    /// As <see cref="FindMatchingMetaverseObjectAsync(ConnectedSystemObject, List{ObjectMatchingRule}, JoinMatchCandidates?)"/>, against the
     /// given repository: Sync Preview passes its read-only guard, so a preview evaluates rules exactly as a
     /// synchronisation would without being able to write.
     /// </summary>
     internal async Task<ImportMatch?> FindMatchingMetaverseObjectAsync(
         ISyncRepository repository,
         ConnectedSystemObject connectedSystemObject,
-        List<ObjectMatchingRule> matchingRules)
+        List<ObjectMatchingRule> matchingRules,
+        JoinMatchCandidates? prefetched = null)
     {
         if (matchingRules.Count == 0)
         {
@@ -291,17 +508,21 @@ public class ObjectMatchingServer
             if (resolution.Kind == MatchValueResolutionKind.NoValue)
                 continue;
 
-            // Resolve succeeded, so the rule has a Target Metaverse Attribute.
-            IReadOnlyList<Guid> ids;
-            using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("Join.MatchLookup"))
+            // Resolve succeeded, so the rule has a Target Metaverse Attribute. The page's batch answers when it covered every
+            // value (#2020); otherwise the database is asked.
+            var ids = prefetched?.GetMetaverseObjectIds(LookupKey(metaverseObjectType.Id, matchingRule, resolution), resolution.Values, JoinLookupTake);
+            if (ids == null)
             {
-                ids = await repository.FindMetaverseObjectIdsByMatchValuesAsync(
-                    metaverseObjectType.Id,
-                    matchingRule.TargetMetaverseAttribute!.Id,
-                    resolution.ValueType,
-                    resolution.Values,
-                    matchingRule.CaseSensitive,
-                    take: ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded + 1);
+                using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("Join.MatchLookup"))
+                {
+                    ids = await repository.FindMetaverseObjectIdsByMatchValuesAsync(
+                        metaverseObjectType.Id,
+                        matchingRule.TargetMetaverseAttribute!.Id,
+                        resolution.ValueType,
+                        resolution.Values,
+                        matchingRule.CaseSensitive,
+                        take: JoinLookupTake);
+                }
             }
 
             if (ids.Count == 0)
@@ -318,9 +539,10 @@ public class ObjectMatchingServer
                 };
             }
 
-            MetaverseObject? mvo;
-            using (var loadSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("Join.LoadMatch"))
+            MetaverseObject? mvo = null;
+            if (prefetched == null || !prefetched.TryGetLoaded(ids[0], out mvo))
             {
+                using var loadSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("Join.LoadMatch");
                 mvo = await repository.GetMetaverseObjectForJoinMatchAsync(ids[0]);
                 loadSpan.SetTag("attributeValueCount", mvo?.AttributeValues.Count ?? 0);
             }

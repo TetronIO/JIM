@@ -431,6 +431,13 @@ public interface IMetaverseRepository
     public Task<int> CountMetaverseObjectsByMatchValuesAsync(int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive);
 
     /// <summary>
+    /// For each of <paramref name="values"/> separately, the first <paramref name="takePerValue"/> distinct Metaverse
+    /// Objects of the type holding it, in id order, compared exactly as <see cref="FindMetaverseObjectIdsByMatchValuesAsync"/>
+    /// compares: a page of import joins' lookups in one round trip (#2020). Each row carries the caller's own value object.
+    /// </summary>
+    public Task<IReadOnlyList<(object Value, Guid MetaverseObjectId)>> FindMetaverseObjectIdsByEachMatchValueAsync(int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive, int takePerValue);
+
+    /// <summary>
     /// Deletes a Metaverse Object from the database.
     /// </summary>
     /// <param name="metaverseObject">The Metaverse Object to delete.</param>

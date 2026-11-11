@@ -517,6 +517,13 @@ try
             OpenApiResponseContentTypes.ApplyToOperation(operation, context.Description.ActionDescriptor.EndpointMetadata);
             return Task.CompletedTask;
         });
+
+        // Enum members no caller can meet or use (a Pending Export still being written) are left out of the document.
+        options.AddSchemaTransformer((schema, context, _) =>
+        {
+            OpenApiHiddenEnumMembers.ApplyToSchema(schema, context.JsonTypeInfo.Type);
+            return Task.CompletedTask;
+        });
     });
 
     // setup logging properly now (it's been bootstrapped initially)
