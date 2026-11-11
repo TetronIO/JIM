@@ -30,6 +30,13 @@ namespace JIM.Application.Services;
 /// heaviest exports together neither loads more at once than queue order's heaviest chunk did (the pass holds one chunk in
 /// memory) nor packs them into one batch that would outlast everything else.
 /// </para>
+/// <para>
+/// The plan also says which chunks may be prepared ahead (#2605), while the batches of the chunk before them are still
+/// being written: see <see cref="DeferredExportPlan.CanPrepareAhead"/>. No export of a stage waits on another export of
+/// it in the sense above, but a stage may still hold a reference to an export queued later whose anchor it supplies; the
+/// pass has always resolved such a reference when the referrer's chunk was loaded after that export was written, so a
+/// chunk holding one is not prepared ahead.
+/// </para>
 /// </remarks>
 public static class DeferredExportScheduler
 {
@@ -99,8 +106,47 @@ public static class DeferredExportScheduler
             Stages = stages,
             Weights = weights,
             BatchWeightBudget = batchWeightBudget,
-            DependentCount = waitsOn.Count
+            DependentCount = waitsOn.Count,
+            PreparableAhead = PreparableAhead(stages, summary.Dependencies)
         };
+    }
+
+    /// <summary>
+    /// Per chunk, whether it may be prepared while the batches of the chunks before it in its stage are still being written
+    /// (#2605; <see cref="DeferredExportPlan.CanPrepareAhead"/>). Every chunk but a stage's first, unless one of its exports
+    /// refers to the object of an export in an earlier chunk of the stage whose anchor that export supplies. Such a
+    /// reference imposes no stage (the export it names was queued later, so queue order never resolved it within the run),
+    /// but the pass resolves a chunk against what has been written by the time it is loaded, and so may resolve it; the
+    /// chunk is loaded when it always was, so it resolves no less. Every other reference resolves the same whenever the
+    /// chunk is prepared: to an object the pass does not give an anchor, a stage before (finished), or this chunk or one
+    /// after it (not yet written either way).
+    /// </summary>
+    private static List<bool> PreparableAhead(IReadOnlyList<IReadOnlyList<Guid[]>> stages, IReadOnlyList<DeferredExportDependency> dependencies)
+    {
+        var located = new Dictionary<Guid, (int Stage, int Chunk)>();
+        var preparable = new List<bool>();
+        for (var stageIndex = 0; stageIndex < stages.Count; stageIndex++)
+        {
+            for (var chunkInStage = 0; chunkInStage < stages[stageIndex].Count; chunkInStage++)
+            {
+                foreach (var id in stages[stageIndex][chunkInStage])
+                    located.TryAdd(id, (stageIndex, preparable.Count));
+                preparable.Add(chunkInStage > 0);
+            }
+        }
+
+        foreach (var dependency in dependencies)
+        {
+            if (located.TryGetValue(dependency.ReferrerId, out var referrer)
+                && located.TryGetValue(dependency.TargetId, out var target)
+                && referrer.Stage == target.Stage
+                && target.Chunk < referrer.Chunk)
+            {
+                preparable[referrer.Chunk] = false;
+            }
+        }
+
+        return preparable;
     }
 
     /// <summary>

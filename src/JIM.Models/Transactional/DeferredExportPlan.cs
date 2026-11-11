@@ -34,6 +34,21 @@ public sealed class DeferredExportPlan
     public int DependentCount { get; init; }
 
     /// <summary>
+    /// Per chunk, in the order of <see cref="Chunks"/>, whether it may be prepared ahead (#2605): see
+    /// <see cref="CanPrepareAhead"/>.
+    /// </summary>
+    public IReadOnlyList<bool> PreparableAhead { get; init; } = [];
+
+    /// <summary>
+    /// Whether the chunk at <paramref name="chunkIndex"/> (in the order of <see cref="Chunks"/>) may be prepared while the
+    /// batches of the chunks before it in its stage are still being written (#2605). A stage's first chunk never is: it
+    /// waits on the stages before it. Nor is a chunk holding a reference to an object whose anchor an export in an earlier
+    /// chunk of its stage supplies: the pass has always resolved it against what that export had written by the time the
+    /// chunk was loaded, so it is still loaded then. Any other chunk resolves the same whenever it is prepared.
+    /// </summary>
+    public bool CanPrepareAhead(int chunkIndex) => chunkIndex >= 0 && chunkIndex < PreparableAhead.Count && PreparableAhead[chunkIndex];
+
+    /// <summary>
     /// Every chunk of every stage, in the order the pass loads them.
     /// </summary>
     public IEnumerable<Guid[]> Chunks => Stages.SelectMany(stage => stage);

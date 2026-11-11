@@ -3964,8 +3964,8 @@ public partial class SyncRepository : ISyncRepository
     /// <summary>
     /// What the deferred pass orders the given exports by (#2905), mirroring the Postgres implementation: each export's
     /// change count, and each export referencing the object of another export among them that supplies that object's
-    /// anchor (the object holds none yet, or the export, not being a Create, changes an external ID attribute). Virtual
-    /// for test-support subclasses.
+    /// anchor (the object holds none yet, or the export, not being a Create, changes an external ID attribute), with the
+    /// Metaverse Objects whose anchor those exports supply (#2605). Virtual for test-support subclasses.
     /// </summary>
     public virtual Task<DeferredExportOrderingSummary> GetDeferredExportOrderingSummaryAsync(int connectedSystemId, IReadOnlyCollection<Guid> pendingExportIds)
     {
@@ -3997,7 +3997,8 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(new DeferredExportOrderingSummary
         {
             ChangeCounts = exports.ToDictionary(export => export.Id, export => export.AttributeValueChanges.Count),
-            Dependencies = dependencies
+            Dependencies = dependencies,
+            AnchorSupplierMetaverseObjectIds = suppliersByMetaverseObject.Keys.ToHashSet()
         });
     }
 
