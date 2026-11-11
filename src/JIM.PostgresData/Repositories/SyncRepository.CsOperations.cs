@@ -1082,54 +1082,6 @@ public partial class SyncRepository
 
     #region Pending Export — Worker-Only Bulk Operations
 
-    /// <summary>
-    /// Stages new Pending Exports (and their attribute value changes) via COPY binary import on the
-    /// EF connection's own transaction, so the parent and child rows commit atomically. Unlike CSO,
-    /// MVO and RPEI creation, Pending Export creation has no separate parallel multi-connection
-    /// branch: every batch, however large, goes through this single path.
-    /// </summary>
-    public async Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
-    {
-        var pendingExportsList = pendingExports.ToList();
-        if (pendingExportsList.Count == 0)
-            return;
-
-        // Inserted after any queued delete for the same objects (the Pending Export batch scope, #2492).
-        await ExecuteQueuedDeletesForAsync(pendingExportsList.Select(pe => pe.ConnectedSystemObjectId));
-
-        // Pre-generate IDs for all Pending Exports and their attribute value changes
-        foreach (var pe in pendingExportsList)
-        {
-            if (pe.Id == Guid.Empty)
-                pe.Id = Guid.NewGuid();
-
-            foreach (var avc in pe.AttributeValueChanges)
-            {
-                if (avc.Id == Guid.Empty)
-                    avc.Id = Guid.NewGuid();
-            }
-        }
-
-        await using var transaction = await _context.Database.BeginTransactionAsync();
-
-        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
-        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
-        var npgsqlTx = (NpgsqlTransaction)_context.Database.CurrentTransaction!.GetDbTransaction();
-
-        // Step 1: INSERT parent PendingExport rows
-        await BulkInsertPendingExportsOnConnectionAsync(npgsqlConn, npgsqlTx, pendingExportsList);
-
-        // Step 2: INSERT child attribute value change rows
-        var allChanges = pendingExportsList
-            .SelectMany(pe => pe.AttributeValueChanges.Select(avc => (PendingExportId: pe.Id, Change: avc)))
-            .ToList();
-
-        if (allChanges.Count > 0)
-            await BulkInsertPendingExportAttributeValueChangesOnConnectionAsync(npgsqlConn, npgsqlTx, allChanges);
-
-        await transaction.CommitAsync();
-    }
-
     public async Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
     {
         var csoIds = connectedSystemObjectIds.ToArray();
@@ -1647,14 +1599,14 @@ public partial class SyncRepository
     #region Private Pending Export Bulk Helpers
 
     /// <summary>
-    /// Inserts Pending Export rows via COPY binary import on the EF connection's own transaction
-    /// (see <see cref="CreatePendingExportsAsync"/>). Pending Export creation has no separate parallel
-    /// multi-connection branch, so this is the only insert path for this table, at any batch size.
+    /// Inserts Pending Export rows via COPY binary import on the given connection, in the transaction open on it: the
+    /// context's own on the single-connection path of <see cref="CreatePendingExportsAsync"/>, or a parallel connection's
+    /// own on its parallel path (#2919). The only insert path for this table, at any batch size.
     /// </summary>
     private static async Task BulkInsertPendingExportsOnConnectionAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        List<PendingExport> exports)
+        IReadOnlyList<PendingExport> exports)
     {
         // Writer order below MUST match PendingExportBulkColumns.PendingExports exactly.
         await using var writer = await connection.BeginBinaryImportAsync(
@@ -1714,14 +1666,14 @@ public partial class SyncRepository
     }
 
     /// <summary>
-    /// Inserts Pending Export attribute value change rows via COPY binary import on the EF
-    /// connection's own transaction (see <see cref="CreatePendingExportsAsync"/>). Uses the parent
-    /// Pending Export id (shadow FK) passed explicitly since it is not a C# property.
+    /// Inserts Pending Export attribute value change rows via COPY binary import on the given connection, in the
+    /// transaction open on it (see <see cref="CreatePendingExportsAsync"/>). Each row's parent Pending Export id is passed
+    /// beside it, from the export that holds the change, so the change need not carry it.
     /// </summary>
     private static async Task BulkInsertPendingExportAttributeValueChangesOnConnectionAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        List<(Guid PendingExportId, PendingExportAttributeValueChange Change)> changes)
+        IReadOnlyList<(Guid PendingExportId, PendingExportAttributeValueChange Change)> changes)
     {
         // Writer order below MUST match PendingExportBulkColumns.PendingExportAttributeValueChanges exactly.
         await using var writer = await connection.BeginBinaryImportAsync(
