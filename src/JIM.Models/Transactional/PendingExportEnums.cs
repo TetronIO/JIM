@@ -261,7 +261,13 @@ public enum ReconciliationReloadReason
     /// <summary>
     /// A value the object holds has no attribute id, by which reconciliation groups values.
     /// </summary>
-    ValueWithoutAttributeId = 5
+    ValueWithoutAttributeId = 5,
+
+    /// <summary>
+    /// The save phase held the object more than once (updated, then reported deleted under another Object Type), so it is
+    /// reconciled once, after every batch is saved.
+    /// </summary>
+    SavedMoreThanOnce = 6
 }
 
 /// <summary>

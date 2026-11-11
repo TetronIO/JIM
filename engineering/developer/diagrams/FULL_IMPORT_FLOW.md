@@ -283,7 +283,7 @@ flowchart TD
 
 As each batch of updated CSOs is saved, the import processor reconciles previously exported changes against the values it has just saved (#2908). This is how JIM confirms that exports actually took effect.
 
-The Pending Exports are loaded once, at the first update batch (in the background during the read where a context factory is available). Each batch then reconciles while the import still holds its objects' values, before they are released. A CSO the run's hydration loaded whole, and which holds after the save exactly what the save wrote, is judged from those values: the probe questions a reload would put to the database (#2669) are answered from them instead (`SyncEngine.AnswerReconciliationProbes`), so every verdict and every recorded last imported value is the same. Any other CSO is reloaded from the database in pages of the sync page size and probed, as all of them were before: one found deleted or by another route, one loaded in part, one compared on two pages, one whose save was not applied to it as written, and one holding an outstanding reference when the cross-batch fix-up resolved references. The outcomes merged onto the batch's execution items are written with the batch; the items reconciliation raises for objects the import did not change are recorded with the run's remaining items, as before.
+The Pending Exports are loaded once, at the first update batch (in the background during the read where a context factory is available). Each batch then reconciles while the import still holds its objects' values, before they are released. A CSO the run's hydration loaded whole, and which holds after the save exactly what the save wrote, is judged from those values: the probe questions a reload would put to the database (#2669) are answered from them instead (`SyncEngine.AnswerReconciliationProbes`), so every verdict and every recorded last imported value is the same. Any other CSO is reloaded from the database in pages of the sync page size and probed, as all of them were before: one found deleted or by another route, one loaded in part, one compared on two pages, one whose save was not applied to it as written, and one holding an outstanding reference when the cross-batch fix-up resolved references. Each batch writes its results before the next batch is saved, execution items first: the items reconciliation raises for objects the import did not change, then the outcomes it merges onto the import's own items, then the Pending Export deletions and updates. The raised items are still counted in the Activity's totals with the run's last items, as before. An object the save phase holds twice (a Delta Import that updates it and is then told it was deleted under another Object Type, #2049) is reconciled once, reloaded, after every batch is saved.
 
 ```mermaid
 flowchart TD
@@ -293,7 +293,7 @@ flowchart TD
     Held --> LoadPE
     Reload --> LoadPE[Per batch, only when it holds a change<br/>awaiting an Initial Password: read which<br/>accounts are still owed a password, #2039]
     LoadPE --> Loop{More CSOs<br/>with Pending Exports?}
-    Loop -->|No| Flush[Write the batch's Pending Export changes<br/>and its merged outcomes]
+    Loop -->|No| Flush[Write the batch's execution items and<br/>merged outcomes, then its Pending<br/>Export changes]
     Flush --> Summary[After the last batch, log the summary:<br/>Confirmed / Retry / Held / Released / Deleted<br/>and how many CSOs were reloaded, and why]
     Summary --> Sweep[JudgeUnreconciledInitialPasswordHoldsAsync #2039:<br/>every held change whose CSO this import<br/>did not reconcile, Full and Delta Import alike<br/>One query from the partial index on the flag,<br/>one owed-password lookup for them all]
     Sweep --> SweepOwed{Password still owed<br/>to its Metaverse Object?}
@@ -324,7 +324,7 @@ flowchart TD
     Update --> Loop
 ```
 
-**Order of work.** Reconciling batch by batch is safe because a batch's verdicts depend only on what its own objects hold, and on the Pending Exports and holds, which the save phase does not write. A failure part way stops the run with the later batches unsaved rather than saved and unreconciled; either way the Activity fails and the next import starts again. The "Reconciling Pending Exports" step on the Activity now covers only the holds sweep: the time reconciliation takes is part of "Saving changes".
+**Order of work.** Reconciling batch by batch is safe because a batch's verdicts depend only on what its own objects hold, and on the Pending Exports and holds, which the save phase does not write. A failure part way stops the run with the later batches unsaved rather than saved and unreconciled; either way the Activity fails and the next import starts again. Because each batch writes its execution items before its Pending Export changes, a failure can leave a recorded confirmation whose Pending Export the next import judges again, but never a Pending Export removed with nothing recording why. The "Reconciling Pending Exports" step on the Activity now covers only the holds sweep: the time reconciliation takes is part of "Saving changes".
 
 ## Key Design Decisions
 

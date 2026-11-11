@@ -1122,7 +1122,7 @@ public partial class SyncImportTaskProcessor
             // Pending Export reconciliation runs as each update batch is saved (#2908), judging each object from the values
             // the import holds for it, exactly as saved, before they are released below. Reloading every object after the
             // save phase cost the 500,000-object confirming import 79 s.
-            reconciliation = await BeginPendingExportReconciliationAsync(totalToUpdate, pendingExportsTask);
+            reconciliation = await BeginPendingExportReconciliationAsync(connectedSystemObjectsToBeUpdated, pendingExportsTask);
 
             _activity.ObjectsProcessed = createdCount;
             await _syncRepo.UpdateActivityAsync(_activity);
@@ -1196,6 +1196,10 @@ public partial class SyncImportTaskProcessor
             }
         }
 
+        // Objects saved more than once are reconciled now, once each, as every object was once the save phase was over.
+        if (reconciliation != null && !_cancellationTokenSource.IsCancellationRequested)
+            await ReconcileDeferredAsync(reconciliation);
+
         savePhaseSw.Stop();
         Log.Information("PerformImportAsync: PHASE TIMING — Save (create + update): {SavePhaseSeconds:F1}s ({Creates} creates, {Updates} updates)",
             savePhaseSw.Elapsed.TotalSeconds, createdCount, connectedSystemObjectsToBeUpdated.Count);
@@ -1209,7 +1213,7 @@ public partial class SyncImportTaskProcessor
             if (reconciliation != null)
             {
                 CompletePendingExportReconciliation(reconciliation);
-                await FlushImportRpeisAsync(reconciliation.RaisedItems);
+                await FlushImportRpeisAsync([], alsoCountInActivityTotals: reconciliation.RaisedItemsAwaitingTotals);
             }
             return;
         }
@@ -1274,7 +1278,7 @@ public partial class SyncImportTaskProcessor
         _activity.ObjectsToProcess = remainingRpeiCount;
         _activity.ObjectsProcessed = 0;
         await _phases.EnterAsync(RunPhaseKeys.ImportRecordResults, "Recording results");
-        await FlushImportRpeisAsync();
+        await FlushImportRpeisAsync(alsoCountInActivityTotals: reconciliation?.RaisedItemsAwaitingTotals);
         _activity.ObjectsProcessed = remainingRpeiCount;
 
         // Summary stats were accumulated incrementally during each FlushImportRpeisAsync call (production).
@@ -1831,12 +1835,24 @@ public partial class SyncImportTaskProcessor
     /// </summary>
     /// <param name="rpeisToFlush">Optional explicit list of RPEIs to flush. If null, flushes
     /// and clears <see cref="_activityRunProfileExecutionItems"/>.</param>
-    private async Task FlushImportRpeisAsync(List<ActivityRunProfileExecutionItem>? rpeisToFlush = null)
+    /// <param name="countInActivityTotals">False to write the items without counting them in the Activity's totals, for items
+    /// a later flush counts (see <paramref name="alsoCountInActivityTotals"/>).</param>
+    /// <param name="alsoCountInActivityTotals">Items already written without being counted, counted now together with these:
+    /// the Activity's totals are worked out per flush (whether any item carries an outcome decides how items are counted), so
+    /// items always counted together are counted together still (#2908).</param>
+    /// <returns>Whether the items were written by the bulk writer, which counts them into the Activity's totals here; false
+    /// where the repository records them on the Activity instead (the in-memory one), which totals them at the end.</returns>
+    private async Task<bool> FlushImportRpeisAsync(List<ActivityRunProfileExecutionItem>? rpeisToFlush = null, bool countInActivityTotals = true,
+        IReadOnlyCollection<ActivityRunProfileExecutionItem>? alsoCountInActivityTotals = null)
     {
         var rpeis = rpeisToFlush ?? _activityRunProfileExecutionItems;
 
         if (rpeis.Count == 0)
-            return;
+        {
+            if (countInActivityTotals && alsoCountInActivityTotals is { Count: > 0 })
+                Worker.AccumulateActivitySummaryStats(_activity, [.. alsoCountInActivityTotals]);
+            return false;
+        }
 
         foreach (var rpei in rpeis)
         {
@@ -1884,7 +1900,9 @@ public partial class SyncImportTaskProcessor
             // Production: accumulate summary stats from this batch before releasing RPEIs.
             // Stats are computed incrementally per-flush, eliminating the need to keep all RPEIs
             // in memory for a final calculation (which caused OOM at 100K+ objects).
-            Worker.AccumulateActivitySummaryStats(_activity, rpeis);
+            if (countInActivityTotals)
+                Worker.AccumulateActivitySummaryStats(_activity,
+                    alsoCountInActivityTotals is { Count: > 0 } ? [.. rpeis, .. alsoCountInActivityTotals] : rpeis);
 
             // Null out CSO navigation on RPEIs so the CSO objects become GC-eligible.
             // The ConnectedSystemObjectId FK is already set, so the navigation is not needed.
@@ -1912,6 +1930,7 @@ public partial class SyncImportTaskProcessor
         }
 
         rpeis.Clear();
+        return usedRawSql;
     }
 
     /// <summary>

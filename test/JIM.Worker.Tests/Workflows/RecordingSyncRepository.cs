@@ -24,6 +24,18 @@ public class RecordingSyncRepository : DispatchProxy
     public ConcurrentQueue<RecordedSyncRepositoryCall> Calls { get; } = new();
 
     /// <summary>
+    /// Called with each call's method name and arguments before the call is handed on, so a test can act part-way
+    /// through a run, as an administrator cancelling it does.
+    /// </summary>
+    public Action<string, object?[]>? BeforeCall { get; set; }
+
+    /// <summary>
+    /// Given each call's method name and arguments, the exception to throw instead of handing the call on, or null to hand
+    /// it on: a database failure at a chosen point of a run.
+    /// </summary>
+    public Func<string, object?[], Exception?>? FailWhen { get; set; }
+
+    /// <summary>
     /// Wraps <paramref name="inner"/>, returning the wrapper as the repository and its recorder.
     /// </summary>
     public static (ISyncRepository Repository, RecordingSyncRepository Recorder) Wrap(ISyncRepository inner)
@@ -40,6 +52,10 @@ public class RecordingSyncRepository : DispatchProxy
         Calls.Enqueue(new RecordedSyncRepositoryCall(targetMethod.Name,
             (args ?? []).Select(arg => arg is ICollection collection ? collection.Count : (int?)null).ToList(),
             (args ?? []).Select(arg => arg is IEnumerable<Guid> ids ? ids.ToList() : null).ToList()));
+
+        BeforeCall?.Invoke(targetMethod.Name, args ?? []);
+        if (FailWhen?.Invoke(targetMethod.Name, args ?? []) is { } failure)
+            throw failure;
 
         try
         {

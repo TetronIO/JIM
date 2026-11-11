@@ -189,13 +189,19 @@ public class ReconcileAwaitingInitialPasswordTests
     private static Task InvokeReconcileAsync(Fixture fixture) =>
         ImportReconciliationInvoker.ReconcileAsync(fixture.Processor, [fixture.Cso]);
 
+    /// <summary>
+    /// Every execution item the run raised: those it has recorded (written with their batch since #2908) and those it
+    /// still holds.
+    /// </summary>
     private static List<ActivityRunProfileExecutionItem> ExecutionItems(SyncImportTaskProcessor processor)
     {
-        const string fieldName = "_activityRunProfileExecutionItems";
-        var field = typeof(SyncImportTaskProcessor).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+        static object Field(SyncImportTaskProcessor processor, string fieldName) =>
+            typeof(SyncImportTaskProcessor).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(processor)
             ?? throw new InvalidOperationException($"SyncImportTaskProcessor.{fieldName} was not found. Update this fixture if it has been renamed.");
 
-        return (List<ActivityRunProfileExecutionItem>)field.GetValue(processor)!;
+        var recorded = ((Activity)Field(processor, "_activity")).RunProfileExecutionItems;
+        var held = (List<ActivityRunProfileExecutionItem>)Field(processor, "_activityRunProfileExecutionItems");
+        return [.. recorded, .. held];
     }
 
     private sealed record Fixture(SyncImportTaskProcessor Processor, SyncRepository Repository, ConnectedSystemObject Cso, Guid PendingExportId);

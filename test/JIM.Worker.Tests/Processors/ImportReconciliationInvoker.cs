@@ -11,9 +11,10 @@ using JIM.Worker.Processors;
 namespace JIM.Worker.Tests.Processors;
 
 /// <summary>
-/// Runs a confirming import's Pending Export reconciliation over objects a test hands it, as the import runs it for one
-/// saved update batch (#2908): begin, reconcile the batch, complete. The objects were not loaded by an import's hydration,
-/// so reconciliation reloads them from the repository, as it does any object it cannot judge from held values.
+/// Runs a confirming import's Pending Export reconciliation over objects a test hands it, as the import runs it alongside
+/// its save phase (#2908): begin with the run's list of updated objects, reconcile each saved batch, reconcile the objects
+/// saved more than once, complete. The objects were not loaded by an import's hydration, so reconciliation reloads them
+/// from the repository, as it does any object it cannot judge from held values.
 /// </summary>
 internal static class ImportReconciliationInvoker
 {
@@ -22,18 +23,32 @@ internal static class ImportReconciliationInvoker
         ?? throw new InvalidOperationException(
             $"SyncImportTaskProcessor.{name} was not found. Update this invoker to call the current production methods.");
 
-    public static async Task ReconcileAsync(SyncImportTaskProcessor processor, List<ConnectedSystemObject> savedBatch)
+    /// <summary>Reconciles <paramref name="savedBatch"/> as the one batch of a run that updated those objects.</summary>
+    public static Task ReconcileAsync(SyncImportTaskProcessor processor, List<ConnectedSystemObject> savedBatch) =>
+        ReconcileAsync(processor, savedBatch, [savedBatch]);
+
+    /// <summary>
+    /// Reconciles a run whose save phase held <paramref name="updated"/> (an object may appear more than once) and saved
+    /// it as <paramref name="savedBatches"/>.
+    /// </summary>
+    public static async Task ReconcileAsync(SyncImportTaskProcessor processor, List<ConnectedSystemObject> updated,
+        IEnumerable<List<ConnectedSystemObject>> savedBatches)
     {
         var beginTask = (Task)Method("BeginPendingExportReconciliationAsync").Invoke(processor,
-            [savedBatch.Count, (Task<Dictionary<Guid, PendingExport>>?)null])!;
+            [updated, (Task<Dictionary<Guid, PendingExport>>?)null])!;
         await beginTask;
         var run = beginTask.GetType().GetProperty("Result")!.GetValue(beginTask);
         if (run == null)
             return;
 
-        var valuesBeforeSave = (IDictionary)Method("CaptureValuesBeforeSave").Invoke(processor, [run, savedBatch])!;
-        await (Task)Method("ReconcileSavedBatchAsync").Invoke(processor,
-            [run, savedBatch, valuesBeforeSave, new Dictionary<Guid, ActivityRunProfileExecutionItem>(), false])!;
+        foreach (var savedBatch in savedBatches)
+        {
+            var valuesBeforeSave = (IDictionary)Method("CaptureValuesBeforeSave").Invoke(processor, [run, savedBatch])!;
+            await (Task)Method("ReconcileSavedBatchAsync").Invoke(processor,
+                [run, savedBatch, valuesBeforeSave, new Dictionary<Guid, ActivityRunProfileExecutionItem>(), false])!;
+        }
+
+        await (Task)Method("ReconcileDeferredAsync").Invoke(processor, [run])!;
         Method("CompletePendingExportReconciliation").Invoke(processor, [run]);
     }
 }
