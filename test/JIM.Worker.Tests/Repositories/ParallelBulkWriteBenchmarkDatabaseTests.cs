@@ -19,22 +19,24 @@ namespace JIM.Worker.Tests.Repositories;
 
 /// <summary>
 /// Measures the bulk Metaverse Object create (<c>SyncRepository.CreateMetaverseObjectsBulkAsync</c>) on one connection
-/// against the parallel path at 4 and 8 connections (#2872), for the pages synchronisation actually writes: one page of
-/// 500 groups carrying 650,000 membership values that reference previously written people (the shape of the slowest
-/// <c>Mvo.Create</c> calls in the 500k initial load: 649,735, 523,865, 255,770 and 177,897 values), one page of 500
-/// people with ten values each, and a sweep of group pages in between that locates where parallel starts to pay, which
-/// is what <see cref="ParallelBatchWriter.MinimumRowsForParallelWrite"/> is set from. Every value names its contributing
+/// against the parallel path at 4, 8 and 16 connections (#2872, #2669), for the pages synchronisation actually writes:
+/// one page of 500 groups carrying 650,000 membership values that reference previously written people (the shape of the
+/// slowest <c>Mvo.Create</c> calls in the 500k initial load: 649,735, 523,865, 255,770 and 177,897 values), pages of 500
+/// people with ten and eleven values each (the 500k Full Synchronisation's people page is the eleven), and a sweep of
+/// group pages in between that locates where parallel starts to pay and how many connections pay at each size, which is
+/// what <see cref="ParallelBatchWriter.MinimumRowsForParallelWrite"/> and
+/// <see cref="ParallelBatchWriter.RowsPerParallelConnection"/> are set from. Every value names its contributing
 /// Connected System and Synchronisation Rule, as synchronisation's values do, so the foreign key checks every row pays
 /// (the bulk of a COPY's cost here) are the real ones. Each measurement is the median of three, the modes interleaved
 /// round by round so drift in the database's state favours none of them; the rows written are deleted, vacuumed and
 /// checkpointed between runs. A second test measures the Connected System Object create and the execution item flush
-/// at the sizes imports and synchronisation write them, which is what shows those writers need no lower threshold.
+/// at the sizes imports and synchronisation write them, which is what shows those writers share the same rule.
 /// </summary>
 /// <remarks>
 /// Explicit, because it seeds 200,000 people and writes several million rows, and exists to be read, not to guard; the
 /// numbers go to the test output. They depend on the host: the development sandbox it was first run on has 4 cores,
-/// shared by the test host and PostgreSQL, so 8 connections there are oversubscribed and the 4-connection figure is the
-/// one to read. A host with more cores, and PostgreSQL on its own, should gain more.
+/// shared by the test host and PostgreSQL, so 8 and 16 connections there are oversubscribed. The constants are set from
+/// a 16-core host (#2669). Each mode forces its connection count, whatever the rows (one row a connection).
 /// </remarks>
 [TestFixture]
 [Category("RequiresPostgres")]
@@ -43,7 +45,7 @@ public class ParallelBulkWriteBenchmarkDatabaseTests
 {
     private const int SeededPeople = 200_000;
     private const int Rounds = 3;
-    private static readonly int?[] Modes = [null, 4, 8];
+    private static readonly int?[] Modes = [null, 4, 8, 16];
 
     private string _connectionString = null!;
 
@@ -87,6 +89,7 @@ public class ParallelBulkWriteBenchmarkDatabaseTests
         var scenarios = new List<(string Name, Func<List<MetaverseObject>> Build)>
         {
             ("People page: 500 people, 10 values each", () => BuildPeoplePage(seeded)),
+            ("People page: 500 people, 11 values each", () => BuildPeoplePage(seeded, extraValue: true)),
             ("Group page: 500 groups, 2 members each", () => BuildGroupPage(seeded, Enumerable.Repeat(2, 500).ToList())),
             ("Group page: 500 groups, 10 members each", () => BuildGroupPage(seeded, Enumerable.Repeat(10, 500).ToList())),
             ("Group page: 500 groups, 40 members each", () => BuildGroupPage(seeded, Enumerable.Repeat(40, 500).ToList())),
@@ -121,6 +124,7 @@ public class ParallelBulkWriteBenchmarkDatabaseTests
                     else
                     {
                         sync.ParallelWriteRowThreshold = 0;
+                        sync.ParallelWriteRowsPerConnection = 1;
                         sync.WriteParallelismOverride = mode;
                     }
 
@@ -150,14 +154,14 @@ public class ParallelBulkWriteBenchmarkDatabaseTests
     /// The import-shaped writes (#2872): the Connected System Object create and the execution item flush, at the sizes a
     /// Full Import writes them (batches of 2,000 objects of about six values, and of twenty for comparison, which went parallel on a 16-core host under
     /// the old object-count gate), and the execution item flush at a synchronisation page's size. Single connection
-    /// against 4 connections; the timing is the writer's own call (for the import flush, also with the change records
+    /// against 4 and 16 connections; the timing is the writer's own call (for the import flush, also with the change records
     /// the import writes beside it, which take the single connection either way).
     /// </summary>
     [Test]
     public async Task CreateConnectedSystemObjectsAndBulkInsertRpeis_SingleConnectionAgainstParallel_ReportsMedianOfThreeAsync()
     {
         var seeded = await SeedImportAsync();
-        int?[] modes = [null, 4];
+        int?[] modes = [null, 4, 16];
         var report = new List<string>();
 
         // Earlier import batches already in the table, so the indexes are not empty ones.
@@ -235,6 +239,7 @@ public class ParallelBulkWriteBenchmarkDatabaseTests
                 var sync = (SyncRepository)new PostgresDataRepository(context).Sync;
                 sync.ConnectionStringForParallelWrites = _connectionString;
                 sync.ParallelWriteRowThreshold = mode == null ? int.MaxValue : 0;
+                sync.ParallelWriteRowsPerConnection = 1;
                 sync.WriteParallelismOverride = mode;
                 var result = await run(sync, mode);
                 rows = result.Rows;
@@ -483,7 +488,7 @@ public class ParallelBulkWriteBenchmarkDatabaseTests
         ContributedByKind = ValueContributorKind.SynchronisationRule
     };
 
-    private static List<MetaverseObject> BuildPeoplePage(Seeded s)
+    private static List<MetaverseObject> BuildPeoplePage(Seeded s, bool extraValue = false)
     {
         var page = new List<MetaverseObject>(500);
         for (var i = 0; i < 500; i++)
@@ -505,6 +510,13 @@ public class ParallelBulkWriteBenchmarkDatabaseTests
             var manager = Value(s, s.ManagerAttributeId);
             manager.ReferenceValueId = s.PeopleIds[i * 7 % s.PeopleIds.Count];
             person.AttributeValues.Add(manager);
+            if (extraValue)
+            {
+                var extra = Value(s, s.PersonTextAttributeIds[0]);
+                extra.StringValue = $"extra-{i}";
+                person.AttributeValues.Add(extra);
+            }
+
             page.Add(person);
         }
 

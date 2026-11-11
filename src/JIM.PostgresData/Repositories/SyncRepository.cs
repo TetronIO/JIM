@@ -46,8 +46,8 @@ public partial class SyncRepository : ISyncRepository
     internal string? ConnectionStringForParallelWrites { get; set; }
 
     /// <summary>
-    /// The connections a parallel write uses; <see cref="ParallelBatchWriter.GetWriteParallelism"/> unless a test or
-    /// benchmark sets it.
+    /// The most connections a parallel write uses; <see cref="ParallelBatchWriter.GetWriteParallelism"/> unless a test
+    /// or benchmark sets it. A write uses fewer when its rows are few (<see cref="ConnectionsForWrite"/>).
     /// </summary>
     internal int? WriteParallelismOverride { get; set; }
 
@@ -57,15 +57,30 @@ public partial class SyncRepository : ISyncRepository
     /// </summary>
     internal int ParallelWriteRowThreshold { get; set; } = ParallelBatchWriter.MinimumRowsForParallelWrite;
 
+    /// <summary>
+    /// The rows each connection of a parallel write is given (#2669); <see cref="ParallelBatchWriter.RowsPerParallelConnection"/>
+    /// unless a test or benchmark sets it. A test that forces the parallel path on a few rows sets it to 1, so the write
+    /// uses every connection <see cref="WriteParallelismOverride"/> allows.
+    /// </summary>
+    internal int ParallelWriteRowsPerConnection { get; set; } = ParallelBatchWriter.RowsPerParallelConnection;
+
     private int WriteParallelism => WriteParallelismOverride ?? ParallelBatchWriter.GetWriteParallelism();
 
     /// <summary>
-    /// Whether a bulk write of <paramref name="rowCount"/> rows goes across parallel connections (#2872); see
-    /// <see cref="ParallelBatchWriter.ShouldWriteInParallel"/>.
+    /// The connections a bulk write of <paramref name="rowCount"/> rows uses: 1 on the context's own connection,
+    /// otherwise the parallel connections it is spread across, scaled to its rows (#2669); see
+    /// <see cref="ParallelBatchWriter.ConnectionsForWrite"/>. Every parallel writer takes its connection count from this,
+    /// never from the write parallelism directly.
     /// </summary>
-    internal bool ShouldWriteInParallel(int rowCount)
-        => ParallelBatchWriter.ShouldWriteInParallel(rowCount, WriteParallelism, ConnectionStringForParallelWrites,
-            callerHoldsTransaction: _context.Database.CurrentTransaction != null, ParallelWriteRowThreshold);
+    internal int ConnectionsForWrite(int rowCount)
+        => ParallelBatchWriter.ConnectionsForWrite(rowCount, WriteParallelism, ConnectionStringForParallelWrites,
+            callerHoldsTransaction: _context.Database.CurrentTransaction != null, ParallelWriteRowThreshold, ParallelWriteRowsPerConnection);
+
+    /// <summary>
+    /// Whether a bulk write of <paramref name="rowCount"/> rows goes across parallel connections (#2872): whether
+    /// <see cref="ConnectionsForWrite"/> gives it more than one.
+    /// </summary>
+    internal bool ShouldWriteInParallel(int rowCount) => ConnectionsForWrite(rowCount) > 1;
 
     /// <summary>
     /// Rows of one table that a failed parallel write committed and must remove (#2872), found by the given key column:

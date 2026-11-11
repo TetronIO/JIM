@@ -65,6 +65,7 @@ public class CsoChangeRecordParallelWriteDatabaseTests
         sync.ConnectionStringForParallelWrites = _connectionString;
         sync.WriteParallelismOverride = Parallelism;
         sync.ParallelWriteRowThreshold = path == WritePath.Parallel ? 0 : int.MaxValue;
+        sync.ParallelWriteRowsPerConnection = 1; // every connection the parallelism allows, however few the rows (#2669)
         Assert.That(sync.ShouldWriteInParallel(rows), Is.EqualTo(path == WritePath.Parallel),
             $"the test means to exercise the {path} path; the gate must agree");
         return sync;

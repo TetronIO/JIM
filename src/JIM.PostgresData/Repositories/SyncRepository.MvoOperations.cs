@@ -82,13 +82,15 @@ public partial class SyncRepository
 
         using (MvoActivitySource.StartActivity("Mvo.Create.BulkWrite"))
         {
-            if (!ShouldWriteInParallel(metaverseObjects.Count + attributeValueRows.Count))
+            // The connections scale with the rows written (#2669): a people page of 6,000 rows takes four, a page of
+            // large groups every one.
+            var parallelism = ConnectionsForWrite(metaverseObjects.Count + attributeValueRows.Count);
+            if (parallelism == 1)
             {
                 await CreateMvosOnSingleConnectionAsync(metaverseObjects, attributeValueRows);
             }
             else
             {
-                var parallelism = WriteParallelism;
                 var connectionString = ConnectionStringForParallelWrites;
                 Log.Information("CreateMetaverseObjectsBulkAsync: Writing {Count} MVOs and {ValueCount} attribute values across {Parallelism} parallel connections",
                     metaverseObjects.Count, attributeValueRows.Count, parallelism);
