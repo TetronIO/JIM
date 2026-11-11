@@ -23,8 +23,10 @@ namespace JIM.Worker.Tests.Repositories;
 /// leaving every other call's rows alone.
 /// </summary>
 /// <remarks>
-/// Each test forces the path it means to exercise (four connections and a threshold of zero, or a threshold no call
-/// reaches) and asserts the decision with the writers' own predicate. Opt-in via <c>JIM_TEST_RESET_*</c>.
+/// Each test forces the path it means to exercise (four connections, a threshold of zero and every connection used
+/// however few the rows, or a threshold no call reaches) and asserts the decision with the writers' own predicate; the
+/// people page test instead runs the default gate and asserts the connections it chooses. Opt-in via
+/// <c>JIM_TEST_RESET_*</c>.
 /// </remarks>
 [TestFixture]
 [Category("RequiresPostgres")]
@@ -75,6 +77,7 @@ public class PendingExportCreateParallelWriteDatabaseTests
         sync.ConnectionStringForParallelWrites = _connectionString;
         sync.WriteParallelismOverride = Parallelism;
         sync.ParallelWriteRowThreshold = path == WritePath.Parallel ? 0 : int.MaxValue;
+        sync.ParallelWriteRowsPerConnection = 1; // every connection the parallelism allows, however few the rows (#2669)
         Assert.That(sync.ShouldWriteInParallel(rows), Is.EqualTo(path == WritePath.Parallel),
             $"the test means to exercise the {path} path; the gate must agree");
         return sync;
@@ -480,6 +483,96 @@ public class PendingExportCreateParallelWriteDatabaseTests
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// A people page's staging as a synchronisation writes it: 500 Updates of 11 changes each, 6,000 rows, one for each of
+    /// 500 Connected System Objects seeded for it (an object holds at most one Pending Export).
+    /// </summary>
+    private async Task<List<PendingExport>> BuildPeoplePageAsync(Seeded s)
+    {
+        var nextId = IdSequence(5);
+        var objectIds = new List<Guid>();
+        await using (var seed = NewContext())
+        {
+            var typeId = await seed.ConnectedSystemObjectTypes.Where(t => t.ConnectedSystemId == s.SystemId).Select(t => t.Id).SingleAsync();
+            var objects = Enumerable.Range(0, 500)
+                .Select(_ => new ConnectedSystemObject { Id = nextId(), TypeId = typeId, ConnectedSystemId = s.SystemId, Status = ConnectedSystemObjectStatus.Normal, Created = StagedAt })
+                .ToList();
+            seed.AddRange(objects);
+            await seed.SaveChangesAsync();
+            objectIds.AddRange(objects.Select(o => o.Id));
+        }
+
+        return objectIds.Select((objectId, i) =>
+        {
+            var export = new PendingExport
+            {
+                Id = nextId(), ConnectedSystemId = s.SystemId, ConnectedSystemObjectId = objectId, ChangeType = PendingExportChangeType.Update,
+                Status = PendingExportStatus.Pending, CreatedAt = StagedAt, SourceMetaverseObjectId = s.People[i % s.People.Count]
+            };
+            for (var c = 0; c < 11; c++)
+            {
+                export.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+                {
+                    Id = nextId(), AttributeId = s.ProxyAddresses.Id, ChangeType = PendingExportAttributeChangeType.Add,
+                    StringValue = $"smtp:person{i}.{c}@glitterband.local", SyncRuleId = s.SyncRuleId, SyncRuleName = "Provision people"
+                });
+            }
+
+            return export;
+        }).ToList();
+    }
+
+    /// <summary>
+    /// The number of transactions that wrote the given rows: each parallel connection commits its own partition, and every
+    /// row a transaction writes carries its id as <c>xmin</c>.
+    /// </summary>
+    private async Task<long> CountWritingTransactionsAsync(string table, IEnumerable<Guid> ids)
+    {
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand($"""SELECT count(DISTINCT xmin::text) FROM "{table}" WHERE "Id" = ANY(@ids)""", connection);
+        command.Parameters.AddWithValue("ids", ids.ToArray());
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
+    /// <summary>
+    /// On the write gate's own defaults (threshold and rows a connection) on a 16-core host, a people page's 6,000 rows of
+    /// staging go parallel on four connections, not sixteen, as every other bulk writer's do at that size (#2669): both
+    /// the exports and their changes carry four transaction ids. The exports are counted once they are staged, before the
+    /// last step makes them live in one UPDATE on the context's connection, which gives every one that transaction's id.
+    /// </summary>
+    [Test]
+    public async Task CreatePendingExportsAsync_PeoplePageOnDefaultGate_WritesAcrossFourConnectionsAsync()
+    {
+        var s = await SeedAsync();
+        var exports = await BuildPeoplePageAsync(s);
+        Assert.That(Rows(exports), Is.EqualTo(6_000), "sanity: the page's rows");
+        long? exportTransactionsWhenWritten = null;
+
+        await using (var context = NewContext())
+        {
+            var sync = (SyncRepository)new PostgresDataRepository(context).Sync;
+            sync.ConnectionStringForParallelWrites = _connectionString;
+            sync.WriteParallelismOverride = 16;
+            Assert.That(sync.ConnectionsForWrite(Rows(exports)), Is.EqualTo(4), "the default gate's decision for 6,000 rows on a 16-core host");
+            sync.PendingExportCreateStepReached = async step =>
+            {
+                if (step == SyncRepository.StepExportsWritten)
+                    exportTransactionsWhenWritten = await CountWritingTransactionsAsync("PendingExports", exports.Select(pe => pe.Id));
+            };
+            await sync.CreatePendingExportsAsync(exports);
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await CountAsync("PendingExports", "Id", exports.Select(pe => pe.Id)), Is.EqualTo(500), "every export is written");
+            Assert.That(await CountAsync("PendingExportAttributeValueChanges", "Id", ChangeIds(exports)), Is.EqualTo(5_500), "and every change");
+            Assert.That(exportTransactionsWhenWritten, Is.EqualTo(4), "the exports are written across four connections");
+            Assert.That(await CountWritingTransactionsAsync("PendingExportAttributeValueChanges", ChangeIds(exports)), Is.EqualTo(4),
+                "and so are their changes");
+        }
     }
 
     /// <summary>

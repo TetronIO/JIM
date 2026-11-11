@@ -70,11 +70,14 @@ public partial class SyncRepository
         span?.SetTag("count", exports.Count);
         span?.SetTag("changeCount", changeRows.Count);
 
-        // Gated on every row the call writes, as the other bulk writers are (#2872).
-        if (ShouldWriteInParallel(exports.Count + changeRows.Count))
+        // Gated on every row the call writes, as the other bulk writers are (#2872), and given connections in proportion
+        // to them (#2669): both phases use the same count, so a people page's staging takes four and a group page's every
+        // one.
+        var connections = ConnectionsForWrite(exports.Count + changeRows.Count);
+        if (connections > 1)
         {
-            span?.SetTag("connections", WriteParallelism);
-            await CreatePendingExportsInParallelAsync(exports, changeRows);
+            span?.SetTag("connections", connections);
+            await CreatePendingExportsInParallelAsync(exports, changeRows, connections);
             return;
         }
 
@@ -140,7 +143,8 @@ public partial class SyncRepository
     internal Func<string, Task>? PendingExportCreateStepReached { get; set; }
 
     /// <summary>
-    /// A call large enough to gain from parallel connections (#2919), written in three steps:
+    /// A call large enough to gain from parallel connections (#2919), written in three steps, the parallel ones across up
+    /// to <paramref name="parallelism"/> connections (<see cref="ConnectionsForWrite"/>, #2669):
     /// <list type="number">
     /// <item>The Pending Export rows, across the parallel connections, each committing its part, as
     /// <see cref="PendingExportStatus.Incomplete"/> and without their Connected System Object. Every one is committed before
@@ -167,9 +171,9 @@ public partial class SyncRepository
     /// </remarks>
     private async Task CreatePendingExportsInParallelAsync(
         List<PendingExport> exports,
-        List<(Guid PendingExportId, PendingExportAttributeValueChange Change)> changeRows)
+        List<(Guid PendingExportId, PendingExportAttributeValueChange Change)> changeRows,
+        int parallelism)
     {
-        var parallelism = WriteParallelism;
         var connectionString = ConnectionStringForParallelWrites!;
         Log.Information("CreatePendingExportsAsync: Writing {Count} Pending Exports and {ChangeCount} attribute value changes across {Parallelism} parallel connections",
             exports.Count, changeRows.Count, parallelism);

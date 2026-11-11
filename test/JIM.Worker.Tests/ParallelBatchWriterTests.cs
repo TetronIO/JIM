@@ -269,6 +269,117 @@ public class ParallelBatchWriterTests
         }
     }
 
+    /// <summary>
+    /// The 500,000-object Full Synchronisation's people pages write 500 Metaverse Objects and 5,500 values, 6,000 rows,
+    /// and took about 98 ms each on one connection while the database had nothing else to do. On a 16-core host the same
+    /// page gained 2.2x to 2.65x on four connections (#2669), so it must go parallel.
+    /// </summary>
+    [Test]
+    public void ShouldWriteInParallel_SynchronisationPeoplePage_ReturnsTrue()
+    {
+        var result = ParallelBatchWriter.ShouldWriteInParallel(
+            rowCount: 500 + 5_500, parallelism: 16, connectionString: "Host=db", callerHoldsTransaction: false);
+
+        Assert.That(result, Is.True);
+    }
+
+    /// <summary>
+    /// The connections a write uses grow with its rows, so a write just over the gate is not spread across every core
+    /// (16 connections on a 6,000-row page varied from 21 to 72 ms; 4 never did worse than 1.8x), while a large write
+    /// keeps all of them.
+    /// </summary>
+    [TestCase(4_999, 16, 1)] // below the gate: one connection
+    [TestCase(5_000, 16, 4)] // at the gate: four connections' worth of rows
+    [TestCase(6_000, 16, 4)] // a synchronisation people page
+    [TestCase(7_000, 16, 5)] // a Full Import batch of 1,000 objects with six values
+    [TestCase(14_000, 16, 11)]
+    [TestCase(19_999, 16, 15)]
+    [TestCase(20_000, 16, 16)] // every connection from here
+    [TestCase(651_500, 16, 16)] // a page of 500 groups carrying 650,000 members
+    [TestCase(6_000, 4, 4)]
+    [TestCase(651_500, 4, 4)]
+    [TestCase(5_000, 2, 2)]
+    [TestCase(651_500, 64, 64)]
+    public void ConnectionsForWrite_ScalesWithRowsUpToTheParallelism(int rowCount, int parallelism, int expected)
+    {
+        var result = ParallelBatchWriter.ConnectionsForWrite(rowCount, parallelism, "Host=db", callerHoldsTransaction: false);
+
+        Assert.That(result, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void ConnectionsForWrite_ParallelismOfOne_ReturnsOne()
+    {
+        var result = ParallelBatchWriter.ConnectionsForWrite(1_000_000, parallelism: 1, connectionString: "Host=db", callerHoldsTransaction: false);
+
+        Assert.That(result, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void ConnectionsForWrite_NoConnectionString_ReturnsOne()
+    {
+        var result = ParallelBatchWriter.ConnectionsForWrite(1_000_000, parallelism: 16, connectionString: null, callerHoldsTransaction: false);
+
+        Assert.That(result, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void ConnectionsForWrite_CallerHoldsTransaction_ReturnsOne()
+    {
+        var result = ParallelBatchWriter.ConnectionsForWrite(1_000_000, parallelism: 16, connectionString: "Host=db", callerHoldsTransaction: true);
+
+        Assert.That(result, Is.EqualTo(1));
+    }
+
+    /// <summary>
+    /// A write that goes parallel uses at least two connections, whatever its rows: a test that lowers the threshold to
+    /// force the parallel path on a handful of rows still gets one.
+    /// </summary>
+    [Test]
+    public void ConnectionsForWrite_ThresholdLoweredBelowOneConnectionsRows_UsesTwo()
+    {
+        var result = ParallelBatchWriter.ConnectionsForWrite(10, parallelism: 16, "Host=db", callerHoldsTransaction: false, rowThreshold: 0);
+
+        Assert.That(result, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void ConnectionsForWrite_ExplicitRowsPerConnection_IsHonoured()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ParallelBatchWriter.ConnectionsForWrite(10, 4, "Host=db", false, rowThreshold: 0, rowsPerConnection: 1), Is.EqualTo(4),
+                "one row a connection: every connection the parallelism allows");
+            Assert.That(ParallelBatchWriter.ConnectionsForWrite(30, 16, "Host=db", false, rowThreshold: 0, rowsPerConnection: 10), Is.EqualTo(3));
+        }
+    }
+
+    [Test]
+    public void ConnectionsForWrite_RowsPerConnectionBelowOne_Throws()
+    {
+        Assert.That(() => ParallelBatchWriter.ConnectionsForWrite(10_000, 16, "Host=db", false, rowsPerConnection: 0),
+            Throws.InstanceOf<ArgumentOutOfRangeException>());
+    }
+
+    /// <summary>
+    /// The two decisions never disagree: a write goes parallel exactly when it is given more than one connection.
+    /// </summary>
+    [TestCase(0)]
+    [TestCase(4_999)]
+    [TestCase(5_000)]
+    [TestCase(1_000_000)]
+    public void ConnectionsForWrite_AgreesWithShouldWriteInParallel(int rowCount)
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var (parallelism, connectionString, transaction) in new[] { (16, "Host=db", false), (1, "Host=db", false), (16, (string?)null, false), (16, "Host=db", true) })
+            {
+                Assert.That(ParallelBatchWriter.ConnectionsForWrite(rowCount, parallelism, connectionString, transaction) > 1,
+                    Is.EqualTo(ParallelBatchWriter.ShouldWriteInParallel(rowCount, parallelism, connectionString, transaction)));
+            }
+        }
+    }
+
     [Test]
     public void FlattenValueRows_PreservesOwnerOrderThenValueOrder_AndPairsEachValueWithItsOwner()
     {

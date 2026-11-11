@@ -344,7 +344,7 @@ To have the installer set it, give it in the installer's environment: it writes 
 
 | Variable               | Description                                                                                                                                                              | Default         |
 |------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------|
-| `JIM_WRITE_PARALLELISM` | Maximum concurrent PostgreSQL connections used by the parallel batch writer during bulk write operations. Higher values speed up large imports but consume more database connections. | CPU core count  |
+| `JIM_WRITE_PARALLELISM` | Maximum concurrent PostgreSQL connections used by the parallel batch writer during bulk write operations; smaller writes use fewer. Higher values speed up large imports and synchronisations but consume more database connections. | CPU core count  |
 
 !!! info
     The worker uses a 300-second command timeout for bulk database operations (PostgreSQL default is 30 seconds). This accommodates large imports where individual batch writes may take longer than the default timeout. No configuration is required; it is set automatically.
