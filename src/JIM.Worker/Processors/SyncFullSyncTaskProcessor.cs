@@ -265,6 +265,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                     // joined/projected yet, so Pass 2 batch collections are empty.
                     if (!_cancellationTokenSource.IsCancellationRequested)
                     {
+                        // Look up the page's import joins at once (#2020), now that Pass 1 has recorded every
+                        // disconnection and before any join reads them.
+                        await PrefetchJoinMatchesForPageAsync(activeSyncRules, csoPagedResult.Results);
+
                         // Pass 2: Process joins, projections, and Attribute Flow for non-obsolete CSOs.
                         // All disconnections from Pass 1 are now visible via _pendingDisconnectedMvoIds.
                         foreach (var connectedSystemObject in csoPagedResult.Results)

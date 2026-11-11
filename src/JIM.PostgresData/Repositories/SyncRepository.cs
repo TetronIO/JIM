@@ -292,6 +292,33 @@ public partial class SyncRepository : ISyncRepository
     public Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectCountByMvoAsync(connectedSystemId, metaverseObjectId);
 
+    public async Task<IReadOnlyDictionary<Guid, int>> GetConnectedSystemObjectCountsByMvoAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        var counts = new Dictionary<Guid, int>();
+        if (metaverseObjectIds.Count == 0)
+            return counts;
+
+        // Raw SQL, once per page on the synchronisation join hot path (#2020): the count the per-object
+        // GetConnectedSystemObjectCountByMvoAsync reads, for every Metaverse Object the page's joins settled on.
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT "MetaverseObjectId", COUNT(*)
+            FROM "ConnectedSystemObjects"
+            WHERE "ConnectedSystemId" = @connectedSystemId AND "MetaverseObjectId" = ANY(@ids)
+            GROUP BY "MetaverseObjectId"
+            """,
+            connection, (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction());
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlDbType.Integer) { Value = connectedSystemId });
+        command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = metaverseObjectIds.Distinct().ToArray() });
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            counts[reader.GetGuid(0)] = checked((int)reader.GetInt64(1));
+        return counts;
+    }
+
     #endregion
 
     #region Connected System Object — Writes
@@ -344,6 +371,18 @@ public partial class SyncRepository : ISyncRepository
         // Objects at those partial copies.
         var loaded = await MetaverseObjectRawReader.ReadAsync(_context, [metaverseObjectId]);
         return loaded.GetValueOrDefault(metaverseObjectId);
+    }
+
+    public Task<IReadOnlyList<(object Value, Guid MetaverseObjectId)>> FindMetaverseObjectIdsByEachMatchValueAsync(
+        int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive, int takePerValue)
+        => _repo.Metaverse.FindMetaverseObjectIdsByEachMatchValueAsync(metaverseObjectTypeId, metaverseAttributeId, valueType, values, caseSensitive, takePerValue);
+
+    public async Task<IReadOnlyDictionary<Guid, MetaverseObject>> GetMetaverseObjectsForJoinMatchAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        // The same untracked raw read as the per-object load (#2598), for the page's matches at once (#2020).
+        return metaverseObjectIds.Count == 0
+            ? new Dictionary<Guid, MetaverseObject>()
+            : await MetaverseObjectRawReader.ReadAsync(_context, [.. metaverseObjectIds.Distinct()]);
     }
 
     public IAsyncEnumerable<(Guid ConnectedSystemObjectId, IReadOnlyList<ConnectedSystemObjectAttributeValue> Values)> StreamUnjoinedConnectedSystemObjectValues(

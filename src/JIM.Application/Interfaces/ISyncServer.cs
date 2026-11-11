@@ -71,9 +71,19 @@ public interface ISyncServer
     #region Object Matching
 
     /// <summary>
-    /// Finds a matching MVO for join evaluation using the configured matching rules.
+    /// Finds a matching MVO for join evaluation using the configured matching rules, consulting the page's batch
+    /// (<paramref name="prefetched"/>, #2020) before the database.
     /// </summary>
-    Task<ImportMatch?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules);
+    Task<ImportMatch?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules, JoinMatchCandidates? prefetched = null);
+
+    /// <summary>
+    /// Looks up a page's import joins at once (#2020): what each object's Object Matching Rules find, the Metaverse
+    /// Objects the joins settle on, and their existing join counts in <paramref name="connectedSystemId"/>. See
+    /// <c>ObjectMatchingServer.PrefetchJoinMatchesForPageAsync</c>.
+    /// </summary>
+    Task<JoinMatchCandidates> PrefetchJoinMatchesForPageAsync(
+        IReadOnlyList<(ConnectedSystemObject ConnectedSystemObject, IReadOnlyList<ObjectMatchingRule> MatchingRules)> joins,
+        int connectedSystemId);
 
     #endregion
 

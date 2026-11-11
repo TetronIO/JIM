@@ -67,8 +67,13 @@ public class SyncServer : ISyncServer
 
     #region Object Matching
 
-    public Task<ImportMatch?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules)
-        => _jim.ObjectMatching.FindMatchingMetaverseObjectAsync(cso, matchingRules);
+    public Task<ImportMatch?> FindMatchingMetaverseObjectAsync(ConnectedSystemObject cso, List<ObjectMatchingRule> matchingRules, JoinMatchCandidates? prefetched = null)
+        => _jim.ObjectMatching.FindMatchingMetaverseObjectAsync(cso, matchingRules, prefetched);
+
+    public Task<JoinMatchCandidates> PrefetchJoinMatchesForPageAsync(
+        IReadOnlyList<(ConnectedSystemObject ConnectedSystemObject, IReadOnlyList<ObjectMatchingRule> MatchingRules)> joins,
+        int connectedSystemId)
+        => _jim.ObjectMatching.PrefetchJoinMatchesForPageAsync(joins, connectedSystemId);
 
     #endregion
 

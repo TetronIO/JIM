@@ -1262,16 +1262,28 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(systemIds);
     }
 
-    public Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId)
+    public virtual Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId)
+        => Task.FromResult(CountConnectedSystemObjectsJoinedTo(connectedSystemId, metaverseObjectId));
+
+    /// <inheritdoc />
+    public virtual Task<IReadOnlyDictionary<Guid, int>> GetConnectedSystemObjectCountsByMvoAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds)
     {
+        // Absent when none, as the production GROUP BY leaves it.
+        IReadOnlyDictionary<Guid, int> counts = metaverseObjectIds
+            .Distinct()
+            .Select(id => (Id: id, Count: CountConnectedSystemObjectsJoinedTo(connectedSystemId, id)))
+            .Where(entry => entry.Count > 0)
+            .ToDictionary(entry => entry.Id, entry => entry.Count);
+        return Task.FromResult(counts);
+    }
+
+    private int CountConnectedSystemObjectsJoinedTo(int connectedSystemId, Guid metaverseObjectId) =>
         // Scan _csos directly rather than using the _csosByMvo index so that within-page joins
         // (where MetaverseObjectId has been set in-memory but the index hasn't been flushed yet)
         // are counted correctly. This matches the behaviour of the production EF Core query.
-        var count = _csos.Values.Count(c =>
+        _csos.Values.Count(c =>
             c.ConnectedSystemId == connectedSystemId &&
             c.MetaverseObjectId == metaverseObjectId);
-        return Task.FromResult(count);
-    }
 
     #endregion
 
@@ -1856,7 +1868,28 @@ public partial class SyncRepository : ISyncRepository
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<Guid>> FindMetaverseObjectIdsByMatchValuesAsync(
+    public virtual Task<IReadOnlyList<Guid>> FindMetaverseObjectIdsByMatchValuesAsync(
+        int metaverseObjectTypeId,
+        int metaverseAttributeId,
+        AttributeDataType valueType,
+        IReadOnlyList<object> values,
+        bool caseSensitive,
+        int take)
+        => Task.FromResult(FindMetaverseObjectIdsByMatchValues(metaverseObjectTypeId, metaverseAttributeId, valueType, values, caseSensitive, take));
+
+    /// <inheritdoc />
+    public virtual Task<IReadOnlyList<(object Value, Guid MetaverseObjectId)>> FindMetaverseObjectIdsByEachMatchValueAsync(
+        int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive, int takePerValue)
+    {
+        // The per-object lookup, value by value, so the two cannot disagree about what a value finds.
+        IReadOnlyList<(object Value, Guid MetaverseObjectId)> found = values
+            .SelectMany(value => FindMetaverseObjectIdsByMatchValues(metaverseObjectTypeId, metaverseAttributeId, valueType, [value], caseSensitive, takePerValue)
+                .Select(id => (value, id)))
+            .ToList();
+        return Task.FromResult(found);
+    }
+
+    private IReadOnlyList<Guid> FindMetaverseObjectIdsByMatchValues(
         int metaverseObjectTypeId,
         int metaverseAttributeId,
         AttributeDataType valueType,
@@ -1878,15 +1911,13 @@ public partial class SyncRepository : ISyncRepository
             _ => throw new ArgumentOutOfRangeException(nameof(valueType), valueType, "Object Matching cannot compare this data type.")
         };
 
-        IReadOnlyList<Guid> ids = _mvos.Values
+        return _mvos.Values
             .Where(mvo => mvo.Type?.Id == metaverseObjectTypeId
                           && mvo.AttributeValues.Any(av => av.AttributeId == metaverseAttributeId && Holds(av)))
             .Select(mvo => mvo.Id)
             .Order()
             .Take(take)
             .ToList();
-
-        return Task.FromResult(ids);
     }
 
     /// <inheritdoc />
@@ -1904,6 +1935,18 @@ public partial class SyncRepository : ISyncRepository
     /// <inheritdoc />
     public virtual Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId) =>
         Task.FromResult(_mvos.GetValueOrDefault(metaverseObjectId));
+
+    /// <inheritdoc />
+    /// <remarks>Virtual for the same reason as <see cref="GetMetaverseObjectForJoinMatchAsync"/>.</remarks>
+    public virtual Task<IReadOnlyDictionary<Guid, MetaverseObject>> GetMetaverseObjectsForJoinMatchAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        IReadOnlyDictionary<Guid, MetaverseObject> loaded = metaverseObjectIds
+            .Distinct()
+            .Select(id => _mvos.GetValueOrDefault(id))
+            .Where(mvo => mvo != null)
+            .ToDictionary(mvo => mvo!.Id, mvo => mvo!);
+        return Task.FromResult(loaded);
+    }
 
     /// <summary>
     /// In-memory mirror of the PostgreSQL export matching candidate query for a single Object Matching
