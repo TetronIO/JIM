@@ -174,6 +174,31 @@ public static class ParallelBatchWriter
            && rowCount >= rowThreshold;
 
     /// <summary>
+    /// Shares <paramref name="parallelism"/> connections between two writes that run at the same time, in proportion to
+    /// the rows each writes (#2909), so that together they never hold more connections than one parallel write would. A
+    /// side with rows gets at least one connection; a side with none gets none, and the other side all of them.
+    /// </summary>
+    /// <param name="parallelism">The connections to share; at least two.</param>
+    /// <param name="firstRows">The rows the first write partitions across its connections.</param>
+    /// <param name="secondRows">The rows the second write partitions across its connections.</param>
+    /// <returns>The connections each write may use; they add up to <paramref name="parallelism"/>.</returns>
+    public static (int First, int Second) SplitConnections(int parallelism, int firstRows, int secondRows)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(parallelism, 2);
+        ArgumentOutOfRangeException.ThrowIfNegative(firstRows);
+        ArgumentOutOfRangeException.ThrowIfNegative(secondRows);
+
+        if (secondRows == 0)
+            return (parallelism, 0);
+        if (firstRows == 0)
+            return (0, parallelism);
+
+        var second = (int)Math.Round(parallelism * (double)secondRows / ((long)firstRows + secondRows), MidpointRounding.AwayFromZero);
+        second = Math.Clamp(second, 1, parallelism - 1);
+        return (parallelism - second, second);
+    }
+
+    /// <summary>
     /// Flattens each owner's values into (owner id, value) rows, owner by owner and each owner's values in order, so the
     /// rows can be partitioned evenly across connections by <see cref="Partition{T}"/>. Partitioning the owners instead
     /// puts every value of one owner on one connection, which for a large group is most of the page (#2872).

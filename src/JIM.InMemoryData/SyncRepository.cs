@@ -1297,6 +1297,33 @@ public partial class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Gives each object an id where it has none. The PostgreSQL writer also settles reference value ids against the
+    /// batch; this store holds no foreign keys, so its create leaves them as they are, and so does this.
+    /// </summary>
+    public void PrepareConnectedSystemObjectsForCreate(List<ConnectedSystemObject> connectedSystemObjects, HashSet<Guid>? previouslyCommittedCsoIds = null)
+    {
+        foreach (var cso in connectedSystemObjects.Where(c => c.Id == Guid.Empty))
+            cso.Id = Guid.NewGuid();
+    }
+
+    /// <summary>
+    /// The objects, then the items, then the items' change records, through the same members the PostgreSQL writer's
+    /// single write stands in for, so a test overriding any of them sees what it always saw.
+    /// </summary>
+    public async Task<bool> CreateConnectedSystemObjectsWithHistoryAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<ActivityRunProfileExecutionItem> rpeis,
+        HashSet<Guid>? previouslyCommittedCsoIds = null)
+    {
+        await CreateConnectedSystemObjectsAsync(connectedSystemObjects, previouslyCommittedCsoIds);
+        var usedRawSql = await BulkInsertRpeisAsync(rpeis);
+        foreach (var rpei in rpeis.Where(r => r.ConnectedSystemObjectChange != null))
+            rpei.ConnectedSystemObjectChange!.ActivityRunProfileExecutionItemId = rpei.Id;
+        await PersistRpeiCsoChangesAsync(rpeis);
+        return usedRawSql;
+    }
+
     public async Task CreateConnectedSystemObjectsAsync(
         List<ConnectedSystemObject> connectedSystemObjects,
         List<ActivityRunProfileExecutionItem> rpeis,
@@ -3026,7 +3053,7 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(new ActivityRpeiErrorCounts(totalWithErrors, totalRpeis, totalUnhandledErrors, totalObjectTypeChangeRefusals));
     }
 
-    public virtual Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    public virtual Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis, bool allowParallelWrite = false)
     {
         // The CSO changes are already in memory on the RPEI objects; only their values' unresolved reference marks are
         // set, as the production writer sets them.
@@ -3034,7 +3061,7 @@ public partial class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes)
+    public Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes, bool allowParallelWrite = false)
     {
         MarkUnresolvedChangeReferences(changes);
         _standaloneCsoChanges.AddRange(changes);

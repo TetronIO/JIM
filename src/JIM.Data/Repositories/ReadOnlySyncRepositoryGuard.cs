@@ -579,6 +579,13 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, HashSet<Guid>? previouslyCommittedCsoIds = null)
         => throw new PreviewWriteAttemptedException(nameof(CreateConnectedSystemObjectsAsync));
 
+    public void PrepareConnectedSystemObjectsForCreate(List<ConnectedSystemObject> connectedSystemObjects, HashSet<Guid>? previouslyCommittedCsoIds = null)
+        => _inner.PrepareConnectedSystemObjectsForCreate(connectedSystemObjects, previouslyCommittedCsoIds);
+
+    public Task<bool> CreateConnectedSystemObjectsWithHistoryAsync(List<ConnectedSystemObject> connectedSystemObjects,
+        List<ActivityRunProfileExecutionItem> rpeis, HashSet<Guid>? previouslyCommittedCsoIds = null)
+        => throw new PreviewWriteAttemptedException(nameof(CreateConnectedSystemObjectsWithHistoryAsync));
+
     public Task UpdateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null, List<Guid>? pendingRemovalIds = null)
         => throw new PreviewWriteAttemptedException(nameof(UpdateConnectedSystemObjectsAsync));
 
@@ -790,10 +797,10 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task BulkUpdateRpeiOutcomesAsync(List<ActivityRunProfileExecutionItem> rpeis, List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes)
         => throw new PreviewWriteAttemptedException(nameof(BulkUpdateRpeiOutcomesAsync));
 
-    public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis, bool allowParallelWrite = false)
         => throw new PreviewWriteAttemptedException(nameof(PersistRpeiCsoChangesAsync));
 
-    public Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes)
+    public Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes, bool allowParallelWrite = false)
         => throw new PreviewWriteAttemptedException(nameof(PersistCsoChangesAsync));
 
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)

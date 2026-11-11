@@ -1,6 +1,6 @@
 # Full Import Flow
 
-> Last updated: 2026-10-29, JIM v0.17.0
+> Last updated: 2026-11-11, JIM v0.17.0
 
 This diagram shows how objects are imported from a Connected System into JIM's connector space. Both Full Import and Delta Import use the same processor (`SyncImportTaskProcessor`); the connector handles delta filtering internally via watermark/persisted data.
 
@@ -90,8 +90,8 @@ flowchart TD
     RetryCreates --> RefResolution[Reference Resolution<br/>Resolve unresolved reference strings<br/>into CSO links by external ID<br/>Every value an object is left with,<br/>unresolved or ambiguous, counted on<br/>its item, #959; under Error handling:<br/>RPEI UnresolvedReference]
 
     %% --- Persist via ISyncRepository ---
-    RefResolution --> PersistCreate[Batch create new CSOs<br/>via ISyncRepository<br/>Two-phase parallel write for large batches<br/>See Two-Phase CSO Persistence below]
-    PersistCreate --> PersistUpdate[Batch update existing CSOs<br/>with change objects via ISyncRepository<br/>ClearChangeTracker after each batch]
+    RefResolution --> PersistCreate[Batch create new CSOs<br/>with their RPEIs and change records #2909<br/>via ISyncRepository, in one write per batch<br/>History written beside the objects<br/>for large batches<br/>See Two-Phase CSO Persistence below]
+    PersistCreate --> PersistUpdate[Batch update existing CSOs<br/>with change objects via ISyncRepository<br/>change records partitioned by row<br/>for large batches #2909<br/>ClearChangeTracker after each batch]
     PersistUpdate --> StampHashes[Stamp import content hashes #1082<br/>per batch, only AFTER that batch's<br/>attribute value writes committed<br/>never touches LastUpdated]
     StampHashes --> ReconcileBatch[Reconcile the batch's Pending Exports #2908<br/>from the values the import holds, as saved<br/>then release them<br/>See Confirming Import below]
     ReconcileBatch -->|Next update batch| PersistUpdate
@@ -278,6 +278,34 @@ flowchart TD
 **Why phases?** Without the split, a CSO in partition A could have an attribute referencing a CSO in partition B. If both partitions write concurrently in one transaction, partition A's FK INSERT would fail because partition B's CSO row isn't committed yet. Phase 1 commits all CSO rows first, making them globally visible; Phase 2 then writes attribute values with full FK visibility. The values are partitioned by row rather than by CSO, so a large group's members spread across every connection instead of landing on one (#2872); because one CSO's values may then commit on several connections, the synchronisation-pending mark (#2092) is written in Phase 3, once every value has committed.
 
 **Failure.** The phases commit separately, so the parallel write is not one transaction. A failure in any phase deletes the CSO rows the call committed (only those: a CSO id that already existed failed its own partition and is left alone) before the failure propagates, so the import finds nothing of the batch, as after the single-connection rollback. Only a process crash between a commit and that removal can leave CSOs without their values. The Metaverse Object and Run Profile Execution Item bulk writers follow the same gate and the same removal on failure.
+
+### A create batch's history is written beside its objects (#2909)
+
+A Full Import's create batch writes its objects, their values, its Run Profile Execution Items (with their outcomes, causal edges, match candidates and stat counters) and its change records in one call, `ISyncRepository.CreateConnectedSystemObjectsWithHistoryAsync`. The change records are built before anything is written: `SyncServer` readies the objects first (`PrepareConnectedSystemObjectsForCreate`: ids, and each reference value's id as the create will write it), so each change record records its references as written. Before #2909 the batch was three writes one after another (objects, then items, then change records on one connection); at 500,000 objects the change records were about 0.38 s of each 0.65 s batch, and a large group's value changes took one connection while its values took sixteen.
+
+Nothing in the history depends on the objects being committed: a change record names its object by plain id, with no foreign key (see "Audit Rows Name Objects by Plain Id" in `src/CLAUDE.md`), and so does an execution item. A change record's only foreign keys are to its execution item (`ActivityRunProfileExecutionItemId`, set null on delete), and its attribute and value rows' are to the change record and attribute row above them and to the Connected System attribute. So a batch large enough for the parallel gate (all its rows counted) is written as two parts at once:
+
+```mermaid
+flowchart TD
+    Start([CreateConnectedSystemObjectsWithHistoryAsync]) --> Gate{Every row of the batch >=<br/>row threshold, and<br/>no caller transaction?}
+    Gate -->|No| One[Objects, values, items, outcomes,<br/>edges, counters, change records<br/>on the EF connection in one transaction]
+    Gate -->|Yes| Split[Split the write parallelism<br/>between the two parts<br/>in proportion to their rows]
+    Split --> Objects[Objects part:<br/>Phase 1 CSO rows, Phase 2 values<br/>across its share of connections]
+    Split --> History[History part:<br/>items, outcomes and change record rows<br/>on the EF connection, one transaction<br/>then change attribute rows, then<br/>change value rows, each partitioned<br/>by row across its share of connections]
+    Objects --> Finish[Once both have committed, one transaction:<br/>mark CSOs synchronisation-pending,<br/>causal edges, match candidates,<br/>stat counters]
+    History --> Finish
+    Finish --> Done([Done])
+    Objects -->|Any step fails| Remove[Wait for both parts, then delete<br/>what the call committed: values, CSOs,<br/>outcomes, change records with their<br/>rows by cascade, items; rethrow]
+    History -->|Any step fails| Remove
+    Finish -->|Fails| Remove
+```
+
+- **Identical rows.** A change value's reference to an object of this batch is written with its id, as the serial path wrote it once the objects had committed: the history part reads which referenced objects exist, and adds the batch's own. `CsoCreateWithHistoryDatabaseTests` compares every column of every row against the old serial writes.
+- **Nothing of a failed batch remains.** The pending mark and the stat counters are written last, in one transaction, because a counter increment cannot be taken back by deleting rows. A failure in either part, or in that last step, removes everything the call committed, so the import is left with no object without its history and no history without its object.
+- **Connections.** The two parts share the write parallelism (`ParallelBatchWriter.SplitConnections`), so together they hold no more connections than one parallel write did, plus the EF connection as before: at most 17 of the pool's 30 on a 16-core host.
+- **Pipelining batches was not taken.** Building batch N+1 while N is written gains little (the build is in memory and quick next to the write), and would put two batches' writes and two batches' failures in flight at once, and batch N+1's references to N's objects rely on N being committed.
+
+The change record writer used by update batches (`PersistCsoChangesAsync`) partitions the same way when a call is large enough: change rows on one connection, then attribute rows and value rows by row across the parallel connections, removing the change rows (and their rows by cascade) if any phase fails.
 
 ## Confirming Import - Pending Export Reconciliation
 

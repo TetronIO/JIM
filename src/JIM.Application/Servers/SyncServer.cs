@@ -276,18 +276,24 @@ public class SyncServer : ISyncServer
 
     #region CSO Persistence with Change Tracking
 
-    public async Task CreateConnectedSystemObjectsAsync(
+    public async Task<bool> CreateConnectedSystemObjectsAsync(
         List<ConnectedSystemObject> connectedSystemObjects,
         List<ActivityRunProfileExecutionItem> rpeis,
         HashSet<Guid>? previouslyCommittedCsoIds = null,
         Func<int, Task>? onBatchPersisted = null)
     {
-        await _syncRepo.CreateConnectedSystemObjectsAsync(connectedSystemObjects, previouslyCommittedCsoIds);
+        // The change records are built before anything is written, so the objects, their values, the execution items
+        // and the change records can be written together (#2909). The objects are readied first: the change records
+        // record each reference value as the create writes it.
+        _syncRepo.PrepareConnectedSystemObjectsForCreate(connectedSystemObjects, previouslyCommittedCsoIds);
+        var changeTrackingEnabled = await GetCsoChangeTrackingEnabledAsync();
+        _jim.ConnectedSystems.LinkCreateChangeRecords(connectedSystemObjects, rpeis, changeTrackingEnabled);
+
+        var usedRawSql = await _syncRepo.CreateConnectedSystemObjectsWithHistoryAsync(connectedSystemObjects, rpeis, previouslyCommittedCsoIds);
         if (onBatchPersisted != null)
             await onBatchPersisted(connectedSystemObjects.Count);
 
-        var changeTrackingEnabled = await GetCsoChangeTrackingEnabledAsync();
-        _jim.ConnectedSystems.LinkCreateChangeRecords(connectedSystemObjects, rpeis, changeTrackingEnabled);
+        return usedRawSql;
     }
 
     public async Task UpdateConnectedSystemObjectsAsync(

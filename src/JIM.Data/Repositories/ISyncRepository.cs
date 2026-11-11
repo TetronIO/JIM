@@ -474,6 +474,39 @@ public interface ISyncRepository
     Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, HashSet<Guid>? previouslyCommittedCsoIds = null);
 
     /// <summary>
+    /// Readies Connected System Objects for a create without writing anything: gives each object and attribute value an
+    /// id where it has none, and settles each reference value's id as the create will write it (a reference to an object
+    /// of this batch or an earlier one keeps or takes its id; one to an object not yet written loses it). Run it before
+    /// building the objects' change records, so they record the references the create writes (#2909). Idempotent; the
+    /// create writers run it again themselves.
+    /// </summary>
+    /// <param name="connectedSystemObjects">The objects about to be created.</param>
+    /// <param name="previouslyCommittedCsoIds">The ids of objects committed by earlier batches.</param>
+    void PrepareConnectedSystemObjectsForCreate(List<ConnectedSystemObject> connectedSystemObjects, HashSet<Guid>? previouslyCommittedCsoIds = null);
+
+    /// <summary>
+    /// Writes an import's batch of new Connected System Objects together with its history (#2909): the objects and their
+    /// attribute values, and the batch's Run Profile Execution Items with their outcomes, causal edges, match candidates,
+    /// stat counters and the change records they carry (<see cref="ActivityRunProfileExecutionItem.ConnectedSystemObjectChange"/>).
+    /// Writes exactly what <see cref="CreateConnectedSystemObjectsAsync"/>, then <see cref="BulkInsertRpeisAsync"/>, then
+    /// <see cref="PersistRpeiCsoChangesAsync"/> write. A batch large enough for parallel writes is written as two
+    /// concurrent parts on connections of their own (the objects and values; the items and change records, partitioned by
+    /// row as the values are); a smaller one in one transaction. Either way a failure leaves nothing of the batch: no
+    /// object without its history, and no history without its objects.
+    /// </summary>
+    /// <param name="connectedSystemObjects">The objects to create.</param>
+    /// <param name="rpeis">The batch's execution items, each carrying its object's change record when change tracking
+    /// records one.</param>
+    /// <param name="previouslyCommittedCsoIds">The ids of objects committed by earlier batches; see
+    /// <see cref="CreateConnectedSystemObjectsAsync"/>.</param>
+    /// <returns>True if the items were written by raw SQL, outside the change tracker; false if they remain tracked (the
+    /// in-memory test repository), as <see cref="BulkInsertRpeisAsync"/> reports.</returns>
+    Task<bool> CreateConnectedSystemObjectsWithHistoryAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        List<ActivityRunProfileExecutionItem> rpeis,
+        HashSet<Guid>? previouslyCommittedCsoIds = null);
+
+    /// <summary>
     /// Bulk updates CSOs with their attribute values.
     /// Uses raw SQL bulk operations in production for performance.
     /// </summary>
@@ -1737,13 +1770,20 @@ public interface ISyncRepository
     /// Used by the export processor to persist change history after RPEI raw SQL bulk insert
     /// (which only inserts RPEI scalar columns, not related change records).
     /// </summary>
-    Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis);
+    /// <param name="rpeis">The items whose change records to write; their rows must be committed.</param>
+    /// <param name="allowParallelWrite">Whether a call large enough may spread its attribute and value rows across the
+    /// parallel connections (#2909). Only for a caller writing one batch at a time, as an import does: a caller writing
+    /// several batches at once, as an export does, must leave it false, or each batch could take the write parallelism's
+    /// share of the connection pool at the same moment.</param>
+    Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis, bool allowParallelWrite = false);
 
     /// <summary>
     /// Persists ConnectedSystemObjectChange records that belong to no execution item: the deletion records of
     /// Connected System Objects deleted quietly, whose disconnection was recorded when it happened.
     /// </summary>
-    Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes);
+    /// <param name="changes">The change records to write.</param>
+    /// <param name="allowParallelWrite">See <see cref="PersistRpeiCsoChangesAsync"/>.</param>
+    Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes, bool allowParallelWrite = false);
 
     #endregion
 

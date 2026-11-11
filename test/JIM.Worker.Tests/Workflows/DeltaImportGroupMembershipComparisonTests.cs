@@ -66,11 +66,11 @@ public class DeltaImportGroupMembershipComparisonTests : WorkflowTestBase
         /// <summary>The change record each execution item carried when it was written, which the import releases after.</summary>
         public Dictionary<ActivityRunProfileExecutionItem, ConnectedSystemObjectChange?> WrittenChanges { get; } = new();
 
-        public override Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
+        public override Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis, bool allowParallelWrite = false)
         {
             foreach (var rpei in rpeis)
                 WrittenChanges[rpei] = rpei.ConnectedSystemObjectChange;
-            return base.PersistRpeiCsoChangesAsync(rpeis);
+            return base.PersistRpeiCsoChangesAsync(rpeis, allowParallelWrite);
         }
     }
 

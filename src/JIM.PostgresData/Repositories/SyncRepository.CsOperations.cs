@@ -101,6 +101,71 @@ public partial class SyncRepository
         if (connectedSystemObjects.Count == 0)
             return;
 
+        PrepareConnectedSystemObjectsForCreate(connectedSystemObjects, previouslyCommittedCsoIds);
+        var attributeValueRows = ParallelBatchWriter.FlattenValueRows(connectedSystemObjects, cso => cso.Id, cso => cso.AttributeValues);
+
+        using var createSpan = MvoActivitySource.StartActivity("Cso.Create");
+        createSpan?.SetTag("count", connectedSystemObjects.Count);
+        createSpan?.SetTag("valueCount", attributeValueRows.Count);
+
+        // Gated on the rows written, objects plus values, not on the object count (#2872).
+        if (!ShouldWriteInParallel(connectedSystemObjects.Count + attributeValueRows.Count))
+        {
+            createSpan?.SetTag("connections", 1);
+            await CreateCsosOnSingleConnectionAsync(connectedSystemObjects, attributeValueRows);
+            return;
+        }
+
+        var parallelism = WriteParallelism;
+        var connectionString = ConnectionStringForParallelWrites!;
+        createSpan?.SetTag("connections", parallelism);
+        Log.Information("CreateConnectedSystemObjectsAsync: Writing {Count} CSOs and {ValueCount} attribute values across {Parallelism} parallel connections",
+            connectedSystemObjects.Count, attributeValueRows.Count, parallelism);
+
+        // Three-phase parallel write: CSO rows first (committed), then attribute values, then the
+        // synchronisation-pending mark (#2092); see WriteCsoRowsAndValuesInParallelAsync for the first two.
+        // The phases commit separately, so unlike the single-connection path the write is not one transaction.
+        // A failure in any phase therefore removes every CSO row the call committed, and their
+        // values, before it propagates (#2872): the import is told the batch failed and finds nothing of it,
+        // as when the single-connection transaction rolls back, rather than objects with no external identifier
+        // that the next import cannot match and so creates again beside them.
+        var allBatchCsoIds = BatchAndCommittedCsoIds(connectedSystemObjects, previouslyCommittedCsoIds);
+        var committedCsoIds = new ConcurrentQueue<Guid>();
+        var written = false;
+        try
+        {
+            await WriteCsoRowsAndValuesInParallelAsync(connectedSystemObjects, attributeValueRows, allBatchCsoIds, parallelism,
+                connectionString, committedCsoIds);
+
+            // Phase 3: mark the rows synchronisation-pending, now that every value has committed.
+            using (MvoActivitySource.StartActivity("Cso.Create.Mark"))
+            {
+                await using var connection = new NpgsqlConnection(connectionString);
+                await connection.OpenAsync();
+                await using var transaction = await connection.BeginTransactionAsync();
+                await MarkConnectedSystemObjectsSynchronisationPendingOnConnectionAsync(connection, transaction,
+                    connectedSystemObjects.Select(cso => cso.Id).ToList());
+                await transaction.CommitAsync();
+            }
+
+            written = true;
+        }
+        finally
+        {
+            // Only the rows this call committed: an id that was already in the table failed its partition's insert,
+            // so it is not in the list, and the object that already held it is left alone.
+            if (!written && !committedCsoIds.IsEmpty)
+                await RemoveRowsOfFailedParallelWriteAsync(connectionString, nameof(CreateConnectedSystemObjectsAsync),
+                    CsoRowRemovals([.. committedCsoIds]));
+        }
+
+        foreach (var cso in connectedSystemObjects)
+            cso.SynchronisationPending = true;
+    }
+
+    /// <inheritdoc />
+    public void PrepareConnectedSystemObjectsForCreate(List<ConnectedSystemObject> connectedSystemObjects, HashSet<Guid>? previouslyCommittedCsoIds = null)
+    {
         // Pre-generate IDs for all CSOs and their attribute values (bypasses EF ValueGeneratedOnAdd)
         foreach (var cso in connectedSystemObjects)
         {
@@ -124,9 +189,10 @@ public partial class SyncRepository
         // When previouslyCommittedCsoIds is provided, FKs pointing to already-committed CSOs
         // are preserved. Combined with sorting CSOs so referenced objects come first, this
         // eliminates most cross-batch FK violations and reduces FixupCrossBatchReferenceIdsAsync work.
-        var allowedCsoIds = new HashSet<Guid>(connectedSystemObjects.Select(c => c.Id));
-        if (previouslyCommittedCsoIds != null)
-            allowedCsoIds.UnionWith(previouslyCommittedCsoIds);
+        //
+        // Idempotent: a second pass over the same objects with the same committed ids changes nothing, so the create
+        // writers run it again whether or not their caller prepared the objects first.
+        var allowedCsoIds = BatchAndCommittedCsoIds(connectedSystemObjects, previouslyCommittedCsoIds);
 
         foreach (var cso in connectedSystemObjects)
         {
@@ -145,45 +211,55 @@ public partial class SyncRepository
                     av.ReferenceValueId = null;
             }
         }
+    }
 
-        var attributeValueRows = ParallelBatchWriter.FlattenValueRows(connectedSystemObjects, cso => cso.Id, cso => cso.AttributeValues);
-
-        // Gated on the rows written, objects plus values, not on the object count (#2872).
-        if (!ShouldWriteInParallel(connectedSystemObjects.Count + attributeValueRows.Count))
-        {
-            await CreateCsosOnSingleConnectionAsync(connectedSystemObjects, attributeValueRows);
-            return;
-        }
-
-        var parallelism = WriteParallelism;
-        var connectionString = ConnectionStringForParallelWrites!;
-        Log.Information("CreateConnectedSystemObjectsAsync: Writing {Count} CSOs and {ValueCount} attribute values across {Parallelism} parallel connections",
-            connectedSystemObjects.Count, attributeValueRows.Count, parallelism);
-
-        // Three-phase parallel write: CSO rows first (committed), then attribute values, then the
-        // synchronisation-pending mark (#2092).
-        // Phase 1 commits all CSO rows across all parallel connections, making them visible
-        // to all subsequent transactions. Phase 2 then writes attribute values with full FK
-        // resolution: ReferenceValueId can point to any CSO in this batch or prior batches
-        // without cross-partition FK violations. The values are partitioned by row, not by CSO, so a
-        // large group's members spread across every connection (#2872); one CSO's values may therefore
-        // commit on several connections, so phase 3 marks the rows only once every value has committed:
-        // no synchronisation can load a marked object without all its values, process it and clear the mark.
-        //
-        // The phases commit separately, so unlike the single-connection path the write is not one transaction.
-        // A failure in any phase therefore removes every CSO row the call committed, and their
-        // values, before it propagates (#2872): the import is told the batch failed and finds nothing of it,
-        // as when the single-connection transaction rolls back, rather than objects with no external identifier
-        // that the next import cannot match and so creates again beside them.
-        var allBatchCsoIds = new HashSet<Guid>(connectedSystemObjects.Select(c => c.Id));
+    /// <summary>
+    /// The ids of the objects being created and of those committed by earlier batches: the objects a value written now
+    /// may reference.
+    /// </summary>
+    private static HashSet<Guid> BatchAndCommittedCsoIds(IEnumerable<ConnectedSystemObject> connectedSystemObjects, HashSet<Guid>? previouslyCommittedCsoIds)
+    {
+        var ids = new HashSet<Guid>(connectedSystemObjects.Select(c => c.Id));
         if (previouslyCommittedCsoIds != null)
-            allBatchCsoIds.UnionWith(previouslyCommittedCsoIds);
+            ids.UnionWith(previouslyCommittedCsoIds);
+        return ids;
+    }
 
-        var committedCsoIds = new ConcurrentQueue<Guid>();
-        var written = false;
-        try
+    /// <summary>
+    /// What removing the Connected System Objects a failed parallel write committed takes: their attribute values first,
+    /// then the objects (see <see cref="RemoveRowsOfFailedParallelWriteAsync"/> for why the values go first).
+    /// </summary>
+    private static ParallelWriteRemoval[] CsoRowRemovals(Guid[] committedCsoIds) =>
+    [
+        new ParallelWriteRemoval("ConnectedSystemObjectAttributeValues", "ConnectedSystemObjectId", committedCsoIds),
+        new ParallelWriteRemoval("ConnectedSystemObjects", "Id", committedCsoIds)
+    ];
+
+    /// <summary>
+    /// The first two phases of a parallel Connected System Object create: the object rows, then their attribute values,
+    /// each across <paramref name="parallelism"/> connections, each connection committing its own part. Phase 1 commits
+    /// every row before phase 2 starts, making them visible to every later transaction, so a value's ReferenceValueId can
+    /// point to any object of this batch or an earlier one without cross-partition foreign key violations. The values are
+    /// partitioned by row, not by object, so a large group's members spread across every connection (#2872); one object's
+    /// values may therefore commit on several connections, which is why the rows are written without the
+    /// synchronisation-pending mark, and marked only once every value has committed: no synchronisation can load a marked
+    /// object without all its values, process it and clear the mark.
+    /// </summary>
+    /// <param name="committedCsoIds">Receives the id of every object row this call commits, for the caller's removal
+    /// should a later step fail.</param>
+    private static async Task WriteCsoRowsAndValuesInParallelAsync(
+        List<ConnectedSystemObject> connectedSystemObjects,
+        IReadOnlyList<(Guid OwnerId, ConnectedSystemObjectAttributeValue Value)> attributeValueRows,
+        HashSet<Guid> allBatchCsoIds,
+        int parallelism,
+        string connectionString,
+        ConcurrentQueue<Guid> committedCsoIds)
+    {
+        // Phase 1: Write CSO rows across parallel connections and commit.
+        using (var rowsSpan = MvoActivitySource.StartActivity("Cso.Create.Rows"))
         {
-            // Phase 1: Write CSO rows across parallel connections and commit.
+            rowsSpan?.SetTag("rowCount", connectedSystemObjects.Count);
+            rowsSpan?.SetTag("connections", Math.Min(parallelism, connectedSystemObjects.Count));
             await ParallelBatchWriter.ExecuteAsync(
                 connectedSystemObjects,
                 parallelism,
@@ -196,9 +272,14 @@ public partial class SyncRepository
                     foreach (var cso in partition)
                         committedCsoIds.Enqueue(cso.Id);
                 });
+        }
 
-            // Phase 2: Write attribute value rows across parallel connections. All CSO rows are now committed and
-            // visible, so references to any CSO of this batch or an earlier one succeed.
+        // Phase 2: Write attribute value rows across parallel connections. All CSO rows are now committed and
+        // visible, so references to any CSO of this batch or an earlier one succeed.
+        using (var valuesSpan = MvoActivitySource.StartActivity("Cso.Create.Values"))
+        {
+            valuesSpan?.SetTag("rowCount", attributeValueRows.Count);
+            valuesSpan?.SetTag("connections", Math.Min(parallelism, attributeValueRows.Count));
             await ParallelBatchWriter.ExecuteAsync(
                 attributeValueRows,
                 parallelism,
@@ -209,33 +290,7 @@ public partial class SyncRepository
                     await BulkInsertCsoAttributeValuesOnConnectionAsync(connection, partition, allBatchCsoIds);
                     await transaction.CommitAsync();
                 });
-
-            // Phase 3: mark the rows synchronisation-pending, now that every value has committed.
-            await using (var connection = new NpgsqlConnection(connectionString))
-            {
-                await connection.OpenAsync();
-                await using var transaction = await connection.BeginTransactionAsync();
-                await MarkConnectedSystemObjectsSynchronisationPendingOnConnectionAsync(connection, transaction,
-                    connectedSystemObjects.Select(cso => cso.Id).ToList());
-                await transaction.CommitAsync();
-            }
-
-            written = true;
         }
-        finally
-        {
-            // Only the rows this call committed: an id that was already in the table failed its partition's insert,
-            // so it is not in the list, and the object that already held it is left alone.
-            if (!written && !committedCsoIds.IsEmpty)
-                await RemoveRowsOfFailedParallelWriteAsync(connectionString, nameof(CreateConnectedSystemObjectsAsync),
-                [
-                    new ParallelWriteRemoval("ConnectedSystemObjectAttributeValues", "ConnectedSystemObjectId", [.. committedCsoIds]),
-                    new ParallelWriteRemoval("ConnectedSystemObjects", "Id", [.. committedCsoIds])
-                ]);
-        }
-
-        foreach (var cso in connectedSystemObjects)
-            cso.SynchronisationPending = true;
     }
 
     /// <summary>

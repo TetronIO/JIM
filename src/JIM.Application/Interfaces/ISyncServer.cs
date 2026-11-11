@@ -153,12 +153,16 @@ public interface ISyncServer
     #region CSO Persistence with Change Tracking
 
     /// <summary>
-    /// Bulk creates CSOs with associated RPEIs. Persists the CSOs via the data layer,
-    /// then links change tracking records to the corresponding RPEIs.
+    /// Bulk creates CSOs with their RPEIs and change history (#2909): builds each object's change record on its RPEI,
+    /// then writes the objects, their values, the RPEIs (with their outcomes, edges, candidates and stat counters) and
+    /// the change records together, so a failure leaves nothing of the batch. The caller readies the RPEIs first (their
+    /// Activity, display snapshots and outcome summaries) and releases them afterwards.
     /// </summary>
     /// <param name="previouslyCommittedCsoIds">IDs of CSOs committed in prior batches, allowing
     /// cross-batch FK references to be preserved during bulk insert instead of requiring post-hoc fixup.</param>
-    Task CreateConnectedSystemObjectsAsync(
+    /// <returns>True if the RPEIs were written by raw SQL, outside the change tracker; false if they remain tracked
+    /// (the in-memory test repository).</returns>
+    Task<bool> CreateConnectedSystemObjectsAsync(
         List<ConnectedSystemObject> connectedSystemObjects,
         List<ActivityRunProfileExecutionItem> rpeis,
         HashSet<Guid>? previouslyCommittedCsoIds = null,
