@@ -539,12 +539,13 @@ public class PendingExportCreateParallelWriteDatabaseTests
 
     /// <summary>
     /// On the write gate's own defaults (threshold and rows a connection) on a 16-core host, a people page's 6,000 rows of
-    /// staging go parallel on four connections, not sixteen, as every other bulk writer's do at that size (#2669): both
-    /// the exports and their changes carry four transaction ids. The exports are counted once they are staged, before the
-    /// last step makes them live in one UPDATE on the context's connection, which gives every one that transaction's id.
+    /// staging go parallel, and each step takes the connections its own rows earn (#2669): the 5,500 changes four, as every
+    /// other bulk writer's do at that size, and the 500 exports one. Spread across five, the exports' step cost 23 ms a
+    /// page for a 2.2 ms COPY in the 500k run. The exports are counted once they are staged, before the last step makes
+    /// them live in one UPDATE on the context's connection, which gives every one that transaction's id.
     /// </summary>
     [Test]
-    public async Task CreatePendingExportsAsync_PeoplePageOnDefaultGate_WritesAcrossFourConnectionsAsync()
+    public async Task CreatePendingExportsAsync_PeoplePageOnDefaultGate_WritesExportsOnOneConnectionAndChangesOnFourAsync()
     {
         var s = await SeedAsync();
         var exports = await BuildPeoplePageAsync(s);
@@ -569,9 +570,9 @@ public class PendingExportCreateParallelWriteDatabaseTests
         {
             Assert.That(await CountAsync("PendingExports", "Id", exports.Select(pe => pe.Id)), Is.EqualTo(500), "every export is written");
             Assert.That(await CountAsync("PendingExportAttributeValueChanges", "Id", ChangeIds(exports)), Is.EqualTo(5_500), "and every change");
-            Assert.That(exportTransactionsWhenWritten, Is.EqualTo(4), "the exports are written across four connections");
+            Assert.That(exportTransactionsWhenWritten, Is.EqualTo(1), "the 500 exports are written on one connection");
             Assert.That(await CountWritingTransactionsAsync("PendingExportAttributeValueChanges", ChangeIds(exports)), Is.EqualTo(4),
-                "and so are their changes");
+                "and their 5,500 changes across four");
         }
     }
 
