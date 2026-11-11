@@ -3564,7 +3564,10 @@ public partial class MetaverseRepository : IMetaverseRepository
         var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
         var transaction = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
-        var sql = BuildMatchValueBatchLookupSql(valueType, caseSensitive);
+        // JIT off for the statement (TransactionJit): a first Full Synchronisation runs it on statistics taken while the
+        // table was empty, which cost each probe as though it read the attribute, and the estimate then crosses the JIT
+        // thresholds. Measured at 200,000 values: 0.49 s compiling a statement that runs in 0.07 s, on every page.
+        var sql = $"{TransactionJit.DisableSql};\n{BuildMatchValueBatchLookupSql(valueType, caseSensitive)}";
 
         var found = new List<(object Value, Guid MetaverseObjectId)>();
         foreach (var chunk in values.Chunk(MatchValueBatchChunkSize))
@@ -3575,6 +3578,8 @@ public partial class MetaverseRepository : IMetaverseRepository
             // Each row names its value by its position in the array sought, so the caller's own value object is handed
             // back: the database's copy may differ in case (Text ignoring case) or scale (Decimal).
             await using var reader = await command.ExecuteReaderAsync();
+            if (!await TransactionJit.SkipDisableResultAsync(reader))
+                throw new InvalidOperationException("The batched Object Matching lookup returned no result after turning JIT off.");
             while (await reader.ReadAsync())
                 found.Add((chunk[(int)(reader.GetInt64(0) - 1)], reader.GetGuid(1)));
         }
@@ -3588,11 +3593,24 @@ public partial class MetaverseRepository : IMetaverseRepository
     /// <c>@take</c> ids. Internal so a database test can <c>EXPLAIN</c> exactly what runs.
     /// </summary>
     /// <remarks>
-    /// As in the per-object lookup, the matches are found first, in a materialised CTE, and only then numbered and cut,
-    /// so a value nothing holds costs one index probe rather than an ordered walk of the attribute's values. Each value
-    /// joins the attribute values by equality on the column its data type uses; Text ignoring case lowers both sides
-    /// with PostgreSQL's <c>lower()</c> and repeats the expression index's <c>"StringValue" IS NOT NULL</c> filter, as
-    /// the per-object lookup does. The type check is the same correlated subquery (#2492).
+    /// <para>
+    /// Each value compares on the column its data type uses, as the per-object lookup does: Text ignoring case lowers both
+    /// sides with PostgreSQL's <c>lower()</c> and repeats the expression index's <c>"StringValue" IS NOT NULL</c> filter.
+    /// The type check is the same correlated subquery (#2492). As in the per-object lookup, the matches are found first,
+    /// in a materialised CTE, and only then numbered and cut.
+    /// </para>
+    /// <para>
+    /// Each value is looked up on its own, through the index, by a LATERAL subquery the planner may not flatten
+    /// (<c>OFFSET 0</c>), as <c>CsoImportStateLookupByExternalIdsArm</c> does. Left as a join, the statement is costed
+    /// on the statistics, and a first Full Synchronisation's are taken while the table is empty and then outgrown by the
+    /// run's own projections: believing the attribute held about one value, the planner hashed every value it holds,
+    /// and checked each one's type, for every page (measured at 200,000 values: 800,000 buffer reads and 0.66 s a page,
+    /// against index probes for the 5,000 values sought). A probe per value costs the same whatever the table holds.
+    /// </para>
+    /// <para>
+    /// Decimal is the exception, and stays a join: no index serves <c>"DecimalValue"</c>, so a probe per value would
+    /// read the attribute once per value, where one hash of it per page is the least a lookup can read.
+    /// </para>
     /// </remarks>
     internal static string BuildMatchValueBatchLookupSql(AttributeDataType valueType, bool caseSensitive)
     {
@@ -3607,14 +3625,31 @@ public partial class MetaverseRepository : IMetaverseRepository
             _ => throw new ArgumentOutOfRangeException(nameof(valueType), valueType, "Object Matching cannot compare this data type.")
         };
 
-        return $"""
-            WITH matched AS MATERIALIZED (
+        var typeCheck = @"(SELECT mo.""TypeId"" FROM ""MetaverseObjects"" AS mo WHERE mo.""Id"" = av.""MetaverseObjectId"") = @typeId";
+        var matches = valueType == AttributeDataType.Decimal
+            ? $"""
                 SELECT DISTINCT sought.ordinal, av."MetaverseObjectId"
                 FROM unnest(@values) WITH ORDINALITY AS sought(value, ordinal)
                 JOIN "MetaverseObjectAttributeValues" AS av
                   ON av."AttributeId" = @attributeId
                  AND {comparison}
-                WHERE (SELECT mo."TypeId" FROM "MetaverseObjects" AS mo WHERE mo."Id" = av."MetaverseObjectId") = @typeId
+                WHERE {typeCheck}
+                """
+            : $"""
+                SELECT DISTINCT sought.ordinal, held."MetaverseObjectId"
+                FROM unnest(@values) WITH ORDINALITY AS sought(value, ordinal)
+                CROSS JOIN LATERAL (
+                    SELECT av."MetaverseObjectId"
+                    FROM "MetaverseObjectAttributeValues" AS av
+                    WHERE av."AttributeId" = @attributeId
+                      AND {comparison}
+                      AND {typeCheck}
+                    OFFSET 0) AS held
+                """;
+
+        return $"""
+            WITH matched AS MATERIALIZED (
+            {matches}
             ),
             numbered AS (
                 SELECT ordinal, "MetaverseObjectId",

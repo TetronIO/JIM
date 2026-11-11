@@ -317,6 +317,107 @@ public class MetaverseMatchValueLookupDatabaseTests
     }
 
     /// <summary>
+    /// The page batch (#2020) seeks each value through the index however stale the statistics: a first Full
+    /// Synchronisation's join lookups run against tables last analysed while empty, then filled by the run's own
+    /// projections, the shape that made other worker statements read whole tables (#2884). A full page of values against
+    /// 200,000 held values must probe the index once per value, never read every value the attribute holds.
+    /// </summary>
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task FindMetaverseObjectIdsByEachMatchValueAsync_StatisticsTakenWhileEmpty_SeeksEachValueThroughTheIndexAsync(bool caseSensitive)
+    {
+        var seeded = await SeedAsync();
+
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        try
+        {
+            await using (var populate = new NpgsqlCommand("""
+                ALTER TABLE "MetaverseObjects" SET (autovacuum_enabled = false);
+                ALTER TABLE "MetaverseObjectAttributeValues" SET (autovacuum_enabled = false);
+                ANALYZE "MetaverseObjects";
+                ANALYZE "MetaverseObjectAttributeValues";
+                INSERT INTO "MetaverseObjects" ("Id", "Created", "TypeId", "Status", "DeletionInitiatedByType", "Origin")
+                SELECT md5('mvo' || n)::uuid, now(), @typeId, 0, 0, 0 FROM generate_series(1, 200000) AS n;
+                INSERT INTO "MetaverseObjectAttributeValues" ("Id", "AttributeId", "MetaverseObjectId", "StringValue")
+                SELECT md5('av' || n)::uuid, @attributeId, md5('mvo' || n)::uuid, 'E' || (1000000 + n) FROM generate_series(1, 200000) AS n;
+                """, connection))
+            {
+                populate.CommandTimeout = 300;
+                populate.Parameters.AddWithValue("typeId", seeded.Person.Id);
+                populate.Parameters.AddWithValue("attributeId", seeded.EmployeeId.Id);
+                await populate.ExecuteNonQueryAsync();
+            }
+
+            // A page of values: half held (spread across the table), half not.
+            var values = Enumerable.Range(0, 5000)
+                .Select(n => (object)(n % 2 == 0 ? $"e{1000000 + n * 37 + 1}" : $"NOBODY{n}"))
+                .ToList();
+            await using var explain = new NpgsqlCommand(
+                $"{TransactionJit.DisableSql};\nEXPLAIN (ANALYZE, BUFFERS) " + MetaverseRepository.BuildMatchValueBatchLookupSql(AttributeDataType.Text, caseSensitive),
+                connection);
+            MetaverseRepository.AddMatchValueLookupParameters(explain, seeded.Person.Id, seeded.EmployeeId.Id, AttributeDataType.Text, values, take: 11);
+
+            // Sent as the repository sends it, JIT off first.
+            var plan = new List<string>();
+            await using (var reader = await explain.ExecuteReaderAsync())
+            {
+                Assert.That(await TransactionJit.SkipDisableResultAsync(reader), Is.True);
+                while (await reader.ReadAsync())
+                    plan.Add(reader.GetString(0));
+            }
+
+            var planText = string.Join("\n", plan);
+            TestContext.Out.WriteLine($"{(caseSensitive ? "Respecting" : "Ignoring")} case:\n{planText}");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(plan.Any(line => line.Contains("Seq Scan on \"MetaverseObjectAttributeValues\"")), Is.False,
+                    "The batch reads every attribute value.\n" + planText);
+                Assert.That(plan.Any(line => line.Contains("Seq Scan on \"MetaverseObjects\"")), Is.False,
+                    "The batch reads every Metaverse Object.\n" + planText);
+                Assert.That(plan.Where(line => line.Contains("Index Cond:")).Any(line => line.Contains("StringValue")), Is.True,
+                    "Each value must drive an index condition.\n" + planText);
+                Assert.That(plan.Any(line => line.StartsWith("JIT:", StringComparison.Ordinal)), Is.False,
+                    "The stale estimate must not have the statement compiled.\n" + planText);
+            }
+        }
+        finally
+        {
+            await using var restore = new NpgsqlCommand("""
+                ALTER TABLE "MetaverseObjects" RESET (autovacuum_enabled);
+                ALTER TABLE "MetaverseObjectAttributeValues" RESET (autovacuum_enabled);
+                """, connection);
+            await restore.ExecuteNonQueryAsync();
+        }
+    }
+
+    /// <summary>
+    /// A page with more values than one statement seeks (#2020) is answered across statements with nothing lost or
+    /// misattributed at the boundary: each row still names the value it was found by.
+    /// </summary>
+    [Test]
+    public async Task FindMetaverseObjectIdsByEachMatchValueAsync_MoreValuesThanOneStatementSeeks_AnswersEveryValueAsync()
+    {
+        var seeded = await SeedAsync();
+        var count = MetaverseRepository.MatchValueBatchChunkSize + 1;
+        var first = await AddMvoAsync(seeded.Person, seeded.EmployeeId, av => av.StringValue = "V0");
+        var lastOfFirstChunk = await AddMvoAsync(seeded.Person, seeded.EmployeeId, av => av.StringValue = $"V{count - 2}");
+        var firstOfSecondChunk = await AddMvoAsync(seeded.Person, seeded.EmployeeId, av => av.StringValue = $"V{count - 1}");
+        var values = Enumerable.Range(0, count).Select(n => (object)$"V{n}").ToList();
+
+        await using var ctx = NewContext();
+        var found = await new PostgresDataRepository(ctx).Metaverse.FindMetaverseObjectIdsByEachMatchValueAsync(
+            seeded.Person.Id, seeded.EmployeeId.Id, AttributeDataType.Text, values, caseSensitive: true, takePerValue: 11);
+
+        Assert.That(found.Select(row => ((string)row.Value, row.MetaverseObjectId)), Is.EquivalentTo(new[]
+        {
+            ("V0", first.Id),
+            ($"V{count - 2}", lastOfFirstChunk.Id),
+            ($"V{count - 1}", firstOfSecondChunk.Id)
+        }));
+    }
+
+    /// <summary>
     /// The page batch behind an import join (#2020) answers every lookup exactly as the per-object query does: the same
     /// ids, in the same order, cut at the same count, for each data type and case mode, values in another case, pattern
     /// characters, several values of one identity, values of several identities, more holders than the lookup takes,

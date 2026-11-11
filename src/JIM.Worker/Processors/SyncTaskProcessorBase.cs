@@ -7493,10 +7493,12 @@ public abstract class SyncTaskProcessorBase
         // two brand-new same-system CSOs that both match one MVO in a single page each read a count of zero,
         // both pass, and their join writes then collide on the filtered unique index as a raw 23505 at the
         // batch flush. That input is genuinely ambiguous (two source records claim one identity) and must
-        // fail cleanly here. This is kept as a separate check rather than folded into existingCsoJoinCount
-        // so it never double-counts: the in-memory test repository already reflects the pending join in the
-        // count above and is caught by the == 1 branch, whereas production is caught here. The current CSO
-        // is not added to _pendingCsoJoinUpdates until after this guard passes, so no self-exclusion applies.
+        // fail cleanly here. It is kept as a separate check rather than folded into existingCsoJoinCount, because that count
+        // is the database's (read by the page's batch before Pass 2, #2020, or by the query above) and so never includes
+        // a join made earlier in the page; this guard is the one place such a join is seen. (Only the in-memory test
+        // repository's per-object count is live, so a join it was asked about directly reaches the == 1 branch first; the
+        // object is refused either way.) The current CSO is not added to _pendingCsoJoinUpdates until after this guard
+        // passes, so no self-exclusion applies.
         if (_pendingCsoJoinUpdates.Any(cso => cso.MetaverseObjectId == mvo.Id))
         {
             throw new SyncJoinException(

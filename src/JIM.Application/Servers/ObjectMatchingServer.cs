@@ -308,11 +308,12 @@ public class ObjectMatchingServer
         while (pending.Count > 0)
         {
             // Resolve the rule each unsettled object has reached, passing over those an object's per-object walk passes over.
-            // An object whose walk ends without a lookup (no rule left, or one that cannot be worked out) drops out.
+            // An object whose walk ends without a lookup (no rule left, or one that cannot be worked out) drops out, as does
+            // one the batch leaves to its own join (see ResolveNextLookupForBatch).
             var awaiting = new List<(int Join, JoinMatchLookupKey Key, IReadOnlyList<object> Values)>();
             foreach (var i in pending)
             {
-                var lookup = ResolveNextLookup(joins[i].ConnectedSystemObject, rules[i], ref positions[i]);
+                var lookup = ResolveNextLookupForBatch(joins[i].ConnectedSystemObject, rules[i], ref positions[i]);
                 if (lookup is { } reached)
                     awaiting.Add((i, reached.Key, reached.Values));
             }
@@ -335,6 +336,10 @@ public class ObjectMatchingServer
 
             foreach (var (key, keyValues) in sought.Where(entry => entry.Value.Count > 0))
             {
+                // A database failure here is left to fail the page: unlike a fault in one object's rule, it is an
+                // infrastructure fault (the database unreachable or refusing the statement) that every object's own lookup
+                // would meet as well. Nothing an object holds can cause it, since a value the database cannot take never
+                // reaches the batch (ResolveNextLookupForBatch).
                 IReadOnlyList<(object Value, Guid MetaverseObjectId)> found;
                 using (var lookupSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("Join.MatchLookup"))
                 {
@@ -401,6 +406,39 @@ public class ObjectMatchingServer
         Log.Debug("PrefetchJoinMatchesForPageAsync: {JoinCount} join(s), {Rounds} round(s), {LookupQueries} lookup quer(ies) for {ValuesSought} value(s), {SettledCount} Metaverse Object(s) settled on",
             joins.Count, rounds, lookupQueries, valuesSought, settled.Count);
         return candidates;
+    }
+
+    /// <summary>
+    /// <see cref="ResolveNextLookup"/> for the page's batch, which must not let one object stop the page. Before the batch,
+    /// a rule that threw for one object made one UnhandledError item, and only when the object was in scope for its
+    /// Synchronisation Rule; the batch resolves before scope is known, outside the per-object catch. So anything that
+    /// goes wrong for an object here leaves it to its own join, which fails, or does not, exactly as it always did:
+    /// null, logged at Debug only, since that join reports it if the object reaches the rule. A Text value holding a NUL
+    /// character is left to the object's own join too: PostgreSQL refuses it in any statement, so it would fail the
+    /// batch for every object on the page rather than the one lookup that carries it.
+    /// </summary>
+    private (JoinMatchLookupKey Key, IReadOnlyList<object> Values)? ResolveNextLookupForBatch(
+        ConnectedSystemObject connectedSystemObject, List<ObjectMatchingRule> rules, ref int position)
+    {
+        try
+        {
+            var lookup = ResolveNextLookup(connectedSystemObject, rules, ref position);
+            if (lookup is { } reached && reached.Values.Any(value => value is string text && text.Contains('\0')))
+            {
+                Log.Debug("PrefetchJoinMatchesForPageAsync: CSO {CsoId}'s Object Matching Rule {RuleId} computes a value holding a NUL character; its join looks it up itself",
+                    connectedSystemObject.Id, rules[position].Id);
+                return null;
+            }
+
+            return lookup;
+        }
+        // A fallback to the object's own join, not a recovery: the join meets the same fault and reports it.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Debug(ex, "PrefetchJoinMatchesForPageAsync: Object Matching Rule {RuleId} could not be resolved for CSO {CsoId}; its join resolves it itself",
+                rules.ElementAtOrDefault(position)?.Id, connectedSystemObject.Id);
+            return null;
+        }
     }
 
     /// <summary>
