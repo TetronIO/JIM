@@ -3876,7 +3876,8 @@ function Stop-LabVm {
     <#
     .SYNOPSIS
         Shuts a VM down through its guest, and turns it off if it has not stopped within -TimeoutSeconds or the
-        shutdown fails. Returns AlreadyOff, ShutDown or TurnedOff.
+        shutdown fails. Returns AlreadyOff, ShutDown or TurnedOff. Throws Hyper-V's error if the VM can be neither
+        shut down nor turned off within -TimeoutSeconds plus -TurnOffRetrySeconds.
 
     .DESCRIPTION
         The guest shutdown runs as a job, so a guest that never answers cannot hold the caller. A VM turned off
@@ -3886,6 +3887,13 @@ function Stop-LabVm {
         disposed of before then makes that thread throw PSObjectDisposedException, which ends the whole process, so
         the job is waited for (up to a minute, with a warning if it is still running then) and never removed; it goes
         when the process ends.
+
+        Hyper-V refuses Turn Off while the guest shutdown it has started is still under way (event 19060, "currently
+        performing ... 'Shutting Down'"). A guest that is slow to shut down rather than hung, such as a domain
+        controller just after a nightly run, can still be shutting down when the timeout runs out: dc-primary took
+        5 m 45 s in the monthly rebuild's Build (run 43011778912), and the single turn-off it was given then failed the
+        build. So a refused turn-off is tried again every few seconds for up to -TurnOffRetrySeconds, and a VM that
+        reaches Off on its own in that time counts as shut down.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -3894,7 +3902,10 @@ function Stop-LabVm {
         [string]$Name,
 
         [ValidateRange(3, 3600)]
-        [int]$TimeoutSeconds = 300
+        [int]$TimeoutSeconds = 300,
+
+        [ValidateRange(0, 3600)]
+        [int]$TurnOffRetrySeconds = 300
     )
 
     if ([string](Get-VM -Name $Name).State -eq 'Off') {
@@ -3918,8 +3929,24 @@ function Stop-LabVm {
         if ([string](Get-VM -Name $Name).State -eq 'Off') {
             return 'ShutDown'
         }
-        Stop-VM -Name $Name -TurnOff -Force
-        return 'TurnedOff'
+        for ($retried = 0; ; $retried += $intervalSeconds) {
+            try {
+                Stop-VM -Name $Name -TurnOff -Force -ErrorAction Stop
+                return 'TurnedOff'
+            }
+            catch {
+                if ([string](Get-VM -Name $Name).State -eq 'Off') {
+                    return 'ShutDown'
+                }
+                if ($retried -ge $TurnOffRetrySeconds) {
+                    throw
+                }
+                if ($retried -eq 0) {
+                    Write-Warning "Hyper-V would not turn $Name off ($($_.Exception.Message)); its shutdown may still be under way, so trying again for up to $TurnOffRetrySeconds s."
+                }
+                Start-Sleep -Seconds $intervalSeconds
+            }
+        }
     }
     finally {
         if ($null -eq (Wait-Job -Job $job -Timeout 60)) {
