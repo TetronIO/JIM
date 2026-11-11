@@ -453,18 +453,18 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
-    public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis, bool allowParallelWrite = false)
     {
         var changes = rpeis
             .Where(r => r.ConnectedSystemObjectChange != null)
             .Select(r => r.ConnectedSystemObjectChange!)
             .ToList();
 
-        return PersistCsoChangesAsync(changes);
+        return PersistCsoChangesAsync(changes, allowParallelWrite);
     }
 
     /// <inheritdoc />
-    public async Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes)
+    public async Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes, bool allowParallelWrite = false)
     {
         if (changes.Count == 0)
             return;
@@ -474,6 +474,27 @@ public partial class SyncRepository
         // end of each index rather than a random page of it (#2669).
         foreach (var change in changes)
             ChangeRecordIds.AssignMissing(change);
+
+        var attributeRows = CsoChangeAttributeRows(changes);
+        var valueRows = CsoChangeValueRows(changes);
+
+        using var persistSpan = MvoActivitySource.StartActivity("CsoChange.Persist");
+        persistSpan?.SetTag("changeCount", changes.Count);
+        persistSpan?.SetTag("attributeCount", attributeRows.Count);
+        persistSpan?.SetTag("valueCount", valueRows.Count);
+
+        // Gated on the rows written, as the other bulk writers are (#2872). A change record of a large group carries a
+        // value row per member, which on one connection took 16.8 s of two Full Import batches while the same rows'
+        // attribute values were written across 16 (#2909). Only for a caller that asks: one writing several batches at
+        // once (an export) would take the parallelism's share of the connection pool for each of them.
+        if (allowParallelWrite && ShouldWriteInParallel(changes.Count + attributeRows.Count + valueRows.Count))
+        {
+            persistSpan?.SetTag("connections", WriteParallelism);
+            await PersistCsoChangesInParallelAsync(changes, attributeRows, valueRows);
+            return;
+        }
+
+        persistSpan?.SetTag("connections", 1);
 
         // Increase command timeout for large change record persistence. With 5K+ CSOs and
         // 20+ attributes each, the three-table bulk insert can generate 100K+ rows.
@@ -495,31 +516,155 @@ public partial class SyncRepository
     }
 
     /// <summary>
-    /// Writes Connected System Object change records whose ids are all assigned, with their attribute and value rows, in
-    /// the transaction the caller holds: <see cref="PersistCsoChangesAsync"/>'s, or a synchronisation history write's
-    /// (#2874).
+    /// The parallel path of <see cref="PersistCsoChangesAsync"/> (#2909): the change rows on one connection, then their
+    /// attribute rows and value rows each partitioned by row across the parallel connections, as the Connected System
+    /// Object create partitions its values (#2872). Each phase commits before the next, since each row's foreign key is to
+    /// a row of the phase before. The phases commit separately, so a failure in any of them removes the change rows the
+    /// call committed, and with them (by their cascade) every attribute and value row written under them, before it
+    /// propagates: the caller finds nothing of the write, as after the single-connection path's rollback.
     /// </summary>
-    private async Task WriteCsoChangeRecordsAsync(IReadOnlyList<ConnectedSystemObjectChange> changes)
+    private async Task PersistCsoChangesInParallelAsync(
+        List<ConnectedSystemObjectChange> changes,
+        List<(Guid ChangeId, int AttributeId, ConnectedSystemObjectChangeAttribute AttrChange)> attributeRows,
+        List<(ConnectedSystemObjectChangeAttribute AttrChange, ConnectedSystemObjectChangeAttributeValue Value)> valueRows)
     {
-        // Step 1: INSERT parent ConnectedSystemObjectChange rows
-        await BulkInsertCsoChangesRawAsync(AsList(changes));
+        var parallelism = WriteParallelism;
+        var connectionString = ConnectionStringForParallelWrites!;
+        Log.Information("PersistCsoChangesAsync: Writing {ChangeCount} change records, {AttributeCount} attribute changes and {ValueCount} value changes across {Parallelism} parallel connections",
+            changes.Count, attributeRows.Count, valueRows.Count, parallelism);
 
-        // Step 2: INSERT ConnectedSystemObjectChangeAttribute rows
-        var allAttrChanges = changes
+        var changesCommitted = false;
+        var written = false;
+        try
+        {
+            HashSet<Guid> writtenReferenceIds;
+            using (var changesSpan = MvoActivitySource.StartActivity("CsoChange.Persist.Changes"))
+            {
+                changesSpan?.SetTag("rowCount", changes.Count);
+                await using var connection = new NpgsqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                // The referenced objects whose rows exist now, read before the values are written, as the
+                // single-connection writer reads them (see BulkInsertCsoChangeAttributeValuesRawAsync).
+                writtenReferenceIds = await GetExistingConnectedSystemObjectIdsAsync(connection, null, ReferencedConnectedSystemObjectIds(valueRows));
+
+                await using var transaction = await connection.BeginTransactionAsync();
+                await BulkInsertCsoChangesOnConnectionAsync(connection, changes);
+                await transaction.CommitAsync();
+            }
+
+            changesCommitted = true;
+            await WriteCsoChangeAttributesAndValuesInParallelAsync(attributeRows, valueRows, writtenReferenceIds, parallelism, connectionString);
+            written = true;
+        }
+        finally
+        {
+            if (!written && changesCommitted)
+                await RemoveRowsOfFailedParallelWriteAsync(connectionString, nameof(PersistCsoChangesAsync),
+                    [CsoChangeRecordRemoval(changes)]);
+        }
+    }
+
+    /// <summary>
+    /// Writes change records' attribute rows, then their value rows, each partitioned by row across up to
+    /// <paramref name="parallelism"/> connections of their own, each connection committing its own part (#2909). The
+    /// change rows they belong to must be committed already. Value rows are partitioned by row, not by change, so a large
+    /// group's members spread across every connection: its attribute row is committed before any of them is written.
+    /// </summary>
+    /// <param name="writtenReferenceIds">The referenced Connected System Objects whose ids are written; see
+    /// <see cref="BulkInsertCsoChangeAttributeValuesOnConnectionAsync"/>.</param>
+    private static async Task WriteCsoChangeAttributesAndValuesInParallelAsync(
+        IReadOnlyList<(Guid ChangeId, int AttributeId, ConnectedSystemObjectChangeAttribute AttrChange)> attributeRows,
+        IReadOnlyList<(ConnectedSystemObjectChangeAttribute AttrChange, ConnectedSystemObjectChangeAttributeValue Value)> valueRows,
+        IReadOnlySet<Guid> writtenReferenceIds,
+        int parallelism,
+        string connectionString)
+    {
+        using (var attributesSpan = MvoActivitySource.StartActivity("CsoChange.Persist.Attributes"))
+        {
+            attributesSpan?.SetTag("rowCount", attributeRows.Count);
+            attributesSpan?.SetTag("connections", Math.Min(parallelism, attributeRows.Count));
+            await ParallelBatchWriter.ExecuteAsync(attributeRows, parallelism, connectionString, async (connection, partition) =>
+            {
+                await using var transaction = await connection!.BeginTransactionAsync();
+                await BulkInsertCsoChangeAttributesOnConnectionAsync(connection, partition);
+                await transaction.CommitAsync();
+            });
+        }
+
+        using (var valuesSpan = MvoActivitySource.StartActivity("CsoChange.Persist.Values"))
+        {
+            valuesSpan?.SetTag("rowCount", valueRows.Count);
+            valuesSpan?.SetTag("connections", Math.Min(parallelism, valueRows.Count));
+            await ParallelBatchWriter.ExecuteAsync(valueRows, parallelism, connectionString, async (connection, partition) =>
+            {
+                await using var transaction = await connection!.BeginTransactionAsync();
+                await BulkInsertCsoChangeAttributeValuesOnConnectionAsync(connection, partition, writtenReferenceIds);
+                await transaction.CommitAsync();
+            });
+        }
+    }
+
+    /// <summary>
+    /// Removing change records a failed parallel write committed: by their own ids, which takes their attribute and value
+    /// rows with them by the cascade those rows' foreign keys carry.
+    /// </summary>
+    private static ParallelWriteRemoval CsoChangeRecordRemoval(IEnumerable<ConnectedSystemObjectChange> changes) =>
+        new("ConnectedSystemObjectChanges", "Id", [.. changes.Select(c => c.Id)]);
+
+    /// <summary>
+    /// The attribute rows of the given change records, each naming its change and attribute, change by change.
+    /// </summary>
+    private static List<(Guid ChangeId, int AttributeId, ConnectedSystemObjectChangeAttribute AttrChange)> CsoChangeAttributeRows(
+        IEnumerable<ConnectedSystemObjectChange> changes) =>
+        changes
             .SelectMany(c => c.AttributeChanges.Select(ac => (ChangeId: c.Id, AttributeId: ac.Attribute!.Id, AttrChange: ac)))
             .ToList();
 
-        if (allAttrChanges.Count > 0)
-            await BulkInsertCsoChangeAttributesRawAsync(allAttrChanges);
-
-        // Step 3: INSERT ConnectedSystemObjectChangeAttributeValue rows
-        var allValueChanges = changes
+    /// <summary>
+    /// The value rows of the given change records, each with the attribute row it belongs to, change by change and
+    /// attribute by attribute.
+    /// </summary>
+    private static List<(ConnectedSystemObjectChangeAttribute AttrChange, ConnectedSystemObjectChangeAttributeValue Value)> CsoChangeValueRows(
+        IEnumerable<ConnectedSystemObjectChange> changes) =>
+        changes
             .SelectMany(c => c.AttributeChanges
                 .SelectMany(ac => ac.ValueChanges.Select(vc => (AttrChange: ac, Value: vc))))
             .ToList();
 
+    /// <summary>
+    /// Writes Connected System Object change records whose ids are all assigned, with their attribute and value rows, in
+    /// the transaction the caller holds: <see cref="PersistCsoChangesAsync"/>'s, a synchronisation history write's
+    /// (#2874), or an import create batch's (#2909).
+    /// </summary>
+    private async Task WriteCsoChangeRecordsAsync(IReadOnlyList<ConnectedSystemObjectChange> changes)
+    {
+        // Step 1: INSERT parent ConnectedSystemObjectChange rows
+        using (var changesSpan = MvoActivitySource.StartActivity("CsoChange.Persist.Changes"))
+        {
+            changesSpan?.SetTag("rowCount", changes.Count);
+            await BulkInsertCsoChangesRawAsync(AsList(changes));
+        }
+
+        // Step 2: INSERT ConnectedSystemObjectChangeAttribute rows
+        var allAttrChanges = CsoChangeAttributeRows(changes);
+        if (allAttrChanges.Count > 0)
+        {
+            using var attributesSpan = MvoActivitySource.StartActivity("CsoChange.Persist.Attributes");
+            attributesSpan?.SetTag("rowCount", allAttrChanges.Count);
+            attributesSpan?.SetTag("connections", 1);
+            await BulkInsertCsoChangeAttributesRawAsync(allAttrChanges);
+        }
+
+        // Step 3: INSERT ConnectedSystemObjectChangeAttributeValue rows
+        var allValueChanges = CsoChangeValueRows(changes);
         if (allValueChanges.Count > 0)
+        {
+            using var valuesSpan = MvoActivitySource.StartActivity("CsoChange.Persist.Values");
+            valuesSpan?.SetTag("rowCount", allValueChanges.Count);
+            valuesSpan?.SetTag("connections", 1);
             await BulkInsertCsoChangeAttributeValuesRawAsync(allValueChanges);
+        }
     }
 
     /// <remarks>
@@ -723,14 +868,22 @@ public partial class SyncRepository
     #region Private RPEI Bulk Helpers
 
     /// <summary>
-    /// Bulk inserts ConnectedSystemObjectChange rows using COPY binary import.
+    /// Bulk inserts ConnectedSystemObjectChange rows using COPY binary import, on the context's connection.
     /// </summary>
     private async Task BulkInsertCsoChangesRawAsync(List<ConnectedSystemObjectChange> changes)
     {
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        await BulkInsertCsoChangesOnConnectionAsync(npgsqlConn, changes);
+    }
 
-        await using var writer = await npgsqlConn.BeginBinaryImportAsync(
+    /// <summary>
+    /// Bulk inserts ConnectedSystemObjectChange rows using COPY binary import, on the given connection inside whatever
+    /// transaction it holds: the context's own, or a connection of a parallel write's own (#2909).
+    /// </summary>
+    private static async Task BulkInsertCsoChangesOnConnectionAsync(NpgsqlConnection connection, IReadOnlyList<ConnectedSystemObjectChange> changes)
+    {
+        await using var writer = await connection.BeginBinaryImportAsync(
             $"""
             COPY "ConnectedSystemObjectChanges" (
                 {BulkSqlHelpers.ToQuotedList(CsoChangeBulkColumns.ConnectedSystemObjectChanges)}
@@ -783,14 +936,24 @@ public partial class SyncRepository
     }
 
     /// <summary>
-    /// Bulk inserts ConnectedSystemObjectChangeAttribute rows using COPY binary import.
+    /// Bulk inserts ConnectedSystemObjectChangeAttribute rows using COPY binary import, on the context's connection.
     /// </summary>
     private async Task BulkInsertCsoChangeAttributesRawAsync(List<(Guid ChangeId, int AttributeId, ConnectedSystemObjectChangeAttribute AttrChange)> attrChanges)
     {
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        await BulkInsertCsoChangeAttributesOnConnectionAsync(npgsqlConn, attrChanges);
+    }
 
-        await using var writer = await npgsqlConn.BeginBinaryImportAsync(
+    /// <summary>
+    /// Bulk inserts ConnectedSystemObjectChangeAttribute rows using COPY binary import, on the given connection inside
+    /// whatever transaction it holds.
+    /// </summary>
+    private static async Task BulkInsertCsoChangeAttributesOnConnectionAsync(
+        NpgsqlConnection connection,
+        IReadOnlyList<(Guid ChangeId, int AttributeId, ConnectedSystemObjectChangeAttribute AttrChange)> attrChanges)
+    {
+        await using var writer = await connection.BeginBinaryImportAsync(
             $"""
             COPY "ConnectedSystemObjectChangeAttributes" ({BulkSqlHelpers.ToQuotedList(CsoChangeBulkColumns.ConnectedSystemObjectChangeAttributes)})
             FROM STDIN (FORMAT binary)
@@ -810,16 +973,16 @@ public partial class SyncRepository
     }
 
     /// <summary>
-    /// Which of the given Connected System Object ids have a row, read on the given connection inside the caller's
-    /// transaction, so rows the caller's own transaction wrote count.
+    /// Which of the given Connected System Object ids have a row, read on the given connection inside the given
+    /// transaction (if any), so rows that transaction wrote count.
     /// </summary>
-    private async Task<HashSet<Guid>> GetExistingConnectedSystemObjectIdsAsync(NpgsqlConnection connection, IEnumerable<Guid> candidateIds)
+    private static async Task<HashSet<Guid>> GetExistingConnectedSystemObjectIdsAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, IEnumerable<Guid> candidateIds)
     {
         var candidates = candidateIds.Distinct().ToArray();
         if (candidates.Length == 0)
             return [];
 
-        var transaction = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
         await using var command = new NpgsqlCommand(
             """SELECT "Id" FROM "ConnectedSystemObjects" WHERE "Id" = ANY(@ids)""", connection, transaction);
         command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = candidates });
@@ -830,6 +993,16 @@ public partial class SyncRepository
             existing.Add(reader.GetGuid(0));
         return existing;
     }
+
+    /// <summary>
+    /// The Connected System Objects the given change values reference by id: the candidates for having their id written.
+    /// </summary>
+    private static IEnumerable<Guid> ReferencedConnectedSystemObjectIds(
+        IEnumerable<(ConnectedSystemObjectChangeAttribute AttrChange, ConnectedSystemObjectChangeAttributeValue Value)> valueChanges) =>
+        valueChanges
+            .Select(vc => vc.Value.ReferenceValueId)
+            .Where(id => id.HasValue && id.Value != Guid.Empty)
+            .Select(id => id!.Value);
 
     /// <summary>
     /// Bulk inserts ConnectedSystemObjectChangeAttributeValue rows using COPY binary import, each under the attribute
@@ -848,12 +1021,24 @@ public partial class SyncRepository
         // rows that exist are written; the rest keep their DN in StringValue, are marked IsUnresolvedReference (#2690),
         // and FixupCrossBatchChangeRecordReferenceIdsAsync resolves them once every batch has been written. Must run
         // before the COPY below opens, since the connection cannot run another command while it is open.
-        var writtenReferenceIds = await GetExistingConnectedSystemObjectIdsAsync(npgsqlConn, valueChanges
-            .Select(vc => vc.Value.ReferenceValueId)
-            .Where(id => id.HasValue && id.Value != Guid.Empty)
-            .Select(id => id!.Value));
+        var writtenReferenceIds = await GetExistingConnectedSystemObjectIdsAsync(npgsqlConn,
+            (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction(), ReferencedConnectedSystemObjectIds(valueChanges));
 
-        await using var writer = await npgsqlConn.BeginBinaryImportAsync(
+        await BulkInsertCsoChangeAttributeValuesOnConnectionAsync(npgsqlConn, valueChanges, writtenReferenceIds);
+    }
+
+    /// <summary>
+    /// Bulk inserts ConnectedSystemObjectChangeAttributeValue rows using COPY binary import, on the given connection
+    /// inside whatever transaction it holds, writing a reference's id only where it is among
+    /// <paramref name="writtenReferenceIds"/>: the referenced objects whose rows exist, or will by the time the write
+    /// that holds these values is complete (#2909).
+    /// </summary>
+    private static async Task BulkInsertCsoChangeAttributeValuesOnConnectionAsync(
+        NpgsqlConnection connection,
+        IReadOnlyList<(ConnectedSystemObjectChangeAttribute AttrChange, ConnectedSystemObjectChangeAttributeValue Value)> valueChanges,
+        IReadOnlySet<Guid> writtenReferenceIds)
+    {
+        await using var writer = await connection.BeginBinaryImportAsync(
             $"""
             COPY "ConnectedSystemObjectChangeAttributeValues" (
                 {BulkSqlHelpers.ToQuotedList(CsoChangeBulkColumns.ConnectedSystemObjectChangeAttributeValues)}
@@ -863,10 +1048,9 @@ public partial class SyncRepository
         // Values below are written in exactly the order of CsoChangeBulkColumns.ConnectedSystemObjectChangeAttributeValues.
         foreach (var (attrChange, v) in valueChanges)
         {
-            // Write the ReferenceValueId FK only when the referenced CSO's row exists (see the lookup above). With
-            // the two-phase parallel writer (Part C), CSO rows from the current batch are committed before change
-            // records are persisted, so within-batch references are written; references to a future batch are
-            // written as null. A Reference value holding a DN whose id is not written, whether its object is in a
+            // Write the ReferenceValueId only when the referenced CSO's row exists (see the callers' lookups). Within-batch
+            // references are written, since the batch's own objects are written with them; references to a future batch
+            // are written as null. A Reference value holding a DN whose id is not written, whether its object is in a
             // later batch or named no object at all (an import reference that matched nothing yet), is marked for
             // FixupCrossBatchChangeRecordReferenceIdsAsync to resolve; nothing else is.
             Guid? writtenReferenceId = v.ReferenceValueId is { } refId && writtenReferenceIds.Contains(refId) ? refId : null;

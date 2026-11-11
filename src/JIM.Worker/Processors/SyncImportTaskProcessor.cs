@@ -1033,7 +1033,7 @@ public partial class SyncImportTaskProcessor
             // Process CSO creates in batches to bound memory. CreateConnectedSystemObjectsAsync
             // creates ConnectedSystemObjectChange graphs (~20 ChangeAttribute + ChangeAttributeValue
             // objects per CSO). At 100K CSOs this creates ~2-6M objects consuming 3-7GB if done at once.
-            // Batching ensures change objects are persisted and released per batch via FlushImportRpeisAsync.
+            // Batching ensures change objects are persisted with their batch and released per batch (#2909).
             // We consume from the front of the list so processed CSOs and their attribute values
             // (~400MB at 100K objects) become GC-eligible immediately.
             var totalCreatedSoFar = 0;
@@ -1056,10 +1056,16 @@ public partial class SyncImportTaskProcessor
                     .Where(r => r.ConnectedSystemObject != null && batchCsoSet.Contains(r.ConnectedSystemObject))
                     .ToList();
 
+                // The batch's objects and its history are written together (#2909): the execution items are readied
+                // first, so the change records built for the objects name them, and then the objects, their values,
+                // the items and the change records are written in one call, which leaves nothing of the batch if any
+                // part of it fails.
+                PrepareImportRpeisForWrite(batchRpeis);
+                var batchRpeiCount = batchRpeis.Count;
                 var batchSw = System.Diagnostics.Stopwatch.StartNew();
-                await _syncServer.CreateConnectedSystemObjectsAsync(csoBatch, batchRpeis, committedCsoIds);
-                Log.Debug("PerformImportAsync: CreateConnectedSystemObjectsAsync took {ElapsedMs}ms for {Count} CSOs",
-                    batchSw.ElapsedMilliseconds, batchSize);
+                var usedRawSql = await _syncServer.CreateConnectedSystemObjectsAsync(csoBatch, batchRpeis, committedCsoIds);
+                Log.Debug("PerformImportAsync: CreateConnectedSystemObjectsAsync took {ElapsedMs}ms for {Count} CSOs and {RpeiCount} RPEIs",
+                    batchSw.ElapsedMilliseconds, batchSize, batchRpeiCount);
 
                 // Sync the FK on RPEIs from CSO IDs (pre-generated before the batch loop)
                 foreach (var rpei in batchRpeis)
@@ -1076,13 +1082,9 @@ public partial class SyncImportTaskProcessor
                 foreach (var cso in csoBatch)
                     committedCsoIds.Add(cso.Id);
 
-                // Remove batch RPEIs from the main list and flush them
+                // Remove batch RPEIs from the main list and release them: they were written with their objects.
                 _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObject != null && batchCsoSet.Contains(r.ConnectedSystemObject));
-                var batchRpeiCount = batchRpeis.Count;
-                batchSw.Restart();
-                await FlushImportRpeisAsync(batchRpeis);
-                Log.Debug("PerformImportAsync: FlushImportRpeisAsync took {ElapsedMs}ms for {Count} RPEIs",
-                    batchSw.ElapsedMilliseconds, batchRpeiCount);
+                ReleaseWrittenImportRpeis(batchRpeis, usedRawSql);
 
                 // Remove processed CSOs from the front of the list so their attribute values
                 // (~20 per CSO × ~200 bytes = ~4KB per CSO) become GC-eligible immediately.
@@ -1854,6 +1856,35 @@ public partial class SyncImportTaskProcessor
             return false;
         }
 
+        PrepareImportRpeisForWrite(rpeis);
+
+        var usedRawSql = await _syncRepo.BulkInsertRpeisAsync(rpeis);
+
+        // Sync change object FKs: an update batch's change records are built before their items are given ids, so they
+        // name their items only now that real Ids exist, before the change objects are persisted.
+        foreach (var rpei in rpeis)
+        {
+            if (rpei.ConnectedSystemObjectChange != null)
+                rpei.ConnectedSystemObjectChange.ActivityRunProfileExecutionItemId = rpei.Id;
+        }
+
+        // Persist CSO change records separately; raw SQL bulk insert only covers
+        // RPEI scalar columns, not the ConnectedSystemObjectChange navigation graph.
+        // This must happen for both production and test paths.
+        // An import writes one batch at a time, so a large batch's change records may spread across the parallel
+        // connections (#2909).
+        await _syncRepo.PersistRpeiCsoChangesAsync(rpeis, allowParallelWrite: true);
+
+        ReleaseWrittenImportRpeis(rpeis, usedRawSql, countInActivityTotals, alsoCountInActivityTotals);
+        return usedRawSql;
+    }
+
+    /// <summary>
+    /// Readies import RPEIs to be written: each is given its Activity and an id, snapshots its object's display fields,
+    /// and has its outcome summary built. Writes nothing.
+    /// </summary>
+    private void PrepareImportRpeisForWrite(List<ActivityRunProfileExecutionItem> rpeis)
+    {
         foreach (var rpei in rpeis)
         {
             rpei.ActivityId = _activity.Id;
@@ -1872,23 +1903,21 @@ public partial class SyncImportTaskProcessor
             foreach (var rpei in rpeis)
                 SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
         }
+    }
 
-        var usedRawSql = await _syncRepo.BulkInsertRpeisAsync(rpeis);
-
-        // Sync change object FKs: RPEI Ids were generated above (lines 623-624) after
-        // CreateConnectedSystemObjectsAsync set ActivityRunProfileExecutionItemId = Guid.Empty.
-        // Update the FK now that real Ids exist, before persisting the change objects.
-        foreach (var rpei in rpeis)
-        {
-            if (rpei.ConnectedSystemObjectChange != null)
-                rpei.ConnectedSystemObjectChange.ActivityRunProfileExecutionItemId = rpei.Id;
-        }
-
-        // Persist CSO change records separately — raw SQL bulk insert only covers
-        // RPEI scalar columns, not the ConnectedSystemObjectChange navigation graph.
-        // This must happen for both production and test paths.
-        await _syncRepo.PersistRpeiCsoChangesAsync(rpeis);
-
+    /// <summary>
+    /// Releases import RPEIs once they and their change records are written: lets their change graphs and objects be
+    /// collected, accumulates the Activity's summary stats from them, and clears the list.
+    /// </summary>
+    /// <param name="usedRawSql">Whether the RPEIs were written outside the change tracker (production), rather than left
+    /// tracked by the in-memory test repository.</param>
+    /// <param name="countInActivityTotals">False to release the items without counting them in the Activity's totals, for
+    /// items a later flush counts; see <see cref="FlushImportRpeisAsync"/> (#2908).</param>
+    /// <param name="alsoCountInActivityTotals">Items already written without being counted, counted now together with
+    /// these; see <see cref="FlushImportRpeisAsync"/>.</param>
+    private void ReleaseWrittenImportRpeis(List<ActivityRunProfileExecutionItem> rpeis, bool usedRawSql, bool countInActivityTotals = true,
+        IReadOnlyCollection<ActivityRunProfileExecutionItem>? alsoCountInActivityTotals = null)
+    {
         // Release the change object graphs to allow GC. At 100K CSOs with ~20 attributes each,
         // the ConnectedSystemObjectChange + ChangeAttribute + ChangeAttributeValue objects
         // consume ~3-7GB of memory if held until activity completion.
@@ -1930,7 +1959,6 @@ public partial class SyncImportTaskProcessor
         }
 
         rpeis.Clear();
-        return usedRawSql;
     }
 
     /// <summary>

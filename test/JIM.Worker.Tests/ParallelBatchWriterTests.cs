@@ -315,6 +315,55 @@ public class ParallelBatchWriterTests
         }
     }
 
+    /// <summary>
+    /// Two writes running at once share one write's connections (#2909): an import batch's objects and its history must
+    /// never together hold more than a single parallel write did, or two of them would exhaust the pool.
+    /// </summary>
+    [TestCase(16, 32_000, 62_000)] // a Full Import user batch: 2,000 objects of 15 values, and their change records
+    [TestCase(16, 1_220_000, 1_220_500)] // a batch holding a large group
+    [TestCase(4, 1, 1_000_000)]
+    [TestCase(4, 1_000_000, 1)]
+    [TestCase(2, 10, 10)]
+    public void SplitConnections_BothWritesHaveRows_GivesEachAtLeastOneAndTogetherNoMoreThanTheParallelism(int parallelism, int firstRows, int secondRows)
+    {
+        var (first, second) = ParallelBatchWriter.SplitConnections(parallelism, firstRows, secondRows);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first + second, Is.EqualTo(parallelism));
+            Assert.That(first, Is.GreaterThanOrEqualTo(1));
+            Assert.That(second, Is.GreaterThanOrEqualTo(1));
+        }
+    }
+
+    [Test]
+    public void SplitConnections_RowsInProportion_SharesConnectionsInProportion()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ParallelBatchWriter.SplitConnections(16, 32_000, 62_000), Is.EqualTo((5, 11)),
+                "a user batch's history writes about twice the rows its objects do");
+            Assert.That(ParallelBatchWriter.SplitConnections(16, 1_000_000, 1_000_000), Is.EqualTo((8, 8)));
+        }
+    }
+
+    [Test]
+    public void SplitConnections_OneWriteHasNoRows_GivesTheOtherEveryConnection()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ParallelBatchWriter.SplitConnections(16, 32_000, 0), Is.EqualTo((16, 0)), "change tracking off: no change records");
+            Assert.That(ParallelBatchWriter.SplitConnections(16, 0, 62_000), Is.EqualTo((0, 16)));
+        }
+    }
+
+    [Test]
+    public void SplitConnections_FewerThanTwoConnections_Throws()
+    {
+        Assert.That(() => ParallelBatchWriter.SplitConnections(1, 10, 10), Throws.InstanceOf<ArgumentOutOfRangeException>(),
+            "two writes at once need a connection each; the parallel gate never lets one connection through");
+    }
+
     [Test]
     public void GetWriteParallelism_DefaultsToProcessorCount()
     {
