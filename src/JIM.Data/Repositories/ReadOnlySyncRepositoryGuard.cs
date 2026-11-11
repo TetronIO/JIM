@@ -187,6 +187,15 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId)
         => _inner.GetMetaverseObjectForJoinMatchAsync(metaverseObjectId);
 
+    public Task<IReadOnlyList<(object Value, Guid MetaverseObjectId)>> FindMetaverseObjectIdsByEachMatchValueAsync(int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive, int takePerValue)
+        => _inner.FindMetaverseObjectIdsByEachMatchValueAsync(metaverseObjectTypeId, metaverseAttributeId, valueType, values, caseSensitive, takePerValue);
+
+    public Task<IReadOnlyDictionary<Guid, MetaverseObject>> GetMetaverseObjectsForJoinMatchAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
+        => _inner.GetMetaverseObjectsForJoinMatchAsync(metaverseObjectIds);
+
+    public Task<IReadOnlyDictionary<Guid, int>> GetConnectedSystemObjectCountsByMvoAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds)
+        => _inner.GetConnectedSystemObjectCountsByMvoAsync(connectedSystemId, metaverseObjectIds);
+
     public IAsyncEnumerable<(Guid ConnectedSystemObjectId, IReadOnlyList<ConnectedSystemObjectAttributeValue> Values)> StreamUnjoinedConnectedSystemObjectValues(
         int connectedSystemId, int connectedSystemObjectTypeId, IReadOnlyCollection<int> attributeIds)
         => _inner.StreamUnjoinedConnectedSystemObjectValues(connectedSystemId, connectedSystemObjectTypeId, attributeIds);

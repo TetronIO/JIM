@@ -1041,9 +1041,18 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
         public override async Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId)
         {
             var match = await base.GetMetaverseObjectForJoinMatchAsync(metaverseObjectId);
-            if (match == null)
-                return null;
+            return match == null ? null : CloneAsASeparateLoad(match);
+        }
 
+        /// <summary>The page's batch load of its matches (#2020) returns separate loads in the same way.</summary>
+        public override async Task<IReadOnlyDictionary<Guid, MetaverseObject>> GetMetaverseObjectsForJoinMatchAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
+        {
+            var matches = await base.GetMetaverseObjectsForJoinMatchAsync(metaverseObjectIds);
+            return matches.ToDictionary(entry => entry.Key, entry => CloneAsASeparateLoad(entry.Value));
+        }
+
+        private static MetaverseObject CloneAsASeparateLoad(MetaverseObject match)
+        {
             return new MetaverseObject
             {
                 Id = match.Id,

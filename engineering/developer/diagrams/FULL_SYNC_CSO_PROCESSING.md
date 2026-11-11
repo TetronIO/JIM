@@ -1,6 +1,6 @@
 # Full Synchronisation - CSO Processing Flow
 
-> Last updated: 2026-11-09, JIM v0.17.0
+> Last updated: 2026-11-11, JIM v0.17.0
 
 This diagram shows the core decision tree for processing a single Connected System Object (CSO) during Full or Delta Synchronisation. This is the central flow of JIM's identity management engine.
 
@@ -31,7 +31,8 @@ flowchart TD
     CheckCancel -->|Yes| FlushBeforeCancel[Complete current page flush<br/>before stopping]
     FlushBeforeCancel --> Return([Return - activity<br/>finalised by caller])
     CheckCancel -->|No| Pass1[Pass 1: for every CSO in page<br/>ProcessObsoleteConnectedSystemObjectTeardownAsync<br/>- Tear down obsolete CSOs<br/>- Populate _pendingDisconnectedMvoIds]
-    Pass1 --> Pass2[Pass 2: for every non-obsolete CSO<br/>ProcessActiveConnectedSystemObjectAsync<br/>See Per-CSO Processing below]
+    Pass1 --> PrefetchJoins[PrefetchJoinMatchesForPageAsync #2020:<br/>for every unjoined CSO, walk its Object<br/>Matching Rules in Order a round at a time,<br/>one lookup per lookup key per round,<br/>then load the settled MVOs and read<br/>their join counts, once per page]
+    PrefetchJoins --> Pass2[Pass 2: for every non-obsolete CSO<br/>ProcessActiveConnectedSystemObjectAsync<br/>See Per-CSO Processing below]
     Pass2 --> IncrProgress[Increment ObjectsProcessed]
     IncrProgress --> CsoLoop
 
@@ -118,7 +119,7 @@ flowchart TD
     InScope -->|Yes| CheckMvo{CSO joined<br/>to MVO?}
 
     %% --- Join/Project path ---
-    CheckMvo -->|No| AttemptJoin[Attempt Join<br/>For each import Synchronisation Rule:<br/>each Object Matching Rule in order computes<br/>its match values, one lookup per rule]
+    CheckMvo -->|No| AttemptJoin[Attempt Join<br/>For each import Synchronisation Rule:<br/>each Object Matching Rule in order computes<br/>its match values; the page's batch answers<br/>the lookup, load and join count #2020,<br/>a database query only for what it did not cover]
     AttemptJoin --> JoinResult{Match<br/>found?}
 
     JoinResult -->|No match| AttemptProject{ISyncEngine.EvaluateProjection<br/>Synchronisation Rule has<br/>ProjectToMetaverse = true?}
@@ -182,6 +183,8 @@ A Full Import only arms the gate when it genuinely succeeded (`FullImportSuccess
 - **Batch persistence**<br /> MVO creates/updates, Pending Exports, and CSO deletions are all batched per-page via `ISyncRepository` bulk operations to reduce database round trips. This is critical for performance at scale. Page-sized writes use PostgreSQL COPY on the EF connection, inside the page's transaction, so each page's write stays atomic.
 
 - **No-net-change detection**<br /> Before creating Pending Exports, the system checks if the target CSO already has the expected values (using pre-cached data). This avoids unnecessary export operations. An attribute found already current also withdraws any change still queued for it (#1883; see [Pending Export Lifecycle](PENDING_EXPORT_LIFECYCLE.md)).
+
+- **Import join lookups batched per page (#2020)**<br /> After Pass 1 and before Pass 2, `PrefetchJoinMatchesForPageAsync` looks up what every unjoined CSO's joins will ask the database: the Metaverse Objects each Object Matching Rule's values find (one query per lookup key, that is Metaverse Object Type, attribute, data type and case mode, per round of rule precedence), the Metaverse Object each join settles on (one load), and how many CSOs of this Connected System are joined to each (one count). The per-CSO join reads the batch and queries the database only for what it did not cover. It answers exactly as the per-object queries did because nothing on the synchronisation path writes Metaverse Objects, their values or join columns between a page's load and its flush: the batch reads the state every per-object query would have read. In-memory page state is applied on top as before (`_pendingDisconnectedMvoIds` adjusts the count, a join queued earlier in the page refuses a second one), and a Metaverse Object projected earlier in the page is no more visible to a later CSO than it was. The batch runs before scope is known and outside the per-CSO catch, so it never lets one object stop the page: a rule that throws for an object, and a Text value holding a NUL character (which PostgreSQL refuses in any statement), are left to that object's own join, which fails, or does not, exactly as before. Only a failure of the batch's own statements, an infrastructure fault every object would meet, fails the page. Each value is probed through its index by a LATERAL subquery (Decimal, which has no index, by one hash of the attribute per page), so stale statistics cannot turn the lookup into a read of every value the attribute holds. At Scale500k25kGroups the per-object lookups cost about 90 s of a first Full Synchronisation, almost all of it round trips.
 
 - **Export matching prefetched per page**<br /> Before a page's export evaluation, `PrefetchExportMatchCandidatesForPageAsync` looks up existing target objects for every Metaverse Object about to be provisioned, in one query per Object Matching Rule group rather than one per object. Every value a Metaverse Object holds is looked up, not only the first. Case-insensitive matching is exact (`lower()` on both sides), never a wildcard `ILIKE`. A failed prefetch fails the page; recall, cross-page reference resolution, drift, deprovisioning and Sync Preview look a Metaverse Object's candidates up through the same query when they need them.
 
