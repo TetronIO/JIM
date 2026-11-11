@@ -437,7 +437,12 @@ jobs:
     - name: Set up Docker Buildx
       if: steps.scope.outputs.run == 'true'
       id: buildx
+      # BuildKit runs on the runner's own network: on GitHub-hosted runners its container could not resolve
+      # archive.ubuntu.com or security.ubuntu.com (2026-11-11), failing every Web image build whose apt layer
+      # missed the cache, while ordinary containers on the same runner resolved names normally.
       uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
+      with:
+        driver-opts: network=host
     - name: Date the apt upgrade layer
       if: steps.scope.outputs.run == 'true'
       id: apt_refresh
@@ -629,6 +634,8 @@ jobs:
     - name: Set up Docker Buildx
       id: buildx
       uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
+      with:
+        driver-opts: network=host
 
     # Same action, pins and cache scope as the release build, so a PR's build warms the
     # cache the release will use and vice versa. The image is loaded into the local
@@ -851,6 +858,7 @@ jobs:
       uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
       with:
         cleanup: false
+        driver-opts: network=host
 
     # Built as scan-images builds them, with the same build arguments, so that they come from the cache
     # scan-images keeps; read-only here, since scan-images writes it. The tag is the bundle's version.
