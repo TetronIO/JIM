@@ -6379,28 +6379,99 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             await Repository.Database.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// A queued Update Pending Export, and whether its Connected System Object is no longer joined (false where it has
+    /// none).
+    /// </summary>
+    private sealed record QueuedUpdateRow(Guid Id, bool Unjoined);
+
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Written so that no plan can read the changes once per Pending Export, whatever the statistics say (#2915). It used to
+    /// be one EF query: the Update Pending Exports <c>WHERE EXISTS</c> a change matching the authority test, with
+    /// <c>OR</c> branches. On a 500,000-user leaver step the tables had last been analysed empty, the planner expected one
+    /// Pending Export, and its semi join read the whole <c>PendingExportId</c> index with no index condition on each of
+    /// 5,421 loops: 223,784,301 rows removed by the join filter, 30.4 s, for no candidate. Statistics are stale on exactly
+    /// this path (the confirming import empties both tables, the synchronisation refills them, and the Export runs before
+    /// autoanalyze), so the fix cannot be to refresh them; it is to leave the planner no join to the changes to order.
+    /// </para>
+    /// <para>
+    /// Three statements, each reading one table by its own key, with no join between the Pending Exports and their changes
+    /// (the pattern of <see cref="GetPendingExportChangesAsync"/>, #2884):
+    /// </para>
+    /// <list type="number">
+    /// <item>The queued Update Pending Exports, from <c>PendingExports</c> alone, each with whether its object is no longer
+    /// joined. That is a scalar subquery on the object's primary key, which the planner cannot turn into a join.</item>
+    /// <item>Which of them hold a change matching the authority test, from the changes alone with
+    /// <c>"PendingExportId" = ANY(...)</c>: an index condition on the table's own key, and one pass over the changes
+    /// whatever plan reads them. The unjoined branch is a test against the second id array, which PostgreSQL hashes. The
+    /// rule and Attribute Flow tests are subqueries on the configuration tables, a handful of rows each.</item>
+    /// <item>The candidates, usually none, loaded by primary key with their object, and their changes read by
+    /// <see cref="GetPendingExportChangesAsync"/>.</item>
+    /// </list>
+    /// <para>
+    /// The queue's ids make two round trips (16 bytes each per queued Update Pending Export), which is the price of leaving
+    /// the planner nothing to get wrong: a single statement must join the changes to the queue somewhere, and a join is
+    /// what the stale statistics mis-plan.
+    /// </para>
+    /// </remarks>
     public async Task<List<PendingExport>> GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(int connectedSystemId, IReadOnlyCollection<int> classMembershipAttributeIds)
     {
-        var classAttributeIds = classMembershipAttributeIds.ToList();
         var database = Repository.Database;
 
-        return await database.PendingExports
-            .AsNoTracking()
-            .AsSplitQuery()
-            .Include(pe => pe.AttributeValueChanges)
-            .Include(pe => pe.ConnectedSystemObject)
-            .Where(pe => pe.ConnectedSystemId == connectedSystemId
-                      && pe.ChangeType == PendingExportChangeType.Update
-                      && pe.Status != PendingExportStatus.Executing)
-            .Where(pe => pe.AttributeValueChanges.Any(c =>
-                (c.Status == PendingExportAttributeChangeStatus.Pending || c.Status == PendingExportAttributeChangeStatus.ExportedNotConfirmed)
-                && c.SyncRuleId != null
-                && ((pe.ConnectedSystemObject != null && pe.ConnectedSystemObject.MetaverseObjectId == null)
-                    || !database.SyncRules.Any(r => r.Id == c.SyncRuleId && r.Enabled)
-                    || (!classAttributeIds.Contains(c.AttributeId)
-                        && !database.SyncRuleMappings.Any(m => m.SyncRuleId == c.SyncRuleId && m.Enabled && m.TargetConnectedSystemAttributeId == c.AttributeId)))))
+        var queued = await database.Database
+            .SqlQueryRaw<QueuedUpdateRow>(
+                """
+                SELECT pe."Id",
+                       COALESCE((SELECT cso."MetaverseObjectId" IS NULL
+                                 FROM "ConnectedSystemObjects" cso
+                                 WHERE cso."Id" = pe."ConnectedSystemObjectId"), false) AS "Unjoined"
+                FROM "PendingExports" pe
+                WHERE pe."ConnectedSystemId" = {0}
+                  AND pe."ChangeType" = {1}
+                  AND pe."Status" <> {2}
+                """,
+                connectedSystemId, (int)PendingExportChangeType.Update, (int)PendingExportStatus.Executing)
             .ToListAsync();
+        if (queued.Count == 0)
+            return [];
+
+        var candidateIds = await database.Database
+            .SqlQueryRaw<Guid>(
+                """
+                SELECT DISTINCT c."PendingExportId" AS "Value"
+                FROM "PendingExportAttributeValueChanges" c
+                WHERE c."PendingExportId" = ANY({0})
+                  AND c."Status" IN ({1}, {2})
+                  AND c."SyncRuleId" IS NOT NULL
+                  AND (c."PendingExportId" = ANY({3})
+                       OR NOT EXISTS (SELECT 1 FROM "SyncRules" r WHERE r."Id" = c."SyncRuleId" AND r."Enabled")
+                       OR (NOT (c."AttributeId" = ANY({4}))
+                           AND NOT EXISTS (SELECT 1 FROM "SyncRuleMappings" m
+                                           WHERE m."SyncRuleId" = c."SyncRuleId"
+                                             AND m."Enabled"
+                                             AND m."TargetConnectedSystemAttributeId" = c."AttributeId")))
+                """,
+                queued.Select(row => row.Id).ToArray(),
+                (int)PendingExportAttributeChangeStatus.Pending,
+                (int)PendingExportAttributeChangeStatus.ExportedNotConfirmed,
+                queued.Where(row => row.Unjoined).Select(row => row.Id).ToArray(),
+                classMembershipAttributeIds.ToArray())
+            .ToListAsync();
+        if (candidateIds.Count == 0)
+            return [];
+
+        var ids = candidateIds.ToArray();
+        var candidates = await database.PendingExports
+            .AsNoTracking()
+            .Include(pe => pe.ConnectedSystemObject)
+            .Where(pe => ids.Contains(pe.Id))
+            .OrderBy(pe => pe.Id)
+            .ToListAsync();
+        var (changes, _) = await GetPendingExportChangesAsync(database, ids, QueryTrackingBehavior.NoTracking);
+        AttachPendingExportChanges(candidates, changes);
+        return candidates;
     }
 
     /// <inheritdoc />
