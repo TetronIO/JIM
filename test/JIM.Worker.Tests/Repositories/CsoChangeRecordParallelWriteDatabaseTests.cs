@@ -337,6 +337,38 @@ public class CsoChangeRecordParallelWriteDatabaseTests
     }
 
     /// <summary>
+    /// A caller holding a transaction keeps the change records inside it even when it allows parallel writes and the
+    /// call is large enough: rows committed on connections of their own would survive the caller's rollback.
+    /// </summary>
+    [Test]
+    public async Task PersistCsoChangesAsync_ParallelAllowedButCallerHoldsTransaction_WritesInsideItSoARollbackLeavesNothingAsync()
+    {
+        var s = await SeedAsync();
+        var changes = BuildChanges(s);
+
+        await using (var context = NewContext())
+        {
+            var sync = (SyncRepository)new PostgresDataRepository(context).Sync;
+            sync.ConnectionStringForParallelWrites = _connectionString;
+            sync.WriteParallelismOverride = Parallelism;
+            sync.ParallelWriteRowThreshold = 0;
+
+            await using var transaction = await context.Database.BeginTransactionAsync();
+            await sync.PersistCsoChangesAsync(changes, allowParallelWrite: true);
+            Assert.That(await context.ConnectedSystemObjectChanges.CountAsync(), Is.EqualTo(changes.Count),
+                "sanity: the caller sees the change records inside its transaction");
+            await transaction.RollbackAsync();
+        }
+
+        var after = await SnapshotAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var table in ChangeTables)
+                Assert.That(after[table], Is.Empty, $"the rollback takes every row of {table} with it");
+        }
+    }
+
+    /// <summary>
     /// Another session's uncommitted value change holding <paramref name="heldId"/>, so the write's row with that id waits
     /// for the session to end.
     /// </summary>

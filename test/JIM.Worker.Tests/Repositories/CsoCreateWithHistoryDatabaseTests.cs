@@ -103,7 +103,7 @@ public class CsoCreateWithHistoryDatabaseTests
     {
         public List<Guid> ObjectIds => Objects.Select(o => o.Id).ToList();
 
-        public List<ConnectedSystemObjectChange> Changes => Items.Select(i => i.ConnectedSystemObjectChange!).ToList();
+        public List<ConnectedSystemObjectChange> Changes => Items.Where(i => i.ConnectedSystemObjectChange != null).Select(i => i.ConnectedSystemObjectChange!).ToList();
 
         public List<Guid> ChangeValueIds => Changes
             .SelectMany(c => c.AttributeChanges.SelectMany(a => a.ValueChanges.Select(v => v.Id))).ToList();
@@ -250,13 +250,13 @@ public class CsoCreateWithHistoryDatabaseTests
     /// the application's own builder, onto their execution items. Change times and ids are fixed, so two runs of the same
     /// batch can be compared row for row.
     /// </summary>
-    private async Task ReadyAsync(Batch batch, List<Guid> earlierBatch, int seed)
+    private async Task ReadyAsync(Batch batch, List<Guid> earlierBatch, int seed, bool changeTrackingEnabled = true)
     {
         await using var context = NewContext();
         var repository = new PostgresDataRepository(context);
         repository.Sync.PrepareConnectedSystemObjectsForCreate(batch.Objects, [.. earlierBatch]);
         using var jim = new JimApplication(repository);
-        jim.ConnectedSystems.LinkCreateChangeRecords(batch.Objects, batch.Items, changeTrackingEnabled: true);
+        jim.ConnectedSystems.LinkCreateChangeRecords(batch.Objects, batch.Items, changeTrackingEnabled);
 
         var nextId = IdSequence(seed + 1000);
         foreach (var change in batch.Changes)
@@ -287,12 +287,12 @@ public class CsoCreateWithHistoryDatabaseTests
     /// <summary>
     /// A batch built and readied against a freshly seeded database, with the earlier batch it references committed.
     /// </summary>
-    private async Task<(Seeded Seeded, List<Guid> EarlierBatch, Batch Batch)> ArrangeAsync(int seed = 4, int users = 200)
+    private async Task<(Seeded Seeded, List<Guid> EarlierBatch, Batch Batch)> ArrangeAsync(int seed = 4, int users = 200, bool changeTrackingEnabled = true)
     {
         var s = await SeedAsync();
         var earlierBatch = await SeedEarlierBatchAsync(s);
         var batch = BuildBatch(s, earlierBatch, seed, users);
-        await ReadyAsync(batch, earlierBatch, seed);
+        await ReadyAsync(batch, earlierBatch, seed, changeTrackingEnabled);
         return (s, earlierBatch, batch);
     }
 
@@ -331,9 +331,11 @@ public class CsoCreateWithHistoryDatabaseTests
     }
 
     /// <summary>
-    /// Asserts nothing of the batch is in the database, and the earlier batch it referenced is whole.
+    /// Asserts nothing of the batch is in the database, and the earlier batch it referenced is whole. An item id the batch
+    /// reused from another batch (<paramref name="itemIdsOwnedElsewhere"/>) is that batch's, and is left out of the count.
     /// </summary>
-    private async Task AssertNothingOfTheBatchRemainsAsync(Batch batch, List<Guid> earlierBatch, Dictionary<string, List<string>> before)
+    private async Task AssertNothingOfTheBatchRemainsAsync(Batch batch, List<Guid> earlierBatch, Dictionary<string, List<string>> before,
+        IReadOnlySet<Guid>? itemIdsOwnedElsewhere = null)
     {
         var after = await SnapshotAsync();
         using (Assert.EnterMultipleScope())
@@ -341,7 +343,7 @@ public class CsoCreateWithHistoryDatabaseTests
             Assert.That(await CountAsync("ConnectedSystemObjects", "Id", batch.ObjectIds), Is.Zero, "no object of the failed batch may remain");
             Assert.That(await CountAsync("ConnectedSystemObjectAttributeValues", "ConnectedSystemObjectId", batch.ObjectIds), Is.Zero,
                 "nor any of its values");
-            Assert.That(await CountAsync("ActivityRunProfileExecutionItems", "Id", batch.Items.Select(i => i.Id)), Is.Zero,
+            Assert.That(await CountAsync("ActivityRunProfileExecutionItems", "Id", batch.Items.Select(i => i.Id).Where(id => itemIdsOwnedElsewhere?.Contains(id) != true)), Is.Zero,
                 "nor any execution item");
             Assert.That(await CountAsync("ConnectedSystemObjectChanges", "Id", batch.Changes.Select(c => c.Id)), Is.Zero,
                 "nor any change record");
@@ -368,7 +370,7 @@ public class CsoCreateWithHistoryDatabaseTests
         var repository = Repository(context, WritePath.SingleConnection, batch.Rows);
         await repository.CreateConnectedSystemObjectsAsync(batch.Objects, [.. earlierBatch]);
         await repository.BulkInsertRpeisAsync(batch.Items);
-        foreach (var item in batch.Items)
+        foreach (var item in batch.Items.Where(i => i.ConnectedSystemObjectChange != null))
             item.ConnectedSystemObjectChange!.ActivityRunProfileExecutionItemId = item.Id;
         await repository.PersistRpeiCsoChangesAsync(batch.Items);
     }
@@ -511,9 +513,10 @@ public class CsoCreateWithHistoryDatabaseTests
     [Test]
     public async Task CreateConnectedSystemObjectsWithHistoryAsync_ChangeValueWriteFails_ThrowsAndLeavesNothingOfTheBatchAsync()
     {
-        var (_, earlierBatch, batch) = await ArrangeAsync();
+        var (s, earlierBatch, batch) = await ArrangeAsync();
         var valueChanges = batch.Changes.SelectMany(c => c.AttributeChanges.SelectMany(a => a.ValueChanges)).ToList();
         valueChanges[^1].Id = valueChanges[0].Id;
+        batch.Items[0].CausalEdges.Add(NewEdge(s, Guid.NewGuid()));
         var before = await SnapshotAsync();
 
         await using (var context = NewContext())
@@ -524,6 +527,27 @@ public class CsoCreateWithHistoryDatabaseTests
         }
 
         await AssertNothingOfTheBatchRemainsAsync(batch, earlierBatch, before);
+        AssertBatchLeftReadyForARetry(batch, edgesOnFirstItems: 1);
+    }
+
+    private static CausalEdge NewEdge(Seeded s, Guid id) => new()
+    {
+        Id = id, EdgeType = CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval,
+        ReasonCode = CausalReasonCode.AuthoritativeSourceDisconnected, CauseDisplayName = "Tina Adams",
+        ConnectedSystemId = s.SystemId, ConnectedSystemName = "Directory"
+    };
+
+    /// <summary>
+    /// A failed batch leaves its in-memory objects and items as they were: no object marked pending, and the items' causal
+    /// edges still buffered, which is what a retry of the batch needs.
+    /// </summary>
+    private static void AssertBatchLeftReadyForARetry(Batch batch, int edgesOnFirstItems)
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(batch.Objects.Any(o => o.SynchronisationPending), Is.False, "nothing is marked pending in memory");
+            Assert.That(batch.Items[0].CausalEdges, Has.Count.EqualTo(edgesOnFirstItems), "the edge buffers are not drained");
+        }
     }
 
     /// <summary>
@@ -536,14 +560,7 @@ public class CsoCreateWithHistoryDatabaseTests
         var (s, earlierBatch, batch) = await ArrangeAsync();
         var edgeId = Guid.NewGuid();
         foreach (var item in batch.Items.Take(2))
-        {
-            item.CausalEdges.Add(new CausalEdge
-            {
-                Id = edgeId, EdgeType = CausalEdgeType.MetaverseObjectDeletionCausedReferenceRemoval,
-                ReasonCode = CausalReasonCode.AuthoritativeSourceDisconnected, CauseDisplayName = "Tina Adams",
-                ConnectedSystemId = s.SystemId, ConnectedSystemName = "Directory"
-            });
-        }
+            item.CausalEdges.Add(NewEdge(s, edgeId));
 
         var before = await SnapshotAsync();
 
@@ -555,6 +572,127 @@ public class CsoCreateWithHistoryDatabaseTests
         }
 
         await AssertNothingOfTheBatchRemainsAsync(batch, earlierBatch, before);
+        AssertBatchLeftReadyForARetry(batch, edgesOnFirstItems: 1);
+    }
+
+    /// <summary>
+    /// The history's first step fails (an execution item whose id another batch's item already holds), so none of the
+    /// history commits, while the objects' part commits its rows and values beside it. The objects must be removed, and
+    /// nothing the other batch owns may be touched: its item, outcomes and change record keep the id the failed batch
+    /// tried to reuse, and a removal by the history's ids would take them.
+    /// </summary>
+    [Test]
+    public async Task CreateConnectedSystemObjectsWithHistoryAsync_HistoryHeadFails_RemovesTheObjectsAndLeavesTheOtherBatchsHistoryAsync()
+    {
+        var (_, earlierBatch, batch) = await ArrangeAsync();
+        Guid takenItemId;
+        await using (var context = NewContext())
+            takenItemId = await context.ActivityRunProfileExecutionItems.Select(i => i.Id).OrderBy(id => id).FirstAsync();
+        batch.Items[^1].Id = takenItemId;
+        var before = await SnapshotAsync();
+
+        await using (var context = NewContext())
+        {
+            var repository = Repository(context, WritePath.Parallel, batch.Rows);
+            Assert.That(async () => await repository.CreateConnectedSystemObjectsWithHistoryAsync(batch.Objects, batch.Items, [.. earlierBatch]),
+                Throws.InstanceOf<PostgresException>().With.Property(nameof(PostgresException.SqlState)).EqualTo(PostgresErrorCodes.UniqueViolation));
+        }
+
+        await AssertNothingOfTheBatchRemainsAsync(batch, earlierBatch, before, new HashSet<Guid> { takenItemId });
+        Assert.That(await CountAsync("ActivityRunProfileExecutionItems", "Id", [takenItemId]), Is.EqualTo(1),
+            "the other batch's item, whose id the failed batch reused, survives");
+    }
+
+    /// <summary>
+    /// With change tracking off the items carry no change records, so the history has no rows to partition and the
+    /// objects take every connection. The rows written are those the old serial writes wrote.
+    /// </summary>
+    [Test]
+    public async Task CreateConnectedSystemObjectsWithHistoryAsync_ChangeTrackingOff_WritesWhatTheOldSerialWritesWroteAsync()
+    {
+        var (_, earlierBatch, oldBatch) = await ArrangeAsync(changeTrackingEnabled: false);
+        await WriteTheOldWayAsync(oldBatch, earlierBatch);
+        var oldRows = await SnapshotAsync();
+        await PostgresTestDatabase.ResetAsync(_connectionString);
+
+        var (_, _, batch) = await ArrangeAsync(changeTrackingEnabled: false);
+        Assert.That(ParallelBatchWriter.SplitConnections(Parallelism, batch.Objects.Sum(o => 1 + o.AttributeValues.Count), 0), Is.EqualTo((Parallelism, 0)),
+            "sanity: the history gets no connections of its own");
+        await using (var context = NewContext())
+            await Repository(context, WritePath.Parallel, batch.Rows)
+                .CreateConnectedSystemObjectsWithHistoryAsync(batch.Objects, batch.Items, [.. earlierBatch]);
+        var rows = await SnapshotAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(batch.Changes, Is.Empty, "sanity: no change records were built");
+            Assert.That(rows["ActivityRunProfileExecutionItems"], Has.Count.EqualTo(oldRows["ActivityRunProfileExecutionItems"].Count));
+            foreach (var table in BatchTables)
+                Assert.That(rows[table], Is.EqualTo(oldRows[table]), $"{table}, every row and column");
+        }
+    }
+
+    /// <summary>
+    /// A call with items and their change records but no objects writes the history alone, partitioned across every
+    /// connection.
+    /// </summary>
+    [Test]
+    public async Task CreateConnectedSystemObjectsWithHistoryAsync_ItemsWithoutObjects_WritesTheHistoryAloneAsync()
+    {
+        var (_, earlierBatch, batch) = await ArrangeAsync();
+
+        await using (var context = NewContext())
+            await Repository(context, WritePath.Parallel, batch.Rows).CreateConnectedSystemObjectsWithHistoryAsync([], batch.Items, [.. earlierBatch]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await CountAsync("ConnectedSystemObjects", "Id", batch.ObjectIds), Is.Zero, "no object was handed over");
+            Assert.That(await CountAsync("ActivityRunProfileExecutionItems", "Id", batch.Items.Select(i => i.Id)), Is.EqualTo(batch.Items.Count));
+            Assert.That(await CountAsync("ConnectedSystemObjectChangeAttributeValues", "Id", batch.ChangeValueIds), Is.EqualTo(batch.ChangeValueIds.Count));
+        }
+    }
+
+    /// <summary>
+    /// A call with objects but no items writes the objects alone, and marks them pending.
+    /// </summary>
+    [Test]
+    public async Task CreateConnectedSystemObjectsWithHistoryAsync_ObjectsWithoutItems_WritesTheObjectsAloneAsync()
+    {
+        var (_, earlierBatch, batch) = await ArrangeAsync();
+
+        await using (var context = NewContext())
+            await Repository(context, WritePath.Parallel, batch.Rows).CreateConnectedSystemObjectsWithHistoryAsync(batch.Objects, [], [.. earlierBatch]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await CountAsync("ConnectedSystemObjectAttributeValues", "ConnectedSystemObjectId", batch.ObjectIds),
+                Is.EqualTo(batch.Objects.Sum(o => o.AttributeValues.Count)));
+            Assert.That(await CountAsync("ActivityRunProfileExecutionItems", "Id", batch.Items.Select(i => i.Id)), Is.Zero, "no item was handed over");
+            Assert.That(batch.Objects.All(o => o.SynchronisationPending), Is.True);
+        }
+    }
+
+    /// <summary>
+    /// A batch below the parallel threshold, with no caller transaction, is one transaction of its own: a failure part
+    /// way (a value naming no attribute) rolls back everything, and leaves the in-memory batch ready for a retry.
+    /// </summary>
+    [Test]
+    public async Task CreateConnectedSystemObjectsWithHistoryAsync_SingleTransactionPathFails_ThrowsAndLeavesNothingOfTheBatchAsync()
+    {
+        var (s, earlierBatch, batch) = await ArrangeAsync();
+        batch.Objects[^1].AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = int.MaxValue, StringValue = "poisoned" });
+        batch.Items[0].CausalEdges.Add(NewEdge(s, Guid.NewGuid()));
+        var before = await SnapshotAsync();
+
+        await using (var context = NewContext())
+        {
+            var repository = Repository(context, WritePath.SingleConnection, batch.Rows);
+            Assert.That(async () => await repository.CreateConnectedSystemObjectsWithHistoryAsync(batch.Objects, batch.Items, [.. earlierBatch]),
+                Throws.InstanceOf<PostgresException>().With.Property(nameof(PostgresException.SqlState)).EqualTo(PostgresErrorCodes.ForeignKeyViolation));
+        }
+
+        await AssertNothingOfTheBatchRemainsAsync(batch, earlierBatch, before);
+        AssertBatchLeftReadyForARetry(batch, edgesOnFirstItems: 1);
     }
 
     /// <summary>
