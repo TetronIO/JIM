@@ -93,10 +93,12 @@ flowchart TD
     RefResolution --> PersistCreate[Batch create new CSOs<br/>via ISyncRepository<br/>Two-phase parallel write for large batches<br/>See Two-Phase CSO Persistence below]
     PersistCreate --> PersistUpdate[Batch update existing CSOs<br/>with change objects via ISyncRepository<br/>ClearChangeTracker after each batch]
     PersistUpdate --> StampHashes[Stamp import content hashes #1082<br/>per batch, only AFTER that batch's<br/>attribute value writes committed<br/>never touches LastUpdated]
-    StampHashes --> Reconcile
+    StampHashes --> ReconcileBatch[Reconcile the batch's Pending Exports #2908<br/>from the values the import holds, as saved<br/>then release them<br/>See Confirming Import below]
+    ReconcileBatch -->|Next update batch| PersistUpdate
+    ReconcileBatch -->|Last batch saved| Reconcile
 
     %% --- Reconciliation ---
-    Reconcile[Reconcile Pending Exports<br/>See Confirming Import below]
+    Reconcile[Complete reconciliation<br/>Judge holds on CSOs it did not reach]
     Reconcile --> ValidateRpeis[Validate RPEIs<br/>Detect orphaned create RPEIs<br/>with no CSO assigned]
     ValidateRpeis --> PersistRpeis[Flush remaining RPEIs<br/>via raw SQL bulk insert<br/>create/update batches flushed<br/>their own RPEIs as they committed]
     PersistRpeis --> RecordWatermark{Watermark captured<br/>and not overridden at close<br/>or dropped by withheld deletes?}
@@ -279,13 +281,20 @@ flowchart TD
 
 ## Confirming Import - Pending Export Reconciliation
 
-After CSOs are persisted, the import processor reconciles previously exported changes against the freshly imported values. This is how JIM confirms that exports actually took effect.
+As each batch of updated CSOs is saved, the import processor reconciles previously exported changes against the values it has just saved (#2908). This is how JIM confirms that exports actually took effect.
+
+The Pending Exports are loaded once, at the first update batch (in the background during the read where a context factory is available). Each batch then reconciles while the import still holds its objects' values, before they are released. A CSO the run's hydration loaded whole, and which holds after the save exactly what the save wrote, is judged from those values: the probe questions a reload would put to the database (#2669) are answered from them instead (`SyncEngine.AnswerReconciliationProbes`), so every verdict and every recorded last imported value is the same. Any other CSO is reloaded from the database in pages of the sync page size and probed, as all of them were before: one found deleted or by another route, one loaded in part, one compared on two pages, one whose save was not applied to it as written, and one holding an outstanding reference when the cross-batch fix-up resolved references. Each batch writes its results before the next batch is saved, execution items first: the items reconciliation raises for objects the import did not change, then the outcomes it merges onto the import's own items, then the Pending Export deletions and updates. The raised items are still counted in the Activity's totals with the run's last items, as before. An object the save phase holds twice (a Delta Import that updates it and is then told it was deleted under another Object Type, #2049) is reconciled once, reloaded, after every batch is saved.
 
 ```mermaid
 flowchart TD
-    Start([ReconcilePendingExportsAsync]) --> LoadPE[Bulk fetch Pending Exports<br/>for updated CSOs<br/>Per page, only when it holds a change<br/>awaiting an Initial Password: read which<br/>accounts are still owed a password, #2039]
+    Start([ReconcileSavedBatchAsync<br/>once per update batch]) --> Gate{CSO held exactly<br/>as saved? #2908}
+    Gate -->|Yes| Held[Answer the probe plan<br/>from the values held]
+    Gate -->|No| Reload[Reload in pages:<br/>probe, then Core load<br/>leaving probed attributes out]
+    Held --> LoadPE
+    Reload --> LoadPE[Per batch, only when it holds a change<br/>awaiting an Initial Password: read which<br/>accounts are still owed a password, #2039]
     LoadPE --> Loop{More CSOs<br/>with Pending Exports?}
-    Loop -->|No| Summary[Log reconciliation summary:<br/>Confirmed / Retry /<br/>Held / Released / Deleted]
+    Loop -->|No| Flush[Write the batch's execution items and<br/>merged outcomes, then its Pending<br/>Export changes]
+    Flush --> Summary[After the last batch, log the summary:<br/>Confirmed / Retry / Held / Released / Deleted<br/>and how many CSOs were reloaded, and why]
     Summary --> Sweep[JudgeUnreconciledInitialPasswordHoldsAsync #2039:<br/>every held change whose CSO this import<br/>did not reconcile, Full and Delta Import alike<br/>One query from the partial index on the flag,<br/>one owed-password lookup for them all]
     Sweep --> SweepOwed{Password still owed<br/>to its Metaverse Object?}
     SweepOwed -->|Yes| SweepHeld[Still held: untouched]
@@ -315,6 +324,8 @@ flowchart TD
     Update --> Loop
 ```
 
+**Order of work.** Reconciling batch by batch is safe because a batch's verdicts depend only on what its own objects hold, and on the Pending Exports and holds, which the save phase does not write. A failure part way stops the run with the later batches unsaved rather than saved and unreconciled; either way the Activity fails and the next import starts again. Because each batch writes its execution items before its Pending Export changes, a failure can leave a recorded confirmation whose Pending Export the next import judges again, but never a Pending Export removed with nothing recording why. The "Reconciling Pending Exports" step on the Activity now covers only the holds sweep: the time reconciliation takes is part of "Saving changes".
+
 ## Key Design Decisions
 
 - **Duplicates are found before any object is processed**<br /> Each page is scanned for repeated external IDs before its first object is processed (#2063), so every copy of a repeated object is rejected before anything is created or updated from it. Rejecting the first copy only once the second turned up was too late for an object JIM already held, whose update had been applied by then. A rejected copy still counts as returned for deletion detection, so a duplicate never deletes the object it repeats.
@@ -339,8 +350,8 @@ flowchart TD
 
 - **Partition-scoped imports (#353)**<br /> Run Profiles can target a specific partition via `GetTargetPartitions()`. When set, only containers within that partition are imported; otherwise all selected partitions are included. This applies to both the import data collection and deletion detection scope. Deletion detection is scoped to the target partition, so CSOs in other partitions are not incorrectly marked as obsolete. A CSO's Partition is where its Connector places it (`IConnectorPartitionPlacement`, #2723; the LDAP Connector by distinguished name), not the Run Profile that first read it, so that scope holds every object in the Partition, including those an unscoped run created or JIM provisioned; see `engineering/developer/connectors.md` > Saying which Partition an object is in.
 
-- **Cancellation safety**<br /> When a cancellation is requested, the page being read is finished and no further pages are requested. Staging happens only after every page has been read, so a run cancelled while reading persists no Connected System Objects at all; one cancelled after deletion detection skips persistence, and one cancelled after saving skips reconciliation. In every case the run's new watermark is not recorded (#1868), so the next Delta Import re-reads anything the cancelled run did not stage.
+- **Cancellation safety**<br /> When a cancellation is requested, the page being read is finished and no further pages are requested. Staging happens only after every page has been read, so a run cancelled while reading persists no Connected System Objects at all; one cancelled after deletion detection skips persistence, and one cancelled while saving stops reconciling at the next batch, recording the execution items reconciliation has raised so far, so no Pending Export it deleted goes unreported. In every case the run's new watermark is not recorded (#1868), so the next Delta Import re-reads anything the cancelled run did not stage.
 
-- **Bounded change tracker**<br /> Existing Connected System Objects are hydrated without tracking (`AsNoTrackingWithIdentityResolution`, #917), so reading pages adds nothing to the EF Core change tracker. `ClearChangeTracker` is called after each update batch, and each batch's hydrated attribute values are released once persisted, keeping memory consumption bounded regardless of total import size.
+- **Bounded change tracker**<br /> Existing Connected System Objects are hydrated without tracking (`AsNoTrackingWithIdentityResolution`, #917), so reading pages adds nothing to the EF Core change tracker. `ClearChangeTracker` is called after each update batch, and each batch's hydrated attribute values are released once persisted and reconciled, keeping memory consumption bounded regardless of total import size. Reconciliation holds nothing across batches either: its outcomes are written with each batch, and no lookup of every execution item is kept for the end (#2908).
 
 - **Optimistic export apply** (#1079)<br /> No import-side behaviour changed for this feature; it is purely an export-side optimisation (see [Pending Export Lifecycle](PENDING_EXPORT_LIFECYCLE.md)). It changes the practical *outcome* of the "Update CSO attributes" step above: a CSO whose export was optimistically applied already carries the exported values, so the confirming import's set-diff typically finds nothing to stage, and no `Updated` RPEI is created for it.

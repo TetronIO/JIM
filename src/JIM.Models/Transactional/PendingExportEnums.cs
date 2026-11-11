@@ -225,6 +225,52 @@ public enum ReconciliationProbeFallbackReason
 }
 
 /// <summary>
+/// Why a confirming import's Pending Export reconciliation reloads a Connected System Object from the database rather than
+/// judging it from the values the import holds as it saved them (#2908). Counted for the import's log, so a run can see
+/// how many objects were reloaded and why.
+/// </summary>
+public enum ReconciliationReloadReason
+{
+    /// <summary>
+    /// The import's batch hydration did not load the object whole and compare it: it was found deleted, found by another
+    /// route, or compared on more than one page.
+    /// </summary>
+    NotLoadedWholeByThisRun = 0,
+
+    /// <summary>
+    /// Some of the object's values were loaded in part, so memory does not hold them all.
+    /// </summary>
+    LoadedInPart = 1,
+
+    /// <summary>
+    /// The save removed a value it had not yet written, which the database and memory treat differently.
+    /// </summary>
+    RemovesAValueNotSaved = 2,
+
+    /// <summary>
+    /// The object held an outstanding reference, and the run's cross-batch reference fix-up resolved references after the
+    /// object was loaded, perhaps that one.
+    /// </summary>
+    HeldAnOutstandingReference = 3,
+
+    /// <summary>
+    /// After the save the object did not hold exactly the values the save wrote.
+    /// </summary>
+    ChangesNotAppliedAsSaved = 4,
+
+    /// <summary>
+    /// A value the object holds has no attribute id, by which reconciliation groups values.
+    /// </summary>
+    ValueWithoutAttributeId = 5,
+
+    /// <summary>
+    /// The save phase held the object more than once (updated, then reported deleted under another Object Type), so it is
+    /// reconciled once, after every batch is saved.
+    /// </summary>
+    SavedMoreThanOnce = 6
+}
+
+/// <summary>
 /// Why export execution loads a large multi-valued reference attribute of an object whole rather than in part (#2816).
 /// Reported on the batch's load span, so a run can see how often, and why, a group's whole membership was read.
 /// </summary>
