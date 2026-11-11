@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Transactional;
 using JIM.PostgresData;
 using JIM.PostgresData.Repositories;
 using JIM.TestSupport;
@@ -312,6 +313,76 @@ public class MetaverseMatchValueLookupDatabaseTests
                 ALTER TABLE "MetaverseObjectAttributeValues" RESET (autovacuum_enabled);
                 """, connection);
             await restore.ExecuteNonQueryAsync();
+        }
+    }
+
+    /// <summary>
+    /// The page batch behind an import join (#2020) answers every lookup exactly as the per-object query does: the same
+    /// ids, in the same order, cut at the same count, for each data type and case mode, values in another case, pattern
+    /// characters, several values of one identity, values of several identities, more holders than the lookup takes,
+    /// and objects of another type holding the value.
+    /// </summary>
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task FindMetaverseObjectIdsByEachMatchValueAsync_AnswersEveryLookupAsThePerObjectQueryDoesAsync(bool caseSensitive)
+    {
+        var seeded = await SeedAsync();
+        var bloggs = await AddMvoAsync(seeded.Person, seeded.EmployeeId, av => av.StringValue = "E100");
+        await AddValueAsync(bloggs, seeded.EmployeeId, av => av.StringValue = "E200");
+        await AddMvoAsync(seeded.Person, seeded.EmployeeId, av => av.StringValue = "e100");
+        await AddMvoAsync(seeded.Person, seeded.EmployeeId, av => av.StringValue = "E300");
+        await AddMvoAsync(seeded.Person, seeded.EmployeeId, av => av.StringValue = "jxsmith");
+        await AddMvoAsync(seeded.Person, seeded.EmployeeId, av => av.StringValue = "Ärger");
+        await AddMvoAsync(seeded.Group, seeded.EmployeeId, av => av.StringValue = "E300");
+        for (var i = 0; i < 13; i++)
+            await AddMvoAsync(seeded.Person, seeded.EmployeeId, av => av.StringValue = i % 2 == 0 ? "shared" : "SHARED");
+        for (var i = 0; i < 3; i++)
+            await AddMvoAsync(seeded.Person, seeded.StaffNumber, av => av.IntValue = 48213);
+        await AddMvoAsync(seeded.Person, seeded.StaffNumber, av => av.IntValue = 7);
+        await AddMvoAsync(seeded.Person, seeded.BadgeNumber, av => av.LongValue = 9_000_000_000L);
+        await AddMvoAsync(seeded.Person, seeded.Rate, av => av.DecimalValue = 12.50m);
+        await AddMvoAsync(seeded.Person, seeded.Rate, av => av.DecimalValue = 12.5m);
+        var key = Guid.NewGuid();
+        await AddMvoAsync(seeded.Person, seeded.ObjectKey, av => av.GuidValue = key);
+        await AddMvoAsync(seeded.Group, seeded.ObjectKey, av => av.GuidValue = key);
+
+        var lookups = new (MetaverseAttribute Attribute, AttributeDataType ValueType, object[][] Sought)[]
+        {
+            (seeded.EmployeeId, AttributeDataType.Text,
+            [
+                ["E100"], ["e100"], ["E100", "E200"], ["E200", "e100"], ["E300"], ["j_smith"], ["ärger"], ["Ärger"],
+                ["shared"], ["SHARED"], ["shared", "E300"], ["nobody"], ["nobody", "E100"]
+            ]),
+            (seeded.StaffNumber, AttributeDataType.Number, [[48213], [7], [7, 48213], [1]]),
+            (seeded.BadgeNumber, AttributeDataType.LongNumber, [[9_000_000_000L], [1L]]),
+            (seeded.Rate, AttributeDataType.Decimal, [[12.5m], [12.500m], [1m]]),
+            (seeded.ObjectKey, AttributeDataType.Guid, [[key], [Guid.NewGuid()]])
+        };
+
+        const int take = 11;
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var (attribute, valueType, sought) in lookups)
+            {
+                var lookupKey = new JoinMatchLookupKey(seeded.Person.Id, attribute.Id, valueType, caseSensitive);
+                var everyValue = sought.SelectMany(values => values).Distinct().ToList();
+
+                var candidates = new JoinMatchCandidates();
+                await using (var ctx = NewContext())
+                {
+                    var found = await new PostgresDataRepository(ctx).Metaverse.FindMetaverseObjectIdsByEachMatchValueAsync(
+                        seeded.Person.Id, attribute.Id, valueType, everyValue, caseSensitive, take);
+                    foreach (var value in everyValue)
+                        candidates.AddLookedUp(lookupKey, value, found.Where(row => ReferenceEquals(row.Value, value)).Select(row => row.MetaverseObjectId).ToList());
+                }
+
+                foreach (var values in sought)
+                {
+                    var perObject = await FindAsync(seeded.Person, attribute, valueType, values, caseSensitive, take);
+                    Assert.That(candidates.GetMetaverseObjectIds(lookupKey, values, take), Is.EqualTo(perObject),
+                        $"{valueType} {(caseSensitive ? "respecting" : "ignoring")} case, sought [{string.Join(", ", values)}]");
+                }
+            }
         }
     }
 

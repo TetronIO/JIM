@@ -459,6 +459,13 @@ public interface ISyncRepository
     /// </summary>
     Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId);
 
+    /// <summary>
+    /// The batch form of <see cref="GetConnectedSystemObjectCountByMvoAsync"/> for a page of import joins (#2020): how
+    /// many Connected System Objects of the Connected System are joined to each of the Metaverse Objects, in one round
+    /// trip. A Metaverse Object with none is absent.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, int>> GetConnectedSystemObjectCountsByMvoAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds);
+
     #endregion
 
     #region Connected System Object — Writes
@@ -693,6 +700,27 @@ public interface ISyncRepository
     /// joining it needs.
     /// </summary>
     Task<MetaverseObject?> GetMetaverseObjectForJoinMatchAsync(Guid metaverseObjectId);
+
+    /// <summary>
+    /// The batch form of <see cref="FindMetaverseObjectIdsByMatchValuesAsync"/> for a page of import joins (#2020): for
+    /// each of <paramref name="values"/> separately, the first <paramref name="takePerValue"/> distinct Metaverse Objects
+    /// of the type holding it, in id order, compared exactly as the per-object lookup compares. Each row carries the
+    /// caller's own value object, so the caller keys its answers by what it sought rather than by what the database
+    /// holds.
+    /// </summary>
+    Task<IReadOnlyList<(object Value, Guid MetaverseObjectId)>> FindMetaverseObjectIdsByEachMatchValueAsync(
+        int metaverseObjectTypeId,
+        int metaverseAttributeId,
+        AttributeDataType valueType,
+        IReadOnlyList<object> values,
+        bool caseSensitive,
+        int takePerValue);
+
+    /// <summary>
+    /// The batch form of <see cref="GetMetaverseObjectForJoinMatchAsync"/> for a page of import joins (#2020): each
+    /// Metaverse Object, loaded as that method loads it, keyed by id. An id with no row is absent.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, MetaverseObject>> GetMetaverseObjectsForJoinMatchAsync(IReadOnlyCollection<Guid> metaverseObjectIds);
 
     /// <summary>
     /// Export matching's lookup (MVO→CSO, #2052): for a single Object Matching Rule, finds every unjoined,

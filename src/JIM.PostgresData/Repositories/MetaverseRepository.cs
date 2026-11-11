@@ -3547,6 +3547,87 @@ public partial class MetaverseRepository : IMetaverseRepository
     }
 
     /// <summary>
+    /// The most values one statement of <see cref="FindMetaverseObjectIdsByEachMatchValueAsync"/> seeks. A page's values
+    /// for one key number at most a few times the page size, so this is one statement in practice; the bound keeps a
+    /// very large page's parameter array, and the statement's working set, in proportion.
+    /// </summary>
+    internal const int MatchValueBatchChunkSize = 5000;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<(object Value, Guid MetaverseObjectId)>> FindMetaverseObjectIdsByEachMatchValueAsync(
+        int metaverseObjectTypeId, int metaverseAttributeId, AttributeDataType valueType, IReadOnlyList<object> values, bool caseSensitive, int takePerValue)
+    {
+        if (values.Count == 0 || takePerValue <= 0)
+            return [];
+
+        // Raw SQL: this runs once per page and rule on the synchronisation join hot path (src/CLAUDE.md, "Worker Hot Path").
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        var transaction = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+        var sql = BuildMatchValueBatchLookupSql(valueType, caseSensitive);
+
+        var found = new List<(object Value, Guid MetaverseObjectId)>();
+        foreach (var chunk in values.Chunk(MatchValueBatchChunkSize))
+        {
+            await using var command = new NpgsqlCommand(sql, connection, transaction);
+            AddMatchValueLookupParameters(command, metaverseObjectTypeId, metaverseAttributeId, valueType, chunk, takePerValue);
+
+            // Each row names its value by its position in the array sought, so the caller's own value object is handed
+            // back: the database's copy may differ in case (Text ignoring case) or scale (Decimal).
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                found.Add((chunk[(int)(reader.GetInt64(0) - 1)], reader.GetGuid(1)));
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// The SQL behind <see cref="FindMetaverseObjectIdsByEachMatchValueAsync"/>: the per-object lookup's filter
+    /// (<see cref="BuildMatchValueLookupSql"/>), applied to each sought value separately, so each keeps its own first
+    /// <c>@take</c> ids. Internal so a database test can <c>EXPLAIN</c> exactly what runs.
+    /// </summary>
+    /// <remarks>
+    /// As in the per-object lookup, the matches are found first, in a materialised CTE, and only then numbered and cut,
+    /// so a value nothing holds costs one index probe rather than an ordered walk of the attribute's values. Each value
+    /// joins the attribute values by equality on the column its data type uses; Text ignoring case lowers both sides
+    /// with PostgreSQL's <c>lower()</c> and repeats the expression index's <c>"StringValue" IS NOT NULL</c> filter, as
+    /// the per-object lookup does. The type check is the same correlated subquery (#2492).
+    /// </remarks>
+    internal static string BuildMatchValueBatchLookupSql(AttributeDataType valueType, bool caseSensitive)
+    {
+        var comparison = valueType switch
+        {
+            AttributeDataType.Text when caseSensitive => @"av.""StringValue"" = sought.value",
+            AttributeDataType.Text => @"lower(av.""StringValue"") = lower(sought.value) AND av.""StringValue"" IS NOT NULL",
+            AttributeDataType.Number => @"av.""IntValue"" = sought.value",
+            AttributeDataType.LongNumber => @"av.""LongValue"" = sought.value",
+            AttributeDataType.Decimal => @"av.""DecimalValue"" = sought.value",
+            AttributeDataType.Guid => @"av.""GuidValue"" = sought.value",
+            _ => throw new ArgumentOutOfRangeException(nameof(valueType), valueType, "Object Matching cannot compare this data type.")
+        };
+
+        return $"""
+            WITH matched AS MATERIALIZED (
+                SELECT DISTINCT sought.ordinal, av."MetaverseObjectId"
+                FROM unnest(@values) WITH ORDINALITY AS sought(value, ordinal)
+                JOIN "MetaverseObjectAttributeValues" AS av
+                  ON av."AttributeId" = @attributeId
+                 AND {comparison}
+                WHERE (SELECT mo."TypeId" FROM "MetaverseObjects" AS mo WHERE mo."Id" = av."MetaverseObjectId") = @typeId
+            ),
+            numbered AS (
+                SELECT ordinal, "MetaverseObjectId",
+                       row_number() OVER (PARTITION BY ordinal ORDER BY "MetaverseObjectId") AS position
+                FROM matched
+            )
+            SELECT ordinal, "MetaverseObjectId" FROM numbered
+            WHERE position <= @take
+            ORDER BY ordinal, "MetaverseObjectId"
+            """;
+    }
+
+    /// <summary>
     /// Binds the parameters <see cref="BuildMatchValueLookupSql"/> names, typing the value array by the attribute's
     /// data type. Internal for the same reason.
     /// </summary>

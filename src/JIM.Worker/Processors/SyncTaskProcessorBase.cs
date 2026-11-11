@@ -186,6 +186,10 @@ public abstract class SyncTaskProcessorBase
     // is disconnected and a new CSO tries to join the same MVO within the same page.
     protected readonly List<Guid> _pendingDisconnectedMvoIds = [];
 
+    // What the page's import joins will ask the database, looked up for the whole page before Pass 2 (#2020); null until
+    // then, and between pages. Every read falls back to the per-object query for what it does not cover.
+    private JoinMatchCandidates? _joinMatchCandidates;
+
     // Metaverse Objects this page disconnected from a system an export rule provisions to (#2318), flagged for the
     // export scope review once the page's writes persist, so the review re-provisions them after the departed objects
     // are deleted.
@@ -431,6 +435,12 @@ public abstract class SyncTaskProcessorBase
     /// map rather than reaching <see cref="QueueMvoForUpdate"/> as a second instance.
     /// </summary>
     internal int MvoIdentityMapAbsorbedCountForTests => _mvoIdentityMap.AbsorbedCount;
+
+    /// <summary>
+    /// Test hook: whether each page's import joins are looked up in one batch before Pass 2 (#2020). Production never
+    /// turns it off; the equivalence tests do, to run the same page through the per-object lookups and compare.
+    /// </summary>
+    internal bool PrefetchJoinMatchesForTests { get; set; } = true;
 
     /// <summary>
     /// Test hook: exercises <see cref="QueueMvoForUpdate"/> directly, bypassing the page identity map, so
@@ -2401,6 +2411,7 @@ public abstract class SyncTaskProcessorBase
     {
         _syncRepo.ClearChangeTracker();
         _mvoIdentityMap.Clear();
+        _joinMatchCandidates = null;
         _snapshotReferenceIdentifiers.Clear();
     }
 
@@ -7326,6 +7337,61 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Looks up, for the whole page at once, what Pass 2's import joins will ask the database (#2020): what each unjoined
+    /// object's Object Matching Rules find, the Metaverse Objects the joins settle on, and their existing join counts in
+    /// this Connected System. Run after Pass 1 and before Pass 2. A join then reads the batch instead of making up to
+    /// three round trips of its own, which cost about 90 s of a first Full Synchronisation at Scale500k25kGroups.
+    /// <para>
+    /// Equivalent to the per-object queries because nothing on the synchronisation path writes Metaverse Objects, their
+    /// values or the join columns between the page's load and its flush: the per-object queries would read exactly what
+    /// the batch read. Two consequences hold either way, unchanged: a Metaverse Object projected earlier in the page is
+    /// not in the database yet, so a later object on the page cannot match it; and what the page changes in memory (a
+    /// pending disconnection, a join queued earlier in the page) is applied on top in <see cref="EstablishJoinAsync"/>,
+    /// as it is to a per-object answer.
+    /// </para>
+    /// <para>
+    /// Covers each unjoined, non-obsolete object with every list of rules its join can try: the type's own in simple
+    /// mode, or each import Synchronisation Rule's for the type, whether or not the object turns out to be in its scope.
+    /// Covering more than the join tries costs only the extra lookups; a join the batch does not cover queries as before.
+    /// </para>
+    /// </summary>
+    protected async Task PrefetchJoinMatchesForPageAsync(List<SyncRule> activeSyncRules, IReadOnlyList<ConnectedSystemObject> page)
+    {
+        _joinMatchCandidates = null;
+        var isSimpleMode = _connectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem;
+        if (!PrefetchJoinMatchesForTests || (activeSyncRules.Count == 0 && !isSimpleMode))
+            return;
+
+        var unjoined = page.Where(cso => cso.MetaverseObject == null && cso.Status != ConnectedSystemObjectStatus.Obsolete);
+        var joins = new List<(ConnectedSystemObject ConnectedSystemObject, IReadOnlyList<ObjectMatchingRule> MatchingRules)>();
+        if (isSimpleMode)
+        {
+            joins.AddRange(unjoined
+                .Select(cso => (ConnectedSystemObject: cso, MatchingRules: (IReadOnlyList<ObjectMatchingRule>)GetSimpleModeMatchingRules(cso.TypeId)))
+                .Where(join => join.MatchingRules.Count > 0));
+        }
+        else
+        {
+            var importSyncRulesByType = activeSyncRules
+                .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ObjectMatchingRules.Count > 0)
+                .ToLookup(sr => sr.ConnectedSystemObjectTypeId);
+
+            // Each rule's Object Matching Rules search the rule's own Metaverse Object Type, as AttemptJoinAsync sets.
+            foreach (var importSyncRule in importSyncRulesByType.SelectMany(group => group))
+            {
+                foreach (var rule in importSyncRule.ObjectMatchingRules)
+                    rule.MetaverseObjectType = importSyncRule.MetaverseObjectType;
+            }
+
+            joins.AddRange(unjoined.SelectMany(cso => importSyncRulesByType[cso.TypeId]
+                .Select(importSyncRule => (ConnectedSystemObject: cso, MatchingRules: (IReadOnlyList<ObjectMatchingRule>)importSyncRule.ObjectMatchingRules.ToList()))));
+        }
+
+        if (joins.Count > 0)
+            _joinMatchCandidates = await _syncServer.PrefetchJoinMatchesForPageAsync(joins, _connectedSystem.Id);
+    }
+
+    /// <summary>
     /// Gets simple mode matching rules from the object type loaded in _objectTypes.
     /// </summary>
     private List<ObjectMatchingRule> GetSimpleModeMatchingRules(int? csoTypeId)
@@ -7354,7 +7420,7 @@ public abstract class SyncTaskProcessorBase
     {
         try
         {
-            var match = await _syncServer.FindMatchingMetaverseObjectAsync(connectedSystemObject, matchingRules);
+            var match = await _syncServer.FindMatchingMetaverseObjectAsync(connectedSystemObject, matchingRules, _joinMatchCandidates);
             return match == null ? null : match with { MetaverseObject = _mvoIdentityMap.Resolve(match.MetaverseObject) };
         }
         catch (JIM.Models.Exceptions.ObjectMatchingRuleFailedException ex)
@@ -7390,9 +7456,15 @@ public abstract class SyncTaskProcessorBase
         ConnectedSystemObject connectedSystemObject, MetaverseObject mvo, SyncRule? joiningSyncRule, ImportMatch match)
     {
         // MVO must not already be joined to a Connected System Object in this Connected System. Joins are 1:1.
+        // The count as the database holds it: the page's batch read it before Pass 2 (#2020), and nothing writes the join
+        // columns before the page flush, so it is the count this query would read here. Asked here only for a Metaverse
+        // Object the batch did not settle on.
         int existingCsoJoinCount;
-        using (Diagnostics.Sync.StartSpan("Join.ExistingJoinCount"))
-            existingCsoJoinCount = await _syncRepo.GetConnectedSystemObjectCountByMvoAsync(_connectedSystem.Id, mvo.Id);
+        if (_joinMatchCandidates == null || !_joinMatchCandidates.TryGetJoinCount(mvo.Id, out existingCsoJoinCount))
+        {
+            using (Diagnostics.Sync.StartSpan("Join.ExistingJoinCount"))
+                existingCsoJoinCount = await _syncRepo.GetConnectedSystemObjectCountByMvoAsync(_connectedSystem.Id, mvo.Id);
+        }
 
         // Account for CSOs that have been disconnected in-memory but not yet flushed to the database.
         if (existingCsoJoinCount > 0 && _pendingDisconnectedMvoIds.Contains(mvo.Id))
