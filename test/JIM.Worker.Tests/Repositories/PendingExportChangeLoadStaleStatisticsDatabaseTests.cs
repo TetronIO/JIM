@@ -1,7 +1,6 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Text.Json;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
@@ -39,7 +38,7 @@ namespace JIM.Worker.Tests.Repositories;
 [Category("RequiresPostgres")]
 public class PendingExportChangeLoadStaleStatisticsDatabaseTests
 {
-    private const string ChangesTable = "PendingExportAttributeValueChanges";
+    private const string ChangesTable = PendingExportChangeScans.ChangesTable;
     private const int ExportCount = 3000;
     private const int ChangesPerExport = 3;
     private const int LoadedExportCount = 5;
@@ -274,67 +273,22 @@ public class PendingExportChangeLoadStaleStatisticsDatabaseTests
 
     // ─── Plan inspection ───
 
-    private sealed record ChangeScan(string NodeType, string? IndexName, string? IndexCondition, long RowsRead);
-
     /// <summary>
     /// Every scan of the changes table across the recorded statements reads by an index condition on its Pending Export's
     /// id, and together they read exactly the changes the load returns.
     /// </summary>
     private async Task AssertChangesSoughtByPendingExportIdAsync(CommandRecordingInterceptor recorder, int expectedChanges)
     {
-        var scans = new List<ChangeScan>();
-        var plans = new List<string>();
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-        foreach (var (text, parameters) in recorder.Commands)
-        {
-            await using var explain = new NpgsqlCommand("EXPLAIN (ANALYZE, FORMAT JSON) " + text, connection);
-            foreach (var parameter in parameters)
-                explain.Parameters.Add(parameter.Clone());
-            var plan = (string)(await explain.ExecuteScalarAsync())!;
-            plans.Add($"{text}\n{plan}");
-            CollectChangeScans(JsonDocument.Parse(plan).RootElement[0].GetProperty("Plan"), scans);
-        }
+        var (scans, plans) = await PendingExportChangeScans.ExplainAsync(_connectionString, recorder);
 
-        var described = string.Join("\n", scans.Select(s => $"{s.NodeType} {s.IndexName} [{s.IndexCondition}] rows read {s.RowsRead}"));
+        var described = string.Join("\n", scans);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(scans, Is.Not.Empty, $"the load reads the changes. Plans:\n{string.Join("\n\n", plans)}");
+            Assert.That(scans, Is.Not.Empty, $"the load reads the changes. Plans:\n{plans}");
             Assert.That(scans.All(s => s.IndexCondition?.Contains("\"PendingExportId\"", StringComparison.Ordinal) == true), Is.True,
-                $"every read of the changes seeks them by Pending Export id, never scanning the table or its index whole:\n{described}\n\nPlans:\n{string.Join("\n\n", plans)}");
+                $"every read of the changes seeks them by Pending Export id, never scanning the table or its index whole:\n{described}\n\nPlans:\n{plans}");
             Assert.That(scans.Sum(s => s.RowsRead), Is.EqualTo(expectedChanges),
                 $"the load reads only the changes it returns:\n{described}");
-        }
-    }
-
-    /// <summary>
-    /// The scans of the changes table in a plan: an index scan carries its own condition; a bitmap heap scan takes its
-    /// condition from the bitmap index scans beneath it; a sequential scan has none.
-    /// </summary>
-    private static void CollectChangeScans(JsonElement node, List<ChangeScan> scans)
-    {
-        if (node.TryGetProperty("Relation Name", out var relation) && relation.GetString() == ChangesTable)
-        {
-            var nodeType = node.GetProperty("Node Type").GetString()!;
-            string? indexName = node.TryGetProperty("Index Name", out var name) ? name.GetString() : null;
-            string? condition = node.TryGetProperty("Index Cond", out var cond) ? cond.GetString() : null;
-            if (nodeType == "Bitmap Heap Scan" && node.TryGetProperty("Plans", out var bitmaps))
-            {
-                var bitmapIndexScans = bitmaps.EnumerateArray().Where(b => b.TryGetProperty("Index Cond", out _)).ToList();
-                indexName = string.Join(",", bitmapIndexScans.Select(b => b.GetProperty("Index Name").GetString()));
-                condition = bitmapIndexScans.Count == 0 ? null : string.Join(" AND ", bitmapIndexScans.Select(b => b.GetProperty("Index Cond").GetString()));
-            }
-
-            var loops = node.GetProperty("Actual Loops").GetDouble();
-            double Per(string property) => node.TryGetProperty(property, out var value) ? value.GetDouble() : 0;
-            var rowsRead = (long)Math.Round(loops * (Per("Actual Rows") + Per("Rows Removed by Filter") + Per("Rows Removed by Index Recheck")));
-            scans.Add(new ChangeScan(nodeType, indexName, condition, rowsRead));
-        }
-
-        if (node.TryGetProperty("Plans", out var children))
-        {
-            foreach (var child in children.EnumerateArray())
-                CollectChangeScans(child, scans);
         }
     }
 
