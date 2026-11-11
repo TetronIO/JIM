@@ -108,15 +108,16 @@ public partial class SyncRepository
         createSpan?.SetTag("count", connectedSystemObjects.Count);
         createSpan?.SetTag("valueCount", attributeValueRows.Count);
 
-        // Gated on the rows written, objects plus values, not on the object count (#2872).
-        if (!ShouldWriteInParallel(connectedSystemObjects.Count + attributeValueRows.Count))
+        // Gated on the rows written, objects plus values, not on the object count (#2872), and spread across connections
+        // in proportion to them (#2669).
+        var parallelism = ConnectionsForWrite(connectedSystemObjects.Count + attributeValueRows.Count);
+        if (parallelism == 1)
         {
             createSpan?.SetTag("connections", 1);
             await CreateCsosOnSingleConnectionAsync(connectedSystemObjects, attributeValueRows);
             return;
         }
 
-        var parallelism = WriteParallelism;
         var connectionString = ConnectionStringForParallelWrites!;
         createSpan?.SetTag("connections", parallelism);
         Log.Information("CreateConnectedSystemObjectsAsync: Writing {Count} CSOs and {ValueCount} attribute values across {Parallelism} parallel connections",

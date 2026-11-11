@@ -56,12 +56,11 @@ public partial class SyncRepository
         _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
 
         // Parallel writes only for calls with rows enough to gain from them, counted as what the COPYs write (the items
-        // and their outcomes), not as the number of items (#2872).
-        var useParallel = ShouldWriteInParallel(rowsToInsert.Count + allOutcomes.Count);
+        // and their outcomes), not as the number of items (#2872), across connections in proportion to them (#2669).
+        var parallelism = ConnectionsForWrite(rowsToInsert.Count + allOutcomes.Count);
 
-        if (useParallel)
+        if (parallelism > 1)
         {
-            var parallelism = WriteParallelism;
             var connectionString = ConnectionStringForParallelWrites!;
             Log.Information("BulkInsertRpeisAsync: Writing {RpeiCount} RPEIs and {OutcomeCount} outcomes across {Parallelism} parallel connections",
                 rpeis.Count, allOutcomes.Count, parallelism);
@@ -487,10 +486,11 @@ public partial class SyncRepository
         // value row per member, which on one connection took 16.8 s of two Full Import batches while the same rows'
         // attribute values were written across 16 (#2909). Only for a caller that asks: one writing several batches at
         // once (an export) would take the parallelism's share of the connection pool for each of them.
-        if (allowParallelWrite && ShouldWriteInParallel(changes.Count + attributeRows.Count + valueRows.Count))
+        var connections = allowParallelWrite ? ConnectionsForWrite(changes.Count + attributeRows.Count + valueRows.Count) : 1;
+        if (connections > 1)
         {
-            persistSpan?.SetTag("connections", WriteParallelism);
-            await PersistCsoChangesInParallelAsync(changes, attributeRows, valueRows);
+            persistSpan?.SetTag("connections", connections);
+            await PersistCsoChangesInParallelAsync(changes, attributeRows, valueRows, connections);
             return;
         }
 
@@ -526,9 +526,9 @@ public partial class SyncRepository
     private async Task PersistCsoChangesInParallelAsync(
         List<ConnectedSystemObjectChange> changes,
         List<(Guid ChangeId, int AttributeId, ConnectedSystemObjectChangeAttribute AttrChange)> attributeRows,
-        List<(ConnectedSystemObjectChangeAttribute AttrChange, ConnectedSystemObjectChangeAttributeValue Value)> valueRows)
+        List<(ConnectedSystemObjectChangeAttribute AttrChange, ConnectedSystemObjectChangeAttributeValue Value)> valueRows,
+        int parallelism)
     {
-        var parallelism = WriteParallelism;
         var connectionString = ConnectionStringForParallelWrites!;
         Log.Information("PersistCsoChangesAsync: Writing {ChangeCount} change records, {AttributeCount} attribute changes and {ValueCount} value changes across {Parallelism} parallel connections",
             changes.Count, attributeRows.Count, valueRows.Count, parallelism);

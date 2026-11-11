@@ -132,6 +132,7 @@ public class PendingExportCreateBenchmarkDatabaseTests
         repository.ConnectionStringForParallelWrites = _connectionString;
         repository.WriteParallelismOverride = parallelism;
         repository.ParallelWriteRowThreshold = 0;
+        repository.ParallelWriteRowsPerConnection = 1; // exactly the connections measured, however few the rows (#2669)
         Assert.That(repository.ShouldWriteInParallel(page.Sum(pe => 1 + pe.AttributeValueChanges.Count)), Is.EqualTo(parallelism > 1));
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();

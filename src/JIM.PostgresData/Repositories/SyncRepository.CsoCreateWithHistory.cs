@@ -62,11 +62,13 @@ public partial class SyncRepository
         _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
         try
         {
-            // Gated on every row the call writes, as the other bulk writers are (#2872).
-            if (ShouldWriteInParallel(objectRows + changeRows + itemRows))
+            // Gated on every row the call writes, as the other bulk writers are (#2872), and given connections in
+            // proportion to them (#2669).
+            var connections = ConnectionsForWrite(objectRows + changeRows + itemRows);
+            if (connections > 1)
             {
                 await WriteBatchConcurrentlyAsync(connectedSystemObjects, attributeValueRows, previouslyCommittedCsoIds, history, changes,
-                    changeAttributeRows, changeValueRows, objectRows, changeRows, span);
+                    changeAttributeRows, changeValueRows, objectRows, changeRows, connections, span);
             }
             else
             {
@@ -164,9 +166,10 @@ public partial class SyncRepository
     /// mark (only now every value has committed, as in <see cref="CreateConnectedSystemObjectsAsync"/>), the causal edges,
     /// the match candidates and the stat counters, which cannot be taken back by removing rows and so are written last.</item>
     /// </list>
-    /// The two parts share the parallelism in proportion to their rows, so together they hold no more connections than one
-    /// parallel write did (plus the context's own, as before). Neither part depends on the other: a change record names
-    /// its object by plain id, and a change value's reference to an object of this batch is written as the old serial
+    /// The two parts share <paramref name="parallelism"/>, the connections the batch's rows earn
+    /// (<see cref="ConnectionsForWrite"/>), in proportion to their rows, so together they hold no more connections than
+    /// one parallel write of the same rows would (plus the context's own, as before). Neither part depends on the other:
+    /// a change record names its object by plain id, and a change value's reference to an object of this batch is written as the old serial
     /// path wrote it once the objects had committed. Nothing is one transaction, so a failure anywhere removes everything
     /// the call committed before it propagates: no object is left without its history, and no history without its object.
     /// </summary>
@@ -180,9 +183,9 @@ public partial class SyncRepository
         List<(ConnectedSystemObjectChangeAttribute AttrChange, ConnectedSystemObjectChangeAttributeValue Value)> changeValueRows,
         int objectRows,
         int changeRows,
+        int parallelism,
         System.Diagnostics.Activity? span)
     {
-        var parallelism = WriteParallelism;
         var connectionString = ConnectionStringForParallelWrites!;
         var (objectConnections, historyConnections) = ParallelBatchWriter.SplitConnections(parallelism, objectRows, changeRows);
         span?.SetTag("connections", parallelism);

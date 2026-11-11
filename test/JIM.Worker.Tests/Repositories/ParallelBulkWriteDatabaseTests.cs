@@ -27,8 +27,10 @@ namespace JIM.Worker.Tests.Repositories;
 /// </summary>
 /// <remarks>
 /// Each test points the repository at this fixture's database directly and forces the path it means to exercise (four
-/// connections and a threshold of zero, or a threshold no call reaches), asserting the decision with the same predicate
-/// the writers use, so none can pass by quietly taking the other path. Opt-in via <c>JIM_TEST_RESET_*</c>.
+/// connections, a threshold of zero and every connection used however few the rows, or a threshold no call reaches),
+/// asserting the decision with the same predicate the writers use, so none can pass by quietly taking the other path.
+/// The people page tests instead run the default gate on sixteen connections and assert the connections it chooses.
+/// Opt-in via <c>JIM_TEST_RESET_*</c>.
 /// </remarks>
 [TestFixture]
 [Category("RequiresPostgres")]
@@ -81,6 +83,7 @@ public class ParallelBulkWriteDatabaseTests
         sync.ConnectionStringForParallelWrites = _connectionString;
         sync.WriteParallelismOverride = Parallelism;
         sync.ParallelWriteRowThreshold = path == WritePath.Parallel ? 0 : int.MaxValue;
+        sync.ParallelWriteRowsPerConnection = 1; // every connection the parallelism allows, however few the rows (#2669)
         Assert.That(sync.ShouldWriteInParallel(rows), Is.EqualTo(path == WritePath.Parallel),
             $"the test means to exercise the {path} path; the gate must agree");
         return sync;
@@ -413,6 +416,110 @@ public class ParallelBulkWriteDatabaseTests
             Assert.That(await CountAsync("MetaverseObjects", "Id", [existingId]), Is.EqualTo(1), "the object that already existed is not");
             Assert.That(await SnapshotAsync("MetaverseObjectAttributeValues", "MetaverseObjectId", [existingId]), Is.EqualTo(existingBefore),
                 "and its values are exactly as they were");
+        }
+    }
+
+    /// <summary>
+    /// A synchronisation people page as the 500,000-object Full Synchronisation writes it: 500 people of 11 values each,
+    /// 6,000 rows.
+    /// </summary>
+    private static List<MetaverseObject> BuildPeoplePage(Seeded s)
+    {
+        var nextId = IdSequence(4);
+        return Enumerable.Range(0, 500).Select(i =>
+        {
+            var person = new MetaverseObject { Id = nextId(), Type = s.PersonType, Created = Created, CachedDisplayName = $"Person {i}" };
+            for (var v = 0; v < 11; v++)
+            {
+                var value = MvoValue(s, nextId, s.NameAttributeId);
+                value.StringValue = $"Person {i} value {v}";
+                person.AttributeValues.Add(value);
+            }
+
+            return person;
+        }).ToList();
+    }
+
+    /// <summary>
+    /// A repository on the write gate's own defaults (threshold and rows a connection) on a 16-core host, asserting how
+    /// many connections it gives a write of <paramref name="rows"/> rows.
+    /// </summary>
+    private SyncRepository DefaultGateRepository(JimDbContext context, int rows, int expectedConnections)
+    {
+        var sync = (SyncRepository)new PostgresDataRepository(context).Sync;
+        sync.ConnectionStringForParallelWrites = _connectionString;
+        sync.WriteParallelismOverride = 16;
+        Assert.That(sync.ConnectionsForWrite(rows), Is.EqualTo(expectedConnections),
+            "the default gate's decision for this many rows on a 16-core host");
+        return sync;
+    }
+
+    /// <summary>
+    /// The number of transactions that wrote the given rows: each parallel connection commits its own partition, and every
+    /// row a transaction writes carries its id as <c>xmin</c>.
+    /// </summary>
+    private async Task<long> CountWritingTransactionsAsync(string table, string keyColumn, IEnumerable<Guid> keys)
+    {
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            $"""SELECT count(DISTINCT xmin::text) FROM "{table}" WHERE "{keyColumn}" = ANY(@keys)""", connection);
+        command.Parameters.AddWithValue("keys", keys.ToArray());
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
+    /// <summary>
+    /// A people page of 6,000 rows goes parallel on the default gate, and on four connections rather than all sixteen: on
+    /// a 16-core host four gained at least 1.8x in every measurement at this size, while sixteen varied from 21 to 72 ms
+    /// (#2669). Each connection commits its own partition, so the rows carry four transaction ids.
+    /// </summary>
+    [Test]
+    public async Task CreateMetaverseObjectsAsync_PeoplePageOnDefaultGate_WritesAcrossFourConnectionsAsync()
+    {
+        var s = await SeedAsync();
+        var page = BuildPeoplePage(s);
+        var pageIds = page.Select(m => m.Id).ToList();
+        Assert.That(Rows(page), Is.EqualTo(6_000), "sanity: the page's rows");
+
+        await using (var context = NewContext())
+            await DefaultGateRepository(context, Rows(page), expectedConnections: 4).CreateMetaverseObjectsAsync(page);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await CountAsync("MetaverseObjects", "Id", pageIds), Is.EqualTo(500), "every object is written");
+            Assert.That(await CountAsync("MetaverseObjectAttributeValues", "MetaverseObjectId", pageIds), Is.EqualTo(5_500), "and every value");
+            Assert.That(await CountWritingTransactionsAsync("MetaverseObjects", "Id", pageIds), Is.EqualTo(4),
+                "the objects are written across four connections");
+            Assert.That(await CountWritingTransactionsAsync("MetaverseObjectAttributeValues", "MetaverseObjectId", pageIds), Is.EqualTo(4),
+                "and so are their values");
+        }
+    }
+
+    /// <summary>
+    /// The parallel path's removal on failure holds at the smaller sizes the gate now admits: a 6,000-row people page whose
+    /// last value cannot be written fails after every object has committed, and the caller must find nothing of it.
+    /// </summary>
+    [Test]
+    public async Task CreateMetaverseObjectsAsync_PeoplePageOnDefaultGateValueWriteFails_ThrowsAndLeavesNothingOfThePageAsync()
+    {
+        var s = await SeedAsync();
+        var page = BuildPeoplePage(s);
+        page[^1].AttributeValues[^1] = new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = int.MaxValue, StringValue = "poisoned" };
+        var pageIds = page.Select(m => m.Id).ToList();
+
+        await using (var context = NewContext())
+        {
+            var repository = DefaultGateRepository(context, Rows(page), expectedConnections: 4);
+            Assert.That(async () => await repository.CreateMetaverseObjectsAsync(page),
+                Throws.InstanceOf<PostgresException>().With.Property(nameof(PostgresException.SqlState)).EqualTo(PostgresErrorCodes.ForeignKeyViolation),
+                "the write's own failure must reach the caller");
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await CountAsync("MetaverseObjects", "Id", pageIds), Is.Zero, "no object of the failed page may remain");
+            Assert.That(await CountAsync("MetaverseObjectAttributeValues", "MetaverseObjectId", pageIds), Is.Zero,
+                "nor any value another connection committed for it");
         }
     }
 

@@ -26,8 +26,9 @@ namespace JIM.Worker.Tests.Repositories;
 /// the objects' values are, which is the point.
 /// </summary>
 /// <remarks>
-/// Each test forces the path it means to exercise (four connections and a threshold of zero, or a threshold no call
-/// reaches) and asserts the decision with the writers' own predicate. Opt-in via <c>JIM_TEST_RESET_*</c>.
+/// Each test forces the path it means to exercise (four connections, a threshold of zero and every connection used
+/// however few the rows, or a threshold no call reaches) and asserts the decision with the writers' own predicate.
+/// Opt-in via <c>JIM_TEST_RESET_*</c>.
 /// </remarks>
 [TestFixture]
 [Category("RequiresPostgres")]
@@ -86,6 +87,7 @@ public class CsoCreateWithHistoryDatabaseTests
         sync.ConnectionStringForParallelWrites = _connectionString;
         sync.WriteParallelismOverride = Parallelism;
         sync.ParallelWriteRowThreshold = path == WritePath.Parallel ? 0 : int.MaxValue;
+        sync.ParallelWriteRowsPerConnection = 1; // every connection the parallelism allows, however few the rows (#2669)
         Assert.That(sync.ShouldWriteInParallel(rows), Is.EqualTo(path == WritePath.Parallel),
             $"the test means to exercise the {path} path; the gate must agree");
         return sync;
