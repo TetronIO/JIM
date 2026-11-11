@@ -1875,7 +1875,8 @@ public partial class SyncImportTaskProcessor
         // connections (#2909).
         await _syncRepo.PersistRpeiCsoChangesAsync(rpeis, allowParallelWrite: true);
 
-        ReleaseWrittenImportRpeis(rpeis, usedRawSql);
+        ReleaseWrittenImportRpeis(rpeis, usedRawSql, countInActivityTotals, alsoCountInActivityTotals);
+        return usedRawSql;
     }
 
     /// <summary>
@@ -1910,7 +1911,12 @@ public partial class SyncImportTaskProcessor
     /// </summary>
     /// <param name="usedRawSql">Whether the RPEIs were written outside the change tracker (production), rather than left
     /// tracked by the in-memory test repository.</param>
-    private void ReleaseWrittenImportRpeis(List<ActivityRunProfileExecutionItem> rpeis, bool usedRawSql)
+    /// <param name="countInActivityTotals">False to release the items without counting them in the Activity's totals, for
+    /// items a later flush counts; see <see cref="FlushImportRpeisAsync"/> (#2908).</param>
+    /// <param name="alsoCountInActivityTotals">Items already written without being counted, counted now together with
+    /// these; see <see cref="FlushImportRpeisAsync"/>.</param>
+    private void ReleaseWrittenImportRpeis(List<ActivityRunProfileExecutionItem> rpeis, bool usedRawSql, bool countInActivityTotals = true,
+        IReadOnlyCollection<ActivityRunProfileExecutionItem>? alsoCountInActivityTotals = null)
     {
         // Release the change object graphs to allow GC. At 100K CSOs with ~20 attributes each,
         // the ConnectedSystemObjectChange + ChangeAttribute + ChangeAttributeValue objects
@@ -1953,7 +1959,6 @@ public partial class SyncImportTaskProcessor
         }
 
         rpeis.Clear();
-        return usedRawSql;
     }
 
     /// <summary>
