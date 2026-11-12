@@ -4375,81 +4375,119 @@ public class ExportExecutionServer
                 : new Dictionary<int, AttributeDataType>();
         }
 
-        // Apply changes to each CSO in-memory
+        // Apply changes to each CSO in-memory, collecting what the database must be given to match
         var csoUpdates = new List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)>();
+        var supersededValueIds = new List<Guid>();
 
         foreach (var (cso, exportResult) in csosToUpdate)
         {
             var newAttributeValues = new List<ConnectedSystemObjectAttributeValue>();
-            var needsUpdate = false;
 
             // Populate external ID attribute if provided in the export result
             if (!string.IsNullOrEmpty(exportResult.ExternalId) && cso.ExternalIdAttributeId > 0)
             {
                 AttributeDataType? externalIdAttributeType = attributeTypes.TryGetValue(cso.ExternalIdAttributeId, out var foundType) ? foundType : null;
 
-                var externalIdAttrValue = cso.AttributeValues
-                    .FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
-
-                if (externalIdAttrValue == null)
+                var externalIdAttrValue = new ConnectedSystemObjectAttributeValue
                 {
-                    externalIdAttrValue = new ConnectedSystemObjectAttributeValue
-                    {
-                        ConnectedSystemObject = cso,
-                        AttributeId = cso.ExternalIdAttributeId
-                    };
-                    cso.AttributeValues.Add(externalIdAttrValue);
-                    newAttributeValues.Add(externalIdAttrValue);
-                }
-
+                    ConnectedSystemObject = cso,
+                    AttributeId = cso.ExternalIdAttributeId
+                };
                 ApplyExternalIdToAttributeValue(externalIdAttrValue, externalIdAttributeType, exportResult.ExternalId, cso.Id);
 
-                needsUpdate = true;
-                Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId} (type: {AttrType})",
-                    cso.Id, LogSanitiser.Sanitise(exportResult.ExternalId), externalIdAttributeType?.ToString() ?? "Unknown");
+                if (RecordReportedValue(cso, externalIdAttrValue, newAttributeValues, supersededValueIds))
+                {
+                    Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId} (type: {AttrType})",
+                        cso.Id, LogSanitiser.Sanitise(exportResult.ExternalId), externalIdAttributeType?.ToString() ?? "Unknown");
+                }
             }
 
             // Update secondary external ID if provided
             if (!string.IsNullOrEmpty(exportResult.SecondaryExternalId) && cso.SecondaryExternalIdAttributeId.HasValue)
             {
-                var secondaryExternalIdAttrValue = cso.AttributeValues
-                    .FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId.Value);
-
-                if (secondaryExternalIdAttrValue == null)
+                var secondaryExternalIdAttrValue = new ConnectedSystemObjectAttributeValue
                 {
-                    secondaryExternalIdAttrValue = new ConnectedSystemObjectAttributeValue
-                    {
-                        ConnectedSystemObject = cso,
-                        AttributeId = cso.SecondaryExternalIdAttributeId.Value
-                    };
-                    cso.AttributeValues.Add(secondaryExternalIdAttrValue);
-                    newAttributeValues.Add(secondaryExternalIdAttrValue);
+                    ConnectedSystemObject = cso,
+                    AttributeId = cso.SecondaryExternalIdAttributeId.Value,
+                    StringValue = exportResult.SecondaryExternalId
+                };
+
+                if (RecordReportedValue(cso, secondaryExternalIdAttrValue, newAttributeValues, supersededValueIds))
+                {
+                    Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} secondary external ID to {SecondaryExternalId}",
+                        cso.Id, LogSanitiser.Sanitise(exportResult.SecondaryExternalId));
                 }
-
-                secondaryExternalIdAttrValue.StringValue = exportResult.SecondaryExternalId;
-
-                needsUpdate = true;
-                Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} secondary external ID to {SecondaryExternalId}",
-                    cso.Id, LogSanitiser.Sanitise(exportResult.SecondaryExternalId));
             }
 
-            if (needsUpdate)
-            {
+            if (newAttributeValues.Count > 0)
                 csoUpdates.Add((cso, newAttributeValues));
-            }
         }
 
         // Single batch save for all CSO updates
         if (csoUpdates.Count > 0)
         {
             using (Diagnostics.Diagnostics.Database.StartSpan("BatchUpdateCsoAttributeValues")
-                .SetTag("csoCount", csoUpdates.Count))
+                .SetTag("csoCount", csoUpdates.Count)
+                .SetTag("supersededCount", supersededValueIds.Count))
             {
-                await repository.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(csoUpdates);
+                await repository.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(csoUpdates, supersededValueIds);
             }
-            Log.Information("BatchUpdateCsosAfterSuccessfulExportAsync: Batch updated {Count} CSOs", csoUpdates.Count);
+            Log.Information("BatchUpdateCsosAfterSuccessfulExportAsync: Batch updated {Count} CSOs, replacing {SupersededCount} previously recorded value(s)",
+                csoUpdates.Count, supersededValueIds.Count);
         }
     }
+
+    /// <summary>
+    /// Makes <paramref name="reported"/>, a value the Connector reported for the object (its External ID or Secondary
+    /// External ID), the object's only value of that attribute. Returns false, changing nothing, when the object already
+    /// holds exactly that value. Otherwise the object's values of the attribute are replaced in memory: each one that
+    /// is stored is added to <paramref name="supersededValueIds"/>, and the reported value to
+    /// <paramref name="newAttributeValues"/>, so the caller writes the replacement to the database too.
+    /// </summary>
+    /// <remarks>
+    /// The stored value is replaced, never changed in place: the database is written only through the values handed to
+    /// the repository, so a value changed in memory alone (as a rename's new distinguished name once was) stays stale in
+    /// the database until the confirming import, while optimistic apply, comparing against the in-memory object, finds
+    /// nothing left to record. Everything reading the stored value meanwhile reads the old one: a reference to the object
+    /// resolved later in the same run, a later run, and the portal.
+    /// </remarks>
+    private static bool RecordReportedValue(
+        ConnectedSystemObject cso,
+        ConnectedSystemObjectAttributeValue reported,
+        List<ConnectedSystemObjectAttributeValue> newAttributeValues,
+        List<Guid> supersededValueIds)
+    {
+        var held = cso.AttributeValues.Where(av => av.AttributeId == reported.AttributeId).ToList();
+        if (held.Count == 1 && HoldsSameValue(held[0], reported))
+            return false;
+
+        foreach (var value in held)
+        {
+            cso.AttributeValues.Remove(value);
+            if (value.Id != Guid.Empty)
+                supersededValueIds.Add(value.Id);
+        }
+
+        // Keep the attribute the replaced value was loaded with, so anything reading the object later in the run by the
+        // attribute (its name, or whether it is the Secondary External ID) finds the reported value as it found the old.
+        var loadedAttribute = held.Select(value => value.Attribute).FirstOrDefault(attribute => attribute != null);
+        if (loadedAttribute != null)
+            reported.Attribute = loadedAttribute;
+        cso.AttributeValues.Add(reported);
+        newAttributeValues.Add(reported);
+        return true;
+    }
+
+    /// <summary>
+    /// Whether two External ID values hold the same value in the same typed slot. Text is compared exactly: a rename that
+    /// changes only the case of a distinguished name is still a rename, and the name the object now has is recorded.
+    /// </summary>
+    private static bool HoldsSameValue(ConnectedSystemObjectAttributeValue held, ConnectedSystemObjectAttributeValue reported) =>
+        string.Equals(held.StringValue, reported.StringValue, StringComparison.Ordinal) &&
+        held.GuidValue == reported.GuidValue &&
+        held.IntValue == reported.IntValue &&
+        held.LongValue == reported.LongValue &&
+        held.DecimalValue == reported.DecimalValue;
 
     /// <summary>
     /// #2723: records the Partition each object a successful export created or renamed was written to, from the name it

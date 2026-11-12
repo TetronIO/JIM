@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 JIM now records an object's new distinguished name as soon as an export renames or moves it. It kept the old one until the next import, so a group the moved person joined in the same run was given the old name as a member. (#2930)
 - 🐛 When a confirming import confirms, or fails to confirm, an export to an object it found unchanged, the execution item it records now names the object's type, so the Activity's breakdown by Object Type counts it. (#2908)
 - 🐛 An object leaving one import Synchronisation Rule's scope while another still covers it now gives up that rule's values under **Disconnect from Metaverse**; they no longer outrank the rules still covering it. The join stays, recorded as **Left scope, join kept**. (#2821)
 - 🐛 Several import Synchronisation Rules for one Object Type no longer depend on rule order: disagreeing rules report an Ambiguous Match or a new Projection Type Conflict, and an object leaving them all stays joined if a rule that held it says **Remain joined**. (#2823)

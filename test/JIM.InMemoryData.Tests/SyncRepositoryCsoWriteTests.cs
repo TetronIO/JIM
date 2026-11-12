@@ -181,6 +181,28 @@ public class SyncRepositoryCsoWriteTests
         Assert.That(retrieved.AttributeValues[0].StringValue, Is.EqualTo("new-value"));
     }
 
+    /// <summary>
+    /// A value the new one supersedes (a renamed object's previous distinguished name) is removed, as the PostgreSQL
+    /// writer deletes its row, and the object's other values are kept.
+    /// </summary>
+    [Test]
+    public async Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync_SupersededValue_ReplacesItAsync()
+    {
+        var stored = CreateCso();
+        var oldName = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = 99, StringValue = "CN=Old,DC=test" };
+        var other = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = AttrId, StringValue = "anchor" };
+        stored.AttributeValues.AddRange([oldName, other]);
+        _repo.SeedConnectedSystemObject(stored);
+        var newName = new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = 99, StringValue = "CN=New,DC=test" };
+
+        // The caller's own copy of the object, as a run holds one, rather than the instance the store holds.
+        var copy = CreateCso(stored.Id);
+        await _repo.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync([(copy, [newName])], [oldName.Id]);
+
+        var retrieved = await _repo.GetConnectedSystemObjectAsync(CsId, stored.Id);
+        Assert.That(retrieved!.AttributeValues.Select(av => av.StringValue), Is.EquivalentTo(new[] { "anchor", "CN=New,DC=test" }));
+    }
+
     [Test]
     public async Task DeleteConnectedSystemObjectsAsync_RemovesFromStoreAsync()
     {
