@@ -1631,18 +1631,14 @@ public partial class SyncRepository : ISyncRepository
                 // Only add values that aren't already in the collection to avoid duplicates.
                 foreach (var av in newAvs)
                 {
-                    // An id where it has none, as the PostgreSQL writer gives it (#2929).
+                    // An id where it has none, as the PostgreSQL writer gives it (#2929), so a later replacement can
+                    // name the value it supersedes (#2930).
                     if (av.Id == Guid.Empty)
                         av.Id = TimeOrderedIds.New();
 
                     // Fixup FK from nav prop (EF Core does this automatically on SaveChanges)
                     if (av.AttributeId == 0 && av.Attribute != null)
                         av.AttributeId = av.Attribute.Id;
-
-                    // An id for each new value, as the PostgreSQL writer assigns one before it inserts, so a later
-                    // replacement can name the value it supersedes (#2930).
-                    if (av.Id == Guid.Empty)
-                        av.Id = Guid.NewGuid();
 
                     if (!stored.AttributeValues.Contains(av))
                         stored.AttributeValues.Add(av);
