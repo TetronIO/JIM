@@ -239,6 +239,7 @@ function Get-LabSettingsExample {
         # installed from the directoryExtensions Exchange media. computerName may be added; it defaults to ex1.
         exchangeServers           = [ordered]@{
             'exchange-primary' = [ordered]@{ domainController = 'dc-primary'; ipAddress = '10.99.0.31'; prefixLength = 24; gateway = '10.99.0.1' }
+            'exchange-source'  = [ordered]@{ domainController = 'dc-source'; ipAddress = '10.99.0.32'; prefixLength = 24; gateway = '10.99.0.1' }
         }
         # The Exchange prerequisites that are not on its media, downloaded once (README.md, Exchange servers).
         exchangePrerequisiteDirectory = 'D:\media\exchange-prerequisites'

@@ -439,8 +439,8 @@ environment. `JIM_AD_LAB_ADFS_PRIMARY_HOST` (default `adfs.panoply.local`) and `
 
 `exchange-primary` is a Windows Server 2025 member server running Exchange Server SE with the Mailbox role, joined to
 PANOPLY.LOCAL as `ex1.panoply.local`, so JIM's Exchange recipient provisioning (#2021) and GAL sync (#944) meet a real
-Exchange server (#2412). `exchange-source`, the same in RESURGAM.LOCAL, follows as a settings change for two-way GAL
-sync. GENTIAN.LOCAL stays without one. Each is built like the AD FS server (the same media, unattended install and AVMA
+Exchange server (#2412). `exchange-source` is the same in RESURGAM.LOCAL (`ex1.resurgam.local`), for two-way GAL sync.
+GENTIAN.LOCAL stays without one. Both are in `settings.example.json`. Each is built like the AD FS server (the same media, unattended install and AVMA
 licensing) by `host/New-LabExchangeServer.ps1`, which drives `guest/Initialize-LabExchangeServer.ps1` through these
 phases:
 
@@ -493,6 +493,9 @@ if ($update) { $arguments.CumulativeUpdatePath = $update.FullName }
 C:\jim-ad-lab\New-LabExchangeServer.ps1 @arguments
 ```
 
+Then build `exchange-source` the same way, with `-Name 'exchange-source'`, once `exchange-primary` has finished: never
+two at once, as each takes 12 GB of static memory (see "Its cost" below; the monthly rebuild waits the same way).
+
 It is safe to re-run after a failure; an interrupted Exchange Setup resumes. When it has finished it shuts the server
 down (`-LeaveRunning` keeps it up), because the lab starts it only for the scenarios that use Exchange.
 
@@ -533,6 +536,12 @@ the VM's Notes, and every other script refuses a VM without it.
 
 The runner VM (`jim-ad-lab-runner`, Ubuntu, GitHub runner `<host>-jim-ad-lab`) is built and configured from the
 `TetronIO/ci-runners` repository (`docs/hyperv-host.md`), not from this folder.
+
+The lab has no DNS the VM can use, so the VM resolves the lab servers from a marked block in its `/etc/hosts`
+(`dc1.panoply.local`, `dc1.resurgam.local`, `dc1.gentian.local`, `ex1.panoply.local` and `ex1`, `ex1.resurgam.local`),
+written by ci-runners' `scripts/runners/write-jim-ad-lab-hosts.sh`. **A lab server added here, or moved to a new
+address, needs that script re-run on the VM with the new entry**, and the entry added to `docs/hyperv-host.md` in
+ci-runners, in the same piece of work.
 
 One part of that configuration matters to every run here: **`needrestart` must never restart the runner, Docker or
 containerd.** Ubuntu's daily upgrade runs `needrestart`, which restarts services whose libraries changed. On 23 Oct 2026
