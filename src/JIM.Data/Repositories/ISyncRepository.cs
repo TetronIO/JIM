@@ -577,9 +577,16 @@ public interface ISyncRepository
     Task<ConnectedSystemObjectMarkClearResult> ClearConnectedSystemObjectMarksAsync(IReadOnlyCollection<ConnectedSystemObjectMarkClear> clears);
 
     /// <summary>
-    /// Updates CSOs that have new attribute values added (e.g., secondary external ID during export).
+    /// Records attribute values a successful export gave Connected System Objects: the External ID a Create was assigned,
+    /// and the Secondary External ID (the distinguished name, for LDAP) a Create or a rename left the object with. The
+    /// new values are inserted; the rows they supersede (<paramref name="supersededValueIds"/>, the object's previous
+    /// value of the same attribute) are deleted in the same transaction, so the object is never left holding both, or
+    /// neither. Tracked instances of the superseded rows are detached.
     /// </summary>
-    Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates);
+    /// <param name="updates">Each object and the new attribute values to insert for it.</param>
+    /// <param name="supersededValueIds">The ids of the stored attribute values the new ones replace; none by default.</param>
+    Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates,
+        IReadOnlyCollection<Guid>? supersededValueIds = null);
 
     /// <summary>
     /// Records the Partition each Connected System Object is in (#2723): an object a successful export created or

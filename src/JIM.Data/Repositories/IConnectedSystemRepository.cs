@@ -1920,11 +1920,14 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemObjectAttributeValue> newAttributeValues);
 
     /// <summary>
-    /// Batch updates multiple Connected System Objects and their new attribute values in a single SaveChanges call.
-    /// Used after batch export processing to avoid per-CSO database round-trips.
+    /// Batch records the attribute values a successful export gave Connected System Objects, in one transaction: inserts
+    /// the new values and deletes the stored rows they supersede. See
+    /// <see cref="ISyncRepository.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync"/>.
     /// </summary>
     /// <param name="updates">A list of tuples containing the CSO to update and any new attribute values to add.</param>
-    public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates);
+    /// <param name="supersededValueIds">The ids of the stored attribute values the new ones replace; none by default.</param>
+    public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates,
+        IReadOnlyCollection<Guid>? supersededValueIds = null);
 
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
 

@@ -4721,9 +4721,18 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Batch updates multiple Connected System Objects and their new attribute values in a single SaveChanges call.
+    /// Batch records the attribute values a successful export gave Connected System Objects: inserts the new values and
+    /// deletes the stored rows they supersede, in one transaction (the caller's, when it holds one, otherwise this
+    /// method's own), so an object is never left holding both its old and new name, or neither.
     /// </summary>
-    public async Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
+    /// <remarks>
+    /// A superseded row is replaced rather than updated in place, as an import and optimistic export apply replace a
+    /// changed value, so the insert writer and its column list are the only ones writing these rows. Tracked instances
+    /// of the superseded rows are detached once the statements have run (the raw-SQL rule in <c>src/CLAUDE.md</c>): the
+    /// worker's long-lived context would otherwise update a row that no longer exists at its next save.
+    /// </remarks>
+    public async Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates,
+        IReadOnlyCollection<Guid>? supersededValueIds = null)
     {
         if (updates.Count == 0)
             return;
@@ -4745,31 +4754,80 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             }
         }
 
-        // Insert new attribute values via raw SQL (works with untracked entities from AsNoTracking)
         var allNewValues = updates
             .SelectMany(u => u.newAttributeValues.Select(av => (u.cso.Id, av)))
             .ToList();
-        if (allNewValues.Count > 0)
-        {
-            await BulkInsertCsoAttributeValuesRawAsync(allNewValues);
+        var supersededIds = supersededValueIds is { Count: > 0 } ? supersededValueIds.ToArray() : [];
+        if (allNewValues.Count == 0 && supersededIds.Length == 0)
+            return;
 
-            // SPEC-1082 D9: same rationale as the singular overload above - this writes attribute
-            // values outside the Full Import stamp path, so null the stored hash/fingerprint for
-            // every affected CSO, set-based, in the same operation. Only rows with a stamp to clear (#2895): import stamping
-            // is the only writer that sets either column, so a provisioned object, whose external ID this records, has
-            // none, and rewriting its row would leave a dead row version for nothing.
-            var affectedCsoIds = updates.Where(u => u.newAttributeValues.Count > 0).Select(u => u.cso.Id).Distinct().ToArray();
-            if (affectedCsoIds.Length > 0)
+        await using (var ownTransaction = Repository.Database.Database.CurrentTransaction == null
+            ? await Repository.Database.Database.BeginTransactionAsync()
+            : null)
+        {
+            if (supersededIds.Length > 0)
             {
-                await Repository.Database.Database.ExecuteSqlRawAsync(
-                    @"UPDATE ""ConnectedSystemObjects"" SET ""ImportStateHash"" = NULL, ""ImportStateFingerprint"" = NULL
-                      WHERE ""Id"" = ANY({0}) AND (""ImportStateHash"" IS NOT NULL OR ""ImportStateFingerprint"" IS NOT NULL)",
-                    affectedCsoIds);
+                await Repository.Database.ConnectedSystemObjectAttributeValues
+                    .Where(av => supersededIds.Contains(av.Id))
+                    .ExecuteDeleteAsync();
             }
+
+            // Insert new attribute values via raw SQL (works with untracked entities from AsNoTracking)
+            if (allNewValues.Count > 0)
+            {
+                await BulkInsertCsoAttributeValuesRawAsync(allNewValues);
+
+                // SPEC-1082 D9: same rationale as the singular overload above - this writes attribute
+                // values outside the Full Import stamp path, so null the stored hash/fingerprint for
+                // every affected CSO, set-based, in the same operation. Only rows with a stamp to clear (#2895): import stamping
+                // is the only writer that sets either column, so a provisioned object, whose external ID this records, has
+                // none, and rewriting its row would leave a dead row version for nothing.
+                var affectedCsoIds = updates.Where(u => u.newAttributeValues.Count > 0).Select(u => u.cso.Id).Distinct().ToArray();
+                if (affectedCsoIds.Length > 0)
+                {
+                    await Repository.Database.Database.ExecuteSqlRawAsync(
+                        @"UPDATE ""ConnectedSystemObjects"" SET ""ImportStateHash"" = NULL, ""ImportStateFingerprint"" = NULL
+                          WHERE ""Id"" = ANY({0}) AND (""ImportStateHash"" IS NOT NULL OR ""ImportStateFingerprint"" IS NOT NULL)",
+                        affectedCsoIds);
+                }
+            }
+
+            if (ownTransaction != null)
+                await ownTransaction.CommitAsync();
         }
 
-        Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Inserted {AttrCount} new attribute values for {CsoCount} CSOs via raw SQL",
-            allNewValues.Count, updates.Count);
+        // Only now that the deletes are written (committed, or in the caller's transaction): a failure above leaves the
+        // rows, and so their tracked instances, as they were.
+        if (supersededIds.Length > 0)
+            DetachTrackedAttributeValues(supersededIds.ToHashSet());
+
+        Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Inserted {AttrCount} new attribute values, replacing {SupersededCount}, " +
+            "for {CsoCount} CSOs via raw SQL", allNewValues.Count, supersededIds.Length, updates.Count);
+    }
+
+    /// <summary>
+    /// Detaches the tracked instances of the given Connected System Object attribute values, in one pass over the change
+    /// tracker with change detection suspended ("Tracker surgery must not trigger DetectChanges" in <c>src/CLAUDE.md</c>),
+    /// as <c>DetachTrackedEntities</c> in SyncRepository.CsOperations.cs does.
+    /// </summary>
+    private void DetachTrackedAttributeValues(IReadOnlySet<Guid> attributeValueIds)
+    {
+        var db = Repository.Database;
+        var autoDetectChanges = db.ChangeTracker.AutoDetectChangesEnabled;
+        db.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            foreach (var entry in db.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>()
+                         .Where(e => attributeValueIds.Contains(e.Entity.Id))
+                         .ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+        }
+        finally
+        {
+            db.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
     }
 
     /// <summary>

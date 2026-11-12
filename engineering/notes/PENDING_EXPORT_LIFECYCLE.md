@@ -118,7 +118,7 @@ The association to a Synchronisation Rule is **indirect**, via the causality tre
 3. **Execute**: connector's `ExportAsync()` called; PE status → `Executing`
 4. **Capture**: `ProcessedExportItem` snapshots taken BEFORE deletion (enables RPEI creation after PE is gone)
 5. **Success**: PE status → `Exported`; attribute changes → `ExportedPendingConfirmation`
-6. **Create exports**: system-assigned external ID stored on CSO
+6. **Create and rename exports**: the External ID and Secondary External ID (the DN, for LDAP) the Connector reports are stored on the CSO in the batch's results transaction, each replacing the stored value of its attribute (#2930). Optimistic apply leaves the attribute alone for that export, since the reported value is authoritative
 7. **RPEI creation**: `SyncExportTaskProcessor.ProcessExportResultAsync()` creates `ActivityRunProfileExecutionItem` and `ConnectedSystemObjectChange` from the captured snapshot
 
 ## Confirmation and Retry
