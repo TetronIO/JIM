@@ -42,6 +42,15 @@ public class MetaverseObjectChangeAttribute
         AttributeId is > 0 ? AttributeId : Attribute is { Id: > 0 } attribute ? attribute.Id : null;
 
     /// <summary>
+    /// <see cref="AttributeIdForWrite"/> for a raw writer, which refuses a row that names no saved attribute: with no
+    /// foreign key, nothing in the database would refuse it, and it would be written as a row no reader could place.
+    /// </summary>
+    public int RequiredAttributeIdForWrite() =>
+        AttributeIdForWrite() ?? throw new InvalidOperationException(
+            $"The change record attribute row for '{AttributeName}' names no saved attribute. Save the attribute before " +
+            "writing history that names it.");
+
+    /// <summary>
     /// Snapshot of the attribute name at the time of the change.
     /// Preserved even if the attribute definition is later deleted.
     /// </summary>

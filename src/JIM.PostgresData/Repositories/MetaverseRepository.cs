@@ -4381,6 +4381,10 @@ public partial class MetaverseRepository : IMetaverseRepository
     /// </summary>
     public async Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change)
     {
+        // Refuse an attribute row naming no saved attribute before anything is written (#2931).
+        foreach (var attributeChange in change.AttributeChanges)
+            attributeChange.RequiredAttributeIdForWrite();
+
         var changeId = TimeOrderedIds.New();
         change.Id = changeId;
 
@@ -4424,7 +4428,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChangeAttributes exactly.
             await Repository.Database.Database.ExecuteSqlRawAsync(
                 insertAttributeSql,
-                attrChangeId, changeId, BulkSqlHelpers.NullableParam(attrChange.AttributeIdForWrite(), NpgsqlTypes.NpgsqlDbType.Integer),
+                attrChangeId, changeId, attrChange.RequiredAttributeIdForWrite(),
                 attrChange.AttributeName, (int)attrChange.AttributeType);
 
             foreach (var valueChange in attrChange.ValueChanges)

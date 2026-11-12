@@ -331,6 +331,41 @@ public class MvoChangeValuePersistenceDatabaseTests
         }
     }
 
+    /// <summary>
+    /// A change record's attribute row names its attribute by a plain id with no foreign key (#2931), so nothing in the
+    /// database refuses a row that names none. Both raw writers refuse it instead, as the Connected System Object writers
+    /// do, rather than write a row no reader could place.
+    /// </summary>
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task ChangeHistoryWritePaths_AttributeRowNamingNoAttribute_ThrowsAndWritesNothingAsync(bool bulkPath)
+    {
+        var (mvo, _) = await SeedObjectAndActivityAsync();
+        var change = new MetaverseObjectChange
+        {
+            MetaverseObjectId = mvo.Id,
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = ObjectChangeType.AttributeFlow,
+            InitiatedByType = ActivityInitiatorType.System
+        };
+        change.AttributeChanges.Add(new MetaverseObjectChangeAttribute
+        {
+            MetaverseObjectChange = change, AttributeName = "title", AttributeType = AttributeDataType.Text
+        });
+
+        await using (var writeContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeContext);
+            Func<Task> write = bulkPath
+                ? () => new SyncRepository(repository).PersistPendingMvoChangesAsync([change], [])
+                : () => repository.Metaverse.CreateMetaverseObjectChangeDirectAsync(change);
+            Assert.That(write, Throws.InvalidOperationException.With.Message.Contains("title"));
+        }
+
+        await using var readContext = NewContext();
+        Assert.That(await readContext.MetaverseObjectChangeAttributes.CountAsync(), Is.Zero);
+    }
+
     [Test]
     public async Task CreateMetaverseObjectChangeDirectAsync_ActivityId_PersistsAsync()
     {

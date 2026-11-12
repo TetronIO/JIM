@@ -229,8 +229,18 @@ public class JimDbContext : DbContext
         if (changeTracker == null)
             return;
 
-        changeTracker.Tracked += (_, e) => WriteHistoryAttributeId(e.Entry);
-        changeTracker.StateChanged += (_, e) => WriteHistoryAttributeId(e.Entry);
+        // Return before reading e.Entry (a new EntityEntry on every read) for the entities that cannot be an insert: the
+        // Worker's tracking context materialises hundreds of thousands per page.
+        changeTracker.Tracked += (_, e) =>
+        {
+            if (!e.FromQuery)
+                WriteHistoryAttributeId(e.Entry);
+        };
+        changeTracker.StateChanged += (_, e) =>
+        {
+            if (e.NewState == EntityState.Added)
+                WriteHistoryAttributeId(e.Entry);
+        };
     }
 
     private static void WriteHistoryAttributeId(EntityEntry entry)
@@ -240,8 +250,8 @@ public class JimDbContext : DbContext
 
         var (attributeId, attributeName) = entry.Entity switch
         {
-            ConnectedSystemObjectChangeAttribute { AttributeId: null } attributeChange => (attributeChange.AttributeIdForWrite(), attributeChange.AttributeName),
-            MetaverseObjectChangeAttribute { AttributeId: null } attributeChange => (attributeChange.AttributeIdForWrite(), attributeChange.AttributeName),
+            ConnectedSystemObjectChangeAttribute { AttributeId: null or <= 0 } attributeChange => (attributeChange.AttributeIdForWrite(), attributeChange.AttributeName),
+            MetaverseObjectChangeAttribute { AttributeId: null or <= 0 } attributeChange => (attributeChange.AttributeIdForWrite(), attributeChange.AttributeName),
             _ => (0, null)
         };
         if (attributeId == 0)

@@ -76,6 +76,17 @@ public class HistoryAttributeIdOnInsertTests
     }
 
     [Test]
+    public void Add_HistoryRowWithZeroIdAndUnsavedAttribute_Throws()
+    {
+        // A builder that copies an unsaved attribute's id copies 0, which names no attribute either.
+        using var ctx = NewContext();
+        var unsaved = new MetaverseAttribute { Name = "title" };
+        var row = new MetaverseObjectChangeAttribute { Attribute = unsaved, AttributeId = unsaved.Id, AttributeName = "title" };
+
+        Assert.That(() => ctx.Add(row), Throws.InvalidOperationException.With.Message.Contains("title"));
+    }
+
+    [Test]
     public void Add_HistoryRowNamingNoAttribute_Throws()
     {
         using var ctx = NewContext();

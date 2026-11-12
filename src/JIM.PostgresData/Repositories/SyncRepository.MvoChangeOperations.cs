@@ -81,19 +81,20 @@ public partial class SyncRepository
         IReadOnlyList<MetaverseObjectChange> newChanges,
         IReadOnlyList<MetaverseObjectChange> attributeAppendsToExistingChanges)
     {
+        // Attribute rows from BOTH sets write to the same table in one COPY call. Gathered before anything is written,
+        // so a row naming no saved attribute is refused before any of the batch reaches the database (#2931).
+        var allAttrChanges = newChanges
+            .Concat(attributeAppendsToExistingChanges)
+            .SelectMany(c => c.AttributeChanges.Select(ac =>
+                (ChangeId: c.Id, AttributeId: (int?)ac.RequiredAttributeIdForWrite(), AttrChange: ac)))
+            .ToList();
+
         if (newChanges.Count > 0)
         {
             using var changesSpan = MvoActivitySource.StartActivity("MvoChange.Persist.Changes");
             changesSpan?.SetTag("rowCount", newChanges.Count);
             await BulkInsertMvoChangesRawAsync(newChanges);
         }
-
-        // Attribute rows from BOTH sets write to the same table in one COPY call.
-        var allAttrChanges = newChanges
-            .Concat(attributeAppendsToExistingChanges)
-            .SelectMany(c => c.AttributeChanges.Select(ac =>
-                (ChangeId: c.Id, AttributeId: ac.AttributeIdForWrite(), AttrChange: ac)))
-            .ToList();
 
         if (allAttrChanges.Count > 0)
         {
