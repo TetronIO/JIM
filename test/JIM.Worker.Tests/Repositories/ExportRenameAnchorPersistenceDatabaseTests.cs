@@ -158,6 +158,121 @@ public class ExportRenameAnchorPersistenceDatabaseTests
     }
 
     /// <summary>
+    /// The ordinary LDAP Create: written under exactly the name provisioning planned, which the Connector reports back.
+    /// Nothing is written: the stored row is the one provisioning wrote, and the object's import-state hash stands.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateReportedUnderItsPlannedName_LeavesTheStoredNameAndImportStateUntouchedAsync()
+    {
+        var s = await SeedSchemaAsync();
+        var user = await SeedProvisionedUserAsync(s, plannedName: OldName, externalId: null);
+        var importState = await StampImportStateAsync(user.CsoId);
+        var plannedRowId = (await ReadStoredRowsAsync(user.CsoId, s.DistinguishedNameAttributeId)).Single().Id;
+        await SaveExportAsync(WithChanges(NewExport(s, user, T0, PendingExportChangeType.Create, hasUnresolvedReferences: false),
+            NewChange(s.DistinguishedNameAttributeId, PendingExportAttributeChangeType.Add, OldName)));
+
+        var result = await ExecuteAsync(s, () => CreateConnector(_ => ConnectedSystemExportResult.Succeeded(null, OldName)));
+
+        Assert.That(result.FailedCount, Is.Zero);
+        var rows = await ReadStoredRowsAsync(user.CsoId, s.DistinguishedNameAttributeId);
+        await using var verify = NewContext();
+        var stored = await verify.ConnectedSystemObjects.SingleAsync(cso => cso.Id == user.CsoId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows.Select(row => (row.Id, row.StringValue)), Is.EqualTo(new[] { (plannedRowId, (string?)OldName) }),
+                "the row provisioning wrote is kept, not replaced by an identical one");
+            Assert.That((stored.ImportStateHash, stored.ImportStateFingerprint), Is.EqualTo(importState), "nothing changed, so the import-state hash stands");
+        }
+    }
+
+    /// <summary>
+    /// A rename that changes only the case of a name is still a rename: the name the object now has is recorded, as one
+    /// value, although optimistic apply compares identifiers without regard to case unless the attribute is case-exact.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CaseOnlyRename_RecordsTheNewCaseAsTheOnlyValueAsync()
+    {
+        const string heldName = "CN=Bob,OU=Sales,DC=panoply,DC=local";
+        const string renamedName = "CN=bob,OU=Sales,DC=panoply,DC=local";
+        var s = await SeedSchemaAsync();
+        var user = await SeedUserAsync(s, "user-guid-1", heldName);
+        await SeedUpdateAsync(s, user, T0, newDistinguishedName: renamedName);
+
+        var result = await ExecuteAsync(s, () => CreateConnector(_ => ConnectedSystemExportResult.Succeeded(null, renamedName)));
+
+        Assert.That(result.FailedCount, Is.Zero);
+        Assert.That(await ReadStoredValuesAsync(user.CsoId, s.DistinguishedNameAttributeId), Is.EqualTo(new[] { renamedName }),
+            "compared exactly: the held name differs from the reported one only in case");
+    }
+
+    /// <summary>
+    /// A Create whose anchor JIM staged in one form and the Connector reports in another (a key the target formats, such
+    /// as a zero-padded number): the reported value is the anchor. Optimistic apply recording the staged one beside it
+    /// would leave the object two anchors, and every later read of its External ID would fail.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateStagedUnderAnotherExternalIdThanReported_StoresOnlyTheReportedOneAsync()
+    {
+        var s = await SeedSchemaAsync();
+        var user = await SeedProvisionedUserAsync(s, plannedName: OldName, externalId: null);
+        await SaveExportAsync(WithChanges(NewExport(s, user, T0, PendingExportChangeType.Create, hasUnresolvedReferences: false),
+            NewChange(s.ObjectGuidAttributeId, PendingExportAttributeChangeType.Add, "1001"),
+            NewChange(s.DistinguishedNameAttributeId, PendingExportAttributeChangeType.Add, OldName)));
+
+        var result = await ExecuteAsync(s, () => CreateConnector(_ => ConnectedSystemExportResult.Succeeded("00001001", OldName)));
+
+        Assert.That(result.FailedCount, Is.Zero);
+        Assert.That(await ReadStoredValuesAsync(user.CsoId, s.ObjectGuidAttributeId), Is.EqualTo(new[] { "00001001" }));
+    }
+
+    /// <summary>
+    /// The same for the Secondary External ID: a Create whose staged name the Connector reports differently leaves the
+    /// object holding the reported name alone.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateStagedUnderAnotherNameThanReported_StoresOnlyTheReportedNameAsync()
+    {
+        var s = await SeedSchemaAsync();
+        var user = await SeedProvisionedUserAsync(s, plannedName: OldName, externalId: null);
+        await SeedCreateAsync(s, user, T0, distinguishedName: OldName);
+
+        var result = await ExecuteAsync(s, () => CreateConnector(_ => ConnectedSystemExportResult.Succeeded("user-guid-1", NewName)));
+
+        Assert.That(result.FailedCount, Is.Zero);
+        Assert.That(await ReadStoredValuesAsync(user.CsoId, s.DistinguishedNameAttributeId), Is.EqualTo(new[] { NewName }));
+    }
+
+    /// <summary>
+    /// The file-based export path records exported values too (#1936), so it must leave the same single anchor.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_FileConnectorCreateStagedUnderAnotherExternalIdThanReported_StoresOnlyTheReportedOneAsync()
+    {
+        var s = await SeedSchemaAsync();
+        var user = await SeedProvisionedUserAsync(s, plannedName: OldName, externalId: null);
+        await SaveExportAsync(WithChanges(NewExport(s, user, T0, PendingExportChangeType.Create, hasUnresolvedReferences: false),
+            NewChange(s.ObjectGuidAttributeId, PendingExportAttributeChangeType.Add, "1001"),
+            NewChange(s.DisplayNameAttributeId, PendingExportAttributeChangeType.Add, "Joe Bloggs")));
+
+        var connector = new Mock<IConnector>();
+        connector.Setup(c => c.Name).Returns("File Connector");
+        connector.As<IConnectorExportUsingFiles>()
+            .Setup(c => c.ExportAsync(It.IsAny<IList<ConnectedSystemSettingValue>>(), It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<ConnectedSystemSettingValue> _, IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+                exports.Select(_ => ConnectedSystemExportResult.Succeeded("00001001", null)).ToList());
+
+        var result = await ExecuteAsync(s, () => connector);
+
+        Assert.That(result.FailedCount, Is.Zero);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await ReadStoredValuesAsync(user.CsoId, s.ObjectGuidAttributeId), Is.EqualTo(new[] { "00001001" }));
+            Assert.That(await ReadStoredValuesAsync(user.CsoId, s.DisplayNameAttributeId), Is.EqualTo(new[] { "Joe Bloggs" }),
+                "the export's other values are still recorded");
+        }
+    }
+
+    /// <summary>
     /// A mover: the user moves to another container and joins a group in the same synchronisation, so one export run
     /// carries both. The group's member reference is resolved in the deferred pass, after the rename, from the stored
     /// distinguished name; it must name the user as it is now called, or the directory is given a member that does not
@@ -223,7 +338,7 @@ public class ExportRenameAnchorPersistenceDatabaseTests
             }
 
             Assert.That(ctx.Entry(tracked).State, Is.EqualTo(EntityState.Detached), "the superseded row's tracked instance is detached");
-            Assert.DoesNotThrowAsync(() => ctx.SaveChangesAsync());
+            Assert.That(() => ctx.SaveChangesAsync(), Throws.Nothing);
         }
 
         await using var verify = NewContext();
@@ -317,6 +432,26 @@ public class ExportRenameAnchorPersistenceDatabaseTests
             .Where(av => av.ConnectedSystemObject.Id == csoId && av.AttributeId == attributeId)
             .Select(av => av.StringValue)
             .ToArrayAsync();
+    }
+
+    /// <summary>Every row the database holds for one attribute of one object, read on a fresh context.</summary>
+    private async Task<List<ConnectedSystemObjectAttributeValue>> ReadStoredRowsAsync(Guid csoId, int attributeId)
+    {
+        await using var verify = NewContext();
+        return await verify.ConnectedSystemObjectAttributeValues
+            .Where(av => av.ConnectedSystemObject.Id == csoId && av.AttributeId == attributeId)
+            .ToListAsync();
+    }
+
+    /// <summary>Gives the object an import-state hash and fingerprint, as an import stamps them; returns the pair.</summary>
+    private async Task<(Guid? Hash, Guid? Fingerprint)> StampImportStateAsync(Guid csoId)
+    {
+        var stamp = ((Guid?)Guid.NewGuid(), (Guid?)Guid.NewGuid());
+        await using var seed = NewContext();
+        await seed.ConnectedSystemObjects.Where(cso => cso.Id == csoId).ExecuteUpdateAsync(set => set
+            .SetProperty(cso => cso.ImportStateHash, stamp.Item1)
+            .SetProperty(cso => cso.ImportStateFingerprint, stamp.Item2));
+        return stamp;
     }
 
     private async Task<Schema> SeedSchemaAsync()
@@ -434,6 +569,12 @@ public class ExportRenameAnchorPersistenceDatabaseTests
         Id = Guid.NewGuid(), ConnectedSystemId = s.SystemId, ConnectedSystemObjectId = target.CsoId, SourceMetaverseObjectId = target.MvoId,
         ChangeType = changeType, Status = PendingExportStatus.Pending, HasUnresolvedReferences = hasUnresolvedReferences, CreatedAt = createdAt
     };
+
+    private static PendingExport WithChanges(PendingExport export, params PendingExportAttributeValueChange[] changes)
+    {
+        export.AttributeValueChanges.AddRange(changes);
+        return export;
+    }
 
     private static PendingExportAttributeValueChange NewChange(int attributeId, PendingExportAttributeChangeType changeType, string? value) => new()
     {

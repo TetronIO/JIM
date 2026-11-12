@@ -3154,7 +3154,8 @@ public class ExportExecutionServer
             // (D9's dedupe guarantee depends on this ordering; see D11).
             if (successfulNonDeleteExports.Count > 0)
             {
-                await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, repository);
+                await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, repository,
+                    ReportedAnchorAttributes(csosToUpdate));
             }
 
             // Collision Remediation revised Metaverse values outside any synchronisation: mark the hosting systems of every
@@ -4139,7 +4140,8 @@ public class ExportExecutionServer
     private async Task<List<PendingExport>> ApplyOptimisticExportUpdatesAsync(
         List<PendingExport> successfulNonDeleteExports,
         ExportExecutionResult result,
-        ISyncRepository repository)
+        ISyncRepository repository,
+        IReadOnlyDictionary<Guid, HashSet<int>> reportedAnchorAttributes)
     {
         using var span = Diagnostics.Diagnostics.Database.StartSpan("OptimisticApply")
             .SetTag("count", successfulNonDeleteExports.Count);
@@ -4165,8 +4167,10 @@ public class ExportExecutionServer
                 // must not be applied as though it had been; the calculator sees the export without it.
                 // #2039: nor was a change the Connector wrote with an interim value until an Initial
                 // Password is delivered, so that is left out too (see AsWrittenForOptimisticApply).
+                // #2930: nor is a change to an External ID the Connector reported, which the batch has already recorded
+                // as reported (see AsWrittenForOptimisticApply).
                 delta = OptimisticExportApplyCalculator.CalculateDelta(
-                    successfulNonDeleteExports.Select(AsWrittenForOptimisticApply).ToList());
+                    successfulNonDeleteExports.Select(pe => AsWrittenForOptimisticApply(pe, reportedAnchorAttributes)).ToList());
 
                 // SPEC-1082 D9: any CSO whose attribute values this optimistic apply is about to mutate
                 // outside the Full Import stamp path (D6/D7) must have its stored ImportStateHash and
@@ -4450,6 +4454,9 @@ public class ExportExecutionServer
     /// the database until the confirming import, while optimistic apply, comparing against the in-memory object, finds
     /// nothing left to record. Everything reading the stored value meanwhile reads the old one: a reference to the object
     /// resolved later in the same run, a later run, and the portal.
+    /// If the batch's results transaction rolls back after the replacement is written, the database keeps the old value
+    /// while the in-memory object holds the reported one; nothing reuses that object afterwards (the batch's failure is
+    /// recorded without walking it, and the deferred pass and later runs reload from the database).
     /// </remarks>
     private static bool RecordReportedValue(
         ConnectedSystemObject cso,
@@ -4910,7 +4917,8 @@ public class ExportExecutionServer
             // a recording that failed outright and an export carrying a value it could not record (#2183).
             var unrecordedExports = successfulNonDeleteExports.Count == 0
                 ? []
-                : await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, SyncRepo);
+                : await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, SyncRepo,
+                    ReportedAnchorAttributes(csosToUpdate));
 
             if (autoConfirm && unrecordedExports.Count > 0)
                 await LeaveUnrecordedExportsUnconfirmedAsync(unrecordedExports, exportsToDelete, result);
@@ -5037,14 +5045,57 @@ public class ExportExecutionServer
 
     /// <summary>
     /// The export as optimistic apply should see it: only the changes whose asserted value the target was actually
-    /// given (<see cref="IsWrittenAsAsserted"/>). Values sent on an earlier partial write and now awaiting confirmation
-    /// are kept, since re-applying them is a no-op by construction (add-if-absent, set-if-different). Returns the
-    /// export itself when every change qualifies, the ordinary case.
+    /// given (<see cref="IsWrittenAsAsserted"/>), less any change to an External ID whose value the Connector reported
+    /// for the export's object (#2930). The reported value is authoritative and the batch has already recorded it
+    /// (<see cref="BatchUpdateCsosAfterSuccessfulExportAsync"/>); applying the staged value as well would add a second
+    /// value to a single-valued attribute wherever the two differ, as when a Connector formats the key it was given.
+    /// Values sent on an earlier partial write and now awaiting confirmation are kept, since re-applying them is a
+    /// no-op by construction (add-if-absent, set-if-different). Returns the export itself when every change
+    /// qualifies, the ordinary case.
     /// </summary>
-    private static PendingExport AsWrittenForOptimisticApply(PendingExport pendingExport) =>
-        pendingExport.AttributeValueChanges.All(IsWrittenAsAsserted)
+    /// <param name="pendingExport">The export the target accepted.</param>
+    /// <param name="reportedAnchorAttributes">For each object, the External ID attributes the Connector reported a
+    /// value for (<see cref="ReportedAnchorAttributes"/>).</param>
+    private static PendingExport AsWrittenForOptimisticApply(PendingExport pendingExport,
+        IReadOnlyDictionary<Guid, HashSet<int>> reportedAnchorAttributes)
+    {
+        var reported = pendingExport.ConnectedSystemObjectId is { } objectId
+            && reportedAnchorAttributes.TryGetValue(objectId, out var attributeIds)
+                ? attributeIds
+                : null;
+
+        bool Applies(PendingExportAttributeValueChange change) =>
+            IsWrittenAsAsserted(change) && (reported == null || !reported.Contains(change.AttributeId));
+
+        return pendingExport.AttributeValueChanges.All(Applies)
             ? pendingExport
-            : WithChanges(pendingExport, pendingExport.AttributeValueChanges.Where(IsWrittenAsAsserted).ToList());
+            : WithChanges(pendingExport, pendingExport.AttributeValueChanges.Where(Applies).ToList());
+    }
+
+    /// <summary>
+    /// For each object a batch is recording a reported value for, the External ID attributes the Connector reported
+    /// (#2930): the primary External ID where it reported one and the object type has one, and the secondary External
+    /// ID (the DN for LDAP) where it reported one and the object type has one. The same conditions
+    /// <see cref="BatchUpdateCsosAfterSuccessfulExportAsync"/> records them under, so optimistic apply leaves exactly
+    /// those attributes alone.
+    /// </summary>
+    private static Dictionary<Guid, HashSet<int>> ReportedAnchorAttributes(
+        IEnumerable<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)> csosToUpdate)
+    {
+        var reported = new Dictionary<Guid, HashSet<int>>();
+        foreach (var (cso, exportResult) in csosToUpdate)
+        {
+            var attributeIds = new HashSet<int>();
+            if (!string.IsNullOrEmpty(exportResult.ExternalId) && cso.ExternalIdAttributeId > 0)
+                attributeIds.Add(cso.ExternalIdAttributeId);
+            if (!string.IsNullOrEmpty(exportResult.SecondaryExternalId) && cso.SecondaryExternalIdAttributeId.HasValue)
+                attributeIds.Add(cso.SecondaryExternalIdAttributeId.Value);
+            if (attributeIds.Count > 0)
+                reported[cso.Id] = attributeIds;
+        }
+
+        return reported;
+    }
 
     /// <summary>
     /// Whether the target was given the value a change asserts, so optimistic apply may record it on the Connected System
