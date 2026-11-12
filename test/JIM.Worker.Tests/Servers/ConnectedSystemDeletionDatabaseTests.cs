@@ -204,6 +204,7 @@ public class ConnectedSystemDeletionDatabaseTests
         public Guid MvoChangeId { get; init; }
         public Guid CsoChangeId { get; init; }
         public Guid CsoId { get; init; }
+        public int CsAttributeId { get; init; }
         public Guid ExecutionItemId { get; init; }
         public Guid ActivityId { get; init; }
     }
@@ -349,6 +350,7 @@ public class ConnectedSystemDeletionDatabaseTests
             MvoChangeId = mvoChange.Id,
             CsoChangeId = csoChange.Id,
             CsoId = cso.Id,
+            CsAttributeId = csAttr.Id,
             ExecutionItemId = executionItem.Id,
             ActivityId = activity.Id
         };
@@ -413,8 +415,8 @@ public class ConnectedSystemDeletionDatabaseTests
         Assert.That(await verify.ConnectedSystemObjectTypes.AnyAsync(), Is.False, "Object types should be removed.");
 
         // Change history is retained, with foreign keys to the now-deleted schema/objects nulled.
-        // DeletedObjectTypeId / AttributeId / ReferenceValueId are shadow FKs (no CLR property), so they are read via
-        // EF.Property projections which work under NoTracking.
+        // DeletedObjectTypeId is a shadow FK (no CLR property), so it is read via an EF.Property projection, which works
+        // under NoTracking.
         Assert.That(await verify.ConnectedSystemObjectChanges.AnyAsync(c => c.Id == ids.CsoChangeId), Is.True,
             "Change history should be retained when deleteChangeHistory is false.");
 
@@ -429,10 +431,11 @@ public class ConnectedSystemDeletionDatabaseTests
         var csoChange = await verify.ConnectedSystemObjectChanges.SingleAsync(c => c.Id == ids.CsoChangeId);
         Assert.That(csoChange.ConnectedSystemObjectId, Is.EqualTo(ids.CsoId), "Retained change should keep the deleted CSO's id.");
 
-        var changeAttributeFk = await verify.ConnectedSystemObjectChangeAttributes
-            .Select(a => EF.Property<int?>(a, "AttributeId"))
+        // And its attribute by plain id (#2931): the retained change attribute keeps naming the deleted attribute.
+        var changeAttributeId = await verify.ConnectedSystemObjectChangeAttributes
+            .Select(a => a.AttributeId)
             .SingleAsync();
-        Assert.That(changeAttributeFk, Is.Null, "Retained change attribute should null its attribute FK (SetNull cascade).");
+        Assert.That(changeAttributeId, Is.EqualTo(ids.CsAttributeId), "Retained change attribute should keep the deleted attribute's id.");
 
         var changeValueReference = await verify.ConnectedSystemObjectChangeAttributeValues
             .Select(v => v.ReferenceValueId)

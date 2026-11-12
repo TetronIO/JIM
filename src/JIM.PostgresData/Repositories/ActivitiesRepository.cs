@@ -46,12 +46,9 @@ public partial class ActivityRepository : IActivityRepository
         foreach (var item in items.Where(i => i.ConnectedSystemObjectId == null && i.ConnectedSystemObject is { Id: var id } && id != Guid.Empty))
             item.ConnectedSystemObjectId = item.ConnectedSystemObject!.Id;
 
-        // AddRange traverses each item's navigation graph and marks every untracked entity it reaches as Added.
-        // Connected System Object change snapshots carried on the sync outcomes reference pre-existing attribute
-        // definitions, which must not be re-inserted. Sever those navigations first, preserving their shadow foreign keys
-        // so the persisted rows keep the links. A change names its object, and a value its referenced object, by plain id
-        // (#2669), so there is nothing to sever there.
-        var severedAttributeIds = new List<(ConnectedSystemObjectChangeAttribute AttributeChange, int AttributeId)>();
+        // Connected System Object change snapshots carried on the sync outcomes name their attributes, as a change names
+        // its object and a value its referenced object, by plain id (#2669, #2931): nothing for AddRange to traverse into,
+        // and the id written is the one set, else the working reference's.
         var changeSnapshots = items
             .SelectMany(i => i.SyncOutcomes.Select(o => o.ConnectedSystemObjectChange))
             .Concat(items.Select(i => i.ConnectedSystemObjectChange))
@@ -75,11 +72,7 @@ public partial class ActivityRepository : IActivityRepository
         {
             foreach (var attributeChange in change.AttributeChanges)
             {
-                if (attributeChange.Attribute != null)
-                {
-                    severedAttributeIds.Add((attributeChange, attributeChange.Attribute.Id));
-                    attributeChange.Attribute = null;
-                }
+                attributeChange.AttributeId = attributeChange.AttributeIdForWrite();
 
                 // Marked as the bulk change record writer marks them (#2690), so the change record reference fix-up
                 // resolves what this path writes too: a snapshot of staged or withdrawn reference values names its
@@ -96,10 +89,6 @@ public partial class ActivityRepository : IActivityRepository
         }
 
         Repository.Database.ActivityRunProfileExecutionItems.AddRange(items);
-
-        // Re-apply the severed foreign keys via their shadow properties now the entities are tracked.
-        foreach (var (attributeChange, attributeId) in severedAttributeIds)
-            Repository.Database.Entry(attributeChange).Property("AttributeId").CurrentValue = attributeId;
 
         await Repository.Database.SaveChangesAsync();
 

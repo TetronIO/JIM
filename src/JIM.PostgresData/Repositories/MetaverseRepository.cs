@@ -1985,8 +1985,17 @@ public partial class MetaverseRepository : IMetaverseRepository
                 {
                     AttributeName = ac.AttributeName,
                     AttributeType = ac.AttributeType,
-                    AttributePlurality = ac.Attribute != null ? ac.Attribute.AttributePlurality : AttributePlurality.SingleValued,
-                    AttributeId = ac.Attribute != null ? ac.Attribute.Id : (int?)null,
+                    // The attribute is named by plain id (#2931): its plurality is the live definition's while it is
+                    // there, and its id is given only then, so nothing links to an attribute that has gone. The name and
+                    // type are the row's own copies either way.
+                    AttributePlurality = database.MetaverseAttributes
+                        .Where(attribute => attribute.Id == ac.AttributeId)
+                        .Select(attribute => (AttributePlurality?)attribute.AttributePlurality)
+                        .FirstOrDefault() ?? AttributePlurality.SingleValued,
+                    AttributeId = database.MetaverseAttributes
+                        .Where(attribute => attribute.Id == ac.AttributeId)
+                        .Select(attribute => (int?)attribute.Id)
+                        .FirstOrDefault(),
                     // Capped as the detail loads cap an object's values (#2498): a large group's change carries one
                     // value change per member, and the rest are read a window at a time.
                     ValueChangeTotal = ac.ValueChanges.Count(),
@@ -2616,14 +2625,11 @@ public partial class MetaverseRepository : IMetaverseRepository
         foreach (var change in metaverseObject.Changes.Where(c => !newOnly || c.Id == Guid.Empty))
         {
             change.MetaverseObjectId = metaverseObject.Id;
-            foreach (var attribute in change.AttributeChanges
-                         .Select(attributeChange => attributeChange.Attribute)
-                         .Where(attribute => attribute != null && Repository.Database.Entry(attribute).State == EntityState.Detached))
-                Repository.Database.MetaverseAttributes.Attach(attribute!);
-
             Repository.Database.Entry(change).State = EntityState.Added;
             foreach (var attributeChange in change.AttributeChanges)
             {
+                // The attribute is named by plain id (#2931); the working reference is not a relationship.
+                attributeChange.AttributeId = attributeChange.AttributeIdForWrite();
                 Repository.Database.Entry(attributeChange).State = EntityState.Added;
                 foreach (var valueChange in attributeChange.ValueChanges)
                     Repository.Database.Entry(valueChange).State = EntityState.Added;
@@ -4360,6 +4366,9 @@ public partial class MetaverseRepository : IMetaverseRepository
     /// <inheritdoc />
     public async Task CreateMetaverseObjectChangeAsync(MetaverseObjectChange change)
     {
+        // The attribute is named by plain id (#2931); the working reference is not a relationship.
+        foreach (var attributeChange in change.AttributeChanges)
+            attributeChange.AttributeId = attributeChange.AttributeIdForWrite();
         Repository.Database.MetaverseObjectChanges.Add(change);
         await Repository.Database.SaveChangesAsync();
     }
@@ -4372,6 +4381,10 @@ public partial class MetaverseRepository : IMetaverseRepository
     /// </summary>
     public async Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change)
     {
+        // Refuse an attribute row naming no saved attribute before anything is written (#2931).
+        foreach (var attributeChange in change.AttributeChanges)
+            attributeChange.RequiredAttributeIdForWrite();
+
         var changeId = TimeOrderedIds.New();
         change.Id = changeId;
 
@@ -4415,7 +4428,8 @@ public partial class MetaverseRepository : IMetaverseRepository
             // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChangeAttributes exactly.
             await Repository.Database.Database.ExecuteSqlRawAsync(
                 insertAttributeSql,
-                attrChangeId, changeId, attrChange.Attribute!.Id, attrChange.AttributeName, (int)attrChange.AttributeType);
+                attrChangeId, changeId, attrChange.RequiredAttributeIdForWrite(),
+                attrChange.AttributeName, (int)attrChange.AttributeType);
 
             foreach (var valueChange in attrChange.ValueChanges)
             {

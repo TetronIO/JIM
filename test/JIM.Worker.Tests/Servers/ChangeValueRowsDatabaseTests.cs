@@ -562,6 +562,8 @@ public class ChangeValueRowsDatabaseTests
         var manager = new MetaverseAttribute { Name = "manager", Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.SingleValued };
         ctx.MetaverseObjectTypes.Add(type);
         ctx.MetaverseAttributes.AddRange(proxyAddresses, manager);
+        // Saved first: history names its attribute by plain id (#2931), so the attributes need theirs before it is written.
+        await ctx.SaveChangesAsync();
         var subject = new MetaverseObject { Id = Guid.NewGuid(), Type = type, Origin = MetaverseObjectOrigin.Projected, CachedDisplayName = "Dan Ward" };
         ctx.MetaverseObjects.Add(subject);
 

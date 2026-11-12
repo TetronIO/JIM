@@ -145,7 +145,7 @@ public partial class MetaverseRepository
         var attributeId = condition.AttributeId;
         var valuePredicate = ValuePredicate(condition);
         return c => c.AttributeChanges.Any(ac =>
-            ac.Attribute != null && ac.Attribute.Id == attributeId &&
+            ac.AttributeId == attributeId &&
             ac.ValueChanges.AsQueryable().Any(valuePredicate));
     }
 

@@ -21,7 +21,8 @@ namespace JIM.Worker.Tests.Repositories;
 /// <summary>
 /// Every way JIM deletes a Connected System Object or a Metaverse Object leaves the history that names it alone (#2669):
 /// no change record, change value, Run Profile Execution Item or Activity is updated or deleted, whether by a statement
-/// of the deleter's own or by a foreign key's action in the database.
+/// of the deleter's own or by a foreign key's action in the database. The same holds for every way JIM deletes an
+/// attribute the history names (#2931): a change record's attribute rows keep naming it by its id.
 /// <para>
 /// Each entry point runs inside a transaction the test holds, against objects with history of every kind naming them,
 /// and the test reads <c>pg_stat_xact_user_tables</c> on that transaction's connection at its start and before rolling
@@ -41,12 +42,13 @@ namespace JIM.Worker.Tests.Repositories;
 public class AuditReferenceDeletionWritesDatabaseTests
 {
     /// <summary>
-    /// The tables whose rows name a Connected System Object or a Metaverse Object as history.
+    /// The tables whose rows name a Connected System Object, a Metaverse Object or an attribute as history.
     /// </summary>
     private static readonly string[] AuditTables =
     [
-        "ConnectedSystemObjectChanges", "ConnectedSystemObjectChangeAttributeValues", "ActivityRunProfileExecutionItems",
-        "MetaverseObjectChanges", "MetaverseObjectChangeAttributeValues", "Activities"
+        "ConnectedSystemObjectChanges", "ConnectedSystemObjectChangeAttributes", "ConnectedSystemObjectChangeAttributeValues",
+        "ActivityRunProfileExecutionItems", "MetaverseObjectChanges", "MetaverseObjectChangeAttributes",
+        "MetaverseObjectChangeAttributeValues", "Activities"
     ];
 
     public enum DeletionEntryPoint
@@ -73,11 +75,14 @@ public class AuditReferenceDeletionWritesDatabaseTests
         MetaverseObjectsBulk,
 
         /// <summary><c>MetaverseRepository.DeleteMetaverseObjectAsync</c>, the portal's and housekeeping's.</summary>
-        MetaverseObjectSingular
+        MetaverseObjectSingular,
+
+        /// <summary><c>MetaverseRepository.CascadeDeleteMetaverseAttributeAsync</c>, an administrator deleting a Metaverse Attribute.</summary>
+        MetaverseAttribute
     }
 
     private sealed record Seeded(
-        int SystemId, Guid LeaverCsoId, Guid SurvivorCsoId, Guid LeaverMvoId, Guid SurvivorMvoId);
+        int SystemId, Guid LeaverCsoId, Guid SurvivorCsoId, Guid LeaverMvoId, Guid SurvivorMvoId, int MvoManagerAttributeId);
 
     private string _connectionString = null!;
 
@@ -115,6 +120,7 @@ public class AuditReferenceDeletionWritesDatabaseTests
     [TestCase(DeletionEntryPoint.ConnectedSystemDeletionKeepingHistory)]
     [TestCase(DeletionEntryPoint.MetaverseObjectsBulk)]
     [TestCase(DeletionEntryPoint.MetaverseObjectSingular)]
+    [TestCase(DeletionEntryPoint.MetaverseAttribute)]
     public async Task Deletion_LeavesEveryAuditRowNamingTheObjectUnwrittenAsync(DeletionEntryPoint entryPoint)
     {
         var seeded = await SeedAsync();
@@ -194,6 +200,9 @@ public class AuditReferenceDeletionWritesDatabaseTests
                 await repository.Metaverse.DeleteMetaverseObjectAsync(leaver);
                 break;
             }
+            case DeletionEntryPoint.MetaverseAttribute:
+                await repository.Metaverse.CascadeDeleteMetaverseAttributeAsync(seeded.MvoManagerAttributeId);
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(entryPoint), entryPoint, null);
         }
@@ -235,8 +244,10 @@ public class AuditReferenceDeletionWritesDatabaseTests
     /// <summary>
     /// One Connected System with two accounts, the leaver and a survivor whose live Manager value names the leaver; two
     /// Metaverse Objects, likewise. History of every kind names each leaver: its own change record, a change value on
-    /// the survivor's change record, a Run Profile Execution Item, and (for the Metaverse Object) an Activity. Written
-    /// with plain SQL, so the seed does not depend on how the model maps any of it.
+    /// the survivor's change record, a Run Profile Execution Item, and (for the Metaverse Object) an Activity. Each
+    /// survivor's change record names its Manager attribute by id, so deleting the attribute (or the Connected System
+    /// that holds it) has history naming it too. Written with plain SQL, so the seed does not depend on how the model
+    /// maps any of it.
     /// </summary>
     private async Task<Seeded> SeedAsync()
     {
@@ -297,8 +308,8 @@ public class AuditReferenceDeletionWritesDatabaseTests
 
             INSERT INTO "ConnectedSystemObjectChanges" ("Id", "ConnectedSystemId", "ChangeTime", "ChangeType", "InitiatedByType", "ConnectedSystemObjectId")
             VALUES (@leaverCsoChange, @system, @earlier, 1, 0, @leaverCso), (@survivorCsoChange, @system, @earlier, 1, 0, @survivorCso);
-            INSERT INTO "ConnectedSystemObjectChangeAttributes" ("Id", "ConnectedSystemChangeId", "AttributeName", "AttributeType")
-            VALUES (@survivorCsoChangeAttribute, @survivorCsoChange, 'manager', @reference);
+            INSERT INTO "ConnectedSystemObjectChangeAttributes" ("Id", "ConnectedSystemChangeId", "AttributeId", "AttributeName", "AttributeType")
+            VALUES (@survivorCsoChangeAttribute, @survivorCsoChange, @manager, 'manager', @reference);
             INSERT INTO "ConnectedSystemObjectChangeAttributeValues" ("Id", "ConnectedSystemObjectChangeAttributeId", "ValueChangeType", "IsPendingExportStub", "StringValue", "ReferenceValueId")
             VALUES (gen_random_uuid(), @survivorCsoChangeAttribute, 1, false, 'CN=Leaver', @leaverCso);
 
@@ -330,6 +341,6 @@ public class AuditReferenceDeletionWritesDatabaseTests
         Add("reference", (int)AttributeDataType.Reference, NpgsqlDbType.Integer);
         await command.ExecuteNonQueryAsync();
 
-        return new Seeded(systemId, leaverCso, survivorCso, leaverMvo, survivorMvo);
+        return new Seeded(systemId, leaverCso, survivorCso, leaverMvo, survivorMvo, mvoManagerAttributeId);
     }
 }

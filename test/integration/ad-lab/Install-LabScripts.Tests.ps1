@@ -140,6 +140,14 @@ Describe 'Get-LabSettingsExample' {
         $script:Settings.exchangePrerequisiteDirectory | Should -Not -BeNullOrEmpty
     }
 
+    It 'describes both Exchange servers the lab builds, PANOPLY''s and RESURGAM''s, each on an address of its own' {
+        @($script:Settings.exchangeServers.PSObject.Properties.Name) | Should -Be @('exchange-primary', 'exchange-source')
+        $source = $script:Settings.exchangeServers.'exchange-source'
+        $source.domainController | Should -Be 'dc-source'
+        $source.ipAddress | Should -Be '10.99.0.32'
+        $source.gateway | Should -Be $script:Settings.ntpServer
+    }
+
     It 'has no dnsForwarder: the Lab switch has no uplink, so there is nothing to forward to' {
         $script:Settings.PSObject.Properties.Name | Should -Not -Contain 'dnsForwarder'
     }

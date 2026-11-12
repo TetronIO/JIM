@@ -11,7 +11,8 @@ using NUnit.Framework;
 namespace JIM.Worker.Tests.Servers;
 
 /// <summary>
-/// Pins, against the live schema, how audit rows refer to Connected System Objects and Metaverse Objects (#2669).
+/// Pins, against the live schema, how audit rows refer to Connected System Objects and Metaverse Objects (#2669), and to
+/// the attributes they record changes to (#2931).
 /// <para>
 /// An audit row (a change record, a change value, a Run Profile Execution Item, an Activity) names the object it is
 /// about by a plain id: no foreign key, written once and never rewritten, resolved when it is read (live object, then
@@ -27,6 +28,14 @@ namespace JIM.Worker.Tests.Servers;
 /// A new one fails here until it is added with its reason, or turned into a plain id if it is history.
 /// </para>
 /// <para>
+/// A change record's attribute rows name their attribute the same way: by a plain id, beside the name and data type
+/// copied when the row was written. A foreign key there made deleting an attribute rewrite every history row naming
+/// it, discarding the id, and made every history write check and lock the attribute's row. Live data referring to an
+/// attribute (values, configuration, generated values) cascades with it or refuses its deletion; only history would
+/// keep a row once its attribute is gone, which is what <c>ON DELETE SET NULL</c> is for, so no foreign key into an
+/// attribute table may have it.
+/// </para>
+/// <para>
 /// Opt-in via the same <c>JIM_TEST_RESET_*</c> environment variables as the other <c>RequiresPostgres</c> fixtures;
 /// ignored when <c>JIM_TEST_RESET_DB</c> is absent.
 /// </para>
@@ -39,7 +48,7 @@ public class AuditReferenceCatalogueTests
     /// One audit column that names an object by id.
     /// </summary>
     /// <param name="Table">The audit table.</param>
-    /// <param name="Column">The column holding the object's id.</param>
+    /// <param name="Column">The column holding the object's or attribute's id.</param>
     /// <param name="ObjectTable">The table the id names a row of.</param>
     /// <param name="Index">
     /// The index readers depend on to find the rows naming one object (an object's history, its timeline, its deletion
@@ -48,7 +57,7 @@ public class AuditReferenceCatalogueTests
     public sealed record AuditReference(string Table, string Column, string ObjectTable, string? Index);
 
     /// <summary>
-    /// Every audit column naming a Connected System Object or a Metaverse Object, as the plan's inventory lists them.
+    /// Every audit column naming a Connected System Object, a Metaverse Object or an attribute.
     /// </summary>
     private static readonly AuditReference[] AuditReferences =
     [
@@ -61,8 +70,17 @@ public class AuditReferenceCatalogueTests
             "IX_ActivityRunProfileExecutionItems_ConnectedSystemObjectId"),
         new("MetaverseObjectChanges", "MetaverseObjectId", "MetaverseObjects", "IX_MetaverseObjectChanges_MetaverseObjectId"),
         new("MetaverseObjectChangeAttributeValues", "ReferenceValueId", "MetaverseObjects", null),
-        new("Activities", "MetaverseObjectId", "MetaverseObjects", "IX_Activities_MetaverseObjectId")
+        new("Activities", "MetaverseObjectId", "MetaverseObjects", "IX_Activities_MetaverseObjectId"),
+        // The attribute a change record's attribute row records (#2931). The Metaverse Object change search finds the
+        // changes to one attribute by this column; the Connected System side keeps its index to match, until a
+        // measurement shows it unused.
+        new("ConnectedSystemObjectChangeAttributes", "AttributeId", "ConnectedSystemAttributes",
+            "IX_ConnectedSystemObjectChangeAttributes_AttributeId"),
+        new("MetaverseObjectChangeAttributes", "AttributeId", "MetaverseAttributes", "IX_MetaverseObjectChangeAttributes_AttributeId")
     ];
+
+    /// <summary>The tables holding attribute definitions.</summary>
+    private static readonly string[] AttributeTables = ["ConnectedSystemAttributes", "MetaverseAttributes"];
 
     /// <summary>
     /// Every foreign key into <c>ConnectedSystemObjects</c> and <c>MetaverseObjects</c>, keyed by the referencing table
@@ -154,7 +172,7 @@ public class AuditReferenceCatalogueTests
 
         Assert.That(constraints, Is.Empty,
             $"{reference.Table}.{reference.Column} is history naming a row of {reference.ObjectTable} by id, and must not be a " +
-            "foreign key: a constraint makes every deletion of the object rewrite the history that names it. Found: " +
+            "foreign key: a constraint makes every deletion of that row rewrite the history that names it. Found: " +
             string.Join(", ", constraints));
     }
 
@@ -177,7 +195,7 @@ public class AuditReferenceCatalogueTests
 
         Assert.That(leadingColumns, Is.EqualTo(new[] { reference.Column }),
             $"{reference.Index} must exist on {reference.Table} and lead with {reference.Column}: it is how an object's " +
-            "history, timeline and deletion record are found. Removing a relationship drops its convention index, so a " +
+            "history, timeline and deletion record (or an attribute's changes) are found. Removing a relationship drops its convention index, so a " +
             "migration that removes one must declare the index again under its existing name.");
     }
 
@@ -207,6 +225,56 @@ public class AuditReferenceCatalogueTests
                 "these listed foreign keys no longer exist; remove them from LiveDataForeignKeys:" + Environment.NewLine +
                 string.Join(Environment.NewLine, missing));
         }
+    }
+
+    /// <summary>
+    /// A foreign key into an attribute table either takes its row with the attribute (live data: values, configuration,
+    /// generated values) or refuses the attribute's deletion. One that keeps its row and clears the reference is history
+    /// naming the attribute, which must hold a plain id instead, or deleting the attribute rewrites every row naming it.
+    /// </summary>
+    [Test]
+    public async Task ForeignKeysIntoTheAttributeTables_NeverKeepTheirRowWhenTheAttributeGoesAsync()
+    {
+        await using var ctx = NewContext();
+
+        var keeping = await ctx.Database.SqlQueryRaw<string>(
+            @"SELECT (child.relname || '.' || a.attname || ' -> ' || parent.relname || '  [' || c.conname || ']')::text AS ""Value""
+              FROM pg_constraint c
+              INNER JOIN pg_class child ON child.oid = c.conrelid
+              INNER JOIN pg_class parent ON parent.oid = c.confrelid
+              INNER JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+              WHERE c.contype = 'f' AND parent.relname = ANY(@attributeTables) AND c.confdeltype IN ('n', 'd')
+              ORDER BY 1",
+            new Npgsql.NpgsqlParameter("attributeTables", AttributeTables)).ToListAsync();
+
+        Assert.That(keeping, Is.Empty,
+            "these foreign keys keep their row when its attribute is deleted, which makes it history naming the attribute. " +
+            "History names an attribute by a plain id beside its copied name and type (no constraint, no navigation), or " +
+            "every attribute deletion rewrites it:" + Environment.NewLine + string.Join(Environment.NewLine, keeping));
+    }
+
+    /// <summary>
+    /// No audit table refers to an attribute table by a foreign key of any kind: a cascade would delete history with the
+    /// attribute, and a refusal would make an attribute that history names impossible to delete.
+    /// </summary>
+    [Test]
+    public async Task AuditTables_HaveNoForeignKeyIntoTheAttributeTablesAsync()
+    {
+        await using var ctx = NewContext();
+
+        var found = await ctx.Database.SqlQueryRaw<string>(
+            @"SELECT (child.relname || '.' || a.attname || ' -> ' || parent.relname || '  [' || c.conname || ']')::text AS ""Value""
+              FROM pg_constraint c
+              INNER JOIN pg_class child ON child.oid = c.conrelid
+              INNER JOIN pg_class parent ON parent.oid = c.confrelid
+              INNER JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+              WHERE c.contype = 'f' AND parent.relname = ANY(@attributeTables) AND child.relname = ANY(@auditTables)
+              ORDER BY 1",
+            new Npgsql.NpgsqlParameter("attributeTables", AttributeTables),
+            new Npgsql.NpgsqlParameter("auditTables", AuditReferences.Select(r => r.Table).Distinct().ToArray())).ToListAsync();
+
+        Assert.That(found, Is.Empty,
+            "history must name an attribute by a plain id, never by a foreign key:" + Environment.NewLine + string.Join(Environment.NewLine, found));
     }
 
     /// <summary>

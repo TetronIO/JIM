@@ -174,6 +174,7 @@ public class MetaverseObjectChange
             attributeChange = new MetaverseObjectChangeAttribute
             {
                 Attribute = value.Attribute,
+                AttributeId = value.Attribute.Id,
                 AttributeName = value.Attribute.Name,
                 AttributeType = value.Attribute.Type,
                 MetaverseObjectChange = this

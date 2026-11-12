@@ -134,6 +134,7 @@ public static class ExportChangeHistoryBuilder
                 attributeChange = new ConnectedSystemObjectChangeAttribute
                 {
                     Attribute = peChange.Attribute,
+                    AttributeId = peChange.Attribute.Id,
                     AttributeName = peChange.Attribute.Name,
                     AttributeType = peChange.Attribute.Type,
                     ConnectedSystemChange = change

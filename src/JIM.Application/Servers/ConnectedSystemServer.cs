@@ -7561,6 +7561,7 @@ public partial class ConnectedSystemServer
             attributeChange = new ConnectedSystemObjectChangeAttribute
             {
                 Attribute = connectedSystemObjectAttributeValue.Attribute,
+                AttributeId = connectedSystemObjectAttributeValue.Attribute.Id,
                 AttributeName = connectedSystemObjectAttributeValue.Attribute.Name,
                 AttributeType = connectedSystemObjectAttributeValue.Attribute.Type,
                 ConnectedSystemChange = connectedSystemObjectChange
