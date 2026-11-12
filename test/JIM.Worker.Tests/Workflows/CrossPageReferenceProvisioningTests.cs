@@ -99,14 +99,15 @@ public class CrossPageReferenceProvisioningTests : WorkflowTestBase
 
     /// <summary>
     /// The change snapshot each staged export records resolves its references to the target objects; every group sharing
-    /// a member, and every report sharing a manager, used to query the same object again (#2492). Within one page each
-    /// referenced object's target is looked up once.
+    /// a member, and every report sharing a manager, used to query the same object again (#2492). Members provisioned
+    /// earlier in the run are named from the target objects their page wrote, so neither group's snapshot looks them up
+    /// (#2939).
     /// </summary>
     [Test]
-    public async Task FullSync_TwoGroupsOnOnePageSharingMembers_LooksUpEachMembersTargetOnceAsync()
+    public async Task FullSync_TwoGroupsSharingMembersProvisionedEarlierInTheRun_NamesThemWithoutLookingThemUpAsync()
     {
         await SetSyncPageSizeAsync(10);
-        var (source, target, userType, groupType, groupMemberAttr, _, _, _) = await BuildDirectoriesAsync();
+        var (source, target, userType, groupType, groupMemberAttr, _, _, targetGroupMemberAttr) = await BuildDirectoriesAsync();
 
         var members = Enumerable.Range(1, 4)
             .Select(i => SeedSourceCso(source.Id, userType, new Guid($"10000000-0000-0000-0000-00000000000{i}"), $"Member {i}"))
@@ -127,20 +128,21 @@ public class CrossPageReferenceProvisioningTests : WorkflowTestBase
             }
         }
 
-        var reloadedSource = await ReloadEntityAsync(source);
-        var profile = await CreateRunProfileAsync(reloadedSource.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
-        var activity = await CreateActivityAsync(reloadedSource.Id, profile, ConnectedSystemRunType.FullSynchronisation);
-        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloadedSource, profile, activity, new CancellationTokenSource())
-            .PerformFullSyncAsync();
+        var activity = await RunFullSyncAsync(source);
 
         var memberMvoIds = members.Select(m => m.MetaverseObjectId!.Value).ToHashSet();
         var memberLookups = SyncRepo.ConnectedSystemObjectLookupsByMetaverseObjectId
             .Where(lookup => lookup.ConnectedSystemId == target.Id && memberMvoIds.Contains(lookup.MetaverseObjectId))
             .ToList();
+        var memberTargetNames = SyncRepo.ConnectedSystemObjects.Values
+            .Where(c => c.ConnectedSystemId == target.Id && c.MetaverseObjectId.HasValue && memberMvoIds.Contains(c.MetaverseObjectId.Value))
+            .Select(ExportChangeHistoryBuilder.GetCsoDisplayIdentifier)
+            .ToList();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(memberLookups.Select(l => l.MetaverseObjectId), Is.EquivalentTo(memberMvoIds),
-                "Each member's target object is looked up once for both groups' snapshots.");
+            Assert.That(memberLookups, Is.Empty, "the members' names are known from the target objects their page wrote");
+            Assert.That(MemberValueChanges(activity, targetGroupMemberAttr).Select(v => v.StringValue),
+                Is.EquivalentTo(memberTargetNames.Concat(memberTargetNames)), "both groups' snapshots name every member by its target object");
             Assert.That(SyncRepo.PendingExports.Values.Count(pe => pe.ConnectedSystemId == target.Id), Is.EqualTo(6),
                 "Four users and two groups are provisioned.");
         }
@@ -195,6 +197,150 @@ public class CrossPageReferenceProvisioningTests : WorkflowTestBase
         }
     }
 
+    /// <summary>
+    /// A name found for a referenced object is kept for the whole run, not only its page (#2939): the groups of a large
+    /// directory share most of their members, and asking again on every page looked up each member about six times in a
+    /// 500,000-person synchronisation. The members' target objects were provisioned by an earlier run, so their names
+    /// come from the database.
+    /// </summary>
+    [Test]
+    public async Task FullSync_GroupsOnTwoPagesSharingMembersHeldSinceAnEarlierRun_LooksUpEachMembersTargetOnceAsync()
+    {
+        await SetSyncPageSizeAsync(10);
+        var (source, target, userType, groupType, groupMemberAttr, _, _, targetGroupMemberAttr) = await BuildDirectoriesAsync();
+        var members = Enumerable.Range(1, 4)
+            .Select(i => SeedSourceCso(source.Id, userType, new Guid($"10000000-0000-0000-0000-00000000000{i}"), $"Member {i}"))
+            .ToList();
+        var groups = new[]
+        {
+            SeedSourceCso(source.Id, groupType, new Guid("00000000-0000-0000-0000-000000000001"), "Team Alpha"),
+            SeedSourceCso(source.Id, groupType, new Guid("00000000-0000-0000-0000-000000000002"), "Team Gamma")
+        };
+        await RunFullSyncAsync(source);
+
+        // The groups gain their members, and each group now has a page of its own.
+        foreach (var group in groups)
+            AddMembers(group, groupMemberAttr, members);
+        // The first run leaves entries tracked that its own work has since removed; start the second from a clean context.
+        DbContext.ChangeTracker.Clear();
+        await SetSyncPageSizeAsync(1);
+        SyncRepo.ConnectedSystemObjectLookupsByMetaverseObjectId.Clear();
+        var activity = await RunFullSyncAsync(source);
+
+        var memberMvoIds = members.Select(m => m.MetaverseObjectId!.Value).ToHashSet();
+        var memberLookups = SyncRepo.ConnectedSystemObjectLookupsByMetaverseObjectId
+            .Where(lookup => lookup.ConnectedSystemId == target.Id && memberMvoIds.Contains(lookup.MetaverseObjectId))
+            .Select(lookup => lookup.MetaverseObjectId)
+            .ToList();
+        var memberTargetNames = SyncRepo.ConnectedSystemObjects.Values
+            .Where(c => c.ConnectedSystemId == target.Id && c.MetaverseObjectId.HasValue && memberMvoIds.Contains(c.MetaverseObjectId.Value))
+            .Select(ExportChangeHistoryBuilder.GetCsoDisplayIdentifier)
+            .ToList();
+        var snapshotMemberNames = MemberValueChanges(activity, targetGroupMemberAttr).Select(v => v.StringValue).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(memberTargetNames, Has.Count.EqualTo(4), "precondition: the first run provisioned every member");
+            Assert.That(snapshotMemberNames, Is.EquivalentTo(memberTargetNames.Concat(memberTargetNames)),
+                "both groups' snapshots name every member by its target object");
+            Assert.That(memberLookups, Is.EquivalentTo(memberMvoIds), "each member's target object is looked up once for both pages");
+        }
+    }
+
+    /// <summary>
+    /// A lookup that found no target object is not kept past its page (#2939): the object may be provisioned later in the
+    /// run, so each page asks again. Here the members are never provisioned, so both groups' pages ask.
+    /// </summary>
+    [Test]
+    public async Task FullSync_GroupsOnTwoPagesSharingMembersWithNoTargetObject_AsksAgainOnEachPageAsync()
+    {
+        await SetSyncPageSizeAsync(1);
+        var (source, target, userType, groupType, groupMemberAttr, _, _, _) = await BuildDirectoriesAsync(exportUsers: false);
+        var members = Enumerable.Range(1, 2)
+            .Select(i => SeedSourceCso(source.Id, userType, new Guid($"10000000-0000-0000-0000-00000000000{i}"), $"Member {i}"))
+            .ToList();
+        foreach (var group in new[]
+                 {
+                     SeedSourceCso(source.Id, groupType, new Guid("00000000-0000-0000-0000-000000000001"), "Team Alpha"),
+                     SeedSourceCso(source.Id, groupType, new Guid("00000000-0000-0000-0000-000000000002"), "Team Gamma")
+                 })
+        {
+            AddMembers(group, groupMemberAttr, members);
+        }
+
+        await RunFullSyncAsync(source);
+
+        var memberMvoIds = members.Select(m => m.MetaverseObjectId!.Value).ToHashSet();
+        var lookupsPerMember = SyncRepo.ConnectedSystemObjectLookupsByMetaverseObjectId
+            .Where(lookup => lookup.ConnectedSystemId == target.Id && memberMvoIds.Contains(lookup.MetaverseObjectId))
+            .GroupBy(lookup => lookup.MetaverseObjectId)
+            .ToDictionary(g => g.Key, g => g.Count());
+        Assert.That(memberMvoIds.Select(id => lookupsPerMember.GetValueOrDefault(id)), Is.All.GreaterThanOrEqualTo(2),
+            "a member with no target object is asked about again on the second group's page");
+    }
+
+    /// <summary>
+    /// The pass that names, once the page's new objects are written, the references a snapshot could not name earlier
+    /// takes a name the run already knows instead of asking again (#2939). Alpha is processed before Beta, which it
+    /// contains, so Alpha's snapshot cannot name Beta until Beta's target object is written with the page.
+    /// </summary>
+    [Test]
+    public async Task FullSync_GroupProcessedBeforeTheNestedGroupProvisionedOnItsPage_NamesItAfterTheFlushWithoutAskingAgainAsync()
+    {
+        await SetSyncPageSizeAsync(10);
+        var (source, target, _, groupType, groupMemberAttr, targetGroupType, _, targetGroupMemberAttr) = await BuildDirectoriesAsync();
+        var group = SeedSourceCso(source.Id, groupType, new Guid("00000000-0000-0000-0000-000000000001"), "Team Alpha");
+        var nested = SeedSourceCso(source.Id, groupType, new Guid("00000000-0000-0000-0000-000000000002"), "Team Beta");
+        AddMembers(group, groupMemberAttr, [nested]);
+
+        var activity = await RunFullSyncAsync(source);
+
+        var nestedTarget = SyncRepo.ConnectedSystemObjects.Values
+            .Single(c => c.ConnectedSystemId == target.Id && c.TypeId == targetGroupType.Id && c.MetaverseObjectId == nested.MetaverseObjectId);
+        var memberValues = MemberValueChanges(activity, targetGroupMemberAttr);
+        var nestedLookups = SyncRepo.ConnectedSystemObjectLookupsByMetaverseObjectId
+            .Count(l => l.ConnectedSystemId == target.Id && l.MetaverseObjectId == nested.MetaverseObjectId);
+        Assert.That(memberValues, Has.Count.EqualTo(1), "Alpha's Create carries its one member");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(memberValues[0].StringValue, Is.EqualTo(ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(nestedTarget)),
+                "the member is named by its target object once the page's objects are written");
+            Assert.That(memberValues[0].IsPendingExportStub, Is.True);
+            Assert.That(nestedLookups, Is.EqualTo(1),
+                "asked once, by Alpha's snapshot; after the flush its name is known from the object the page wrote");
+        }
+    }
+
+    private async Task<Activity> RunFullSyncAsync(ConnectedSystem source)
+    {
+        var reloadedSource = await ReloadEntityAsync(source);
+        var profile = await CreateRunProfileAsync(reloadedSource.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var activity = await CreateActivityAsync(reloadedSource.Id, profile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloadedSource, profile, activity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+        return activity;
+    }
+
+    private static void AddMembers(ConnectedSystemObject group, ConnectedSystemObjectTypeAttribute memberAttr, IEnumerable<ConnectedSystemObject> members)
+    {
+        foreach (var member in members)
+        {
+            group.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            {
+                Id = Guid.NewGuid(), AttributeId = memberAttr.Id, Attribute = memberAttr,
+                ReferenceValueId = member.Id, ReferenceValue = member, ConnectedSystemObject = group
+            });
+        }
+    }
+
+    /// <summary>The member values every Pending Export snapshot of the run recorded for the target group's Member attribute.</summary>
+    private static List<ConnectedSystemObjectChangeAttributeValue> MemberValueChanges(Activity activity, ConnectedSystemObjectTypeAttribute targetMemberAttr) =>
+        AllOutcomes(activity)
+            .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated)
+            .SelectMany(o => o.ConnectedSystemObjectChange?.AttributeChanges ?? [])
+            .Where(a => a.AttributeName == targetMemberAttr.Name)
+            .SelectMany(a => a.ValueChanges)
+            .ToList();
+
     /// <summary>Every outcome the run recorded, roots and descendants, once each.</summary>
     private static List<ActivityRunProfileExecutionItemSyncOutcome> AllOutcomes(Activity activity)
     {
@@ -217,7 +363,8 @@ public class CrossPageReferenceProvisioningTests : WorkflowTestBase
     /// </summary>
     private async Task<(ConnectedSystem Source, ConnectedSystem Target, ConnectedSystemObjectType UserType, ConnectedSystemObjectType GroupType,
         ConnectedSystemObjectTypeAttribute GroupMemberAttr, ConnectedSystemObjectType TargetGroupType,
-        ConnectedSystemObjectTypeAttribute TargetGroupDisplayNameAttr, ConnectedSystemObjectTypeAttribute TargetGroupMemberAttr)> BuildDirectoriesAsync()
+        ConnectedSystemObjectTypeAttribute TargetGroupDisplayNameAttr, ConnectedSystemObjectTypeAttribute TargetGroupMemberAttr)> BuildDirectoriesAsync(
+        bool exportUsers = true)
     {
         // --- Source directory: users, and a group whose Member attribute references them ---
         var source = await CreateConnectedSystemAsync("Directory Source");
@@ -270,8 +417,11 @@ public class CrossPageReferenceProvisioningTests : WorkflowTestBase
         var targetGroupType = await CreateCsoTypeAsync(target.Id, "TargetGroup",
             new List<ConnectedSystemObjectTypeAttribute> { targetGroupExternalIdAttr, targetGroupDisplayNameAttr, targetGroupMemberAttr });
 
-        var userExportRule = await CreateExportSyncRuleAsync(target.Id, targetUserType, mvPersonType, "User Export");
-        userExportRule.AttributeFlowRules.Add(BuildExportMapping(userExportRule, targetUserDisplayNameAttr, mvPersonDisplayNameAttr));
+        if (exportUsers)
+        {
+            var userExportRule = await CreateExportSyncRuleAsync(target.Id, targetUserType, mvPersonType, "User Export");
+            userExportRule.AttributeFlowRules.Add(BuildExportMapping(userExportRule, targetUserDisplayNameAttr, mvPersonDisplayNameAttr));
+        }
         var groupExportRule = await CreateExportSyncRuleAsync(target.Id, targetGroupType, mvGroupType, "Group Export");
         groupExportRule.AttributeFlowRules.Add(BuildExportMapping(groupExportRule, targetGroupDisplayNameAttr, mvGroupDisplayNameAttr));
         groupExportRule.AttributeFlowRules.Add(BuildExportMapping(groupExportRule, targetGroupMemberAttr, mvMemberAttr));

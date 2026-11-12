@@ -2441,17 +2441,25 @@ public abstract class SyncTaskProcessorBase
         _syncRepo.ClearChangeTracker();
         _mvoIdentityMap.Clear();
         _joinMatchCandidates = null;
-        _snapshotReferenceIdentifiers.Clear();
+        _snapshotReferenceNames.ForgetMisses();
     }
 
     /// <summary>
     /// The display identifier of the target Connected System Object each referenced Metaverse Object resolved to in this
-    /// page's (or cross-page batch's) export change snapshots, or null where the database held none. Every report of one
-    /// manager, and every group sharing a member, used to query the same object again (#2492: about 6 ms of each object's
-    /// export evaluation on Scenario 032). Cleared at each page boundary, and once the page's provisioning objects are
-    /// written, so a lookup that found none is asked again.
+    /// run's export change snapshots. Every report of one manager, and every group sharing a member, used to query the
+    /// same object again (#2492: about 6 ms of each object's export evaluation on Scenario 032), and the groups of a large
+    /// directory share members across pages too (#2939: 2.94 million references to 500,000 objects in one run).
+    /// <list type="bullet">
+    /// <item>A name found lives for the whole run: this processor serves one Run Profile execution, so it can never
+    /// outlive it. It is filled from lookups and from the provisioning objects each page writes, and bounded by
+    /// <see cref="SnapshotReferenceNameCache.DefaultCapacity"/>; why a name cannot go stale within the run is on the
+    /// class.</item>
+    /// <item>A lookup that found none lives only until the page boundary (<see cref="ClearPageTrackingState"/>) or until
+    /// the page's provisioning objects are written (<see cref="FlushPendingExportOperationsAsync"/>), whichever is first,
+    /// because the object may have been provisioned since.</item>
+    /// </list>
     /// </summary>
-    private readonly Dictionary<(Guid MetaverseObjectId, int ConnectedSystemId), string?> _snapshotReferenceIdentifiers = [];
+    private readonly SnapshotReferenceNameCache _snapshotReferenceNames = new();
 
     /// <summary>
     /// Queues a Metaverse Object for the page-flush batch update (<see cref="_pendingMvoUpdates"/>), keyed
@@ -5773,11 +5781,15 @@ public abstract class SyncTaskProcessorBase
             await _syncServer.CreateProvisioningCsoChangeRecordsAsync(_provisioningCsosToCreate, _mvoIdToRpei);
 
             Log.Verbose("FlushPendingExportOperationsAsync: Created {Count} provisioning CSOs in batch", _provisioningCsosToCreate.Count);
-            _provisioningCsosToCreate.Clear();
 
-            // A snapshot lookup that found no target object may have been for one just written here; the snapshots
-            // the rest of the page flush takes (deletion cascades, reference recall) must see it.
-            _snapshotReferenceIdentifiers.Clear();
+            // The objects just written are named as a lookup would name them now (provisioning writes nothing else a name
+            // comes from), so later snapshots in this run need not ask (#2939). A snapshot lookup that found no target
+            // object may have been for one just written here; the snapshots the rest of the page flush takes (deletion
+            // cascades, reference recall, the unresolved-reference pass) must see it.
+            foreach (var cso in _provisioningCsosToCreate.Where(cso => cso.MetaverseObjectId.HasValue))
+                _snapshotReferenceNames.RecordFound(cso.MetaverseObjectId!.Value, cso.ConnectedSystemId, ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(cso));
+            _snapshotReferenceNames.ForgetMisses();
+            _provisioningCsosToCreate.Clear();
         }
 
         // Unique Value Generation (#242, Phase 2 work package H): commit this page's export-mode
@@ -7716,13 +7728,14 @@ public abstract class SyncTaskProcessorBase
                 }
             }
 
-            // Then this page's earlier lookups; only Metaverse Objects not looked up yet reach the database (objects created
-            // in a previous page or run).
+            // Then the names this run has already found, and this page's lookups that found none; only Metaverse Objects
+            // not known either way reach the database (objects created in a previous run, or whose name this run has not
+            // needed yet).
             var connectedSystemId = pendingExport.ConnectedSystemId;
             var notYetLookedUp = new List<Guid>();
             foreach (var mvoGuid in mvoGuids.Where(g => !referenceDisplayIdentifiers.ContainsKey(g)))
             {
-                if (!_snapshotReferenceIdentifiers.TryGetValue((mvoGuid, connectedSystemId), out var known))
+                if (!_snapshotReferenceNames.TryGet(mvoGuid, connectedSystemId, out var known))
                     notYetLookedUp.Add(mvoGuid);
                 else if (known != null)
                     referenceDisplayIdentifiers.TryAdd(mvoGuid, known);
@@ -7736,10 +7749,15 @@ public abstract class SyncTaskProcessorBase
                     found = await _syncRepo.GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(notYetLookedUp, connectedSystemId);
                 foreach (var mvoGuid in notYetLookedUp)
                 {
-                    var identifier = found.GetValueOrDefault(mvoGuid);
-                    _snapshotReferenceIdentifiers[(mvoGuid, connectedSystemId)] = identifier;
-                    if (identifier != null)
+                    if (found.TryGetValue(mvoGuid, out var identifier))
+                    {
+                        _snapshotReferenceNames.RecordFound(mvoGuid, connectedSystemId, identifier);
                         referenceDisplayIdentifiers.TryAdd(mvoGuid, identifier);
+                    }
+                    else
+                    {
+                        _snapshotReferenceNames.RecordMiss(mvoGuid, connectedSystemId);
+                    }
                 }
 
                 // Some references may remain unresolved if the referenced objects haven't been
@@ -7826,13 +7844,28 @@ public abstract class SyncTaskProcessorBase
         if (unresolvedValueChanges.Count == 0)
             return;
 
-        // Batch-resolve all MVO GUIDs per Connected System, to the identifiers alone (#2598)
+        // Resolve each Connected System's MVO GUIDs from the names this run has already found (the page's provisioning
+        // objects among them, #2939), then batch-resolve the rest to the identifiers alone (#2598). A lookup that finds
+        // none is not recorded: this pass runs once a page, after its objects are written.
         var resolvedLookup = new Dictionary<(int CsId, Guid MvoGuid), string>();
         foreach (var (csId, mvoGuids) in unresolvedByCs)
         {
-            var resolved = await _syncRepo.GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(mvoGuids, csId);
+            var notYetLookedUp = new List<Guid>();
+            foreach (var mvoGuid in mvoGuids)
+            {
+                if (_snapshotReferenceNames.TryGet(mvoGuid, csId, out var known) && known != null)
+                    resolvedLookup[(csId, mvoGuid)] = known;
+                else
+                    notYetLookedUp.Add(mvoGuid);
+            }
+
+            if (notYetLookedUp.Count == 0)
+                continue;
+
+            var resolved = await _syncRepo.GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(notYetLookedUp, csId);
             foreach (var (mvoGuid, identifier) in resolved)
             {
+                _snapshotReferenceNames.RecordFound(mvoGuid, csId, identifier);
                 resolvedLookup[(csId, mvoGuid)] = identifier;
             }
         }
