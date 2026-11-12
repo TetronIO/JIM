@@ -1612,15 +1612,21 @@ public partial class SyncRepository : ISyncRepository
     private void BumpRowVersion(ConnectedSystemObject cso) => cso.xmin = ++_lastRowVersion;
 
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(
-        List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
+        List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates,
+        IReadOnlyCollection<Guid>? supersededValueIds = null)
     {
         if (FailConnectedSystemObjectUpdateWith != null)
             throw FailConnectedSystemObjectUpdateWith;
 
+        var supersededIds = supersededValueIds?.Where(id => id != Guid.Empty).ToHashSet() ?? [];
         foreach (var (cso, newAvs) in updates)
         {
             if (_csos.TryGetValue(cso.Id, out var stored) || TryGetLeanOriginal(cso, out stored))
             {
+                // The rows the new values replace are deleted, as the PostgreSQL writer deletes them.
+                if (supersededIds.Count > 0)
+                    stored.AttributeValues.RemoveAll(av => supersededIds.Contains(av.Id));
+
                 // Since InMemoryData stores references (not copies), stored and cso may be the same object.
                 // Only add values that aren't already in the collection to avoid duplicates.
                 foreach (var av in newAvs)
@@ -1632,6 +1638,11 @@ public partial class SyncRepository : ISyncRepository
                     // Fixup FK from nav prop (EF Core does this automatically on SaveChanges)
                     if (av.AttributeId == 0 && av.Attribute != null)
                         av.AttributeId = av.Attribute.Id;
+
+                    // An id for each new value, as the PostgreSQL writer assigns one before it inserts, so a later
+                    // replacement can name the value it supersedes (#2930).
+                    if (av.Id == Guid.Empty)
+                        av.Id = Guid.NewGuid();
 
                     if (!stored.AttributeValues.Contains(av))
                         stored.AttributeValues.Add(av);

@@ -3096,10 +3096,11 @@ public class ExportExecutionServer
         // Create's result together with the External ID it assigned: the status alone would leave an object JIM cannot
         // address, and losing both would have a Create already written sent again. A failure here records nothing, and
         // the batch is reported failed as a whole.
+        IReadOnlyDictionary<Guid, HashSet<int>> newlyReportedAnchors = new Dictionary<Guid, HashSet<int>>();
         await using (var transaction = await repository.BeginTransactionAsync())
         {
             if (csosToUpdate.Count > 0)
-                await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, repository);
+                newlyReportedAnchors = await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, repository);
             await WriteExportResultsAsync(writtenNow, sent, sentAt, executingMark, repository);
             if (transaction != null)
                 await transaction.CommitAsync();
@@ -3155,7 +3156,7 @@ public class ExportExecutionServer
             // (D9's dedupe guarantee depends on this ordering; see D11).
             if (successfulNonDeleteExports.Count > 0)
             {
-                await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, repository);
+                await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, repository, newlyReportedAnchors);
             }
 
             // Collision Remediation revised Metaverse values outside any synchronisation: mark the hosting systems of every
@@ -4140,7 +4141,8 @@ public class ExportExecutionServer
     private async Task<List<PendingExport>> ApplyOptimisticExportUpdatesAsync(
         List<PendingExport> successfulNonDeleteExports,
         ExportExecutionResult result,
-        ISyncRepository repository)
+        ISyncRepository repository,
+        IReadOnlyDictionary<Guid, HashSet<int>> reportedAnchorAttributes)
     {
         using var span = Diagnostics.Diagnostics.Database.StartSpan("OptimisticApply")
             .SetTag("count", successfulNonDeleteExports.Count);
@@ -4166,8 +4168,10 @@ public class ExportExecutionServer
                 // must not be applied as though it had been; the calculator sees the export without it.
                 // #2039: nor was a change the Connector wrote with an interim value until an Initial
                 // Password is delivered, so that is left out too (see AsWrittenForOptimisticApply).
+                // #2930: nor is a change to an External ID whose value the Connector's report changed, which the batch has recorded
+                // as reported (see AsWrittenForOptimisticApply).
                 delta = OptimisticExportApplyCalculator.CalculateDelta(
-                    successfulNonDeleteExports.Select(AsWrittenForOptimisticApply).ToList());
+                    successfulNonDeleteExports.Select(pe => AsWrittenForOptimisticApply(pe, reportedAnchorAttributes)).ToList());
 
                 // SPEC-1082 D9: any CSO whose attribute values this optimistic apply is about to mutate
                 // outside the Full Import stamp path (D6/D7) must have its stored ImportStateHash and
@@ -4351,10 +4355,16 @@ public class ExportExecutionServer
         attributeValue.StringValue = externalId;
     }
 
-    private async Task BatchUpdateCsosAfterSuccessfulExportAsync(
+    /// <summary>
+    /// Records the External ID and Secondary External ID the Connector reported for each object (#2930), replacing what
+    /// the object held, and returns, for each object, the attributes whose value the report changed: the ones whose
+    /// staged value optimistic apply must then leave alone (<see cref="AsWrittenForOptimisticApply"/>).
+    /// </summary>
+    private async Task<IReadOnlyDictionary<Guid, HashSet<int>>> BatchUpdateCsosAfterSuccessfulExportAsync(
         List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)> csosToUpdate,
         ISyncRepository repository)
     {
+        var newlyReportedAnchors = new Dictionary<Guid, HashSet<int>>();
         // Collect all unique attribute IDs we need to look up (external ID + secondary external ID attributes)
         var attributeIds = new HashSet<int>();
         foreach (var (cso, _) in csosToUpdate)
@@ -4376,81 +4386,133 @@ public class ExportExecutionServer
                 : new Dictionary<int, AttributeDataType>();
         }
 
-        // Apply changes to each CSO in-memory
+        // Apply changes to each CSO in-memory, collecting what the database must be given to match
         var csoUpdates = new List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)>();
+        var supersededValueIds = new List<Guid>();
 
         foreach (var (cso, exportResult) in csosToUpdate)
         {
             var newAttributeValues = new List<ConnectedSystemObjectAttributeValue>();
-            var needsUpdate = false;
 
             // Populate external ID attribute if provided in the export result
             if (!string.IsNullOrEmpty(exportResult.ExternalId) && cso.ExternalIdAttributeId > 0)
             {
                 AttributeDataType? externalIdAttributeType = attributeTypes.TryGetValue(cso.ExternalIdAttributeId, out var foundType) ? foundType : null;
 
-                var externalIdAttrValue = cso.AttributeValues
-                    .FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
-
-                if (externalIdAttrValue == null)
+                var externalIdAttrValue = new ConnectedSystemObjectAttributeValue
                 {
-                    externalIdAttrValue = new ConnectedSystemObjectAttributeValue
-                    {
-                        ConnectedSystemObject = cso,
-                        AttributeId = cso.ExternalIdAttributeId
-                    };
-                    cso.AttributeValues.Add(externalIdAttrValue);
-                    newAttributeValues.Add(externalIdAttrValue);
-                }
-
+                    ConnectedSystemObject = cso,
+                    AttributeId = cso.ExternalIdAttributeId
+                };
                 ApplyExternalIdToAttributeValue(externalIdAttrValue, externalIdAttributeType, exportResult.ExternalId, cso.Id);
 
-                needsUpdate = true;
-                Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId} (type: {AttrType})",
-                    cso.Id, LogSanitiser.Sanitise(exportResult.ExternalId), externalIdAttributeType?.ToString() ?? "Unknown");
+                if (RecordReportedValue(cso, externalIdAttrValue, newAttributeValues, supersededValueIds))
+                {
+                    NoteNewlyReported(newlyReportedAnchors, cso.Id, cso.ExternalIdAttributeId);
+                    Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId} (type: {AttrType})",
+                        cso.Id, LogSanitiser.Sanitise(exportResult.ExternalId), externalIdAttributeType?.ToString() ?? "Unknown");
+                }
             }
 
             // Update secondary external ID if provided
             if (!string.IsNullOrEmpty(exportResult.SecondaryExternalId) && cso.SecondaryExternalIdAttributeId.HasValue)
             {
-                var secondaryExternalIdAttrValue = cso.AttributeValues
-                    .FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId.Value);
-
-                if (secondaryExternalIdAttrValue == null)
+                var secondaryExternalIdAttrValue = new ConnectedSystemObjectAttributeValue
                 {
-                    secondaryExternalIdAttrValue = new ConnectedSystemObjectAttributeValue
-                    {
-                        ConnectedSystemObject = cso,
-                        AttributeId = cso.SecondaryExternalIdAttributeId.Value
-                    };
-                    cso.AttributeValues.Add(secondaryExternalIdAttrValue);
-                    newAttributeValues.Add(secondaryExternalIdAttrValue);
+                    ConnectedSystemObject = cso,
+                    AttributeId = cso.SecondaryExternalIdAttributeId.Value,
+                    StringValue = exportResult.SecondaryExternalId
+                };
+
+                if (RecordReportedValue(cso, secondaryExternalIdAttrValue, newAttributeValues, supersededValueIds))
+                {
+                    NoteNewlyReported(newlyReportedAnchors, cso.Id, cso.SecondaryExternalIdAttributeId.Value);
+                    Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} secondary external ID to {SecondaryExternalId}",
+                        cso.Id, LogSanitiser.Sanitise(exportResult.SecondaryExternalId));
                 }
-
-                secondaryExternalIdAttrValue.StringValue = exportResult.SecondaryExternalId;
-
-                needsUpdate = true;
-                Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} secondary external ID to {SecondaryExternalId}",
-                    cso.Id, LogSanitiser.Sanitise(exportResult.SecondaryExternalId));
             }
 
-            if (needsUpdate)
-            {
+            if (newAttributeValues.Count > 0)
                 csoUpdates.Add((cso, newAttributeValues));
-            }
         }
 
         // Single batch save for all CSO updates
         if (csoUpdates.Count > 0)
         {
             using (Diagnostics.Diagnostics.Database.StartSpan("BatchUpdateCsoAttributeValues")
-                .SetTag("csoCount", csoUpdates.Count))
+                .SetTag("csoCount", csoUpdates.Count)
+                .SetTag("supersededCount", supersededValueIds.Count))
             {
-                await repository.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(csoUpdates);
+                await repository.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(csoUpdates, supersededValueIds);
             }
-            Log.Information("BatchUpdateCsosAfterSuccessfulExportAsync: Batch updated {Count} CSOs", csoUpdates.Count);
+            Log.Information("BatchUpdateCsosAfterSuccessfulExportAsync: Batch updated {Count} CSOs, replacing {SupersededCount} previously recorded value(s)",
+                csoUpdates.Count, supersededValueIds.Count);
         }
+
+        return newlyReportedAnchors;
     }
+
+    private static void NoteNewlyReported(Dictionary<Guid, HashSet<int>> newlyReportedAnchors, Guid csoId, int attributeId)
+    {
+        if (!newlyReportedAnchors.TryGetValue(csoId, out var attributeIds))
+            newlyReportedAnchors[csoId] = attributeIds = [];
+        attributeIds.Add(attributeId);
+    }
+
+    /// <summary>
+    /// Makes <paramref name="reported"/>, a value the Connector reported for the object (its External ID or Secondary
+    /// External ID), the object's only value of that attribute. Returns false, changing nothing, when the object already
+    /// holds exactly that value. Otherwise the object's values of the attribute are replaced in memory: each one that
+    /// is stored is added to <paramref name="supersededValueIds"/>, and the reported value to
+    /// <paramref name="newAttributeValues"/>, so the caller writes the replacement to the database too.
+    /// </summary>
+    /// <remarks>
+    /// The stored value is replaced, never changed in place: the database is written only through the values handed to
+    /// the repository, so a value changed in memory alone (as a rename's new distinguished name once was) stays stale in
+    /// the database until the confirming import, while optimistic apply, comparing against the in-memory object, finds
+    /// nothing left to record. Everything reading the stored value meanwhile reads the old one: a reference to the object
+    /// resolved later in the same run, a later run, and the portal.
+    /// If the batch's results transaction rolls back after the replacement is written, the database keeps the old value
+    /// while the in-memory object holds the reported one; nothing reuses that object afterwards (the batch's failure is
+    /// recorded without walking it, and the deferred pass and later runs reload from the database).
+    /// </remarks>
+    private static bool RecordReportedValue(
+        ConnectedSystemObject cso,
+        ConnectedSystemObjectAttributeValue reported,
+        List<ConnectedSystemObjectAttributeValue> newAttributeValues,
+        List<Guid> supersededValueIds)
+    {
+        var held = cso.AttributeValues.Where(av => av.AttributeId == reported.AttributeId).ToList();
+        if (held.Count == 1 && HoldsSameValue(held[0], reported))
+            return false;
+
+        foreach (var value in held)
+        {
+            cso.AttributeValues.Remove(value);
+            if (value.Id != Guid.Empty)
+                supersededValueIds.Add(value.Id);
+        }
+
+        // Keep the attribute the replaced value was loaded with, so anything reading the object later in the run by the
+        // attribute (its name, or whether it is the Secondary External ID) finds the reported value as it found the old.
+        var loadedAttribute = held.Select(value => value.Attribute).FirstOrDefault(attribute => attribute != null);
+        if (loadedAttribute != null)
+            reported.Attribute = loadedAttribute;
+        cso.AttributeValues.Add(reported);
+        newAttributeValues.Add(reported);
+        return true;
+    }
+
+    /// <summary>
+    /// Whether two External ID values hold the same value in the same typed slot. Text is compared exactly: a rename that
+    /// changes only the case of a distinguished name is still a rename, and the name the object now has is recorded.
+    /// </summary>
+    private static bool HoldsSameValue(ConnectedSystemObjectAttributeValue held, ConnectedSystemObjectAttributeValue reported) =>
+        string.Equals(held.StringValue, reported.StringValue, StringComparison.Ordinal) &&
+        held.GuidValue == reported.GuidValue &&
+        held.IntValue == reported.IntValue &&
+        held.LongValue == reported.LongValue &&
+        held.DecimalValue == reported.DecimalValue;
 
     /// <summary>
     /// #2723: records the Partition each object a successful export created or renamed was written to, from the name it
@@ -4860,9 +4922,10 @@ public class ExportExecutionServer
             }
 
             // Batch update CSOs that need external ID or status changes
+            IReadOnlyDictionary<Guid, HashSet<int>> newlyReportedAnchors = new Dictionary<Guid, HashSet<int>>();
             if (csosToUpdate.Count > 0)
             {
-                await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, SyncRepo);
+                newlyReportedAnchors = await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, SyncRepo);
                 await RecordPartitionPlacementsAsync(csosToUpdate, SyncRepo, result);
             }
 
@@ -4873,7 +4936,7 @@ public class ExportExecutionServer
             // a recording that failed outright and an export carrying a value it could not record (#2183).
             var unrecordedExports = successfulNonDeleteExports.Count == 0
                 ? []
-                : await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, SyncRepo);
+                : await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, SyncRepo, newlyReportedAnchors);
 
             if (autoConfirm && unrecordedExports.Count > 0)
                 await LeaveUnrecordedExportsUnconfirmedAsync(unrecordedExports, exportsToDelete, result);
@@ -5000,14 +5063,35 @@ public class ExportExecutionServer
 
     /// <summary>
     /// The export as optimistic apply should see it: only the changes whose asserted value the target was actually
-    /// given (<see cref="IsWrittenAsAsserted"/>). Values sent on an earlier partial write and now awaiting confirmation
-    /// are kept, since re-applying them is a no-op by construction (add-if-absent, set-if-different). Returns the
-    /// export itself when every change qualifies, the ordinary case.
+    /// given (<see cref="IsWrittenAsAsserted"/>), less any Add to an External ID whose value the Connector's report
+    /// changed on the export's object (#2930). Such a report tells JIM what the target assigned or wrote, the batch has
+    /// already recorded it (<see cref="BatchUpdateCsosAfterSuccessfulExportAsync"/>), and adding the staged value as
+    /// well would leave a second value on a single-valued attribute, as when a Connector formats the key it was given.
+    /// An Update replaces the attribute's values outright, so it can never leave two and applies as it always has; so
+    /// does any change where the report told JIM nothing new (a Connector echoing the object's current External ID).
+    /// Values sent on an earlier partial write and now awaiting confirmation are kept, since re-applying them is a
+    /// no-op by construction (add-if-absent, set-if-different). Returns the export itself when every change
+    /// qualifies, the ordinary case.
     /// </summary>
-    private static PendingExport AsWrittenForOptimisticApply(PendingExport pendingExport) =>
-        pendingExport.AttributeValueChanges.All(IsWrittenAsAsserted)
+    /// <param name="pendingExport">The export the target accepted.</param>
+    /// <param name="reportedAnchorAttributes">For each object, the External ID attributes whose value the Connector's
+    /// report changed (<see cref="BatchUpdateCsosAfterSuccessfulExportAsync"/>).</param>
+    private static PendingExport AsWrittenForOptimisticApply(PendingExport pendingExport,
+        IReadOnlyDictionary<Guid, HashSet<int>> reportedAnchorAttributes)
+    {
+        var reported = pendingExport.ConnectedSystemObjectId is { } objectId
+            && reportedAnchorAttributes.TryGetValue(objectId, out var attributeIds)
+                ? attributeIds
+                : null;
+
+        bool Applies(PendingExportAttributeValueChange change) =>
+            IsWrittenAsAsserted(change)
+            && !(change.ChangeType == PendingExportAttributeChangeType.Add && reported != null && reported.Contains(change.AttributeId));
+
+        return pendingExport.AttributeValueChanges.All(Applies)
             ? pendingExport
-            : WithChanges(pendingExport, pendingExport.AttributeValueChanges.Where(IsWrittenAsAsserted).ToList());
+            : WithChanges(pendingExport, pendingExport.AttributeValueChanges.Where(Applies).ToList());
+    }
 
     /// <summary>
     /// Whether the target was given the value a change asserts, so optimistic apply may record it on the Connected System

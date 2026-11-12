@@ -8638,9 +8638,16 @@ public abstract class SyncTaskProcessorBase
 
         using (Diagnostics.Sync.StartSpan("EvaluateDrift"))
         {
-            await PrefetchGeneratedExportAssignmentsForDriftAsync();
-            var heldPendingExports = await GetPendingExportsHoldingChangesAsync();
-            var heldReferenceAnswers = await AskDriftHeldReferenceQuestionsAsync();
+            // Each step its own span (#2669): EvaluateDrift took 10 s more in a 500,000-object confirming Full
+            // Synchronisation from d2bbd123c on, outside the database and outside EvaluateDriftAndEnforceState.
+            using (Diagnostics.Sync.StartSpan("Drift.PrefetchGeneratedAssignments"))
+                await PrefetchGeneratedExportAssignmentsForDriftAsync();
+            IReadOnlyDictionary<Guid, PendingExport> heldPendingExports;
+            using (Diagnostics.Sync.StartSpan("Drift.HeldPendingExports"))
+                heldPendingExports = await GetPendingExportsHoldingChangesAsync();
+            IReadOnlyDictionary<Guid, IReadOnlyCollection<DriftHeldReferenceAnswer>> heldReferenceAnswers;
+            using (Diagnostics.Sync.StartSpan("Drift.HeldReferenceQuestions"))
+                heldReferenceAnswers = await AskDriftHeldReferenceQuestionsAsync();
 
             // Which enforcing rules cover an object can depend on its connections (#2021, #2820): read them once for the
             // batch, and only when a rule has a connection criterion.
@@ -8649,12 +8656,19 @@ public abstract class SyncTaskProcessorBase
                 .Where(id => id != Guid.Empty)
                 .Distinct()
                 .ToList();
-            var connections = driftMvoIds.Count == 0 || _driftDetectionExportRules == null
-                ? null
-                : await _syncServer.ReadExportConnectionsAsync(driftMvoIds, _driftDetectionExportRules);
+            MetaverseObjectConnections? connections;
+            using (Diagnostics.Sync.StartSpan("Drift.ReadConnections").SetTag("metaverseObjectCount", driftMvoIds.Count))
+            {
+                connections = driftMvoIds.Count == 0 || _driftDetectionExportRules == null
+                    ? null
+                    : await _syncServer.ReadExportConnectionsAsync(driftMvoIds, _driftDetectionExportRules);
+            }
 
-            foreach (var (cso, mvo) in _pendingDriftEvaluations)
-                EvaluateDriftAndEnforceState(cso, mvo, heldPendingExports.GetValueOrDefault(cso.Id), heldReferenceAnswers.GetValueOrDefault(cso.Id), connections);
+            using (Diagnostics.Sync.StartSpan("Drift.EvaluateObjects").SetTag("count", _pendingDriftEvaluations.Count))
+            {
+                foreach (var (cso, mvo) in _pendingDriftEvaluations)
+                    EvaluateDriftAndEnforceState(cso, mvo, heldPendingExports.GetValueOrDefault(cso.Id), heldReferenceAnswers.GetValueOrDefault(cso.Id), connections);
+            }
         }
 
         _pendingDriftEvaluations.Clear();

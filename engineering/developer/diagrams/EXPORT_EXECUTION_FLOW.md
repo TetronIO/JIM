@@ -121,8 +121,8 @@ flowchart TD
     ProcessResults --> CheckResult{Export<br/>succeeded?}
 
     CheckResult -->|Not attempted,<br/>run cancelled| PutBack[Put back as it was<br/>before the mark, first<br/>No attempt counted, no RPEI]
-    CheckResult -->|Yes, Create| HandleCreate[Record Exported<br/>Capture new external ID<br/>from ExportResult<br/>Set Status = Exported<br/>Mark the changes the connector<br/>wrote with an interim value<br/>AwaitsInitialPassword, #2039<br/>as for a flagged Update, #2158]
-    CheckResult -->|Yes, Update| HandleUpdate[Record Exported<br/>Set Status = Exported<br/>Clear the failure record]
+    CheckResult -->|Yes, Create| HandleCreate[Record Exported<br/>Capture the External ID and<br/>Secondary External ID the<br/>ExportResult reports<br/>Set Status = Exported<br/>Mark the changes the connector<br/>wrote with an interim value<br/>AwaitsInitialPassword, #2039<br/>as for a flagged Update, #2158]
+    CheckResult -->|Yes, Update| HandleUpdate[Record Exported<br/>Set Status = Exported<br/>Clear the failure record<br/>A rename: capture the new<br/>Secondary External ID reported]
     CheckResult -->|Yes, but references<br/>still unresolved| HandlePartial[Written in part, #1398<br/>Status stays Pending with<br/>HasUnresolvedReferences<br/>A Create becomes an Update]
     CheckResult -->|Yes, Delete| CsoStatus{CSO status =<br/>PendingProvisioning?}
     CsoStatus -->|No, Normal| HandleDelete[Record Deprovisioned<br/>Set Status = Exported<br/>confirming import deletes PE and CSO]
@@ -139,7 +139,7 @@ flowchart TD
     HoldCollision --> Record
     HandleFail --> Record
 
-    Record[Record the batch's results first, #2197:<br/>Pending Export statuses and each Create's<br/>new External ID in one transaction<br/>A Create owed an Initial Password stays<br/>Executing until it is staged, #2270<br/>A failure here records nothing, and the<br/>batch is reported failed as a whole]
+    Record[Record the batch's results first, #2197:<br/>Pending Export statuses and the External IDs<br/>reported, each replacing the stored value, #2930<br/>in one transaction<br/>A Create owed an Initial Password stays<br/>Executing until it is staged, #2270<br/>A failure here records nothing, and the<br/>batch is reported failed as a whole]
     Record --> Collision[Collision Remediation, each held value<br/>decided and recorded on its own:<br/>corrected, stays Pending for the next<br/>synchronisation to re-stage<br/>needs a decision, Parked<br/>neither, an ordinary failed attempt]
     Collision --> Housekeeping[Clear rename allowances the batch's<br/>successes made moot<br/>Remove the Pending Export and CSO of<br/>each never-confirmed provisioning's Delete]
     Housekeeping --> InitialPassword{Provisioning rule<br/>asks for an<br/>initial password?<br/>the batch's lookup}
@@ -268,7 +268,7 @@ flowchart TD
 
 - **Per-batch isolation**<br /> Each parallel batch gets its own `DbContext`, and each parallel worker its own connector instance. EF Core is not thread-safe, so sharing a context across batches would cause data corruption, and a connection held by two workers at once would share connection state.
 
-- **Batch persistence**<br /> A batch's results (Pending Export statuses and the CSO updates carrying each Create's new External ID) are written in one transaction on the repository the batch runs on (a parallel batch's own), before anything that can fail while processing them further (#2197). Its RPEIs are written separately, by the processor's per-batch callback (`PersistBatchRpeisAsync` through `BulkInsertRpeisAsync`), which splits a large enough insert across N concurrent PostgreSQL connections via `ParallelBatchWriter` (#394).
+- **Batch persistence**<br /> A batch's results (Pending Export statuses, and the External ID and Secondary External ID the Connector reported for each Create or rename) are written in one transaction on the repository the batch runs on (a parallel batch's own), before anything that can fail while processing them further (#2197). Its RPEIs are written separately, by the processor's per-batch callback (`PersistBatchRpeisAsync` through `BulkInsertRpeisAsync`), which splits a large enough insert across N concurrent PostgreSQL connections via `ParallelBatchWriter` (#394).
 
 - **Max Export Parallelism applies to both passes (#1820)**<br /> After the switch to paged batch loading, the first pass (every export without unresolved references) ran one batch at a time whatever Max Export Parallelism or the connector recommended; only the deferred pass honoured it. Both passes now share `ProcessBatchesInParallelAsync`, with workers that keep one connector each for the whole run rather than opening and closing a connection per batch. With **Create containers as needed?** on, an LDAP export whose container a parallel batch created a moment earlier now finds it and creates the object in it.
 

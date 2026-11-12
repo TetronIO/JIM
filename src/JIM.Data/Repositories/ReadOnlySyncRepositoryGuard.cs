@@ -614,7 +614,8 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<ConnectedSystemObjectMarkClearResult> ClearConnectedSystemObjectMarksAsync(IReadOnlyCollection<ConnectedSystemObjectMarkClear> clears)
         => throw new PreviewWriteAttemptedException(nameof(ClearConnectedSystemObjectMarksAsync));
 
-    public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
+    public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates,
+        IReadOnlyCollection<Guid>? supersededValueIds = null)
         => throw new PreviewWriteAttemptedException(nameof(UpdateConnectedSystemObjectsWithNewAttributeValuesAsync));
 
     public Task<int> UpdateConnectedSystemObjectPartitionsAsync(IReadOnlyCollection<(Guid ConnectedSystemObjectId, int PartitionId)> placements)

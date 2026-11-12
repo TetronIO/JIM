@@ -355,8 +355,9 @@ public partial class SyncRepository : ISyncRepository
         => _repo.ConnectedSystems.ClearConnectedSystemObjectScopeReviewPendingAsync(ids);
 
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(
-        List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
-        => _repo.ConnectedSystems.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(updates);
+        List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates,
+        IReadOnlyCollection<Guid>? supersededValueIds = null)
+        => _repo.ConnectedSystems.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(updates, supersededValueIds);
 
     public Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
         => _repo.ConnectedSystems.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
