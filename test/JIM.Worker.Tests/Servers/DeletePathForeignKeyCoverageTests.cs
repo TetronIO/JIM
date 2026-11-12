@@ -389,6 +389,61 @@ public class DeletePathForeignKeyCoverageTests
     }
 
     /// <summary>
+    /// The tables whose rows are history: change records with their attribute and value rows, Run Profile Execution
+    /// Items with what hangs off them, and Activities.
+    /// </summary>
+    private static readonly string[] HistoryTables =
+    [
+        "ConnectedSystemObjectChanges", "ConnectedSystemObjectChangeAttributes", "ConnectedSystemObjectChangeAttributeValues",
+        "MetaverseObjectChanges", "MetaverseObjectChangeAttributes", "MetaverseObjectChangeAttributeValues",
+        "ActivityRunProfileExecutionItems", "ActivityRunProfileExecutionItemSyncOutcomes", "Activities"
+    ];
+
+    /// <summary>
+    /// Every path that deletes an attribute (an administrator deleting a Metaverse Attribute, deleting a Connected
+    /// System, the factory reset's removal of custom Metaverse Attributes) leaves the history naming it alone (#2931).
+    /// Walked from each attribute table through the cascades its deletion sets off, no foreign key may reach a history
+    /// table: a cascade would delete history with the attribute, a <c>SET NULL</c> rewrites every row naming it, and
+    /// anything else refuses the deletion for as long as history names the attribute. History names an attribute by a
+    /// plain id beside its copied name and type instead (see "Audit Rows Name Objects by Plain Id" in src/CLAUDE.md).
+    /// </summary>
+    [TestCase("ConnectedSystemAttributes")]
+    [TestCase("MetaverseAttributes")]
+    public async Task AttributeDeletion_ReachesNoHistoryTableAsync(string attributeTable)
+    {
+        await using var ctx = NewContext();
+
+        var reaching = await ctx.Database.SqlQueryRaw<string>(
+            @"WITH RECURSIVE fk AS (
+                  SELECT c.conname::text COLLATE ""C"" AS conname,
+                         child.relname::text COLLATE ""C"" AS child,
+                         parent.relname::text COLLATE ""C"" AS parent,
+                         c.confdeltype
+                  FROM pg_constraint c
+                  INNER JOIN pg_class child ON child.oid = c.conrelid
+                  INNER JOIN pg_class parent ON parent.oid = c.confrelid
+                  WHERE c.contype = 'f'
+              ),
+              reachable(tbl, depth, path) AS (
+                  SELECT @root::text COLLATE ""C"", 0, @root::text COLLATE ""C""
+                  UNION ALL
+                  SELECT fk.child, r.depth + 1, (r.path || ' > ' || fk.child)::text COLLATE ""C""
+                  FROM reachable r INNER JOIN fk ON fk.parent = r.tbl
+                  WHERE r.depth < 12 AND position(fk.child in r.path) = 0 AND fk.confdeltype = 'c'
+              )
+              SELECT DISTINCT (r.path || ' -> ' || fk.child || '  [' || fk.conname || ']')::text COLLATE ""C"" AS ""Value""
+              FROM reachable r INNER JOIN fk ON fk.parent = r.tbl
+              WHERE fk.child = ANY(@history)
+              ORDER BY 1",
+            new Npgsql.NpgsqlParameter("root", attributeTable),
+            new Npgsql.NpgsqlParameter("history", HistoryTables)).ToListAsync();
+
+        Assert.That(reaching, Is.Empty,
+            $"deleting a row of {attributeTable} reaches history through these foreign keys. History names an attribute " +
+            "by a plain id, never a constraint:" + Environment.NewLine + string.Join(Environment.NewLine, reaching));
+    }
+
+    /// <summary>
     /// The walk above treats <c>SET NULL</c> as safe, which holds only while the column it nulls actually accepts
     /// null. PostgreSQL allows the pairing and fails at delete time, so this asserts the premise rather than
     /// assuming it.

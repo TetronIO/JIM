@@ -8372,7 +8372,12 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                 {
                     AttributeName = ac.AttributeName,
                     AttributeType = ac.AttributeType,
-                    AttributePlurality = ac.Attribute != null ? ac.Attribute.AttributePlurality : Models.Core.AttributePlurality.SingleValued,
+                    // The attribute is named by plain id (#2931): its plurality is the live definition's while it is
+                    // there; the name and type are the row's own copies either way.
+                    AttributePlurality = database.ConnectedSystemAttributes
+                        .Where(attribute => attribute.Id == ac.AttributeId)
+                        .Select(attribute => (Models.Core.AttributePlurality?)attribute.AttributePlurality)
+                        .FirstOrDefault() ?? Models.Core.AttributePlurality.SingleValued,
                     // Capped as the detail loads cap an object's values (#2498): a large group's change carries one
                     // value change per member, and the rest are read a window at a time.
                     ValueChangeTotal = ac.ValueChanges.Count(),
@@ -9808,7 +9813,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             @"DELETE FROM ""SyncRules"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 12. Delete Object Type Attributes
+        // 12. Delete Object Type Attributes. On the preserve-history path the change records' attribute rows keep naming
+        //     them by plain id (#2931): no foreign key, so nothing in the history is written.
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemAttributes""
               WHERE ""ConnectedSystemObjectTypeId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0})",

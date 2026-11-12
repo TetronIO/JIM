@@ -92,7 +92,7 @@ public partial class SyncRepository
         var allAttrChanges = newChanges
             .Concat(attributeAppendsToExistingChanges)
             .SelectMany(c => c.AttributeChanges.Select(ac =>
-                (ChangeId: c.Id, AttributeId: ac.Attribute?.Id, AttrChange: ac)))
+                (ChangeId: c.Id, AttributeId: ac.AttributeIdForWrite(), AttrChange: ac)))
             .ToList();
 
         if (allAttrChanges.Count > 0)

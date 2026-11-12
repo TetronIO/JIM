@@ -16,6 +16,7 @@ using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
 namespace JIM.PostgresData;
 
@@ -205,12 +206,46 @@ public class JimDbContext : DbContext
     public JimDbContext()
     {
         _connectionString = BuildConnectionString();
+        WriteHistoryAttributeIdsOnInsert();
     }
 
     // Constructor for dependency injection with DbContextOptions
     public JimDbContext(DbContextOptions<JimDbContext> options) : base(options)
     {
         // When using DI, options are already configured, so we don't need to build connection string
+        WriteHistoryAttributeIdsOnInsert();
+    }
+
+    /// <summary>
+    /// A change record's attribute row names its attribute by a plain id, and its <c>Attribute</c> is an unmapped working
+    /// reference (#2931), so EF Core writes only the id. The writers set it, but a row added through a graph EF walks (a
+    /// change carried on an execution item, a change saved with its object) would otherwise be inserted without one, and
+    /// nothing in the database would object. Any such row inserted with no id takes its working reference's.
+    /// </summary>
+    private void WriteHistoryAttributeIdsOnInsert()
+    {
+        // A mocked context (a test's proxy of this class) has no change tracker while it is being constructed.
+        var changeTracker = ChangeTracker;
+        if (changeTracker == null)
+            return;
+
+        changeTracker.Tracked += (_, e) => WriteHistoryAttributeId(e.Entry);
+        changeTracker.StateChanged += (_, e) => WriteHistoryAttributeId(e.Entry);
+    }
+
+    private static void WriteHistoryAttributeId(EntityEntry entry)
+    {
+        if (entry.State != EntityState.Added)
+            return;
+
+        var attributeId = entry.Entity switch
+        {
+            ConnectedSystemObjectChangeAttribute { AttributeId: null } attributeChange => attributeChange.AttributeIdForWrite(),
+            MetaverseObjectChangeAttribute { AttributeId: null } attributeChange => attributeChange.AttributeIdForWrite(),
+            _ => null
+        };
+        if (attributeId != null)
+            entry.Property(nameof(MetaverseObjectChangeAttribute.AttributeId)).CurrentValue = attributeId;
     }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -406,13 +441,13 @@ public class JimDbContext : DbContext
             .WithOne(av => av.ConnectedSystemObjectChangeAttribute)
             .OnDelete(DeleteBehavior.Cascade); // let the db delete all dependent ConnectedSystemObjectChangeAttributeValue objects when the parent is deleted.
 
-        // When a Connected System attribute definition is deleted, preserve the change history record
-        // by setting the FK to null. The AttributeName and AttributeType sibling properties retain
-        // the attribute metadata even after the definition is removed.
+        // A change record's attribute row names its attribute by a plain id (#2931), as a change record names its object
+        // (#2669): no relationship, so no foreign key, and deleting the attribute never rewrites the rows. Readers show the
+        // live attribute while it is there and otherwise the row's own copied AttributeName and AttributeType. The index
+        // keeps the name the foreign key's convention index had. AuditReferenceCatalogueTests holds the schema to this.
         modelBuilder.Entity<ConnectedSystemObjectChangeAttribute>()
-            .HasOne(ca => ca.Attribute)
-            .WithMany()
-            .OnDelete(DeleteBehavior.SetNull);
+            .HasIndex(ca => ca.AttributeId)
+            .HasDatabaseName("IX_ConnectedSystemObjectChangeAttributes_AttributeId");
 
         // The references the change record reference fix-up still has to resolve (#2690), which it reads after every
         // export and import. Partial, because a reference is marked only while its object's id is unwritten, so the
@@ -639,13 +674,11 @@ public class JimDbContext : DbContext
             .HasForeignKey(a => a.SyncRuleId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        // When a metaverse attribute definition is deleted, preserve the change history record
-        // by setting the FK to null. The AttributeName and AttributeType sibling properties retain
-        // the attribute metadata even after the definition is removed.
+        // The Metaverse side of the same rule (#2931): the attribute by plain id, with no foreign key. The index is what the
+        // Metaverse Object change search finds the changes to one attribute by.
         modelBuilder.Entity<MetaverseObjectChangeAttribute>()
-            .HasOne(ca => ca.Attribute)
-            .WithMany()
-            .OnDelete(DeleteBehavior.SetNull);
+            .HasIndex(ca => ca.AttributeId)
+            .HasDatabaseName("IX_MetaverseObjectChangeAttributes_AttributeId");
 
         modelBuilder.Entity<MetaverseObjectAttributeValue>()
             .HasOne(moav => moav.MetaverseObject)
