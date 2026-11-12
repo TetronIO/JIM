@@ -1171,6 +1171,7 @@ Describe 'Stop-LabVm' {
         if (-not (Get-Command Stop-VM -ErrorAction SilentlyContinue)) {
             function global:Stop-VM {
                 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '', Justification = 'A stand-in for the Hyper-V cmdlet, to be mocked.')]
+                [CmdletBinding()]
                 param([string]$Name, [switch]$Force, [switch]$TurnOff, [switch]$AsJob)
             }
         }
@@ -1208,6 +1209,38 @@ Describe 'Stop-LabVm' {
         Mock -ModuleName LabDomainController Stop-VM { $job = Start-Job -ScriptBlock { throw 'The shutdown integration service did not answer.' }; $null = Wait-Job -Job $job; $job } -ParameterFilter { $AsJob }
         Stop-LabVm -Name 'exchange-primary' -TimeoutSeconds 3600 | Should -Be 'TurnedOff'
         Should -Invoke -ModuleName LabDomainController Start-Sleep -Times 0 -Exactly -Scope It
+    }
+
+    It 'tries the turn-off again while Hyper-V refuses it, since the guest shutdown it started may still be under way' {
+        # Hyper-V refuses Turn Off while the guest is shutting down (event 19060); dc-primary took 5 m 45 s to shut
+        # down in the monthly rebuild's Build, run 43011778912, and its single turn-off failed the build.
+        $script:refusals = 0
+        $script:turnedOff = $false
+        Mock -ModuleName LabDomainController Get-VM { [pscustomobject]@{ State = $(if ($script:turnedOff) { 'Off' } else { 'Running' }) } }
+        Mock -ModuleName LabDomainController Stop-VM { if ($script:refusals -lt 2) { $script:refusals++; throw "'dc-primary' failed to change state." }; $script:turnedOff = $true } -ParameterFilter { $TurnOff }
+        Mock -ModuleName LabDomainController Stop-VM { Start-Job -ScriptBlock { } } -ParameterFilter { $AsJob }
+        Mock -ModuleName LabDomainController Write-Warning {}
+        Stop-LabVm -Name 'dc-primary' -TimeoutSeconds 30 | Should -Be 'TurnedOff'
+        Should -Invoke -ModuleName LabDomainController Stop-VM -Times 3 -Exactly -Scope It -ParameterFilter { $TurnOff }
+        Should -Invoke -ModuleName LabDomainController Write-Warning -Times 1 -Exactly -Scope It -ParameterFilter { $Message -like '*would not turn dc-primary off*' }
+    }
+
+    It 'counts the VM as shut down when it reaches Off while Hyper-V is refusing to turn it off' {
+        $script:refused = $false
+        Mock -ModuleName LabDomainController Get-VM { [pscustomobject]@{ State = $(if ($script:refused) { 'Off' } else { 'Running' }) } }
+        Mock -ModuleName LabDomainController Stop-VM { $script:refused = $true; throw "'dc-primary' failed to change state." } -ParameterFilter { $TurnOff }
+        Mock -ModuleName LabDomainController Stop-VM { Start-Job -ScriptBlock { } } -ParameterFilter { $AsJob }
+        Stop-LabVm -Name 'dc-primary' -TimeoutSeconds 30 | Should -Be 'ShutDown'
+        Should -Invoke -ModuleName LabDomainController Stop-VM -Times 1 -Exactly -Scope It -ParameterFilter { $TurnOff }
+    }
+
+    It 'throws Hyper-V''s error when it is still refusing the turn-off after -TurnOffRetrySeconds' {
+        Mock -ModuleName LabDomainController Get-VM { [pscustomobject]@{ State = 'Running' } }
+        Mock -ModuleName LabDomainController Stop-VM { throw "'dc-primary' failed to change state." } -ParameterFilter { $TurnOff }
+        Mock -ModuleName LabDomainController Stop-VM { Start-Job -ScriptBlock { } } -ParameterFilter { $AsJob }
+        Mock -ModuleName LabDomainController Write-Warning {}
+        { Stop-LabVm -Name 'dc-primary' -TimeoutSeconds 30 -TurnOffRetrySeconds 9 } | Should -Throw "*'dc-primary' failed to change state.*"
+        Should -Invoke -ModuleName LabDomainController Stop-VM -Times 4 -Exactly -Scope It -ParameterFilter { $TurnOff }
     }
 
     It 'waits for the shutdown job to finish, and never disposes of it, since the Hyper-V module completes it on a thread of its own' {
@@ -2071,6 +2104,26 @@ Describe 'Get-LabRebuildBuildChain' {
         $chains = @(Get-LabRebuildBuildChain -Role $roles)
         $chains.Count | Should -Be 1
         @($chains[0].Roles) | Should -Be @('dc-primary', 'dc-source', 'adfs-primary')
+    }
+}
+
+Describe 'Get-LabRebuildExclusiveRole' {
+    It 'names every Exchange server, in the order given, since two cannot start on the host at once' {
+        $roles = @(
+            [pscustomobject]@{ live = 'dc-primary'; kind = 'DomainController' },
+            [pscustomobject]@{ live = 'exchange-source'; kind = 'ExchangeServer' },
+            [pscustomobject]@{ live = 'adfs-primary'; kind = 'FederationServer' },
+            [pscustomobject]@{ live = 'exchange-primary'; kind = 'ExchangeServer' }
+        )
+        @(Get-LabRebuildExclusiveRole -Role $roles) | Should -Be @('exchange-source', 'exchange-primary')
+    }
+
+    It 'holds nothing back when the roles do not say what kind they are (a host on older scripts)' {
+        @(Get-LabRebuildExclusiveRole -Role @([pscustomobject]@{ live = 'exchange-primary'; dependsOn = 'dc-primary' })).Count | Should -Be 0
+    }
+
+    It 'returns nothing for no roles' {
+        @(Get-LabRebuildExclusiveRole -Role @()).Count | Should -Be 0
     }
 }
 
@@ -3260,6 +3313,14 @@ Describe 'Invoke-LabRebuildPhase' {
             Add-FakeLiveSet $lab
             $results = @(Invoke-LabRebuildPhase -Phase Status -Plan (Get-FakePlan -WithFederation -WithExchange) -Adapter $lab.Adapter)
             @($results | ForEach-Object { "$($_.live)<$($_.dependsOn)" } | Sort-Object) | Should -Be @('adfs-primary<dc-primary', 'dc-primary<', 'dc-source<', 'dc-target<', 'exchange-primary<dc-primary')
+        }
+
+        It 'says what kind of server each role is, so the runner can build the Exchange servers one at a time' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $results = @(Invoke-LabRebuildPhase -Phase Status -Plan (Get-FakePlan -WithFederation -WithExchange) -Adapter $lab.Adapter)
+            @($results | ForEach-Object { "$($_.live)=$($_.kind)" } | Sort-Object) | Should -Be @('adfs-primary=FederationServer', 'dc-primary=DomainController', 'dc-source=DomainController', 'dc-target=DomainController', 'exchange-primary=ExchangeServer')
+            @(Get-LabRebuildExclusiveRole -Role $results) | Should -Be @('exchange-primary')
         }
 
         It 'still reports a run whose guest build cannot be read, as no build rather than an error' {
