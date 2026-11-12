@@ -202,6 +202,10 @@ public partial class SyncRepository : ISyncRepository
         => _repo.ConnectedSystems.GetConnectedSystemObjectValueCountsModifiedSinceAsync(connectedSystemId, modifiedSince, pageSize, afterId, objectTypeId,
             createdOnOrAfter, onlyIds, valueCountCap, valueLoadPlan, earlierCandidateIds);
 
+    public Task<IReadOnlyDictionary<Guid, int>> GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync(IReadOnlyCollection<Guid> pageObjectIds,
+        SynchronisationValueLoadPlan valueLoadPlan, int valueCountCap)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync(pageObjectIds, valueLoadPlan, valueCountCap);
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
 

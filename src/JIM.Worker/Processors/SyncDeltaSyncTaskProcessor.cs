@@ -254,7 +254,15 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             // The sweep's ids come from the selection its loads use, the modified-since one (#2861).
             (afterId, createdOnOrAfter) => _syncRepo.GetConnectedSystemObjectIdsModifiedSinceAsync(
                 _connectedSystem.Id, lastSyncTimestamp, pageSize, afterId, createdOnOrAfter),
-            pageSize, "Delta Synchronisation", observeUndeclaredReferenceTargets: processedInFull.Count > 0);
+            pageSize, "Delta Synchronisation", observeUndeclaredReferenceTargets: processedInFull.Count > 0,
+            // A count is made before the page is known, and the load leaves values out of an object depending on which
+            // objects share its page (#2818): each planned page is checked before it loads, so it is planned with what its
+            // load brings. A type processed in full is loaded whole, and needs no check.
+            revisePlannedPage: valueLoadPlan.LeavesNothingOut
+                ? null
+                : (objectTypeId, plannedIds, valueCountCap) => LoadsInFull(objectTypeId)
+                    ? Task.FromResult<IReadOnlyDictionary<Guid, int>>(new Dictionary<Guid, int>())
+                    : _syncRepo.GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync(plannedIds, valueLoadPlan, valueCountCap));
 
         try
         {

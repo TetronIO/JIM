@@ -170,6 +170,19 @@ public interface ISyncRepository
         SynchronisationValueLoadPlan? valueLoadPlan = null, IReadOnlyCollection<Guid>? earlierCandidateIds = null);
 
     /// <summary>
+    /// Checks a planned Delta Synchronisation page before it loads (#2934): for each of its objects whose planned attributes
+    /// (#2818) the load would bring whole because of the company the object keeps on exactly this page (a value referencing
+    /// another of its objects, or a Metaverse Object it shares with one), the values the load brings, counted to
+    /// <paramref name="valueCountCap"/>. A count made before the page was planned saw other candidates, and can have counted
+    /// such an attribute as left out. Objects not returned bring what was counted.
+    /// </summary>
+    /// <param name="pageObjectIds">The objects planned for the page.</param>
+    /// <param name="valueLoadPlan">The plan the page load uses.</param>
+    /// <param name="valueCountCap">The most values counted for one object.</param>
+    Task<IReadOnlyDictionary<Guid, int>> GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync(IReadOnlyCollection<Guid> pageObjectIds,
+        SynchronisationValueLoadPlan valueLoadPlan, int valueCountCap);
+
+    /// <summary>
     /// The Object Types that hold at least one of the Connected System's objects (#2492). A type-ordered
     /// synchronisation pages only these: a schema can declare a hundred types while the objects use two. Answered from
     /// the (ConnectedSystemId, TypeId, Id) index one type at a time, so it costs a probe per type in use, not a scan.

@@ -518,6 +518,14 @@ public partial class SyncRepository : ISyncRepository
         => Task.FromResult(ValueCountPage(ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter, onlyIds)
             .Where(c => IsModifiedSince(c, modifiedSince)), pageSize, afterId, valueCountCap));
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Always empty: the page load here does not apply the plan, so every object is loaded whole and was counted whole.
+    /// </remarks>
+    public Task<IReadOnlyDictionary<Guid, int>> GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync(IReadOnlyCollection<Guid> pageObjectIds,
+        SynchronisationValueLoadPlan valueLoadPlan, int valueCountCap)
+        => Task.FromResult<IReadOnlyDictionary<Guid, int>>(new Dictionary<Guid, int>());
+
     /// <summary>
     /// A page plan (#2934): the objects the keyset page loaders would return, ordered and cursored as they are, each with its
     /// value count capped at <paramref name="valueCountCap"/>.

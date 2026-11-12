@@ -63,7 +63,7 @@ public class ValueBudgetedCsoPagingDatabaseTests
     }
 
     private sealed record Seeded(int SystemId, int PersonTypeId, int GroupTypeId, List<Guid> PersonIds, List<Guid> SmallGroupIds,
-        List<Guid> LargeGroupIds, Dictionary<Guid, int> ValueCounts);
+        List<Guid> LargeGroupIds, Dictionary<Guid, int> ValueCounts, ConnectedSystemObjectTypeAttribute Member);
 
     /// <summary>
     /// People of three values each; then, in import order, small groups, the large groups one after another (as a
@@ -131,7 +131,7 @@ public class ValueBudgetedCsoPagingDatabaseTests
         smallGroupIds.AddRange(AddGroups(Enumerable.Range(0, smallGroupsAfter).Select(_ => random.Next(0, 6))));
         await seed.SaveChangesAsync();
 
-        return new Seeded(system.Id, person.Id, group.Id, personIds, smallGroupIds, largeGroupIds, valueCounts);
+        return new Seeded(system.Id, person.Id, group.Id, personIds, smallGroupIds, largeGroupIds, valueCounts, group.Attributes[1]);
     }
 
     private static ConnectedSystemObjectType NewType(ConnectedSystem system, string name)
@@ -368,5 +368,100 @@ public class ValueBudgetedCsoPagingDatabaseTests
             Assert.That(afterSmallWithoutIt.Single(c => c.Id == joinedLargeReferencingSmall).ValueCount, Is.EqualTo(1),
                 "with no candidate referenced, the members are left out");
         }
+    }
+
+    /// <summary>
+    /// The count of a group is made when its chunk is counted, and a group it references can be counted in a later chunk
+    /// (#2934): the first count leaves the members out, but once both are planned on one page the load brings them whole
+    /// (#2818). The check of the planned page finds it, so the counts the page is planned with are what its load brings.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync_GroupReferencingAGroupCountedInALaterChunk_GivesWhatThePageLoadBringsAsync()
+    {
+        int systemId, groupTypeId;
+        ConnectedSystemObjectTypeAttribute member;
+        Guid referencing, referenced;
+        await using (var seed = NewContext())
+        {
+            var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+            var system = new ConnectedSystem { Name = "Glitterband", ConnectorDefinition = connectorDefinition };
+            var person = NewType(system, "person");
+            var group = NewType(system, "group");
+            member = new ConnectedSystemObjectTypeAttribute
+            {
+                Name = "member", ConnectedSystemObjectType = group, Type = AttributeDataType.Reference,
+                AttributePlurality = AttributePlurality.MultiValued, Selected = true
+            };
+            group.Attributes.Add(member);
+            var groupMvType = new MetaverseObjectType { Name = "Group", PluralName = "Groups" };
+            seed.AddRange(connectorDefinition, system, person, group, groupMvType);
+            await seed.SaveChangesAsync();
+
+            var people = Enumerable.Range(0, 40).Select(i => NewObject(system, person, $"person{i}")).ToList();
+            seed.AddRange(people);
+
+            // The large group sorts first, so a count of one object at a time counts it before the group it references.
+            var large = NewObject(system, group, "large");
+            large.MetaverseObject = new MetaverseObject { Type = groupMvType };
+            var small = NewObject(system, group, "small");
+            small.MetaverseObject = new MetaverseObject { Type = groupMvType };
+            foreach (var target in people.Take(30))
+                large.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = member, AttributeId = member.Id, ReferenceValue = target });
+            large.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = member, AttributeId = member.Id, ReferenceValue = small });
+            foreach (var target in people.Take(5))
+                small.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = member, AttributeId = member.Id, ReferenceValue = target });
+            seed.AddRange(large, small);
+            await seed.SaveChangesAsync();
+            (systemId, groupTypeId, referencing, referenced) = (system.Id, group.Id, large.Id, small.Id);
+        }
+
+        await using (var mark = NewContext())
+            await mark.ConnectedSystemObjects.Where(c => c.TypeId == groupTypeId).ExecuteUpdateAsync(s => s.SetProperty(c => c.SynchronisationPending, true));
+
+        var plan = new SynchronisationValueLoadPlan(new Dictionary<int, IReadOnlyList<ConnectedSystemObjectTypeAttribute>> { [groupTypeId] = [member] },
+            minimumHeldValueCount: 10);
+        var watermark = DateTime.UtcNow.AddMinutes(5);
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+        var firstChunk = await repository.Sync.GetConnectedSystemObjectValueCountsModifiedSinceAsync(systemId, watermark, 1, Guid.Empty, groupTypeId,
+            null, null, int.MaxValue, plan, []);
+        var secondChunk = await repository.Sync.GetConnectedSystemObjectValueCountsModifiedSinceAsync(systemId, watermark, 1, referencing, groupTypeId,
+            null, null, int.MaxValue, plan, [referencing]);
+        var revised = await repository.Sync.GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync([referencing, referenced], plan, int.MaxValue);
+        var planned = firstChunk.Concat(secondChunk)
+            .Select(c => (c.Id, revised.TryGetValue(c.Id, out var count) ? Math.Max(count, c.ValueCount) : c.ValueCount))
+            .ToList();
+
+        await using var loadContext = NewContext();
+        var page = await new PostgresDataRepository(loadContext).Sync.GetConnectedSystemObjectsModifiedSinceAsync(systemId, watermark, 1, 10, 2,
+            Guid.Empty, groupTypeId, null, plan, [referencing, referenced]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(firstChunk, Is.EqualTo(new[] { (referencing, 1) }), "precondition: counted alone, its members are left out");
+            Assert.That(page.Results.Single(c => c.Id == referencing).AttributeValues, Has.Count.EqualTo(32),
+                "precondition: on a page with the group it references, the load brings every member");
+            Assert.That(planned, Is.EqualTo(page.Results.Select(c => (c.Id, c.AttributeValues.Count))),
+                "the counts the page is planned with are what its load brings");
+        }
+    }
+
+    /// <summary>
+    /// A page none of whose objects depends on its company revises nothing: groups that reference only people, and are not
+    /// joined, so the load brings them whole whatever the page and they were counted whole.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync_NoObjectDependingOnThePage_ReturnsNothingAsync()
+    {
+        var seeded = await SeedAsync(people: 30, smallGroupsBefore: 1, largeGroupMembers: [25], smallGroupsAfter: 1);
+        var plan = new SynchronisationValueLoadPlan(
+            new Dictionary<int, IReadOnlyList<ConnectedSystemObjectTypeAttribute>> { [seeded.GroupTypeId] = [seeded.Member] }, minimumHeldValueCount: 10);
+
+        await using var ctx = NewContext();
+        var revised = await new PostgresDataRepository(ctx).Sync.GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync(
+            seeded.SmallGroupIds.Concat(seeded.LargeGroupIds).ToList(), plan, int.MaxValue);
+
+        Assert.That(revised, Is.Empty);
     }
 }

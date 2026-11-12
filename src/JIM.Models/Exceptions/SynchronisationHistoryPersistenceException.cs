@@ -73,7 +73,7 @@ public class SynchronisationHistoryPersistenceException : SyncPersistenceExcepti
         return page > 0
             ? $"Failed to record the execution items and change history of page {page} of {totalPages} for Connected System " +
               $"'{connectedSystemName}'. Those synchronisation changes were saved; their history was not, and the run stopped " +
-              $"without saving the changes of any page after page {page + 1} or of the steps after the pages."
+              "without saving the changes of any page after the next one, or of the steps after the pages."
             : "Failed to record the execution items and change history of the steps after the pages for Connected System " +
               $"'{connectedSystemName}'. Those synchronisation changes were saved; their history was not, and the run stopped " +
               "before saving any further changes.";

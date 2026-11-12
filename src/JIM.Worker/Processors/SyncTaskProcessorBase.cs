@@ -8584,6 +8584,8 @@ public abstract class SyncTaskProcessorBase
     /// selection <paramref name="loadPage"/> makes for the sweep (#2861).</param>
     /// <param name="pageSize">The most objects a page holds (<c>Sync.PageSize</c>).</param>
     /// <param name="runKind">The run kind, for the log line.</param>
+    /// <param name="revisePlannedPage">Checks a planned page before it loads where its load can leave values out of an object
+    /// depending on the page it shares (#2818, #2934); null where the load brings every value.</param>
     /// <param name="observeUndeclaredReferenceTargets">Whether to ask the database which types the mapped reference
     /// attributes with no declared target actually point at (one aggregate over their values, about 2 seconds at
     /// 7 million values), rather than assume each reaches every type. Worth it for a Full Synchronisation: without it
@@ -8592,7 +8594,7 @@ public abstract class SyncTaskProcessorBase
     protected async Task<TypeOrderedCsoPager> CreateTypeOrderedPagerAsync(
         List<SyncRule> activeSyncRules, DateTime runStartedAt, TypeOrderedCsoPager.PageLoader loadPage,
         TypeOrderedCsoPager.ValueCountLoader loadValueCounts, TypeOrderedCsoPager.SweepIdLoader loadSweepIds, int pageSize, string runKind,
-        bool observeUndeclaredReferenceTargets)
+        bool observeUndeclaredReferenceTargets, TypeOrderedCsoPager.PlannedPageReviser? revisePlannedPage = null)
     {
         // Only the types holding objects are paged: a schema can declare a hundred (OpenLDAP's does) while the objects
         // use two. A type the loaded schema does not carry still has its objects paged, ordered as one with no
@@ -8624,7 +8626,7 @@ public abstract class SyncTaskProcessorBase
         {
             Log.Information("{RunKind} type order: no objects to page; sweeping for any created during the run", runKind);
             _csoPager = new TypeOrderedCsoPager(loadPage, loadValueCounts, loadSweepIds, [], runStartedAt - TypeOrderedSweepClockSkewMargin,
-                pageSize, PageValueBudget);
+                pageSize, PageValueBudget, revisePlannedPage);
             return _csoPager;
         }
 
@@ -8638,7 +8640,7 @@ public abstract class SyncTaskProcessorBase
         }
 
         _csoPager = new TypeOrderedCsoPager(loadPage, loadValueCounts, loadSweepIds, order.TypeIds, runStartedAt - TypeOrderedSweepClockSkewMargin,
-            pageSize, PageValueBudget);
+            pageSize, PageValueBudget, revisePlannedPage);
         return _csoPager;
     }
 

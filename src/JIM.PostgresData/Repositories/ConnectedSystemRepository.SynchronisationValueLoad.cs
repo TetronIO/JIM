@@ -276,6 +276,157 @@ public partial class ConnectedSystemRepository
     }
 
     /// <summary>
+    /// What a planned Delta Synchronisation page's load brings for the objects whose planned attributes depend on that page
+    /// (#2934). See <see cref="ISyncRepository.GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The page load decides over the page (<see cref="DecideAttributesLeftOutAsync"/>), and so does this: an object of a
+    /// planned type that is Normal and joined has a planned attribute loaded whole when it shares its Metaverse Object with
+    /// another of the page's objects, or when a value of that attribute references one of them. The count saw other
+    /// candidates, so it can have counted such an attribute as left out: a group counted before the group it references,
+    /// in an earlier count. (Two objects of one Connected System cannot share a Metaverse Object while the unique index on
+    /// the join holds; the check mirrors the load's all the same.) Objects loaded whole whatever the page (not Normal, not
+    /// joined, below the threshold) were counted whole, and are not returned.
+    /// </para>
+    /// <para>
+    /// One round trip when no object depends on the page: the page's objects' type, status and join, and the references
+    /// among them. Only for an object that does depend on it, a second: its other values, and its planned attributes, each
+    /// counted to the cap, so what is returned is exactly what the load brings.
+    /// </para>
+    /// </remarks>
+    public async Task<IReadOnlyDictionary<Guid, int>> GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync(IReadOnlyCollection<Guid> pageObjectIds,
+        SynchronisationValueLoadPlan valueLoadPlan, int valueCountCap)
+    {
+        ArgumentNullException.ThrowIfNull(valueLoadPlan);
+        ArgumentOutOfRangeException.ThrowIfLessThan(valueCountCap, 1);
+        var revised = new Dictionary<Guid, int>();
+        if (pageObjectIds.Count == 0 || valueLoadPlan.LeavesNothingOut || !Repository.Database.Database.IsRelational())
+            return revised;
+
+        var pageIds = pageObjectIds.Distinct().ToArray();
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        var transaction = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+        using var span = ActivitySource.StartActivity("Cso.Page.CheckValuesLeftOut");
+
+        var objects = new List<(Guid Id, int TypeId, ConnectedSystemObjectStatus Status, Guid? MetaverseObjectId)>();
+        var referencingPage = new HashSet<(Guid, int)>();
+        await using (var batch = new NpgsqlBatch(connection) { Transaction = transaction })
+        {
+            var read = new NpgsqlBatchCommand(PageObjectJoinStateSql);
+            read.Parameters.Add(new NpgsqlParameter("objectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = pageIds });
+            batch.BatchCommands.Add(read);
+
+            var references = new NpgsqlBatchCommand(CandidatePageReferenceSql);
+            references.Parameters.Add(new NpgsqlParameter("pageObjectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = pageIds });
+            references.Parameters.Add(new NpgsqlParameter("objectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = pageIds });
+            batch.BatchCommands.Add(references);
+
+            await using var reader = await batch.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                objects.Add((reader.GetGuid(0), reader.GetInt32(1), (ConnectedSystemObjectStatus)reader.GetInt32(2),
+                    reader.IsDBNull(3) ? null : reader.GetGuid(3)));
+            }
+            await reader.NextResultAsync();
+            while (await reader.ReadAsync())
+                referencingPage.Add((reader.GetGuid(0), reader.GetInt32(1)));
+        }
+
+        var sharedMetaverseObjectIds = objects
+            .Where(o => o.MetaverseObjectId.HasValue)
+            .GroupBy(o => o.MetaverseObjectId!.Value)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToHashSet();
+
+        // The objects whose planned attributes the load could leave out on another page, but brings whole on this one.
+        var dependingOnPage = objects
+            .Where(o => o.Status == ConnectedSystemObjectStatus.Normal && o.MetaverseObjectId.HasValue &&
+                        valueLoadPlan.AttributesByObjectTypeId.TryGetValue(o.TypeId, out var attributes) &&
+                        (sharedMetaverseObjectIds.Contains(o.MetaverseObjectId.Value) ||
+                         attributes.Any(a => referencingPage.Contains((o.Id, a.Id)))))
+            .ToList();
+        span?.SetTag("objectCount", objects.Count);
+        span?.SetTag("dependingOnPageCount", dependingOnPage.Count);
+        if (dependingOnPage.Count == 0)
+            return revised;
+
+        var plannedAttributeIds = valueLoadPlan.AttributesByObjectTypeId.Values.SelectMany(a => a).Select(a => a.Id).Distinct().ToArray();
+        var cap = Math.Max(valueCountCap, Math.Max(valueLoadPlan.MinimumHeldValueCount, 1));
+        var plannedCounts = dependingOnPage
+            .SelectMany(o => valueLoadPlan.AttributesByObjectTypeId[o.TypeId].Select(a => (ObjectId: o.Id, AttributeId: a.Id, Cap: cap)))
+            .ToList();
+
+        var otherValues = new Dictionary<Guid, long>();
+        var held = new Dictionary<(Guid, int), int>();
+        await using (var batch = new NpgsqlBatch(connection) { Transaction = transaction })
+        {
+            var other = new NpgsqlBatchCommand(OtherValueCountSql);
+            other.Parameters.Add(new NpgsqlParameter("objectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = dependingOnPage.Select(o => o.Id).ToArray() });
+            other.Parameters.Add(new NpgsqlParameter("excludedAttributeIds", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = plannedAttributeIds });
+            other.Parameters.Add(new NpgsqlParameter("cap", NpgsqlDbType.Integer) { Value = valueCountCap });
+            batch.BatchCommands.Add(other);
+
+            var count = new NpgsqlBatchCommand(ExportCandidateValueCountSql);
+            count.Parameters.Add(new NpgsqlParameter("objectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = plannedCounts.Select(c => c.ObjectId).ToArray() });
+            count.Parameters.Add(new NpgsqlParameter("attributeIds", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = plannedCounts.Select(c => c.AttributeId).ToArray() });
+            count.Parameters.Add(new NpgsqlParameter("caps", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = plannedCounts.Select(c => c.Cap).ToArray() });
+            batch.BatchCommands.Add(count);
+
+            await using var reader = await batch.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                otherValues[reader.GetGuid(0)] = reader.GetInt32(1);
+            await reader.NextResultAsync();
+            while (await reader.ReadAsync())
+                held[(reader.GetGuid(0), reader.GetInt32(1))] = reader.GetInt32(2);
+        }
+
+        // What the load brings, attribute by attribute, as DecideAttributesLeftOutAsync decides it for this page.
+        foreach (var o in dependingOnPage)
+        {
+            var shared = sharedMetaverseObjectIds.Contains(o.MetaverseObjectId!.Value);
+            long values = otherValues.GetValueOrDefault(o.Id);
+            foreach (var attribute in valueLoadPlan.AttributesByObjectTypeId[o.TypeId])
+            {
+                var n = held.GetValueOrDefault((o.Id, attribute.Id));
+                if (shared || n < valueLoadPlan.MinimumHeldValueCount || referencingPage.Contains((o.Id, attribute.Id)))
+                    values += n;
+            }
+
+            revised[o.Id] = (int)Math.Min(values, valueCountCap);
+        }
+
+        return revised;
+    }
+
+    /// <summary>
+    /// The join state of a page's objects, for <see cref="GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync"/>.
+    /// </summary>
+    internal const string PageObjectJoinStateSql =
+        @"SELECT cso.""Id"", cso.""TypeId"", cso.""Status"", cso.""MetaverseObjectId""
+          FROM ""ConnectedSystemObjects"" AS cso
+          WHERE cso.""Id"" = ANY(@objectIds)";
+
+    /// <summary>
+    /// Each object's values outside the excluded attributes, counted up to the cap, led by the object's index entries.
+    /// </summary>
+    internal const string OtherValueCountSql =
+        @"SELECT p.object_id, c.value_count
+          FROM unnest(@objectIds) AS p(object_id)
+          CROSS JOIN LATERAL (
+              SELECT count(*)::integer AS value_count
+              FROM (
+                  SELECT 1
+                  FROM ""ConnectedSystemObjectAttributeValues"" AS av
+                  WHERE av.""ConnectedSystemObjectId"" = p.object_id
+                    AND av.""AttributeId"" <> ALL(@excludedAttributeIds)
+                  LIMIT @cap
+              ) AS capped
+          ) AS c";
+
+    /// <summary>
     /// Each object's held values of an attribute, counted up to its own cap (<see cref="ExportCandidateValueCountSql"/>),
     /// and which of <paramref name="referencingObjectIds"/> hold a value referencing one of <paramref name="pageObjectIds"/>
     /// (<see cref="CandidatePageReferenceSql"/>), in one round trip.

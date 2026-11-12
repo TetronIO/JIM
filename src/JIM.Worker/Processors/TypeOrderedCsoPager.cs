@@ -67,9 +67,18 @@ public sealed class TypeOrderedCsoPager
     /// </summary>
     public delegate Task<List<Guid>> SweepIdLoader(Guid afterId, DateTime createdOnOrAfter);
 
+    /// <summary>
+    /// For a planned page, what the load would bring for those of its objects whose values depend on the company they keep
+    /// on that page (#2818): a load that leaves values out of an object decides by which objects share its page, which no
+    /// count made before the page was planned could know. Objects not named are as counted; a value is counted to
+    /// <c>valueCountCap</c> at most.
+    /// </summary>
+    public delegate Task<IReadOnlyDictionary<Guid, int>> PlannedPageReviser(int? objectTypeId, IReadOnlyList<Guid> plannedIds, int valueCountCap);
+
     private readonly PageLoader _loadPage;
     private readonly ValueCountLoader _loadValueCounts;
     private readonly SweepIdLoader _loadSweepIds;
+    private readonly PlannedPageReviser? _revisePlannedPage;
     private readonly IReadOnlyList<int> _typeIds;
     private readonly Dictionary<int, int> _walkPositionByTypeId;
     private readonly DateTime _createdFloor;
@@ -116,14 +125,17 @@ public sealed class TypeOrderedCsoPager
     /// <see cref="Constants.SynchronisationLimits.MaxPageSize"/>.</param>
     /// <param name="valueBudget">The most attribute values a page holds, unless a single object holds more; that object
     /// gets a page of its own.</param>
+    /// <param name="revisePlannedPage">What the load would bring for a planned page's objects whose values depend on the page they
+    /// share (#2818), checked before the page loads; null where the load brings every value whatever the page.</param>
     public TypeOrderedCsoPager(PageLoader loadPage, ValueCountLoader loadValueCounts, SweepIdLoader loadSweepIds, IReadOnlyList<int> typeIds,
-        DateTime createdFloor, int pageSize, int valueBudget)
+        DateTime createdFloor, int pageSize, int valueBudget, PlannedPageReviser? revisePlannedPage = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(valueBudget, 1);
         _loadPage = loadPage;
         _loadValueCounts = loadValueCounts;
         _loadSweepIds = loadSweepIds;
+        _revisePlannedPage = revisePlannedPage;
         _typeIds = typeIds;
         _walkPositionByTypeId = typeIds.Select((typeId, position) => (typeId, position)).ToDictionary(t => t.typeId, t => t.position);
         _createdFloor = createdFloor;
@@ -215,7 +227,7 @@ public sealed class TypeOrderedCsoPager
 
                 if (_candidates.Count > 0)
                 {
-                    var planned = TakePlannedPage();
+                    var planned = await TakePlannedPageAsync(typeId);
 
                     // The page loads only the objects planned for it: one counted and since deleted is simply not there,
                     // and a load of the next objects from the cursor could bring one far over the budget in its place. The
@@ -276,7 +288,7 @@ public sealed class TypeOrderedCsoPager
             if (_candidates.Count == 0)
                 continue;
 
-            var batch = TakePlannedPage();
+            var batch = await TakePlannedPageAsync(null);
             var sweepPage = await _loadPage(_sweepPageCursor, null, _createdFloor, batch, batch.Count);
 
             // Records what is handed out, and keeps the guarantee that nothing is handed out twice whatever the loader returns.
@@ -337,9 +349,34 @@ public sealed class TypeOrderedCsoPager
     /// <summary>
     /// Takes the next page's objects from the front of the candidates, recording why the page ends.
     /// </summary>
-    private List<Guid> TakePlannedPage()
+    /// <remarks>
+    /// Where values can depend on the page an object shares (<see cref="PlannedPageReviser"/>), the planned page is checked
+    /// before it loads: a count that grew is raised and the page planned again, until a check raises nothing. Counts only
+    /// rise, so the page only shrinks, and each pass raises at least one count to at most the cap, so it ends; on a page
+    /// with nothing to raise it costs one check.
+    /// </remarks>
+    private async Task<List<Guid>> TakePlannedPageAsync(int? objectTypeId)
     {
         var take = ValueBudgetedBatchPlanner.FirstBatchSize(CandidateValueCounts(), _pageSize, _valueBudget);
+        while (_revisePlannedPage != null)
+        {
+            var revised = await _revisePlannedPage(objectTypeId, _candidates.Take(take).Select(c => c.Id).ToList(), _valueCountCap);
+            var raised = false;
+            for (var i = 0; i < take; i++)
+            {
+                if (!revised.TryGetValue(_candidates[i].Id, out var count) || count <= _candidates[i].ValueCount)
+                    continue;
+
+                _candidates[i] = (_candidates[i].Id, Math.Min(count, _valueCountCap));
+                raised = true;
+            }
+
+            if (!raised)
+                break;
+
+            take = ValueBudgetedBatchPlanner.FirstBatchSize(CandidateValueCounts(), _pageSize, _valueBudget);
+        }
+
         LastPageEndedAtValueBudget = take < _pageSize && (take < _candidates.Count || PlannedValues(take) > _valueBudget);
         var planned = _candidates.Take(take).Select(c => c.Id).ToList();
         _candidates.RemoveRange(0, take);

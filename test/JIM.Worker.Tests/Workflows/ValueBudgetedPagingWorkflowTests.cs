@@ -91,6 +91,122 @@ public class ValueBudgetedPagingWorkflowTests : WorkflowTestBase
         }
     }
 
+    // A group written while the run is in flight, with an id between Large A's and Large B's: inside the range the pager
+    // counted for the first page of groups, behind the candidates it kept for later pages (#2934).
+    private static readonly Guid InsideTheCountedRange = new("20000000-0000-0000-0000-000000000038");
+
+    /// <summary>
+    /// A group created mid-run inside the range already counted is not handed out by the type walk, whose next pages are
+    /// the candidates it counted; the closing sweep reaches it, as it reaches an object created behind the cursor, and it is
+    /// processed exactly once.
+    /// </summary>
+    [Test]
+    public async Task FullSync_GroupCreatedMidRunInsideTheCountedRange_IsProcessedOnceByTheClosingSweepAsync()
+    {
+        var directory = await BuildAsync();
+
+        var (_, run) = await SynchroniseAsync(directory.Source, ConnectedSystemRunType.FullSynchronisation, ValueBudget,
+            cso => CreateLateGroupOnce(directory, after: cso, trigger: "Small B"));
+
+        AssertLateGroupProcessedOnceAndLast(run);
+    }
+
+    /// <summary>
+    /// The same in a Delta Synchronisation processing the group type in full (#2615): its pages are counted and loaded as a
+    /// Full Synchronisation's are, and its closing sweep reaches the new group, created after the watermark.
+    /// </summary>
+    [Test]
+    public async Task DeltaSync_TypeProcessedInFull_GroupCreatedMidRunInsideTheCountedRange_IsProcessedOnceByTheClosingSweepAsync()
+    {
+        var directory = await BuildAsync();
+        await SynchroniseAsync(directory.Source, ConnectedSystemRunType.FullSynchronisation, int.MaxValue);
+        SyncRepo.SeedConfigurationChangeSynchronisation(new ConfigurationChangeSynchronisation
+        {
+            ConnectedSystemId = directory.Source.Id, ConnectedSystemObjectTypeId = directory.GroupType.Id, Reason = "Group import rule changed"
+        });
+
+        var (_, run) = await SynchroniseAsync(directory.Source, ConnectedSystemRunType.DeltaSynchronisation, ValueBudget,
+            cso => CreateLateGroupOnce(directory, after: cso, trigger: "Small B"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            AssertLateGroupProcessedOnceAndLast(run);
+            Assert.That(run.Processed, Has.Count.EqualTo(Groups.Length + 1), "every group, the type processed in full, and the late one");
+        }
+    }
+
+    /// <summary>
+    /// A group modified mid-run inside the range a Delta Synchronisation already counted, which it had not selected, is not
+    /// handed out by the walk, and the closing sweep reaches only objects created since the run began. It is processed by
+    /// neither, keeps its synchronisation-pending mark, and the next Delta Synchronisation processes it once.
+    /// </summary>
+    [Test]
+    public async Task DeltaSync_GroupModifiedMidRunInsideTheCountedRange_StaysPendingAndTheNextDeltaProcessesItOnceAsync()
+    {
+        var directory = await BuildAsync();
+        await SynchroniseAsync(directory.Source, ConnectedSystemRunType.FullSynchronisation, int.MaxValue);
+
+        // Every group but Large C changes, so the Delta counts the groups from Small A to Small E around it.
+        var modifiedAt = DateTime.UtcNow.AddSeconds(1);
+        foreach (var (name, _, _) in Groups.Where(g => g.Name != "Large C"))
+            Rename(directory.ByName[name], name + " (renamed)", modifiedAt);
+        var largeC = directory.ByName["Large C"];
+
+        var (_, first) = await SynchroniseAsync(directory.Source, ConnectedSystemRunType.DeltaSynchronisation, ValueBudget, cso =>
+        {
+            // Once the first page of groups is under way, an import changes Large C and marks it, as every writer does.
+            if (cso.Id == directory.ByName["Small B"].Id && !largeC.SynchronisationPending)
+            {
+                Rename(largeC, "Large C (renamed)", DateTime.UtcNow);
+                largeC.SynchronisationPending = true;
+            }
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first.Processed, Does.Not.Contain(largeC.Id), "inside the counted range, and not selected when it was counted");
+            Assert.That(first.Processed, Is.Unique);
+            Assert.That(first.Processed, Has.Count.EqualTo(Groups.Length - 1), "every other group once");
+            Assert.That(largeC.SynchronisationPending, Is.True, "its mark stays for the next Delta Synchronisation");
+        }
+
+        var (_, second) = await SynchroniseAsync(directory.Source, ConnectedSystemRunType.DeltaSynchronisation, ValueBudget);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(second.Processed.Count(id => id == largeC.Id), Is.EqualTo(1), "the next Delta Synchronisation processes it once");
+            Assert.That(largeC.SynchronisationPending, Is.False);
+            Assert.That(MetaverseGroupNames(), Does.Contain("Large C (renamed)"));
+        }
+    }
+
+    private void CreateLateGroupOnce(Directory directory, ConnectedSystemObject after, string trigger)
+    {
+        if (after.Id != directory.ByName[trigger].Id || SyncRepo.ConnectedSystemObjects.ContainsKey(InsideTheCountedRange))
+            return;
+
+        var late = Seed(directory.Source.Id, directory.GroupType, InsideTheCountedRange, "Small Z");
+        late.Created = DateTime.UtcNow;
+        directory.ByName["Small Z"] = late;
+        AddMember(directory, "Small Z", "Person 01", DateTime.UtcNow);
+    }
+
+    private void AssertLateGroupProcessedOnceAndLast(RunResult run)
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.Processed.Count(id => id == InsideTheCountedRange), Is.EqualTo(1), "processed exactly once");
+            Assert.That(run.Processed[^1], Is.EqualTo(InsideTheCountedRange), "by the closing sweep, after every group the walk handed out");
+            Assert.That(run.Processed, Is.Unique);
+            Assert.That(MetaverseGroupNames(), Does.Contain("Small Z"), "and projected");
+        }
+    }
+
+    private List<string?> MetaverseGroupNames() => SyncRepo.MetaverseObjects.Values
+        .Where(m => m.Type?.Name == "Group")
+        .Select(m => m.AttributeValues.FirstOrDefault(av => av.Attribute?.Name == "DisplayName")?.StringValue)
+        .ToList();
+
     private sealed record RunResult(List<string> Outcome, List<Guid> Processed, List<int> PageSizes, bool PagesWithinExpected,
         int LastExpectedTotal, int CrossPageReferenceObjects);
 
@@ -128,10 +244,11 @@ public class ValueBudgetedPagingWorkflowTests : WorkflowTestBase
         return run with { Outcome = Snapshot(activity) };
     }
 
-    private async Task<(Activity Activity, RunResult Run)> SynchroniseAsync(ConnectedSystem source, ConnectedSystemRunType runType, int valueBudget)
+    private async Task<(Activity Activity, RunResult Run)> SynchroniseAsync(ConnectedSystem source, ConnectedSystemRunType runType, int valueBudget,
+        Action<ConnectedSystemObject>? onProcessed = null)
     {
         source = await ReloadEntityAsync(source);
-        var profile = await CreateRunProfileAsync(source.Id, runType.ToString(), runType);
+        var profile = await CreateRunProfileAsync(source.Id, $"{runType} {Guid.NewGuid():N}", runType);
         var activity = await CreateActivityAsync(source.Id, profile, runType);
 
         var processed = new List<Guid>();
@@ -140,14 +257,19 @@ public class ValueBudgetedPagingWorkflowTests : WorkflowTestBase
         var lastExpectedTotal = 0;
         var onPage = 0;
 
+        // As the worker does before it loads the Connected System: the configuration changes the run may claim (#2615).
+        var eligibleChanges = await SyncRepo.GetConfigurationChangeSynchronisationIdsAwaitingAsync(source.Id);
         SyncTaskProcessorBase processor = runType == ConnectedSystemRunType.FullSynchronisation
-            ? new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, source, profile, activity, new CancellationTokenSource())
-            : new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, source, profile, activity, new CancellationTokenSource());
+            ? new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, source, profile, activity, new CancellationTokenSource(),
+                configurationChangeIdsEligibleToClaim: eligibleChanges)
+            : new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, source, profile, activity, new CancellationTokenSource(),
+                configurationChangeIdsEligibleToClaim: eligibleChanges);
         processor.PageValueBudgetForTests = valueBudget;
         processor.OnConnectedSystemObjectProcessedInPass2 = cso =>
         {
             processed.Add(cso.Id);
             onPage++;
+            onProcessed?.Invoke(cso);
         };
         processor.OnHistoryHandedOffForTests = batch =>
         {
@@ -324,7 +446,7 @@ public class ValueBudgetedPagingWorkflowTests : WorkflowTestBase
         }
 
         for (var i = 0; i < Groups.Length; i++)
-            byName[Groups[i].Name] = Seed(source.Id, groupType, new Guid($"20000000-0000-0000-0000-{i + 1:D12}"), Groups[i].Name);
+            byName[Groups[i].Name] = Seed(source.Id, groupType, new Guid($"20000000-0000-0000-0000-{(i + 1) * 16:X12}"), Groups[i].Name);
 
         var directory = new Directory(source, userType, groupType, member, byName);
         var created = DateTime.UtcNow.AddMinutes(-10);

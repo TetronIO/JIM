@@ -41,8 +41,9 @@ public class TypeOrderedCsoPagerTests
             return cso;
         }
 
-        public TypeOrderedCsoPager Pager(IReadOnlyList<int> typeIds, DateTime createdFloor, int valueBudget = int.MaxValue) =>
-            new(LoadAsync, LoadValueCountsAsync, LoadSweepIdsAsync, typeIds, createdFloor, PageSize, valueBudget);
+        public TypeOrderedCsoPager Pager(IReadOnlyList<int> typeIds, DateTime createdFloor, int valueBudget = int.MaxValue,
+            TypeOrderedCsoPager.PlannedPageReviser? revisePlannedPage = null) =>
+            new(LoadAsync, LoadValueCountsAsync, LoadSweepIdsAsync, typeIds, createdFloor, PageSize, valueBudget, revisePlannedPage);
 
         private IEnumerable<ConnectedSystemObject> Page(Guid afterId, int? typeId, DateTime? floor, IReadOnlyCollection<Guid>? onlyIds,
             int maxObjects) =>
@@ -524,6 +525,46 @@ public class TypeOrderedCsoPagerTests
             Assert.That(store.EarlierCandidateIdsByCall[1], Is.EqualTo(new[] { IdOf(4) }),
                 "the second page's count is a top-up of object 4, counted for the first page and left for this one");
             Assert.That(store.CountedIds, Is.Unique);
+        }
+    }
+
+    /// <summary>
+    /// A load that leaves values out of an object decides by the company the object keeps on its page (#2818), which the
+    /// count could not know. Once a page is planned, the pager asks what the load would bring for exactly that page, raises
+    /// any count that grew and plans again, until the page is stable: it can only shrink.
+    /// </summary>
+    [Test]
+    public async Task NextPageAsync_RevisionRaisesAPlannedCount_PlansAgainUntilThePageIsStableAsync()
+    {
+        var store = new FakeStore { PageSize = 10 };
+        store.Add(typeId: 1, values: 5, id: IdOf(1));
+        store.Add(typeId: 1, values: 5, id: IdOf(2));
+        store.Add(typeId: 1, values: 5, id: IdOf(3));
+        var revisions = new List<List<Guid>>();
+
+        // Object 1 references object 2, so on a page with it the load brings all 95 of 1's values.
+        Task<IReadOnlyDictionary<Guid, int>> ReviseAsync(int? typeId, IReadOnlyList<Guid> planned, int valueCountCap)
+        {
+            revisions.Add(planned.ToList());
+            IReadOnlyDictionary<Guid, int> revised = planned.Contains(IdOf(1)) && planned.Contains(IdOf(2))
+                ? new Dictionary<Guid, int> { [IdOf(1)] = 95 }
+                : new Dictionary<Guid, int> { [IdOf(3)] = 1 };
+            return Task.FromResult(revised);
+        }
+
+        var pages = await DrainAsync(store.Pager([1], RunStart, valueBudget: 100, revisePlannedPage: ReviseAsync));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(pages.Select(p => p.Page.Select(c => c.Id).ToList()),
+                Is.EqualTo(new[] { new List<Guid> { IdOf(1), IdOf(2) }, new List<Guid> { IdOf(3) } }),
+                "1 at 95 and 2 fill the budget, so 3 moves to the next page");
+            Assert.That(revisions, Is.EqualTo(new[]
+            {
+                new List<Guid> { IdOf(1), IdOf(2), IdOf(3) },
+                new List<Guid> { IdOf(1), IdOf(2) },
+                new List<Guid> { IdOf(3) }
+            }), "revised as planned, again once the page shrank, and a lower count than planned changes nothing");
         }
     }
 

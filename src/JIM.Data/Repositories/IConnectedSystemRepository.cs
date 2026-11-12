@@ -1413,6 +1413,13 @@ public interface IConnectedSystemRepository
         SynchronisationValueLoadPlan? valueLoadPlan = null, IReadOnlyCollection<Guid>? earlierCandidateIds = null);
 
     /// <summary>
+    /// The values a planned Delta Synchronisation page's load brings for objects whose planned attributes depend on that page
+    /// (#2934); see <see cref="ISyncRepository.GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync"/>.
+    /// </summary>
+    public Task<IReadOnlyDictionary<Guid, int>> GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync(IReadOnlyCollection<Guid> pageObjectIds,
+        SynchronisationValueLoadPlan valueLoadPlan, int valueCountCap);
+
+    /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System that have been created or modified since a given timestamp.
     /// Used for delta synchronisation statistics.
     /// Returns count of CSOs where Created > modifiedSince OR LastUpdated > modifiedSince.
