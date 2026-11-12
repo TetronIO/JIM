@@ -4372,7 +4372,7 @@ public partial class MetaverseRepository : IMetaverseRepository
     /// </summary>
     public async Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change)
     {
-        var changeId = ChangeRecordIds.New();
+        var changeId = TimeOrderedIds.New();
         change.Id = changeId;
 
         // The interpolated fragments are compile-time constant column lists, never user data.
@@ -4409,7 +4409,7 @@ public partial class MetaverseRepository : IMetaverseRepository
         // Insert attribute changes and their values
         foreach (var attrChange in change.AttributeChanges)
         {
-            var attrChangeId = ChangeRecordIds.New();
+            var attrChangeId = TimeOrderedIds.New();
             attrChange.Id = attrChangeId;
 
             // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChangeAttributes exactly.
@@ -4419,7 +4419,7 @@ public partial class MetaverseRepository : IMetaverseRepository
 
             foreach (var valueChange in attrChange.ValueChanges)
             {
-                var valueChangeId = ChangeRecordIds.New();
+                var valueChangeId = TimeOrderedIds.New();
                 valueChange.Id = valueChangeId;
 
                 // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChangeAttributeValues

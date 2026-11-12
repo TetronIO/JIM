@@ -12,6 +12,7 @@ using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Serilog;
 
@@ -390,7 +391,7 @@ public partial class ConnectedSystemServer
     {
         var item = new ActivityRunProfileExecutionItem
         {
-            Id = Guid.NewGuid(),
+            Id = TimeOrderedIds.New(),
             ObjectChangeType = ObjectChangeType.AttributeFlow,
             DisplayNameSnapshot = mvo.NameOrId,
             ObjectTypeSnapshot = mvo.Type?.Name
@@ -434,7 +435,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     private static ActivityRunProfileExecutionItem BuildHeldBackExecutionItem(MetaverseObject mvo, string undecidable) => new()
     {
-        Id = Guid.NewGuid(),
+        Id = TimeOrderedIds.New(),
         ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed,
         ErrorMessage = $"{undecidable} Metaverse Object {mvo.Id} was left as it was, with the values the Synchronisation Rule contributed.",
         DisplayNameSnapshot = mvo.NameOrId,
@@ -451,7 +452,7 @@ public partial class ConnectedSystemServer
     {
         var item = new ActivityRunProfileExecutionItem
         {
-            Id = Guid.NewGuid(),
+            Id = TimeOrderedIds.New(),
             ObjectChangeType = ObjectChangeType.AttributeFlow,
             DisplayNameSnapshot = mvo.NameOrId,
             ObjectTypeSnapshot = mvo.Type?.Name

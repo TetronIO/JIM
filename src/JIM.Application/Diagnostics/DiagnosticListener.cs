@@ -22,6 +22,7 @@ public sealed class DiagnosticListener : IDisposable
     /// The custom property each span's <see cref="SpanBreakdown"/> is kept under, unique to this listener so that two
     /// listeners on the same spans (the Worker's and a test's) never count a descendant twice.
     /// </summary>
+    // random-id: a property name unique to this listener; not a row's id
     private readonly string _breakdownPropertyName = $"JIM.SpanBreakdown.{Guid.NewGuid():N}";
 
     /// <summary>

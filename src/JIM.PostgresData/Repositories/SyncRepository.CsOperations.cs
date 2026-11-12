@@ -8,6 +8,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -167,18 +168,10 @@ public partial class SyncRepository
     /// <inheritdoc />
     public void PrepareConnectedSystemObjectsForCreate(List<ConnectedSystemObject> connectedSystemObjects, HashSet<Guid>? previouslyCommittedCsoIds = null)
     {
-        // Pre-generate IDs for all CSOs and their attribute values (bypasses EF ValueGeneratedOnAdd)
+        // Pre-generate IDs for all CSOs and their attribute values (bypasses EF ValueGeneratedOnAdd); time-ordered, so
+        // the rows land on the growing end of each index keyed on them (#2929).
         foreach (var cso in connectedSystemObjects)
-        {
-            if (cso.Id == Guid.Empty)
-                cso.Id = Guid.NewGuid();
-
-            foreach (var av in cso.AttributeValues)
-            {
-                if (av.Id == Guid.Empty)
-                    av.Id = Guid.NewGuid();
-            }
-        }
+            TimeOrderedIds.AssignMissing(cso);
 
         // Fixup ReferenceValueId FKs from navigation properties within this batch.
         // Cross-batch references (referenced CSO in a later batch) are left null and

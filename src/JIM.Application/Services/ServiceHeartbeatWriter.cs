@@ -80,6 +80,7 @@ public sealed class ServiceHeartbeatWriter
     /// Host name plus eight hex characters of a fresh GUID: enough to tell two processes on one host apart (a
     /// restart, or two Workers side by side) while staying readable on a status card.
     /// </summary>
+    // random-id: its first eight characters tell processes apart, and a version 7 id's are its timestamp
     public static string NewInstanceId() => $"{Environment.MachineName}-{Guid.NewGuid():N}"[..(Environment.MachineName.Length + 9)];
 
     public JimService Service => _service;

@@ -1006,18 +1006,10 @@ public partial class SyncImportTaskProcessor
             // the cross-batch FK gap where a group in batch 1 references a user in batch 3
             // whose ID is still Guid.Empty. With all IDs assigned upfront, the per-batch
             // ReferenceValueId fixup in CreateConnectedSystemObjectsAsync can resolve ALL
-            // reference FKs regardless of batch boundaries.
+            // reference FKs regardless of batch boundaries. Time-ordered, so the rows land on the
+            // growing end of each index keyed on them (#2929).
             foreach (var cso in connectedSystemObjectsToBeCreated)
-            {
-                if (cso.Id == Guid.Empty)
-                    cso.Id = Guid.NewGuid();
-
-                foreach (var av in cso.AttributeValues)
-                {
-                    if (av.Id == Guid.Empty)
-                        av.Id = Guid.NewGuid();
-                }
-            }
+                TimeOrderedIds.AssignMissing(cso);
 
             // Sort CSOs so non-referencing objects (e.g., users) come before referencing objects
             // (e.g., groups with member DNs). Combined with committed ID tracking below, this
@@ -1889,7 +1881,7 @@ public partial class SyncImportTaskProcessor
         {
             rpei.ActivityId = _activity.Id;
             if (rpei.Id == Guid.Empty)
-                rpei.Id = ChangeRecordIds.New();
+                rpei.Id = TimeOrderedIds.New();
 
             // Snapshot CSO display fields (ExternalId, DisplayName, ObjectType) for historical preservation.
             // Defence-in-depth: ensures snapshots are populated even if individual code paths missed them.

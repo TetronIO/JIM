@@ -3,6 +3,7 @@
 
 using JIM.Data.Repositories;
 using JIM.Models.Core;
+using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 
 namespace JIM.PostgresData.Repositories;
@@ -47,7 +48,7 @@ public class TrustedCertificateRepository : ITrustedCertificateRepository
     public async Task<TrustedCertificate> CreateAsync(TrustedCertificate certificate)
     {
         if (certificate.Id == Guid.Empty)
-            certificate.Id = Guid.NewGuid();
+            certificate.Id = TimeOrderedIds.New();
 
         Repository.Database.TrustedCertificates.Add(certificate);
         await Repository.Database.SaveChangesAsync();

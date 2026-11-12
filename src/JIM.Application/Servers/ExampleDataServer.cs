@@ -1382,6 +1382,7 @@ public class ExampleDataServer
         metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
             Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
+            // random-id: generated attribute data (an object GUID), not a row's id
             GuidValue = Guid.NewGuid()
         });
     }

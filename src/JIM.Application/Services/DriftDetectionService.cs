@@ -13,6 +13,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Serilog;
 
@@ -1361,7 +1362,7 @@ public class DriftDetectionService
             // Create the Pending Export
             var pendingExport = new PendingExport
             {
-                Id = Guid.NewGuid(),
+                Id = TimeOrderedIds.New(),
                 ConnectedSystemId = cso.ConnectedSystemId,
                 ConnectedSystemObjectId = cso.Id,
                 ChangeType = PendingExportChangeType.Update,
@@ -1435,7 +1436,7 @@ public class DriftDetectionService
             // For single-valued attributes, use Update
             var change = new PendingExportAttributeValueChange
             {
-                Id = Guid.NewGuid(),
+                Id = TimeOrderedIds.New(),
                 AttributeId = drifted.Attribute.Id,
                 ChangeType = PendingExportAttributeChangeType.Update,
                 SyncRuleId = exportRule.Id,
@@ -1460,7 +1461,7 @@ public class DriftDetectionService
     {
         var change = new PendingExportAttributeValueChange
         {
-            Id = Guid.NewGuid(),
+            Id = TimeOrderedIds.New(),
             AttributeId = attribute.Id,
             ChangeType = changeType,
             SyncRuleId = exportRule.Id,
@@ -1526,7 +1527,7 @@ public class DriftDetectionService
         {
             attributeChanges.Add(new PendingExportAttributeValueChange
             {
-                Id = Guid.NewGuid(),
+                Id = TimeOrderedIds.New(),
                 AttributeId = classAttribute.Id,
                 StringValue = className,
 

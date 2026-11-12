@@ -19,6 +19,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Serilog;
 
@@ -3382,8 +3383,8 @@ public class ExportExecutionServer
         var attribute = collision.CarryingAttribute;
         return
         [
-            new PendingExportAttributeValueChange { Id = Guid.NewGuid(), Attribute = attribute, AttributeId = attribute.Id, StringValue = collision.RejectedValue, ChangeType = PendingExportAttributeChangeType.Remove },
-            new PendingExportAttributeValueChange { Id = Guid.NewGuid(), Attribute = attribute, AttributeId = attribute.Id, StringValue = collision.NewValue, ChangeType = PendingExportAttributeChangeType.Update }
+            new PendingExportAttributeValueChange { Id = TimeOrderedIds.New(), Attribute = attribute, AttributeId = attribute.Id, StringValue = collision.RejectedValue, ChangeType = PendingExportAttributeChangeType.Remove },
+            new PendingExportAttributeValueChange { Id = TimeOrderedIds.New(), Attribute = attribute, AttributeId = attribute.Id, StringValue = collision.NewValue, ChangeType = PendingExportAttributeChangeType.Update }
         ];
     }
 
@@ -3614,7 +3615,7 @@ public class ExportExecutionServer
             if (item.PendingExportId is not { } pendingExportId || !wanted.Contains(pendingExportId) || named.ContainsKey(pendingExportId))
                 continue;
 
-            item.ExecutionItemId ??= Guid.NewGuid();
+            item.ExecutionItemId ??= TimeOrderedIds.New();
             named[pendingExportId] = item.ExecutionItemId.Value;
         }
 
@@ -3690,7 +3691,7 @@ public class ExportExecutionServer
                     continue;
                 }
 
-                var changeId = Guid.NewGuid();
+                var changeId = TimeOrderedIds.New();
                 executionItemByChange[changeId] = executionItemIds.GetValueOrDefault(pe.Id);
                 staging.Add(new PendingPasswordChange
                 {
@@ -3706,7 +3707,7 @@ public class ExportExecutionServer
                     Status = PendingPasswordChangeStatus.Pending,
                     CreatedAt = now,
                     ExpiresAt = now.Add(initialPasswordTimeToLive),
-                    ActivityId = Guid.NewGuid(),
+                    ActivityId = TimeOrderedIds.New(),
                     // #2064: the Create wrote the account's enabled state, so an Attribute Flow decides it and the
                     // delivery leaves it alone (a pre-hire the flow creates disabled stays disabled).
                     EnabledStateSetByAttributeFlow = accountsWithEnabledStateWritten.Contains(pe.ConnectedSystemObject!.Id),
@@ -3742,7 +3743,7 @@ public class ExportExecutionServer
                 {
                     Id = outcome.Disposition is ProvisionedPasswordStagingDisposition.Inserted or ProvisionedPasswordStagingDisposition.Superseded
                         ? change.ActivityId
-                        : Guid.NewGuid(),
+                        : TimeOrderedIds.New(),
                     TargetType = ActivityTargetType.PasswordSynchronisation,
                     TargetOperationType = ActivityTargetOperationType.SetPassword,
                     TargetContext = nameof(PendingPasswordChangeOrigin.Provisioned),
@@ -3787,7 +3788,7 @@ public class ExportExecutionServer
                                          $"JIM has just provisioned there, because this change {replaced}";
                             activities.Add(new Activity
                             {
-                                Id = Guid.NewGuid(),
+                                Id = TimeOrderedIds.New(),
                                 ParentActivityId = replacedChangeActivityId,
                                 TargetType = ActivityTargetType.PasswordSynchronisation,
                                 TargetOperationType = ActivityTargetOperationType.SetPassword,
@@ -3929,7 +3930,7 @@ public class ExportExecutionServer
                 var isRefusal = decision.Kind != ExchangeRecipientDecisionKind.Stage;
                 var change = new PendingExchangeChange
                 {
-                    Id = Guid.NewGuid(),
+                    Id = TimeOrderedIds.New(),
                     ConnectedSystemId = export.ConnectedSystemId,
                     ConnectedSystemObjectId = cso.Id,
                     MetaverseObjectId = cso.MetaverseObjectId,
@@ -3944,7 +3945,7 @@ public class ExportExecutionServer
                     Status = isRefusal ? PendingExchangeChangeStatus.Refused : PendingExchangeChangeStatus.Pending,
                     FailureMessage = isRefusal ? decision.Reason : null,
                     CreatedAt = now,
-                    ActivityId = Guid.NewGuid()
+                    ActivityId = TimeOrderedIds.New()
                 };
                 stagedBy[change.Id] = (cso, executionItemId, decision);
                 staging.Add(change);
@@ -3997,7 +3998,7 @@ public class ExportExecutionServer
                     // The change it replaced is told so beneath its own Activity, where its attempts are.
                     if (outcome.PreviousActivityId is { } previousActivityId)
                     {
-                        var replaced = ExchangeFollowUp(Guid.NewGuid(), cso, declared, connectedSystemName, executionItemId: null, now,
+                        var replaced = ExchangeFollowUp(TimeOrderedIds.New(), cso, declared, connectedSystemName, executionItemId: null, now,
                             ActivityStatus.Complete, ExchangeChangeStagingMessages.Replaced(connectedSystemName));
                         replaced.ParentActivityId = previousActivityId;
                         replaced.TargetOperationType = ActivityTargetOperationType.ReplaceExchangeRecipient;

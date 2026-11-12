@@ -683,6 +683,7 @@ public class SyncPreviewServer
         {
             DryRun = true,
             Reservations = new UniqueValueReservationSet(),
+            // random-id: an in-memory reservation owner for a dry run; never a row's id
             ReservationOwnerId = Guid.NewGuid()
         };
 
@@ -2594,6 +2595,7 @@ public class SyncPreviewServer
             {
                 attributeChanges.Add(new PendingExportAttributeValueChange
                 {
+                    // random-id: a preview's change, never written
                     Id = Guid.NewGuid(),
                     Attribute = exportDecision.SecondaryExternalIdAttribute,
                     AttributeId = exportDecision.SecondaryExternalIdAttribute.Id,

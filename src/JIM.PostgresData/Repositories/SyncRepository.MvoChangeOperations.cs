@@ -24,7 +24,7 @@ public partial class SyncRepository
         // before building the COPY binary import statements. Time-ordered, so the rows land on
         // the growing end of each index rather than a random page of it (#2669).
         foreach (var change in newChanges)
-            ChangeRecordIds.AssignMissing(change);
+            TimeOrderedIds.AssignMissing(change);
 
         // For appends, the parent id must already be set (it's the existing MvoChange row).
         // Only the attribute/value children need id generation — writing a new parent here
@@ -35,7 +35,7 @@ public partial class SyncRepository
                 throw new InvalidOperationException(
                     "PersistPendingMvoChangesAsync (append): each MvoChange must already have its existing parent Id set.");
 
-            ChangeRecordIds.AssignMissingToAttributes(change);
+            TimeOrderedIds.AssignMissingToAttributes(change);
         }
 
         // Spans on the shared JIM.PostgresData.Sync source (#2669), so a run shows where writing its change records

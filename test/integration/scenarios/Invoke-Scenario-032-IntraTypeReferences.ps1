@@ -7,8 +7,9 @@
 
 .DESCRIPTION
     Validates the Full Synchronisation's cross-page reference step end to end (#2492). Users have managers and groups
-    contain groups, references within one Object Type, which no ordering of types can resolve inside the page loop:
-    about half of each type is deferred to "Resolving cross-page references", which re-flows their references and
+    contain groups, references within one Object Type, which no ordering of types can resolve inside the page loop.
+    The data is built so that every reference points at an object imported later (Populate-OpenLDAP-Scenario-032.ps1),
+    so every referring object is deferred to "Resolving cross-page references", which re-flows their references and
     replaces the Pending Exports the page loop already staged. The scenario then exports everything to an empty
     target and asserts that every manager and every nested membership arrived.
 

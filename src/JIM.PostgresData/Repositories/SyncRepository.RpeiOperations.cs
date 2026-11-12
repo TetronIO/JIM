@@ -228,7 +228,7 @@ public partial class SyncRepository
         int totalPages)
     {
         foreach (var rpei in rpeis.Where(r => r.Id == Guid.Empty))
-            rpei.Id = ChangeRecordIds.New();
+            rpei.Id = TimeOrderedIds.New();
 
         var allOutcomes = rpeis.SelectMany(FlattenSyncOutcomes).ToList();
 
@@ -255,7 +255,7 @@ public partial class SyncRepository
             .Select(o => o.ConnectedSystemObjectChange!)
             .ToList();
         foreach (var change in outcomeCsoChanges)
-            ChangeRecordIds.AssignMissing(change);
+            TimeOrderedIds.AssignMissing(change);
         foreach (var outcome in allOutcomes.Where(o => o.ConnectedSystemObjectChange != null))
             outcome.ConnectedSystemObjectChangeId = outcome.ConnectedSystemObjectChange!.Id;
 
@@ -383,7 +383,7 @@ public partial class SyncRepository
                 throw new InvalidOperationException(
                     "InsertRpeiRowsAsync: every execution item must carry its Activity's id before its row is written.");
             if (rpei.Id == Guid.Empty)
-                rpei.Id = ChangeRecordIds.New();
+                rpei.Id = TimeOrderedIds.New();
         }
 
         // On the context's own connection, so the rows join whatever transaction the caller holds: a deletion's, whose
@@ -430,7 +430,7 @@ public partial class SyncRepository
         // Pre-generate IDs for all entities in the hierarchy; time-ordered, so the rows land on
         // the growing end of each index rather than a random page of it (#2669).
         foreach (var change in changes)
-            ChangeRecordIds.AssignMissing(change);
+            TimeOrderedIds.AssignMissing(change);
 
         // Step 1: INSERT parent ConnectedSystemObjectChange rows
         await BulkInsertCsoChangesRawAsync(changes);
@@ -475,7 +475,7 @@ public partial class SyncRepository
         // before we build the raw SQL statements; time-ordered, so the rows land on the growing
         // end of each index rather than a random page of it (#2669).
         foreach (var change in changes)
-            ChangeRecordIds.AssignMissing(change);
+            TimeOrderedIds.AssignMissing(change);
 
         var attributeRows = CsoChangeAttributeRows(changes);
         var valueRows = CsoChangeValueRows(changes);
@@ -1282,7 +1282,7 @@ public partial class SyncRepository
             foreach (var candidate in rpei.MatchCandidates)
             {
                 if (candidate.Id == Guid.Empty)
-                    candidate.Id = ChangeRecordIds.New();
+                    candidate.Id = TimeOrderedIds.New();
                 candidate.ActivityRunProfileExecutionItemId = rpei.Id;
             }
 
@@ -1581,7 +1581,7 @@ public partial class SyncRepository
         foreach (var outcome in outcomes)
         {
             if (outcome.Id == Guid.Empty)
-                outcome.Id = ChangeRecordIds.New();
+                outcome.Id = TimeOrderedIds.New();
 
             outcome.ActivityRunProfileExecutionItemId = rpeiId;
             outcome.ParentSyncOutcomeId = parentId;

@@ -1296,8 +1296,8 @@ public partial class SyncRepository : ISyncRepository
         ConnectedSystemObject.EnsureWhollyLoaded(connectedSystemObjects, nameof(CreateConnectedSystemObjectsAsync));
         foreach (var cso in connectedSystemObjects)
         {
-            if (cso.Id == Guid.Empty)
-                cso.Id = Guid.NewGuid();
+            // Ids for the object and its values where they have none, as the PostgreSQL writer gives them (#2929).
+            TimeOrderedIds.AssignMissing(cso);
 
             FixupCsoNavigationProperties(cso);
             // A created object is pending synchronisation (#2092), as every production create writer records it.
@@ -1310,13 +1310,14 @@ public partial class SyncRepository : ISyncRepository
     }
 
     /// <summary>
-    /// Gives each object an id where it has none. The PostgreSQL writer also settles reference value ids against the
-    /// batch; this store holds no foreign keys, so its create leaves them as they are, and so does this.
+    /// Gives each object and each of its values an id where it has none. The PostgreSQL writer also settles reference
+    /// value ids against the batch; this store holds no foreign keys, so its create leaves them as they are, and so does
+    /// this.
     /// </summary>
     public void PrepareConnectedSystemObjectsForCreate(List<ConnectedSystemObject> connectedSystemObjects, HashSet<Guid>? previouslyCommittedCsoIds = null)
     {
-        foreach (var cso in connectedSystemObjects.Where(c => c.Id == Guid.Empty))
-            cso.Id = Guid.NewGuid();
+        foreach (var cso in connectedSystemObjects)
+            TimeOrderedIds.AssignMissing(cso);
     }
 
     /// <summary>
@@ -1443,6 +1444,8 @@ public partial class SyncRepository : ISyncRepository
         {
             foreach (var addition in cso.PendingAttributeValueAdditions)
             {
+                if (addition.Id == Guid.Empty)
+                    addition.Id = TimeOrderedIds.New();
                 if (addition.AttributeId == 0 && addition.Attribute != null)
                     addition.AttributeId = addition.Attribute.Id;
                 cso.AttributeValues.Add(addition);
@@ -1628,14 +1631,14 @@ public partial class SyncRepository : ISyncRepository
                 // Only add values that aren't already in the collection to avoid duplicates.
                 foreach (var av in newAvs)
                 {
+                    // An id where it has none, as the PostgreSQL writer gives it (#2929), so a later replacement can
+                    // name the value it supersedes (#2930).
+                    if (av.Id == Guid.Empty)
+                        av.Id = TimeOrderedIds.New();
+
                     // Fixup FK from nav prop (EF Core does this automatically on SaveChanges)
                     if (av.AttributeId == 0 && av.Attribute != null)
                         av.AttributeId = av.Attribute.Id;
-
-                    // An id for each new value, as the PostgreSQL writer assigns one before it inserts, so a later
-                    // replacement can name the value it supersedes (#2930).
-                    if (av.Id == Guid.Empty)
-                        av.Id = Guid.NewGuid();
 
                     if (!stored.AttributeValues.Contains(av))
                         stored.AttributeValues.Add(av);
@@ -2317,8 +2320,8 @@ public partial class SyncRepository : ISyncRepository
     {
         foreach (var mvo in metaverseObjects)
         {
-            if (mvo.Id == Guid.Empty)
-                mvo.Id = Guid.NewGuid();
+            // Ids for the object and its values where they have none, as the PostgreSQL writer gives them (#2929).
+            TimeOrderedIds.AssignMissing(mvo);
             FixupMvoAttributeValues(mvo);
             _mvos[mvo.Id] = mvo;
         }
@@ -2331,6 +2334,8 @@ public partial class SyncRepository : ISyncRepository
     {
         foreach (var mvo in metaverseObjects)
         {
+            // Ids for the values added since the object was written, as the PostgreSQL writer gives them (#2929).
+            TimeOrderedIds.AssignMissing(mvo);
             FixupMvoAttributeValues(mvo);
             _mvos[mvo.Id] = mvo;
         }
@@ -2501,8 +2506,8 @@ public partial class SyncRepository : ISyncRepository
 
         foreach (var pe in batch)
         {
-            if (pe.Id == Guid.Empty)
-                pe.Id = Guid.NewGuid();
+            // Ids for the export and its changes where they have none, as the PostgreSQL writer gives them (#2929).
+            TimeOrderedIds.AssignMissing(pe);
 
             if (pe.ConnectedSystem == null && pe.ConnectedSystemId > 0 && _connectedSystems.TryGetValue(pe.ConnectedSystemId, out var cs))
                 pe.ConnectedSystem = cs;
@@ -2770,7 +2775,7 @@ public partial class SyncRepository : ISyncRepository
         foreach (var rpei in rpeis)
         {
             if (rpei.Id == Guid.Empty)
-                rpei.Id = ChangeRecordIds.New();
+                rpei.Id = TimeOrderedIds.New();
 
             // An item whose row a deletion wrote already (#2807) is the same instance in this store, so storing it again
             // is the production writer's update of its mutable columns.
@@ -2787,7 +2792,7 @@ public partial class SyncRepository : ISyncRepository
             foreach (var candidate in rpei.MatchCandidates)
             {
                 if (candidate.Id == Guid.Empty)
-                    candidate.Id = ChangeRecordIds.New();
+                    candidate.Id = TimeOrderedIds.New();
                 candidate.ActivityRunProfileExecutionItemId = rpei.Id;
                 _matchCandidates[candidate.Id] = candidate;
             }
@@ -2838,7 +2843,7 @@ public partial class SyncRepository : ISyncRepository
         foreach (var item in items)
         {
             if (item.Id == Guid.Empty)
-                item.Id = ChangeRecordIds.New();
+                item.Id = TimeOrderedIds.New();
 
             // Matches PostgresDataRepository.FlattenSyncOutcomes.
             AssignSyncOutcomeIds(item.SyncOutcomes, item.Id, null);
@@ -2848,7 +2853,7 @@ public partial class SyncRepository : ISyncRepository
             foreach (var candidate in item.MatchCandidates)
             {
                 if (candidate.Id == Guid.Empty)
-                    candidate.Id = ChangeRecordIds.New();
+                    candidate.Id = TimeOrderedIds.New();
                 candidate.ActivityRunProfileExecutionItemId = item.Id;
             }
 
@@ -2871,11 +2876,11 @@ public partial class SyncRepository : ISyncRepository
 
         // Ids the production store's writers would assign; the writes below assign none.
         foreach (var change in outcomeChangeRecords.Concat(itemChangeRecords))
-            ChangeRecordIds.AssignMissing(change);
+            TimeOrderedIds.AssignMissing(change);
 
         var newChanges = newMetaverseObjectChanges.ToList();
         foreach (var change in newChanges)
-            ChangeRecordIds.AssignMissing(change);
+            TimeOrderedIds.AssignMissing(change);
 
         var appends = metaverseObjectChangeAppends.ToList();
         foreach (var append in appends)
@@ -2883,7 +2888,7 @@ public partial class SyncRepository : ISyncRepository
             if (append.Id == Guid.Empty)
                 throw new InvalidOperationException(
                     "PrepareSynchronisationHistory: each Metaverse Object change appended to must carry the id of the existing change record it extends.");
-            ChangeRecordIds.AssignMissingToAttributes(append);
+            TimeOrderedIds.AssignMissingToAttributes(append);
         }
 
         return new SynchronisationHistoryBatch
@@ -2972,7 +2977,7 @@ public partial class SyncRepository : ISyncRepository
         foreach (var edge in edges)
         {
             if (edge.Id == Guid.Empty)
-                edge.Id = Guid.NewGuid();
+                edge.Id = TimeOrderedIds.New();
             _causalEdges[edge.Id] = edge;
         }
     }
@@ -2998,7 +3003,7 @@ public partial class SyncRepository : ISyncRepository
         foreach (var outcome in roots)
         {
             if (outcome.Id == Guid.Empty)
-                outcome.Id = ChangeRecordIds.New();
+                outcome.Id = TimeOrderedIds.New();
             outcome.ActivityRunProfileExecutionItemId = rpeiId;
             outcome.ParentSyncOutcomeId = parentId;
 
@@ -3015,7 +3020,7 @@ public partial class SyncRepository : ISyncRepository
                 throw new InvalidOperationException(
                     "InsertRpeiRowsAsync: every execution item must carry its Activity's id before its row is written.");
             if (rpei.Id == Guid.Empty)
-                rpei.Id = ChangeRecordIds.New();
+                rpei.Id = TimeOrderedIds.New();
             _rpeis[rpei.Id] = rpei;
         }
 
@@ -3089,9 +3094,9 @@ public partial class SyncRepository : ISyncRepository
         foreach (var attrChange in incoming.AttributeChanges)
         {
             if (attrChange.Id == Guid.Empty)
-                attrChange.Id = Guid.NewGuid();
+                attrChange.Id = TimeOrderedIds.New();
             foreach (var valueChange in attrChange.ValueChanges.Where(vc => vc.Id == Guid.Empty))
-                valueChange.Id = Guid.NewGuid();
+                valueChange.Id = TimeOrderedIds.New();
             existing.AttributeChanges.Add(attrChange);
         }
     }
@@ -3504,7 +3509,7 @@ public partial class SyncRepository : ISyncRepository
     public virtual Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change)
     {
         if (change.Id == Guid.Empty)
-            change.Id = Guid.NewGuid();
+            change.Id = TimeOrderedIds.New();
         _mvoChanges[change.Id] = change;
         return Task.CompletedTask;
     }
@@ -3516,17 +3521,17 @@ public partial class SyncRepository : ISyncRepository
         foreach (var change in newChanges)
         {
             if (change.Id == Guid.Empty)
-                change.Id = Guid.NewGuid();
+                change.Id = TimeOrderedIds.New();
 
             foreach (var attrChange in change.AttributeChanges)
             {
                 if (attrChange.Id == Guid.Empty)
-                    attrChange.Id = Guid.NewGuid();
+                    attrChange.Id = TimeOrderedIds.New();
 
                 foreach (var valueChange in attrChange.ValueChanges)
                 {
                     if (valueChange.Id == Guid.Empty)
-                        valueChange.Id = Guid.NewGuid();
+                        valueChange.Id = TimeOrderedIds.New();
                 }
             }
 
@@ -4459,7 +4464,7 @@ public partial class SyncRepository : ISyncRepository
             }
 
             if (change.Id == Guid.Empty)
-                change.Id = Guid.NewGuid();
+                change.Id = TimeOrderedIds.New();
 
             _pendingPasswordChanges[change.Id] = change;
         }
@@ -4477,7 +4482,7 @@ public partial class SyncRepository : ISyncRepository
         foreach (var change in changes)
         {
             if (change.Id == Guid.Empty)
-                change.Id = Guid.NewGuid();
+                change.Id = TimeOrderedIds.New();
 
             var requestedId = change.Id;
 
@@ -4557,7 +4562,7 @@ public partial class SyncRepository : ISyncRepository
                 throw new ArgumentException($"Exchange change {change.Id} names no Connected System Object; staging is per account.", nameof(changes));
 
             if (change.Id == Guid.Empty)
-                change.Id = Guid.NewGuid();
+                change.Id = TimeOrderedIds.New();
 
             var requestedId = change.Id;
 
@@ -5711,7 +5716,7 @@ public partial class SyncRepository : ISyncRepository
                     $"A generated value assignment could not be created because the value '{assignment.Value}' is already held by another live assignment for the same attribute.");
 
             if (assignment.Id == Guid.Empty)
-                assignment.Id = Guid.NewGuid();
+                assignment.Id = TimeOrderedIds.New();
 
             _generatedValueAssignments[assignment.Id] = assignment;
         }
@@ -6275,7 +6280,7 @@ public partial class SyncRepository : ISyncRepository
     public void SeedGeneratedValueRevisionPending(GeneratedValueRevisionPending record)
     {
         if (record.Id == Guid.Empty)
-            record.Id = Guid.NewGuid();
+            record.Id = TimeOrderedIds.New();
         _generatedValueRevisionsPending[record.Id] = record;
     }
 
@@ -6348,7 +6353,7 @@ public partial class SyncRepository : ISyncRepository
             if (revision.MetaverseObjectChange != null)
             {
                 if (revision.MetaverseObjectChange.Id == Guid.Empty)
-                    revision.MetaverseObjectChange.Id = Guid.NewGuid();
+                    revision.MetaverseObjectChange.Id = TimeOrderedIds.New();
                 _mvoChanges[revision.MetaverseObjectChange.Id] = revision.MetaverseObjectChange;
             }
 

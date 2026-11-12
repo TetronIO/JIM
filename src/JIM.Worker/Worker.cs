@@ -1245,7 +1245,7 @@ public class Worker : BackgroundService
 
                     // The item recording this deletion is created after it, but its id is fixed now so the Deleted
                     // change record can name it (#2460).
-                    var deletionItemId = ChangeRecordIds.New();
+                    var deletionItemId = TimeOrderedIds.New();
                     mvo.DeletingRunProfileExecutionItemId = deletionItemId;
 
                     // Delete the MVO using the initiator info captured when it was marked for deletion
@@ -1376,7 +1376,7 @@ public class Worker : BackgroundService
                     Log.Error(ex, "PerformMetaverseObjectHousekeepingAsync: Failed to delete MVO {MvoId}", mvo.Id);
                     executionItems.Add(new ActivityRunProfileExecutionItem
                     {
-                        Id = ChangeRecordIds.New(),
+                        Id = TimeOrderedIds.New(),
                         ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError,
                         ErrorMessage = ex.Message,
                         ErrorStackTrace = ex.StackTrace,
@@ -1552,7 +1552,7 @@ public class Worker : BackgroundService
     {
         var executionItem = new ActivityRunProfileExecutionItem
         {
-            Id = ChangeRecordIds.New(),
+            Id = TimeOrderedIds.New(),
             ObjectChangeType = ObjectChangeType.PendingExport,
             ConnectedSystemObjectId = pendingExport.ConnectedSystemObjectId,
             PendingExportId = pendingExport.Id,

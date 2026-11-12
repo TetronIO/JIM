@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Text;
 using JIM.Models.Core;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -53,17 +54,9 @@ public partial class SyncRepository
         // Pre-generate IDs for all MVOs and their attribute values (bypasses EF ValueGeneratedOnAdd).
         // This ensures mvo.Id is set BEFORE persistence, which the caller relies on for CSO FK fixup
         // (SyncTaskProcessorBase sets cso.MetaverseObjectId = cso.MetaverseObject.Id after this call).
+        // Time-ordered, so the rows land on the growing end of each index keyed on them (#2929).
         foreach (var mvo in metaverseObjects)
-        {
-            if (mvo.Id == Guid.Empty)
-                mvo.Id = Guid.NewGuid();
-
-            foreach (var av in mvo.AttributeValues)
-            {
-                if (av.Id == Guid.Empty)
-                    av.Id = Guid.NewGuid();
-            }
-        }
+            TimeOrderedIds.AssignMissing(mvo);
 
         // Fixup ReferenceValueId FKs from navigation properties.
         // MVO attribute values can reference other MVOs (e.g., StaticMembers → Person MVO).
@@ -453,7 +446,7 @@ public partial class SyncRepository
             foreach (var av in mvo.AttributeValues)
             {
                 if (av.Id == Guid.Empty)
-                    av.Id = Guid.NewGuid();
+                    av.Id = TimeOrderedIds.New();
 
                 if (av.ReferenceValue != null && av.ReferenceValue.Id != Guid.Empty && !av.ReferenceValueId.HasValue)
                     av.ReferenceValueId = av.ReferenceValue.Id;

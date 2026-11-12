@@ -17,6 +17,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Serilog;
 
@@ -1170,7 +1171,7 @@ public class ExportEvaluationServer
                 {
                     attributeValueChanges.Add(new PendingExportAttributeValueChange
                     {
-                        Id = Guid.NewGuid(),
+                        Id = TimeOrderedIds.New(),
                         Attribute = decision.SecondaryExternalIdAttribute,
                         AttributeId = decision.SecondaryExternalIdAttribute.Id,
                         StringValue = decision.SecondaryExternalIdValue,
@@ -1192,7 +1193,7 @@ public class ExportEvaluationServer
                 // matching EnsureDeletePendingExportAsync.
                 var pendingExport = new PendingExport
                 {
-                    Id = Guid.NewGuid(),
+                    Id = TimeOrderedIds.New(),
                     ConnectedSystemId = cso.ConnectedSystemId,
                     ConnectedSystemObjectId = cso.Id,
                     ChangeType = PendingExportChangeType.Delete,
@@ -1336,7 +1337,7 @@ public class ExportEvaluationServer
         // Setting both can cause EF Core change tracker conflicts where the FK gets overwritten.
         var pendingExport = new PendingExport
         {
-            Id = Guid.NewGuid(),
+            Id = TimeOrderedIds.New(),
             ConnectedSystemId = cso.ConnectedSystemId,
             ConnectedSystemObjectId = cso.Id,
             ChangeType = PendingExportChangeType.Delete,
@@ -1838,7 +1839,7 @@ public class ExportEvaluationServer
 
             stagedPendingExports.Add(new PendingExport
             {
-                Id = Guid.NewGuid(),
+                Id = TimeOrderedIds.New(),
                 ConnectedSystemId = systemByCso[csoId],
                 ConnectedSystemObjectId = csoId,
                 ChangeType = PendingExportChangeType.Update,
@@ -1908,7 +1909,7 @@ public class ExportEvaluationServer
         {
             attributeChanges.Add(new PendingExportAttributeValueChange
             {
-                Id = Guid.NewGuid(),
+                Id = TimeOrderedIds.New(),
                 Attribute = classAttribute,
                 AttributeId = classAttribute.Id,
                 StringValue = className,
@@ -2419,7 +2420,7 @@ public class ExportEvaluationServer
         // Setting both can cause EF Core change tracker conflicts where the FK gets overwritten.
         var pendingExport = new PendingExport
         {
-            Id = Guid.NewGuid(),
+            Id = TimeOrderedIds.New(),
             ConnectedSystemId = exportRule.ConnectedSystemId,
             ConnectedSystemObjectId = csoForExport?.Id,
             ChangeType = changeType,
@@ -2538,7 +2539,7 @@ public class ExportEvaluationServer
         // to determine the FK value, which can result in null FKs for entities loaded from different contexts.
         var pendingExport = new PendingExport
         {
-            Id = Guid.NewGuid(),
+            Id = TimeOrderedIds.New(),
             ConnectedSystemId = exportRule.ConnectedSystemId,
             ConnectedSystemObjectId = csoId,
             ChangeType = changeType,
@@ -3217,7 +3218,7 @@ public class ExportEvaluationServer
             // earlier run's outcome names the export by id, and that is how each finds its change still queued
             // (#2100). One already sent and awaiting confirmation is an export cycle of its own, and its id stays
             // with what was sent. A Pending one that failed and awaits a retry keeps its id across retries anyway.
-            Id = continuedPendingExport is { Status: PendingExportStatus.Pending } ? continuedPendingExport.Id : Guid.NewGuid(),
+            Id = continuedPendingExport is { Status: PendingExportStatus.Pending } ? continuedPendingExport.Id : TimeOrderedIds.New(),
             ConnectedSystemId = exportRule.ConnectedSystemId,
             ConnectedSystemObjectId = csoId,
             ChangeType = changeType,
@@ -3290,7 +3291,7 @@ public class ExportEvaluationServer
         // which can cause issues if that entity is already tracked in a different state.
         var cso = new ConnectedSystemObject
         {
-            Id = Guid.NewGuid(),
+            Id = TimeOrderedIds.New(),
             ConnectedSystemId = exportRule.ConnectedSystemId,
             TypeId = exportRule.ConnectedSystemObjectType.Id,
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
@@ -4089,6 +4090,7 @@ public class ExportEvaluationServer
         {
             DryRun = true,
             Reservations = new UniqueValueReservationSet(),
+            // random-id: an in-memory reservation owner for a dry run; never a row's id
             ReservationOwnerId = Guid.NewGuid()
         };
     }

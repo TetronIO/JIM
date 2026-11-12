@@ -108,7 +108,7 @@ public static class MetaverseObjectDeletionRuleApplier
         ArgumentNullException.ThrowIfNull(schedulingItem);
 
         if (schedulingItem.Id == Guid.Empty)
-            schedulingItem.Id = ChangeRecordIds.New();
+            schedulingItem.Id = TimeOrderedIds.New();
         mvo.DeletionScheduledByRunProfileExecutionItemId = schedulingItem.Id;
     }
 
@@ -125,7 +125,7 @@ public static class MetaverseObjectDeletionRuleApplier
         ArgumentNullException.ThrowIfNull(deletingItem);
 
         if (deletingItem.Id == Guid.Empty)
-            deletingItem.Id = ChangeRecordIds.New();
+            deletingItem.Id = TimeOrderedIds.New();
         mvo.DeletingRunProfileExecutionItemId = deletingItem.Id;
     }
 

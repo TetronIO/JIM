@@ -10,10 +10,16 @@
     Type, which no ordering of types can resolve within the Full Synchronisation's page loop (#2492):
 
     - Every user but the first has a manager, another user. User i reports to user (i - 1) / 5, so the managers form
-      a tree five wide, and since Connected System Object ids are random, about half of the users are processed
-      before their manager and are deferred to the cross-page reference step.
+      a tree five wide.
     - Every group has user members and up to two nested groups: group g contains groups 2g + 1 and 2g + 2, a binary
-      tree, so about half of the groups are processed before a group they contain.
+      tree.
+
+    Every reference points at an object the directory holds later than the one referring to it: users are created
+    reports first and groups parents first, and the managers and nested memberships are added once all are created.
+    JIM imports in the directory's order and gives each Connected System Object a time-ordered id (#2929), and the
+    Full Synchronisation pages each Object Type in id order, so every referring object is processed before the object
+    it refers to and is deferred to the cross-page reference step, whatever the page size. (While ids were random,
+    about half were, by chance.)
 
     The Target suffix (Glitterband) is left as the base image creates it, with empty ou=People and ou=Groups: JIM
     provisions everything there, so the managers and nested memberships it exports are what the scenario asserts on.
@@ -56,13 +62,14 @@ Write-Host "Users:  $($scale.Users) (each but the first with a manager)" -Foregr
 Write-Host "Groups: $($scale.Groups) (nested two to a parent)" -ForegroundColor Gray
 
 function Import-Ldif {
-    param([string]$Content, [string]$What)
+    param([string]$Content, [string]$What, [switch]$Modify)
 
     $ldifPath = [System.IO.Path]::GetTempFileName()
     Set-Content -Path $ldifPath -Value $Content -NoNewline
     try {
-        $result = bash -c "cat '$ldifPath' | docker exec -i $Container ldapadd -x -H $ldapUri -D '$($directoryConfig.BindDN)' -w '$($directoryConfig.BindPassword)' -c" 2>&1
-        if ($LASTEXITCODE -ne 0 -and "$result" -notmatch "already exists") {
+        $tool = if ($Modify) { "ldapmodify" } else { "ldapadd" }
+        $result = bash -c "cat '$ldifPath' | docker exec -i $Container $tool -x -H $ldapUri -D '$($directoryConfig.BindDN)' -w '$($directoryConfig.BindPassword)' -c" 2>&1
+        if ($LASTEXITCODE -ne 0 -and "$result" -notmatch "already exists|Type or value exists") {
             throw "Failed to import $What (exit code $LASTEXITCODE): $result"
         }
     }
@@ -71,10 +78,11 @@ function Import-Ldif {
     }
 }
 
-# Users. Added managers first (index order), so every manager DN exists when its reports are added.
+# Users. Created reports first (reverse index order), so every manager is created after its reports; the managers are
+# added below, once every user exists.
 Write-TestStep "Step 1" "Creating $($scale.Users) users"
 $builder = [System.Text.StringBuilder]::new()
-for ($i = 0; $i -lt $scale.Users; $i++) {
+for ($i = $scale.Users - 1; $i -ge 0; $i--) {
     $uid = Get-Scenario32UserUid -Index $i
     $displayName = "Scenario 32 User $i"
     [void]$builder.AppendLine("dn: uid=$uid,$peopleOU")
@@ -92,20 +100,30 @@ for ($i = 0; $i -lt $scale.Users; $i++) {
     [void]$builder.AppendLine("employeeNumber: S32-$i")
     [void]$builder.AppendLine("employeeType: Active")
     [void]$builder.AppendLine("jimEmployeeEndDate: 20991231235959Z")
-    if ($i -gt 0) {
-        $managerUid = Get-Scenario32UserUid -Index (Get-Scenario32ManagerIndex -Index $i)
-        [void]$builder.AppendLine("manager: uid=$managerUid,$peopleOU")
-    }
     [void]$builder.AppendLine("userPassword: Test@123!")
     [void]$builder.AppendLine("")
 }
 Import-Ldif -Content $builder.ToString() -What "users"
 Write-Host "  Created $($scale.Users) users" -ForegroundColor Green
 
-# Groups. Added leaves first (reverse index order), so every nested group DN exists when its parent is added.
-Write-TestStep "Step 2" "Creating $($scale.Groups) groups"
+Write-TestStep "Step 2" "Giving every user but the first a manager"
 [void]$builder.Clear()
-for ($g = $scale.Groups - 1; $g -ge 0; $g--) {
+for ($i = 1; $i -lt $scale.Users; $i++) {
+    $managerUid = Get-Scenario32UserUid -Index (Get-Scenario32ManagerIndex -Index $i)
+    [void]$builder.AppendLine("dn: uid=$(Get-Scenario32UserUid -Index $i),$peopleOU")
+    [void]$builder.AppendLine("changetype: modify")
+    [void]$builder.AppendLine("add: manager")
+    [void]$builder.AppendLine("manager: uid=$managerUid,$peopleOU")
+    [void]$builder.AppendLine("")
+}
+Import-Ldif -Content $builder.ToString() -What "managers" -Modify
+Write-Host "  Gave $($scale.Users - 1) users a manager" -ForegroundColor Green
+
+# Groups. Created parents first (index order), so every nested group is created after the group containing it; the
+# nested memberships are added below, once every group exists.
+Write-TestStep "Step 3" "Creating $($scale.Groups) groups"
+[void]$builder.Clear()
+for ($g = 0; $g -lt $scale.Groups; $g++) {
     $name = Get-Scenario32GroupName -Index $g
     [void]$builder.AppendLine("dn: cn=$name,$groupsOU")
     [void]$builder.AppendLine("objectClass: jimGroup")
@@ -117,12 +135,27 @@ for ($g = $scale.Groups - 1; $g -ge 0; $g--) {
     foreach ($userIndex in Get-Scenario32GroupUserMemberIndexes -Index $g -UserCount $scale.Users -MembersPerGroup $scale.UsersPerGroup) {
         [void]$builder.AppendLine("member: uid=$(Get-Scenario32UserUid -Index $userIndex),$peopleOU")
     }
-    foreach ($childIndex in Get-Scenario32NestedGroupIndexes -Index $g -GroupCount $scale.Groups) {
-        [void]$builder.AppendLine("member: cn=$(Get-Scenario32GroupName -Index $childIndex),$groupsOU")
-    }
     [void]$builder.AppendLine("")
 }
 Import-Ldif -Content $builder.ToString() -What "groups"
 Write-Host "  Created $($scale.Groups) groups" -ForegroundColor Green
+
+Write-TestStep "Step 4" "Nesting the groups"
+[void]$builder.Clear()
+$nestedCount = 0
+for ($g = 0; $g -lt $scale.Groups; $g++) {
+    $children = @(Get-Scenario32NestedGroupIndexes -Index $g -GroupCount $scale.Groups)
+    if ($children.Count -eq 0) { continue }
+    [void]$builder.AppendLine("dn: cn=$(Get-Scenario32GroupName -Index $g),$groupsOU")
+    [void]$builder.AppendLine("changetype: modify")
+    [void]$builder.AppendLine("add: member")
+    foreach ($childIndex in $children) {
+        [void]$builder.AppendLine("member: cn=$(Get-Scenario32GroupName -Index $childIndex),$groupsOU")
+        $nestedCount++
+    }
+    [void]$builder.AppendLine("")
+}
+Import-Ldif -Content $builder.ToString() -What "nested groups" -Modify
+Write-Host "  Added $nestedCount nested group memberships" -ForegroundColor Green
 
 Write-TestSection "Scenario 032 OpenLDAP Population Complete"
