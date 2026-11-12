@@ -1640,11 +1640,6 @@ public partial class SyncRepository : ISyncRepository
                     if (av.AttributeId == 0 && av.Attribute != null)
                         av.AttributeId = av.Attribute.Id;
 
-                    // An id for each new value, as the PostgreSQL writer assigns one before it inserts, so a later
-                    // replacement can name the value it supersedes (#2930).
-                    if (av.Id == Guid.Empty)
-                        av.Id = Guid.NewGuid();
-
                     if (!stored.AttributeValues.Contains(av))
                         stored.AttributeValues.Add(av);
                 }
