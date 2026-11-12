@@ -87,6 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- ⚡ Synchronising a group with hundreds of thousands of members does less database work: recording its export's change looks up its members' names 10,000 at a time, so the database uses its indexes instead of scanning every attribute value. (#2939)
 - ⚡ Imports, synchronisations and exports do less database work writing new objects, values and Pending Exports to large Connected Systems: their ids are now time-ordered, so each write adds to the end of the database's indexes instead of a random page of each. (#2929)
 - ⚡ Full and Delta Synchronisations of directories with very large groups use far less memory: a page now also ends at 100,000 attribute values, so the largest groups no longer share one, where a single page of four groups once held two million members. (#2934)
 - ⚡ Deleting an attribute no longer rewrites the change history that names it, which keeps the attribute's name and values, and change history writes no longer wait on one another over the attributes they name. (#2931)

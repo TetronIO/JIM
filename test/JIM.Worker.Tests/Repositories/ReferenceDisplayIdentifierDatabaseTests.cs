@@ -1,10 +1,13 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using JIM.Application.Utilities;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.PostgresData;
+using JIM.PostgresData.Repositories;
 using JIM.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -24,7 +27,11 @@ namespace JIM.Worker.Tests.Repositories;
 [Category("RequiresPostgres")]
 public class ReferenceDisplayIdentifierDatabaseTests
 {
+    private static readonly ActivitySource TestSource = new("JIM.Tests.ReferenceDisplayIdentifiers");
+
     private string _connectionString = null!;
+    private ActivityListener _listener = null!;
+    private readonly ConcurrentQueue<Activity> _stopped = new();
 
     private JimDbContext NewContext()
     {
@@ -50,7 +57,19 @@ public class ReferenceDisplayIdentifierDatabaseTests
 
         using var ctx = NewContext();
         ctx.Database.Migrate();
+
+        // JIM's own spans, and Npgsql's span per command, so a test can count the statements a lookup sends.
+        _listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name.StartsWith("JIM.", StringComparison.Ordinal) || source.Name == "Npgsql",
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = _stopped.Enqueue
+        };
+        ActivitySource.AddActivityListener(_listener);
     }
+
+    [OneTimeTearDown]
+    public void OneTimeTearDown() => _listener?.Dispose();
 
     [SetUp]
     public async Task SetUpAsync()
@@ -129,6 +148,91 @@ public class ReferenceDisplayIdentifierDatabaseTests
         await new PostgresDataRepository(ctx).Sync.GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync([mvoId], s.SystemId);
 
         Assert.That(ctx.ChangeTracker.Entries(), Is.Empty);
+    }
+
+    [Test]
+    public async Task GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync_MoreIdsThanTwoChunks_ReturnsEveryFoundObjectOnceWithItsIdentifierAsync()
+    {
+        // Two chunks and one id over (#2939), with the objects that exist placed either side of each chunk boundary and
+        // every other id naming nothing in the system, as most of a large group's members do on a first export.
+        const int chunkSize = SyncRepository.ReferenceDisplayIdentifierChunkSize;
+        var s = await SeedSchemaAsync();
+        var ids = Enumerable.Range(0, (chunkSize * 2) + 1).Select(_ => Guid.NewGuid()).ToList();
+
+        var named = 0;
+        var placed = new List<Guid>();
+        foreach (var position in new[] { 0, 1, chunkSize - 1, chunkSize, chunkSize + 1, (chunkSize * 2) - 1, chunkSize * 2 })
+        {
+            // Alternate the naming shapes: a display name, only an external id (no name attribute), and nothing at all.
+            ids[position] = (named++ % 3) switch
+            {
+                0 => await SeedAsync(s, s.SystemId, (s.DisplayName, v => v.StringValue = $"Group at {position}"), (s.ObjectGuid, v => v.GuidValue = Guid.NewGuid())),
+                1 => await SeedAsync(s, s.SystemId, (s.ObjectGuid, v => v.GuidValue = Guid.NewGuid())),
+                _ => await SeedAsync(s, s.SystemId)
+            };
+            placed.Add(ids[position]);
+        }
+
+        // Asked for, but joined in another system, at a chunk boundary.
+        var inOtherSystem = await SeedAsync(s, s.OtherSystemId, (s.DisplayName, v => v.StringValue = "Elsewhere"));
+        ids[chunkSize - 2] = inOtherSystem;
+        // The first id asked for again at the end, so it falls in another chunk as well.
+        ids.Add(ids[0]);
+
+        await using var ctx = NewContext();
+        var identifiers = await new PostgresDataRepository(ctx).Sync.GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(ids, s.SystemId);
+        var fullyLoaded = await ctx.ConnectedSystemObjects.AsNoTracking()
+            .Include(cso => cso.AttributeValues).ThenInclude(av => av.Attribute)
+            .Where(cso => cso.ConnectedSystemId == s.SystemId && cso.MetaverseObjectId.HasValue && placed.Contains(cso.MetaverseObjectId.Value))
+            .ToDictionaryAsync(cso => cso.MetaverseObjectId!.Value);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(identifiers.Keys, Is.EquivalentTo(placed), "every object found, none lost at a boundary, nothing else returned");
+            foreach (var mvoId in placed)
+                Assert.That(identifiers[mvoId], Is.EqualTo(ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(fullyLoaded[mvoId])), $"Metaverse Object {mvoId}");
+            Assert.That(identifiers[placed[0]], Is.EqualTo("Group at 0"), "the oracle itself names the first object by its display name");
+        }
+    }
+
+    [Test]
+    public async Task GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync_MoreIdsThanTwoChunks_SendsOneBoundedStatementPerChunkAsync()
+    {
+        // A statement given every id at once was planned as parallel sequential scans of the attribute values once the
+        // array was large (500,000 ids in the lab); each statement must stay within one chunk's worth (#2939).
+        const int chunkSize = SyncRepository.ReferenceDisplayIdentifierChunkSize;
+        var s = await SeedSchemaAsync();
+        var ids = Enumerable.Range(0, (chunkSize * 2) + 1).Select(_ => Guid.NewGuid()).ToList();
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+        var spans = await RecordAsync(() => repository.Sync.GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(ids, s.SystemId));
+
+        var lookups = spans.Where(span => span.Source.Name == "Npgsql"
+            && span.TagObjects.Any(t => t.Value is string text && text.Contains("LEFT JOIN LATERAL", StringComparison.Ordinal))).ToList();
+        var load = spans.SingleOrDefault(span => span.DisplayName == "Cso.LoadReferenceDisplayIdentifiers");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(lookups, Has.Count.EqualTo(3), "one statement per chunk of ids");
+            Assert.That(load, Is.Not.Null, "the lookup reports a span of its own");
+            Assert.That(load?.GetTagItem("idCount"), Is.EqualTo(ids.Count));
+            Assert.That(load?.GetTagItem("chunkCount"), Is.EqualTo(3));
+        }
+    }
+
+    /// <summary>
+    /// Runs <paramref name="action"/> under a span of the test's own and returns every span completed in its trace.
+    /// </summary>
+    private async Task<List<Activity>> RecordAsync(Func<Task> action)
+    {
+        ActivityTraceId traceId;
+        using (var root = TestSource.StartActivity("Test"))
+        {
+            Assert.That(root, Is.Not.Null, "the test's listener samples its own source");
+            traceId = root!.TraceId;
+            await action();
+        }
+        return [.. _stopped.Where(span => span.TraceId == traceId)];
     }
 
     private sealed record Schema(

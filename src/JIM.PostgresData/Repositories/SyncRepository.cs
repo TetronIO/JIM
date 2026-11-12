@@ -926,6 +926,16 @@ public partial class SyncRepository : ISyncRepository
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectByMetaverseObjectIdAsync(metaverseObjectId, connectedSystemId);
 
+    /// <summary>
+    /// The most Metaverse Object ids one statement of <see cref="GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync"/>
+    /// looks up, which keeps the plan on the indexes and each result set bounded (#2939). Measured on a 22.6M-row value
+    /// table: the plan stays on IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId up to 60,000 ids, at about 10 ms
+    /// per 1,000, and flips to a parallel sequential scan between 60,000 and 70,000, at 1.5 to 3.3 s per call. 2,000 ids
+    /// is below that floor rate (17.5 ms per 1,000); 10,000 runs at it, with a wide margin for the staler statistics seen
+    /// mid-sync.
+    /// </summary>
+    internal const int ReferenceDisplayIdentifierChunkSize = 10_000;
+
     public async Task<Dictionary<Guid, string>> GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(
         IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
     {
@@ -954,21 +964,29 @@ public partial class SyncRepository : ISyncRepository
               AND cso."MetaverseObjectId" = ANY(@metaverseObjectIds)
             """;
 
+        // Each id once, so an object's rows all come from one chunk's statement, exactly as from a single statement.
+        var chunks = metaverseObjectIds.Distinct().Chunk(ReferenceDisplayIdentifierChunkSize).ToList();
+        using var loadSpan = CsoActivitySource.StartActivity("Cso.LoadReferenceDisplayIdentifiers");
+        loadSpan?.SetTag("idCount", chunks.Sum(chunk => chunk.Length));
+        loadSpan?.SetTag("chunkCount", chunks.Count);
+
         var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
         var transaction = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
 
         await using var command = new NpgsqlCommand(sql, connection, transaction);
         command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlDbType.Integer) { Value = connectedSystemId });
-        command.Parameters.Add(new NpgsqlParameter("metaverseObjectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = metaverseObjectIds.ToArray() });
+        var idsParameter = command.Parameters.Add(new NpgsqlParameter("metaverseObjectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid));
         command.Parameters.Add(new NpgsqlParameter("nameAttributes", NpgsqlDbType.Array | NpgsqlDbType.Text)
             { Value = ObjectNaming.ConnectedSystemNameAttributes.Select(name => name.ToLowerInvariant()).ToArray() });
 
         // Each object is rebuilt with just these values, untracked, and named by the model's own rule, so the identifier
         // cannot drift from what the fully loaded object would give.
         var objectsByMetaverseObjectId = new Dictionary<Guid, ConnectedSystemObject>();
-        await using (var reader = await command.ExecuteReaderAsync())
+        foreach (var chunk in chunks)
         {
+            idsParameter.Value = chunk;
+            await using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
                 var metaverseObjectId = reader.GetGuid(0);
