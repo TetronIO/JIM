@@ -337,10 +337,6 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 // page's tracker is cleared, below.
                 try
                 {
-                    // The previous page's history is waited for before any of this page's changes are saved (#2874); see
-                    // SyncFullSyncTaskProcessor.
-                    await WaitForPreviousPageHistoryAsync();
-
                     // Batch persist all MVOs collected during this page.
                     // See SyncFullSyncTaskProcessor for design notes on why progress updates
                     // cannot be decoupled from batch persistence boundaries.
@@ -382,7 +378,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 
                     // Record this page's history (its RPEIs and their change records, and its MVO change records): prepared
                     // and released before updating progress and clearing the change tracker, and written while the next
-                    // page loads and is processed (#2874)
+                    // page loads, is processed and saves its changes (#2874, #2924). The previous page's write, which ran
+                    // alongside this page's, is waited for here: at most one write is in flight, and a failed write stops
+                    // the run once this page's history is written, before another page loads.
                     await FlushPageHistoryAsync(page, totalCsoPages);
 
                     // Clear the change tracker (and the page identity map, #1612) unconditionally at every page

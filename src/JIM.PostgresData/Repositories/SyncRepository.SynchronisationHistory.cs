@@ -6,6 +6,8 @@ using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
 
 namespace JIM.PostgresData.Repositories;
 
@@ -77,6 +79,25 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
+    public async Task FindSynchronisationHistoryReferenceTargetsAsync(SynchronisationHistoryBatch batch)
+    {
+        // One look-up of ids by primary key, on the run's connection, as the batch is handed off: the answer as the page
+        // ended, before the next page's changes create or delete any of these objects (#2924). Read inside the run's
+        // transaction if it holds one, so rows it has written count, as the write's own look-up would count them.
+        var referenced = batch.ConnectedSystemObjectReferenceIds().ToList();
+        if (referenced.Count == 0)
+        {
+            batch.RecordConnectedSystemObjectReferencesFound(new HashSet<Guid>());
+            return;
+        }
+
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        batch.RecordConnectedSystemObjectReferencesFound(await GetExistingConnectedSystemObjectIdsAsync(connection,
+            (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction(), referenced));
+    }
+
+    /// <inheritdoc />
     public async Task<bool> WriteSynchronisationHistoryAsync(SynchronisationHistoryBatch batch)
     {
         if (_context.Database.CurrentTransaction != null)
@@ -103,7 +124,7 @@ public partial class SyncRepository
             {
                 using var changesSpan = MvoActivitySource.StartActivity("RpeiHistory.ItemCsoChanges");
                 changesSpan?.SetTag("rowCount", batch.ItemChangeRecords.Count);
-                await WriteCsoChangeRecordsAsync(batch.ItemChangeRecords);
+                await WriteCsoChangeRecordsAsync(batch.ItemChangeRecords, batch.ConnectedSystemObjectReferencesFound);
             }
 
             if (batch.MetaverseObjectChanges.Count > 0 || batch.MetaverseObjectChangeAppends.Count > 0)

@@ -25,17 +25,19 @@ using Activity = JIM.Models.Activities.Activity;
 namespace JIM.Worker.Tests.Workflows;
 
 /// <summary>
-/// A synchronisation's page loop writes each page's history while the next page loads and is processed (#2874, Phase
-/// 3), on PostgreSQL, where the run chooses that mode itself: the next page loads before the previous page's history
-/// commits; no change of the next page is saved until it has; a failed write fails the run naming its page, leaving no
-/// history of that page and no change after it; and a cancelled run still completes the history it handed off.
+/// A synchronisation's page loop writes each page's history while the next page loads, is processed and saves its
+/// changes (#2874, #2924), on PostgreSQL, where the run chooses that mode itself: the next page loads, and saves its
+/// changes, before the previous page's history commits, and waits for it only as it hands its own history off; a failed
+/// write fails the run naming its page, leaving no history of that page and no change beyond the next page, whose history
+/// is still written; and a cancelled run still completes the history it handed off.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Six HR people over pages of two, each projected to a Metaverse Object with its change record. A history write is held
-/// back by a lock on the execution item table taken from the test's own connection, which every history write needs and
-/// nothing else in the run writes to; the run's own state writes go on regardless. A write is made to fail by a trigger
-/// on the Metaverse Object change values that refuses one marked name, which only page 2's history carries.
+/// Eight HR people over pages of two, each projected to a Metaverse Object with its change record. Every history write is
+/// held back by a lock on the execution item table taken from the test's own connection, which every history write needs
+/// and nothing else in the run writes to; the run's own state writes go on regardless. One page's write alone is held back
+/// by a trigger on the Metaverse Object change values that waits on an advisory lock the test holds, for a person carrying
+/// a marked name, and made to fail by the same trigger for another marked name.
 /// </para>
 /// <para>
 /// Opt-in via the <c>JIM_TEST_RESET_*</c> environment variables; ignored when <c>JIM_TEST_RESET_DB</c> is absent.
@@ -46,9 +48,13 @@ namespace JIM.Worker.Tests.Workflows;
 public class SynchronisationHistoryOverlapDatabaseTests
 {
     private const int PageSize = 2;
-    private const int People = 6;
-    private const int TotalPages = 3;
+    private const int People = 8;
+    private const int TotalPages = 4;
     private const string FailMarker = "History Refused";
+    private const string HoldMarker = "History Held";
+
+    /// <summary>The advisory lock a marked page's history write waits on while the test holds it.</summary>
+    private const long HistoryHoldLock = 2924;
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
 
     private static Guid HrId(int employee) => Guid.Parse($"00000000-0000-0000-0000-{employee:D12}");
@@ -64,10 +70,10 @@ public class SynchronisationHistoryOverlapDatabaseTests
     private readonly ConcurrentQueue<System.Diagnostics.Activity> _spansStarted = new();
     private readonly ConcurrentQueue<System.Diagnostics.Activity> _spansStopped = new();
 
-    private JimDbContext NewContext(bool trackAll = false)
+    private JimDbContext NewContext(bool trackAll = false, string? connectionString = null)
     {
         var builder = new DbContextOptionsBuilder<JimDbContext>()
-            .UseNpgsql(_connectionString)
+            .UseNpgsql(connectionString ?? _connectionString)
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
         // The Worker tracks by default (src/JIM.Worker/Program.cs); a synchronisation run must too.
         if (trackAll)
@@ -155,59 +161,111 @@ public class SynchronisationHistoryOverlapDatabaseTests
     }
 
     /// <summary>
-    /// While page 1's history is held back, the run waits for it before saving any of page 2's changes: no Metaverse
-    /// Object of page 2 exists until page 1's history has committed.
+    /// While page 1's history is held back, page 2 saves its changes, and waits for page 1's history only as it hands its
+    /// own off (#2924): page 2's Metaverse Objects exist while page 1's history has yet to commit, and page 2's history
+    /// is not written until it has.
     /// </summary>
-    [Test]
-    public async Task PageLoop_StateFlushWaitsForPreviousHistoryAsync()
+    [TestCase(ConnectedSystemRunType.FullSynchronisation)]
+    [TestCase(ConnectedSystemRunType.DeltaSynchronisation)]
+    public async Task PageLoop_NextPageSavesItsChangesWhilePreviousHistoryIsWrittenAsync(ConnectedSystemRunType runType)
     {
         await ArrangeAsync();
-        var (_, _, _, run) = await CreateRunAsync(ConnectedSystemRunType.FullSynchronisation);
+        var (_, _, _, run) = await CreateRunAsync(runType);
 
         Task runTask;
         long metaverseObjectsWhileWaiting;
+        long pageOneItemsWhileWaiting;
+        long pageTwoItemsWhileWaiting;
+        bool waiting;
         await using (await HoldHistoryWritesAsync())
         {
             runTask = Task.Run(run);
-            var waiting = await WaitForAsync(() => RunningWait(SynchronisationHistoryBarrier.PageStateFlush, page: 1) != null, runTask);
-            // Long enough for a run that did not wait to have saved page 2's objects.
-            await Task.Delay(TimeSpan.FromMilliseconds(500));
+            waiting = await WaitForAsync(() => RunningWait(SynchronisationHistoryBarrier.PageHandOff, page: 1) != null, runTask);
             metaverseObjectsWhileWaiting = await CountMetaverseObjectsAsync();
-            using (Assert.EnterMultipleScope())
-            {
-                Assert.That(waiting, Is.True, "the run waits for page 1's history before saving page 2's changes");
-                Assert.That(runTask.IsCompleted, Is.False, "the run is still waiting");
-            }
+            pageOneItemsWhileWaiting = await CountItemsAsync(PageIds(1));
+            pageTwoItemsWhileWaiting = await CountItemsAsync(PageIds(2));
+            Assert.That(runTask.IsCompleted, Is.False, "the run is still waiting");
         }
 
         await runTask;
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(metaverseObjectsWhileWaiting, Is.EqualTo(PageSize), "only page 1's Metaverse Objects existed while its history was written");
+            Assert.That(waiting, Is.True, "page 2 waits for page 1's history as it hands its own off");
+            Assert.That(metaverseObjectsWhileWaiting, Is.EqualTo(2 * PageSize),
+                "page 2 saved its Metaverse Objects while page 1's history was being written");
+            Assert.That(pageOneItemsWhileWaiting, Is.Zero, "page 1's history had not committed");
+            Assert.That(pageTwoItemsWhileWaiting, Is.Zero, "page 2's history is handed off only once page 1's is written");
             Assert.That(await CountMetaverseObjectsAsync(), Is.EqualTo(People));
+            Assert.That(await CountItemsAsync(Enumerable.Range(1, People).Select(HrId).ToArray()), Is.EqualTo(People));
         }
     }
 
     /// <summary>
-    /// A history write that fails fails the run, naming the page whose history it was: none of that page's history is
-    /// left, the history before it is complete, the changes of the pages up to it are saved and none after, its totals
-    /// are not counted, the watermark does not move, and nothing is left running or unobserved.
+    /// The connections a run holds while a page's history is written alongside the next page's parallel bulk writes stay
+    /// within the write parallelism plus the run's own two contexts (#2924): the history write runs on its own context's
+    /// connection alone, inside its one transaction, so the page's parallel writers keep the whole parallelism.
+    /// </summary>
+    [Test]
+    public async Task PageLoop_HistoryWriteAlongsideParallelPageWrites_StaysWithinTheConnectionBudgetAsync()
+    {
+        const int writeParallelism = 4;
+        await ArrangeAsync();
+        await ExecuteAsync(
+            """
+            CREATE TABLE IF NOT EXISTS budget_log (pid int, backends int);
+            TRUNCATE budget_log;
+            CREATE OR REPLACE FUNCTION log_budget() RETURNS trigger LANGUAGE plpgsql AS $fn$
+            BEGIN
+                INSERT INTO budget_log SELECT pg_backend_pid(), count(*)::int FROM pg_stat_activity
+                    WHERE datname = current_database() AND application_name = 'jim-2924-budget';
+                RETURN NULL;
+            END $fn$;
+            DROP TRIGGER IF EXISTS log_budget ON "MetaverseObjectAttributeValues";
+            CREATE TRIGGER log_budget AFTER INSERT ON "MetaverseObjectAttributeValues" FOR EACH STATEMENT EXECUTE FUNCTION log_budget();
+            """);
+        try
+        {
+            var (_, _, _, run) = await CreateRunAsync(ConnectedSystemRunType.FullSynchronisation, writeParallelism: writeParallelism);
+
+            Task runTask;
+            await using (await HoldHistoryWritesAsync())
+            {
+                runTask = Task.Run(run);
+                // Page 2 has saved its changes, in parallel, while page 1's history write holds its connection.
+                Assert.That(await WaitForAsync(() => RunningWait(SynchronisationHistoryBarrier.PageHandOff, page: 1) != null, runTask), Is.True);
+            }
+
+            await runTask;
+
+            var writers = await ScalarAsync("SELECT count(DISTINCT pid) FROM budget_log");
+            var peak = await ScalarAsync("SELECT coalesce(max(backends), 0)::bigint FROM budget_log");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(writers, Is.GreaterThan(1), "precondition: the pages' values were written across parallel connections");
+                Assert.That(peak, Is.LessThanOrEqualTo(writeParallelism + 2),
+                    "the page's parallel writers, the run's own connection and the history write's, and nothing more");
+            }
+        }
+        finally
+        {
+            await ExecuteAsync("""DROP TRIGGER IF EXISTS log_budget ON "MetaverseObjectAttributeValues"; DROP TABLE IF EXISTS budget_log;""");
+        }
+    }
+
+    /// <summary>
+    /// A history write that fails fails the run, naming the page whose history it was (#2924). The next page has saved its
+    /// changes by the time the failure is found, as it hands its own history off; that history is still written, so one
+    /// page's history is lost, as before the overlap. None of the failed page's history is left, no page beyond the next
+    /// saves anything, only the written pages' totals count, the watermark does not move, and nothing is left running or
+    /// unobserved.
     /// </summary>
     [TestCase(ConnectedSystemRunType.FullSynchronisation)]
     [TestCase(ConnectedSystemRunType.DeltaSynchronisation)]
-    public async Task PageLoop_HistoryWriteFails_FailsTheRunNamingThePageAsync(ConnectedSystemRunType runType)
+    public async Task PageLoop_HistoryWriteFails_WritesTheNextPagesHistoryThenFailsNamingThePageAsync(ConnectedSystemRunType runType)
     {
-        await ArrangeAsync(failMarkerEmployee: 3);
-        await ExecuteAsync(
-            $$"""
-            CREATE OR REPLACE FUNCTION refuse_marked_history() RETURNS trigger LANGUAGE plpgsql AS $fn$
-            BEGIN
-                RAISE EXCEPTION 'test refuses the history of %', NEW."StringValue";
-            END $fn$;
-            CREATE TRIGGER refuse_marked_history BEFORE INSERT ON "MetaverseObjectChangeAttributeValues"
-                FOR EACH ROW WHEN (NEW."StringValue" = '{{FailMarker}}') EXECUTE FUNCTION refuse_marked_history();
-            """);
+        await ArrangeAsync(refused: [3]);
+        await InstallHistoryTriggerAsync();
         var unobserved = new ConcurrentQueue<Exception>();
         void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e) => unobserved.Enqueue(e.Exception);
         TaskScheduler.UnobservedTaskException += OnUnobserved;
@@ -215,7 +273,17 @@ public class SynchronisationHistoryOverlapDatabaseTests
         {
             var (_, activity, _, run) = await CreateRunAsync(runType, recordFailureAsTheWorkerDoes: true);
 
-            var failure = Assert.ThrowsAsync<SynchronisationHistoryPersistenceException>(() => run());
+            // Page 2's write is held until page 3 is waiting for it at its hand-off, so the failure is found there and
+            // not by the check before page 3 loads.
+            Task runTask;
+            await using (await HoldMarkedHistoryAsync())
+            {
+                runTask = Task.Run(run);
+                Assert.That(await WaitForAsync(() => RunningWait(SynchronisationHistoryBarrier.PageHandOff, page: 2) != null, runTask), Is.True,
+                    "page 3 reached its hand-off while page 2's write was held");
+            }
+
+            var failure = Assert.ThrowsAsync<SynchronisationHistoryPersistenceException>(() => runTask);
             var writesStartedWhenTheRunEnded = _spansStarted.Count(s => s.OperationName == "SyncHistoryWrite");
             var writesStoppedWhenTheRunEnded = _spansStopped.Count(s => s.OperationName == "SyncHistoryWrite");
 
@@ -231,19 +299,24 @@ public class SynchronisationHistoryOverlapDatabaseTests
                 Assert.That(failure!.Page, Is.EqualTo(2));
                 Assert.That(failure.TotalPages, Is.EqualTo(TotalPages));
                 Assert.That(failure.InnerException, Is.InstanceOf<PostgresException>());
+                Assert.That(failure.NextPage, Is.EqualTo(3));
+                Assert.That(failure.NextPageOutcome, Is.EqualTo(SynchronisationHistoryNextPageOutcome.Written));
                 Assert.That(recorded.Status, Is.EqualTo(ActivityStatus.FailedWithError));
                 Assert.That(recorded.ErrorMessage, Does.StartWith(SynchronisationHistoryPersistenceException.BuildMessage(2, TotalPages, "HR")));
+                Assert.That(recorded.ErrorMessage, Does.Contain(SynchronisationHistoryPersistenceException.BuildNextPageMessage(
+                    3, TotalPages, SynchronisationHistoryNextPageOutcome.Written, null)));
 
                 Assert.That(await CountItemsAsync(PageIds(1)), Is.EqualTo(PageSize), "page 1's history is complete");
-                Assert.That(await CountMetaverseObjectChangesAsync(), Is.EqualTo(PageSize), "page 1's change records, and none of page 2's");
                 Assert.That(await CountItemsAsync(PageIds(2)), Is.Zero, "none of page 2's history is left");
-                Assert.That(await CountItemsAsync(PageIds(3)), Is.Zero);
-                Assert.That(await CountMetaverseObjectsAsync(), Is.EqualTo(2 * PageSize), "pages 1 and 2 saved their changes; page 3 did not");
-                Assert.That(activity.TotalProjected, Is.EqualTo(PageSize), "only page 1's totals were applied");
-                Assert.That(recorded.TotalProjected, Is.EqualTo(PageSize));
+                Assert.That(await CountItemsAsync(PageIds(3)), Is.EqualTo(PageSize), "page 3's history was written after page 2's failed");
+                Assert.That(await CountItemsAsync(PageIds(4)), Is.Zero);
+                Assert.That(await CountMetaverseObjectChangesAsync(), Is.EqualTo(2 * PageSize), "pages 1 and 3's change records, none of page 2's");
+                Assert.That(await CountMetaverseObjectsAsync(), Is.EqualTo(3 * PageSize), "pages 1 to 3 saved their changes; page 4 did not");
+                Assert.That(activity.TotalProjected, Is.EqualTo(2 * PageSize), "only pages 1 and 3's totals were applied");
+                Assert.That(recorded.TotalProjected, Is.EqualTo(2 * PageSize));
                 Assert.That(system.LastSyncCompletedAt, Is.Null, "the watermark does not move");
 
-                Assert.That(writesStartedWhenTheRunEnded, Is.EqualTo(2), "pages 1 and 2 were handed off; nothing after the failure");
+                Assert.That(writesStartedWhenTheRunEnded, Is.EqualTo(3), "pages 1, 2 and 3 were written; nothing after the failure");
                 Assert.That(writesStoppedWhenTheRunEnded, Is.EqualTo(writesStartedWhenTheRunEnded), "no write was left running");
                 Assert.That(unobserved, Is.Empty, "no write's failure went unobserved");
             }
@@ -255,11 +328,53 @@ public class SynchronisationHistoryOverlapDatabaseTests
     }
 
     /// <summary>
-    /// A run cancelled while a page's history is held back waits for it: the history is complete, and the run ends as a
-    /// cancelled run does, without failing and without moving the watermark.
+    /// When the next page's history fails to write too, the run fails naming both pages, the first as its cause (#2924):
+    /// neither page's history is left, no page beyond the next saves anything, and neither page's totals count.
     /// </summary>
     [Test]
-    public async Task PageLoop_CancelledWhileHistoryWriteHeld_WaitsAndCompletesThatHistoryAsync()
+    public async Task PageLoop_HistoryWriteFailsAndSoDoesTheNextPages_FailsNamingBothPagesAsync()
+    {
+        await ArrangeAsync(refused: [3, 5]);
+        await InstallHistoryTriggerAsync();
+        var (_, activity, _, run) = await CreateRunAsync(ConnectedSystemRunType.FullSynchronisation, recordFailureAsTheWorkerDoes: true);
+
+        Task runTask;
+        await using (await HoldMarkedHistoryAsync())
+        {
+            runTask = Task.Run(run);
+            Assert.That(await WaitForAsync(() => RunningWait(SynchronisationHistoryBarrier.PageHandOff, page: 2) != null, runTask), Is.True);
+        }
+
+        var failure = Assert.ThrowsAsync<SynchronisationHistoryPersistenceException>(() => runTask);
+
+        await using var read = NewContext();
+        var recorded = await read.Activities.AsNoTracking().SingleAsync(a => a.Id == activity.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(failure!.Page, Is.EqualTo(2), "page 2's failure, found first, is the cause");
+            Assert.That(failure.InnerException, Is.InstanceOf<PostgresException>());
+            Assert.That(failure.NextPage, Is.EqualTo(3));
+            Assert.That(failure.NextPageOutcome, Is.EqualTo(SynchronisationHistoryNextPageOutcome.WriteFailed));
+            Assert.That(failure.NextPageFailure, Is.InstanceOf<PostgresException>(), "page 3's failure is kept too");
+            Assert.That(recorded.Status, Is.EqualTo(ActivityStatus.FailedWithError));
+            Assert.That(recorded.ErrorMessage, Does.StartWith(SynchronisationHistoryPersistenceException.BuildMessage(2, TotalPages, "HR")));
+            Assert.That(recorded.ErrorMessage, Does.Contain($"Page 3 of {TotalPages} had saved its changes when the failure was found; " +
+                "its history could not be written either"));
+
+            Assert.That(await CountItemsAsync(PageIds(1)), Is.EqualTo(PageSize));
+            Assert.That(await CountItemsAsync(PageIds(2)), Is.Zero);
+            Assert.That(await CountItemsAsync(PageIds(3)), Is.Zero);
+            Assert.That(await CountMetaverseObjectsAsync(), Is.EqualTo(3 * PageSize), "no page beyond page 3 saved its changes");
+            Assert.That(activity.TotalProjected, Is.EqualTo(PageSize), "only page 1's totals were applied");
+        }
+    }
+
+    /// <summary>
+    /// A run cancelled during page 2 while page 1's history is held back waits for it as page 2 hands its own off: the
+    /// history is complete, and the run ends as a cancelled run does, without failing and without moving the watermark.
+    /// </summary>
+    [Test]
+    public async Task PageLoop_CancelledWhileHistoryWriteHeld_WaitsAtTheHandOffAndCompletesThatHistoryAsync()
     {
         await ArrangeAsync();
         var (processor, activity, cancellation, run) = await CreateRunAsync(ConnectedSystemRunType.FullSynchronisation);
@@ -273,8 +388,7 @@ public class SynchronisationHistoryOverlapDatabaseTests
         await using (await HoldHistoryWritesAsync())
         {
             runTask = Task.Run(run);
-            var waiting = await WaitForAsync(() => RunningWait(SynchronisationHistoryBarrier.PageStateFlush, page: 1) != null, runTask);
-            await Task.Delay(TimeSpan.FromMilliseconds(200));
+            var waiting = await WaitForAsync(() => RunningWait(SynchronisationHistoryBarrier.PageHandOff, page: 1) != null, runTask);
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(waiting, Is.True, "the cancelled run waits for page 1's history");
@@ -294,6 +408,43 @@ public class SynchronisationHistoryOverlapDatabaseTests
             Assert.That(await CountItemsAsync(PageIds(3)), Is.Zero);
             Assert.That(activity.TotalProjected, Is.EqualTo(PageSize + 1));
             Assert.That(system.LastSyncCompletedAt, Is.Null, "a cancelled run does not move the watermark");
+        }
+    }
+
+    /// <summary>
+    /// A run cancelled during page 2, whose history is then held back, waits for it as the page loop ends: the history is
+    /// complete, and the run ends as a cancelled run does.
+    /// </summary>
+    [Test]
+    public async Task PageLoop_CancelledWhileLastHistoryWriteHeld_WaitsAtTheLoopExitAndCompletesThatHistoryAsync()
+    {
+        await ArrangeAsync(held: [3]);
+        await InstallHistoryTriggerAsync();
+        var (processor, activity, cancellation, run) = await CreateRunAsync(ConnectedSystemRunType.FullSynchronisation);
+        processor.OnConnectedSystemObjectProcessedInPass2 = cso =>
+        {
+            if (cso.Id == PageIds(2)[0])
+                cancellation.Cancel();
+        };
+
+        Task runTask;
+        await using (await HoldMarkedHistoryAsync())
+        {
+            runTask = Task.Run(run);
+            var waiting = await WaitForAsync(() => RunningWait(SynchronisationHistoryBarrier.PageLoopExit, page: 2) != null, runTask);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(waiting, Is.True, "the cancelled run waits for page 2's history as the page loop ends");
+                Assert.That(runTask.IsCompleted, Is.False);
+            }
+        }
+
+        Assert.That(() => runTask, Throws.Nothing, "a cancelled run ends without failing");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await CountItemsAsync([PageIds(2)[0]]), Is.EqualTo(1), "page 2's history is complete");
+            Assert.That(await CountItemsAsync(PageIds(3)), Is.Zero);
+            Assert.That(activity.TotalProjected, Is.EqualTo(PageSize + 1));
         }
     }
 
@@ -326,11 +477,18 @@ public class SynchronisationHistoryOverlapDatabaseTests
     #region Arrangement and reads
 
     /// <summary>
-    /// Six HR people, projected with their names and employee ids; pages of two; Metaverse Object change tracking on.
-    /// The person numbered <paramref name="failMarkerEmployee"/>, if any, carries the name the failure trigger refuses.
+    /// Eight HR people, projected with their names and employee ids; pages of two; Metaverse Object change tracking on.
+    /// The people numbered in <paramref name="refused"/> carry the name the history trigger refuses, and those in
+    /// <paramref name="held"/> the name it holds back while the test holds the advisory lock
+    /// (<see cref="InstallHistoryTriggerAsync"/>).
     /// </summary>
-    private async Task ArrangeAsync(int? failMarkerEmployee = null)
+    private async Task ArrangeAsync(int[]? refused = null, int[]? held = null)
     {
+        string NameOf(int employee) =>
+            refused?.Contains(employee) == true ? FailMarker
+            : held?.Contains(employee) == true ? HoldMarker
+            : $"Person {employee:D2}";
+
         await using (var seed = NewContext())
         {
             foreach (var (key, valueType, value) in new[]
@@ -399,7 +557,7 @@ public class SynchronisationHistoryOverlapDatabaseTests
             cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
             {
                 Id = Guid.NewGuid(), AttributeId = _hrDisplayNameAttributeId,
-                StringValue = employee == failMarkerEmployee ? FailMarker : $"Person {employee:D2}"
+                StringValue = NameOf(employee)
             });
             return cso;
         }).ToList();
@@ -422,10 +580,24 @@ public class SynchronisationHistoryOverlapDatabaseTests
     /// disposed when the run ends.
     /// </summary>
     private async Task<(SyncTaskProcessorBase Processor, Activity Activity, CancellationTokenSource Cancellation, Func<Task> Run)> CreateRunAsync(
-        ConnectedSystemRunType runType, bool recordFailureAsTheWorkerDoes = false)
+        ConnectedSystemRunType runType, bool recordFailureAsTheWorkerDoes = false, int? writeParallelism = null)
     {
-        var ctx = NewContext(trackAll: true);
+        // With a write parallelism, the run's every connection carries an application name the budget test counts by, and
+        // every bulk write of the run's own goes parallel across up to that many connections.
+        var connectionString = writeParallelism == null
+            ? _connectionString
+            : new NpgsqlConnectionStringBuilder(_connectionString) { ApplicationName = "jim-2924-budget" }.ConnectionString;
+        var ctx = NewContext(trackAll: true, connectionString);
         var repository = new PostgresDataRepository(ctx);
+        if (writeParallelism != null)
+        {
+            var sync = (JIM.PostgresData.Repositories.SyncRepository)repository.Sync;
+            sync.ConnectionStringForParallelWrites = connectionString;
+            sync.WriteParallelismOverride = writeParallelism;
+            sync.ParallelWriteRowThreshold = 1;
+            sync.ParallelWriteRowsPerConnection = 1;
+        }
+
         var jim = new JimApplication(repository, syncRepository: repository.Sync);
         var system = await jim.ConnectedSystems.GetConnectedSystemAsync(_hrId, withChangeTracking: true)
             ?? throw new InvalidOperationException("Connected System not found.");
@@ -490,6 +662,49 @@ public class SynchronisationHistoryOverlapDatabaseTests
         {
             await transaction.RollbackAsync();
             await transaction.DisposeAsync();
+            await connection.DisposeAsync();
+        }
+    }
+
+    /// <summary>
+    /// A trigger on the Metaverse Object change values that, for a person carrying <see cref="HoldMarker"/>, waits on the
+    /// advisory lock <see cref="HoldMarkedHistoryAsync"/> holds, and for one carrying <see cref="FailMarker"/> waits on it
+    /// too and then refuses the row, failing that page's history write. Only the history write inserts those rows.
+    /// </summary>
+    private Task InstallHistoryTriggerAsync() => ExecuteAsync(
+        $$"""
+        CREATE OR REPLACE FUNCTION refuse_marked_history() RETURNS trigger LANGUAGE plpgsql AS $fn$
+        BEGIN
+            PERFORM pg_advisory_xact_lock({{HistoryHoldLock}});
+            IF NEW."StringValue" = '{{FailMarker}}' THEN
+                RAISE EXCEPTION 'test refuses the history of %', NEW."StringValue";
+            END IF;
+            RETURN NEW;
+        END $fn$;
+        CREATE TRIGGER refuse_marked_history BEFORE INSERT ON "MetaverseObjectChangeAttributeValues"
+            FOR EACH ROW WHEN (NEW."StringValue" IN ('{{FailMarker}}', '{{HoldMarker}}')) EXECUTE FUNCTION refuse_marked_history();
+        """);
+
+    /// <summary>
+    /// Holds back the history write of every page carrying a marked person (<see cref="InstallHistoryTriggerAsync"/>) until
+    /// disposed; no other write is held.
+    /// </summary>
+    private async Task<IAsyncDisposable> HoldMarkedHistoryAsync()
+    {
+        var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using (var command = new NpgsqlCommand($"SELECT pg_advisory_lock({HistoryHoldLock})", connection))
+            await command.ExecuteNonQueryAsync();
+        return new HeldAdvisoryLock(connection);
+    }
+
+    private sealed class HeldAdvisoryLock(NpgsqlConnection connection) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            // Released explicitly: a pooled connection keeps its session's locks until it is next reset.
+            await using (var command = new NpgsqlCommand($"SELECT pg_advisory_unlock({HistoryHoldLock})", connection))
+                await command.ExecuteNonQueryAsync();
             await connection.DisposeAsync();
         }
     }

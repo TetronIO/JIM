@@ -1043,11 +1043,11 @@ public abstract class SyncTaskProcessorBase
     /// drained and disposed as the run ends however it ends.
     /// </summary>
     /// <remarks>
-    /// The run overlaps each page's history write with the next page's load and processing when its repository can write
-    /// history on a connection of its own (PostgreSQL), and writes every flush before going on otherwise (the in-memory
-    /// store, whose collections are not safe to use from two threads). As the run ends, whatever is in flight is waited
-    /// for: a history failure then fails a run that was completing or cancelling, and is recorded beside any other failure
-    /// already ending it (<see cref="SynchronisationHistoryWriter.DrainOnExitAsync"/>).
+    /// The run overlaps each page's history write with the next page's load, processing and saved changes (#2924) when
+    /// its repository can write history on a connection of its own (PostgreSQL), and writes every flush before going on
+    /// otherwise (the in-memory store, whose collections are not safe to use from two threads). As the run ends, whatever
+    /// is in flight is waited for: a history failure then fails a run that was completing or cancelling, and is recorded
+    /// beside any other failure already ending it (<see cref="SynchronisationHistoryWriter.DrainOnExitAsync"/>).
     /// </remarks>
     protected async Task RunWithHistoryWriterAsync(Func<Task> run)
     {
@@ -1096,14 +1096,23 @@ public abstract class SyncTaskProcessorBase
 
     /// <summary>
     /// Records a page's history at the end of its page loop iteration (#2874). Overlapped, the history is prepared and
-    /// released here, then written while the next page loads and is processed; the next page waits for it before saving
-    /// any of its own changes (<see cref="WaitForPreviousPageHistoryAsync"/>), and the page loop's end waits for the last
-    /// (<see cref="WaitForPageLoopHistoryAsync"/>). Inline, it is written before this returns, as any other flush is.
+    /// released here, then written while the next page loads, is processed and saves its changes (#2924); the next page
+    /// waits for it only as it hands its own history off, here (<see cref="SynchronisationHistoryWriter.HandOffPageAsync"/>),
+    /// and the page loop's end waits for the last (<see cref="WaitForPageLoopHistoryAsync"/>). Inline, it is written
+    /// before this returns, as any other flush is.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Released means the run holds none of it: the Activity's items are cleared and detached, the page lookups cleared,
     /// and the batch's references into the objects the run is still working on cut, ids having been copied into scalars
     /// by the preparation. The batch's totals are counted only once its write has succeeded.
+    /// </para>
+    /// <para>
+    /// The batch is prepared, and the Connected System Objects its change values refer to looked up, before the wait, so
+    /// the wait comes last and the history written is the page's as it ended, whatever the next page saves meanwhile. When
+    /// the wait finds the previous page's write failed, this page's history is still written and the run fails naming
+    /// the previous page (see the writer).
+    /// </para>
     /// </remarks>
     /// <param name="page">The 1-based page the flush records.</param>
     /// <param name="totalPages">The pages the run expects.</param>
@@ -1138,13 +1147,15 @@ public abstract class SyncTaskProcessorBase
             }
 
             batch.ReleaseRunObjects();
+            await _syncRepo.FindSynchronisationHistoryReferenceTargetsAsync(batch);
             OnHistoryHandedOffForTests?.Invoke(batch);
         }
         writer.RecordFlush(flushStopwatch.Elapsed);
 
         // Handed off once the flush's span has ended, so the write, which outlives it, is timed under the run's page loop
-        // rather than under a flush that has already finished.
-        await writer.HandOffAsync(batch);
+        // rather than under a flush that has already finished. The previous page's write is waited for here, so it ran
+        // alongside this page's own writes, and is counted once it has succeeded.
+        await writer.HandOffPageAsync(batch, CountWrittenHistory);
     }
 
     /// <summary>
@@ -1177,6 +1188,9 @@ public abstract class SyncTaskProcessorBase
         var (batch, pageRpeis) = prepared.Value;
 
         // Handed off and waited for at once: a failure propagates here, as it is, where the flush's caller attributes it.
+        // The references are looked up as for a page's batch (#2924), so both write the same history; nothing runs
+        // alongside this write, so the answer is the one the write would have found.
+        await _syncRepo.FindSynchronisationHistoryReferenceTargetsAsync(batch);
         OnHistoryHandedOffForTests?.Invoke(batch);
         await writer.HandOffAsync(batch);
         var written = await writer.WaitAsync(SynchronisationHistoryBarrier.AwaitedFlush);
@@ -1198,15 +1212,6 @@ public abstract class SyncTaskProcessorBase
 
         ClearPageExecutionItemLookups();
     }
-
-    /// <summary>
-    /// Waits, before a page saves any of its changes, for the previous page's history (#2874): at most one write is then
-    /// in flight, it never runs alongside the run's own writes, and a failure stops the run before another page's changes
-    /// are saved. The written page's totals are counted here.
-    /// </summary>
-    /// <exception cref="SynchronisationHistoryPersistenceException">The previous page's history, or an earlier page's,
-    /// was not written.</exception>
-    protected Task WaitForPreviousPageHistoryAsync() => WaitForHistoryAsync(SynchronisationHistoryBarrier.PageStateFlush);
 
     /// <summary>
     /// Waits, as the page loop ends however it ends, for the last page's history (#2874), before the steps that follow read

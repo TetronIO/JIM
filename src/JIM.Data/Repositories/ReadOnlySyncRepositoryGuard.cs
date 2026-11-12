@@ -796,6 +796,10 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
         => _inner.PrepareSynchronisationHistory(items, itemIdsWrittenWithDeletion, includeItemChangeRecords,
             newMetaverseObjectChanges, metaverseObjectChangeAppends, page, totalPages);
 
+    // A read, so it delegates.
+    public Task FindSynchronisationHistoryReferenceTargetsAsync(SynchronisationHistoryBatch batch)
+        => _inner.FindSynchronisationHistoryReferenceTargetsAsync(batch);
+
     public Task<bool> WriteSynchronisationHistoryAsync(SynchronisationHistoryBatch batch)
         => throw new PreviewWriteAttemptedException(nameof(WriteSynchronisationHistoryAsync));
 

@@ -47,10 +47,9 @@ Without this flush, the database can be left in an inconsistent state where MVOs
 
 ### Sync Operations (Full Sync, Delta Sync)
 
-The sync page pipeline has 9 sequential steps (`SyncFullSyncTaskProcessor` and `SyncDeltaSyncTaskProcessor`):
+The sync page pipeline has 8 sequential steps (`SyncFullSyncTaskProcessor` and `SyncDeltaSyncTaskProcessor`):
 
 ```
-0. WaitForPreviousPageHistoryAsync        -- waits for the previous page's history write (#2874)
 1. PersistPendingMetaverseObjectsAsync    -- saves MVO creates/updates
 2. CreatePendingMvoChangeObjectsAsync     -- builds MVO change history
 3. EvaluatePendingExportsAsync            -- evaluates export rules
@@ -58,12 +57,14 @@ The sync page pipeline has 9 sequential steps (`SyncFullSyncTaskProcessor` and `
 5. ResolvePendingExportReferenceSnapshotsAsync -- resolves deferred refs
 6. FlushObsoleteCsoOperationsAsync        -- deletes obsolete CSOs
 7. FlushPendingMvoDeletionsAsync          -- deletes 0-grace-period MVOs
-8. FlushPageHistoryAsync                  -- prepares the page's RPEIs and change records and hands them
-                                             to the run's history writer, which writes them in one
-                                             transaction while the next page loads (#2874)
+8. FlushPageHistoryAsync                  -- prepares the page's RPEIs and change records, waits for the
+                                             previous page's history write, then hands them to the run's
+                                             history writer, which writes them in one transaction while
+                                             the next page loads, is processed and saves its changes
+                                             (#2874, #2924)
 ```
 
-After step 8 the page's tracking state is cleared (the EF change tracker and the page's Metaverse Object identity map), so nothing from a flushed page is carried into the next. The history write handed off in step 8 is never cancelled with the run: the page's changes are already saved, so the page loop's exit waits for it whether the run finished or was cancelled, and a failed write fails the run rather than letting it end as cancelled.
+After step 8 the page's tracking state is cleared (the EF change tracker and the page's Metaverse Object identity map), so nothing from a flushed page is carried into the next. The history write handed off in step 8 is never cancelled with the run: the page's changes are already saved, so the next page's hand-off and the page loop's exit wait for it whether the run finished or was cancelled, and a failed write fails the run rather than letting it end as cancelled. None of these waits is cancellable; a cancelled run waits at whichever it reaches (the next page's hand-off when it is cancelled mid-page, the page loop's exit otherwise), then ends. A run never waits for history while its own connection holds a transaction: the writer refuses that, since the write could then wait on the run's uncommitted rows.
 
 **Highest-risk window** (before #339 fix): If a crash or cancellation occurs after step 1 but before step 4, MVOs are updated but no Pending Exports are created. Target systems silently miss the update, and a subsequent sync won't regenerate exports because CSO attributes haven't changed.
 

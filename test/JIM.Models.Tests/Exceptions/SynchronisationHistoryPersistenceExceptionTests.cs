@@ -23,7 +23,64 @@ public class SynchronisationHistoryPersistenceExceptionTests
         {
             Assert.That(message, Does.StartWith("Failed to record the execution items and change history of page 4 of 12 for Connected System 'HR'."));
             Assert.That(message, Does.Contain("synchronisation changes were saved; their history was not"));
-            Assert.That(message, Does.Contain("the run stopped before saving any further changes"));
+            Assert.That(message, Does.Contain("the run stopped without saving the changes of any page after page 5"),
+                "a page's history is written while the next page saves its changes (#2924), so the next page may have saved them");
+        }
+    }
+
+    [Test]
+    public void BuildMessage_NoPage_SavedNothingFurther()
+    {
+        var message = SynchronisationHistoryPersistenceException.BuildMessage(0, 0, "Directory");
+
+        Assert.That(message, Does.Contain("the run stopped before saving any further changes"));
+    }
+
+    [Test]
+    public void BuildNextPageMessage_Written_SaysTheNextPagesHistoryWasWritten()
+    {
+        var message = SynchronisationHistoryPersistenceException.BuildNextPageMessage(5, 12, SynchronisationHistoryNextPageOutcome.Written, null);
+
+        Assert.That(message, Is.EqualTo("Page 5 of 12 had saved its changes when the failure was found; its history was written."));
+    }
+
+    [Test]
+    public void BuildNextPageMessage_WriteFailed_NamesThePageAndWhyItFailed()
+    {
+        var message = SynchronisationHistoryPersistenceException.BuildNextPageMessage(5, 12, SynchronisationHistoryNextPageOutcome.WriteFailed,
+            "the disk is full");
+
+        Assert.That(message, Is.EqualTo(
+            "Page 5 of 12 had saved its changes when the failure was found; its history could not be written either: the disk is full"));
+    }
+
+    [Test]
+    public void BuildNextPageMessage_DependsOnTheFailedPage_SaysWhyItWasNotWritten()
+    {
+        var message = SynchronisationHistoryPersistenceException.BuildNextPageMessage(5, 12,
+            SynchronisationHistoryNextPageOutcome.NotWrittenDependsOnFailedPage, "a causal edge names an execution item of the failed page");
+
+        Assert.That(message, Is.EqualTo(
+            "Page 5 of 12 had saved its changes when the failure was found; its history was not written, because it refers to the " +
+            "history that failed (a causal edge names an execution item of the failed page)."));
+    }
+
+    [Test]
+    public void Constructor_WithTheNextPage_KeepsThePageThatFailedFirstAsThePrimaryCause()
+    {
+        var first = new TimeoutException("page 4's write timed out");
+        var second = new InvalidOperationException("page 5's write failed too");
+
+        var exception = new SynchronisationHistoryPersistenceException("both", first, page: 4, totalPages: 12, connectedSystemName: "HR",
+            nextPage: 5, nextPageOutcome: SynchronisationHistoryNextPageOutcome.WriteFailed, nextPageFailure: second);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exception.Page, Is.EqualTo(4), "the page whose history failed first is the one the run fails on");
+            Assert.That(exception.InnerException, Is.SameAs(first));
+            Assert.That(exception.NextPage, Is.EqualTo(5));
+            Assert.That(exception.NextPageOutcome, Is.EqualTo(SynchronisationHistoryNextPageOutcome.WriteFailed));
+            Assert.That(exception.NextPageFailure, Is.SameAs(second));
         }
     }
 

@@ -2893,6 +2893,14 @@ public partial class SyncRepository : ISyncRepository
     }
 
     /// <inheritdoc />
+    /// <remarks>Recorded as the production store records them, so the write marks the values as they stood here.</remarks>
+    public Task FindSynchronisationHistoryReferenceTargetsAsync(SynchronisationHistoryBatch batch)
+    {
+        batch.RecordConnectedSystemObjectReferencesFound(batch.ConnectedSystemObjectReferenceIds().Where(_csos.ContainsKey).ToHashSet());
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
     /// <remarks>
     /// Records the batch as this store's earlier writers did: each item stored (an item a deletion stored already is the
     /// same instance, so storing it again is the production writer's update of its row), the change records' values
@@ -2906,13 +2914,13 @@ public partial class SyncRepository : ISyncRepository
         foreach (var item in batch.Items)
             _rpeis[item.Id] = item;
 
-        MarkUnresolvedChangeReferences(batch.OutcomeChangeRecords);
+        MarkUnresolvedChangeReferences(batch.OutcomeChangeRecords, batch.ConnectedSystemObjectReferencesFound);
 
         foreach (var candidate in batch.MatchCandidates)
             _matchCandidates[candidate.Id] = candidate;
 
         RecordCausalEdges([.. batch.CausalEdges]);
-        MarkUnresolvedChangeReferences(batch.ItemChangeRecords);
+        MarkUnresolvedChangeReferences(batch.ItemChangeRecords, batch.ConnectedSystemObjectReferencesFound);
 
         foreach (var change in batch.MetaverseObjectChanges)
             _mvoChanges[change.Id] = change;
@@ -3116,7 +3124,7 @@ public partial class SyncRepository : ISyncRepository
     /// (#2690): a reference's id counts as written only when the object it refers to is stored, mirroring the writer's
     /// check that the referenced row exists.
     /// </summary>
-    private void MarkUnresolvedChangeReferences(IEnumerable<ConnectedSystemObjectChange> changes)
+    private void MarkUnresolvedChangeReferences(IEnumerable<ConnectedSystemObjectChange> changes, IReadOnlySet<Guid>? referencesFound = null)
     {
         foreach (var attributeChange in changes.SelectMany(c => c.AttributeChanges))
         {
@@ -3124,7 +3132,7 @@ public partial class SyncRepository : ISyncRepository
             {
                 var referenceIdWritten = valueChange.ReferenceValueId is { } referencedId
                                          && referencedId != Guid.Empty
-                                         && _csos.ContainsKey(referencedId);
+                                         && (referencesFound?.Contains(referencedId) ?? _csos.ContainsKey(referencedId));
                 valueChange.SetUnresolvedReferenceMark(attributeChange.AttributeType, referenceIdWritten);
             }
         }

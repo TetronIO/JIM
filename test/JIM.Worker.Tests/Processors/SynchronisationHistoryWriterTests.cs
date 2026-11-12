@@ -83,7 +83,7 @@ public class SynchronisationHistoryWriterTests
         Assert.That(() => writer.HandOffAsync(Batch(2)), Throws.InvalidOperationException.With.Message.Contain("in flight"));
 
         gate.SetResult(true);
-        await writer.WaitAsync(SynchronisationHistoryBarrier.PageStateFlush);
+        await writer.WaitAsync(SynchronisationHistoryBarrier.PageHandOff);
     }
 
     [Test]
@@ -103,7 +103,7 @@ public class SynchronisationHistoryWriterTests
     {
         var writer = NewWriter();
         await writer.HandOffAsync(Batch(1));
-        await writer.WaitAsync(SynchronisationHistoryBarrier.PageStateFlush);
+        await writer.WaitAsync(SynchronisationHistoryBarrier.PageHandOff);
 
         await writer.DisposeAsync();
 
@@ -125,7 +125,7 @@ public class SynchronisationHistoryWriterTests
         await writer.HandOffAsync(Batch(1));
 
         Assert.That(() => _written.Count, Is.EqualTo(1).After(5000, 10), "the write started");
-        var wait = writer.WaitAsync(SynchronisationHistoryBarrier.PageStateFlush);
+        var wait = writer.WaitAsync(SynchronisationHistoryBarrier.PageHandOff);
         Assert.That(wait.IsCompleted, Is.False, "the wait lasts as long as the write");
         gate.SetResult(true);
         Assert.That((await wait)!.Batch.Page, Is.EqualTo(1));
@@ -163,7 +163,7 @@ public class SynchronisationHistoryWriterTests
         for (var page = 1; page <= 3; page++)
         {
             await writer.HandOffAsync(Batch(page));
-            await writer.WaitAsync(SynchronisationHistoryBarrier.PageStateFlush);
+            await writer.WaitAsync(SynchronisationHistoryBarrier.PageHandOff);
         }
 
         using (Assert.EnterMultipleScope())
@@ -182,7 +182,7 @@ public class SynchronisationHistoryWriterTests
         var cause = new TimeoutException("the write timed out");
         gate.SetException(cause);
 
-        var failure = Assert.ThrowsAsync<SynchronisationHistoryPersistenceException>(() => writer.WaitAsync(SynchronisationHistoryBarrier.PageStateFlush));
+        var failure = Assert.ThrowsAsync<SynchronisationHistoryPersistenceException>(() => writer.WaitAsync(SynchronisationHistoryBarrier.PageHandOff));
 
         using (Assert.EnterMultipleScope())
         {
@@ -232,7 +232,7 @@ public class SynchronisationHistoryWriterTests
         Assert.That(watch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(1)), "the probe never waits for the write");
 
         gate.SetResult(true);
-        await writer.WaitAsync(SynchronisationHistoryBarrier.PageStateFlush);
+        await writer.WaitAsync(SynchronisationHistoryBarrier.PageHandOff);
     }
 
     [Test]
@@ -333,7 +333,7 @@ public class SynchronisationHistoryWriterTests
         await using var writer = NewWriter();
         Gate().SetException(new TimeoutException("the write timed out"));
         await writer.HandOffAsync(Batch(2, 3));
-        var failure = Assert.ThrowsAsync<SynchronisationHistoryPersistenceException>(() => writer.WaitAsync(SynchronisationHistoryBarrier.PageStateFlush));
+        var failure = Assert.ThrowsAsync<SynchronisationHistoryPersistenceException>(() => writer.WaitAsync(SynchronisationHistoryBarrier.PageHandOff));
 
         Assert.That(() => writer.DrainOnExitAsync(failure), Throws.Nothing);
         Assert.That(_activity.WarningMessage, Is.Null.Or.Empty);
@@ -368,7 +368,7 @@ public class SynchronisationHistoryWriterTests
         await using var writer = NewWriter();
 
         await writer.HandOffAsync(Batch(5));
-        await writer.WaitAsync(SynchronisationHistoryBarrier.PageStateFlush);
+        await writer.WaitAsync(SynchronisationHistoryBarrier.PageHandOff);
 
         System.Diagnostics.Activity Span(string name)
         {
@@ -382,7 +382,7 @@ public class SynchronisationHistoryWriterTests
         {
             Assert.That(write.GetTagItem("mode"), Is.EqualTo(nameof(SynchronisationHistoryWriteMode.Overlapped)));
             Assert.That(write.GetTagItem("rpeiCount"), Is.EqualTo(1));
-            Assert.That(wait.GetTagItem("barrier"), Is.EqualTo(nameof(SynchronisationHistoryBarrier.PageStateFlush)));
+            Assert.That(wait.GetTagItem("barrier"), Is.EqualTo(nameof(SynchronisationHistoryBarrier.PageHandOff)));
             Assert.That(wait.GetTagItem("writeWasRunning"), Is.Not.Null);
             Assert.That(wait.GetTagItem("waitedMs"), Is.Not.Null);
         }
@@ -399,22 +399,22 @@ public class SynchronisationHistoryWriterTests
 
         var gate = Gate();
         await writer.HandOffAsync(Batch(1));
-        var waitAtPageState = writer.WaitAsync(SynchronisationHistoryBarrier.PageStateFlush);
+        var waitAtPageHandOff = writer.WaitAsync(SynchronisationHistoryBarrier.PageHandOff);
         await Task.Delay(40);
         gate.SetResult(true);
-        await waitAtPageState;
+        await waitAtPageHandOff;
 
         await writer.HandOffAsync(Batch(2));
         await writer.WaitAsync(SynchronisationHistoryBarrier.PageLoopExit);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(writer.WaitTime(SynchronisationHistoryBarrier.PageStateFlush), Is.GreaterThanOrEqualTo(TimeSpan.FromMilliseconds(30)));
+            Assert.That(writer.WaitTime(SynchronisationHistoryBarrier.PageHandOff), Is.GreaterThanOrEqualTo(TimeSpan.FromMilliseconds(30)));
             Assert.That(writer.WaitTime(SynchronisationHistoryBarrier.PageLoopExit), Is.LessThan(TimeSpan.FromMilliseconds(30)),
                 "a write already complete is barely waited for");
             Assert.That(writer.WaitTime(SynchronisationHistoryBarrier.AwaitedFlush), Is.EqualTo(TimeSpan.Zero), "nothing waited there");
             Assert.That(writer.TotalWaitTime, Is.EqualTo(
-                writer.WaitTime(SynchronisationHistoryBarrier.PageStateFlush)
+                writer.WaitTime(SynchronisationHistoryBarrier.PageHandOff)
                 + writer.WaitTime(SynchronisationHistoryBarrier.PageLoopExit)
                 + writer.WaitTime(SynchronisationHistoryBarrier.AwaitedFlush)));
         }
@@ -456,4 +456,168 @@ public class SynchronisationHistoryWriterTests
         await dispose;
         _scope.Verify(s => s.Dispose(), Times.Once);
     }
+
+    #region The page hand-off (#2924)
+
+    [Test]
+    public async Task HandOffPageAsync_PreviousWriteInFlight_WaitsForItCountsItThenHandsOffAsync()
+    {
+        await using var writer = NewWriter();
+        var counted = new List<int>();
+        // Both gates queued before any write starts: the writes dequeue them on other threads.
+        var pageOneGate = Gate();
+        var pageTwoGate = Gate();
+        await writer.HandOffAsync(Batch(1));
+        Assert.That(() => _written.Count, Is.EqualTo(1).After(5000, 10), "page 1's write started");
+
+        var handOff = writer.HandOffPageAsync(Batch(2), written => counted.Add(written.Batch.Page));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(handOff.IsCompleted, Is.False, "page 2 is handed off only once page 1's write is done: one write in flight");
+            Assert.That(_written.Select(b => b.Page), Is.EqualTo(new[] { 1 }));
+        }
+
+        pageOneGate.SetResult(true);
+        await handOff;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(counted, Is.EqualTo(new[] { 1 }), "page 1's totals are counted once its write has succeeded");
+            Assert.That(() => _written.Select(b => b.Page).ToList(), Is.EqualTo(new[] { 1, 2 }).After(5000, 10), "page 2's write started");
+        }
+
+        pageTwoGate.SetResult(true);
+        Assert.That((await writer.WaitAsync(SynchronisationHistoryBarrier.PageLoopExit))!.Batch.Page, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task HandOffPageAsync_PreviousWriteFailed_WritesThisPageThenFailsNamingThePreviousPageAsync()
+    {
+        await using var writer = NewWriter();
+        var counted = new List<int>();
+        var cause = new InvalidOperationException("page 4's batch is refused");
+        Gate().SetException(cause);
+        await writer.HandOffAsync(Batch(4, 12));
+        var pageFive = Batch(5, 12);
+
+        var failure = Assert.ThrowsAsync<SynchronisationHistoryPersistenceException>(
+            () => writer.HandOffPageAsync(pageFive, written => counted.Add(written.Batch.Page)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(failure!.Page, Is.EqualTo(4), "page 4's failure is the cause the run fails with");
+            Assert.That(failure.InnerException, Is.SameAs(cause));
+            Assert.That(failure.NextPage, Is.EqualTo(5));
+            Assert.That(failure.NextPageOutcome, Is.EqualTo(SynchronisationHistoryNextPageOutcome.Written));
+            Assert.That(failure.NextPageFailure, Is.Null);
+            Assert.That(failure.Message, Is.EqualTo(SynchronisationHistoryPersistenceException.BuildMessage(4, 12, "HR") + " " +
+                SynchronisationHistoryPersistenceException.BuildNextPageMessage(5, 12, SynchronisationHistoryNextPageOutcome.Written, null)));
+            Assert.That(_written, Is.EqualTo(new[] { _written[0], pageFive }), "page 5's history was written, after page 4's failed");
+            Assert.That(counted, Is.EqualTo(new[] { 5 }), "page 5's totals count, its write having succeeded; page 4's do not");
+            Assert.That(writer.BatchesWritten, Is.EqualTo(1));
+            Assert.That(Assert.Throws<SynchronisationHistoryPersistenceException>(writer.ThrowIfFaulted), Is.SameAs(failure),
+                "the run's later calls find the same failure, so nothing more is written");
+            Assert.That(Assert.ThrowsAsync<SynchronisationHistoryPersistenceException>(() => writer.HandOffAsync(Batch(6, 12))), Is.SameAs(failure));
+        }
+
+        Assert.That(() => writer.DrainOnExitAsync(failure), Throws.Nothing, "the failure ending the run is the history failure itself");
+        Assert.That(_activity.WarningMessage, Is.Null.Or.Empty, "and is not recorded a second time");
+    }
+
+    [Test]
+    public async Task HandOffPageAsync_BothWritesFail_FailsNamingBothPagesKeepingTheFirstAsTheCauseAsync()
+    {
+        await using var writer = NewWriter();
+        var counted = new List<int>();
+        var first = new InvalidOperationException("page 4's batch is refused");
+        var second = new TimeoutException("page 5's write timed out");
+        // Both gates queued before any write starts: the writes dequeue them on other threads.
+        Gate().SetException(first);
+        Gate().SetException(second);
+        await writer.HandOffAsync(Batch(4, 12));
+
+        var failure = Assert.ThrowsAsync<SynchronisationHistoryPersistenceException>(
+            () => writer.HandOffPageAsync(Batch(5, 12), written => counted.Add(written.Batch.Page)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(failure!.Page, Is.EqualTo(4));
+            Assert.That(failure.InnerException, Is.SameAs(first), "the first failure stays the primary cause");
+            Assert.That(failure.NextPage, Is.EqualTo(5));
+            Assert.That(failure.NextPageOutcome, Is.EqualTo(SynchronisationHistoryNextPageOutcome.WriteFailed));
+            Assert.That(failure.NextPageFailure, Is.SameAs(second), "nor is the second failure swallowed");
+            Assert.That(failure.Message, Does.Contain("page 4 of 12").And.Contain("Page 5 of 12").And.Contain(second.Message));
+            Assert.That(counted, Is.Empty, "neither page's totals count");
+            Assert.That(_written, Has.Count.EqualTo(2));
+        }
+    }
+
+    [Test]
+    public async Task HandOffPageAsync_PreviousWriteFailedAndThisPageRefersToIt_WritesNothingMoreAndSaysWhyAsync()
+    {
+        await using var writer = NewWriter();
+        var counted = new List<int>();
+        Gate().SetException(new InvalidOperationException("page 4's batch is refused"));
+        var pageFour = Batch(4, 12);
+        await writer.HandOffAsync(pageFour);
+        var pageFive = new SynchronisationHistoryBatch
+        {
+            Items = [],
+            ItemIdsWrittenWithDeletion = new HashSet<Guid>(),
+            Outcomes = [new ActivityRunProfileExecutionItemSyncOutcome { Id = Guid.NewGuid(), ActivityRunProfileExecutionItemId = pageFour.Items[0].Id }],
+            OutcomeChangeRecords = [],
+            ItemChangeRecords = [],
+            CausalEdges = [],
+            MatchCandidates = [],
+            MetaverseObjectChanges = [],
+            MetaverseObjectChangeAppends = [],
+            CounterDeltas = new Dictionary<ActivityStatCounterKey, long>(),
+            Page = 5,
+            TotalPages = 12
+        };
+
+        var failure = Assert.ThrowsAsync<SynchronisationHistoryPersistenceException>(
+            () => writer.HandOffPageAsync(pageFive, written => counted.Add(written.Batch.Page)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(failure!.Page, Is.EqualTo(4));
+            Assert.That(failure.NextPageOutcome, Is.EqualTo(SynchronisationHistoryNextPageOutcome.NotWrittenDependsOnFailedPage));
+            Assert.That(failure.Message, Does.Contain("an outcome's execution item"));
+            Assert.That(_written, Is.EqualTo(new[] { pageFour }), "a batch that does not stand alone is not written");
+            Assert.That(counted, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task HandOffPageAsync_NothingInFlight_HandsOffAsync()
+    {
+        await using var writer = NewWriter();
+        var counted = new List<int>();
+
+        await writer.HandOffPageAsync(Batch(1), written => counted.Add(written.Batch.Page));
+
+        Assert.That((await writer.WaitAsync(SynchronisationHistoryBarrier.PageLoopExit))!.Batch.Page, Is.EqualTo(1));
+        Assert.That(counted, Is.Empty, "the caller counts what it waits for itself");
+    }
+
+    [Test]
+    public async Task WaitAsync_WriteInFlightWhileTheRunHoldsATransaction_ThrowsRatherThanWaitingAsync()
+    {
+        // The run's own writes now go on while a write is in flight (#2924), so a wait with the run's connection inside a
+        // transaction could wait for ever on rows that transaction holds; no barrier is ever reached that way.
+        await using var writer = NewWriter();
+        var gate = Gate();
+        await writer.HandOffAsync(Batch(1));
+        _runRepository.Setup(r => r.HasOpenTransaction).Returns(true);
+
+        Assert.That(() => writer.WaitAsync(SynchronisationHistoryBarrier.PageLoopExit), Throws.InvalidOperationException.With.Message.Contain("transaction"));
+
+        _runRepository.Setup(r => r.HasOpenTransaction).Returns(false);
+        gate.SetResult(true);
+        await writer.WaitAsync(SynchronisationHistoryBarrier.PageLoopExit);
+    }
+
+    #endregion
 }
