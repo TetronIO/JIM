@@ -23,7 +23,12 @@ namespace JIM.Models.Utility;
 /// so each insert read a page from disk and dirtied it: a page of 5,500 change attribute rows touched about as many
 /// index pages per index, measured on PostgreSQL 18 at 9,700 pages written in full to the write-ahead log and 59 MB of
 /// it for one batch into a four-million-row table, against about ten pages and 1.6 MB with version 7 ids, and a tenth of
-/// the time (#2669).
+/// the time (#2669). The Connected System Object value table gains less, because only two of the five indexes a text
+/// value touches are keyed on an id (the rest on the value): copying 100,000 values in batches of 5,000 into a
+/// 1.5-million-row table whose indexes were three times <c>shared_buffers</c> read and wrote about a third fewer
+/// buffers, wrote a fifth or more less write-ahead log, and took 15 to 33% less time on one connection; on four
+/// connections at once, where the batches meet at the growing end, the time varied either way between runs while the
+/// buffers saved held (#2929, <c>TimeOrderedIdCopyBenchmarkDatabaseTests</c>).
 /// </para>
 /// <para>
 /// Ids stay opaque: nothing may read a time, an order or a source from one, and keyset paging by id is still a total
