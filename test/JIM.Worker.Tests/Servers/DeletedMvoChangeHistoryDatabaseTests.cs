@@ -87,6 +87,8 @@ public class DeletedMvoChangeHistoryDatabaseTests
     {
         var attributeChange = new MetaverseObjectChangeAttribute
         {
+            // History names its attribute by plain id with no foreign key (#2931); none needs to exist behind it here.
+            AttributeId = 1,
             AttributeName = "Manager",
             AttributeType = AttributeDataType.Reference,
             MetaverseObjectChange = change

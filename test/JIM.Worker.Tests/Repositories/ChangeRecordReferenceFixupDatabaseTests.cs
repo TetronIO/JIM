@@ -143,6 +143,7 @@ public class ChangeRecordReferenceFixupDatabaseTests
         var memberChangeAttr = new ConnectedSystemObjectChangeAttribute
         {
             Id = Guid.NewGuid(),
+            AttributeId = 1, // a plain id with no foreign key (#2931); no attribute needs to exist behind it
             ConnectedSystemChange = change,
             AttributeName = "member",
             AttributeType = AttributeDataType.Reference
@@ -182,6 +183,7 @@ public class ChangeRecordReferenceFixupDatabaseTests
         var descriptionChangeAttr = new ConnectedSystemObjectChangeAttribute
         {
             Id = Guid.NewGuid(),
+            AttributeId = 1, // a plain id with no foreign key (#2931); no attribute needs to exist behind it
             ConnectedSystemChange = change,
             AttributeName = "description",
             AttributeType = AttributeDataType.Text
@@ -210,6 +212,7 @@ public class ChangeRecordReferenceFixupDatabaseTests
         var otherChangeAttr = new ConnectedSystemObjectChangeAttribute
         {
             Id = Guid.NewGuid(),
+            AttributeId = 1, // a plain id with no foreign key (#2931); no attribute needs to exist behind it
             ConnectedSystemChange = otherChange,
             AttributeName = "member",
             AttributeType = AttributeDataType.Reference
