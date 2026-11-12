@@ -23,8 +23,24 @@ public class SynchronisationHistoryPersistenceExceptionTests
         {
             Assert.That(message, Does.StartWith("Failed to record the execution items and change history of page 4 of 12 for Connected System 'HR'."));
             Assert.That(message, Does.Contain("synchronisation changes were saved; their history was not"));
-            Assert.That(message, Does.Contain("the run stopped without saving the changes of any page after page 5"),
+            Assert.That(message, Does.Contain("the run stopped without saving the changes of any page after the next one, or of the steps after the pages"),
                 "a page's history is written while the next page saves its changes (#2924), so the next page may have saved them");
+        }
+    }
+
+    /// <summary>
+    /// The pages a run expects is an estimate that grows as pages end at the value budget (#2934), so a page numbered as the
+    /// last can be followed by another (a closing sweep page, say) that saved its changes. The message must not rest on it.
+    /// </summary>
+    [Test]
+    public void BuildMessage_PageNumberedAsTheLast_StillSaysTheNextPageMayHaveSavedItsChanges()
+    {
+        var message = SynchronisationHistoryPersistenceException.BuildMessage(12, 12, "HR");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.Contain("the run stopped without saving the changes of any page after the next one, or of the steps after the pages"));
+            Assert.That(message, Does.Not.Contain("page 13"), "no page after the last is named");
         }
     }
 

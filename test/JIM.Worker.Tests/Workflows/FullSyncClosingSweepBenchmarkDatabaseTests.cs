@@ -116,17 +116,19 @@ public class FullSyncClosingSweepBenchmarkDatabaseTests
         var repository = new PostgresDataRepository(ctx);
         var loads = 0;
         var idReads = 0;
-        var pager = new TypeOrderedCsoPager((afterId, objectTypeId, createdOnOrAfter, onlyIds) =>
+        var pager = new TypeOrderedCsoPager((afterId, objectTypeId, createdOnOrAfter, onlyIds, maxObjects) =>
             {
                 loads++;
-                return repository.Sync.GetConnectedSystemObjectsAsync(_systemId, 1, PageSize, Users + 1, afterId, objectTypeId, createdOnOrAfter, onlyIds);
+                return repository.Sync.GetConnectedSystemObjectsAsync(_systemId, 1, maxObjects, Users + 1, afterId, objectTypeId, createdOnOrAfter, onlyIds);
             },
+            (afterId, objectTypeId, createdOnOrAfter, onlyIds, earlierCandidateIds, maxObjects, valueCountCap) => repository.Sync.GetConnectedSystemObjectValueCountsAsync(
+                _systemId, maxObjects, afterId, objectTypeId, createdOnOrAfter, onlyIds, valueCountCap),
             (afterId, createdOnOrAfter) =>
             {
                 idReads++;
                 return repository.Sync.GetConnectedSystemObjectIdsAsync(_systemId, PageSize, afterId, createdOnOrAfter);
             },
-            [_userTypeId, _groupTypeId], createdFloor);
+            [_userTypeId, _groupTypeId], createdFloor, PageSize, ValueBudgetedBatchPlanner.DefaultValueBudget);
 
         var walkMs = 0L;
         var maxWalkPageMs = 0L;

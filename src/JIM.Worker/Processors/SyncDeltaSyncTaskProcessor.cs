@@ -190,14 +190,17 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // Process only the modified CSOs, and every object of the types processed in full, in batches. This enables us to
         // respond to cancellation requests in a reasonable timeframe.
         // Page size is configurable via service settings for performance tuning.
+        // A page also ends at a budget of attribute values (#2934), as in Full Synchronisation, so the page count is an
+        // estimate the pager revises as pages end early.
         var pageSize = await _syncServer.GetSyncPageSizeAsync();
-        var totalCsoPages = Convert.ToInt16(Math.Ceiling((double)totalCsosToProcess / pageSize));
+        var estimatedCsoPages = (int)Math.Ceiling((double)totalCsosToProcess / pageSize);
         await _phases.EnterAsync(RunPhaseKeys.SyncProcessObjects, "Processing modified Connected System Objects");
 
         using var processCsosSpan = Diagnostics.Sync.StartSpan("ProcessModifiedConnectedSystemObjects");
         processCsosSpan.SetTag("totalObjects", totalCsosToProcess);
         processCsosSpan.SetTag("pageSize", pageSize);
-        processCsosSpan.SetTag("totalPages", totalCsoPages);
+        processCsosSpan.SetTag("pageValueBudget", PageValueBudget);
+        processCsosSpan.SetTag("totalPages", estimatedCsoPages);
 
         var throughput = new ThroughputTracker();
 
@@ -229,17 +232,37 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // asks the database which types the mapped reference attributes with no declared target actually point at
         // (observeUndeclaredReferenceTargets), as Full Synchronisation does, rather than assume the few references a
         // modified-only Delta Synchronisation defers.
+        //
+        // Each page ends at pageSize objects or at the page value budget, whichever comes first (#2934), as in Full
+        // Synchronisation; its candidates are counted from the same selection its load uses, with the same value load plan:
+        // a large group whose members the load leaves out (#2818) counts only the values it brings, so it does not take a page
+        // of its own for members never loaded.
         var processedInFull = _objectTypeIdsToProcessInFull;
+        bool LoadsInFull(int? objectTypeId) => objectTypeId.HasValue && processedInFull.Contains(objectTypeId.Value);
         var csoPager = await CreateTypeOrderedPagerAsync(activeSyncRules, deltaSyncStartedAt,
-            (afterId, objectTypeId, createdOnOrAfter, onlyIds) => objectTypeId.HasValue && processedInFull.Contains(objectTypeId.Value)
+            (afterId, objectTypeId, createdOnOrAfter, onlyIds, maxObjects) => LoadsInFull(objectTypeId)
                 ? _syncRepo.GetConnectedSystemObjectsAsync(
-                    _connectedSystem.Id, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter, onlyIds)
+                    _connectedSystem.Id, 1, maxObjects, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter, onlyIds)
                 : _syncRepo.GetConnectedSystemObjectsModifiedSinceAsync(
-                    _connectedSystem.Id, lastSyncTimestamp, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter, valueLoadPlan, onlyIds),
+                    _connectedSystem.Id, lastSyncTimestamp, 1, maxObjects, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter, valueLoadPlan, onlyIds),
+            (afterId, objectTypeId, createdOnOrAfter, onlyIds, earlierCandidateIds, maxObjects, valueCountCap) => LoadsInFull(objectTypeId)
+                ? _syncRepo.GetConnectedSystemObjectValueCountsAsync(
+                    _connectedSystem.Id, maxObjects, afterId, objectTypeId, createdOnOrAfter, onlyIds, valueCountCap)
+                : _syncRepo.GetConnectedSystemObjectValueCountsModifiedSinceAsync(
+                    _connectedSystem.Id, lastSyncTimestamp, maxObjects, afterId, objectTypeId, createdOnOrAfter, onlyIds, valueCountCap,
+                    valueLoadPlan, earlierCandidateIds),
             // The sweep's ids come from the selection its loads use, the modified-since one (#2861).
             (afterId, createdOnOrAfter) => _syncRepo.GetConnectedSystemObjectIdsModifiedSinceAsync(
                 _connectedSystem.Id, lastSyncTimestamp, pageSize, afterId, createdOnOrAfter),
-            "Delta Synchronisation", observeUndeclaredReferenceTargets: processedInFull.Count > 0);
+            pageSize, "Delta Synchronisation", observeUndeclaredReferenceTargets: processedInFull.Count > 0,
+            // A count is made before the page is known, and the load leaves values out of an object depending on which
+            // objects share its page (#2818): each planned page is checked before it loads, so it is planned with what its
+            // load brings. A type processed in full is loaded whole, and needs no check.
+            revisePlannedPage: valueLoadPlan.LeavesNothingOut
+                ? null
+                : (objectTypeId, plannedIds, valueCountCap) => LoadsInFull(objectTypeId)
+                    ? Task.FromResult<IReadOnlyDictionary<Guid, int>>(new Dictionary<Guid, int>())
+                    : _syncRepo.GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync(plannedIds, valueLoadPlan, valueCountCap));
 
         try
         {
@@ -256,12 +279,16 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 using (var loadSpan = Diagnostics.Sync.StartSpan("LoadModifiedCsoPage"))
                 {
                     csoPagedResult = await csoPager.NextPageAsync();
+                    TagPageLoad(loadSpan, csoPager, csoPagedResult);
                     if (csoPagedResult != null)
                         CountLeftOutObjects(csoPagedResult.Results, loadSpan);
                 }
 
                 if (csoPagedResult == null)
                     break;
+
+                // The pages the run now expects, for the page's log line, history and any failure message (#2934).
+                var totalCsoPages = csoPager.ExpectedPageCount(totalCsosToProcess);
 
                 // Seed the page identity map (#1612) with every already-joined MVO this page's CSO load
                 // brought in, so Pass 1's obsoletion handling and Pass 2's matching-rule join both resolve

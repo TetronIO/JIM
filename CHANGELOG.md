@@ -88,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Performance
 
 - ⚡ Imports, synchronisations and exports do less database work writing new objects, values and Pending Exports to large Connected Systems: their ids are now time-ordered, so each write adds to the end of the database's indexes instead of a random page of each. (#2929)
+- ⚡ Full and Delta Synchronisations of directories with very large groups use far less memory: a page now also ends at 100,000 attribute values, so the largest groups no longer share one, where a single page of four groups once held two million members. (#2934)
 - ⚡ Deleting an attribute no longer rewrites the change history that names it, which keeps the attribute's name and values, and change history writes no longer wait on one another over the attributes they name. (#2931)
 - ⚡ Synchronisation is faster with the bundled PostgreSQL, which now runs with JIT compilation off; with 500,000 users some synchronisations ran 13% faster. With your own PostgreSQL server, run `ALTER DATABASE jim SET jit = off;` to do the same. (#2834)
 - ⚡ Exports to 389 Directory Server are faster: on schema import JIM now raises the LDAP Connector's Export Concurrency to 16 and sends two batches at once, as it already did for Active Directory, rather than 4 operations and one batch at a time. A value you have set yourself is kept.

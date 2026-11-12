@@ -68,13 +68,12 @@ public class SynchronisationHistoryPersistenceException : SyncPersistenceExcepti
     public static string BuildMessage(int page, int totalPages, string connectedSystemName)
     {
         // A page's history is written while the next page saves its changes (#2924), so a page's failure can be found
-        // once the next page has saved them; the run never goes further than that.
+        // once the next page has saved them; the run never goes further than that. Whether there was a next page is not
+        // read from totalPages: that is an estimate (#2934), and a closing sweep page can follow one it called the last.
         return page > 0
             ? $"Failed to record the execution items and change history of page {page} of {totalPages} for Connected System " +
               $"'{connectedSystemName}'. Those synchronisation changes were saved; their history was not, and the run stopped " +
-              (page < totalPages
-                  ? $"without saving the changes of any page after page {page + 1}."
-                  : "before saving any further changes.")
+              "without saving the changes of any page after the next one, or of the steps after the pages."
             : "Failed to record the execution items and change history of the steps after the pages for Connected System " +
               $"'{connectedSystemName}'. Those synchronisation changes were saved; their history was not, and the run stopped " +
               "before saving any further changes.";

@@ -1398,6 +1398,28 @@ public interface IConnectedSystemRepository
         DateTime createdOnOrAfter);
 
     /// <summary>
+    /// The objects a Full Synchronisation page would load, ids with their value counts (#2934); see
+    /// <see cref="ISyncRepository.GetConnectedSystemObjectValueCountsAsync"/>.
+    /// </summary>
+    public Task<List<(Guid Id, int ValueCount)>> GetConnectedSystemObjectValueCountsAsync(int connectedSystemId, int pageSize, Guid afterId,
+        int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap);
+
+    /// <summary>
+    /// The objects a Delta Synchronisation page would load, ids with their value counts (#2934); see
+    /// <see cref="ISyncRepository.GetConnectedSystemObjectValueCountsModifiedSinceAsync"/>.
+    /// </summary>
+    public Task<List<(Guid Id, int ValueCount)>> GetConnectedSystemObjectValueCountsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince,
+        int pageSize, Guid afterId, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap,
+        SynchronisationValueLoadPlan? valueLoadPlan = null, IReadOnlyCollection<Guid>? earlierCandidateIds = null);
+
+    /// <summary>
+    /// The values a planned Delta Synchronisation page's load brings for objects whose planned attributes depend on that page
+    /// (#2934); see <see cref="ISyncRepository.GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync"/>.
+    /// </summary>
+    public Task<IReadOnlyDictionary<Guid, int>> GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync(IReadOnlyCollection<Guid> pageObjectIds,
+        SynchronisationValueLoadPlan valueLoadPlan, int valueCountCap);
+
+    /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System that have been created or modified since a given timestamp.
     /// Used for delta synchronisation statistics.
     /// Returns count of CSOs where Created > modifiedSince OR LastUpdated > modifiedSince.

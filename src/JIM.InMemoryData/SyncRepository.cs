@@ -502,6 +502,43 @@ public partial class SyncRepository : ISyncRepository
         => Task.FromResult(SweepIdPage(ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), null, createdOnOrAfter)
             .Where(c => IsModifiedSince(c, modifiedSince)), pageSize, afterId));
 
+    public Task<List<(Guid Id, int ValueCount)>> GetConnectedSystemObjectValueCountsAsync(int connectedSystemId, int pageSize, Guid afterId,
+        int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap)
+        => Task.FromResult(ValueCountPage(ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter, onlyIds),
+            pageSize, afterId, valueCountCap));
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <paramref name="valueLoadPlan"/> is not applied, as the page load does not apply it here: every object is loaded
+    /// whole, so every value is counted.
+    /// </remarks>
+    public Task<List<(Guid Id, int ValueCount)>> GetConnectedSystemObjectValueCountsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince,
+        int pageSize, Guid afterId, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap,
+        SynchronisationValueLoadPlan? valueLoadPlan = null, IReadOnlyCollection<Guid>? earlierCandidateIds = null)
+        => Task.FromResult(ValueCountPage(ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter, onlyIds)
+            .Where(c => IsModifiedSince(c, modifiedSince)), pageSize, afterId, valueCountCap));
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Always empty: the page load here does not apply the plan, so every object is loaded whole and was counted whole.
+    /// </remarks>
+    public Task<IReadOnlyDictionary<Guid, int>> GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync(IReadOnlyCollection<Guid> pageObjectIds,
+        SynchronisationValueLoadPlan valueLoadPlan, int valueCountCap)
+        => Task.FromResult<IReadOnlyDictionary<Guid, int>>(new Dictionary<Guid, int>());
+
+    /// <summary>
+    /// A page plan (#2934): the objects the keyset page loaders would return, ordered and cursored as they are, each with its
+    /// value count capped at <paramref name="valueCountCap"/>.
+    /// </summary>
+    private static List<(Guid Id, int ValueCount)> ValueCountPage(IEnumerable<ConnectedSystemObject> selection, int pageSize, Guid afterId,
+        int valueCountCap)
+        => selection
+            .OrderBy(c => c.Id)
+            .Where(c => c.Id.CompareTo(afterId) > 0)
+            .Take(pageSize)
+            .Select(c => (c.Id, Math.Min(c.AttributeValues.Count, valueCountCap)))
+            .ToList();
+
     public Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsInUseAsync(int connectedSystemId)
     {
         // Tests often build objects with only the Type navigation set, so read either.

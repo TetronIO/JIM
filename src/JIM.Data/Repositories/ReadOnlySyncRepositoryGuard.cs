@@ -66,6 +66,20 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<Guid>> GetConnectedSystemObjectIdsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int pageSize, Guid afterId, DateTime createdOnOrAfter)
         => _inner.GetConnectedSystemObjectIdsModifiedSinceAsync(connectedSystemId, modifiedSince, pageSize, afterId, createdOnOrAfter);
 
+    public Task<List<(Guid Id, int ValueCount)>> GetConnectedSystemObjectValueCountsAsync(int connectedSystemId, int pageSize, Guid afterId, int? objectTypeId,
+        DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap)
+        => _inner.GetConnectedSystemObjectValueCountsAsync(connectedSystemId, pageSize, afterId, objectTypeId, createdOnOrAfter, onlyIds, valueCountCap);
+
+    public Task<List<(Guid Id, int ValueCount)>> GetConnectedSystemObjectValueCountsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince,
+        int pageSize, Guid afterId, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap,
+        SynchronisationValueLoadPlan? valueLoadPlan = null, IReadOnlyCollection<Guid>? earlierCandidateIds = null)
+        => _inner.GetConnectedSystemObjectValueCountsModifiedSinceAsync(connectedSystemId, modifiedSince, pageSize, afterId, objectTypeId, createdOnOrAfter,
+            onlyIds, valueCountCap, valueLoadPlan, earlierCandidateIds);
+
+    public Task<IReadOnlyDictionary<Guid, int>> GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync(IReadOnlyCollection<Guid> pageObjectIds,
+        SynchronisationValueLoadPlan valueLoadPlan, int valueCountCap)
+        => _inner.GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync(pageObjectIds, valueLoadPlan, valueCountCap);
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
         => _inner.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
 

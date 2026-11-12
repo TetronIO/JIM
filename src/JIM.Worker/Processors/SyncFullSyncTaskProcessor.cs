@@ -161,15 +161,17 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         var fullSyncStartedAt = DateTime.UtcNow;
 
         // Process CSOs in batches. This enables us to respond to cancellation requests in a reasonable timeframe.
-        // Page size is configurable via service settings for performance tuning.
+        // Page size is configurable via service settings for performance tuning. A page also ends at a budget of attribute
+        // values (#2934), so the page count is an estimate: the pager revises it as pages end early (see below).
         var pageSize = await _syncServer.GetSyncPageSizeAsync();
-        var totalCsoPages = Convert.ToInt16(Math.Ceiling((double)totalCsosToProcess / pageSize));
+        var estimatedCsoPages = (int)Math.Ceiling((double)totalCsosToProcess / pageSize);
         await _phases.EnterAsync(RunPhaseKeys.SyncProcessObjects);
 
         using var processCsosSpan = Diagnostics.Sync.StartSpan("ProcessConnectedSystemObjects");
         processCsosSpan.SetTag("totalObjects", totalCsosToProcess);
         processCsosSpan.SetTag("pageSize", pageSize);
-        processCsosSpan.SetTag("totalPages", totalCsoPages);
+        processCsosSpan.SetTag("pageValueBudget", PageValueBudget);
+        processCsosSpan.SetTag("totalPages", estimatedCsoPages);
 
         var throughput = new ThroughputTracker();
         var csoPhaseStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -188,11 +190,18 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // arrived. A closing sweep then picks up objects created mid-run behind a type that had already been walked: it reads
         // its selection as ids and loads only those the walks did not hand out (#2861).
         // The count is the progress estimate only, and ObjectsProcessed may exceed it.
+        //
+        // Each page ends at pageSize objects or at the page value budget, whichever comes first (#2934): before a page
+        // loads, its candidates are counted, ids only, and the page takes those that fit. Since object ids are
+        // time-ordered (#2929), a directory's largest groups are imported, and so paged, together; one page at 500,000
+        // objects held 2.0 million member values. Only page boundaries move: every object is processed once, in the same order.
         var csoPager = await CreateTypeOrderedPagerAsync(activeSyncRules, fullSyncStartedAt,
-            (afterId, objectTypeId, createdOnOrAfter, onlyIds) => _syncRepo.GetConnectedSystemObjectsAsync(
-                _connectedSystem.Id, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter, onlyIds),
+            (afterId, objectTypeId, createdOnOrAfter, onlyIds, maxObjects) => _syncRepo.GetConnectedSystemObjectsAsync(
+                _connectedSystem.Id, 1, maxObjects, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter, onlyIds),
+            (afterId, objectTypeId, createdOnOrAfter, onlyIds, earlierCandidateIds, maxObjects, valueCountCap) => _syncRepo.GetConnectedSystemObjectValueCountsAsync(
+                _connectedSystem.Id, maxObjects, afterId, objectTypeId, createdOnOrAfter, onlyIds, valueCountCap),
             (afterId, createdOnOrAfter) => _syncRepo.GetConnectedSystemObjectIdsAsync(_connectedSystem.Id, pageSize, afterId, createdOnOrAfter),
-            "Full Synchronisation", observeUndeclaredReferenceTargets: true);
+            pageSize, "Full Synchronisation", observeUndeclaredReferenceTargets: true);
 
         try
         {
@@ -211,13 +220,17 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 ThrowIfHistoryWriteFailed();
 
                 PagedResultSet<ConnectedSystemObject>? csoPagedResult;
-                using (Diagnostics.Sync.StartSpan("LoadCsoPage"))
+                using (var loadSpan = Diagnostics.Sync.StartSpan("LoadCsoPage"))
                 {
                     csoPagedResult = await csoPager.NextPageAsync();
+                    TagPageLoad(loadSpan, csoPager, csoPagedResult);
                 }
 
                 if (csoPagedResult == null)
                     break;
+
+                // The pages the run now expects, for the page's log line, history and any failure message (#2934).
+                var totalCsoPages = csoPager.ExpectedPageCount(totalCsosToProcess);
 
                 // Seed the page identity map (#1612) with every already-joined MVO this page's CSO load
                 // brought in, so Pass 1's obsoletion handling and Pass 2's matching-rule join both resolve

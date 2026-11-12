@@ -950,12 +950,14 @@ public class LeaverCohortCostDatabaseTests
         await using var ctx = NewPageContext(null);
         var repository = new PostgresDataRepository(ctx);
         var pager = new TypeOrderedCsoPager(
-            (afterId, objectTypeId, createdOnOrAfter, onlyIds) => repository.Sync.GetConnectedSystemObjectsModifiedSinceAsync(
-                seeded.SystemId, seeded.Watermark, 1, SyncPageSize, 1, afterId, objectTypeId, createdOnOrAfter, onlyIds: onlyIds),
+            (afterId, objectTypeId, createdOnOrAfter, onlyIds, maxObjects) => repository.Sync.GetConnectedSystemObjectsModifiedSinceAsync(
+                seeded.SystemId, seeded.Watermark, 1, maxObjects, 1, afterId, objectTypeId, createdOnOrAfter, onlyIds: onlyIds),
+            (afterId, objectTypeId, createdOnOrAfter, onlyIds, earlierCandidateIds, maxObjects, valueCountCap) => repository.Sync.GetConnectedSystemObjectValueCountsModifiedSinceAsync(
+                seeded.SystemId, seeded.Watermark, maxObjects, afterId, objectTypeId, createdOnOrAfter, onlyIds, valueCountCap),
             (afterId, createdOnOrAfter) => repository.Sync.GetConnectedSystemObjectIdsModifiedSinceAsync(
                 seeded.SystemId, seeded.Watermark, SyncPageSize, afterId, createdOnOrAfter),
             [seeded.UserTypeId, seeded.GroupTypeId],
-            seeded.Watermark);
+            seeded.Watermark, SyncPageSize, ValueBudgetedBatchPlanner.DefaultValueBudget);
 
         _spans.Start();
         var stopwatch = Stopwatch.StartNew();

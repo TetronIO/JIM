@@ -168,8 +168,271 @@ public partial class ConnectedSystemRepository
     /// Each candidate's held value count, capped at <paramref name="cap"/> (<see cref="ExportCandidateValueCountSql"/>,
     /// #2816), and the candidates referencing an object on the page, in one round trip.
     /// </summary>
-    private async Task<(Dictionary<(Guid, int), int> Counts, HashSet<(Guid, int)> ReferencingPage)> CountCandidateValuesAndPageReferencesAsync(
+    private Task<(Dictionary<(Guid, int), int> Counts, HashSet<(Guid, int)> ReferencingPage)> CountCandidateValuesAndPageReferencesAsync(
         List<(ConnectedSystemObject Cso, ConnectedSystemObjectTypeAttribute Attribute)> candidates, Guid[] pageObjectIds, int cap)
+        => CountHeldValuesAndPageReferencesAsync(candidates.Select(c => (c.Cso.Id, c.Attribute.Id, cap)).ToList(), pageObjectIds,
+            candidates.Select(c => c.Cso.Id).Distinct().ToArray());
+
+    /// <summary>
+    /// Plans a Delta Synchronisation page whose load may leave attributes out (#2934): the page's candidates, as
+    /// <see cref="LoadValueCountPageAsync"/> reads them, each counting the values its load would bring with
+    /// <paramref name="plan"/>. A planned attribute counts nothing where the load could leave it out whichever candidates
+    /// share the page; otherwise it is counted as the load would bring it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The load decides object by object as the page loads (<see cref="DecideAttributesLeftOutAsync"/>), so the count makes
+    /// the same decision for the page's possible company: every candidate counted with these and every one counted before
+    /// them and not yet handed out (<paramref name="earlierCandidateIds"/>). A planned attribute is counted when the object
+    /// is not Normal, not joined, or shares its Metaverse Object with another of these candidates; when it holds fewer than
+    /// the plan's threshold of its values; or when one of its values references a candidate. Otherwise it is left out, and
+    /// so are its member rows: only up to the threshold of them is read.
+    /// </para>
+    /// <para>
+    /// Three statements, or four: the candidates with their other values counted, in EF on the page loader's selection;
+    /// each planned attribute counted to the threshold, or to <paramref name="valueCountCap"/> where it is counted whole,
+    /// and the references to candidates, in one round trip; and a count to the cap of the few attributes that reached the
+    /// threshold but reference a candidate.
+    /// </para>
+    /// </remarks>
+    private async Task<List<(Guid Id, int ValueCount)>> LoadValueCountPageLeavingAttributesOutAsync(IQueryable<ConnectedSystemObject> selection,
+        int pageSize, Guid afterId, int valueCountCap, SynchronisationValueLoadPlan plan, IReadOnlyCollection<Guid> earlierCandidateIds)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(valueCountCap, 1);
+        if (pageSize > MaxSyncPageSize)
+            pageSize = MaxSyncPageSize;
+
+        using var span = ActivitySource.StartActivity("Cso.Page.CountValuesLeavingAttributesOut");
+        var plannedAttributeIds = plan.AttributesByObjectTypeId.Values.SelectMany(attributes => attributes).Select(a => a.Id).Distinct().ToList();
+        var rows = await selection
+            .OrderBy(cso => cso.Id)
+            .Where(cso => cso.Id.CompareTo(afterId) > 0)
+            .Take(pageSize)
+            .Select(cso => new
+            {
+                cso.Id,
+                cso.TypeId,
+                cso.Status,
+                cso.MetaverseObjectId,
+                OtherValueCount = cso.AttributeValues
+                    .Where(av => !plannedAttributeIds.Contains(av.AttributeId))
+                    .OrderBy(av => av.AttributeId)
+                    .Take(valueCountCap)
+                    .Count()
+            })
+            .AsNoTracking()
+            .ToListAsync();
+        if (rows.Count == 0)
+            return [];
+
+        var sharedMetaverseObjectIds = rows
+            .Where(r => r.MetaverseObjectId.HasValue)
+            .GroupBy(r => r.MetaverseObjectId!.Value)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToHashSet();
+
+        var threshold = Math.Max(plan.MinimumHeldValueCount, 1);
+        var planned = rows
+            .Where(r => plan.AttributesByObjectTypeId.ContainsKey(r.TypeId))
+            .SelectMany(r => plan.AttributesByObjectTypeId[r.TypeId].Select(attribute => (
+                ObjectId: r.Id,
+                AttributeId: attribute.Id,
+                Whole: r.Status != ConnectedSystemObjectStatus.Normal || r.MetaverseObjectId == null ||
+                       sharedMetaverseObjectIds.Contains(r.MetaverseObjectId.Value))))
+            .ToList();
+
+        var valueCounts = rows.ToDictionary(r => r.Id, r => (long)r.OtherValueCount);
+        if (planned.Count > 0)
+        {
+            var candidateIds = earlierCandidateIds.Concat(rows.Select(r => r.Id)).Distinct().ToArray();
+            var (held, referencing) = await CountHeldValuesAndPageReferencesAsync(
+                planned.Select(p => (p.ObjectId, p.AttributeId, p.Whole ? valueCountCap : threshold)).ToList(), candidateIds,
+                planned.Where(p => !p.Whole).Select(p => p.ObjectId).Distinct().ToArray());
+
+            var referencingCandidate = new List<(Guid ObjectId, int AttributeId, int Cap)>();
+            foreach (var (objectId, attributeId, whole) in planned)
+            {
+                var count = held.GetValueOrDefault((objectId, attributeId));
+                if (whole || count < plan.MinimumHeldValueCount)
+                    valueCounts[objectId] += count;
+                else if (referencing.Contains((objectId, attributeId)))
+                    referencingCandidate.Add((objectId, attributeId, valueCountCap));
+            }
+
+            if (referencingCandidate.Count > 0)
+            {
+                var (whole, _) = await CountHeldValuesAndPageReferencesAsync(referencingCandidate, [], []);
+                foreach (var (objectId, attributeId, _) in referencingCandidate)
+                    valueCounts[objectId] += whole.GetValueOrDefault((objectId, attributeId));
+            }
+        }
+
+        span?.SetTag("objectCount", rows.Count);
+        span?.SetTag("plannedAttributeCount", planned.Count);
+        span?.SetTag("valueCount", valueCounts.Values.Sum());
+        return rows.Select(r => (r.Id, (int)Math.Min(valueCounts[r.Id], valueCountCap))).ToList();
+    }
+
+    /// <summary>
+    /// What a planned Delta Synchronisation page's load brings for the objects whose planned attributes depend on that page
+    /// (#2934). See <see cref="ISyncRepository.GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The page load decides over the page (<see cref="DecideAttributesLeftOutAsync"/>), and so does this: an object of a
+    /// planned type that is Normal and joined has a planned attribute loaded whole when it shares its Metaverse Object with
+    /// another of the page's objects, or when a value of that attribute references one of them. The count saw other
+    /// candidates, so it can have counted such an attribute as left out: a group counted before the group it references,
+    /// in an earlier count. (Two objects of one Connected System cannot share a Metaverse Object while the unique index on
+    /// the join holds; the check mirrors the load's all the same.) Objects loaded whole whatever the page (not Normal, not
+    /// joined, below the threshold) were counted whole, and are not returned.
+    /// </para>
+    /// <para>
+    /// One round trip when no object depends on the page: the page's objects' type, status and join, and the references
+    /// among them. Only for an object that does depend on it, a second: its other values, and its planned attributes, each
+    /// counted to the cap, so what is returned is exactly what the load brings.
+    /// </para>
+    /// </remarks>
+    public async Task<IReadOnlyDictionary<Guid, int>> GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync(IReadOnlyCollection<Guid> pageObjectIds,
+        SynchronisationValueLoadPlan valueLoadPlan, int valueCountCap)
+    {
+        ArgumentNullException.ThrowIfNull(valueLoadPlan);
+        ArgumentOutOfRangeException.ThrowIfLessThan(valueCountCap, 1);
+        var revised = new Dictionary<Guid, int>();
+        if (pageObjectIds.Count == 0 || valueLoadPlan.LeavesNothingOut || !Repository.Database.Database.IsRelational())
+            return revised;
+
+        var pageIds = pageObjectIds.Distinct().ToArray();
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        var transaction = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+        using var span = ActivitySource.StartActivity("Cso.Page.CheckValuesLeftOut");
+
+        var objects = new List<(Guid Id, int TypeId, ConnectedSystemObjectStatus Status, Guid? MetaverseObjectId)>();
+        var referencingPage = new HashSet<(Guid, int)>();
+        await using (var batch = new NpgsqlBatch(connection) { Transaction = transaction })
+        {
+            var read = new NpgsqlBatchCommand(PageObjectJoinStateSql);
+            read.Parameters.Add(new NpgsqlParameter("objectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = pageIds });
+            batch.BatchCommands.Add(read);
+
+            var references = new NpgsqlBatchCommand(CandidatePageReferenceSql);
+            references.Parameters.Add(new NpgsqlParameter("pageObjectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = pageIds });
+            references.Parameters.Add(new NpgsqlParameter("objectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = pageIds });
+            batch.BatchCommands.Add(references);
+
+            await using var reader = await batch.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                objects.Add((reader.GetGuid(0), reader.GetInt32(1), (ConnectedSystemObjectStatus)reader.GetInt32(2),
+                    reader.IsDBNull(3) ? null : reader.GetGuid(3)));
+            }
+            await reader.NextResultAsync();
+            while (await reader.ReadAsync())
+                referencingPage.Add((reader.GetGuid(0), reader.GetInt32(1)));
+        }
+
+        var sharedMetaverseObjectIds = objects
+            .Where(o => o.MetaverseObjectId.HasValue)
+            .GroupBy(o => o.MetaverseObjectId!.Value)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToHashSet();
+
+        // The objects whose planned attributes the load could leave out on another page, but brings whole on this one.
+        var dependingOnPage = objects
+            .Where(o => o.Status == ConnectedSystemObjectStatus.Normal && o.MetaverseObjectId.HasValue &&
+                        valueLoadPlan.AttributesByObjectTypeId.TryGetValue(o.TypeId, out var attributes) &&
+                        (sharedMetaverseObjectIds.Contains(o.MetaverseObjectId.Value) ||
+                         attributes.Any(a => referencingPage.Contains((o.Id, a.Id)))))
+            .ToList();
+        span?.SetTag("objectCount", objects.Count);
+        span?.SetTag("dependingOnPageCount", dependingOnPage.Count);
+        if (dependingOnPage.Count == 0)
+            return revised;
+
+        var plannedAttributeIds = valueLoadPlan.AttributesByObjectTypeId.Values.SelectMany(a => a).Select(a => a.Id).Distinct().ToArray();
+        var cap = Math.Max(valueCountCap, Math.Max(valueLoadPlan.MinimumHeldValueCount, 1));
+        var plannedCounts = dependingOnPage
+            .SelectMany(o => valueLoadPlan.AttributesByObjectTypeId[o.TypeId].Select(a => (ObjectId: o.Id, AttributeId: a.Id, Cap: cap)))
+            .ToList();
+
+        var otherValues = new Dictionary<Guid, long>();
+        var held = new Dictionary<(Guid, int), int>();
+        await using (var batch = new NpgsqlBatch(connection) { Transaction = transaction })
+        {
+            var other = new NpgsqlBatchCommand(OtherValueCountSql);
+            other.Parameters.Add(new NpgsqlParameter("objectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = dependingOnPage.Select(o => o.Id).ToArray() });
+            other.Parameters.Add(new NpgsqlParameter("excludedAttributeIds", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = plannedAttributeIds });
+            other.Parameters.Add(new NpgsqlParameter("cap", NpgsqlDbType.Integer) { Value = valueCountCap });
+            batch.BatchCommands.Add(other);
+
+            var count = new NpgsqlBatchCommand(ExportCandidateValueCountSql);
+            count.Parameters.Add(new NpgsqlParameter("objectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = plannedCounts.Select(c => c.ObjectId).ToArray() });
+            count.Parameters.Add(new NpgsqlParameter("attributeIds", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = plannedCounts.Select(c => c.AttributeId).ToArray() });
+            count.Parameters.Add(new NpgsqlParameter("caps", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = plannedCounts.Select(c => c.Cap).ToArray() });
+            batch.BatchCommands.Add(count);
+
+            await using var reader = await batch.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                otherValues[reader.GetGuid(0)] = reader.GetInt32(1);
+            await reader.NextResultAsync();
+            while (await reader.ReadAsync())
+                held[(reader.GetGuid(0), reader.GetInt32(1))] = reader.GetInt32(2);
+        }
+
+        // What the load brings, attribute by attribute, as DecideAttributesLeftOutAsync decides it for this page.
+        foreach (var o in dependingOnPage)
+        {
+            var shared = sharedMetaverseObjectIds.Contains(o.MetaverseObjectId!.Value);
+            long values = otherValues.GetValueOrDefault(o.Id);
+            foreach (var attribute in valueLoadPlan.AttributesByObjectTypeId[o.TypeId])
+            {
+                var n = held.GetValueOrDefault((o.Id, attribute.Id));
+                if (shared || n < valueLoadPlan.MinimumHeldValueCount || referencingPage.Contains((o.Id, attribute.Id)))
+                    values += n;
+            }
+
+            revised[o.Id] = (int)Math.Min(values, valueCountCap);
+        }
+
+        return revised;
+    }
+
+    /// <summary>
+    /// The join state of a page's objects, for <see cref="GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync"/>.
+    /// </summary>
+    internal const string PageObjectJoinStateSql =
+        @"SELECT cso.""Id"", cso.""TypeId"", cso.""Status"", cso.""MetaverseObjectId""
+          FROM ""ConnectedSystemObjects"" AS cso
+          WHERE cso.""Id"" = ANY(@objectIds)";
+
+    /// <summary>
+    /// Each object's values outside the excluded attributes, counted up to the cap, led by the object's index entries.
+    /// </summary>
+    internal const string OtherValueCountSql =
+        @"SELECT p.object_id, c.value_count
+          FROM unnest(@objectIds) AS p(object_id)
+          CROSS JOIN LATERAL (
+              SELECT count(*)::integer AS value_count
+              FROM (
+                  SELECT 1
+                  FROM ""ConnectedSystemObjectAttributeValues"" AS av
+                  WHERE av.""ConnectedSystemObjectId"" = p.object_id
+                    AND av.""AttributeId"" <> ALL(@excludedAttributeIds)
+                  LIMIT @cap
+              ) AS capped
+          ) AS c";
+
+    /// <summary>
+    /// Each object's held values of an attribute, counted up to its own cap (<see cref="ExportCandidateValueCountSql"/>),
+    /// and which of <paramref name="referencingObjectIds"/> hold a value referencing one of <paramref name="pageObjectIds"/>
+    /// (<see cref="CandidatePageReferenceSql"/>), in one round trip.
+    /// </summary>
+    private async Task<(Dictionary<(Guid, int), int> Counts, HashSet<(Guid, int)> ReferencingPage)> CountHeldValuesAndPageReferencesAsync(
+        List<(Guid ObjectId, int AttributeId, int Cap)> counts, Guid[] pageObjectIds, Guid[] referencingObjectIds)
     {
         var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
@@ -179,25 +442,25 @@ public partial class ConnectedSystemRepository
         };
 
         var count = new NpgsqlBatchCommand(ExportCandidateValueCountSql);
-        count.Parameters.Add(new NpgsqlParameter("objectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = candidates.Select(c => c.Cso.Id).ToArray() });
-        count.Parameters.Add(new NpgsqlParameter("attributeIds", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = candidates.Select(c => c.Attribute.Id).ToArray() });
-        count.Parameters.Add(new NpgsqlParameter("caps", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = candidates.Select(_ => cap).ToArray() });
+        count.Parameters.Add(new NpgsqlParameter("objectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = counts.Select(c => c.ObjectId).ToArray() });
+        count.Parameters.Add(new NpgsqlParameter("attributeIds", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = counts.Select(c => c.AttributeId).ToArray() });
+        count.Parameters.Add(new NpgsqlParameter("caps", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = counts.Select(c => c.Cap).ToArray() });
         batch.BatchCommands.Add(count);
 
         var references = new NpgsqlBatchCommand(CandidatePageReferenceSql);
         references.Parameters.Add(new NpgsqlParameter("pageObjectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = pageObjectIds });
-        references.Parameters.Add(new NpgsqlParameter("objectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = candidates.Select(c => c.Cso.Id).Distinct().ToArray() });
+        references.Parameters.Add(new NpgsqlParameter("objectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = referencingObjectIds });
         batch.BatchCommands.Add(references);
 
-        var counts = new Dictionary<(Guid, int), int>();
+        var held = new Dictionary<(Guid, int), int>();
         var referencingPage = new HashSet<(Guid, int)>();
         await using var reader = await batch.ExecuteReaderAsync();
         while (await reader.ReadAsync())
-            counts[(reader.GetGuid(0), reader.GetInt32(1))] = reader.GetInt32(2);
+            held[(reader.GetGuid(0), reader.GetInt32(1))] = reader.GetInt32(2);
         await reader.NextResultAsync();
         while (await reader.ReadAsync())
             referencingPage.Add((reader.GetGuid(0), reader.GetInt32(1)));
 
-        return (counts, referencingPage);
+        return (held, referencingPage);
     }
 }

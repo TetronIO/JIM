@@ -2102,6 +2102,77 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             WhereModifiedSince(Repository.Database.ConnectedSystemObjects, connectedSystemId, modifiedSince), null, createdOnOrAfter), pageSize, afterId);
 
     /// <summary>
+    /// The objects a Full Synchronisation page would load, ids with their value counts (#2934). See
+    /// <see cref="ISyncRepository.GetConnectedSystemObjectValueCountsAsync"/>.
+    /// </summary>
+    public Task<List<(Guid Id, int ValueCount)>> GetConnectedSystemObjectValueCountsAsync(int connectedSystemId, int pageSize, Guid afterId,
+        int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap)
+        => LoadValueCountPageAsync(ApplySyncPageFilters(
+            Repository.Database.ConnectedSystemObjects.Where(q => q.ConnectedSystemId == connectedSystemId), objectTypeId, createdOnOrAfter, onlyIds),
+            pageSize, afterId, valueCountCap);
+
+    /// <summary>
+    /// The objects a Delta Synchronisation page would load, ids with their value counts (#2934). See
+    /// <see cref="ISyncRepository.GetConnectedSystemObjectValueCountsModifiedSinceAsync"/>.
+    /// </summary>
+    public Task<List<(Guid Id, int ValueCount)>> GetConnectedSystemObjectValueCountsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince,
+        int pageSize, Guid afterId, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap,
+        SynchronisationValueLoadPlan? valueLoadPlan = null, IReadOnlyCollection<Guid>? earlierCandidateIds = null)
+    {
+        var selection = ApplySyncPageFilters(
+            WhereModifiedSince(Repository.Database.ConnectedSystemObjects, connectedSystemId, modifiedSince), objectTypeId, createdOnOrAfter, onlyIds);
+
+        // The same test the page load makes (#2818): a page that may leave attributes out is counted as it would load.
+        var leavesAttributesOut = valueLoadPlan is { LeavesNothingOut: false } &&
+                                  (!objectTypeId.HasValue || valueLoadPlan.AttributesByObjectTypeId.ContainsKey(objectTypeId.Value)) &&
+                                  Repository.Database.Database.IsRelational();
+        return leavesAttributesOut
+            ? LoadValueCountPageLeavingAttributesOutAsync(selection, pageSize, afterId, valueCountCap, valueLoadPlan!, earlierCandidateIds ?? [])
+            : LoadValueCountPageAsync(selection, pageSize, afterId, valueCountCap);
+    }
+
+    /// <summary>
+    /// One keyset page of a page loader's selection, ids with their value counts (#2934): ordered, cursored and capped as
+    /// the page loaders are, so the ids are the objects the matching page load would return, in its order. In EF, as the
+    /// sweep's id page is, so the selection is the very expression the page loader filters with.
+    /// </summary>
+    /// <remarks>
+    /// Each object's values are counted by a correlated subquery that stops at <paramref name="valueCountCap"/>, read
+    /// through <c>IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId</c> (ordered by the index's second column, so
+    /// the limit ends the scan): a page of people reads about 6,000 index entries, which the page load then reads again
+    /// from a warm cache, and a 500,000-member group no more than the cap. Over a whole run this is one more read of each
+    /// value's index entry, a page at a time; no table is scanned.
+    /// </remarks>
+    private static async Task<List<(Guid Id, int ValueCount)>> LoadValueCountPageAsync(IQueryable<ConnectedSystemObject> selection, int pageSize,
+        Guid afterId, int valueCountCap)
+    {
+        if (pageSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+        if (valueCountCap < 1)
+            throw new ArgumentOutOfRangeException(nameof(valueCountCap), "valueCountCap must be a positive number");
+
+        // The page load that follows must be able to return every object this page counts.
+        if (pageSize > MaxSyncPageSize)
+            pageSize = MaxSyncPageSize;
+
+        using var span = ActivitySource.StartActivity("Cso.Page.CountValues");
+        var rows = await selection
+            .OrderBy(cso => cso.Id)
+            .Where(cso => cso.Id.CompareTo(afterId) > 0)
+            .Take(pageSize)
+            .Select(cso => new
+            {
+                cso.Id,
+                ValueCount = cso.AttributeValues.OrderBy(av => av.AttributeId).Take(valueCountCap).Count()
+            })
+            .AsNoTracking()
+            .ToListAsync();
+        span?.SetTag("objectCount", rows.Count);
+        span?.SetTag("valueCount", rows.Sum(r => (long)r.ValueCount));
+        return rows.Select(r => (r.Id, r.ValueCount)).ToList();
+    }
+
+    /// <summary>
     /// The Delta Synchronisation's selection: this Connected System's objects carrying any of the three marks, or created
     /// or updated after <paramref name="modifiedSince"/>. Shared by its page load and its closing sweep's id page (#2861),
     /// so the two cannot select differently.
@@ -2119,7 +2190,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// The page loaders cap a page at this many objects, to avoid increasing latency unnecessarily; a closing sweep's id
     /// page is capped the same, so the load that follows it can return every id it holds (#2861).
     /// </summary>
-    private const int MaxSyncPageSize = 2000;
+    private const int MaxSyncPageSize = Constants.SynchronisationLimits.MaxPageSize;
 
     /// <summary>
     /// The optional filters both synchronisation page loaders share (#2492): one Object Type, so a run can page through

@@ -137,6 +137,52 @@ public interface ISyncRepository
     Task<List<Guid>> GetConnectedSystemObjectIdsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int pageSize, Guid afterId, DateTime createdOnOrAfter);
 
     /// <summary>
+    /// Plans a Full Synchronisation page (#2934): the objects <see cref="GetConnectedSystemObjectsAsync"/> would load from the
+    /// same keyset cursor and filters, ids only, each with how many attribute values it holds, without loading any. A page
+    /// then takes as many of them as fit a budget of values, so several very large groups never share one.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System.</param>
+    /// <param name="pageSize">The most objects to return, capped as the page load caps it.</param>
+    /// <param name="afterId">The keyset cursor: objects whose id sorts after it.</param>
+    /// <param name="objectTypeId">As for <see cref="GetConnectedSystemObjectsAsync"/>.</param>
+    /// <param name="createdOnOrAfter">As for <see cref="GetConnectedSystemObjectsAsync"/>.</param>
+    /// <param name="onlyIds">As for <see cref="GetConnectedSystemObjectsAsync"/>.</param>
+    /// <param name="valueCountCap">The most values counted for one object: a count reaching it may stand for any count at
+    /// or above it, so a group of 500,000 members costs no more to count than the cap.</param>
+    /// <returns>The objects in the page load's order, each with its value count.</returns>
+    Task<List<(Guid Id, int ValueCount)>> GetConnectedSystemObjectValueCountsAsync(int connectedSystemId, int pageSize, Guid afterId, int? objectTypeId,
+        DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap);
+
+    /// <summary>
+    /// Plans a Delta Synchronisation page (#2934): as <see cref="GetConnectedSystemObjectValueCountsAsync"/>, over the
+    /// objects <see cref="GetConnectedSystemObjectsModifiedSinceAsync"/> selects, counting the values the page load with
+    /// the same <paramref name="valueLoadPlan"/> would bring.
+    /// </summary>
+    /// <param name="valueLoadPlan">#2818: the attributes the page load may leave out of an object. An attribute is counted
+    /// as left out wherever the load could leave it out whichever of the candidates share the page: the object is Normal,
+    /// joined and the only candidate joined to its Metaverse Object, holds at least the plan's threshold of its values,
+    /// and references none of the candidates. Otherwise it is counted, as the load would bring it. Null counts every
+    /// value.</param>
+    /// <param name="earlierCandidateIds">The objects counted before these and not yet handed out: the next page may hold
+    /// them alongside these, so a reference to one of them keeps an attribute counted.</param>
+    Task<List<(Guid Id, int ValueCount)>> GetConnectedSystemObjectValueCountsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int pageSize,
+        Guid afterId, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap,
+        SynchronisationValueLoadPlan? valueLoadPlan = null, IReadOnlyCollection<Guid>? earlierCandidateIds = null);
+
+    /// <summary>
+    /// Checks a planned Delta Synchronisation page before it loads (#2934): for each of its objects whose planned attributes
+    /// (#2818) the load would bring whole because of the company the object keeps on exactly this page (a value referencing
+    /// another of its objects, or a Metaverse Object it shares with one), the values the load brings, counted to
+    /// <paramref name="valueCountCap"/>. A count made before the page was planned saw other candidates, and can have counted
+    /// such an attribute as left out. Objects not returned bring what was counted.
+    /// </summary>
+    /// <param name="pageObjectIds">The objects planned for the page.</param>
+    /// <param name="valueLoadPlan">The plan the page load uses.</param>
+    /// <param name="valueCountCap">The most values counted for one object.</param>
+    Task<IReadOnlyDictionary<Guid, int>> GetConnectedSystemObjectValueCountsLoadedWholeOnPageAsync(IReadOnlyCollection<Guid> pageObjectIds,
+        SynchronisationValueLoadPlan valueLoadPlan, int valueCountCap);
+
+    /// <summary>
     /// The Object Types that hold at least one of the Connected System's objects (#2492). A type-ordered
     /// synchronisation pages only these: a schema can declare a hundred types while the objects use two. Answered from
     /// the (ConnectedSystemId, TypeId, Id) index one type at a time, so it costs a probe per type in use, not a scan.

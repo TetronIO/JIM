@@ -394,6 +394,18 @@ public abstract class SyncTaskProcessorBase
     internal int? SynchronisationValueLoadThresholdForTests { get; set; }
 
     /// <summary>
+    /// Test hook (#2934): the attribute values a page may hold, in place of
+    /// <see cref="ValueBudgetedBatchPlanner.DefaultValueBudget"/>; <see cref="int.MaxValue"/> pages by object count alone.
+    /// Null in production.
+    /// </summary>
+    internal int? PageValueBudgetForTests { get; set; }
+
+    /// <summary>
+    /// The attribute values a synchronisation page may hold, unless a single object holds more (#2934).
+    /// </summary>
+    protected int PageValueBudget => PageValueBudgetForTests ?? ValueBudgetedBatchPlanner.DefaultValueBudget;
+
+    /// <summary>
     /// Test hook (#2818): how many objects this run's page loads left an attribute out of, and how many questions Drift
     /// Detection asked the database about them.
     /// </summary>
@@ -1030,11 +1042,16 @@ public abstract class SyncTaskProcessorBase
         var crossPageRefCount = _unresolvedCrossPageReferences.Count;
         var rpeiCount = _activity.RunProfileExecutionItems.Count;
 
+        // The values the page loaded, and whether its plan ended it at the value budget (#2934): what bounds its memory.
+        var pageValueCount = _csoPager?.LastPageValueCount ?? 0;
+        var endedAtValueBudget = _csoPager?.LastPageEndedAtValueBudget ?? false;
+
         Log.Information("Page {Page}/{TotalPages} complete. Memory: {MemoryMb:F1} MB, Gen0: {Gen0}, Gen1: {Gen1}, Gen2: {Gen2} | " +
-            "Tracker: {TrackerCount}, TrackerBeforeClear: {TrackerCountBeforeClear}, CrossPageRefs: {CrossPageRefCount}, RPEIs: {RpeiCount}",
+            "Tracker: {TrackerCount}, TrackerBeforeClear: {TrackerCountBeforeClear}, CrossPageRefs: {CrossPageRefCount}, RPEIs: {RpeiCount} | " +
+            "Values: {PageValueCount}, EndedAtValueBudget: {EndedAtValueBudget}",
             pageNumber, totalPages, memoryMb,
             GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2),
-            trackerCount, trackerCountBeforeClear, crossPageRefCount, rpeiCount);
+            trackerCount, trackerCountBeforeClear, crossPageRefCount, rpeiCount, pageValueCount, endedAtValueBudget);
     }
 
 
@@ -5127,9 +5144,9 @@ public abstract class SyncTaskProcessorBase
             // budget's worth of reference values (#2492), so a batch holding several very large groups does not hold all
             // of them in memory together. A group larger than the budget gets a batch of its own.
             var pageSize = await _syncServer.GetSyncPageSizeAsync();
-            var batchPlan = CrossPageReferenceBatchPlanner.Plan(
+            var batchPlan = ValueBudgetedBatchPlanner.Plan(
                 _unresolvedCrossPageReferences.Select(x => x.ReferenceValueCount).ToList(),
-                pageSize, CrossPageReferenceBatchPlanner.DefaultValueBudget);
+                pageSize, ValueBudgetedBatchPlanner.DefaultValueBudget);
             var totalBatches = batchPlan.Count;
 
             var resolvedCount = 0;
@@ -8554,15 +8571,21 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Creates the page source for a synchronisation's main loop (#2492): the Connected System's Object Types in
     /// dependency order (referenced types first, from the run's mapped reference attributes), each walked with its own
-    /// keyset cursor, then a sweep for objects created while the run was in flight. Logs the order, so a run's
-    /// behaviour can be explained from its log.
+    /// keyset cursor, then a sweep for objects created while the run was in flight. Each page ends at
+    /// <paramref name="pageSize"/> objects or at <see cref="PageValueBudget"/> attribute values, whichever comes first
+    /// (#2934). Logs the order, so a run's behaviour can be explained from its log.
     /// </summary>
     /// <param name="activeSyncRules">The run's Synchronisation Rules.</param>
     /// <param name="runStartedAt">When the run started; the sweep's creation floor is derived from it.</param>
     /// <param name="loadPage">The repository page load for this run kind.</param>
+    /// <param name="loadValueCounts">The repository read of the objects <paramref name="loadPage"/> would load, ids with
+    /// their value counts, which ends each page at the value budget (#2934).</param>
     /// <param name="loadSweepIds">The repository read of the closing sweep's selection for this run kind, ids only: the
     /// selection <paramref name="loadPage"/> makes for the sweep (#2861).</param>
+    /// <param name="pageSize">The most objects a page holds (<c>Sync.PageSize</c>).</param>
     /// <param name="runKind">The run kind, for the log line.</param>
+    /// <param name="revisePlannedPage">Checks a planned page before it loads where its load can leave values out of an object
+    /// depending on the page it shares (#2818, #2934); null where the load brings every value.</param>
     /// <param name="observeUndeclaredReferenceTargets">Whether to ask the database which types the mapped reference
     /// attributes with no declared target actually point at (one aggregate over their values, about 2 seconds at
     /// 7 million values), rather than assume each reaches every type. Worth it for a Full Synchronisation: without it
@@ -8570,7 +8593,8 @@ public abstract class SyncTaskProcessorBase
     /// Synchronisation defers only references to objects new in the same delta, too few to pay for the query.</param>
     protected async Task<TypeOrderedCsoPager> CreateTypeOrderedPagerAsync(
         List<SyncRule> activeSyncRules, DateTime runStartedAt, TypeOrderedCsoPager.PageLoader loadPage,
-        TypeOrderedCsoPager.SweepIdLoader loadSweepIds, string runKind, bool observeUndeclaredReferenceTargets)
+        TypeOrderedCsoPager.ValueCountLoader loadValueCounts, TypeOrderedCsoPager.SweepIdLoader loadSweepIds, int pageSize, string runKind,
+        bool observeUndeclaredReferenceTargets, TypeOrderedCsoPager.PlannedPageReviser? revisePlannedPage = null)
     {
         // Only the types holding objects are paged: a schema can declare a hundred (OpenLDAP's does) while the objects
         // use two. A type the loaded schema does not carry still has its objects paged, ordered as one with no
@@ -8601,7 +8625,8 @@ public abstract class SyncTaskProcessorBase
         if (order.TypeIds.Count == 0)
         {
             Log.Information("{RunKind} type order: no objects to page; sweeping for any created during the run", runKind);
-            _csoPager = new TypeOrderedCsoPager(loadPage, loadSweepIds, [], runStartedAt - TypeOrderedSweepClockSkewMargin);
+            _csoPager = new TypeOrderedCsoPager(loadPage, loadValueCounts, loadSweepIds, [], runStartedAt - TypeOrderedSweepClockSkewMargin,
+                pageSize, PageValueBudget, revisePlannedPage);
             return _csoPager;
         }
 
@@ -8614,7 +8639,8 @@ public abstract class SyncTaskProcessorBase
                 runKind, string.Join(", ", order.SelfReferencingTypeIds.Order().Select(NameOf)));
         }
 
-        _csoPager = new TypeOrderedCsoPager(loadPage, loadSweepIds, order.TypeIds, runStartedAt - TypeOrderedSweepClockSkewMargin);
+        _csoPager = new TypeOrderedCsoPager(loadPage, loadValueCounts, loadSweepIds, order.TypeIds, runStartedAt - TypeOrderedSweepClockSkewMargin,
+            pageSize, PageValueBudget, revisePlannedPage);
         return _csoPager;
     }
 
@@ -8756,6 +8782,20 @@ public abstract class SyncTaskProcessorBase
         span.SetTag("configurationFallbackReasons", string.Join(",", fallbacks.Select(f => f.Reason).Distinct()));
         span.SetSuccess();
         return plan;
+    }
+
+    /// <summary>
+    /// #2934: tags the page load's span with what the page holds and why it ended, so a run's log shows each page's values
+    /// against the budget. Nothing for the load that found no further page.
+    /// </summary>
+    protected static void TagPageLoad(OperationSpan loadSpan, TypeOrderedCsoPager pager, PagedResultSet<ConnectedSystemObject>? page)
+    {
+        if (page == null)
+            return;
+
+        loadSpan.SetTag("csoCount", page.Results.Count);
+        loadSpan.SetTag("valueCount", pager.LastPageValueCount);
+        loadSpan.SetTag("endedAtValueBudget", pager.LastPageEndedAtValueBudget);
     }
 
     /// <summary>
