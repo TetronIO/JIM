@@ -238,14 +238,23 @@ public class JimDbContext : DbContext
         if (entry.State != EntityState.Added)
             return;
 
-        var attributeId = entry.Entity switch
+        var (attributeId, attributeName) = entry.Entity switch
         {
-            ConnectedSystemObjectChangeAttribute { AttributeId: null } attributeChange => attributeChange.AttributeIdForWrite(),
-            MetaverseObjectChangeAttribute { AttributeId: null } attributeChange => attributeChange.AttributeIdForWrite(),
-            _ => null
+            ConnectedSystemObjectChangeAttribute { AttributeId: null } attributeChange => (attributeChange.AttributeIdForWrite(), attributeChange.AttributeName),
+            MetaverseObjectChangeAttribute { AttributeId: null } attributeChange => (attributeChange.AttributeIdForWrite(), attributeChange.AttributeName),
+            _ => (0, null)
         };
-        if (attributeId != null)
-            entry.Property(nameof(MetaverseObjectChangeAttribute.AttributeId)).CurrentValue = attributeId;
+        if (attributeId == 0)
+            return;
+
+        // No relationship remains to fix the id up at save, so a row naming an attribute that is not yet saved (or none
+        // at all) would be written with no id and lose its link to the attribute for good. Refuse it here instead.
+        if (attributeId == null)
+            throw new InvalidOperationException(
+                $"A change history row for attribute '{attributeName}' names no saved attribute. Save the attribute before " +
+                "writing history that names it, and set the row's AttributeId or its Attribute.");
+
+        entry.Property(nameof(MetaverseObjectChangeAttribute.AttributeId)).CurrentValue = attributeId;
     }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
