@@ -438,7 +438,7 @@ public partial class SyncRepository
         // Step 2: INSERT ConnectedSystemObjectChangeAttribute rows
         var allAttrChanges = changes
             .SelectMany(c => c.AttributeChanges.Select(ac =>
-                (ChangeId: c.Id, AttributeId: ac.Attribute?.Id ?? 0, AttrChange: ac)))
+                (ChangeId: c.Id, AttributeId: RequiredAttributeId(ac), AttrChange: ac)))
             .ToList();
 
         if (allAttrChanges.Count > 0)
@@ -621,8 +621,18 @@ public partial class SyncRepository
     private static List<(Guid ChangeId, int AttributeId, ConnectedSystemObjectChangeAttribute AttrChange)> CsoChangeAttributeRows(
         IEnumerable<ConnectedSystemObjectChange> changes) =>
         changes
-            .SelectMany(c => c.AttributeChanges.Select(ac => (ChangeId: c.Id, AttributeId: ac.Attribute!.Id, AttrChange: ac)))
+            .SelectMany(c => c.AttributeChanges.Select(ac => (ChangeId: c.Id, AttributeId: RequiredAttributeId(ac), AttrChange: ac)))
             .ToList();
+
+    /// <summary>
+    /// The attribute a Connected System Object change record's attribute row names, by plain id (#2931). Every such row
+    /// is built from a loaded attribute, so one naming none is a fault in its builder: refused, rather than written as a
+    /// row no reader could place, now that no foreign key would refuse it.
+    /// </summary>
+    private static int RequiredAttributeId(ConnectedSystemObjectChangeAttribute attributeChange) =>
+        attributeChange.AttributeIdForWrite() ?? throw new InvalidOperationException(
+            $"The change record attribute row '{attributeChange.AttributeName}' names no attribute; a Connected System Object " +
+            "change record's attribute rows are built from a loaded attribute.");
 
     /// <summary>
     /// The value rows of the given change records, each with the attribute row it belongs to, change by change and

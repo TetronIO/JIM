@@ -140,7 +140,7 @@ Writers and readers of each:
   - Metaverse Object attribute values' references (`MetaverseReferenceRowCleanup`);
   - the join detach;
   - `PendingExports`, `PendingPasswordChanges`, `DeferredReferences` and `GeneratedValueAssignments`.
-- Configuration references from audit rows (Synchronisation Rule, Object Type, attribute definitions). They are low volume and not on the synchronisation path.
+- Configuration references from audit rows (Synchronisation Rule, Object Type, attribute definitions). They are low volume and not on the synchronisation path. Attribute definitions have since followed under [#2931](https://github.com/TetronIO/JIM/issues/2931): every history write checked and locked its attribute's row, which made parallel writers contend on the same few rows.
 
 **Retention:** `ChangeHistoryRepository.DeleteExpired*` removes change records and general Activities oldest first, under one `History.RetentionPeriod` cutoff. Retention neither reads nor writes these columns.
 

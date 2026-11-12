@@ -375,7 +375,7 @@ public class SynchronisationHistoryWriteDatabaseTests
         foreach (var attribute in change.AttributeChanges)
         {
             await AssertRowAsync("ConnectedSystemObjectChangeAttributes", attribute.Id, attribute,
-                new() { ["ConnectedSystemChangeId"] = change.Id, ["AttributeId"] = attribute.Attribute?.Id });
+                new() { ["ConnectedSystemChangeId"] = change.Id, ["AttributeId"] = attribute.AttributeIdForWrite() });
             foreach (var value in attribute.ValueChanges)
                 await AssertRowAsync("ConnectedSystemObjectChangeAttributeValues", value.Id, value,
                     new() { ["ConnectedSystemObjectChangeAttributeId"] = attribute.Id });
@@ -389,7 +389,7 @@ public class SynchronisationHistoryWriteDatabaseTests
         foreach (var attribute in change.AttributeChanges)
         {
             await AssertRowAsync("MetaverseObjectChangeAttributes", attribute.Id, attribute,
-                new() { ["MetaverseObjectChangeId"] = change.Id, ["AttributeId"] = attribute.Attribute?.Id });
+                new() { ["MetaverseObjectChangeId"] = change.Id, ["AttributeId"] = attribute.AttributeIdForWrite() });
             foreach (var value in attribute.ValueChanges)
                 await AssertRowAsync("MetaverseObjectChangeAttributeValues", value.Id, value,
                     new() { ["MetaverseObjectChangeAttributeId"] = attribute.Id });

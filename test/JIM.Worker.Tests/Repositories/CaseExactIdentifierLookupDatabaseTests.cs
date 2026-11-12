@@ -318,7 +318,8 @@ public class CaseExactIdentifierLookupDatabaseTests
         };
         var memberChange = new ConnectedSystemObjectChangeAttribute
         {
-            Id = Guid.NewGuid(), ConnectedSystemChange = change, AttributeName = "member", AttributeType = AttributeDataType.Reference
+            // History names its attribute by plain id with no foreign key (#2931); none needs to exist behind it here.
+            Id = Guid.NewGuid(), ConnectedSystemChange = change, AttributeId = 1, AttributeName = "member", AttributeType = AttributeDataType.Reference
         };
         var changeValue = new ConnectedSystemObjectChangeAttributeValue
         {

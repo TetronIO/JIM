@@ -228,7 +228,8 @@ internal sealed class SynchronisationHistoryBatchBuilder
         var append = new MetaverseObjectChange { Id = existingChangeId };
         var attribute = new MetaverseObjectChangeAttribute
         {
-            MetaverseObjectChange = append, AttributeName = "Manager", AttributeType = AttributeDataType.Reference
+            // History names its attribute by plain id with no foreign key (#2931); none needs to exist behind it here.
+            MetaverseObjectChange = append, AttributeId = 1, AttributeName = "Manager", AttributeType = AttributeDataType.Reference
         };
         attribute.ValueChanges.Add(new MetaverseObjectChangeAttributeValue
         {

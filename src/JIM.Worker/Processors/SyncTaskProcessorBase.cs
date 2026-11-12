@@ -7781,7 +7781,7 @@ public abstract class SyncTaskProcessorBase
                 var change = outcome.ConnectedSystemObjectChange;
                 foreach (var attrChange in change.AttributeChanges)
                 {
-                    if (attrChange.Attribute?.Type != AttributeDataType.Reference)
+                    if (attrChange.AttributeType != AttributeDataType.Reference)
                         continue;
 
                     foreach (var valueChange in attrChange.ValueChanges)

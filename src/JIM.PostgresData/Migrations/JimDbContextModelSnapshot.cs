@@ -1076,7 +1076,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AttributeId");
+                    b.HasIndex("AttributeId")
+                        .HasDatabaseName("IX_MetaverseObjectChangeAttributes_AttributeId");
 
                     b.HasIndex("MetaverseObjectChangeId");
 
@@ -3908,7 +3909,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AttributeId");
+                    b.HasIndex("AttributeId")
+                        .HasDatabaseName("IX_ConnectedSystemObjectChangeAttributes_AttributeId");
 
                     b.HasIndex("ConnectedSystemChangeId");
 
@@ -5882,18 +5884,11 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObjectChangeAttribute", b =>
                 {
-                    b.HasOne("JIM.Models.Core.MetaverseAttribute", "Attribute")
-                        .WithMany()
-                        .HasForeignKey("AttributeId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("JIM.Models.Core.MetaverseObjectChange", "MetaverseObjectChange")
                         .WithMany("AttributeChanges")
                         .HasForeignKey("MetaverseObjectChangeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("Attribute");
 
                     b.Navigation("MetaverseObjectChange");
                 });
@@ -6693,18 +6688,11 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectChangeAttribute", b =>
                 {
-                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectTypeAttribute", "Attribute")
-                        .WithMany()
-                        .HasForeignKey("AttributeId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("JIM.Models.Staging.ConnectedSystemObjectChange", "ConnectedSystemChange")
                         .WithMany("AttributeChanges")
                         .HasForeignKey("ConnectedSystemChangeId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("Attribute");
 
                     b.Navigation("ConnectedSystemChange");
                 });
