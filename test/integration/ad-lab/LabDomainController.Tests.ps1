@@ -2107,6 +2107,26 @@ Describe 'Get-LabRebuildBuildChain' {
     }
 }
 
+Describe 'Get-LabRebuildExclusiveRole' {
+    It 'names every Exchange server, in the order given, since two cannot start on the host at once' {
+        $roles = @(
+            [pscustomobject]@{ live = 'dc-primary'; kind = 'DomainController' },
+            [pscustomobject]@{ live = 'exchange-source'; kind = 'ExchangeServer' },
+            [pscustomobject]@{ live = 'adfs-primary'; kind = 'FederationServer' },
+            [pscustomobject]@{ live = 'exchange-primary'; kind = 'ExchangeServer' }
+        )
+        @(Get-LabRebuildExclusiveRole -Role $roles) | Should -Be @('exchange-source', 'exchange-primary')
+    }
+
+    It 'holds nothing back when the roles do not say what kind they are (a host on older scripts)' {
+        @(Get-LabRebuildExclusiveRole -Role @([pscustomobject]@{ live = 'exchange-primary'; dependsOn = 'dc-primary' })).Count | Should -Be 0
+    }
+
+    It 'returns nothing for no roles' {
+        @(Get-LabRebuildExclusiveRole -Role @()).Count | Should -Be 0
+    }
+}
+
 Describe 'Get-LabRebuildBuildAction' {
     BeforeAll {
         $script:BuildNow = [datetime]::new(2026, 9, 30, 12, 0, 0, [System.DateTimeKind]::Utc)
@@ -3293,6 +3313,14 @@ Describe 'Invoke-LabRebuildPhase' {
             Add-FakeLiveSet $lab
             $results = @(Invoke-LabRebuildPhase -Phase Status -Plan (Get-FakePlan -WithFederation -WithExchange) -Adapter $lab.Adapter)
             @($results | ForEach-Object { "$($_.live)<$($_.dependsOn)" } | Sort-Object) | Should -Be @('adfs-primary<dc-primary', 'dc-primary<', 'dc-source<', 'dc-target<', 'exchange-primary<dc-primary')
+        }
+
+        It 'says what kind of server each role is, so the runner can build the Exchange servers one at a time' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $results = @(Invoke-LabRebuildPhase -Phase Status -Plan (Get-FakePlan -WithFederation -WithExchange) -Adapter $lab.Adapter)
+            @($results | ForEach-Object { "$($_.live)=$($_.kind)" } | Sort-Object) | Should -Be @('adfs-primary=FederationServer', 'dc-primary=DomainController', 'dc-source=DomainController', 'dc-target=DomainController', 'exchange-primary=ExchangeServer')
+            @(Get-LabRebuildExclusiveRole -Role $results) | Should -Be @('exchange-primary')
         }
 
         It 'still reports a run whose guest build cannot be read, as no build rather than an error' {

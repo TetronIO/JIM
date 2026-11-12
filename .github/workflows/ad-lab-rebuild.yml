@@ -196,7 +196,9 @@ jobs:
       # live VM is off: the candidate is built with its address. The newest .msu in the host's cumulativeUpdateDirectory
       # is installed in each. The VMs come from the host's settings.json. The forests are independent, so each domain
       # controller's chain runs at the same time (Get-LabRebuildBuildChain): dc-source and dc-target alone, and
-      # dc-primary followed by the AD FS and Exchange servers that join it, in turn. A chain that fails stops there; the
+      # dc-primary followed by the AD FS and Exchange servers that join it, in turn. The Exchange servers are built one
+      # at a time across the chains (Get-LabRebuildExclusiveRole): each has 12 GB of static memory, and the host cannot
+      # start a second beside everything else the build runs (run 43115533577). A chain that fails stops there; the
       # others finish, then the step fails.
       - name: 'Phase: Build the candidates'
         id: build
@@ -210,17 +212,35 @@ jobs:
           $status = @((ConvertFrom-Json (Invoke-LabControl -Script 'Invoke-LabRebuild.ps1' -Arguments @('-Phase', 'Status', '-AsJson') -TimeoutSeconds 600)).roles)
           $chains = @(Get-LabRebuildBuildChain -Role $status)
           foreach ($chain in $chains) { Write-Host "Building side by side: $($chain.Roles -join ', then ')" }
+          $exclusive = @(Get-LabRebuildExclusiveRole -Role $status)
+          if ($exclusive.Count -gt 1) { Write-Host "One at a time: $($exclusive -join ', ')" }
+          # Shared by the thread jobs (one process), so an Exchange build waits outside Invoke-LabControl and the wait
+          # never counts against that build's own timeout.
+          $exclusiveGate = [System.Threading.SemaphoreSlim]::new(1, 1)
           $control = (Resolve-Path ./test/integration/utils/Invoke-LabControl.ps1).Path
           $jobs = @(foreach ($chain in $chains) {
-              Start-ThreadJob -Name $chain.Root -ArgumentList $control, $chain.Roles, $extra -ScriptBlock {
-                param($control, $roles, $extra)
+              Start-ThreadJob -Name $chain.Root -ArgumentList $control, $chain.Roles, $extra, $exclusive, $exclusiveGate -ScriptBlock {
+                param($control, $roles, $extra, $exclusive, $exclusiveGate)
                 . $control
                 foreach ($role in $roles) {
-                  Write-Host "$([datetime]::UtcNow.ToString('HH:mm:ss'))Z building $role-candidate"
-                  $json = Invoke-LabControl -Script 'Invoke-LabRebuild.ps1' -Arguments (@('-Phase', 'Build', '-Role', $role, '-AsJson') + $extra) -TimeoutSeconds 10800
-                  $result = (ConvertFrom-Json $json).roles
-                  Write-Host ('{0}Z {1,-8} {2,-8} {3}  [guest build {4}]' -f [datetime]::UtcNow.ToString('HH:mm:ss'), $result.role, $result.action, $result.detail, $result.guestBuild)
-                  $result
+                  $holdsGate = $false
+                  if ($exclusive -contains $role) {
+                    if ($exclusiveGate.CurrentCount -eq 0) {
+                      Write-Host "$([datetime]::UtcNow.ToString('HH:mm:ss'))Z $role-candidate waits for the Exchange server being built in another chain"
+                    }
+                    $exclusiveGate.Wait()
+                    $holdsGate = $true
+                  }
+                  try {
+                    Write-Host "$([datetime]::UtcNow.ToString('HH:mm:ss'))Z building $role-candidate"
+                    $json = Invoke-LabControl -Script 'Invoke-LabRebuild.ps1' -Arguments (@('-Phase', 'Build', '-Role', $role, '-AsJson') + $extra) -TimeoutSeconds 10800
+                    $result = (ConvertFrom-Json $json).roles
+                    Write-Host ('{0}Z {1,-8} {2,-8} {3}  [guest build {4}]' -f [datetime]::UtcNow.ToString('HH:mm:ss'), $result.role, $result.action, $result.detail, $result.guestBuild)
+                    $result
+                  }
+                  finally {
+                    if ($holdsGate) { [void]$exclusiveGate.Release() }
+                  }
                 }
               }
             })

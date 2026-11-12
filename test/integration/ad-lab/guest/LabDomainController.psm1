@@ -2524,6 +2524,42 @@ function Get-LabRebuildBuildChain {
     }
 }
 
+function Get-LabRebuildExclusiveRole {
+    <#
+    .SYNOPSIS
+        The live names of the roles the Build phase builds one at a time across its chains: the Exchange servers.
+
+    .DESCRIPTION
+        Each Exchange server has 12 GB of static memory (Microsoft does not support Dynamic Memory for Exchange), and the
+        lab host cannot hold two Exchange candidates beside the runner, the domain controller candidates and the AD FS
+        servers: the second fails to start with "Not enough memory in the system" (run 43115533577, where
+        exchange-primary-candidate was started while exchange-source-candidate was still being built in another chain).
+        The chains still run side by side; only these roles wait for one another.
+
+        A role from a host on older scripts reports no kind, and is not held back, which is how the lab was built before.
+
+    .PARAMETER Role
+        The roles of a Status or Build result: objects with live and, from a current host, kind.
+
+    .OUTPUTS
+        The live names of the Exchange servers, in the order given.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object[]]$Role
+    )
+
+    foreach ($item in @($Role)) {
+        $kind = $item.PSObject.Properties['kind']
+        if (($null -ne $kind) -and ([string]$kind.Value -eq 'ExchangeServer')) {
+            [string]$item.live
+        }
+    }
+}
+
 function Get-LabRebuildBuildAction {
     <#
     .SYNOPSIS
@@ -3123,6 +3159,7 @@ function ConvertTo-LabRebuildResult {
         detail     = $Detail
         guestBuild = $GuestBuild
         dependsOn  = $Role.DependsOn
+        kind       = $Role.Kind
     }
 }
 
@@ -5008,7 +5045,7 @@ Export-ModuleMember -Function @(
     'Test-LabServiceAccountDelegation', 'Test-LabPlainLdapRefused', 'Set-LabOldPasswordAllowedPeriod', 'Get-LabOldPasswordAllowedPeriod',
     'Get-LabDomainPasswordPolicyChange', 'Get-LabPasswordTemplateChange',
     'Get-LabRebuildVmName', 'Get-LabRebuildGenerationName', 'ConvertFrom-LabRebuildSetting', 'Get-LabNewestCumulativeUpdate',
-    'Get-LabRebuildBuildAction', 'Get-LabRebuildBuildChain', 'Get-LabPromotePlan', 'Get-LabRollbackPlan', 'Get-LabPrunePlan',
+    'Get-LabRebuildBuildAction', 'Get-LabRebuildBuildChain', 'Get-LabRebuildExclusiveRole', 'Get-LabPromotePlan', 'Get-LabRollbackPlan', 'Get-LabPrunePlan',
     'Get-LabVmNoteValue', 'Set-LabVmNoteValue', 'ConvertTo-LabChildArgument', 'Test-LabOwnedVmFolder',
     'Get-LabRunSummary', 'Get-LabRunStatusDescription', 'Invoke-LabRebuildPhase',
     'Get-LabReadinessPort', 'Get-LabInstallImage', 'New-LabUnattendIso', 'New-LabVirtualMachine', 'Complete-LabUnattendedInstall',
