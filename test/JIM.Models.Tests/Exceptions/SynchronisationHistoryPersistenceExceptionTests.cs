@@ -28,6 +28,22 @@ public class SynchronisationHistoryPersistenceExceptionTests
         }
     }
 
+    /// <summary>
+    /// The pages a run expects is an estimate that grows as pages end at the value budget (#2934), so a page numbered as the
+    /// last can be followed by another (a closing sweep page, say) that saved its changes. The message must not rest on it.
+    /// </summary>
+    [Test]
+    public void BuildMessage_PageNumberedAsTheLast_StillSaysTheNextPageMayHaveSavedItsChanges()
+    {
+        var message = SynchronisationHistoryPersistenceException.BuildMessage(12, 12, "HR");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.Contain("the run stopped without saving the changes of any page after page 13"));
+            Assert.That(message, Does.Contain("or of the steps after the pages"));
+        }
+    }
+
     [Test]
     public void BuildMessage_NoPage_SavedNothingFurther()
     {

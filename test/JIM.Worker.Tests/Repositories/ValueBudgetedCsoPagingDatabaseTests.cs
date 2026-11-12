@@ -174,7 +174,7 @@ public class ValueBudgetedCsoPagingDatabaseTests
         var pager = new TypeOrderedCsoPager(
             (afterId, objectTypeId, createdOnOrAfter, onlyIds, maxObjects) => repository.Sync.GetConnectedSystemObjectsAsync(
                 seeded.SystemId, 1, maxObjects, seeded.ValueCounts.Count, afterId, objectTypeId, createdOnOrAfter, onlyIds),
-            (afterId, objectTypeId, createdOnOrAfter, onlyIds, maxObjects, valueCountCap) => repository.Sync.GetConnectedSystemObjectValueCountsAsync(
+            (afterId, objectTypeId, createdOnOrAfter, onlyIds, earlierCandidateIds, maxObjects, valueCountCap) => repository.Sync.GetConnectedSystemObjectValueCountsAsync(
                 seeded.SystemId, maxObjects, afterId, objectTypeId, createdOnOrAfter, onlyIds, valueCountCap),
             (afterId, createdOnOrAfter) => repository.Sync.GetConnectedSystemObjectIdsAsync(seeded.SystemId, PageSize, afterId, createdOnOrAfter),
             [seeded.PersonTypeId, seeded.GroupTypeId], DateTime.UtcNow.AddMinutes(-5), PageSize, valueBudget);
@@ -279,6 +279,94 @@ public class ValueBudgetedCsoPagingDatabaseTests
         {
             Assert.That(counts.Select(c => c.Id), Is.EquivalentTo(marked), "the marked groups only");
             Assert.That(counts, Is.EqualTo(page.Results.Select(c => (c.Id, c.AttributeValues.Count))), "as the page load returns them");
+        }
+    }
+
+    /// <summary>
+    /// A Delta Synchronisation whose value load plan leaves a large group's members out (#2818) counts what its page load
+    /// brings, not every value held, so such a group does not take a page of its own for members that are never loaded.
+    /// Where the load would bring them after all, they are counted: a group below the threshold, one not joined, one not
+    /// Normal, and one referencing another candidate (here also the earlier candidate named to a later count).
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectValueCountsModifiedSinceAsync_PlanLeavingMembersOut_CountsWhatThePageLoadBringsAsync()
+    {
+        int systemId, groupTypeId;
+        ConnectedSystemObjectTypeAttribute member;
+        Guid joinedSmall, joinedLarge, unjoinedLarge, obsoleteLarge, joinedLargeReferencingSmall;
+        await using (var seed = NewContext())
+        {
+            var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+            var system = new ConnectedSystem { Name = "Glitterband", ConnectorDefinition = connectorDefinition };
+            var person = NewType(system, "person");
+            var group = NewType(system, "group");
+            member = new ConnectedSystemObjectTypeAttribute
+            {
+                Name = "member", ConnectedSystemObjectType = group, Type = AttributeDataType.Reference,
+                AttributePlurality = AttributePlurality.MultiValued, Selected = true
+            };
+            group.Attributes.Add(member);
+            var groupMvType = new MetaverseObjectType { Name = "Group", PluralName = "Groups" };
+            seed.AddRange(connectorDefinition, system, person, group, groupMvType);
+            await seed.SaveChangesAsync();
+
+            var people = Enumerable.Range(0, 40).Select(i => NewObject(system, person, $"person{i}")).ToList();
+            seed.AddRange(people);
+
+            ConnectedSystemObject Group(string name, int members, bool joined, ConnectedSystemObjectStatus status = ConnectedSystemObjectStatus.Normal)
+            {
+                var cso = NewObject(system, group, name);
+                cso.Status = status;
+                if (joined)
+                    cso.MetaverseObject = new MetaverseObject { Type = groupMvType };
+                foreach (var target in people.Take(members))
+                    cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = member, AttributeId = member.Id, ReferenceValueId = target.Id });
+                seed.Add(cso);
+                return cso;
+            }
+
+            var small = Group("small", 5, joined: true);
+            joinedLarge = Group("large", 30, joined: true).Id;
+            unjoinedLarge = Group("unjoined", 30, joined: false).Id;
+            obsoleteLarge = Group("obsolete", 30, joined: true, ConnectedSystemObjectStatus.Obsolete).Id;
+            var referencing = Group("referencing", 30, joined: true);
+            referencing.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = member, AttributeId = member.Id, ReferenceValueId = small.Id });
+            await seed.SaveChangesAsync();
+            (systemId, groupTypeId, joinedSmall, joinedLargeReferencingSmall) = (system.Id, group.Id, small.Id, referencing.Id);
+        }
+
+        await using (var mark = NewContext())
+            await mark.ConnectedSystemObjects.Where(c => c.TypeId == groupTypeId).ExecuteUpdateAsync(s => s.SetProperty(c => c.SynchronisationPending, true));
+
+        var plan = new SynchronisationValueLoadPlan(new Dictionary<int, IReadOnlyList<ConnectedSystemObjectTypeAttribute>> { [groupTypeId] = [member] },
+            minimumHeldValueCount: 10);
+        var watermark = DateTime.UtcNow.AddMinutes(5);
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+        var counts = await repository.Sync.GetConnectedSystemObjectValueCountsModifiedSinceAsync(systemId, watermark, 10, Guid.Empty, groupTypeId,
+            null, null, int.MaxValue, plan, []);
+        var afterSmallWithIt = await repository.Sync.GetConnectedSystemObjectValueCountsModifiedSinceAsync(systemId, watermark, 10, joinedSmall,
+            groupTypeId, null, null, int.MaxValue, plan, [joinedSmall]);
+        var afterSmallWithoutIt = await repository.Sync.GetConnectedSystemObjectValueCountsModifiedSinceAsync(systemId, watermark, 10, joinedSmall,
+            groupTypeId, null, null, int.MaxValue, plan, []);
+        var page = await repository.Sync.GetConnectedSystemObjectsModifiedSinceAsync(systemId, watermark, 1, 10, 5, Guid.Empty, groupTypeId, null, plan);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(counts, Is.EqualTo(new[]
+            {
+                (joinedSmall, 6),
+                (joinedLarge, 1),
+                (unjoinedLarge, 31),
+                (obsoleteLarge, 31),
+                (joinedLargeReferencingSmall, 32)
+            }), "below the threshold, not joined, not Normal or referencing a candidate: counted; otherwise left out");
+            Assert.That(counts, Is.EqualTo(page.Results.Select(c => (c.Id, c.AttributeValues.Count))), "what the page load brings");
+            Assert.That(afterSmallWithIt.Single(c => c.Id == joinedLargeReferencingSmall).ValueCount, Is.EqualTo(32),
+                "a reference to an earlier candidate, which can share the page, keeps the members counted");
+            Assert.That(afterSmallWithoutIt.Single(c => c.Id == joinedLargeReferencingSmall).ValueCount, Is.EqualTo(1),
+                "with no candidate referenced, the members are left out");
         }
     }
 }

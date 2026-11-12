@@ -71,9 +71,10 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
         => _inner.GetConnectedSystemObjectValueCountsAsync(connectedSystemId, pageSize, afterId, objectTypeId, createdOnOrAfter, onlyIds, valueCountCap);
 
     public Task<List<(Guid Id, int ValueCount)>> GetConnectedSystemObjectValueCountsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince,
-        int pageSize, Guid afterId, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap)
+        int pageSize, Guid afterId, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap,
+        SynchronisationValueLoadPlan? valueLoadPlan = null, IReadOnlyCollection<Guid>? earlierCandidateIds = null)
         => _inner.GetConnectedSystemObjectValueCountsModifiedSinceAsync(connectedSystemId, modifiedSince, pageSize, afterId, objectTypeId, createdOnOrAfter,
-            onlyIds, valueCountCap);
+            onlyIds, valueCountCap, valueLoadPlan, earlierCandidateIds);
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
         => _inner.GetConnectedSystemObjectAsync(connectedSystemId, csoId);

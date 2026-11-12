@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
 
@@ -33,7 +34,8 @@ namespace JIM.Worker.Processors;
 /// </para>
 /// <para>
 /// Before each page is loaded, the next page's candidates are read as ids with their value counts, capped just above the
-/// budget, and the page takes as many of them as <see cref="ValueBudgetedBatchPlanner.FirstBatchSize"/> allows (#2934). A
+/// budget, and the page takes as many of them as <see cref="ValueBudgetedBatchPlanner.FirstBatchSize"/> allows (#2934),
+/// loading exactly those. Candidates left for a later page are kept, so every object is counted once. A
 /// page of people is never near the budget and keeps the page size; a page of large groups ends early, and a group over the
 /// budget gets a page of its own. Since object ids are time-ordered (#2929), a directory's largest groups are imported, and
 /// so paged, together: one page at 500,000 objects held 2.0 million member values. Only the boundaries move: every object
@@ -52,10 +54,12 @@ public sealed class TypeOrderedCsoPager
 
     /// <summary>
     /// Reads the objects the page loader would load from the same arguments, ids only, each with how many attribute values
-    /// it holds, capped at <c>valueCountCap</c>; in the page loader's order, at most <c>maxObjects</c> of them.
+    /// the load would bring, capped at <c>valueCountCap</c>; in the page loader's order, at most <c>maxObjects</c> of them.
+    /// <c>earlierCandidateIds</c> are the objects counted before these and not yet handed out, which the next page can hold
+    /// alongside them (a load that leaves values out of an object can depend on which others share its page, #2818).
     /// </summary>
     public delegate Task<List<(Guid Id, int ValueCount)>> ValueCountLoader(Guid afterId, int? objectTypeId, DateTime? createdOnOrAfter,
-        IReadOnlyCollection<Guid>? onlyIds, int maxObjects, int valueCountCap);
+        IReadOnlyCollection<Guid>? onlyIds, IReadOnlyCollection<Guid> earlierCandidateIds, int maxObjects, int valueCountCap);
 
     /// <summary>
     /// Reads one page of the sweep's selection, ids only, in the page loader's order: the objects created at or after the
@@ -78,9 +82,25 @@ public sealed class TypeOrderedCsoPager
     private bool _sweeping;
     private bool _finished;
 
-    // The sweep's current id page: where its loads start, and the ids of it still to hand out, in order.
+    // The objects counted and not yet handed out, in the loaders' order: the walk's next objects of its type, or the next
+    // objects of the sweep's current id page. Each object is counted once (#2934): planning a page from a fresh count of a
+    // page size of candidates, and taking one, counted the rest again for every page, which for a run of large groups is
+    // quadratic in index reads.
+    private readonly List<(Guid Id, int ValueCount)> _candidates = [];
+
+    // Whether nothing follows the candidates, as of the last count.
+    private bool _candidatesExhausted;
+
+    // The walk: the last object counted, where its next count starts.
+    private Guid _countCursor = Guid.Empty;
+
+    // The sweep's current id page: where its loads start, and the ids of it not yet counted, in order.
     private Guid _sweepPageCursor = Guid.Empty;
-    private List<Guid> _sweepIdsToHandOut = [];
+    private List<Guid> _sweepIdsToCount = [];
+
+    // The values per object of the last count, which sizes the next: once the candidates hold the budget, counting further
+    // ahead only spends reads on objects for later pages.
+    private double? _valuesPerObjectCounted;
 
     private int _objectsHandedOut;
 
@@ -92,7 +112,8 @@ public sealed class TypeOrderedCsoPager
     /// <param name="typeIds">Every Object Type id to walk, in paging order.</param>
     /// <param name="createdFloor">Objects created at or after this instant are swept once the type walks finish:
     /// the run's start, less a margin for clock skew between the writer and this run.</param>
-    /// <param name="pageSize">The most objects a page holds.</param>
+    /// <param name="pageSize">The most objects a page holds (<c>Sync.PageSize</c>); no more than the loaders return in a page,
+    /// <see cref="Constants.SynchronisationLimits.MaxPageSize"/>.</param>
     /// <param name="valueBudget">The most attribute values a page holds, unless a single object holds more; that object
     /// gets a page of its own.</param>
     public TypeOrderedCsoPager(PageLoader loadPage, ValueCountLoader loadValueCounts, SweepIdLoader loadSweepIds, IReadOnlyList<int> typeIds,
@@ -106,7 +127,7 @@ public sealed class TypeOrderedCsoPager
         _typeIds = typeIds;
         _walkPositionByTypeId = typeIds.Select((typeId, position) => (typeId, position)).ToDictionary(t => t.typeId, t => t.position);
         _createdFloor = createdFloor;
-        _pageSize = pageSize;
+        _pageSize = Math.Min(pageSize, Constants.SynchronisationLimits.MaxPageSize);
         _valueBudget = valueBudget;
 
         // Any count above the budget sends its object to a page of its own, so no object need be counted further than one
@@ -137,19 +158,21 @@ public sealed class TypeOrderedCsoPager
     public int PagesHandedOut { get; private set; }
 
     /// <summary>
-    /// The attribute values the last page's objects held when it was planned, each counted at most one past the budget.
+    /// The attribute values the last page's objects were loaded with.
     /// </summary>
     public long LastPageValueCount { get; private set; }
 
     /// <summary>
-    /// Whether the last page ended at the value budget rather than at the page size or at the end of its selection.
+    /// Whether the last page was planned to end at the value budget, rather than at the page size or at the end of its
+    /// selection.
     /// </summary>
     public bool LastPageEndedAtValueBudget { get; private set; }
 
     /// <summary>
     /// The pages the run can now expect in all: those handed out, and enough full pages for the rest of
     /// <paramref name="expectedObjects"/>. Pages that end at the value budget, and each type's last page, make the count
-    /// grow as the run goes; it is never below the pages handed out.
+    /// grow as the run goes; it is never below the pages handed out, and it is an estimate: a closing sweep page, or an
+    /// object entering the selection mid-run, can follow a page it called the last.
     /// </summary>
     /// <param name="expectedObjects">The objects the run expects to process, counted when it started.</param>
     public int ExpectedPageCount(int expectedObjects)
@@ -176,36 +199,53 @@ public sealed class TypeOrderedCsoPager
             if (!_sweeping)
             {
                 var typeId = _typeIds[_typeIndex];
-                var candidates = await _loadValueCounts(_cursor, typeId, null, null, _pageSize, _valueCountCap);
-                if (candidates.Count > 0)
+
+                // A walk pages until a count finds nothing more (#2092), so with no candidates left it counts afresh,
+                // reaching any object written behind the last count's end.
+                if (_candidates.Count == 0)
+                    _candidatesExhausted = false;
+
+                await FillCandidatesAsync(async want =>
                 {
-                    var take = PlanPage(candidates);
-                    var page = await _loadPage(_cursor, typeId, null, null, take);
+                    var counted = await _loadValueCounts(_countCursor, typeId, null, null, CandidateIds(), want, _valueCountCap);
+                    if (counted.Count > 0)
+                        _countCursor = counted[^1].Id;
+                    return (counted, counted.Count < want);
+                });
+
+                if (_candidates.Count > 0)
+                {
+                    var planned = TakePlannedPage();
+
+                    // The page loads only the objects planned for it: one counted and since deleted is simply not there,
+                    // and a load of the next objects from the cursor could bring one far over the budget in its place. The
+                    // next page starts after the last object planned, whatever came back; an object written since the count
+                    // inside the planned range is left to the closing sweep, as one written behind the cursor always was.
+                    var page = await _loadPage(_cursor, typeId, null, planned, planned.Count);
+                    _cursor = planned[^1];
                     if (page.Results.Count > 0)
                     {
-                        _cursor = page.Results[^1].Id;
                         foreach (var cso in page.Results.Where(c => c.Created >= _createdFloor))
                             _handedOutSinceFloor.Add(cso.Id);
                         return HandOut(page);
                     }
 
-                    // The objects counted had gone by the time the page loaded (an object deleted in between): step past
-                    // them, as the page that loaded none of them would have.
-                    _cursor = candidates[take - 1].Id;
                     continue;
                 }
 
                 _cursor = Guid.Empty;
+                _countCursor = Guid.Empty;
                 _typeIndex++;
                 if (_typeIndex >= _typeIds.Count)
                 {
                     _typeIndex = _typeIds.Count - 1;
                     _sweeping = true;
+                    _candidatesExhausted = true;
                 }
                 continue;
             }
 
-            if (_sweepIdsToHandOut.Count == 0)
+            if (_candidates.Count == 0 && _sweepIdsToCount.Count == 0)
             {
                 var sweepIds = await _loadSweepIds(_cursor, _createdFloor);
                 if (sweepIds.Count == 0)
@@ -218,22 +258,25 @@ public sealed class TypeOrderedCsoPager
                 // last row in the database's own ordering.
                 _sweepPageCursor = _cursor;
                 _cursor = sweepIds[^1];
-                _sweepIdsToHandOut = sweepIds.Where(id => !_handedOutSinceFloor.Contains(id)).ToList();
+                _sweepIdsToCount = sweepIds.Where(id => !_handedOutSinceFloor.Contains(id)).ToList();
+                _candidatesExhausted = _sweepIdsToCount.Count == 0;
                 continue;
             }
 
             // The page the sweep would have loaded from this id page, restricted to what it would have kept of it, and
-            // ended at the value budget. An id not counted has left the selection, and no load would return it.
-            var sweepCandidates = await _loadValueCounts(_sweepPageCursor, null, _createdFloor, _sweepIdsToHandOut, _pageSize, _valueCountCap);
-            if (sweepCandidates.Count == 0)
+            // ended at the value budget. An id the count does not return has left the selection, and no load would return it.
+            await FillCandidatesAsync(async want =>
             {
-                _sweepIdsToHandOut = [];
-                continue;
-            }
+                var ids = _sweepIdsToCount.Take(want).ToList();
+                _sweepIdsToCount.RemoveRange(0, ids.Count);
+                var counted = await _loadValueCounts(_sweepPageCursor, null, _createdFloor, ids, CandidateIds(), ids.Count, _valueCountCap);
+                return (counted, _sweepIdsToCount.Count == 0);
+            });
 
-            var sweepTake = PlanPage(sweepCandidates);
-            var batch = sweepCandidates.Take(sweepTake).Select(c => c.Id).ToList();
-            _sweepIdsToHandOut = sweepCandidates.Skip(sweepTake).Select(c => c.Id).ToList();
+            if (_candidates.Count == 0)
+                continue;
+
+            var batch = TakePlannedPage();
             var sweepPage = await _loadPage(_sweepPageCursor, null, _createdFloor, batch, batch.Count);
 
             // Records what is handed out, and keeps the guarantee that nothing is handed out twice whatever the loader returns.
@@ -246,23 +289,74 @@ public sealed class TypeOrderedCsoPager
     }
 
     /// <summary>
-    /// How many of the candidates the page takes, recording the page's value count and why it ended.
+    /// Counts further candidates until the next page is decided: it fills the page size, the budget closes it before the
+    /// candidates run out, or nothing more is there. Each object is counted once, whatever page it ends up on.
     /// </summary>
-    private int PlanPage(List<(Guid Id, int ValueCount)> candidates)
+    /// <param name="countNext">Counts up to the given number of the next objects, returning them in the loaders' order and
+    /// whether nothing follows them.</param>
+    private async Task FillCandidatesAsync(Func<int, Task<(List<(Guid Id, int ValueCount)> Counted, bool Exhausted)>> countNext)
     {
-        var counts = candidates.Select(c => c.ValueCount).ToList();
-        var take = ValueBudgetedBatchPlanner.FirstBatchSize(counts, _pageSize, _valueBudget);
-        LastPageValueCount = counts.Take(take).Sum(count => (long)Math.Max(count, 0));
-
-        // The candidates are at most a page size, so a page that leaves any of them out ended at the budget.
-        LastPageEndedAtValueBudget = take < candidates.Count;
-        return take;
+        while (!_candidatesExhausted && _candidates.Count < _pageSize && !NextPageClosesWithinCandidates())
+        {
+            var (counted, exhausted) = await countNext(NextCountSize());
+            _candidates.AddRange(counted);
+            if (counted.Count > 0)
+                _valuesPerObjectCounted = counted.Average(c => (double)Math.Max(c.ValueCount, 0));
+            _candidatesExhausted = exhausted;
+        }
     }
+
+    /// <summary>
+    /// Whether the budget closes the next page before the candidates run out, so counting further cannot change it.
+    /// </summary>
+    private bool NextPageClosesWithinCandidates()
+    {
+        if (_candidates.Count == 0)
+            return false;
+
+        var take = ValueBudgetedBatchPlanner.FirstBatchSize(CandidateValueCounts(), _pageSize, _valueBudget);
+        return take < _candidates.Count || PlannedValues(take) > _valueBudget;
+    }
+
+    /// <summary>
+    /// How many objects the next count asks for: enough, at the last count's values per object, to reach the budget from
+    /// what the candidates hold, and one more to show where the page ends; never more than the page has room for. A page
+    /// of people (about 12 values each) asks for the whole page at once; a run of large groups a few at a time.
+    /// </summary>
+    private int NextCountSize()
+    {
+        var room = _pageSize - _candidates.Count;
+        if (_valuesPerObjectCounted is not { } perObject || perObject <= 0)
+            return room;
+
+        var remaining = Math.Max(0, (double)_valueBudget - PlannedValues(_candidates.Count));
+        var wanted = Math.Ceiling(remaining / perObject) + 1;
+        return (int)Math.Clamp(wanted, 1, room);
+    }
+
+    /// <summary>
+    /// Takes the next page's objects from the front of the candidates, recording why the page ends.
+    /// </summary>
+    private List<Guid> TakePlannedPage()
+    {
+        var take = ValueBudgetedBatchPlanner.FirstBatchSize(CandidateValueCounts(), _pageSize, _valueBudget);
+        LastPageEndedAtValueBudget = take < _pageSize && (take < _candidates.Count || PlannedValues(take) > _valueBudget);
+        var planned = _candidates.Take(take).Select(c => c.Id).ToList();
+        _candidates.RemoveRange(0, take);
+        return planned;
+    }
+
+    private List<int> CandidateValueCounts() => _candidates.Select(c => c.ValueCount).ToList();
+
+    private long PlannedValues(int take) => _candidates.Take(take).Sum(c => (long)Math.Max(c.ValueCount, 0));
+
+    private List<Guid> CandidateIds() => _candidates.Select(c => c.Id).ToList();
 
     private PagedResultSet<ConnectedSystemObject> HandOut(PagedResultSet<ConnectedSystemObject> page)
     {
         PagesHandedOut++;
         _objectsHandedOut += page.Results.Count;
+        LastPageValueCount = page.Results.Sum(c => (long)c.AttributeValues.Count);
         return page;
     }
 }

@@ -2116,10 +2116,20 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// <see cref="ISyncRepository.GetConnectedSystemObjectValueCountsModifiedSinceAsync"/>.
     /// </summary>
     public Task<List<(Guid Id, int ValueCount)>> GetConnectedSystemObjectValueCountsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince,
-        int pageSize, Guid afterId, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap)
-        => LoadValueCountPageAsync(ApplySyncPageFilters(
-            WhereModifiedSince(Repository.Database.ConnectedSystemObjects, connectedSystemId, modifiedSince), objectTypeId, createdOnOrAfter, onlyIds),
-            pageSize, afterId, valueCountCap);
+        int pageSize, Guid afterId, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap,
+        SynchronisationValueLoadPlan? valueLoadPlan = null, IReadOnlyCollection<Guid>? earlierCandidateIds = null)
+    {
+        var selection = ApplySyncPageFilters(
+            WhereModifiedSince(Repository.Database.ConnectedSystemObjects, connectedSystemId, modifiedSince), objectTypeId, createdOnOrAfter, onlyIds);
+
+        // The same test the page load makes (#2818): a page that may leave attributes out is counted as it would load.
+        var leavesAttributesOut = valueLoadPlan is { LeavesNothingOut: false } &&
+                                  (!objectTypeId.HasValue || valueLoadPlan.AttributesByObjectTypeId.ContainsKey(objectTypeId.Value)) &&
+                                  Repository.Database.Database.IsRelational();
+        return leavesAttributesOut
+            ? LoadValueCountPageLeavingAttributesOutAsync(selection, pageSize, afterId, valueCountCap, valueLoadPlan!, earlierCandidateIds ?? [])
+            : LoadValueCountPageAsync(selection, pageSize, afterId, valueCountCap);
+    }
 
     /// <summary>
     /// One keyset page of a page loader's selection, ids with their value counts (#2934): ordered, cursored and capped as
@@ -2180,7 +2190,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// The page loaders cap a page at this many objects, to avoid increasing latency unnecessarily; a closing sweep's id
     /// page is capped the same, so the load that follows it can return every id it holds (#2861).
     /// </summary>
-    private const int MaxSyncPageSize = 2000;
+    private const int MaxSyncPageSize = Constants.SynchronisationLimits.MaxPageSize;
 
     /// <summary>
     /// The optional filters both synchronisation page loaders share (#2492): one Object Type, so a run can page through

@@ -440,6 +440,19 @@ public static class Constants
     }
 
     /// <summary>
+    /// Limits the synchronisation page loaders apply, shared by the repository that applies them and the pager that plans
+    /// pages within them, so the two cannot disagree.
+    /// </summary>
+    public static class SynchronisationLimits
+    {
+        /// <summary>
+        /// The most Connected System Objects a synchronisation page holds, whatever <c>Sync.PageSize</c> asks for: a larger
+        /// page only adds latency.
+        /// </summary>
+        public const int MaxPageSize = 2000;
+    }
+
+    /// <summary>
     /// PostgreSQL NOTIFY channel names used for real-time, event-driven updates between JIM services
     /// (issue #307). Database triggers publish on these channels; services LISTEN on them via a dedicated
     /// connection. Payloads carry identifiers only; the database remains the source of truth and every

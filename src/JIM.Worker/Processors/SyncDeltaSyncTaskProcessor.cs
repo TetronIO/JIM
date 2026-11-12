@@ -234,9 +234,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // modified-only Delta Synchronisation defers.
         //
         // Each page ends at pageSize objects or at the page value budget, whichever comes first (#2934), as in Full
-        // Synchronisation; its candidates are counted from the same selection its load uses. The count takes in every value
-        // an object holds, including any the load then leaves out of it (#2818), so a page of large modified groups whose
-        // members are left out can end earlier than it needs to, never later.
+        // Synchronisation; its candidates are counted from the same selection its load uses, with the same value load plan:
+        // a large group whose members the load leaves out (#2818) counts only the values it brings, so it does not take a page
+        // of its own for members never loaded.
         var processedInFull = _objectTypeIdsToProcessInFull;
         bool LoadsInFull(int? objectTypeId) => objectTypeId.HasValue && processedInFull.Contains(objectTypeId.Value);
         var csoPager = await CreateTypeOrderedPagerAsync(activeSyncRules, deltaSyncStartedAt,
@@ -245,11 +245,12 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                     _connectedSystem.Id, 1, maxObjects, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter, onlyIds)
                 : _syncRepo.GetConnectedSystemObjectsModifiedSinceAsync(
                     _connectedSystem.Id, lastSyncTimestamp, 1, maxObjects, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter, valueLoadPlan, onlyIds),
-            (afterId, objectTypeId, createdOnOrAfter, onlyIds, maxObjects, valueCountCap) => LoadsInFull(objectTypeId)
+            (afterId, objectTypeId, createdOnOrAfter, onlyIds, earlierCandidateIds, maxObjects, valueCountCap) => LoadsInFull(objectTypeId)
                 ? _syncRepo.GetConnectedSystemObjectValueCountsAsync(
                     _connectedSystem.Id, maxObjects, afterId, objectTypeId, createdOnOrAfter, onlyIds, valueCountCap)
                 : _syncRepo.GetConnectedSystemObjectValueCountsModifiedSinceAsync(
-                    _connectedSystem.Id, lastSyncTimestamp, maxObjects, afterId, objectTypeId, createdOnOrAfter, onlyIds, valueCountCap),
+                    _connectedSystem.Id, lastSyncTimestamp, maxObjects, afterId, objectTypeId, createdOnOrAfter, onlyIds, valueCountCap,
+                    valueLoadPlan, earlierCandidateIds),
             // The sweep's ids come from the selection its loads use, the modified-since one (#2861).
             (afterId, createdOnOrAfter) => _syncRepo.GetConnectedSystemObjectIdsModifiedSinceAsync(
                 _connectedSystem.Id, lastSyncTimestamp, pageSize, afterId, createdOnOrAfter),

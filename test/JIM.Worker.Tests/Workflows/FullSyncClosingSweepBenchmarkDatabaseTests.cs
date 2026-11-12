@@ -121,7 +121,7 @@ public class FullSyncClosingSweepBenchmarkDatabaseTests
                 loads++;
                 return repository.Sync.GetConnectedSystemObjectsAsync(_systemId, 1, maxObjects, Users + 1, afterId, objectTypeId, createdOnOrAfter, onlyIds);
             },
-            (afterId, objectTypeId, createdOnOrAfter, onlyIds, maxObjects, valueCountCap) => repository.Sync.GetConnectedSystemObjectValueCountsAsync(
+            (afterId, objectTypeId, createdOnOrAfter, onlyIds, earlierCandidateIds, maxObjects, valueCountCap) => repository.Sync.GetConnectedSystemObjectValueCountsAsync(
                 _systemId, maxObjects, afterId, objectTypeId, createdOnOrAfter, onlyIds, valueCountCap),
             (afterId, createdOnOrAfter) =>
             {

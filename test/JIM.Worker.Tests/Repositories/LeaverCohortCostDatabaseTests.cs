@@ -952,7 +952,7 @@ public class LeaverCohortCostDatabaseTests
         var pager = new TypeOrderedCsoPager(
             (afterId, objectTypeId, createdOnOrAfter, onlyIds, maxObjects) => repository.Sync.GetConnectedSystemObjectsModifiedSinceAsync(
                 seeded.SystemId, seeded.Watermark, 1, maxObjects, 1, afterId, objectTypeId, createdOnOrAfter, onlyIds: onlyIds),
-            (afterId, objectTypeId, createdOnOrAfter, onlyIds, maxObjects, valueCountCap) => repository.Sync.GetConnectedSystemObjectValueCountsModifiedSinceAsync(
+            (afterId, objectTypeId, createdOnOrAfter, onlyIds, earlierCandidateIds, maxObjects, valueCountCap) => repository.Sync.GetConnectedSystemObjectValueCountsModifiedSinceAsync(
                 seeded.SystemId, seeded.Watermark, maxObjects, afterId, objectTypeId, createdOnOrAfter, onlyIds, valueCountCap),
             (afterId, createdOnOrAfter) => repository.Sync.GetConnectedSystemObjectIdsModifiedSinceAsync(
                 seeded.SystemId, seeded.Watermark, SyncPageSize, afterId, createdOnOrAfter),

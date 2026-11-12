@@ -198,7 +198,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         var csoPager = await CreateTypeOrderedPagerAsync(activeSyncRules, fullSyncStartedAt,
             (afterId, objectTypeId, createdOnOrAfter, onlyIds, maxObjects) => _syncRepo.GetConnectedSystemObjectsAsync(
                 _connectedSystem.Id, 1, maxObjects, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter, onlyIds),
-            (afterId, objectTypeId, createdOnOrAfter, onlyIds, maxObjects, valueCountCap) => _syncRepo.GetConnectedSystemObjectValueCountsAsync(
+            (afterId, objectTypeId, createdOnOrAfter, onlyIds, earlierCandidateIds, maxObjects, valueCountCap) => _syncRepo.GetConnectedSystemObjectValueCountsAsync(
                 _connectedSystem.Id, maxObjects, afterId, objectTypeId, createdOnOrAfter, onlyIds, valueCountCap),
             (afterId, createdOnOrAfter) => _syncRepo.GetConnectedSystemObjectIdsAsync(_connectedSystem.Id, pageSize, afterId, createdOnOrAfter),
             pageSize, "Full Synchronisation", observeUndeclaredReferenceTargets: true);

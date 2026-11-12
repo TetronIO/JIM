@@ -67,13 +67,21 @@ public class TypeOrderedCsoPagerTests
         /// <summary>Runs after each count read, before the page load that follows it: a writer committing in between.</summary>
         public Action? AfterCount { get; set; }
 
+        /// <summary>Every object counted, once per count of it, in count order: the count work the pager asked for.</summary>
+        public List<Guid> CountedIds { get; } = [];
+
+        /// <summary>The earlier candidates the pager named with each count read, in call order.</summary>
+        public List<List<Guid>> EarlierCandidateIdsByCall { get; } = [];
+
         public Task<List<(Guid Id, int ValueCount)>> LoadValueCountsAsync(Guid afterId, int? typeId, DateTime? floor,
-            IReadOnlyCollection<Guid>? onlyIds, int maxObjects, int valueCountCap)
+            IReadOnlyCollection<Guid>? onlyIds, IReadOnlyCollection<Guid> earlierCandidateIds, int maxObjects, int valueCountCap)
         {
             ValueCountCaps.Add(valueCountCap);
+            EarlierCandidateIdsByCall.Add(earlierCandidateIds.ToList());
             var counts = Page(afterId, typeId, floor, onlyIds, Math.Min(maxObjects, PageSize))
                 .Select(c => (c.Id, Math.Min(c.AttributeValues.Count, valueCountCap)))
                 .ToList();
+            CountedIds.AddRange(counts.Select(c => c.Id));
             AfterCount?.Invoke();
             return Task.FromResult(counts);
         }
@@ -419,6 +427,114 @@ public class TypeOrderedCsoPagerTests
 
         Assert.That(pages.Select(p => (p.TypeId, p.Page.Select(c => c.Id).ToList())), Is.EqualTo(new[] { ((int?)2, new List<Guid> { IdOf(3) }) }),
             "the walk steps past the objects that went, finishes type 1 and carries on with type 2");
+    }
+
+    [Test]
+    public async Task NextPageAsync_PlannedObjectDeletedBeforeTheLoadAndTheNextOneLarge_LoadsOnlyWhatWasPlannedAsync()
+    {
+        var store = new FakeStore { PageSize = 10 };
+        var a = store.Add(typeId: 1, values: 10, id: IdOf(1));
+        store.Add(typeId: 1, values: 10, id: IdOf(2));
+        store.Add(typeId: 1, values: 95, id: IdOf(3));
+
+        // The first page is planned as 1 and 2 (20 values; 3 would take it to 115). Object 1 is deleted before it loads, and
+        // a load that took the next two objects from the cursor would bring 3's 95 values with 2's 10.
+        store.AfterCount = () =>
+        {
+            store.Objects.Remove(a);
+            store.AfterCount = null;
+        };
+
+        var pager = store.Pager([1], RunStart, valueBudget: 100);
+        var first = await pager.NextPageAsync();
+        var firstValues = pager.LastPageValueCount;
+        var rest = await DrainAsync(pager);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(first!.Results.Select(c => c.Id), Is.EqualTo(new[] { IdOf(2) }), "the page holds what was planned and is still there");
+            Assert.That(firstValues, Is.EqualTo(10), "the page's value count is what it loaded");
+            Assert.That(rest.Select(p => p.Page.Select(c => c.Id).ToList()), Is.EqualTo(new[] { new List<Guid> { IdOf(3) } }));
+        }
+    }
+
+    /// <summary>
+    /// Counting is linear (#2934): an object counted for one page and left for a later one is not counted again. Paging
+    /// many objects over the budget, one to a page, used to count a page size of them for every page.
+    /// </summary>
+    [Test]
+    public async Task NextPageAsync_ManyObjectsOverTheBudget_CountsEachObjectOnceAsync()
+    {
+        var store = new FakeStore { PageSize = 10 };
+        var groups = Enumerable.Range(1, 40).Select(i => store.Add(typeId: 1, values: 150, id: IdOf(i))).ToList();
+
+        var pages = await DrainAsync(store.Pager([1], RunStart, valueBudget: 100));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(pages.Select(p => p.Page.Count), Is.All.EqualTo(1), "each over the budget, alone on its page");
+            Assert.That(pages.SelectMany(p => p.Page).Select(c => c.Id), Is.EqualTo(groups.Select(c => c.Id)));
+            Assert.That(store.CountedIds, Is.EquivalentTo(groups.Select(c => c.Id)), "each object counted exactly once");
+        }
+    }
+
+    [Test]
+    public async Task NextPageAsync_SweepOfManyObjectsOverTheBudget_CountsEachObjectOnceAsync()
+    {
+        var store = new FakeStore { PageSize = 10 };
+        store.Add(typeId: 1, values: 1, id: IdOf(100));
+        var late = new List<ConnectedSystemObject>();
+
+        var pager = store.Pager([1], RunStart, valueBudget: 100);
+        var pages = new List<List<ConnectedSystemObject>>();
+        while (await pager.NextPageAsync() is { } page)
+        {
+            pages.Add(page.Results.ToList());
+            if (late.Count == 0)
+                late.AddRange(Enumerable.Range(1, 10).Select(i => store.Add(typeId: 1, created: RunStart.AddMinutes(1), values: 150, id: IdOf(i))));
+        }
+
+        var countedBySweep = store.CountedIds.Where(id => late.Exists(c => c.Id == id)).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(pages.Skip(1).Select(p => p.Count), Is.All.EqualTo(1));
+            Assert.That(pages.Skip(1).SelectMany(p => p).Select(c => c.Id), Is.EqualTo(late.Select(c => c.Id)));
+            Assert.That(countedBySweep, Is.EquivalentTo(late.Select(c => c.Id)), "the sweep counts each object once");
+        }
+    }
+
+    /// <summary>
+    /// A count read for a page some of whose candidates were counted before names those earlier candidates, since a load
+    /// that leaves values out of an object decides by which objects share its page (#2818).
+    /// </summary>
+    [Test]
+    public async Task NextPageAsync_TopUpOfEarlierCandidates_NamesThemToTheCountAsync()
+    {
+        var store = new FakeStore { PageSize = 4 };
+        int[] sizes = [90, 5, 5, 5, 5, 5];
+        for (var i = 0; i < sizes.Length; i++)
+            store.Add(typeId: 1, values: sizes[i], id: IdOf(i + 1));
+
+        var pages = await DrainAsync(store.Pager([1], RunStart, valueBudget: 100));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(pages.Select(p => p.Page.Count), Is.EqualTo(new[] { 3, 3 }));
+            Assert.That(store.EarlierCandidateIdsByCall[0], Is.Empty, "the first count has nothing before it");
+            Assert.That(store.EarlierCandidateIdsByCall[1], Is.EqualTo(new[] { IdOf(4) }),
+                "the second page's count is a top-up of object 4, counted for the first page and left for this one");
+            Assert.That(store.CountedIds, Is.Unique);
+        }
+    }
+
+    [Test]
+    public void ExpectedPageCount_PageSizeAboveWhatTheLoadersReturn_DividesByWhatTheyReturn()
+    {
+        var store = new FakeStore { PageSize = 5000 };
+
+        var pager = store.Pager([1], RunStart);
+
+        Assert.That(pager.ExpectedPageCount(10_000), Is.EqualTo(5), "the loaders return at most 2,000 objects a page");
     }
 
     [Test]

@@ -1042,7 +1042,7 @@ public abstract class SyncTaskProcessorBase
         var crossPageRefCount = _unresolvedCrossPageReferences.Count;
         var rpeiCount = _activity.RunProfileExecutionItems.Count;
 
-        // The page's planned value count, and whether it ended at the value budget (#2934): what bounds its memory.
+        // The values the page loaded, and whether its plan ended it at the value budget (#2934): what bounds its memory.
         var pageValueCount = _csoPager?.LastPageValueCount ?? 0;
         var endedAtValueBudget = _csoPager?.LastPageEndedAtValueBudget ?? false;
 
@@ -8792,7 +8792,7 @@ public abstract class SyncTaskProcessorBase
             return;
 
         loadSpan.SetTag("csoCount", page.Results.Count);
-        loadSpan.SetTag("plannedValueCount", pager.LastPageValueCount);
+        loadSpan.SetTag("valueCount", pager.LastPageValueCount);
         loadSpan.SetTag("endedAtValueBudget", pager.LastPageEndedAtValueBudget);
     }
 

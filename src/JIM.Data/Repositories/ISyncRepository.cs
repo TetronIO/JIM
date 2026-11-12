@@ -155,12 +155,19 @@ public interface ISyncRepository
 
     /// <summary>
     /// Plans a Delta Synchronisation page (#2934): as <see cref="GetConnectedSystemObjectValueCountsAsync"/>, over the
-    /// objects <see cref="GetConnectedSystemObjectsModifiedSinceAsync"/> selects. Every value an object holds is counted,
-    /// including those of an attribute the page load may leave out of it (#2818): which those are is decided as the page
-    /// loads, so the count is the most the page can hold.
+    /// objects <see cref="GetConnectedSystemObjectsModifiedSinceAsync"/> selects, counting the values the page load with
+    /// the same <paramref name="valueLoadPlan"/> would bring.
     /// </summary>
+    /// <param name="valueLoadPlan">#2818: the attributes the page load may leave out of an object. An attribute is counted
+    /// as left out wherever the load could leave it out whichever of the candidates share the page: the object is Normal,
+    /// joined and the only candidate joined to its Metaverse Object, holds at least the plan's threshold of its values,
+    /// and references none of the candidates. Otherwise it is counted, as the load would bring it. Null counts every
+    /// value.</param>
+    /// <param name="earlierCandidateIds">The objects counted before these and not yet handed out: the next page may hold
+    /// them alongside these, so a reference to one of them keeps an attribute counted.</param>
     Task<List<(Guid Id, int ValueCount)>> GetConnectedSystemObjectValueCountsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int pageSize,
-        Guid afterId, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap);
+        Guid afterId, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap,
+        SynchronisationValueLoadPlan? valueLoadPlan = null, IReadOnlyCollection<Guid>? earlierCandidateIds = null);
 
     /// <summary>
     /// The Object Types that hold at least one of the Connected System's objects (#2492). A type-ordered

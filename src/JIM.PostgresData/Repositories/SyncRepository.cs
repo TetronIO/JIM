@@ -197,9 +197,10 @@ public partial class SyncRepository : ISyncRepository
             valueCountCap);
 
     public Task<List<(Guid Id, int ValueCount)>> GetConnectedSystemObjectValueCountsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince,
-        int pageSize, Guid afterId, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap)
+        int pageSize, Guid afterId, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap,
+        SynchronisationValueLoadPlan? valueLoadPlan = null, IReadOnlyCollection<Guid>? earlierCandidateIds = null)
         => _repo.ConnectedSystems.GetConnectedSystemObjectValueCountsModifiedSinceAsync(connectedSystemId, modifiedSince, pageSize, afterId, objectTypeId,
-            createdOnOrAfter, onlyIds, valueCountCap);
+            createdOnOrAfter, onlyIds, valueCountCap, valueLoadPlan, earlierCandidateIds);
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, csoId);

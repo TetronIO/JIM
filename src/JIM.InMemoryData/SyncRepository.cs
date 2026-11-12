@@ -507,8 +507,14 @@ public partial class SyncRepository : ISyncRepository
         => Task.FromResult(ValueCountPage(ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter, onlyIds),
             pageSize, afterId, valueCountCap));
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <paramref name="valueLoadPlan"/> is not applied, as the page load does not apply it here: every object is loaded
+    /// whole, so every value is counted.
+    /// </remarks>
     public Task<List<(Guid Id, int ValueCount)>> GetConnectedSystemObjectValueCountsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince,
-        int pageSize, Guid afterId, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap)
+        int pageSize, Guid afterId, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds, int valueCountCap,
+        SynchronisationValueLoadPlan? valueLoadPlan = null, IReadOnlyCollection<Guid>? earlierCandidateIds = null)
         => Task.FromResult(ValueCountPage(ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter, onlyIds)
             .Where(c => IsModifiedSince(c, modifiedSince)), pageSize, afterId, valueCountCap));
 
