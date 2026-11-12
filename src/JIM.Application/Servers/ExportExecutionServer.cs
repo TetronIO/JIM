@@ -3095,10 +3095,11 @@ public class ExportExecutionServer
         // Create's result together with the External ID it assigned: the status alone would leave an object JIM cannot
         // address, and losing both would have a Create already written sent again. A failure here records nothing, and
         // the batch is reported failed as a whole.
+        IReadOnlyDictionary<Guid, HashSet<int>> newlyReportedAnchors = new Dictionary<Guid, HashSet<int>>();
         await using (var transaction = await repository.BeginTransactionAsync())
         {
             if (csosToUpdate.Count > 0)
-                await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, repository);
+                newlyReportedAnchors = await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, repository);
             await WriteExportResultsAsync(writtenNow, sent, sentAt, executingMark, repository);
             if (transaction != null)
                 await transaction.CommitAsync();
@@ -3154,8 +3155,7 @@ public class ExportExecutionServer
             // (D9's dedupe guarantee depends on this ordering; see D11).
             if (successfulNonDeleteExports.Count > 0)
             {
-                await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, repository,
-                    ReportedAnchorAttributes(csosToUpdate));
+                await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, repository, newlyReportedAnchors);
             }
 
             // Collision Remediation revised Metaverse values outside any synchronisation: mark the hosting systems of every
@@ -4167,7 +4167,7 @@ public class ExportExecutionServer
                 // must not be applied as though it had been; the calculator sees the export without it.
                 // #2039: nor was a change the Connector wrote with an interim value until an Initial
                 // Password is delivered, so that is left out too (see AsWrittenForOptimisticApply).
-                // #2930: nor is a change to an External ID the Connector reported, which the batch has already recorded
+                // #2930: nor is a change to an External ID whose value the Connector's report changed, which the batch has recorded
                 // as reported (see AsWrittenForOptimisticApply).
                 delta = OptimisticExportApplyCalculator.CalculateDelta(
                     successfulNonDeleteExports.Select(pe => AsWrittenForOptimisticApply(pe, reportedAnchorAttributes)).ToList());
@@ -4354,10 +4354,16 @@ public class ExportExecutionServer
         attributeValue.StringValue = externalId;
     }
 
-    private async Task BatchUpdateCsosAfterSuccessfulExportAsync(
+    /// <summary>
+    /// Records the External ID and Secondary External ID the Connector reported for each object (#2930), replacing what
+    /// the object held, and returns, for each object, the attributes whose value the report changed: the ones whose
+    /// staged value optimistic apply must then leave alone (<see cref="AsWrittenForOptimisticApply"/>).
+    /// </summary>
+    private async Task<IReadOnlyDictionary<Guid, HashSet<int>>> BatchUpdateCsosAfterSuccessfulExportAsync(
         List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)> csosToUpdate,
         ISyncRepository repository)
     {
+        var newlyReportedAnchors = new Dictionary<Guid, HashSet<int>>();
         // Collect all unique attribute IDs we need to look up (external ID + secondary external ID attributes)
         var attributeIds = new HashSet<int>();
         foreach (var (cso, _) in csosToUpdate)
@@ -4401,6 +4407,7 @@ public class ExportExecutionServer
 
                 if (RecordReportedValue(cso, externalIdAttrValue, newAttributeValues, supersededValueIds))
                 {
+                    NoteNewlyReported(newlyReportedAnchors, cso.Id, cso.ExternalIdAttributeId);
                     Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId} (type: {AttrType})",
                         cso.Id, LogSanitiser.Sanitise(exportResult.ExternalId), externalIdAttributeType?.ToString() ?? "Unknown");
                 }
@@ -4418,6 +4425,7 @@ public class ExportExecutionServer
 
                 if (RecordReportedValue(cso, secondaryExternalIdAttrValue, newAttributeValues, supersededValueIds))
                 {
+                    NoteNewlyReported(newlyReportedAnchors, cso.Id, cso.SecondaryExternalIdAttributeId.Value);
                     Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} secondary external ID to {SecondaryExternalId}",
                         cso.Id, LogSanitiser.Sanitise(exportResult.SecondaryExternalId));
                 }
@@ -4439,6 +4447,15 @@ public class ExportExecutionServer
             Log.Information("BatchUpdateCsosAfterSuccessfulExportAsync: Batch updated {Count} CSOs, replacing {SupersededCount} previously recorded value(s)",
                 csoUpdates.Count, supersededValueIds.Count);
         }
+
+        return newlyReportedAnchors;
+    }
+
+    private static void NoteNewlyReported(Dictionary<Guid, HashSet<int>> newlyReportedAnchors, Guid csoId, int attributeId)
+    {
+        if (!newlyReportedAnchors.TryGetValue(csoId, out var attributeIds))
+            newlyReportedAnchors[csoId] = attributeIds = [];
+        attributeIds.Add(attributeId);
     }
 
     /// <summary>
@@ -4904,9 +4921,10 @@ public class ExportExecutionServer
             }
 
             // Batch update CSOs that need external ID or status changes
+            IReadOnlyDictionary<Guid, HashSet<int>> newlyReportedAnchors = new Dictionary<Guid, HashSet<int>>();
             if (csosToUpdate.Count > 0)
             {
-                await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, SyncRepo);
+                newlyReportedAnchors = await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, SyncRepo);
                 await RecordPartitionPlacementsAsync(csosToUpdate, SyncRepo, result);
             }
 
@@ -4917,8 +4935,7 @@ public class ExportExecutionServer
             // a recording that failed outright and an export carrying a value it could not record (#2183).
             var unrecordedExports = successfulNonDeleteExports.Count == 0
                 ? []
-                : await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, SyncRepo,
-                    ReportedAnchorAttributes(csosToUpdate));
+                : await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, SyncRepo, newlyReportedAnchors);
 
             if (autoConfirm && unrecordedExports.Count > 0)
                 await LeaveUnrecordedExportsUnconfirmedAsync(unrecordedExports, exportsToDelete, result);
@@ -5045,17 +5062,19 @@ public class ExportExecutionServer
 
     /// <summary>
     /// The export as optimistic apply should see it: only the changes whose asserted value the target was actually
-    /// given (<see cref="IsWrittenAsAsserted"/>), less any change to an External ID whose value the Connector reported
-    /// for the export's object (#2930). The reported value is authoritative and the batch has already recorded it
-    /// (<see cref="BatchUpdateCsosAfterSuccessfulExportAsync"/>); applying the staged value as well would add a second
-    /// value to a single-valued attribute wherever the two differ, as when a Connector formats the key it was given.
+    /// given (<see cref="IsWrittenAsAsserted"/>), less any Add to an External ID whose value the Connector's report
+    /// changed on the export's object (#2930). Such a report tells JIM what the target assigned or wrote, the batch has
+    /// already recorded it (<see cref="BatchUpdateCsosAfterSuccessfulExportAsync"/>), and adding the staged value as
+    /// well would leave a second value on a single-valued attribute, as when a Connector formats the key it was given.
+    /// An Update replaces the attribute's values outright, so it can never leave two and applies as it always has; so
+    /// does any change where the report told JIM nothing new (a Connector echoing the object's current External ID).
     /// Values sent on an earlier partial write and now awaiting confirmation are kept, since re-applying them is a
     /// no-op by construction (add-if-absent, set-if-different). Returns the export itself when every change
     /// qualifies, the ordinary case.
     /// </summary>
     /// <param name="pendingExport">The export the target accepted.</param>
-    /// <param name="reportedAnchorAttributes">For each object, the External ID attributes the Connector reported a
-    /// value for (<see cref="ReportedAnchorAttributes"/>).</param>
+    /// <param name="reportedAnchorAttributes">For each object, the External ID attributes whose value the Connector's
+    /// report changed (<see cref="BatchUpdateCsosAfterSuccessfulExportAsync"/>).</param>
     private static PendingExport AsWrittenForOptimisticApply(PendingExport pendingExport,
         IReadOnlyDictionary<Guid, HashSet<int>> reportedAnchorAttributes)
     {
@@ -5065,36 +5084,12 @@ public class ExportExecutionServer
                 : null;
 
         bool Applies(PendingExportAttributeValueChange change) =>
-            IsWrittenAsAsserted(change) && (reported == null || !reported.Contains(change.AttributeId));
+            IsWrittenAsAsserted(change)
+            && !(change.ChangeType == PendingExportAttributeChangeType.Add && reported != null && reported.Contains(change.AttributeId));
 
         return pendingExport.AttributeValueChanges.All(Applies)
             ? pendingExport
             : WithChanges(pendingExport, pendingExport.AttributeValueChanges.Where(Applies).ToList());
-    }
-
-    /// <summary>
-    /// For each object a batch is recording a reported value for, the External ID attributes the Connector reported
-    /// (#2930): the primary External ID where it reported one and the object type has one, and the secondary External
-    /// ID (the DN for LDAP) where it reported one and the object type has one. The same conditions
-    /// <see cref="BatchUpdateCsosAfterSuccessfulExportAsync"/> records them under, so optimistic apply leaves exactly
-    /// those attributes alone.
-    /// </summary>
-    private static Dictionary<Guid, HashSet<int>> ReportedAnchorAttributes(
-        IEnumerable<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)> csosToUpdate)
-    {
-        var reported = new Dictionary<Guid, HashSet<int>>();
-        foreach (var (cso, exportResult) in csosToUpdate)
-        {
-            var attributeIds = new HashSet<int>();
-            if (!string.IsNullOrEmpty(exportResult.ExternalId) && cso.ExternalIdAttributeId > 0)
-                attributeIds.Add(cso.ExternalIdAttributeId);
-            if (!string.IsNullOrEmpty(exportResult.SecondaryExternalId) && cso.SecondaryExternalIdAttributeId.HasValue)
-                attributeIds.Add(cso.SecondaryExternalIdAttributeId.Value);
-            if (attributeIds.Count > 0)
-                reported[cso.Id] = attributeIds;
-        }
-
-        return reported;
     }
 
     /// <summary>
