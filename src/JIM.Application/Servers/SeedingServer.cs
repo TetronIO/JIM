@@ -1385,7 +1385,7 @@ internal class SeedingServer
         {
             Key = Constants.SettingKeys.SyncPageSize,
             DisplayName = "Sync page size",
-            Description = "The number of Connected System Objects to process per database page during sync operations. Larger values improve throughput by reducing database round trips. UI progress updates occur every 100 objects regardless of page size. Recommended range: 200-1000.",
+            Description = "The most Connected System Objects to process per database page during sync operations. A page also ends once its objects hold 100,000 attribute values, so very large groups never share a page. Larger values improve throughput by reducing database round trips. UI progress updates occur every 100 objects regardless of page size. Recommended range: 200-1000.",
             Category = ServiceSettingCategory.Synchronisation,
             ValueType = ServiceSettingValueType.Integer,
             DefaultValue = "500",
