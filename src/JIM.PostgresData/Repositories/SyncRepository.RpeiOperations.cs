@@ -323,7 +323,7 @@ public partial class SyncRepository
             // Raw SQL rather than EF AddRange: see the parallel path's comment in BulkInsertRpeisAsync.
             using var changesSpan = MvoActivitySource.StartActivity("RpeiHistory.CsoChanges");
             changesSpan?.SetTag("rowCount", batch.OutcomeChangeRecords.Count);
-            await InsertCsoChangeHierarchyRawAsync(AsList(batch.OutcomeChangeRecords));
+            await InsertCsoChangeHierarchyRawAsync(AsList(batch.OutcomeChangeRecords), batch.ConnectedSystemObjectReferencesFound);
         }
 
         if (batch.Outcomes.Count > 0)
@@ -422,7 +422,10 @@ public partial class SyncRepository
     /// This avoids EF AddRange graph traversal which causes identity conflicts with shared
     /// ConnectedSystemObjectTypeAttribute entities at scale.
     /// </summary>
-    private async Task InsertCsoChangeHierarchyRawAsync(List<ConnectedSystemObjectChange> changes)
+    /// <param name="changes">The change records.</param>
+    /// <param name="referencesFound">The referenced Connected System Objects found to exist when a synchronisation history
+    /// batch was handed off (#2924); null to look them up as the values are written.</param>
+    private async Task InsertCsoChangeHierarchyRawAsync(List<ConnectedSystemObjectChange> changes, IReadOnlySet<Guid>? referencesFound = null)
     {
         // Pre-generate IDs for all entities in the hierarchy; time-ordered, so the rows land on
         // the growing end of each index rather than a random page of it (#2669).
@@ -448,7 +451,7 @@ public partial class SyncRepository
             .ToList();
 
         if (allValueChanges.Count > 0)
-            await BulkInsertCsoChangeAttributeValuesRawAsync(allValueChanges);
+            await BulkInsertCsoChangeAttributeValuesRawAsync(allValueChanges, referencesFound);
     }
 
     /// <inheritdoc />
@@ -637,7 +640,10 @@ public partial class SyncRepository
     /// the transaction the caller holds: <see cref="PersistCsoChangesAsync"/>'s, a synchronisation history write's
     /// (#2874), or an import create batch's (#2909).
     /// </summary>
-    private async Task WriteCsoChangeRecordsAsync(IReadOnlyList<ConnectedSystemObjectChange> changes)
+    /// <param name="changes">The change records.</param>
+    /// <param name="referencesFound">The referenced Connected System Objects found to exist when a synchronisation history
+    /// batch was handed off (#2924); null to look them up as the values are written.</param>
+    private async Task WriteCsoChangeRecordsAsync(IReadOnlyList<ConnectedSystemObjectChange> changes, IReadOnlySet<Guid>? referencesFound = null)
     {
         // Step 1: INSERT parent ConnectedSystemObjectChange rows
         using (var changesSpan = MvoActivitySource.StartActivity("CsoChange.Persist.Changes"))
@@ -663,7 +669,7 @@ public partial class SyncRepository
             using var valuesSpan = MvoActivitySource.StartActivity("CsoChange.Persist.Values");
             valuesSpan?.SetTag("rowCount", allValueChanges.Count);
             valuesSpan?.SetTag("connections", 1);
-            await BulkInsertCsoChangeAttributeValuesRawAsync(allValueChanges);
+            await BulkInsertCsoChangeAttributeValuesRawAsync(allValueChanges, referencesFound);
         }
     }
 
@@ -1009,7 +1015,13 @@ public partial class SyncRepository
     /// change it belongs to, whose recorded data type decides whether the value is marked as a reference still to
     /// resolve.
     /// </summary>
-    private async Task BulkInsertCsoChangeAttributeValuesRawAsync(List<(ConnectedSystemObjectChangeAttribute AttrChange, ConnectedSystemObjectChangeAttributeValue Value)> valueChanges)
+    /// <param name="valueChanges">The value rows, each under its attribute change.</param>
+    /// <param name="referencesFound">The referenced Connected System Objects found to exist when a synchronisation history
+    /// batch was handed off (#2924), used instead of a look-up here: the next page's changes, saved while the batch is
+    /// written, may have created or deleted some since. Null to look them up now.</param>
+    private async Task BulkInsertCsoChangeAttributeValuesRawAsync(
+        List<(ConnectedSystemObjectChangeAttribute AttrChange, ConnectedSystemObjectChangeAttributeValue Value)> valueChanges,
+        IReadOnlySet<Guid>? referencesFound = null)
     {
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
@@ -1021,7 +1033,7 @@ public partial class SyncRepository
         // rows that exist are written; the rest keep their DN in StringValue, are marked IsUnresolvedReference (#2690),
         // and FixupCrossBatchChangeRecordReferenceIdsAsync resolves them once every batch has been written. Must run
         // before the COPY below opens, since the connection cannot run another command while it is open.
-        var writtenReferenceIds = await GetExistingConnectedSystemObjectIdsAsync(npgsqlConn,
+        var writtenReferenceIds = referencesFound ?? await GetExistingConnectedSystemObjectIdsAsync(npgsqlConn,
             (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction(), ReferencedConnectedSystemObjectIds(valueChanges));
 
         await BulkInsertCsoChangeAttributeValuesOnConnectionAsync(npgsqlConn, valueChanges, writtenReferenceIds);

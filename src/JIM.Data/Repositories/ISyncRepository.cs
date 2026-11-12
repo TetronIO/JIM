@@ -1711,6 +1711,17 @@ public interface ISyncRepository
         int totalPages);
 
     /// <summary>
+    /// Looks up which of the Connected System Objects a prepared batch's change values refer to exist, and records them on
+    /// the batch (<see cref="SynchronisationHistoryBatch.RecordConnectedSystemObjectReferencesFound"/>), so that
+    /// <see cref="WriteSynchronisationHistoryAsync"/> writes those references as they stood when the batch was handed off
+    /// rather than as they stand when the write runs (#2924). A page's history is written while the next page saves its
+    /// changes, which can create or delete the objects referred to. A read: it writes nothing. Without it, the write
+    /// looks the references up itself, as it always did.
+    /// </summary>
+    /// <param name="batch">The batch, prepared and not yet handed off.</param>
+    Task FindSynchronisationHistoryReferenceTargetsAsync(SynchronisationHistoryBatch batch);
+
+    /// <summary>
     /// Writes a batch <see cref="PrepareSynchronisationHistory"/> prepared, in one transaction of this repository's own
     /// (#2874): the items (bringing up to date those a deletion wrote), the outcomes' change records, the outcomes, the
     /// causal edges, the match candidates and the stat counters, then the items' change records and the Metaverse Object

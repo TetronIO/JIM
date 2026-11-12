@@ -28,10 +28,10 @@ public enum SynchronisationHistoryWriteMode
 public enum SynchronisationHistoryBarrier
 {
     /// <summary>
-    /// Before a page's changes are saved: the previous page's history is written first, so at most one write is in
-    /// flight and none runs alongside a page's own writes.
+    /// As a page hands its history off (#2924): the previous page's write, which ran alongside this page's load,
+    /// processing and saved changes, is waited for first, so at most one write is in flight.
     /// </summary>
-    PageStateFlush,
+    PageHandOff,
 
     /// <summary>
     /// After the page loop, before the steps that follow it, which read what the pages recorded.

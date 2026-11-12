@@ -90,6 +90,88 @@ public class SynchronisationHistoryWriteDatabaseTests
         _syncRuleId = rule.Id;
         _connectedSystemAttributeId = attribute.Id;
         _metaverseAttributeId = mvAttribute.Id;
+        _connectedSystemObjectTypeId = type.Id;
+    }
+
+    private int _connectedSystemObjectTypeId;
+
+    /// <summary>
+    /// A page's history is written while the next page saves its changes (#2924), which can create or delete the objects
+    /// its change values refer to. Which referenced objects exist is looked up as the batch is handed off, before any of
+    /// those changes, so the history written is the history of the page as it ended: here the referenced object is
+    /// deleted after the look-up and before the write, and the value still names it, unmarked.
+    /// </summary>
+    [Test]
+    public async Task WriteSynchronisationHistoryAsync_ReferenceTargetsFoundAtHandOff_WritesThemAsFoundThenAsync()
+    {
+        var activityId = await SeedActivityAsync();
+        var referenced = Guid.NewGuid();
+        var notYetWritten = Guid.NewGuid();
+        await using (var seed = NewContext())
+        {
+            seed.ConnectedSystemObjects.Add(new ConnectedSystemObject
+            {
+                Id = referenced, ConnectedSystemId = _connectedSystemId, TypeId = _connectedSystemObjectTypeId,
+                Status = ConnectedSystemObjectStatus.Normal, Created = DateTime.UtcNow
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        var item = new ActivityRunProfileExecutionItem { ActivityId = activityId, ObjectChangeType = ObjectChangeType.NoChange };
+        var change = new ConnectedSystemObjectChange
+        {
+            ConnectedSystemId = _connectedSystemId, ConnectedSystemObjectId = Guid.NewGuid(), ChangeType = ObjectChangeType.Added,
+            ChangeTime = DateTime.UtcNow, InitiatedByType = ActivityInitiatorType.System
+        };
+        var attribute = new ConnectedSystemObjectChangeAttribute
+        {
+            ConnectedSystemChange = change, AttributeName = "member", AttributeType = AttributeDataType.Reference,
+            Attribute = new ConnectedSystemObjectTypeAttribute { Id = _connectedSystemAttributeId, Name = "displayName" }
+        };
+        var existing = new ConnectedSystemObjectChangeAttributeValue
+            { ConnectedSystemObjectChangeAttribute = attribute, ValueChangeType = ValueChangeType.Add, StringValue = "CN=Jo", ReferenceValueId = referenced };
+        var later = new ConnectedSystemObjectChangeAttributeValue
+            { ConnectedSystemObjectChangeAttribute = attribute, ValueChangeType = ValueChangeType.Add, StringValue = "CN=Sam", ReferenceValueId = notYetWritten };
+        attribute.ValueChanges.AddRange([existing, later]);
+        change.AttributeChanges.Add(attribute);
+        item.ConnectedSystemObjectChange = change;
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx).Sync;
+        var batch = repository.PrepareSynchronisationHistory([item], null, true, [], [], 1, 1);
+
+        await repository.FindSynchronisationHistoryReferenceTargetsAsync(batch);
+        await ExecuteAsync($"""DELETE FROM "ConnectedSystemObjects" WHERE "Id" = '{referenced}'""");
+        await using (var seed = NewContext())
+        {
+            seed.ConnectedSystemObjects.Add(new ConnectedSystemObject
+            {
+                Id = notYetWritten, ConnectedSystemId = _connectedSystemId, TypeId = _connectedSystemObjectTypeId,
+                Status = ConnectedSystemObjectStatus.Normal, Created = DateTime.UtcNow
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await using (var writerContext = NewContext())
+            await new PostgresDataRepository(writerContext).Sync.WriteSynchronisationHistoryAsync(batch);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await ReadColumnAsync("ConnectedSystemObjectChangeAttributeValues", existing.Id, "ReferenceValueId"), Is.EqualTo(referenced),
+                "the object existed as the page ended, so the value names it");
+            Assert.That(await ReadColumnAsync("ConnectedSystemObjectChangeAttributeValues", existing.Id, "IsUnresolvedReference"), Is.EqualTo(false));
+            Assert.That(await ReadColumnAsync("ConnectedSystemObjectChangeAttributeValues", later.Id, "ReferenceValueId"), Is.Null,
+                "the object did not exist as the page ended, so the value is left for the reference fix-up, as it was before the overlap");
+            Assert.That(await ReadColumnAsync("ConnectedSystemObjectChangeAttributeValues", later.Id, "IsUnresolvedReference"), Is.EqualTo(true));
+        }
+    }
+
+    private async Task ExecuteAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
     }
 
     private async Task<Guid> SeedActivityAsync()
