@@ -170,7 +170,17 @@ public class SynchronisationHistoryOverlapDatabaseTests
     public async Task PageLoop_NextPageSavesItsChangesWhilePreviousHistoryIsWrittenAsync(ConnectedSystemRunType runType)
     {
         await ArrangeAsync();
-        var (_, _, _, run) = await CreateRunAsync(runType);
+        var (processor, _, _, run) = await CreateRunAsync(runType);
+        // Each page's reference look-up is taken on the run's connection before its batch is handed off, so the write
+        // never asks the live table, which the next page's own creates and deletes change while it runs (#2924).
+        var batchesHandedOff = 0;
+        var batchesWithoutReferencesFound = 0;
+        processor.OnHistoryHandedOffForTests = batch =>
+        {
+            Interlocked.Increment(ref batchesHandedOff);
+            if (batch.ConnectedSystemObjectReferencesFound == null)
+                Interlocked.Increment(ref batchesWithoutReferencesFound);
+        };
 
         Task runTask;
         long metaverseObjectsWhileWaiting;
@@ -198,6 +208,8 @@ public class SynchronisationHistoryOverlapDatabaseTests
             Assert.That(pageTwoItemsWhileWaiting, Is.Zero, "page 2's history is handed off only once page 1's is written");
             Assert.That(await CountMetaverseObjectsAsync(), Is.EqualTo(People));
             Assert.That(await CountItemsAsync(Enumerable.Range(1, People).Select(HrId).ToArray()), Is.EqualTo(People));
+            Assert.That(batchesHandedOff, Is.EqualTo(TotalPages), "every page handed its history off");
+            Assert.That(batchesWithoutReferencesFound, Is.Zero, "every handed-off batch carried its references as the page found them");
         }
     }
 
@@ -325,6 +337,56 @@ public class SynchronisationHistoryOverlapDatabaseTests
         {
             TaskScheduler.UnobservedTaskException -= OnUnobserved;
         }
+    }
+
+    /// <summary>
+    /// A page with no history of its own still waits at its hand-off for the previous page's write (#2924 review), so a
+    /// failing write is found before any later page saves its changes. In a second Full Synchronisation only pages 1 and 3
+    /// change: page 1's history is held, then refused; page 2 has nothing to record. Page 2 must wait for page 1's write
+    /// there, and page 3 must save nothing.
+    /// </summary>
+    [Test]
+    public async Task PageLoop_EmptyPageBetween_WaitsAtItsHandOffSoNoLaterPageSavesAfterAFailureAsync()
+    {
+        await ArrangeAsync();
+        var (_, _, _, firstRun) = await CreateRunAsync(ConnectedSystemRunType.FullSynchronisation);
+        await firstRun();
+
+        // Page 1's change carries the refusal marker; page 3's is an ordinary rename; pages 2 and 4 are unchanged.
+        await ExecuteAsync($"""
+            UPDATE "ConnectedSystemObjectAttributeValues" SET "StringValue" = '{FailMarker}'
+                WHERE "ConnectedSystemObjectId" = '{HrId(1)}' AND "AttributeId" = {_hrDisplayNameAttributeId};
+            UPDATE "ConnectedSystemObjectAttributeValues" SET "StringValue" = 'Person 05 Renamed'
+                WHERE "ConnectedSystemObjectId" = '{HrId(5)}' AND "AttributeId" = {_hrDisplayNameAttributeId};
+            """);
+        await InstallHistoryTriggerAsync();
+        _spansStarted.Clear();
+        _spansStopped.Clear();
+        var (_, _, _, run) = await CreateRunAsync(ConnectedSystemRunType.FullSynchronisation);
+
+        Task runTask;
+        bool waited;
+        long pageThreeRenamesWhileWaiting;
+        await using (await HoldMarkedHistoryAsync())
+        {
+            runTask = Task.Run(run);
+            waited = await WaitForAsync(() => _spansStarted.Any(s => s.OperationName == "SyncHistoryWait"
+                && Equals(s.GetTagItem("barrier"), SynchronisationHistoryBarrier.PageHandOff.ToString())
+                && !_spansStopped.Contains(s)), runTask);
+            pageThreeRenamesWhileWaiting = await CountRenamesAsync();
+        }
+
+        var failure = Assert.ThrowsAsync<SynchronisationHistoryPersistenceException>(() => runTask);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(waited, Is.True, "a later page waited at its hand-off for page 1's held write");
+            Assert.That(pageThreeRenamesWhileWaiting, Is.Zero, "page 3 had saved nothing while page 1's write was held");
+            Assert.That(failure!.Page, Is.EqualTo(1));
+            Assert.That(await CountRenamesAsync(), Is.Zero, "page 3 never saved its changes after page 1's history failed");
+        }
+
+        Task<long> CountRenamesAsync() => ScalarAsync(
+            """SELECT count(*) FROM "MetaverseObjectAttributeValues" WHERE "StringValue" = 'Person 05 Renamed'""");
     }
 
     /// <summary>

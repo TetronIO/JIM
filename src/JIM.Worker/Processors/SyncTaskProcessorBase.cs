@@ -1129,28 +1129,35 @@ public abstract class SyncTaskProcessorBase
             return;
         }
 
-        SynchronisationHistoryBatch batch;
+        SynchronisationHistoryBatch? batch = null;
         using (Diagnostics.Sync.StartSpan("FlushHistory"))
         {
             var prepared = PrepareHistory(page, totalPages);
-            if (prepared == null)
+            if (prepared != null)
             {
-                writer.RecordFlush(flushStopwatch.Elapsed);
-                return;
-            }
+                (batch, var pageRpeis) = prepared.Value;
+                if (pageRpeis.Count > 0)
+                {
+                    ReleaseWrittenItems(pageRpeis, batch);
+                    ClearPageExecutionItemLookups();
+                }
 
-            (batch, var pageRpeis) = prepared.Value;
-            if (pageRpeis.Count > 0)
-            {
-                ReleaseWrittenItems(pageRpeis, batch);
-                ClearPageExecutionItemLookups();
+                batch.ReleaseRunObjects();
+                using (Diagnostics.Sync.StartSpan("FindHistoryReferenceTargets"))
+                    await _syncRepo.FindSynchronisationHistoryReferenceTargetsAsync(batch);
+                OnHistoryHandedOffForTests?.Invoke(batch);
             }
-
-            batch.ReleaseRunObjects();
-            await _syncRepo.FindSynchronisationHistoryReferenceTargetsAsync(batch);
-            OnHistoryHandedOffForTests?.Invoke(batch);
         }
         writer.RecordFlush(flushStopwatch.Elapsed);
+
+        if (batch == null)
+        {
+            // A page with nothing to record still waits here for the previous page's write, as a page with history does
+            // as it hands its own off: otherwise a run of unchanged pages would carry on past a failing write, and a later
+            // page could save its changes before the failure was found, beyond the one page the overlap allows (#2924).
+            await WaitForHistoryAsync(SynchronisationHistoryBarrier.PageHandOff);
+            return;
+        }
 
         // Handed off once the flush's span has ended, so the write, which outlives it, is timed under the run's page loop
         // rather than under a flush that has already finished. The previous page's write is waited for here, so it ran

@@ -250,10 +250,11 @@ internal sealed class SynchronisationHistoryWriter : IAsyncDisposable
         _failure = new SynchronisationHistoryPersistenceException(message, failure.InnerException!, failure.Page, failure.TotalPages,
             failure.ConnectedSystemName, batch.Page, outcome, nextPageFailure);
 
+        // The message names the Connected System, so it is sanitised before it is logged (CWE-117).
         if (nextPageFailure != null)
-            Log.Error(nextPageFailure, "SynchronisationHistoryWriter: {Message}", _failure.Message);
+            Log.Error(nextPageFailure, "SynchronisationHistoryWriter: {Message}", LogSanitiser.Sanitise(_failure.Message));
         else
-            Log.Error("SynchronisationHistoryWriter: {Message}", _failure.Message);
+            Log.Error("SynchronisationHistoryWriter: {Message}", LogSanitiser.Sanitise(_failure.Message));
 
         return _failure;
     }
