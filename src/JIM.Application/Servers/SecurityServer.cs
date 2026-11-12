@@ -423,6 +423,7 @@ public class SecurityServer
 
         var apiKey = new ApiKey
         {
+            // random-id: an API key's id; kept unguessable, as nothing about a credential should be inferable
             Id = Guid.NewGuid(),
             Name = "Infrastructure Key",
             Description = "Auto-created from the JIM_INFRASTRUCTURE_API_KEY environment variable. It works for 24 hours, and restarting JIM renews it once it has expired.",
@@ -521,6 +522,7 @@ public class SecurityServer
         var (secret, keyPrefix) = ApiKeyMaterial.Generate();
         var apiKey = new ApiKey
         {
+            // random-id: an API key's id; kept unguessable, as nothing about a credential should be inferable
             Id = Guid.NewGuid(),
             Name = name,
             Description = description,

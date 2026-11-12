@@ -1347,7 +1347,7 @@ public abstract class SyncTaskProcessorBase
         {
             rpei.ActivityId = _activity.Id;
             if (rpei.Id == Guid.Empty)
-                rpei.Id = ChangeRecordIds.New();
+                rpei.Id = TimeOrderedIds.New();
 
             // Snapshot CSO display fields (ExternalId, DisplayName, ObjectType) for historical preservation.
             // This centralised call ensures every sync RPEI gets snapshots regardless of creation path.
@@ -4330,7 +4330,7 @@ public abstract class SyncTaskProcessorBase
         // Why an export exists is not a level of detail an administrator can turn off (#1223), so the queueing item
         // is recorded whatever the tracking level. The rows are already persisted, so the page flush writes the stamp.
         if (item.Id == Guid.Empty)
-            item.Id = ChangeRecordIds.New();
+            item.Id = TimeOrderedIds.New();
         foreach (var delete in deletes)
         {
             delete.RecordStager(item.Id);
@@ -5373,7 +5373,7 @@ public abstract class SyncTaskProcessorBase
                     foreach (var outcome in newOutcomes)
                     {
                         if (outcome.Id == Guid.Empty)
-                            outcome.Id = ChangeRecordIds.New();
+                            outcome.Id = TimeOrderedIds.New();
                     }
 
                     await _syncRepo.BulkUpdateRpeiOutcomesAsync(updatedExistingRpeis, newOutcomes);
@@ -5700,7 +5700,7 @@ public abstract class SyncTaskProcessorBase
             return;
 
         if (queueingItem.Id == Guid.Empty)
-            queueingItem.Id = ChangeRecordIds.New();
+            queueingItem.Id = TimeOrderedIds.New();
 
         foreach (var pendingExport in pendingExports)
             pendingExport.RecordStager(queueingItem.Id);
@@ -6717,7 +6717,7 @@ public abstract class SyncTaskProcessorBase
                 // The deletion item's id is assigned here where missing, because the RPEI flush that would
                 // otherwise assign it runs after this method; the flush only fills ids in where absent.
                 if (mvoDeletedNode.Rpei.Id == Guid.Empty)
-                    mvoDeletedNode.Rpei.Id = ChangeRecordIds.New();
+                    mvoDeletedNode.Rpei.Id = TimeOrderedIds.New();
                 pendingExport.RecordStager(mvoDeletedNode.Rpei.Id);
                 queueingStamps.Add((pendingExport.Id, mvoDeletedNode.Rpei.Id));
                 nestedCount++;
@@ -6730,7 +6730,7 @@ public abstract class SyncTaskProcessorBase
 
             var cascadeRpei = new ActivityRunProfileExecutionItem
             {
-                Id = ChangeRecordIds.New(),
+                Id = TimeOrderedIds.New(),
                 ObjectChangeType = ObjectChangeType.PendingExport,
                 ConnectedSystemObjectId = csoId,
                 PendingExportId = pendingExport.Id,
@@ -7073,7 +7073,7 @@ public abstract class SyncTaskProcessorBase
             csoSnapshots.TryGetValue(csoId, out var snapshot);
             var recallRpei = new ActivityRunProfileExecutionItem
             {
-                Id = ChangeRecordIds.New(),
+                Id = TimeOrderedIds.New(),
                 ObjectChangeType = ObjectChangeType.PendingExport,
                 ConnectedSystemObjectId = csoId,
                 PendingExportId = stagedPendingExport.Id,
@@ -8985,7 +8985,7 @@ public abstract class SyncTaskProcessorBase
             // export run reads as an ordinary update, with nothing to say the values it is putting back were
             // changed behind JIM's back.
             if (runProfileExecutionItem.Id == Guid.Empty)
-                runProfileExecutionItem.Id = ChangeRecordIds.New();
+                runProfileExecutionItem.Id = TimeOrderedIds.New();
             foreach (var correctiveExport in result.CorrectiveExports)
                 correctiveExport.RecordStager(runProfileExecutionItem.Id);
 

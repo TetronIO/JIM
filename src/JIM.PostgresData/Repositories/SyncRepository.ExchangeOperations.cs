@@ -58,7 +58,7 @@ public partial class SyncRepository
             throw new ArgumentException($"Exchange change {unaddressed.Id} names no Connected System Object; staging is per account.", nameof(changes));
 
         foreach (var change in staging.Where(c => c.Id == Guid.Empty))
-            change.Id = Guid.NewGuid();
+            change.Id = TimeOrderedIds.New();
 
         var sql = BuildStageExchangeChangeSql();
 

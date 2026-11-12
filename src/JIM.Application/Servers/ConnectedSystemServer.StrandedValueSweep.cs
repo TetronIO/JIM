@@ -370,7 +370,7 @@ public partial class ConnectedSystemServer
     {
         var item = new ActivityRunProfileExecutionItem
         {
-            Id = Guid.NewGuid(),
+            Id = TimeOrderedIds.New(),
             ObjectChangeType = ObjectChangeType.AttributeFlow,
             DisplayNameSnapshot = mvo.NameOrId,
             ObjectTypeSnapshot = mvo.Type?.Name,

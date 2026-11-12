@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.ComponentModel.DataAnnotations;
+using JIM.Models.Utility;
 
 namespace JIM.Models.Transactional;
 
@@ -36,7 +37,7 @@ namespace JIM.Models.Transactional;
 /// </summary>
 public class PendingExchangeChange
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; } = TimeOrderedIds.New();
 
     /// <summary>
     /// The Connected System whose directory the account lives in, and whose Exchange settings the change is delivered

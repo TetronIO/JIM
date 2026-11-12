@@ -3031,7 +3031,7 @@ public partial class ConnectedSystemServer
                 {
                     var item = new ActivityRunProfileExecutionItem
                     {
-                        Id = Guid.NewGuid(),
+                        Id = TimeOrderedIds.New(),
                         ObjectChangeType = ObjectChangeType.Deleted,
                         ConnectedSystemObjectId = cso.Id
                     };

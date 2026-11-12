@@ -28,7 +28,7 @@ public partial class SyncRepository
     {
         // The items' ids first: the change records below name their items by them.
         foreach (var item in items.Where(i => i.Id == Guid.Empty))
-            item.Id = ChangeRecordIds.New();
+            item.Id = TimeOrderedIds.New();
 
         // An item names its object by plain id (#2669); the navigation is a working reference the write must not need.
         foreach (var item in items.Where(i => i.ConnectedSystemObjectId == null && i.ConnectedSystemObject != null && i.ConnectedSystemObject.Id != Guid.Empty))
@@ -47,14 +47,14 @@ public partial class SyncRepository
                 .Select(i => i.ConnectedSystemObjectChange!)
                 .ToList();
             foreach (var change in itemChangeRecords)
-                ChangeRecordIds.AssignMissing(change);
+                TimeOrderedIds.AssignMissing(change);
         }
 
         // The Metaverse Object change records, copied so the caller can clear its queues, each naming its item by id.
         var newChanges = newMetaverseObjectChanges.ToList();
         foreach (var change in newChanges)
         {
-            ChangeRecordIds.AssignMissing(change);
+            TimeOrderedIds.AssignMissing(change);
             if (change.ActivityRunProfileExecutionItem?.Id is { } itemId && itemId != Guid.Empty)
                 change.ActivityRunProfileExecutionItemId = itemId;
         }
@@ -68,7 +68,7 @@ public partial class SyncRepository
                 throw new InvalidOperationException(
                     "PrepareSynchronisationHistory: each Metaverse Object change appended to must carry the id of the existing change record it extends.");
 
-            ChangeRecordIds.AssignMissingToAttributes(append);
+            TimeOrderedIds.AssignMissingToAttributes(append);
         }
 
         var batch = CollectExecutionItemHistory(items.ToList(), itemIdsWrittenWithDeletion, itemChangeRecords, newChanges, appends, page, totalPages);

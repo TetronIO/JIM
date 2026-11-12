@@ -1524,6 +1524,7 @@ internal class SeedingServer
             ValueType = ServiceSettingValueType.Guid,
             DefaultValue = null,
             IsReadOnly = true
+        // random-id: the instance's Service ID, which identifies it to tooling and telemetry; not a row's id
         }, () => Guid.NewGuid().ToString());
 
         // Feature flags (#1781) - one Service Setting row per FeatureFlagCatalogue entry, default off. Existing

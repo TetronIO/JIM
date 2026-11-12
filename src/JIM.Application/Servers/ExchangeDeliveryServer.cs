@@ -251,7 +251,7 @@ public class ExchangeDeliveryServer
         var now = DateTime.UtcNow;
         return new Activity
         {
-            Id = Guid.NewGuid(),
+            Id = TimeOrderedIds.New(),
             ParentActivityId = change.ActivityId,
             TargetType = ActivityTargetType.ExchangeRecipient,
             TargetOperationType = ActivityTargetOperationType.RetryExchangeRecipient,

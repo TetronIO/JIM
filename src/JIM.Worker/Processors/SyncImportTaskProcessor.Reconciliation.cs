@@ -679,7 +679,7 @@ public partial class SyncImportTaskProcessor
         {
             foreach (var outcome in rpei.SyncOutcomes.Where(o => o.ParentSyncOutcome == null && o.ParentSyncOutcomeId == null && o.Id == Guid.Empty))
             {
-                outcome.Id = ChangeRecordIds.New();
+                outcome.Id = TimeOrderedIds.New();
                 outcome.ActivityRunProfileExecutionItemId = rpei.Id;
                 newOutcomes.Add(outcome);
             }

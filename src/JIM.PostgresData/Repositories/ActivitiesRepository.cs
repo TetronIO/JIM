@@ -39,7 +39,7 @@ public partial class ActivityRepository : IActivityRepository
             return;
 
         foreach (var item in items.Where(i => i.Id == Guid.Empty))
-            item.Id = ChangeRecordIds.New();
+            item.Id = TimeOrderedIds.New();
 
         // The item's object is an unmapped working reference (#2669), so the id is what is written: the one set, else the
         // working reference's.

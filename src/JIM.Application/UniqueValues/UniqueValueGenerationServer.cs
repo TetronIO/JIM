@@ -10,6 +10,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 
 namespace JIM.Application.UniqueValues;
 
@@ -64,6 +65,7 @@ public sealed class UniqueValueGenerationServer
         // A dry run claims and releases under a throwaway owner id of its own: a Sync Preview call must leave
         // no trace in the shared reservation set once it returns, regardless of what options.ReservationOwnerId
         // is used for elsewhere by the caller.
+        // random-id: a dry run's throwaway reservation owner, held in memory; never a row's id
         var ownerId = options.DryRun ? Guid.NewGuid() : options.ReservationOwnerId;
         var claimedThisCall = new HashSet<(UniqueValueScope Scope, int AttributeId, string NormalisedValue)>();
         var outcomes = new GenerationOutcome?[requests.Count];
@@ -318,6 +320,7 @@ public sealed class UniqueValueGenerationServer
             return new GenerationOutcome(request, GenerationOutcomeKind.Waiting, null, null, null, null);
 
         var outcomes = new GenerationOutcome?[1];
+        // random-id: a dry run's throwaway reservation owner, held in memory; never a row's id
         var ownerId = options.DryRun ? Guid.NewGuid() : options.ReservationOwnerId;
         try
         {
@@ -1615,7 +1618,7 @@ public sealed class UniqueValueGenerationServer
         var now = DateTime.UtcNow;
         var assignment = new GeneratedValueAssignment
         {
-            Id = Guid.NewGuid(),
+            Id = TimeOrderedIds.New(),
             Value = value,
             NormalisedValue = normalisedValue,
             BaseValue = string.IsNullOrWhiteSpace(request.BaseValue) ? null : request.BaseValue,

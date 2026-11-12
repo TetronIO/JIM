@@ -5,6 +5,7 @@ using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 
 namespace JIM.Application.Servers;
 
@@ -41,7 +42,7 @@ public partial class SyncEngine
 
             return new PendingExportAttributeValueChange
             {
-                Id = Guid.NewGuid(),
+                Id = TimeOrderedIds.New(),
                 Attribute = flow.TargetAttribute,
                 AttributeId = flow.TargetAttribute.Id,
                 ChangeType = PendingExportAttributeChangeType.Remove,
@@ -61,7 +62,7 @@ public partial class SyncEngine
         // reference (the orchestrator's existence query matched it).
         return new PendingExportAttributeValueChange
         {
-            Id = Guid.NewGuid(),
+            Id = TimeOrderedIds.New(),
             Attribute = flow.TargetAttribute,
             AttributeId = flow.TargetAttribute.Id,
             ChangeType = PendingExportAttributeChangeType.Update,
@@ -116,7 +117,7 @@ public partial class SyncEngine
 
             recallChangesByMergeKey[mergeKey] = new PendingExportAttributeValueChange
             {
-                Id = Guid.NewGuid(),
+                Id = TimeOrderedIds.New(),
                 AttributeId = existingChange.AttributeId,
                 Attribute = existingChange.Attribute,
                 StringValue = existingChange.StringValue,

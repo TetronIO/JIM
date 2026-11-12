@@ -13,6 +13,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Serilog;
 
@@ -58,6 +59,7 @@ internal sealed class CollisionRemediationRun
         Options = new UniqueValueResolveOptions
         {
             Reservations = reservations,
+            // random-id: an in-memory reservation owner for this run; never a row's id
             ReservationOwnerId = Guid.NewGuid()
         };
     }
@@ -148,7 +150,7 @@ internal sealed class CollisionRemediationRun
             return LogOrdinary(export, $"the value was already corrected to \"{assignment.Value}\", which the next synchronisation will carry to this export");
 
         var attribute = mapping.TargetMetaverseAttribute!;
-        var executionItemId = Guid.NewGuid();
+        var executionItemId = TimeOrderedIds.New();
         var rejectedValue = assignment.Value;
 
         if (assignment.RemediationCount >= UniqueValueGenerationServer.MaximumRemediations && !assignment.RenameAuthorised)
@@ -235,7 +237,7 @@ internal sealed class CollisionRemediationRun
             ContributedBySystemId = mapping.SyncRule?.ConnectedSystemId,
             RevisionPending = new GeneratedValueRevisionPending
             {
-                Id = Guid.NewGuid(),
+                Id = TimeOrderedIds.New(),
                 MetaverseObjectId = metaverseObjectId.Value,
                 MetaverseAttributeId = metaverseAttributeId,
                 RemediatingActivityRunProfileExecutionItemId = executionItemId,
@@ -280,7 +282,7 @@ internal sealed class CollisionRemediationRun
         if (!string.Equals(carriedValue, assignment.Value, StringComparison.OrdinalIgnoreCase))
             return LogOrdinary(export, $"the export carries \"{carriedValue}\", which is no longer the value JIM holds for it");
 
-        var executionItemId = Guid.NewGuid();
+        var executionItemId = TimeOrderedIds.New();
         var rejectedValue = assignment.Value;
 
         // An export-mode value is never anchored (plan decision 10): only this one system holds it.

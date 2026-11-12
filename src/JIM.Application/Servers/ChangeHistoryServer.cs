@@ -396,7 +396,7 @@ public class ChangeHistoryServer
     {
         return new Activity
         {
-            Id = Guid.NewGuid(),
+            Id = TimeOrderedIds.New(),
             TargetType = ActivityTargetType.HistoryRetentionCleanup,
             TargetOperationType = ActivityTargetOperationType.Delete,
             Message = "Change history and activity retention cleanup"

@@ -10,6 +10,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Application.Utilities;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Serilog;
 using System.Security.Cryptography;
@@ -112,7 +113,7 @@ public class CertificateServer : ICertificateProvider
 
             var certificate = new TrustedCertificate
             {
-                Id = Guid.NewGuid(),
+                Id = TimeOrderedIds.New(),
                 Name = name,
                 Thumbprint = thumbprint,
                 Subject = x509Cert.Subject,
@@ -198,7 +199,7 @@ public class CertificateServer : ICertificateProvider
 
             var certificate = new TrustedCertificate
             {
-                Id = Guid.NewGuid(),
+                Id = TimeOrderedIds.New(),
                 Name = name,
                 Thumbprint = thumbprint,
                 Subject = x509Cert.Subject,

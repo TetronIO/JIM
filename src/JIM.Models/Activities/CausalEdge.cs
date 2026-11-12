@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.ComponentModel.DataAnnotations.Schema;
+using JIM.Models.Utility;
 
 namespace JIM.Models.Activities;
 
@@ -238,7 +239,7 @@ public class CausalEdge
     public void ResolveTransientReferences(Guid effectRunProfileExecutionItemId)
     {
         if (Id == Guid.Empty)
-            Id = Guid.NewGuid();
+            Id = TimeOrderedIds.New();
 
         EffectRunProfileExecutionItemId = effectRunProfileExecutionItemId;
 

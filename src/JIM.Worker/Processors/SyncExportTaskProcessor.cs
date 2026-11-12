@@ -549,7 +549,7 @@ public class SyncExportTaskProcessor
         {
             rpei.ActivityId = _activity.Id;
             if (rpei.Id == Guid.Empty)
-                rpei.Id = ChangeRecordIds.New();
+                rpei.Id = TimeOrderedIds.New();
             if (rpei.ConnectedSystemObjectChange != null)
                 rpei.ConnectedSystemObjectChange.ActivityRunProfileExecutionItemId = rpei.Id;
             if (rpei.ConnectedSystemObject != null)

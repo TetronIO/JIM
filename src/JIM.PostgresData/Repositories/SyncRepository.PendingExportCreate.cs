@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -48,17 +49,9 @@ public partial class SyncRepository
         // stays on that connection, so the unique index on ConnectedSystemObjectId sees it gone either way.
         await ExecuteQueuedDeletesForAsync(exports.Select(pe => pe.ConnectedSystemObjectId));
 
+        // Time-ordered, so the rows land on the growing end of each index keyed on them (#2929).
         foreach (var pe in exports)
-        {
-            if (pe.Id == Guid.Empty)
-                pe.Id = Guid.NewGuid();
-
-            foreach (var change in pe.AttributeValueChanges)
-            {
-                if (change.Id == Guid.Empty)
-                    change.Id = Guid.NewGuid();
-            }
-        }
+            TimeOrderedIds.AssignMissing(pe);
 
         // Each change beside the id of the export holding it, export by export, so the rows partition evenly across
         // connections however unevenly the changes fall across the exports (one group can be most of a page).

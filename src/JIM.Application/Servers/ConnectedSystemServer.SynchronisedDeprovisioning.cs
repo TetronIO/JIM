@@ -14,6 +14,7 @@ using JIM.Models.Staging.DTOs;
 using JIM.Models.Sync;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Serilog;
 
@@ -390,7 +391,7 @@ public partial class ConnectedSystemServer
         {
             executionItems.Add(new ActivityRunProfileExecutionItem
             {
-                Id = Guid.NewGuid(),
+                Id = TimeOrderedIds.New(),
                 ConnectedSystemObjectId = heldBack.Id,
                 ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed,
                 ErrorMessage = $"{undecidable} It and Metaverse Object {heldBack.MetaverseObjectId} were left as they were, " +

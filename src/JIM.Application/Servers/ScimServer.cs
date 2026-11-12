@@ -303,6 +303,7 @@ public class ScimServer
         if (split.Error != null)
             return ScimServiceResult.Failed(split.Error);
 
+        // random-id: handed to SCIM clients as the resource's id, so it reveals nothing about when or in what order resources were made
         var id = Guid.NewGuid();
         await using var session = await Store.BeginWriteAsync(context.ConnectedSystemId);
         if (session == null)

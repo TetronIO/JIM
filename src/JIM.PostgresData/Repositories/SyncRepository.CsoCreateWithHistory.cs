@@ -99,7 +99,7 @@ public partial class SyncRepository
         {
             var change = rpei.ConnectedSystemObjectChange!;
             change.ActivityRunProfileExecutionItemId = rpei.Id;
-            ChangeRecordIds.AssignMissing(change);
+            TimeOrderedIds.AssignMissing(change);
             changes.Add(change);
         }
 

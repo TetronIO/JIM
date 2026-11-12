@@ -3,6 +3,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using JIM.Models.Staging;
+using JIM.Models.Utility;
 
 namespace JIM.Models.Transactional;
 
@@ -38,7 +39,7 @@ public class PendingPasswordChange
     /// </summary>
     public static readonly TimeSpan DefaultTimeToLive = TimeSpan.FromDays(7);
 
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; } = TimeOrderedIds.New();
 
     /// <summary>
     /// The identity whose password changed. Half of the coalescing key, and what the Metaverse Object's password

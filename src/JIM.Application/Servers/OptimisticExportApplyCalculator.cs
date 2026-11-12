@@ -5,6 +5,7 @@ using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 using JIM.Utilities;
 
 namespace JIM.Application.Servers;
@@ -759,7 +760,7 @@ public static class OptimisticExportApplyCalculator
     {
         var value = new ConnectedSystemObjectAttributeValue
         {
-            Id = Guid.NewGuid(),
+            Id = TimeOrderedIds.New(),
             ConnectedSystemObject = cso,
             AttributeId = change.AttributeId,
             Attribute = change.Attribute

@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Staging;
+using JIM.Models.Utility;
 
 namespace JIM.Models.Activities;
 
@@ -259,7 +260,7 @@ public class ActivityPhaseSet
 
     private static ActivityPhase NewPhase(Guid activityId, string key, string name, string? parentKey, int order) => new()
     {
-        Id = Guid.NewGuid(),
+        Id = TimeOrderedIds.New(),
         ActivityId = activityId,
         Key = key,
         Name = name,

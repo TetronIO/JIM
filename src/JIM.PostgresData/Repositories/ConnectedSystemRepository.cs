@@ -4510,18 +4510,10 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         if (connectedSystemObjects.Count == 0)
             return;
 
-        // Pre-generate IDs for all CSOs and their attribute values (bypasses EF ValueGeneratedOnAdd)
+        // Pre-generate IDs for all CSOs and their attribute values (bypasses EF ValueGeneratedOnAdd); time-ordered, so
+        // the rows land on the growing end of each index keyed on them (#2929).
         foreach (var cso in connectedSystemObjects)
-        {
-            if (cso.Id == Guid.Empty)
-                cso.Id = Guid.NewGuid();
-
-            foreach (var av in cso.AttributeValues)
-            {
-                if (av.Id == Guid.Empty)
-                    av.Id = Guid.NewGuid();
-            }
-        }
+            TimeOrderedIds.AssignMissing(cso);
 
         // Fixup ReferenceValueId FKs from navigation properties. ResolveReferencesAsync sets
         // ReferenceValue (navigation) but not ReferenceValueId (FK). EF change tracking would
@@ -4736,7 +4728,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             foreach (var av in newAttributeValues)
             {
                 if (av.Id == Guid.Empty)
-                    av.Id = Guid.NewGuid();
+                    av.Id = TimeOrderedIds.New();
 
                 // Fixup ReferenceValueId FK from navigation property (same reason as
                 // CreateConnectedSystemObjectsAsync — raw SQL bypasses EF change tracking).

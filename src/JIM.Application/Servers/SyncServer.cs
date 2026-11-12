@@ -218,7 +218,7 @@ public class SyncServer : ISyncServer
 
                     var change = new MetaverseObjectChange
                     {
-                        Id = ChangeRecordIds.New(),
+                        Id = TimeOrderedIds.New(),
                         ChangeType = ObjectChangeType.Deleted,
                         ChangeTime = DateTime.UtcNow,
                         InitiatedByType = activity.InitiatedByType,
@@ -315,7 +315,7 @@ public class SyncServer : ISyncServer
                 // bulk insert. EF Core would auto-generate IDs and resolve navigation→FK mappings,
                 // but raw SQL requires all values set explicitly.
                 if (av.Id == Guid.Empty)
-                    av.Id = Guid.NewGuid();
+                    av.Id = TimeOrderedIds.New();
                 if (av.AttributeId == 0 && av.Attribute != null)
                     av.AttributeId = av.Attribute.Id;
                 return (CsoId: cso.Id, Value: av);
@@ -352,7 +352,7 @@ public class SyncServer : ISyncServer
             if (rpei.ActivityId == Guid.Empty && rpei.Activity != null)
                 rpei.ActivityId = rpei.Activity.Id;
             if (rpei.Id == Guid.Empty)
-                rpei.Id = ChangeRecordIds.New();
+                rpei.Id = TimeOrderedIds.New();
             if (rpei.ConnectedSystemObjectChange != null)
                 rpei.ConnectedSystemObjectChange.ActivityRunProfileExecutionItemId = rpei.Id;
         }

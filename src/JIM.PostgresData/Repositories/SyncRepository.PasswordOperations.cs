@@ -46,7 +46,7 @@ public partial class SyncRepository
             return notQueued;
 
         foreach (var change in queueing.Where(c => c.Id == Guid.Empty))
-            change.Id = Guid.NewGuid();
+            change.Id = TimeOrderedIds.New();
 
         // Requirement 8's coalescing, done in one statement per change rather than read-then-write. The unique
         // index on (MetaverseObjectId, ConnectedSystemId) is what makes last-write-wins atomic: two password
@@ -102,7 +102,7 @@ public partial class SyncRepository
             return outcomes;
 
         foreach (var change in staging.Where(c => c.Id == Guid.Empty))
-            change.Id = Guid.NewGuid();
+            change.Id = TimeOrderedIds.New();
 
         // One statement per account (#1697, #2160), deciding what the account's first password is against the row the
         // queue already holds for the person and system, if any. One statement, not an insert followed by a second

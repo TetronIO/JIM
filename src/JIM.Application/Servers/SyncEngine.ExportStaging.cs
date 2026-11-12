@@ -11,6 +11,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Serilog;
 
@@ -800,7 +801,7 @@ public partial class SyncEngine
                     // plurality (#2182), and would silently stop working without it.
                     var attributeChange = new PendingExportAttributeValueChange
                     {
-                        Id = Guid.NewGuid(),
+                        Id = TimeOrderedIds.New(),
                         Attribute = mapping.TargetConnectedSystemAttribute,
                         AttributeId = mapping.TargetConnectedSystemAttribute.Id,
                         ChangeType = attrChangeType,
@@ -1331,7 +1332,7 @@ public partial class SyncEngine
     {
         var change = new PendingExportAttributeValueChange
         {
-            Id = Guid.NewGuid(),
+            Id = TimeOrderedIds.New(),
             Attribute = mapping.TargetConnectedSystemAttribute!,
             AttributeId = mapping.TargetConnectedSystemAttribute!.Id,
             ChangeType = changeType,
@@ -1516,7 +1517,7 @@ public partial class SyncEngine
 
         return new PendingExportAttributeValueChange
         {
-            Id = Guid.NewGuid(),
+            Id = TimeOrderedIds.New(),
             Attribute = mapping.TargetConnectedSystemAttribute!,
             AttributeId = mapping.TargetConnectedSystemAttribute!.Id,
             ChangeType = PendingExportAttributeChangeType.Update,
@@ -1941,7 +1942,7 @@ public partial class SyncEngine
         var last = attributeChanges[^1];
         return new PendingExportAttributeValueChange
         {
-            Id = Guid.NewGuid(),
+            Id = TimeOrderedIds.New(),
             Attribute = last.Attribute,
             AttributeId = last.AttributeId,
             ChangeType = PendingExportAttributeChangeType.Update,
@@ -1959,7 +1960,7 @@ public partial class SyncEngine
     /// </summary>
     internal static PendingExportAttributeValueChange CarryOverSurvivingChange(PendingExportAttributeValueChange change) => new()
     {
-        Id = Guid.NewGuid(),
+        Id = TimeOrderedIds.New(),
         AttributeId = change.AttributeId,
         Attribute = change.Attribute,
         StringValue = change.StringValue,
