@@ -31,6 +31,17 @@ namespace JIM.Application.Services;
 /// memory) nor packs them into one batch that would outlast everything else.
 /// </para>
 /// <para>
+/// A stage's first chunk is its first batch alone (#2943): the run of its largest exports that the pass cuts into one batch,
+/// and never more than a chunk would hold. That chunk cannot be prepared ahead, since it waits on the stages before it, so
+/// it is prepared with no worker writing anything; kept to what one worker starts on, a worker starts writing the largest
+/// work as soon as it is ready, and the next chunk is prepared while it does. At 500,000 objects a first chunk of the 18
+/// largest groups took 23 seconds to prepare, with every worker idle. The rest of the stage is chunked as before, and still
+/// largest first, so stages keep their order and every chunk stays within the bound above. A stage holding a reference
+/// from one of its exports to another (see below) has no lead chunk and is chunked as before: behind a lead chunk of one
+/// batch, the chunk after it would be loaded by the next free worker while that batch might still be being written, and
+/// so would resolve less.
+/// </para>
+/// <para>
 /// The plan also says which chunks may be prepared ahead (#2605), while the batches of the chunk before them are still
 /// being written: see <see cref="DeferredExportPlan.CanPrepareAhead"/>. No export of a stage waits on another export of
 /// it in the sense above, but a stage may still hold a reference to an export queued later whose anchor it supplies; the
@@ -46,7 +57,8 @@ public static class DeferredExportScheduler
     /// <param name="queueOrder">The pass's Pending Export ids, in the (CreatedAt, Id) order they were collected in.</param>
     /// <param name="summary">How much each export writes, and which wait on another export of the pass.</param>
     /// <param name="chunkSize">The most exports a chunk holds (<see cref="ExportExecutionOptions.DeferredChunkSize"/>).</param>
-    /// <param name="batchSize">The most exports a batch holds (<see cref="ExportExecutionOptions.BatchSize"/>).</param>
+    /// <param name="batchSize">The most exports a batch holds (<see cref="ExportExecutionOptions.BatchSize"/>); also the most
+    /// a stage's first chunk holds.</param>
     public static DeferredExportPlan Plan(IReadOnlyList<Guid> queueOrder, DeferredExportOrderingSummary summary, int chunkSize, int batchSize)
     {
         ArgumentNullException.ThrowIfNull(queueOrder);
@@ -91,14 +103,42 @@ public static class DeferredExportScheduler
             ? long.MaxValue
             : Math.Min((totalWeight * batchSize + ordered.Count - 1) / ordered.Count, HeaviestQueueOrderRun(batchSize));
 
+        // The stages holding a reference from one of their exports to another (to one queued later, so imposing no stage).
+        var stagesReferringWithin = summary.Dependencies
+            .Where(dependency => dependency.ReferrerId != dependency.TargetId
+                && stageOf.TryGetValue(dependency.ReferrerId, out var referrerStage)
+                && stageOf.TryGetValue(dependency.TargetId, out var targetStage)
+                && referrerStage == targetStage)
+            .Select(dependency => stageOf[dependency.ReferrerId])
+            .ToHashSet();
+
+        // A stage's lead chunk is its first batch (#2943), cut as the pass cuts a chunk into batches, and never more than a
+        // chunk would hold: so it is exactly one batch, which a worker starts on as soon as it is prepared, while the next
+        // chunk is prepared ahead. The rest of the stage is chunked as it always was. A stage referring within itself is
+        // chunked as it always was from the start: such a reference resolves within the run only when the referrer's chunk
+        // is loaded after the export it names has been written, and behind a lead chunk of one batch the next chunk would be
+        // loaded by the next free worker, while that batch may still be being written.
+        var leadChunkSize = Math.Min(batchSize, chunkSize);
+        var leadChunkWeightBudget = Math.Min(batchWeightBudget, chunkWeightBudget);
         var stages = ordered
             .GroupBy(id => stageOf[id])
             .OrderBy(stage => stage.Key)
-            .Select(stage => (IReadOnlyList<Guid[]>)CutIntoBatches(
-                    stage.OrderByDescending(id => weights[id]).ThenBy(id => position[id]).ToList(),
-                    id => weights[id], chunkSize, chunkWeightBudget)
-                .Select(chunk => chunk.ToArray())
-                .ToList())
+            .Select(stage =>
+            {
+                var stageOrder = stage.OrderByDescending(id => weights[id]).ThenBy(id => position[id]).ToList();
+                if (stagesReferringWithin.Contains(stage.Key))
+                {
+                    return (IReadOnlyList<Guid[]>)CutIntoBatches(stageOrder, id => weights[id], chunkSize, chunkWeightBudget)
+                        .Select(chunk => chunk.ToArray())
+                        .ToList();
+                }
+
+                var leadChunk = CutIntoBatches(stageOrder, id => weights[id], leadChunkSize, leadChunkWeightBudget)[0];
+                var chunks = new List<Guid[]> { leadChunk.ToArray() };
+                chunks.AddRange(CutIntoBatches(stageOrder.Skip(leadChunk.Count).ToList(), id => weights[id], chunkSize, chunkWeightBudget)
+                    .Select(chunk => chunk.ToArray()));
+                return (IReadOnlyList<Guid[]>)chunks;
+            })
             .ToList();
 
         return new DeferredExportPlan

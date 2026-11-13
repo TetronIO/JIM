@@ -303,6 +303,155 @@ public class DeferredExportSchedulerTests
         }
     }
 
+    // ─── A stage's lead chunk (#2943) ───
+
+    [Test]
+    public void Plan_StagesFirstChunk_IsExactlyItsFirstBatchAndTheRestIsChunkedAsBefore()
+    {
+        // Queue order weights 4, 6, 5, 3, 6, 2, 5, 4, 3, 2 (40 in all). A batch of three takes on no more than 12 (three
+        // exports' worth of the average of 4), so the first batch, largest first, is the two exports of 6. A chunk of four
+        // takes on no more than 18, the heaviest four queue order loaded together (4 + 6 + 5 + 3).
+        var ids = Ids(10);
+        var summary = Summary(ids, [4, 6, 5, 3, 6, 2, 5, 4, 3, 2]);
+
+        var plan = DeferredExportScheduler.Plan(ids, summary, chunkSize: 4, batchSize: 3);
+        var chunks = plan.Chunks.ToList();
+        var firstBatch = DeferredExportScheduler.CutIntoBatches(Order(plan), plan.WeightOf, batchSize: 3, plan.BatchWeightBudget)[0];
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(plan.BatchWeightBudget, Is.EqualTo(12));
+            Assert.That(chunks[0], Is.EqualTo(firstBatch), "the stage starts with what one worker starts on");
+            Assert.That(chunks, Is.EqualTo(new[]
+            {
+                new[] { ids[1], ids[4] },
+                new[] { ids[2], ids[6], ids[0], ids[7] },
+                new[] { ids[3], ids[8], ids[5], ids[9] }
+            }), "after the lead chunk the stage is cut by the chunk size and weight, as it always was");
+            Assert.That(DeferredExportScheduler.CutIntoBatches(chunks[0], plan.WeightOf, batchSize: 3, plan.BatchWeightBudget), Has.Count.EqualTo(1),
+                "cut into batches as the pass cuts a chunk, the lead chunk is one batch");
+            Assert.That(Enumerable.Range(0, 3).Select(plan.CanPrepareAhead), Is.EqualTo(new[] { false, true, true }),
+                "the chunk after the lead chunk is prepared while the lead chunk's batch is written");
+        }
+    }
+
+    [Test]
+    public void Plan_LargestExportHeavierThanTheBatchBudget_IsTheLeadChunkAlone()
+    {
+        // The budget is three exports' worth of the average (28 of 55), which the export of 50 alone outweighs.
+        var ids = Ids(6);
+        var summary = Summary(ids, [1, 1, 50, 1, 1, 1]);
+
+        var plan = DeferredExportScheduler.Plan(ids, summary, LargeChunk, batchSize: 3);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(plan.Chunks, Is.EqualTo(new[]
+            {
+                new[] { ids[2] },
+                new[] { ids[0], ids[1], ids[3], ids[4], ids[5] }
+            }));
+            Assert.That(plan.CanPrepareAhead(1), Is.True);
+        }
+    }
+
+    [Test]
+    public void Plan_StageWithAReferenceToAnotherExportOfIt_KeepsItsChunksWithoutALeadChunk()
+    {
+        // R refers to T, queued after it, so the reference imposes no stage. Queue order: R 2, X1 9, X2 9, T 10; chunks of
+        // three take on no more than 20. R resolves within the run only if its chunk is loaded once T has been written, and
+        // a chunk that may not be prepared ahead is loaded once the batches before it have been handed out. Behind a lead
+        // chunk of T's batch alone ([T], then [X1, X2, R]), R's chunk would be loaded by the next free worker while T is
+        // still being written. So the stage is chunked as before, [T, X1] then [X2, R], and R's chunk is loaded only once
+        // X1's batch has been handed out too, as the pass always has.
+        var ids = Ids(4);
+        var summary = Summary(ids, [2, 9, 9, 10], (0, 3));
+
+        var plan = DeferredExportScheduler.Plan(ids, summary, chunkSize: 3, batchSize: 1);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(plan.Stages, Has.Count.EqualTo(1));
+            Assert.That(plan.Chunks, Is.EqualTo(new[] { new[] { ids[3], ids[1] }, new[] { ids[2], ids[0] } }));
+            Assert.That(plan.CanPrepareAhead(1), Is.False, "R's chunk waits until T's chunk has been handed out");
+        }
+    }
+
+    [Test]
+    public void Plan_ReferenceWithinOneStage_LeavesTheOtherStagesLeadChunksInPlace()
+    {
+        // Stage 0: A, B, C, D, all weighing the same, so a batch is two. Stage 1: E, F and G each wait on A, and F also refers
+        // to G, queued after it. Stage 0 starts with a lead chunk; stage 1 is chunked as before, in one chunk.
+        var ids = Ids(7);
+        var summary = Summary(ids, [1, 1, 1, 1, 1, 1, 1], (4, 0), (5, 0), (6, 0), (5, 6));
+
+        var plan = DeferredExportScheduler.Plan(ids, summary, chunkSize: 4, batchSize: 2);
+
+        Assert.That(plan.Stages.Select(stage => stage.ToArray()), Is.EqualTo(new[]
+        {
+            new[] { new[] { ids[0], ids[1] }, new[] { ids[2], ids[3] } },
+            new[] { new[] { ids[4], ids[5], ids[6] } }
+        }));
+    }
+
+    [Test]
+    public void Plan_StageThatFitsInOneBatch_StaysOneChunk()
+    {
+        var ids = Ids(3);
+        var summary = Summary(ids, [3, 2, 1]);
+
+        var plan = DeferredExportScheduler.Plan(ids, summary, chunkSize: 10, batchSize: 10);
+
+        Assert.That(plan.Chunks, Is.EqualTo(new[] { new[] { ids[0], ids[1], ids[2] } }));
+    }
+
+    [Test]
+    public void Plan_StageOfOneExport_StaysOneChunk()
+    {
+        var ids = Ids(1);
+
+        var plan = DeferredExportScheduler.Plan(ids, Summary(ids, [7]), LargeChunk, batchSize: 3);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(plan.Chunks, Is.EqualTo(new[] { new[] { ids[0] } }));
+            Assert.That(plan.CanPrepareAhead(0), Is.False);
+        }
+    }
+
+    [Test]
+    public void Plan_SeveralStages_EachStartsWithALeadChunk()
+    {
+        // Four independent exports, then three each waiting on one of them: every export weighs the same, so a batch is two.
+        var ids = Ids(7);
+        var summary = Summary(ids, [1, 1, 1, 1, 1, 1, 1], (4, 0), (5, 1), (6, 2));
+
+        var plan = DeferredExportScheduler.Plan(ids, summary, LargeChunk, batchSize: 2);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(plan.Stages.Select(stage => stage.ToArray()), Is.EqualTo(new[]
+            {
+                new[] { new[] { ids[0], ids[1] }, new[] { ids[2], ids[3] } },
+                new[] { new[] { ids[4], ids[5] }, new[] { ids[6] } }
+            }));
+            Assert.That(Enumerable.Range(0, 4).Select(plan.CanPrepareAhead), Is.EqualTo(new[] { false, true, false, true }),
+                "a later stage's lead chunk waits on the stages before it; the chunk after it does not");
+        }
+    }
+
+    [Test]
+    public void Plan_ChunkSizeBelowTheBatchSize_LeadChunkIsNoLargerThanAChunk()
+    {
+        // The pass holds a chunk in memory, so the lead chunk never takes more than a chunk would, even where a batch could.
+        var ids = Ids(6);
+        var summary = Summary(ids, [1, 1, 1, 1, 1, 1]);
+
+        var plan = DeferredExportScheduler.Plan(ids, summary, chunkSize: 2, batchSize: 5);
+
+        Assert.That(plan.Chunks, Is.EqualTo(new[] { new[] { ids[0], ids[1] }, new[] { ids[2], ids[3] }, new[] { ids[4], ids[5] } }));
+    }
+
     // ─── Helpers ───
 
     private static List<Guid> Ids(int count) => Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToList();

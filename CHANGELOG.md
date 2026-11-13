@@ -87,6 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- ⚡ Exports with very large groups start writing their deferred references sooner: the largest group goes to an export batch as soon as it alone is ready, while the next groups are prepared, instead of after the largest groups have all been prepared together, which left every batch waiting 23 seconds in a 500,000-object initial load. (#2943)
 - ⚡ Synchronising groups with hundreds of thousands of members does less database work: the members' names recorded in export changes are looked up once per synchronisation, 10,000 at a time, instead of again for every group that shares them, and members provisioned in the same synchronisation are not looked up at all. (#2939)
 - ⚡ Imports, synchronisations and exports do less database work writing new objects, values and Pending Exports to large Connected Systems: their ids are now time-ordered, so each write adds to the end of the database's indexes instead of a random page of each. (#2929)
 - ⚡ Full and Delta Synchronisations of directories with very large groups use far less memory: a page now also ends at 100,000 attribute values, so the largest groups no longer share one, where a single page of four groups once held two million members. (#2934)
