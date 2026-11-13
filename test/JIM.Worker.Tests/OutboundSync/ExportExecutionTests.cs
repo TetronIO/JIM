@@ -4739,6 +4739,81 @@ public class ExportExecutionTests
     }
 
     /// <summary>
+    /// #2943: a worker waiting for a chunk still being prepared ahead waits outside the caller's context gate, so the other
+    /// workers' gated work, here the first worker's progress report, goes on meanwhile. At 500,000 objects the wait held the
+    /// gate for 23.1 seconds, holding up progress and every other worker's next batch behind it.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredPass_WaitForAChunkPreparedAhead_DoesNotHoldTheGateAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+        var textAttributes = targetUserType.Attributes
+            .Where(a => a.Type == AttributeDataType.Text && !a.IsExternalId && !a.IsSecondaryExternalId)
+            .ToList();
+
+        var repo = new ChunkLoadSyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: repo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+        var managerMvoId = SeedAnchoredUser(repo, targetSystem, targetUserType, objectGuidAttr);
+
+        // Queue order: three small exports, then the largest, which is the first chunk; the second, the first small one, is
+        // prepared ahead and held there until the first worker's progress report has been made.
+        var exports = SeedDeferredExportsReferringTo(repo, targetSystem, targetUserType, managerAttr, managerMvoId, count: 4);
+        foreach (var change in TextChanges(exports[3], textAttributes))
+            exports[3].AttributeValueChanges.Add(change);
+        repo.HoldLoadOf = exports[0].Id;
+
+        // Told when a worker waiting under the gate reports that it is loading the next chunk.
+        var loadingReported = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        bool? reportedWhileTheNextChunkWasHeld = null;
+        Task ProgressCallback(ExportProgressInfo info)
+        {
+            if (info.Message?.StartsWith("Loading deferred exports 2 ", StringComparison.Ordinal) == true)
+                loadingReported.TrySetResult();
+
+            if (info.Phase == ExportPhase.Executing && info.PassProcessed >= 1 && reportedWhileTheNextChunkWasHeld == null)
+            {
+                reportedWhileTheNextChunkWasHeld = repo.HeldLoadEntered.Task.IsCompleted && !repo.HeldLoadFinished;
+                repo.ReleaseHeldLoad.TrySetResult();
+            }
+            return Task.CompletedTask;
+        }
+
+        // The largest export finishes only once the next chunk is held in its preparation, and the second worker has had
+        // the time to be waiting for it.
+        async Task OnExport(IList<PendingExport> batch)
+        {
+            if (!batch.Any(pe => pe.Id == exports[3].Id))
+                return;
+            await repo.HeldLoadEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await Task.WhenAny(loadingReported.Task, Task.Delay(TimeSpan.FromMilliseconds(250)));
+        }
+
+        var options = new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 2, DeferredChunkSize = 1 };
+
+        // Act
+        var result = await jim.ExportExecution.ExecuteExportsAsync(targetSystem, CreateSucceedingConnector(OnExport).Object,
+            SyncRunMode.PreviewAndSync, options, CancellationToken.None, ProgressCallback,
+            connectorFactory: () => CreateSucceedingConnector(OnExport).Object,
+            repositoryFactory: () => new JIM.Data.Repositories.SyncRepositoryScope(repo));
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(4));
+            Assert.That(reportedWhileTheNextChunkWasHeld, Is.True,
+                "the first worker reported its progress while the second waited for the chunk being prepared ahead");
+            Assert.That(TimeSpan.FromTicks(result.ContextGateTimings.Snapshot()
+                    .Where(t => t.Purpose == ExportContextGatePurpose.NextBatch).Sum(t => t.TotalHeld.Ticks)),
+                Is.LessThan(TimeSpan.FromSeconds(5)), "taking a batch never held the gate for the held preparation");
+        }
+    }
+
+    /// <summary>
     /// Records every Metaverse Object id whose reference anchor is asked for.
     /// </summary>
     private sealed class AnchorRequestRecordingSyncRepository : SyncRepository

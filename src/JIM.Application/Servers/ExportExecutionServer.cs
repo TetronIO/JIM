@@ -1208,7 +1208,9 @@ public class ExportExecutionServer
     /// seconds held and 72.2 waited at 500,000 objects). One chunk is prepared at a time and in plan order, never past the
     /// end of its stage, and not at all when it refers to an object whose anchor an export in an earlier chunk of its stage
     /// supplies (<see cref="DeferredExportPlan.CanPrepareAhead"/>): that chunk is prepared when it always was, so every
-    /// reference resolves as it did. A chunk prepared ahead is awaited on every way out of the stage. A chunk that is not
+    /// reference resolves as it did. A worker that finds nothing left to take but a chunk still being prepared ahead waits
+    /// for it before taking the gate (#2943), so the wait holds up no progress report and no other worker's take; the chunk
+    /// is still taken under the gate. A chunk prepared ahead is awaited on every way out of the stage. A chunk that is not
     /// prepared ahead, and every chunk on the sequential path, is prepared when its turn comes, on the caller's context, as
     /// before. On both, an anchor read for one chunk
     /// answers the later chunks naming the same object, where it cannot change during the pass
@@ -1488,8 +1490,12 @@ public class ExportExecutionServer
         // The parallel path (#2605). The workers load each batch themselves, so only what chose it is held: a chunk's
         // exports are let go as soon as its batches are cut, and at most two chunks are in hand at once, the one whose
         // batches are being taken and the one being prepared.
-        var readySummaries = new Queue<List<ExecutableExportSummary>>();
+        // Changed only under the gate; read off it too, by a worker deciding whether to wait for the chunk prepared ahead
+        // (WaitOffTheGateForTheChunkPreparedAheadAsync), so the queue is a concurrent one and the task is published with a
+        // barrier, after the batches of the chunk before it have been queued.
+        var readySummaries = new ConcurrentQueue<List<ExecutableExportSummary>>();
         Task<List<List<ExecutableExportSummary>>>? preparedAhead = null;
+        long preparationWaitedOffTheGateTicks = 0;
         var preparedAheadCount = 0;
         var preparationWaitedFor = TimeSpan.Zero;
 
@@ -1534,7 +1540,7 @@ public class ExportExecutionServer
 
             var chunkIndex = nextChunk;
             preparedAheadCount++;
-            preparedAhead = Task.Run(async () =>
+            Volatile.Write(ref preparedAhead, Task.Run(async () =>
             {
                 System.Diagnostics.Activity.Current = passActivity;
                 using var span = Diagnostics.Diagnostics.Database.StartSpan("PrepareDeferredChunkAhead")
@@ -1543,7 +1549,7 @@ public class ExportExecutionServer
                 var prepared = await PrepareChunkOnItsOwnScopeAsync(chunkIndex);
                 span.SetSuccess();
                 return prepared;
-            }, cancellationToken);
+            }, cancellationToken));
         }
 
         // Called under the gate, one call at a time. Hands over the next batch, taking the chunk prepared ahead when its turn
@@ -1596,6 +1602,38 @@ public class ExportExecutionServer
             }
 
             return readySummaries.TryDequeue(out var next) ? next : null;
+        }
+
+        // Called by a worker before it takes the gate for its next batch (#2943). When every batch handed out so far has been
+        // taken and the next chunk is still being prepared ahead, the take would wait for it holding the gate, holding up
+        // every progress report and every other worker's take behind it: 23.1 seconds at 500,000 objects. So the worker
+        // waits here first, off the gate. It only waits: the chunk is still taken, and whatever its preparation ended in
+        // observed, under the gate by TakeNextParallelDeferredBatchAsync, so one chunk is still prepared at a time, in plan
+        // order and within the stage, and the way out of the stage still awaits it. Reading the task before the queue means
+        // a task published after the queue was refilled is never mistaken for one the empty queue is waiting on; a stale read
+        // costs at most a wait for a preparation that has finished.
+        async Task WaitOffTheGateForTheChunkPreparedAheadAsync()
+        {
+            var ahead = Volatile.Read(ref preparedAhead);
+            if (ahead is null || ahead.IsCompleted || !readySummaries.IsEmpty)
+                return;
+
+            var waited = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                using var span = Diagnostics.Diagnostics.Database.StartSpan("AwaitDeferredChunkPreparedAheadOffTheGate");
+
+                // Waits for the preparation to end however it ends, without observing how: a failure is the take's to observe,
+                // under the gate, where it stops the workers. The continuation itself never fails, so nothing is left
+                // unobserved here; only the run's cancellation ends the wait early, as it ends the take.
+                await ahead.ContinueWith(static _ => { }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default)
+                    .WaitAsync(cancellationToken);
+                span.SetSuccess();
+            }
+            finally
+            {
+                Interlocked.Add(ref preparationWaitedOffTheGateTicks, waited.Elapsed.Ticks);
+            }
         }
 
         // On the way out of a stage: a chunk still being prepared ahead is awaited, so nothing the pass started outlives it
@@ -1660,7 +1698,8 @@ public class ExportExecutionServer
                         passTotal: passTotal,
                         unresolvedReferenceNotes: unresolvedReferenceNotes,
                         batchExecuted: count => Interlocked.Add(ref written, count),
-                        passProcessedOffset: () => writtenBeforeStage + Volatile.Read(ref finishedUnwritten));
+                        passProcessedOffset: () => writtenBeforeStage + Volatile.Read(ref finishedUnwritten),
+                        beforeTakingBatch: WaitOffTheGateForTheChunkPreparedAheadAsync);
                     stageFinished = true;
                 }
                 finally
@@ -1699,10 +1738,11 @@ public class ExportExecutionServer
             Volatile.Read(ref written), Volatile.Read(ref finishedUnwritten));
 
         // How much of the chunks' preparation left the workers' way (#2605), and how much reading the anchors cost.
-        Log.Information("ProcessDeferredExportsAsync: Deferred pass for {SystemName} prepared {PreparedAhead} of {Chunks} chunk(s) ahead of their turn, " +
-            "and waited {WaitedSeconds:F1}s for one still being prepared. Reference anchors: {AnchorHits} of {AnchorLookups} lookup(s) answered from " +
-            "the {AnchorsHeld} the pass had already read",
-            connectedSystem.Name, preparedAheadCount, chunks.Count, preparationWaitedFor.TotalSeconds, anchorCache.Hits, anchorCache.Lookups, anchorCache.Count);
+        Log.Information("ProcessDeferredExportsAsync: Deferred pass for {SystemName} prepared {PreparedAhead} of {Chunks} chunk(s) ahead of their turn; " +
+            "workers waited {WaitedOffTheGateSeconds:F1}s in all off the gate, and {WaitedSeconds:F1}s holding it, for one still being prepared. " +
+            "Reference anchors: {AnchorHits} of {AnchorLookups} lookup(s) answered from the {AnchorsHeld} the pass had already read",
+            connectedSystem.Name, preparedAheadCount, chunks.Count, TimeSpan.FromTicks(Interlocked.Read(ref preparationWaitedOffTheGateTicks)).TotalSeconds,
+            preparationWaitedFor.TotalSeconds, anchorCache.Hits, anchorCache.Lookups, anchorCache.Count);
     }
 
     /// <summary>
@@ -2005,6 +2045,9 @@ public class ExportExecutionServer
     /// <param name="batchExecuted">Told how many Pending Exports each batch held once its outcome is recorded.</param>
     /// <param name="passProcessedOffset">With <paramref name="passTotal"/>: how many of the pass's exports it has finished
     /// with without writing them, counted towards its progress beside the batches written.</param>
+    /// <param name="beforeTakingBatch">Awaited by each worker before it takes the gate for a batch, off the gate: waits for
+    /// anything the next batch cannot be handed out without (#2943). Throws only on cancellation: what it waits for is
+    /// observed by <paramref name="takeNextBatch"/>.</param>
     private async Task ProcessBatchesInParallelAsync(
         ConnectedSystem connectedSystem,
         IConnectorExportUsingCalls primaryConnector,
@@ -2022,7 +2065,8 @@ public class ExportExecutionServer
         int? passTotal = null,
         IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null,
         Action<int>? batchExecuted = null,
-        Func<int>? passProcessedOffset = null)
+        Func<int>? passProcessedOffset = null,
+        Func<Task>? beforeTakingBatch = null)
     {
         // The one gate on the caller's DbContext; see the remarks above. Each pass through it is timed by purpose into the
         // run's totals (#2895), which the end-of-run log reports.
@@ -2060,10 +2104,24 @@ public class ExportExecutionServer
         Task<T> UnderCallerContextGateAsync<T>(ExportContextGatePurpose purpose, Func<Task<T>> action) =>
             callerContextGate.RunAsync(purpose, action, cancellationToken);
 
-        async Task<List<ExecutableExportSummary>?> TakeNextBatchAsync()
+        // Set once every worker that will start has been started. Waiting off the gate (beforeTakingBatch), a running worker
+        // and the loop starting the next worker would race for whatever was waited for, and a worker that had finished its
+        // first batch could take every batch left before the next worker started; so a running worker takes no other batch
+        // until the workers have all started, as it could not while the loop held the gate waiting.
+        var workersStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        async Task<List<ExecutableExportSummary>?> TakeNextBatchAsync(bool forAWorkerStarting)
         {
             if (Volatile.Read(ref stopTaking) == 1)
                 return null;
+
+            // Off the gate: whatever the next batch waits on, waited for without holding up the others' gated work.
+            if (beforeTakingBatch != null)
+            {
+                if (!forAWorkerStarting)
+                    await workersStarted.Task.WaitAsync(cancellationToken);
+                await beforeTakingBatch();
+            }
 
             return await UnderCallerContextGateAsync(ExportContextGatePurpose.NextBatch, async () =>
             {
@@ -2093,16 +2151,21 @@ public class ExportExecutionServer
         {
             for (var workerIndex = 0; workerIndex < options.MaxParallelism; workerIndex++)
             {
-                var firstBatch = await TakeNextBatchAsync();
+                var firstBatch = await TakeNextBatchAsync(forAWorkerStarting: true);
                 if (firstBatch == null)
                     break;
 
                 var index = workerIndex;
                 workers.Add(Task.Run(() => RunWorkerAsync(index, firstBatch), cancellationToken));
             }
+
+            workersStarted.TrySetResult();
         }
         catch (Exception) when (workers.Count > 0)
         {
+            // Before the workers are awaited: one may be waiting for the rest to start.
+            workersStarted.TrySetResult();
+
             // A worker's first batch could not be taken (or the run was cancelled meanwhile). The workers already running take
             // no more, finish their batches and are awaited, so none outlives the run; then the failure goes on. Their own
             // failures, if any, are logged here: the one unwinding takes precedence.
@@ -2145,7 +2208,7 @@ public class ExportExecutionServer
                             Volatile.Write(ref stopTaking, 1);
                     }
 
-                    batch = await TakeNextBatchAsync();
+                    batch = await TakeNextBatchAsync(forAWorkerStarting: false);
                 }
 
                 completed = true;

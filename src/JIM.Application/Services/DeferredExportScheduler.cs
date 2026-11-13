@@ -35,8 +35,11 @@ namespace JIM.Application.Services;
 /// and never more than a chunk would hold. That chunk cannot be prepared ahead, since it waits on the stages before it, so
 /// it is prepared with no worker writing anything; kept to what one worker starts on, a worker starts writing the largest
 /// work as soon as it is ready, and the next chunk is prepared while it does. At 500,000 objects a first chunk of the 18
-/// largest groups took 23 seconds to prepare, with every worker idle. The rest of the stage is chunked as before, and still
-/// largest first, so stages keep their order and every chunk stays within the bound above. A stage holding a reference
+/// largest groups took 23 seconds to prepare, with every worker idle. The rest of the stage is chunked as before, largest
+/// first, except that no chunk of such a stage takes on more than <see cref="DeferredChunkWeightCap"/> changes, unless it
+/// is a single export with more: chunks are prepared one at a time, and the 29 largest groups after the lead took as long
+/// to prepare as the lead chunk had, with three workers waiting. Stages keep their order, and every chunk stays within the
+/// bound above. A stage holding a reference
 /// from one of its exports to another (see below) has no lead chunk and is chunked as before: behind a lead chunk of one
 /// batch, the chunk after it would be loaded by the next free worker while that batch might still be being written, and
 /// so would resolve less.
@@ -51,6 +54,15 @@ namespace JIM.Application.Services;
 /// </remarks>
 public static class DeferredExportScheduler
 {
+    /// <summary>
+    /// The most changes a chunk of a stage with a lead chunk takes on (#2943), unless it holds a single export with more.
+    /// Preparing a chunk costs about 7 microseconds per change (measured at 500,000 objects: 2,135,016 changes in 23.1
+    /// seconds) and one chunk is prepared at a time, so a chunk of 250,000 changes takes about 1.75 seconds: short enough to
+    /// be ready before the free workers have drained the chunk before it. Uncapped, the chunk after the lead held 29 of the
+    /// largest groups, and three workers waited 23 seconds for it.
+    /// </summary>
+    public const int DeferredChunkWeightCap = 250_000;
+
     /// <summary>
     /// Plans the order of the deferred pass.
     /// </summary>
@@ -114,12 +126,14 @@ public static class DeferredExportScheduler
 
         // A stage's lead chunk is its first batch (#2943), cut as the pass cuts a chunk into batches, and never more than a
         // chunk would hold: so it is exactly one batch, which a worker starts on as soon as it is prepared, while the next
-        // chunk is prepared ahead. The rest of the stage is chunked as it always was. A stage referring within itself is
-        // chunked as it always was from the start: such a reference resolves within the run only when the referrer's chunk
-        // is loaded after the export it names has been written, and behind a lead chunk of one batch the next chunk would be
-        // loaded by the next free worker, while that batch may still be being written.
+        // chunk is prepared ahead. The rest of the stage is chunked as it always was, but no chunk takes on more than the cap,
+        // so the next chunk is prepared in time. A stage referring within itself is chunked exactly as it always was: such a
+        // reference resolves within the run only when the referrer's chunk is loaded after the export it names has been
+        // written, and behind a lead chunk of one batch, or smaller chunks, the next chunk would be loaded by the next free
+        // worker, while the batch before it may still be being written.
         var leadChunkSize = Math.Min(batchSize, chunkSize);
-        var leadChunkWeightBudget = Math.Min(batchWeightBudget, chunkWeightBudget);
+        var cappedChunkWeightBudget = Math.Min(chunkWeightBudget, DeferredChunkWeightCap);
+        var leadChunkWeightBudget = Math.Min(batchWeightBudget, cappedChunkWeightBudget);
         var stages = ordered
             .GroupBy(id => stageOf[id])
             .OrderBy(stage => stage.Key)
@@ -135,7 +149,7 @@ public static class DeferredExportScheduler
 
                 var leadChunk = CutIntoBatches(stageOrder, id => weights[id], leadChunkSize, leadChunkWeightBudget)[0];
                 var chunks = new List<Guid[]> { leadChunk.ToArray() };
-                chunks.AddRange(CutIntoBatches(stageOrder.Skip(leadChunk.Count).ToList(), id => weights[id], chunkSize, chunkWeightBudget)
+                chunks.AddRange(CutIntoBatches(stageOrder.Skip(leadChunk.Count).ToList(), id => weights[id], chunkSize, cappedChunkWeightBudget)
                     .Select(chunk => chunk.ToArray()));
                 return (IReadOnlyList<Guid[]>)chunks;
             })

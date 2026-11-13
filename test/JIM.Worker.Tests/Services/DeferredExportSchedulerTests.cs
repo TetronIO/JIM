@@ -452,6 +452,62 @@ public class DeferredExportSchedulerTests
         Assert.That(plan.Chunks, Is.EqualTo(new[] { new[] { ids[0], ids[1] }, new[] { ids[2], ids[3] }, new[] { ids[4], ids[5] } }));
     }
 
+    // ─── The chunk weight cap (#2943) ───
+
+    [Test]
+    public void Plan_HeavyStage_CutsItsChunksAtTheWeightCap()
+    {
+        // Eight exports of 100,000 changes, any chunk of which queue order could have loaded whole: preparing a chunk costs
+        // about 7 microseconds per change, so no chunk after the lead takes on more than 250,000.
+        var ids = Ids(8);
+        var summary = Summary(ids, Enumerable.Repeat(100_000, 8).ToArray());
+
+        var plan = DeferredExportScheduler.Plan(ids, summary, LargeChunk, batchSize: 1);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DeferredExportScheduler.DeferredChunkWeightCap, Is.EqualTo(250_000));
+            Assert.That(plan.Chunks, Is.EqualTo(new[]
+            {
+                new[] { ids[0] },
+                new[] { ids[1], ids[2] },
+                new[] { ids[3], ids[4] },
+                new[] { ids[5], ids[6] },
+                new[] { ids[7] }
+            }));
+            Assert.That(Enumerable.Range(0, 5).Select(plan.CanPrepareAhead), Is.EqualTo(new[] { false, true, true, true, true }));
+        }
+    }
+
+    [Test]
+    public void Plan_ExportHeavierThanTheWeightCap_IsAChunkOfItsOwn()
+    {
+        var ids = Ids(6);
+        var summary = Summary(ids, [400_000, 300_000, 100_000, 100_000, 100_000, 10]);
+
+        var plan = DeferredExportScheduler.Plan(ids, summary, LargeChunk, batchSize: 1);
+
+        Assert.That(plan.Chunks, Is.EqualTo(new[]
+        {
+            new[] { ids[0] },
+            new[] { ids[1] },
+            new[] { ids[2], ids[3] },
+            new[] { ids[4], ids[5] }
+        }));
+    }
+
+    [Test]
+    public void Plan_StageReferringWithinItself_IsNotCutAtTheWeightCap()
+    {
+        // The stage keeps the chunks it always had, for the reason it has no lead chunk.
+        var ids = Ids(4);
+        var summary = Summary(ids, Enumerable.Repeat(100_000, 4).ToArray(), (0, 3));
+
+        var plan = DeferredExportScheduler.Plan(ids, summary, LargeChunk, batchSize: 1);
+
+        Assert.That(plan.Chunks, Is.EqualTo(new[] { new[] { ids[0], ids[1], ids[2], ids[3] } }));
+    }
+
     // ─── Helpers ───
 
     private static List<Guid> Ids(int count) => Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToList();
