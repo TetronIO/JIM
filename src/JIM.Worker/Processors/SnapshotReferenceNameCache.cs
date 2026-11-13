@@ -34,9 +34,9 @@ namespace JIM.Worker.Processors;
 public sealed class SnapshotReferenceNameCache(int capacity = SnapshotReferenceNameCache.DefaultCapacity)
 {
     /// <summary>
-    /// The most names one run keeps. An entry costs roughly 100 bytes (its key, and a name of a few dozen characters;
-    /// a name the object holds as a long DN costs more), so about 100 MB at the cap: about one page's memory budget
-    /// (#2934), held for the run, and room for every object of a 1,000,000-object directory. Once full, nothing more is
+    /// The most names one run keeps. An entry costs about 190 bytes of live memory (measured at 500,000 names: about
+    /// 95 MB; its key, a dictionary slot, and a name of a few dozen characters, more for a long DN), so about 190 MB at
+    /// the cap, held for the run, and room for every object of a 1,000,000-object directory. Once full, nothing more is
     /// kept and the names it holds still answer; the rest are looked up as they would be without it.
     /// </summary>
     public const int DefaultCapacity = 1_000_000;
