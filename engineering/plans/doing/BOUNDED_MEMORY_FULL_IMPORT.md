@@ -102,7 +102,16 @@ Each phase is its own PR, test-driven (red first), with no behaviour change unti
 
 - Lab baseline on `main`: Scenario 008 on OpenLDAP at Scale500k25kGroups and Scale100k5kGroups. Record the docker-stats peak, the GC heap logged at the start of the save phase, and every phase timing of the first and the confirming Full Import. Take a `dotnet-gcdump` heap snapshot at the start of the save phase, to split the 9.3 GB between hydrated objects, the Pending Export preload and execution items.
 - Worker harness: a Full Import over N pages of large groups, with a deterministic counter of the most hydrated values held at once (`internal`; red: it grows with N), and an explicit `GC.GetTotalMemory(true)` measurement.
-- Done with Phase 1: the harness is `FullImportHeldValuesHarnessTests`, and its counter `SyncImportTaskProcessor.PeakHeldAttributeValues` (sampled after each page, before the save phase and after each save batch, only when `MeasureHeldAttributeValues` is set). The growth with N is a characterisation, not an explicit test, so Phase 5 inverts it. The lab baseline is outstanding.
+- Done with Phase 1: the harness is `FullImportHeldValuesHarnessTests`, and its counter `SyncImportTaskProcessor.PeakHeldAttributeValues` (sampled after each page, before the save phase and after each save batch, only when `MeasureHeldAttributeValues` is set). The growth with N is a characterisation, not an explicit test, so Phase 5 inverts it.
+- Lab baseline on `aa8c461c5` ([#2521 comment](https://github.com/TetronIO/JIM/issues/2521#issuecomment-6893502898); clean timings from the `61b290a51` run, as the dumps paused the Worker). `dotnet-gcdump` stops at 10M objects and this heap holds 70 to 150M, so the lab took process dumps and read them with ClrMD instead. At the start of the confirming import's save phase, 9,266 MB was live:
+  - Pending Export preload: 4,525 MB (10.34M changes, about 264 bytes each). Phase 1 removes it.
+  - Objects hydrated for update: 3,915 MB (10.86M values, about 240 bytes each). Phase 5's target.
+  - The Connector page: 212 MB, only the External ID attributes `externalIdsImported` keeps. Phase 3's target.
+  - Execution items: 184 MB. Everything else: 430 MB.
+- What the baseline changed:
+  - **The live high-water mark is in CallBasedImport, not the save phase:** about 12.7 GB, while the Connector's single page (3,475 MB, dead by "Import complete") is still live. About 1.2 GB of that page was empty typed value lists, seven per attribute. Phase 1 makes each list allocate on first use (192 bytes saved per attribute), and Phase 2 is what bounds the rest.
+  - **The 20 GiB Docker peak is mostly garbage:** at the worst point only 2,740 MB of an 18,438 MB heap was live. Phase 1 is therefore measured by live heap, not by the Docker peak; a lab run with `DOTNET_GCConserveMemory` measures how much of the peak is garbage collector policy.
+  - **The preload is pruned as the save goes,** from 10.34M changes to 2.17M, so the 4.5 GB is the peak of a falling curve.
 
 ### Phase 1: Extract the staging step; load Pending Exports per batch (no behaviour change) ✅
 
@@ -120,6 +129,7 @@ What was found doing it:
 - **The "no Pending Exports" early-out** is a count of the Connected System's Pending Exports when the save phase starts. A Pending Export with no object counts where the preload left it out; the run then reconciles nothing, as before.
 - **The overlap stays:** given a context factory, the next batch's Pending Exports load on their own context while the current batch is saved and reconciled.
 - **The raised-item totals** are counts (`ExecutionItemTotals`), merged with the last flush's items exactly as one list was counted: one item with an outcome makes the whole list count by outcome.
+- **Empty value lists:** `ConnectedSystemImportObjectAttribute` now allocates each of its typed lists on first use, as #2153 did for date and true-or-false values, and the import path probes them through `Has*` properties, so a string attribute holds one list instead of seven (384 to 192 bytes). A lazy getter alone saved nothing: the import's own probes allocated every list again (`ImportValueListAllocationTests` was red on that).
 - Scenarios and the 500k measurement are still to be run.
 
 ### Phase 2: The LDAP Connector yields pages (Connector behaviour change)
