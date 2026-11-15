@@ -8,8 +8,9 @@ namespace JIM.Worker.Tests.Hosting;
 /// <summary>
 /// The garbage collector settings the Worker ships with, read from the runtime configuration its build produces (the
 /// SDK copies a referenced executable's <c>runtimeconfig.json</c> beside the tests). Measured at Scale500k25kGroups
-/// (#2521): conserving memory at level 7 ran three full collections during a confirming Full Import's save instead of
-/// one, and cut its peak from 20.4 to 16.9 GiB at no cost in time; most of what the heap held at that peak was garbage.
+/// (#2521): conserving memory at level 7 cut the Source Full Import's peak from 11.0 to 8.5 GiB at no cost in time, and
+/// ran 12 full collections during a confirming Full Import's save instead of 8; most of what the heap held at its peak
+/// was garbage.
 /// </summary>
 [TestFixture]
 public class WorkerGarbageCollectionConfigurationTests

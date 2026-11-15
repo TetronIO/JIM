@@ -130,7 +130,9 @@ What was found doing it:
 - **The overlap stays:** given a context factory, the next batch's Pending Exports load on their own context while the current batch is saved and reconciled.
 - **The raised-item totals** are counts (`ExecutionItemTotals`), merged with the last flush's items exactly as one list was counted: one item with an outcome makes the whole list count by outcome.
 - **Empty value lists:** `ConnectedSystemImportObjectAttribute` now allocates each of its typed lists on first use, as #2153 did for date and true-or-false values, and the import path probes them through `Has*` properties, so a string attribute holds one list instead of seven (384 to 192 bytes). A lazy getter alone saved nothing: the import's own probes allocated every list again (`ImportValueListAllocationTests` was red on that).
-- Scenarios and the 500k measurement are still to be run.
+- **Garbage collector policy, measured after Phase 1** ([lab counters](https://github.com/TetronIO/JIM/issues/2521#issuecomment-6896913899)): `System.GC.ConserveMemory=7` costs no time (Test 1 1,223 s against 1,217 s) and lowers most step peaks: Source Full Import 11.0 to 8.5 GiB, Source Full Synchronisation 3.8 to 2.4 GiB, Target Full Synchronisation 3.8 to 3.2 GiB, confirming Full Import 11.9 to 11.6 GiB. The Worker ships with it.
+- **The Source Full Import's `ProcessImportObjects` time is not a garbage collector cost.** It ranged from 16.8 to 30.9 s across twelve 500k runs on old and new code alike; the slow windows show allocation halving and CPU at 3 to 5% with almost no collections, a wait outside the process. No gen0 budget floor is needed.
+- **Next allocation target:** the confirming save allocates about 64 GiB in 80 s (about 125 KB per updated object), mostly Npgsql parameters and strings.
 
 ### Phase 2: The LDAP Connector yields pages (Connector behaviour change)
 
