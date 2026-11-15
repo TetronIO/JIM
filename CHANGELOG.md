@@ -88,7 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
-- ⚡ Imports into Connected Systems with many Pending Exports use less memory: a confirming import loads the Pending Exports it reconciles batch by batch, rather than all at once. (#2521)
+- ⚡ Imports use less memory: a confirming import loads the Pending Exports it reconciles batch by batch rather than all at once, and each imported attribute holds only the one list of values it uses. (#2521)
 - ⚡ Synchronising groups with hundreds of thousands of members does less database work: the members' names recorded in export changes are looked up once per synchronisation, 10,000 at a time, instead of again for every group that shares them, and members provisioned in the same synchronisation are not looked up at all. (#2939)
 - ⚡ Imports, synchronisations and exports do less database work writing new objects, values and Pending Exports to large Connected Systems: their ids are now time-ordered, so each write adds to the end of the database's indexes instead of a random page of each. (#2929)
 - ⚡ Full and Delta Synchronisations of directories with very large groups use far less memory: a page now also ends at 100,000 attribute values, so the largest groups no longer share one, where a single page of four groups once held two million members. (#2934)
