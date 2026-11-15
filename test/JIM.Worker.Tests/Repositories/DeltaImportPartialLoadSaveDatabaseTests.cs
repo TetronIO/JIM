@@ -168,17 +168,16 @@ public class DeltaImportPartialLoadSaveDatabaseTests
         const int members = 20_000;
         var seeded = await LargeGroupImportSeed.SeedAsync(NewContext, _connectionString, userCount: members, memberCount: members);
 
-        var recorder = new CommandRecordingInterceptor();
-        var options = new DbContextOptionsBuilder<JimDbContext>()
-            .UseNpgsql(_connectionString)
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .AddInterceptors(recorder)
-            .Options;
         Dictionary<Guid, Dictionary<Guid, string>> externalIds;
-        await using (var ctx = new JimDbContext(options))
+        await using (var ctx = NewContext())
             externalIds = await new PostgresDataRepository(ctx).Sync.GetReferenceExternalIdsForCsosAsync([seeded.GroupCsoId], [seeded.MemberAttributeId]);
 
-        var rowsRead = await PlanRowsRead.FromAsync(_connectionString, recorder.Commands, PlanRowsRead.AttributeValues);
+        // The lookup runs its statement through Npgsql directly, out of sight of a context's interceptors (#2521), so the
+        // statement it runs is measured as it is built.
+        var rowsRead = await PlanRowsRead.FromAsync(_connectionString,
+            [(JIM.PostgresData.Repositories.ConnectedSystemRepository.ReferenceExternalIdsForCsosSql,
+              JIM.PostgresData.Repositories.ConnectedSystemRepository.ReferenceExternalIdsForCsosParameters([seeded.GroupCsoId], [seeded.MemberAttributeId]).ToList())],
+            PlanRowsRead.AttributeValues);
 
         using (Assert.EnterMultipleScope())
         {

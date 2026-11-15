@@ -410,6 +410,28 @@ public class ReferenceExternalIdBatchLookupDatabaseTests
             Assert.That(batched, Is.EquivalentTo(await repository.Sync.GetReferenceExternalIdsAsync(csoId)), $"CSO {csoId}: parity with the single-object lookup");
     }
 
+    /// <summary>
+    /// #2521: an object referenced by every group on a page has its External ID read and held once. The confirming Full
+    /// Import's first page held 3 million references to 495,000 users; a string per reference was six of every seven
+    /// External IDs it allocated, all duplicates.
+    /// </summary>
+    [Test]
+    public async Task GetReferenceExternalIdsForCsosAsync_GroupsSharingMembers_ShareEachMembersExternalIdAsync()
+    {
+        var seeded = await SeedGroupsSharingMembersAsync();
+        await using var ctx = NewContext();
+
+        var result = await new PostgresDataRepository(ctx).Sync.GetReferenceExternalIdsForCsosAsync([seeded.GroupAId, seeded.GroupBId, seeded.GroupCId]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result[seeded.GroupBId][seeded.UserWithDnId], Is.SameAs(result[seeded.GroupAId][seeded.UserWithDnId]));
+            Assert.That(result[seeded.GroupCId][seeded.UserWithDnId], Is.SameAs(result[seeded.GroupAId][seeded.UserWithDnId]));
+            Assert.That(result[seeded.GroupBId][seeded.UserWithoutDnId], Is.SameAs(result[seeded.GroupAId][seeded.UserWithoutDnId]));
+            Assert.That(result[seeded.GroupCId][seeded.OtherUserWithDnId], Is.SameAs(result[seeded.GroupBId][seeded.OtherUserWithDnId]));
+        }
+    }
+
     [Test]
     public async Task GetReferenceExternalIdsForCsosAsync_EmptyInput_ReturnsEmptyAsync()
     {

@@ -2418,38 +2418,60 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// DTO for the batched reference external ID lookup SQL query.
-    /// </summary>
-    private record ReferenceExternalIdBatchRow(Guid ConnectedSystemObjectId, Guid ReferenceValueId, string? ExternalId);
-
-    /// <summary>
     /// The statement behind <see cref="GetReferenceExternalIdsForCsosAsync"/>, exposed so its plan can be checked
-    /// (<c>DeltaImportPartialLoadSaveDatabaseTests</c>).
+    /// (<c>DeltaImportPartialLoadSaveDatabaseTests</c>, <c>LargeGroupDeltaImportTimingDatabaseTests</c>).
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Each object's values are read by attribute id range, every id but those it leaves out, as
     /// <see cref="AttributeValuesByRangesSql"/> reads them and for the same reason (#2836): a filter leaving an attribute
     /// out (<c>NOT (AttributeId = ANY(...))</c>) cannot bound the index scan on (object, attribute), so PostgreSQL read
     /// every member of a group whose member attribute a Delta Import's answer had settled, only to discard it. At 500,000
     /// users that cost the confirming Delta Import 4.7 s for groups in which nothing was left undecided.
+    /// </para>
+    /// <para>
+    /// #2521: the External ID of each object referenced is read once, however many of the objects asked about reference
+    /// it, and sent once. The statement returns two kinds of row: one per distinct referenced object holding an External
+    /// ID (no owner; the referenced object and its External ID), then one per reference (the owner and the referenced
+    /// object; no External ID). Reading the External ID once per reference instead probed the referenced object's row and
+    /// both its External ID values once per reference: the confirming Full Import's first page, the 100 largest groups at
+    /// 500,000 users, holds 3,030,928 references to 495,000 users, and took 13 s of CPU over 9.2 million probes (11.0 s
+    /// warm; 42.4 million buffers). Joining the two kinds in the database instead of here measured 3.7 s, but spilled a
+    /// 495,000-entry hash to disk and sent each External ID once per reference.
+    /// </para>
+    /// <para>
+    /// <c>refs</c> is <c>MATERIALIZED</c> so that both arms read the references once; inlined, the planner folds the
+    /// External ID lookup back into one probe per reference (12.2 s in the lab).
+    /// </para>
     /// </remarks>
     internal const string ReferenceExternalIdsForCsosSql =
         """
-        SELECT av."ConnectedSystemObjectId",
-               av."ReferenceValueId",
-               COALESCE(sec_av."StringValue", pri_av."StringValue") AS "ExternalId"
-        FROM unnest(@rangeObjectIds, @rangeLows, @rangeHighs) AS r(object_id, low, high)
-        JOIN "ConnectedSystemObjectAttributeValues" av
-            ON av."ConnectedSystemObjectId" = r.object_id
-           AND av."AttributeId" BETWEEN r.low AND r.high
-        JOIN "ConnectedSystemObjects" ref_cso ON av."ReferenceValueId" = ref_cso."Id"
-        LEFT JOIN "ConnectedSystemObjectAttributeValues" sec_av
-            ON sec_av."ConnectedSystemObjectId" = ref_cso."Id"
-           AND sec_av."AttributeId" = ref_cso."SecondaryExternalIdAttributeId"
-        LEFT JOIN "ConnectedSystemObjectAttributeValues" pri_av
-            ON pri_av."ConnectedSystemObjectId" = ref_cso."Id"
-           AND pri_av."AttributeId" = ref_cso."ExternalIdAttributeId"
-        WHERE av."ReferenceValueId" IS NOT NULL
+        WITH refs AS MATERIALIZED (
+            SELECT av."ConnectedSystemObjectId", av."ReferenceValueId"
+            FROM unnest(@rangeObjectIds, @rangeLows, @rangeHighs) AS r(object_id, low, high)
+            JOIN "ConnectedSystemObjectAttributeValues" av
+                ON av."ConnectedSystemObjectId" = r.object_id
+               AND av."AttributeId" BETWEEN r.low AND r.high
+            WHERE av."ReferenceValueId" IS NOT NULL
+        )
+        SELECT NULL::uuid AS "ConnectedSystemObjectId",
+               referenced."Id" AS "ReferenceValueId",
+               referenced."ExternalId"
+        FROM (
+            SELECT ref_cso."Id", COALESCE(sec_av."StringValue", pri_av."StringValue") AS "ExternalId"
+            FROM (SELECT DISTINCT "ReferenceValueId" AS "Id" FROM refs) distinct_refs
+            JOIN "ConnectedSystemObjects" ref_cso ON ref_cso."Id" = distinct_refs."Id"
+            LEFT JOIN "ConnectedSystemObjectAttributeValues" sec_av
+                ON sec_av."ConnectedSystemObjectId" = ref_cso."Id"
+               AND sec_av."AttributeId" = ref_cso."SecondaryExternalIdAttributeId"
+            LEFT JOIN "ConnectedSystemObjectAttributeValues" pri_av
+                ON pri_av."ConnectedSystemObjectId" = ref_cso."Id"
+               AND pri_av."AttributeId" = ref_cso."ExternalIdAttributeId"
+        ) referenced
+        WHERE referenced."ExternalId" IS NOT NULL
+        UNION ALL
+        SELECT refs."ConnectedSystemObjectId", refs."ReferenceValueId", NULL
+        FROM refs
         """;
 
     /// <summary>
@@ -2472,6 +2494,11 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// #2521: every reference to the same object shares one External ID string. Raw Npgsql and streamed, since the
+    /// confirming Full Import's first page at 500,000 users reads 3 million references here; the statement's rows are read
+    /// as they arrive rather than materialised first.
+    /// </remarks>
     public async Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds,
         IReadOnlyCollection<int>? excludedAttributeIds = null)
     {
@@ -2479,24 +2506,58 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         if (csoIds.Count == 0)
             return result;
 
-        // Same query shape as GetReferenceExternalIdsAsync, widened to a page of owning CSOs via
-        // = ANY so import processing pays one round trip per hydration page instead of one per CSO
-        // (535K single-CSO round trips measured at Scale500k25kGroups, 2026-07-20). An excluded attribute's references
-        // are left out (#2817): a Delta Import that loaded a group's members only in part has their External IDs from the
-        // answer it loaded them by, and reading every member's here is the cost it exists to avoid.
-        var rows = await Repository.Database.Database
-            .SqlQueryRaw<ReferenceExternalIdBatchRow>(ReferenceExternalIdsForCsosSql,
-                ReferenceExternalIdsForCsosParameters(csoIds, excludedAttributeIds ?? []).Cast<object>().ToArray())
-            .ToListAsync();
-
         // Every requested ID gets an entry (empty when the CSO has no resolved references) so
         // callers never need a per-CSO fallback query to distinguish "no references" from
         // "not fetched".
         foreach (var csoId in csoIds)
             result.TryAdd(csoId, new Dictionary<Guid, string>());
 
-        foreach (var row in rows.Where(r => r.ExternalId != null))
-            result[row.ConnectedSystemObjectId].TryAdd(row.ReferenceValueId, row.ExternalId!);
+        // Same External ID as GetReferenceExternalIdsAsync reads, widened to a page of owning CSOs so import processing
+        // pays one round trip per hydration page instead of one per CSO (535K single-CSO round trips measured at
+        // Scale500k25kGroups, 2026-07-20). An excluded attribute's references are left out (#2817): a Delta Import that
+        // loaded a group's members only in part has their External IDs from the answer it loaded them by, and reading
+        // every member's here is the cost it exists to avoid.
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand(ReferenceExternalIdsForCsosSql, npgsqlConn) { Transaction = npgsqlTx };
+        command.Parameters.AddRange(ReferenceExternalIdsForCsosParameters(csoIds, excludedAttributeIds ?? []));
+        if (Repository.Database.Database.GetCommandTimeout() is { } timeoutSeconds)
+            command.CommandTimeout = timeoutSeconds;
+
+        // Each referenced object's External ID, read once and shared by every reference to it.
+        var externalIdsByReferencedId = new Dictionary<Guid, string>();
+
+        // References read before their object's External ID. The statement sends every External ID first, so this holds
+        // only references to objects with none; it is here so the result never depends on the order rows arrive in.
+        List<(Guid OwnerId, Guid ReferencedId)>? referencesReadEarly = null;
+
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+            {
+                // Column order is ReferenceExternalIdsForCsosSql's: owner (null on an External ID row), referenced object,
+                // External ID (null on a reference row).
+                var referencedId = reader.GetGuid(1);
+                if (reader.IsDBNull(0))
+                {
+                    // An object with more than one value for its External ID attribute keeps the first, as before.
+                    if (!externalIdsByReferencedId.ContainsKey(referencedId))
+                        externalIdsByReferencedId[referencedId] = reader.GetString(2);
+                    continue;
+                }
+
+                var ownerId = reader.GetGuid(0);
+                if (externalIdsByReferencedId.TryGetValue(referencedId, out var externalId))
+                    result[ownerId].TryAdd(referencedId, externalId);
+                else
+                    (referencesReadEarly ??= []).Add((ownerId, referencedId));
+            }
+        }
+
+        foreach (var (ownerId, referencedId) in (referencesReadEarly ?? []).Where(early => externalIdsByReferencedId.ContainsKey(early.ReferencedId)))
+            result[ownerId].TryAdd(referencedId, externalIdsByReferencedId[referencedId]);
 
         return result;
     }
