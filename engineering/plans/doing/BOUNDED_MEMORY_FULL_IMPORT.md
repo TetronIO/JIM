@@ -1,6 +1,6 @@
 # Bounded-Memory Full Import
 
-- **Status:** Doing
+- **Status:** Doing (Phase 1 complete)
 - **Issue:** [#2521](https://github.com/TetronIO/JIM/issues/2521)
 - **Related:** [#917](https://github.com/TetronIO/JIM/issues/917) ([Bounded-Memory Delta Import](../BOUNDED_MEMORY_DELTA_IMPORT.md)), [#2669](https://github.com/TetronIO/JIM/issues/2669)
 
@@ -102,8 +102,9 @@ Each phase is its own PR, test-driven (red first), with no behaviour change unti
 
 - Lab baseline on `main`: Scenario 008 on OpenLDAP at Scale500k25kGroups and Scale100k5kGroups. Record the docker-stats peak, the GC heap logged at the start of the save phase, and every phase timing of the first and the confirming Full Import. Take a `dotnet-gcdump` heap snapshot at the start of the save phase, to split the 9.3 GB between hydrated objects, the Pending Export preload and execution items.
 - Worker harness: a Full Import over N pages of large groups, with a deterministic counter of the most hydrated values held at once (`internal`; red: it grows with N), and an explicit `GC.GetTotalMemory(true)` measurement.
+- Done with Phase 1: the harness is `FullImportHeldValuesHarnessTests`, and its counter `SyncImportTaskProcessor.PeakHeldAttributeValues` (sampled after each page, before the save phase and after each save batch, only when `MeasureHeldAttributeValues` is set). The growth with N is a characterisation, not an explicit test, so Phase 5 inverts it. The lab baseline is outstanding.
 
-### Phase 1: Extract the staging step; load Pending Exports per batch (no behaviour change)
+### Phase 1: Extract the staging step; load Pending Exports per batch (no behaviour change) ✅
 
 - Move the save phase into one staging method, still called once.
 - The whole-run consumers (deletion detection, the Unconfirmed Create retry, the hold judgements, reconciliation setup) take id sets.
@@ -112,6 +113,14 @@ Each phase is its own PR, test-driven (red first), with no behaviour change unti
 - Tests: every existing test passes; a `RequiresPostgres` test that per-batch loading reaches the same reconciliation verdicts as the preload (held, retried, released, Exchange-held).
 - Scenarios (Pending Export lifecycle): 008 (Samba AD at Medium, OpenLDAP at Large), 032 (OpenLDAP, Medium), 014, 017, 001; 024 and 034 in the AD lab after merge.
 - Measure the save-phase heap at 500k.
+
+What was found doing it:
+- **The preload judged Pending Exports that no longer existed.** It was taken at run start; deletion detection then removes the Pending Exports of the objects it marks deleted, and the preload still held them, so reconciliation judged each one and merged an "export not confirmed" error onto the object's deletion item. Every test ran without a context factory, so loaded at the start of the save phase and never saw it; the Worker always has one. Per-batch loading matches what the tests characterised (`ConfirmingImportPendingExportHoldsDatabaseTests`, the context-factory case was red).
+- **`DeferredIds`** comes from the update list's ids alone (an id listed twice), and one query for which of those few have a Pending Export; their Pending Exports load when they are reconciled, after the save phase. No batch touches them, so they are as they stood when the save phase began, as before.
+- **The "no Pending Exports" early-out** is a count of the Connected System's Pending Exports when the save phase starts. A Pending Export with no object counts where the preload left it out; the run then reconciles nothing, as before.
+- **The overlap stays:** given a context factory, the next batch's Pending Exports load on their own context while the current batch is saved and reconciled.
+- **The raised-item totals** are counts (`ExecutionItemTotals`), merged with the last flush's items exactly as one list was counted: one item with an outcome makes the whole list count by outcome.
+- Scenarios and the 500k measurement are still to be run.
 
 ### Phase 2: The LDAP Connector yields pages (Connector behaviour change)
 

@@ -13,6 +13,7 @@ using JIM.Models.Exceptions;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 namespace JIM.Worker.Processors;
@@ -22,7 +23,8 @@ namespace JIM.Worker.Processors;
 /// holds. It runs as each update batch of the save phase is saved (#2908), so it judges each object from the values the
 /// import holds for it, exactly as saved, while they are still in memory, and writes the outcomes it merges onto that
 /// batch's execution items before the next batch. An object whose held values cannot be shown to be what was saved is
-/// reloaded from the database, as every object used to be.
+/// reloaded from the database, as every object used to be. Each batch's Pending Exports are loaded as the batch is reached
+/// (#2521), never every one the Connected System has at once.
 /// </summary>
 public partial class SyncImportTaskProcessor
 {
@@ -31,8 +33,6 @@ public partial class SyncImportTaskProcessor
     /// </summary>
     private sealed class PendingExportReconciliationRun
     {
-        public required Dictionary<Guid, PendingExport> PendingExportsByCsoId { get; init; }
-
         public required bool DatabaseFoldsCaseLikeIdentifierKey { get; init; }
 
         public required int PageSize { get; init; }
@@ -40,9 +40,27 @@ public partial class SyncImportTaskProcessor
         /// <summary>
         /// Objects with a Pending Export that the save phase holds more than once: a Delta Import can update an object and
         /// then be told it was deleted under another Object Type (#2049), on the same page or a later one. Each is reconciled
-        /// once, reloaded after every batch is saved, as all objects were before #2908.
+        /// once, reloaded after every batch is saved, as all objects were before #2908. No batch loads their Pending Exports;
+        /// they are loaded once, when they are reconciled.
         /// </summary>
         public required IReadOnlySet<Guid> DeferredIds { get; init; }
+
+        /// <summary>
+        /// The Pending Exports of the save batch being reconciled, by object, loaded as the batch is reached (#2521). Every
+        /// other batch's are released: at 525,000 objects the whole Connected System's held 9.8 million value changes.
+        /// </summary>
+        public IReadOnlyDictionary<Guid, PendingExport> BatchPendingExportsByCsoId { get; set; } = new Dictionary<Guid, PendingExport>();
+
+        /// <summary>
+        /// The next batch's Pending Exports, loading on a context of their own while the current batch is saved and
+        /// reconciled, so the load overlaps the run's own work as the whole-system load once did. Null when the import was
+        /// given no context factory, or there is no next batch.
+        /// </summary>
+        public (HashSet<Guid> CsoIds, Task<Dictionary<Guid, PendingExport>> Load)? NextBatchPendingExports { get; set; }
+
+        /// <summary>The Pending Exports loaded for reconciliation over the run, and the most in one load.</summary>
+        public int PendingExportsLoaded;
+        public int LargestPendingExportLoad;
 
         /// <summary>
         /// For each deferred object, the first execution item from the import that names it, which its outcomes merge onto.
@@ -50,11 +68,12 @@ public partial class SyncImportTaskProcessor
         public Dictionary<Guid, ActivityRunProfileExecutionItem> DeferredImportItems { get; } = [];
 
         /// <summary>
-        /// Execution items raised for objects the import did not change (so had none of their own), already written with
-        /// their batch, and still to be counted in the Activity's totals with the run's remaining items, as they always
-        /// were counted. Empty where the repository records items on the Activity instead (the in-memory one).
+        /// The totals of the execution items raised for objects the import did not change (so had none of their own),
+        /// already written with their batch, and still to be counted in the Activity's totals with the run's remaining
+        /// items, as they always were counted. Held as counts, so the items themselves are released with their batch
+        /// (#2521). Empty where the repository records items on the Activity instead (the in-memory one).
         /// </summary>
-        public List<ActivityRunProfileExecutionItem> RaisedItemsAwaitingTotals { get; } = [];
+        public ExecutionItemTotals RaisedItemTotals { get; } = new();
 
         public Dictionary<ReconciliationReloadReason, int> ReloadsByReason { get; } = [];
 
@@ -80,37 +99,26 @@ public partial class SyncImportTaskProcessor
         IReadOnlyList<ConnectedSystemObjectAttributeValue> Removals);
 
     /// <summary>
-    /// Readies reconciliation for the run: the Connected System's Pending Exports (pre-loaded during the import where it
-    /// could be), whether the database folds case as JIM does, and the page size. Null when there is nothing to reconcile.
+    /// Readies reconciliation for the run: whether the Connected System has any Pending Export at all, which objects are
+    /// saved more than once, whether the database folds case as JIM does, and the page size. Null when there is nothing to
+    /// reconcile. Loads no Pending Export: each save batch loads its own (<see cref="LoadBatchPendingExportsAsync"/>).
     /// </summary>
-    private async Task<PendingExportReconciliationRun?> BeginPendingExportReconciliationAsync(
-        IReadOnlyList<ConnectedSystemObject> updatedCsos, Task<Dictionary<Guid, PendingExport>>? preLoadedPendingExportsTask)
+    /// <param name="updatedCsoIds">The id of each object the save phase updates, once for each time it is saved.</param>
+    private async Task<PendingExportReconciliationRun?> BeginPendingExportReconciliationAsync(IReadOnlyCollection<Guid> updatedCsoIds)
     {
-        var updatedCount = updatedCsos.Count;
+        var updatedCount = updatedCsoIds.Count;
         if (updatedCount == 0)
             return null;
 
-        // Use pre-loaded Pending Exports if available (loaded in parallel during import processing
-        // on a separate DbContext). Otherwise, fall back to loading them now.
-        Dictionary<Guid, PendingExport> allPendingExportsByCsoId;
-        if (preLoadedPendingExportsTask != null)
+        // Asked of the database as the save phase starts, as the Pending Exports were once loaded here: a Pending Export
+        // deletion detection has just removed is not one to reconcile.
+        int pendingExportCount;
+        using (Diagnostics.Sync.StartSpan("CountPendingExports"))
         {
-            using (Diagnostics.Sync.StartSpan("AwaitPreLoadedPendingExports"))
-            {
-                allPendingExportsByCsoId = await preLoadedPendingExportsTask;
-            }
-            Log.Information("BeginPendingExportReconciliationAsync: Using pre-loaded Pending Exports ({Count} loaded in background)",
-                allPendingExportsByCsoId.Count);
-        }
-        else
-        {
-            using (Diagnostics.Sync.StartSpan("BulkLoadPendingExports"))
-            {
-                allPendingExportsByCsoId = await _syncRepo.GetPendingExportsLightweightByConnectedSystemIdAsync(_connectedSystem.Id);
-            }
+            pendingExportCount = await _syncRepo.GetPendingExportsCountAsync(_connectedSystem.Id);
         }
 
-        if (allPendingExportsByCsoId.Count == 0)
+        if (pendingExportCount == 0)
         {
             Log.Debug("BeginPendingExportReconciliationAsync: No Pending Exports found for Connected System {ConnectedSystemId}. Skipping reconciliation",
                 _connectedSystem.Id);
@@ -126,16 +134,20 @@ public partial class SyncImportTaskProcessor
                 "ignoring case are loaded in full for reconciliation rather than probed");
 
         var pageSize = await _syncServer.GetSyncPageSizeAsync();
-        Log.Information("BeginPendingExportReconciliationAsync: {PendingExportCount} Pending Exports to reconcile against {UpdatedCount} updated " +
-            "Connected System Objects, as each update batch is saved; objects reloaded from the database are read in pages of {PageSize}",
-            allPendingExportsByCsoId.Count, updatedCount, pageSize);
+        Log.Information("BeginPendingExportReconciliationAsync: The Connected System has {PendingExportCount} Pending Exports; those of the {UpdatedCount} " +
+            "updated Connected System Objects are loaded and reconciled as each update batch is saved; objects reloaded from the database are read " +
+            "in pages of {PageSize}", pendingExportCount, updatedCount, pageSize);
 
-        var deferredIds = updatedCsos
-            .Where(cso => allPendingExportsByCsoId.ContainsKey(cso.Id))
-            .GroupBy(cso => cso.Id)
+        // An object saved more than once is in the list more than once, so which those are is read from the ids alone; only
+        // they are asked about, and only whether each has a Pending Export (#2521).
+        var savedMoreThanOnce = updatedCsoIds
+            .GroupBy(id => id)
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
-            .ToHashSet();
+            .ToList();
+        IReadOnlySet<Guid> deferredIds = savedMoreThanOnce.Count == 0
+            ? new HashSet<Guid>()
+            : await _syncRepo.GetConnectedSystemObjectIdsWithPendingExportsAsync(savedMoreThanOnce);
         if (deferredIds.Count > 0)
             Log.Information("BeginPendingExportReconciliationAsync: {Count} Connected System Object(s) with Pending Exports are saved more than once " +
                 "this run (updated, then reported deleted under another Object Type); each is reconciled once, after the save phase", deferredIds.Count);
@@ -143,11 +155,61 @@ public partial class SyncImportTaskProcessor
         return new PendingExportReconciliationRun
         {
             DeferredIds = deferredIds,
-            PendingExportsByCsoId = allPendingExportsByCsoId,
             DatabaseFoldsCaseLikeIdentifierKey = databaseFoldsCaseLikeIdentifierKey,
             PageSize = pageSize
         };
     }
+
+    /// <summary>
+    /// Loads the Pending Exports of the update batch about to be saved, so the batch can be reconciled once saved (#2521):
+    /// by the ids of its objects, leaving out those reconciled after the save phase. Given the next batch, and a context
+    /// factory, it starts loading the next batch's on a context of its own, to be taken up when that batch is reached.
+    /// </summary>
+    private async Task LoadBatchPendingExportsAsync(PendingExportReconciliationRun run, IReadOnlyCollection<ConnectedSystemObject> csoBatch,
+        IReadOnlyCollection<ConnectedSystemObject>? nextBatch = null)
+    {
+        var csoIds = BatchPendingExportCsoIds(run, csoBatch);
+        Dictionary<Guid, PendingExport> loaded;
+        using (var span = Diagnostics.Sync.StartSpan("LoadBatchPendingExports").SetTag("csoCount", csoIds.Count))
+        {
+            var prefetched = run.NextBatchPendingExports is { } next && next.CsoIds.SetEquals(csoIds) ? next.Load : null;
+            loaded = prefetched != null
+                ? await prefetched
+                : csoIds.Count == 0 ? [] : await _syncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(csoIds);
+            span.SetTag("prefetched", prefetched != null);
+            span.SetTag("pendingExportCount", loaded.Count);
+            span.SetSuccess();
+        }
+
+        run.NextBatchPendingExports = null;
+        run.BatchPendingExportsByCsoId = loaded;
+        run.PendingExportsLoaded += loaded.Count;
+        run.LargestPendingExportLoad = Math.Max(run.LargestPendingExportLoad, loaded.Count);
+
+        if (nextBatch == null || _dbContextFactory == null)
+            return;
+
+        var nextCsoIds = BatchPendingExportCsoIds(run, nextBatch);
+        if (nextCsoIds.Count > 0)
+            run.NextBatchPendingExports = (nextCsoIds, LoadPendingExportsOnOwnContextAsync(_dbContextFactory, nextCsoIds));
+    }
+
+    private static HashSet<Guid> BatchPendingExportCsoIds(PendingExportReconciliationRun run, IEnumerable<ConnectedSystemObject> csoBatch) =>
+        csoBatch.Select(cso => cso.Id).Where(id => !run.DeferredIds.Contains(id)).ToHashSet();
+
+    /// <summary>
+    /// Loads Pending Exports on a context of their own, so the load can run while the import's own context works. The
+    /// batches are disjoint and reconciliation writes only its own batch's Pending Exports, so what is read here is what a
+    /// load on the import's context would read once the batch is reached.
+    /// </summary>
+    private static Task<Dictionary<Guid, PendingExport>> LoadPendingExportsOnOwnContextAsync(
+        IDbContextFactory<JIM.PostgresData.JimDbContext> dbContextFactory, IReadOnlyCollection<Guid> csoIds) =>
+        Task.Run(async () =>
+        {
+            await using var context = await dbContextFactory.CreateDbContextAsync();
+            var repository = new JIM.PostgresData.PostgresDataRepository(context);
+            return await repository.Sync.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(csoIds);
+        });
 
     /// <summary>
     /// Takes, for each object of the batch with a Pending Export that this run's hydration loaded whole, what it holds and
@@ -157,7 +219,7 @@ public partial class SyncImportTaskProcessor
     private Dictionary<ConnectedSystemObject, ValuesBeforeSave> CaptureValuesBeforeSave(PendingExportReconciliationRun run,
         IEnumerable<ConnectedSystemObject> csoBatch) =>
         csoBatch
-            .Where(cso => run.PendingExportsByCsoId.ContainsKey(cso.Id) && !run.DeferredIds.Contains(cso.Id) &&
+            .Where(cso => run.BatchPendingExportsByCsoId.ContainsKey(cso.Id) && !run.DeferredIds.Contains(cso.Id) &&
                           _connectedSystemObjectsLoadedWhole.Contains(cso) && !cso.IsPartiallyLoaded)
             .ToDictionary(cso => cso,
                 cso => new ValuesBeforeSave([.. cso.AttributeValues], [.. cso.PendingAttributeValueAdditions], [.. cso.PendingAttributeValueRemovals]),
@@ -221,7 +283,7 @@ public partial class SyncImportTaskProcessor
         foreach (var (csoId, item) in importItemsByCsoId.Where(pair => run.DeferredIds.Contains(pair.Key)))
             run.DeferredImportItems.TryAdd(csoId, item);
 
-        var withExports = csoBatch.Where(cso => run.PendingExportsByCsoId.ContainsKey(cso.Id) && !run.DeferredIds.Contains(cso.Id)).ToList();
+        var withExports = csoBatch.Where(cso => run.BatchPendingExportsByCsoId.ContainsKey(cso.Id) && !run.DeferredIds.Contains(cso.Id)).ToList();
         if (withExports.Count == 0)
             return;
 
@@ -244,13 +306,14 @@ public partial class SyncImportTaskProcessor
 
         batchSpan.SetTag("heldAsSavedCount", heldAsSaved.Count);
         batchSpan.SetTag("reloadedCount", toReload.Count);
-        await ReconcileObjectsAsync(run, heldAsSaved, toReload, importItemsByCsoId);
+        await ReconcileObjectsAsync(run, heldAsSaved, toReload, importItemsByCsoId, run.BatchPendingExportsByCsoId);
         batchSpan.SetSuccess();
     }
 
     /// <summary>
     /// Reconciles the objects saved more than once this run (<see cref="PendingExportReconciliationRun.DeferredIds"/>), once
-    /// each, after every batch is saved: reloaded, as every object was reconciled before #2908.
+    /// each, after every batch is saved: reloaded, as every object was reconciled before #2908, with their Pending Exports
+    /// loaded now. No batch touched those, so they are as they stood when the save phase began.
     /// </summary>
     private async Task ReconcileDeferredAsync(PendingExportReconciliationRun run)
     {
@@ -259,7 +322,10 @@ public partial class SyncImportTaskProcessor
 
         using var span = Diagnostics.Sync.StartSpan("ReconcilePendingExports").SetTag("csoCount", run.DeferredIds.Count).SetTag("deferred", true);
         run.ReloadsByReason[ReconciliationReloadReason.SavedMoreThanOnce] = run.DeferredIds.Count;
-        await ReconcileObjectsAsync(run, [], [.. run.DeferredIds], run.DeferredImportItems);
+        var pendingExportsByCsoId = await _syncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(run.DeferredIds);
+        run.PendingExportsLoaded += pendingExportsByCsoId.Count;
+        run.LargestPendingExportLoad = Math.Max(run.LargestPendingExportLoad, pendingExportsByCsoId.Count);
+        await ReconcileObjectsAsync(run, [], [.. run.DeferredIds], run.DeferredImportItems, pendingExportsByCsoId);
         span.SetSuccess();
     }
 
@@ -270,7 +336,7 @@ public partial class SyncImportTaskProcessor
     /// the next import judges again, never a Pending Export removed with nothing recording why.
     /// </summary>
     private async Task ReconcileObjectsAsync(PendingExportReconciliationRun run, List<ConnectedSystemObject> heldAsSaved, List<Guid> toReload,
-        Dictionary<Guid, ActivityRunProfileExecutionItem> importItemsByCsoId)
+        Dictionary<Guid, ActivityRunProfileExecutionItem> importItemsByCsoId, IReadOnlyDictionary<Guid, PendingExport> pendingExportsByCsoId)
     {
         var isFirstBatch = run.BatchCount++ == 0;
         run.JudgedFromHeldValuesCount += heldAsSaved.Count;
@@ -284,7 +350,7 @@ public partial class SyncImportTaskProcessor
         if (heldAsSaved.Count > 0)
         {
             using var heldSpan = Diagnostics.Sync.StartSpan("ReconcileHeldValues").SetTag("csoCount", heldAsSaved.Count);
-            var plan = SyncEngine.PlanReconciliationProbes(heldAsSaved.Select(cso => run.PendingExportsByCsoId[cso.Id]),
+            var plan = SyncEngine.PlanReconciliationProbes(heldAsSaved.Select(cso => pendingExportsByCsoId[cso.Id]),
                 run.DatabaseFoldsCaseLikeIdentifierKey);
             var answers = plan.Questions.Count == 0
                 ? []
@@ -299,7 +365,7 @@ public partial class SyncImportTaskProcessor
 
         // Reloaded, exactly as every object was before #2908.
         foreach (var pageCsoIds in toReload.Chunk(run.PageSize))
-            csosToJudge.AddRange(await ReloadForReconciliationAsync(run, pageCsoIds, probedValuesByCsoId));
+            csosToJudge.AddRange(await ReloadForReconciliationAsync(run, pageCsoIds, pendingExportsByCsoId, probedValuesByCsoId));
 
         // Which of the batch's accounts are still owed a password, read only when it holds a change written with an interim
         // value until an Initial Password is delivered (#2039), and which of its objects still have a change on the Exchange
@@ -308,8 +374,8 @@ public partial class SyncImportTaskProcessor
         IReadOnlySet<Guid>? connectedSystemObjectIdsWithExchangeChange;
         using (var lookupsSpan = Diagnostics.Sync.StartSpan("ReconcilePageLookups"))
         {
-            metaverseObjectIdsOwedPassword = await GetMetaverseObjectIdsOwedPasswordForPageAsync(csosToJudge, run.PendingExportsByCsoId);
-            connectedSystemObjectIdsWithExchangeChange = await GetConnectedSystemObjectIdsWithExchangeChangeForPageAsync(csosToJudge, run.PendingExportsByCsoId);
+            metaverseObjectIdsOwedPassword = await GetMetaverseObjectIdsOwedPasswordForPageAsync(csosToJudge, pendingExportsByCsoId);
+            connectedSystemObjectIdsWithExchangeChange = await GetConnectedSystemObjectIdsWithExchangeChangeForPageAsync(csosToJudge, pendingExportsByCsoId);
             lookupsSpan.SetTag("owedPasswordCount", metaverseObjectIdsOwedPassword?.Count ?? 0);
             lookupsSpan.SetTag("exchangeChangeCount", connectedSystemObjectIdsWithExchangeChange?.Count ?? 0);
             lookupsSpan.SetSuccess();
@@ -334,7 +400,7 @@ public partial class SyncImportTaskProcessor
                 try
                 {
                     var perCsoSw = isFirstBatch ? Stopwatch.StartNew() : null;
-                    run.PendingExportsByCsoId.TryGetValue(cso.Id, out var pendingExport);
+                    pendingExportsByCsoId.TryGetValue(cso.Id, out var pendingExport);
 
                     var result = new PendingExportReconciliationResult();
                     _syncEngine.ReconcileCsoAgainstPendingExport(cso, pendingExport, result, metaverseObjectIdsOwedPassword,
@@ -392,7 +458,7 @@ public partial class SyncImportTaskProcessor
         {
             var written = raised.ToList();
             if (await FlushImportRpeisAsync(raised, countInActivityTotals: false))
-                run.RaisedItemsAwaitingTotals.AddRange(written);
+                run.RaisedItemTotals.Add(written);
         }
 
         await PersistMergedReconciliationOutcomesAsync(modifiedImportItems.Values.ToList());
@@ -404,7 +470,8 @@ public partial class SyncImportTaskProcessor
     /// multi-valued references (#2669), and adds the probe answers to <paramref name="probedValuesByCsoId"/>.
     /// </summary>
     private async Task<List<ConnectedSystemObject>> ReloadForReconciliationAsync(PendingExportReconciliationRun run,
-        IReadOnlyCollection<Guid> pageCsoIds, Dictionary<Guid, Dictionary<int, ProbedAttributeValues>> probedValuesByCsoId)
+        IReadOnlyCollection<Guid> pageCsoIds, IReadOnlyDictionary<Guid, PendingExport> pendingExportsByCsoId,
+        Dictionary<Guid, Dictionary<int, ProbedAttributeValues>> probedValuesByCsoId)
     {
         // Probe rather than load the values of large multi-valued references (#2669): a group's member attribute would
         // otherwise bring every member's value for a handful of changes (761,000 and 1.73 million values on two pages
@@ -413,7 +480,7 @@ public partial class SyncImportTaskProcessor
         // it, the value count capped at two; the engine judges them with the same comparison it applies to a full load.
         // What is probed is left out of the load below, decided from the answers so the two can never disagree.
         var probePlan = SyncEngine.PlanReconciliationProbes(
-            pageCsoIds.Select(id => run.PendingExportsByCsoId.GetValueOrDefault(id)).OfType<PendingExport>(),
+            pageCsoIds.Select(id => pendingExportsByCsoId.GetValueOrDefault(id)).OfType<PendingExport>(),
             run.DatabaseFoldsCaseLikeIdentifierKey);
         using (var probeSpan = Diagnostics.Sync.StartSpan("ReconcileProbeValues"))
         {
@@ -709,10 +776,11 @@ public partial class SyncImportTaskProcessor
         Log.Information("CompletePendingExportReconciliation: Reconciled {Reconciled} Connected System Objects with Pending Exports over {Batches} " +
             "update batch(es): {Held} judged from the values the import held as saved, {Reloaded} reloaded ({ReloadReasons}). Confirmed: {Confirmed}, " +
             "Retry: {Retry}, Held awaiting Initial Password: {HeldForPassword}, Released (no Initial Password owed): {Released}, " +
-            "Held awaiting Exchange: {HeldForExchange}, Exports deleted: {Deleted}",
+            "Held awaiting Exchange: {HeldForExchange}, Exports deleted: {Deleted}. Pending Exports loaded: {Loaded}, the most in one load: {LargestLoad}",
             run.ReconciledCount, run.BatchCount, run.JudgedFromHeldValuesCount, run.ReloadedCount,
             run.ReloadsByReason.Count == 0 ? "none" : string.Join(", ", run.ReloadsByReason.OrderBy(r => r.Key).Select(r => $"{r.Key}={r.Value}")),
-            run.TotalConfirmed, run.TotalRetry, run.TotalHeld, run.TotalReleased, run.TotalHeldForExchange, run.ExportsDeleted);
+            run.TotalConfirmed, run.TotalRetry, run.TotalHeld, run.TotalReleased, run.TotalHeldForExchange, run.ExportsDeleted,
+            run.PendingExportsLoaded, run.LargestPendingExportLoad);
     }
 
     /// <summary>

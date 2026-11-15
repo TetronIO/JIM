@@ -245,7 +245,7 @@ public class UnconfirmedExportedCreateRetryTests
                 "changed, update this fixture to invoke the current production method; do not reimplement its " +
                 "unseen-Create scoping here, because that scoping is the behaviour under test.");
 
-        await (Task)method.Invoke(processor, [externalIdsImported, new List<ConnectedSystemObject>(), null, totalObjectsImported])!;
+        await (Task)method.Invoke(processor, [externalIdsImported, new HashSet<Guid>(), null, totalObjectsImported])!;
     }
 
     private static (SyncImportTaskProcessor Processor, SyncRepository Repo, Guid CsoId, Guid PendingExportId, Guid AttrChangeId) BuildFixture(
