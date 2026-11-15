@@ -243,6 +243,173 @@ public class ReferenceExternalIdBatchLookupDatabaseTests
         }
     }
 
+    private sealed record SharedReferencesSeed(
+        Guid GroupAId,
+        Guid GroupBId,
+        Guid GroupCId,
+        Guid UserWithDnId,
+        Guid UserWithoutDnId,
+        Guid UserWithNoExternalIdValueId,
+        Guid OtherUserWithDnId,
+        int MemberAttributeId,
+        int ManagedByAttributeId);
+
+    /// <summary>
+    /// #2521: a page of groups sharing their members, as the confirming Full Import's first page is (the 100 largest groups
+    /// hold 3 million references to 495,000 users). Three groups reference the same users through two reference attributes
+    /// (member, and managedBy). One user has a Secondary External ID (a DN), one only an External ID, one neither. Group A
+    /// references a user through both attributes, and holds an unresolved reference and a text value besides.
+    /// </summary>
+    private async Task<SharedReferencesSeed> SeedGroupsSharingMembersAsync()
+    {
+        await using var seed = NewContext();
+
+        var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+        var system = new ConnectedSystem { Name = "Yellowstone", ConnectorDefinition = connectorDefinition };
+
+        var userType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = system, Selected = true };
+        var entryUuidAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "entryUUID", ConnectedSystemObjectType = userType, Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued, Selected = true, IsExternalId = true
+        };
+        var dnAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "dn", ConnectedSystemObjectType = userType, Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued, Selected = true
+        };
+        userType.Attributes.Add(entryUuidAttr);
+        userType.Attributes.Add(dnAttr);
+
+        var groupType = new ConnectedSystemObjectType { Name = "group", ConnectedSystem = system, Selected = true };
+        var memberAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "member", ConnectedSystemObjectType = groupType, Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued, Selected = true
+        };
+        var managedByAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "managedBy", ConnectedSystemObjectType = groupType, Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.SingleValued, Selected = true
+        };
+        var descriptionAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "description", ConnectedSystemObjectType = groupType, Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued, Selected = true
+        };
+        groupType.Attributes.Add(memberAttr);
+        groupType.Attributes.Add(managedByAttr);
+        groupType.Attributes.Add(descriptionAttr);
+
+        seed.AddRange(connectorDefinition, system, userType, groupType);
+        await seed.SaveChangesAsync();
+
+        ConnectedSystemObject User(string entryUuid, string? dn)
+        {
+            var user = new ConnectedSystemObject
+            {
+                Type = userType, ConnectedSystem = system, Status = ConnectedSystemObjectStatus.Normal,
+                ExternalIdAttributeId = entryUuidAttr.Id, SecondaryExternalIdAttributeId = dnAttr.Id
+            };
+            if (entryUuid.Length > 0)
+                user.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = entryUuidAttr, AttributeId = entryUuidAttr.Id, StringValue = entryUuid });
+            if (dn != null)
+                user.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = dnAttr, AttributeId = dnAttr.Id, StringValue = dn });
+            return user;
+        }
+
+        var userWithDn = User("uuid-ada", "cn=Ada,ou=Users,dc=yellowstone,dc=local");
+        var userWithoutDn = User("uuid-grace", null);
+        var userWithNoExternalIdValue = User(string.Empty, null);
+        var otherUserWithDn = User("uuid-alan", "cn=Alan,ou=Users,dc=yellowstone,dc=local");
+
+        ConnectedSystemObject Group(params (ConnectedSystemObjectTypeAttribute Attribute, ConnectedSystemObject? Reference, string? Unresolved)[] values)
+        {
+            var group = new ConnectedSystemObject
+            {
+                Type = groupType, ConnectedSystem = system, Status = ConnectedSystemObjectStatus.Normal,
+                ExternalIdAttributeId = entryUuidAttr.Id
+            };
+            foreach (var (attribute, reference, unresolved) in values)
+            {
+                group.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                {
+                    Attribute = attribute, AttributeId = attribute.Id, ReferenceValue = reference, UnresolvedReferenceValue = unresolved
+                });
+            }
+
+            return group;
+        }
+
+        var groupA = Group(
+            (memberAttr, userWithDn, null),
+            (memberAttr, userWithoutDn, null),
+            (memberAttr, userWithNoExternalIdValue, null),
+            (memberAttr, null, "cn=Nobody,ou=Users,dc=yellowstone,dc=local"),
+            (managedByAttr, userWithDn, null));
+        groupA.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Attribute = descriptionAttr, AttributeId = descriptionAttr.Id, StringValue = "Not a reference"
+        });
+        var groupB = Group(
+            (memberAttr, userWithDn, null),
+            (memberAttr, userWithoutDn, null),
+            (managedByAttr, otherUserWithDn, null));
+        var groupC = Group(
+            (memberAttr, userWithDn, null),
+            (memberAttr, otherUserWithDn, null));
+
+        seed.AddRange(userWithDn, userWithoutDn, userWithNoExternalIdValue, otherUserWithDn, groupA, groupB, groupC);
+        await seed.SaveChangesAsync();
+
+        return new SharedReferencesSeed(groupA.Id, groupB.Id, groupC.Id, userWithDn.Id, userWithoutDn.Id, userWithNoExternalIdValue.Id,
+            otherUserWithDn.Id, memberAttr.Id, managedByAttr.Id);
+    }
+
+    /// <summary>
+    /// #2521: what the lookup answers for a page of groups sharing their members, pinned so that a rewrite of the statement
+    /// returns exactly what it returned before: per group, each object it references through any attribute not left out,
+    /// by its Secondary External ID where it has one and otherwise its External ID; nothing for an object with neither, an
+    /// unresolved reference or a value that is not a reference.
+    /// </summary>
+    [Test]
+    public async Task GetReferenceExternalIdsForCsosAsync_GroupsSharingMembers_ReturnsEachGroupsReferencesAsync()
+    {
+        var seeded = await SeedGroupsSharingMembersAsync();
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        var whole = await repository.Sync.GetReferenceExternalIdsForCsosAsync([seeded.GroupAId, seeded.GroupBId, seeded.GroupCId, seeded.UserWithDnId]);
+        var leavingMembersOut = await repository.Sync.GetReferenceExternalIdsForCsosAsync([seeded.GroupAId, seeded.GroupBId, seeded.GroupCId],
+            [seeded.MemberAttributeId]);
+        var leavingManagersOut = await repository.Sync.GetReferenceExternalIdsForCsosAsync([seeded.GroupAId, seeded.GroupBId, seeded.GroupCId],
+            [seeded.ManagedByAttributeId]);
+
+        const string ada = "cn=Ada,ou=Users,dc=yellowstone,dc=local";
+        const string alan = "cn=Alan,ou=Users,dc=yellowstone,dc=local";
+        const string grace = "uuid-grace";
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(whole.Keys, Is.EquivalentTo(new[] { seeded.GroupAId, seeded.GroupBId, seeded.GroupCId, seeded.UserWithDnId }));
+            Assert.That(whole[seeded.GroupAId], Is.EquivalentTo(new Dictionary<Guid, string> { [seeded.UserWithDnId] = ada, [seeded.UserWithoutDnId] = grace }));
+            Assert.That(whole[seeded.GroupBId], Is.EquivalentTo(new Dictionary<Guid, string>
+                { [seeded.UserWithDnId] = ada, [seeded.UserWithoutDnId] = grace, [seeded.OtherUserWithDnId] = alan }));
+            Assert.That(whole[seeded.GroupCId], Is.EquivalentTo(new Dictionary<Guid, string> { [seeded.UserWithDnId] = ada, [seeded.OtherUserWithDnId] = alan }));
+            Assert.That(whole[seeded.UserWithDnId], Is.Empty);
+
+            Assert.That(leavingMembersOut[seeded.GroupAId], Is.EquivalentTo(new Dictionary<Guid, string> { [seeded.UserWithDnId] = ada }));
+            Assert.That(leavingMembersOut[seeded.GroupBId], Is.EquivalentTo(new Dictionary<Guid, string> { [seeded.OtherUserWithDnId] = alan }));
+            Assert.That(leavingMembersOut[seeded.GroupCId], Is.Empty);
+
+            Assert.That(leavingManagersOut[seeded.GroupAId], Is.EquivalentTo(whole[seeded.GroupAId]), "Group A references Ada as a member too");
+            Assert.That(leavingManagersOut[seeded.GroupBId], Is.EquivalentTo(new Dictionary<Guid, string> { [seeded.UserWithDnId] = ada, [seeded.UserWithoutDnId] = grace }));
+            Assert.That(leavingManagersOut[seeded.GroupCId], Is.EquivalentTo(whole[seeded.GroupCId]));
+        }
+
+        foreach (var (csoId, batched) in whole)
+            Assert.That(batched, Is.EquivalentTo(await repository.Sync.GetReferenceExternalIdsAsync(csoId)), $"CSO {csoId}: parity with the single-object lookup");
+    }
+
     [Test]
     public async Task GetReferenceExternalIdsForCsosAsync_EmptyInput_ReturnsEmptyAsync()
     {
