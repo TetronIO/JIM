@@ -17,7 +17,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorPartitionWatermarks, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorPartitionPlacement, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IConnectorUniquenessProbe, IConnectorSettingsCheck, IConnectorExchangeRecipients, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorPartitionWatermarks, IConnectorObjectTypeReadOrder, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorPartitionPlacement, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IConnectorUniquenessProbe, IConnectorSettingsCheck, IConnectorExchangeRecipients, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -97,6 +97,21 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     /// reads as no watermark for any Partition.
     /// </summary>
     private IReadOnlyDictionary<int, string?>? _partitionWatermarks;
+
+    /// <summary>
+    /// The order JIM asked for the selected Object Types to be read in (#2492), handed over once before the import
+    /// connection opens. Null until JIM hands one, which reads every type together, in the order the schema lists them.
+    /// </summary>
+    private IReadOnlyList<IReadOnlyList<int>>? _objectTypeReadOrder;
+
+    /// <summary>
+    /// Where a Full Import of a directory whose paging cookies are scoped to the connection stands between calls (#2521):
+    /// the searches still reading, and the objects they have read that JIM has not yet been handed. Made by the first
+    /// <see cref="ImportAsync"/> of a session, kept for every later call of the same run, since JIM keeps one Connector
+    /// instance for the whole run, and closed with the import connection, which stops its searches and closes their
+    /// connections.
+    /// </summary>
+    private LdapFullReadCursor? _fullReadCursor;
 
     /// <summary>
     /// Where the server used by the most recent <see cref="OpenImportConnection"/> call came from (issue
@@ -656,6 +671,21 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     };
     #endregion
 
+    #region IConnectorObjectTypeReadOrder members
+    /// <inheritdoc />
+    /// <remarks>
+    /// Governs only the full read of a directory whose paging cookies are scoped to the connection (OpenLDAP, 389
+    /// Directory Server, a generic directory), which reads each Container and Object Type with a search of its own:
+    /// a group's searches start once every earlier group's have been read. Active Directory reads every search on one
+    /// connection, a page of each per call, so it has no order to follow.
+    /// </remarks>
+    public void SetObjectTypeReadOrder(IReadOnlyList<IReadOnlyList<int>> groups)
+    {
+        ArgumentNullException.ThrowIfNull(groups);
+        _objectTypeReadOrder = groups;
+    }
+    #endregion
+
     #region IConnectorPartitionWatermarks members
     /// <inheritdoc />
     public void SetPartitionWatermarks(IReadOnlyDictionary<int, string?> watermarks)
@@ -1152,7 +1182,13 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         // The server this session actually connected through, and a probe for any other, so the import can
         // prove a discovered domain controller reachable before pinning it (issue #230 Phase 2).
         var connectedServer = _openConnectionPlan?.EffectiveServer ?? string.Empty;
-        var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, _connectionFactory, importConcurrency, paginationTokens, persistedConnectorData, _partitionWatermarks, preferredDomainController, connectedServer, server => CanConnectTo(server, logger), logger, cancellationToken, progress);
+        var connectionFactory = _connectionFactory;
+        Func<ILdapDedicatedConnection>? dedicatedConnectionFactory = connectionFactory == null
+            ? null
+            : () => new LdapDedicatedConnection(connectionFactory());
+        _fullReadCursor ??= new LdapFullReadCursor();
+        var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, dedicatedConnectionFactory, importConcurrency, paginationTokens, persistedConnectorData, _partitionWatermarks,
+            preferredDomainController, connectedServer, server => CanConnectTo(server, logger), logger, cancellationToken, progress, _fullReadCursor, _objectTypeReadOrder);
 
         switch (runProfile.RunType)
         {
@@ -1197,6 +1233,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
     public string? CloseImportConnection()
     {
+        // The full read's searches first: they stop, and close their own connections, before the import's goes.
+        _fullReadCursor?.Dispose();
+        _fullReadCursor = null;
+
         _connection?.Dispose();
 
         // The trust directory is only read while a TLS session is being established, so it is safe to remove as soon
@@ -2034,6 +2074,9 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
         if (disposing)
         {
+            _fullReadCursor?.Dispose();
+            _fullReadCursor = null;
+
             _connection?.Dispose();
             _connection = null;
 

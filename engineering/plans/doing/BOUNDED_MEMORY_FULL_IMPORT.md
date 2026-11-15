@@ -1,6 +1,6 @@
 # Bounded-Memory Full Import
 
-- **Status:** Doing (Phase 1 complete)
+- **Status:** Doing (Phase 2 complete)
 - **Issue:** [#2521](https://github.com/TetronIO/JIM/issues/2521)
 - **Related:** [#917](https://github.com/TetronIO/JIM/issues/917) ([Bounded-Memory Delta Import](../BOUNDED_MEMORY_DELTA_IMPORT.md)), [#2669](https://github.com/TetronIO/JIM/issues/2669)
 
@@ -134,11 +134,26 @@ What was found doing it:
 - **The Source Full Import's `ProcessImportObjects` time is not a garbage collector cost.** It ranged from 16.8 to 30.9 s across twelve 500k runs on old and new code alike; the slow windows show allocation halving and CPU at 3 to 5% with almost no collections, a wait outside the process. No gen0 budget floor is needed.
 - **Next allocation target:** the confirming save allocates about 64 GiB in 80 s (about 125 KB per updated object), mostly Npgsql parameters and strings.
 
-### Phase 2: The LDAP Connector yields pages (Connector behaviour change)
+### Phase 2: The LDAP Connector yields pages (Connector behaviour change) ✅
 
 - The cursor and producers above, with dependency-ordered reads.
 - Tests through the connection factory seam: bounded pages until every pair is drained, the watermark on the first page only, a producer's failure failing the next call, disposal on close and cancellation, and backpressure.
 - Scenarios: 008 on OpenLDAP (Large) and on 389 Directory Server, 009, 019, 022, 032, and a Scale100k5kGroups run.
+
+What was found doing it:
+- **One Connector instance per run holds:** the Worker creates the Connector once per task (`Worker.cs`, `_connectorFactory.Create`) and hands it to `SyncImportTaskProcessor`, which opens, calls every page and closes on it, closing in a `finally`. The cursor (`LdapFullReadCursor`) lives on `LdapConnector` from the first `ImportAsync` to `CloseImportConnection` (and `Dispose`). A continuation reaching a Connector that never started the read throws rather than reading as "nothing left", which would have JIM take every object it holds as deleted.
+- **The searches:** one per Container and Object Type, each on a connection of its own from the plan's factory (now `ILdapDedicatedConnection`, which is the test seam), up to Import Concurrency at once (the existing setting, default 4); without a factory, which only a test builds, one at a time on the import's connection. Each pages its search at the Run Profile's Page Size into one bounded `Channel` of Page Size objects, waiting when it is full. A call takes up to Page Size objects and returns a continuation while anything is left; it waits for the next object, or the searches' end, before saying so, so the last page is never empty. Held at once: about one page handed over, one buffered, and one directory page per search.
+- **Watermarks and Partitions:** unchanged. The first call reads the rootDSE and takes every target Partition's watermark (#2715) before any search starts, and only that call returns `PersistedConnectorData` and `PartitionWatermarks`. The searches cover every top-level selected Container of every target Partition, as before. A later call carries on from the cursor before anything else, because the record JIM replays to later pages is the previous run's, which could make a later page think the directory is a different type (on a first ever import it is null, and the page would have fallen to the Active Directory path and ended the read early).
+- **Delta Import that reads every object (#2720)** pages the same way: every later page decides alike from the same record and watermarks, reaches the fallback and carries on the cursor; a later page that decided otherwise throws rather than drop the rest of the read.
+- **Failure:** a search's failure stops the others and is thrown by the call that next reaches it, before or after taking its page; no page claims the read is complete while a search has failed. Search limit refusals keep their message (`CannotPerformImportException`). An unexpected cancellation inside a search counts as a failure, never as its end.
+- **Close and cancellation** cancel the searches and wait for each to close its connection; a search waiting on the directory finishes that request first, bounded by Search Timeout. A cancelled call returns what it has, as before; the processor skips everything after the read on cancellation.
+- **Reading order (decision 7):** the Worker hands the order through a new `IConnectorObjectTypeReadOrder`, before opening the connection, on Full Import only, computed with `SyncObjectTypeOrdering` exactly as Full Synchronisation does: from declared targets, else the types the held values point at (one aggregate query). Each group's searches start once the group before has been read to the end. Without an order (Delta Import, or a test) every selected type reads together, as before. On a Connected System's first import there are no held values, so LDAP's undeclared `member` and `manager` give no edges and the types read in id order; the order is only right from the second Full Import onwards. Phase 5 should decide whether that matters for the first load.
+- **What the processor assumed:** nothing about one page that the multi-call shape did not already handle (Active Directory has always returned a page per call). Two consequences to know about:
+  - **Duplicates (#2063):** two copies of one External ID on the same page are both rejected; on different pages the earlier is kept and the later rejected. With the whole directory on one page every duplicate was the first kind; it is now whichever the paging gives, as for Active Directory. Only an External ID that is not unique in the directory reaches this.
+  - **Per-page overhead:** Page Size defaults to 100, so 500,000 objects are now 5,000 calls, each with its own hydration and reference queries, Activity message writes and step changes, where they were one. To be measured against Phase 0's timings at scale.
+- **Exclusion discards (#1255)** are counted by the searches between calls, into one tally the session shares; each call now takes what has accumulated (`ExclusionDiscardTally.TakeCounts`) rather than reading it, since JIM adds up every page's counts.
+- **Progress:** each call enters the Fetch step, naming what the searches are reading, and reports the objects it handed over; the searches report nothing themselves, as the step would otherwise show as running while JIM processes. The cursor logs a summary when the read ends.
+- **A real bug found by the tests:** describing what is being read with LINQ straight over a `ConcurrentDictionary` sizes its buffer from `Count` and then enumerates, so a search finishing in between threw `IndexOutOfRangeException` (about one run in twenty-five); it reads a `ToArray` snapshot.
 
 ### Phase 3: Deletion detection over ids; #2049 replacements held apart (no behaviour change)
 

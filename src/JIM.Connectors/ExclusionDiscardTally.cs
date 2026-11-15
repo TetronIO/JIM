@@ -8,7 +8,7 @@ namespace JIM.Connectors;
 
 /// <summary>
 /// Counts the entries an import read from a Connected System and discarded because an excluded Container carved
-/// them out (#1255), per Container, for one import call.
+/// them out (#1255), per Container, until the import reports them.
 /// </summary>
 /// <remarks>
 /// A directory cannot express "this subtree except that branch" in one search, and decomposing the searches to
@@ -43,6 +43,28 @@ public sealed class ExclusionDiscardTally
     {
         ArgumentNullException.ThrowIfNull(excludedBy);
         _discardsByContainerId.AddOrUpdate(excludedBy.Id, 1, (_, count) => count + 1);
+    }
+
+    /// <summary>
+    /// What was discarded since the last take, heaviest exclusion first, removing it from the tally: for a Connector
+    /// whose reading carries on between import calls (the LDAP Connector's full read of a directory whose paging
+    /// cookies are scoped to the connection, #2521), so each call reports what it adds and JIM, which adds up every
+    /// call's counts, counts each discard once.
+    /// </summary>
+    /// <remarks>
+    /// Each Container's count is removed atomically, so a discard recorded while the take runs is either in this take
+    /// or left for the next, never lost.
+    /// </remarks>
+    public List<ExclusionDiscardCount> TakeCounts()
+    {
+        var taken = new List<ExclusionDiscardCount>();
+        foreach (var containerId in _discardsByContainerId.Keys)
+        {
+            if (_discardsByContainerId.TryRemove(containerId, out var count))
+                taken.Add(new ExclusionDiscardCount(containerId, count));
+        }
+
+        return [.. taken.OrderByDescending(count => count.EntriesDiscarded).ThenBy(count => count.ContainerId)];
     }
 
     /// <summary>

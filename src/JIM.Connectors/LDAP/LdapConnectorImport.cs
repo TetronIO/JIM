@@ -14,6 +14,7 @@ using System.DirectoryServices.Protocols;
 using System.Globalization;
 using System.Runtime.ExceptionServices;
 using System.Text.Json;
+using System.Threading.Channels;
 namespace JIM.Connectors.LDAP;
 
 internal class LdapConnectorImport : ILdapDeltaImportHost
@@ -25,8 +26,7 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _connectedSystemRunProfile;
     private readonly ILogger _logger;
-    private readonly LdapConnection _connection;
-    private readonly Func<LdapConnection>? _connectionFactory;
+    private readonly Func<ILdapDedicatedConnection>? _connectionFactory;
     private readonly int _importConcurrency;
     private readonly List<ConnectedSystemPaginationToken> _paginationTokens;
     private readonly string? _persistedConnectorData;
@@ -86,10 +86,9 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
     private readonly IConnectorProgress _progress;
 
     /// <summary>
-    /// Objects handed over so far within the call currently being served. A Full Import against a
-    /// directory that pages per connection drains every page inside one call, so without this the
-    /// Activity's counters would not move until the whole directory had been read. Written from
-    /// parallel combos, hence the interlocked increments.
+    /// Objects handed over so far within the call currently being served, so the Activity's counters move while
+    /// a call that reads many directory pages (a change source's) is still in flight. Interlocked, as a call's
+    /// reads may report from more than one thread.
     /// </summary>
     private int _objectsReadThisCall;
     private LdapConnectorRootDse? _currentRootDse;
@@ -104,22 +103,35 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
     /// <summary>
     /// Every Container stating something about scope for this run, held once because every entry the searches
     /// return is tested against it. Lazy because it depends on the Run Profile's target partitions, and
-    /// thread-safe because the parallel combos convert their entries concurrently.
+    /// thread-safe because a full read's searches convert their entries concurrently.
     /// </summary>
     private readonly Lazy<List<ConnectedSystemContainer>> _scopeDecidingContainers;
 
     /// <summary>
     /// How many entries each excluded Container caused to be discarded on the way in. Client-side filtering means
     /// these entries were read from the directory and thrown away, and the design accepted that cost on condition
-    /// it is reported rather than hidden (#1255).
+    /// it is reported rather than hidden (#1255). The full read's, for the session, where there is one: its searches
+    /// discard between calls, and each call reports, and takes, what has accumulated.
     /// </summary>
-    private readonly ExclusionDiscardTally _entriesDiscardedByExclusion = new();
+    private readonly ExclusionDiscardTally _entriesDiscardedByExclusion;
+
+    /// <summary>
+    /// The session's full read of a directory whose paging cookies are scoped to the connection, kept by the Connector
+    /// between calls (#2521): started by a run's first page, and carried on by each call after it.
+    /// </summary>
+    private readonly LdapFullReadCursor _fullReadCursor;
+
+    /// <summary>
+    /// The order JIM asked for the selected Object Types to be read in, as groups of Object Type ids (#2492); null to read
+    /// every selected type together.
+    /// </summary>
+    private readonly IReadOnlyList<IReadOnlyList<int>>? _objectTypeReadOrder;
 
     internal LdapConnectorImport(
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile runProfile,
         LdapConnection connection,
-        Func<LdapConnection>? connectionFactory,
+        Func<ILdapDedicatedConnection>? connectionFactory,
         int importConcurrency,
         List<ConnectedSystemPaginationToken> paginationTokens,
         string? persistedConnectorData,
@@ -129,11 +141,12 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         Func<string, bool> canConnectTo,
         ILogger logger,
         CancellationToken cancellationToken,
-        IConnectorProgress progress)
+        IConnectorProgress progress,
+        LdapFullReadCursor? fullReadCursor = null,
+        IReadOnlyList<IReadOnlyList<int>>? objectTypeReadOrder = null)
     {
         _connectedSystem = connectedSystem;
         _connectedSystemRunProfile = runProfile;
-        _connection = connection;
         Executor = new LdapOperationExecutor(connection);
         _connectionFactory = connectionFactory;
         _importConcurrency = Math.Clamp(importConcurrency, 1, LdapConnectorConstants.MAX_IMPORT_CONCURRENCY);
@@ -147,6 +160,9 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         _cancellationToken = cancellationToken;
         _progress = progress;
         _scopeDecidingContainers = new Lazy<List<ConnectedSystemContainer>>(() => GetScopeDecidingContainers(GetTargetPartitions()));
+        _fullReadCursor = fullReadCursor ?? new LdapFullReadCursor();
+        _entriesDiscardedByExclusion = _fullReadCursor.Discards;
+        _objectTypeReadOrder = objectTypeReadOrder;
 
         // Get search timeout from settings, defaulting to 5 minutes
         _bindIdentity = connectedSystem.SettingValues
@@ -196,6 +212,12 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
             return result;
         }
 
+        // A later page of a full read of a directory whose paging cookies are scoped to the connection carries on from
+        // the session's cursor (#2521), whatever this call would otherwise decide about the directory: the record JIM
+        // replays on later pages is the previous run's, not this one's.
+        if (IsFullReadContinuation)
+            return await TakeFullReadPageAsync(result);
+
         if (_paginationTokens.Count == 0)
         {
             // initial-page call. we have no paging tokens to use (yet) to resume a query
@@ -213,58 +235,32 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
             LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(currentRootDse, targetPartitions, _logger);
         }
 
-        // OpenLDAP's RFC 2696 paging cookies are connection-scoped: any new search on the same
-        // connection invalidates all outstanding paging cursors. To work around this, we give each
-        // container+objectType combo its own dedicated LdapConnection and run combos in parallel,
-        // capped by the Import Concurrency setting. Each connection fully drains its paged search
-        // before being disposed, so there are no cross-call pagination tokens for this path — all
-        // data is fetched within this single call.
+        // OpenLDAP's RFC 2696 paging cookies are connection-scoped: any new search on the same connection invalidates
+        // every outstanding cookie on it. Each Container and Object Type is therefore read by a search on a connection of
+        // its own, up to Import Concurrency at once, each paging into one bounded buffer that this call and every later
+        // one take a page from (#2521). The searches carry on between calls, so JIM holds one page at a time rather than
+        // the whole directory, and fetching from the directory overlaps JIM's processing.
         //
-        // When the connection factory is unavailable or concurrency is 1, we fall back to the
-        // original serialised approach using the primary connection (one combo at a time).
-        //
-        // For AD directories, this block is skipped entirely — AD supports multiple concurrent
-        // paged searches on a single connection, so the original multi-combo-per-page logic below
-        // is used instead.
+        // For AD directories, this block is skipped entirely: AD supports multiple concurrent paged searches on a single
+        // connection, and its cookies survive between calls, so the multi-combo-per-page logic below is used instead.
         var isConnectionScopedPaging = _currentRootDse?.DirectoryType is LdapDirectoryType.OpenLDAP or LdapDirectoryType.Generic or LdapDirectoryType.DirectoryServer389;
-
 
         if (isConnectionScopedPaging)
         {
-            // Build the ordered list of all container+objectType combos
-            var combos = new List<(ConnectedSystemContainer Container, ConnectedSystemObjectType ObjectType)>();
-            foreach (var selectedPartition in GetTargetPartitions())
-            {
-                foreach (var selectedContainer in ConnectedSystemUtilities.GetTopLevelSelectedContainers(selectedPartition))
-                {
-                    foreach (var selectedObjectType in _connectedSystem.ObjectTypes.Where(ot => ot.Selected))
-                    {
-                        combos.Add((selectedContainer, selectedObjectType));
-                    }
-                }
-            }
-
-            if (combos.Count == 0)
+            var searches = GetFullReadSearchesInReadingOrder();
+            if (searches.Count == 0)
                 return result;
 
-            _logger.Debug("GetFullImportObjects: connection-scoped paging directory (OpenLDAP, 389 Directory Server or Generic) detected. Processing {ComboCount} container+objectType combos with concurrency {Concurrency}",
-                combos.Count, _connectionFactory != null ? _importConcurrency : 1);
+            // Without a factory for connections of their own (only a test constructs the import so), the searches share
+            // the import's connection, which can carry one paged search at a time.
+            var concurrency = _connectionFactory != null ? _importConcurrency : 1;
+            _logger.Information("GetFullImportObjects: connection-scoped paging directory (OpenLDAP, 389 Directory Server or Generic) detected. Reading {SearchCount} Container and Object Type searches " +
+                "in {GroupCount} group(s), {Concurrency} at a time, {PageSize} objects to a page",
+                searches.Sum(group => group.Count), searches.Count, concurrency, PageLimit);
 
-            if (_connectionFactory != null && _importConcurrency > 1)
-            {
-                // Parallel path: one dedicated connection per combo, capped by semaphore.
-                // Each combo fully drains all pages on its own connection, so no pagination
-                // tokens are returned — the import processor sees this as a single-page result.
-                await GetFullImportObjectsParallelAsync(result, combos);
-            }
-            else
-            {
-                // Sequential fallback: use the primary connection, one combo at a time.
-                // Each combo is fully drained before moving to the next.
-                await GetFullImportObjectsSequentialAsync(result, combos);
-            }
-
-            return result;
+            _fullReadCursor.Start(searches, concurrency, PageLimit, ReadFullReadSearchAsync,
+                search => $"{search.ObjectType.Name} objects from {search.Container.Name}", _logger, _cancellationToken);
+            return await TakeFullReadPageAsync(result);
         }
 
         // Non-OpenLDAP: original behaviour — query all combos on every page
@@ -358,6 +354,12 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
 
         if (watermarks == null)
             return await ReadEveryObjectInsteadAsync(withoutWatermark);
+
+        // Every page of a run decides alike from the same record and watermarks, so a run whose first page fell back to
+        // reading every object never reaches here on a later one. Were it to, carrying on the change read would drop the
+        // rest of the full read while JIM took it as complete.
+        if (IsFullReadContinuation)
+            throw new InvalidOperationException("A later page of a Delta Import that read every object decided to read changes instead. Every page must decide alike; the import stops rather than lose the rest of its read.");
 
         var context = new LdapDeltaReadContext
         {
@@ -579,14 +581,16 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
     {
         ArgumentNullException.ThrowIfNull(result);
 
-        if (_entriesDiscardedByExclusion.IsEmpty)
+        // Taken rather than read: a full read of a directory whose paging cookies are scoped to the connection goes on
+        // discarding between calls into one tally for the session, and JIM adds up every call's counts (#2521).
+        var counts = _entriesDiscardedByExclusion.TakeCounts();
+        if (counts.Count == 0)
             return;
 
-        var counts = _entriesDiscardedByExclusion.ToCounts();
         result.EntriesDiscardedByExclusion = counts;
 
         _logger.Information("LdapConnectorImport: Discarded {DiscardedCount} entries read from excluded Containers across {ContainerCount} exclusion(s)",
-            _entriesDiscardedByExclusion.Total, counts.Count);
+            counts.Sum(count => count.EntriesDiscarded), counts.Count);
 
         // Named by Distinguished Name in the log even though the count travels by id: the log is read by a person,
         // and a Container id says nothing to one.
@@ -632,162 +636,152 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
     }
 
     /// <summary>
-    /// Processes all container+objectType combos in parallel using a dedicated LdapConnection per combo.
-    /// Each combo fully drains all pages on its own connection, avoiding the RFC 2696 connection-scoped
-    /// paging cookie limitation. Concurrency is capped by <see cref="_importConcurrency"/>.
+    /// Whether this call carries on a full read the session started on an earlier page (#2521).
     /// </summary>
-    private async Task GetFullImportObjectsParallelAsync(
-        ConnectedSystemImportResult result,
-        List<(ConnectedSystemContainer Container, ConnectedSystemObjectType ObjectType)> combos)
+    private bool IsFullReadContinuation => _paginationTokens.Exists(token => token.Name == LdapFullReadCursor.ContinuationTokenName);
+
+    /// <summary>
+    /// The most objects one call hands JIM: the Run Profile's page size, which is also the page size each search asks
+    /// the directory for.
+    /// </summary>
+    private int PageLimit => Math.Max(1, _connectedSystemRunProfile.PageSize);
+
+    /// <summary>
+    /// Takes the next page of the session's full read into <paramref name="result"/>, with a continuation token while
+    /// anything is left to read. A search's failure is thrown here, before or after the page is taken, never handed over
+    /// as the end of the read.
+    /// </summary>
+    private async Task<ConnectedSystemImportResult> TakeFullReadPageAsync(ConnectedSystemImportResult result)
     {
+        if (!_fullReadCursor.IsStarted)
+            throw new InvalidOperationException("JIM asked the LDAP Connector to carry on a full read this import session never started. " +
+                "The read cannot be resumed on another Connector instance; run the import again.");
+
+        await _progress.EnterPhaseAsync(LdapConnectorPhases.Fetch, _fullReadCursor.DescribeReading());
+
+        var more = await _fullReadCursor.TakePageAsync(result.ImportObjects, PageLimit, _cancellationToken);
+        if (more)
+            result.PaginationTokens.Add(new ConnectedSystemPaginationToken(LdapFullReadCursor.ContinuationTokenName, "more"));
+
+        await ReportObjectsReadAsync(result.ImportObjects.Count);
+        return result;
+    }
+
+    /// <summary>
+    /// The searches of a full read, one per Container and selected Object Type, in groups in reading order: the Object
+    /// Types in the order JIM handed (#2492), each group's searches across every top-level selected Container of every
+    /// target Partition. A selected type the order does not name is read in a group after every type it does; with no
+    /// order, every selected type is read together, in the order the schema lists them.
+    /// </summary>
+    private List<IReadOnlyList<(ConnectedSystemContainer Container, ConnectedSystemObjectType ObjectType)>> GetFullReadSearchesInReadingOrder()
+    {
+        var containers = GetTargetPartitions()
+            .SelectMany(ConnectedSystemUtilities.GetTopLevelSelectedContainers)
+            .ToList();
+
+        var typeGroups = OrderObjectTypesForReading(_connectedSystem.ObjectTypes!.Where(ot => ot.Selected).ToList(), _objectTypeReadOrder);
+        if (typeGroups.Count > 1)
+            _logger.Information("GetFullImportObjects: Object Types are read in dependency order: {TypeOrder}",
+                LogSanitiser.Sanitise(string.Join(", then ", typeGroups.Select(group => string.Join(" and ", group.Select(type => type.Name))))));
+
+        return typeGroups
+            .Select(types => (IReadOnlyList<(ConnectedSystemContainer, ConnectedSystemObjectType)>)containers
+                .SelectMany(container => types.Select(type => (container, type)))
+                .ToList())
+            .Where(group => group.Count > 0)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Groups the selected Object Types in the order to read them: the groups of <paramref name="order"/>, each keeping
+    /// only the selected types it names, then any selected type it does not name; with no order, one group of every
+    /// selected type.
+    /// </summary>
+    internal static List<List<ConnectedSystemObjectType>> OrderObjectTypesForReading(
+        IReadOnlyList<ConnectedSystemObjectType> selected, IReadOnlyList<IReadOnlyList<int>>? order)
+    {
+        if (selected.Count == 0)
+            return [];
+
+        if (order == null)
+            return [selected.ToList()];
+
+        var placed = new HashSet<ConnectedSystemObjectType>(ReferenceEqualityComparer.Instance);
+        var groups = order
+            .Select(group => group.SelectMany(typeId => selected.Where(type => type.Id == typeId)).Where(placed.Add).ToList())
+            .Where(group => group.Count > 0)
+            .ToList();
+
+        var unnamed = selected.Where(type => !placed.Contains(type)).ToList();
+        if (unnamed.Count > 0)
+            groups.Add(unnamed);
+
+        return groups;
+    }
+
+    /// <summary>
+    /// Reads one Container and Object Type to the end, a directory page at a time, on a connection of its own, into the
+    /// full read's buffer, waiting for room in it; returns how many objects it wrote. The connection is closed however
+    /// the search ends.
+    /// </summary>
+    private async Task<int> ReadFullReadSearchAsync(
+        (ConnectedSystemContainer Container, ConnectedSystemObjectType ObjectType) search,
+        ChannelWriter<ConnectedSystemImportObject> buffer,
+        CancellationToken stop)
+    {
+        var (container, objectType) = search;
         var stopwatch = Stopwatch.StartNew();
-
-        // Each combo gets its own result to avoid contention on shared collections.
-        // Results are merged after all combos complete.
-        var comboResults = new ConnectedSystemImportResult[combos.Count];
-        for (var i = 0; i < comboResults.Length; i++)
-            comboResults[i] = new ConnectedSystemImportResult();
-
-        using var semaphore = new SemaphoreSlim(_importConcurrency);
-        var tasks = new Task[combos.Count];
-
-        for (var i = 0; i < combos.Count; i++)
-        {
-            _cancellationToken.ThrowIfCancellationRequested();
-
-            var index = i;
-            var (container, objectType) = combos[i];
-
-            tasks[i] = Task.Run(async () =>
-            {
-                await semaphore.WaitAsync(_cancellationToken);
-                LdapConnection? comboConnection = null;
-                try
-                {
-                    comboConnection = _connectionFactory!();
-                    _logger.Debug("GetFullImportObjectsParallel: Started combo {Index}/{Total} — container={Container}, objectType={ObjectType}",
-                        index + 1, combos.Count, container.Name, objectType.Name);
-
-                    // Fully drain all pages for this combo on its dedicated connection
-                    await DrainAllPagesAsync(comboResults[index], comboConnection, container, objectType);
-                }
-                catch (OperationCanceledException)
-                {
-                    _logger.Debug("GetFullImportObjectsParallel: Combo {Index} cancelled", index + 1);
-                }
-                catch (OperationalException ex)
-                {
-                    // A refusal the import chose (for example a search stopped at the directory's limit): the
-                    // message says everything, and the Activity reports it without a stack trace.
-                    _logger.Warning("GetFullImportObjectsParallel: Combo {Index} refused — container={Container}, objectType={ObjectType}: {Message}",
-                        index + 1, container.Name, objectType.Name, LogSanitiser.Sanitise(ex.Message));
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, "GetFullImportObjectsParallel: Combo {Index} failed — container={Container}, objectType={ObjectType}",
-                        index + 1, container.Name, objectType.Name);
-                    throw;
-                }
-                finally
-                {
-                    comboConnection?.Dispose();
-                    semaphore.Release();
-                }
-            }, _cancellationToken);
-        }
-
-        var allCombos = Task.WhenAll(tasks);
+        var written = 0;
+        var page = 0;
+        ILdapDedicatedConnection? dedicatedConnection = null;
         try
         {
-            await allCombos;
+            dedicatedConnection = _connectionFactory?.Invoke();
+            var connection = (ILdapOperationExecutor?)dedicatedConnection ?? Executor;
+
+            byte[]? pagingCookie = null;
+            do
+            {
+                stop.ThrowIfCancellationRequested();
+                page++;
+
+                var pageResult = new ConnectedSystemImportResult();
+                GetFisoResults(pageResult, connection, container, objectType, pagingCookie);
+
+                // GetFisoResults stops early, and quietly, when the run is cancelled; a search stopped part-way must never
+                // look like one read to the end.
+                stop.ThrowIfCancellationRequested();
+
+                foreach (var importObject in pageResult.ImportObjects)
+                {
+                    await buffer.WriteAsync(importObject, stop);
+                    written++;
+                }
+
+                pagingCookie = pageResult.PaginationTokens.Count > 0 ? pageResult.PaginationTokens[0].ByteValue : null;
+            } while (pagingCookie is { Length: > 0 });
+
+            _logger.Debug("GetFullImportObjects: Read {ObjectCount} {ObjectType} objects from {Container} in {PageCount} page(s) in {Elapsed}",
+                written, LogSanitiser.Sanitise(objectType.Name), LogSanitiser.Sanitise(container.Name), page, stopwatch.Elapsed);
+            return written;
         }
-        catch (OperationCanceledException)
+        catch (OperationalException ex)
         {
-            _logger.Debug("GetFullImportObjectsParallel: Cancelled while waiting for combos to complete");
-            return;
+            // A refusal the import chose (for example a search stopped at the directory's limit): the message says
+            // everything, and the Activity reports it without a stack trace.
+            _logger.Warning("GetFullImportObjects: The search of {ObjectType} objects in {Container} was refused on page {Page}: {Message}",
+                LogSanitiser.Sanitise(objectType.Name), LogSanitiser.Sanitise(container.Name), page, LogSanitiser.Sanitise(ex.Message));
+            throw;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Awaiting rethrows only the first exception; unwrap and rethrow the first real
-            // (non-cancellation) failure so the import processor sees it
-            var inner = allCombos.Exception?.Flatten().InnerExceptions.FirstOrDefault(e => e is not OperationCanceledException);
-            if (inner != null)
-                throw inner;
-
-            _logger.Warning(ex, "GetFullImportObjectsParallel: Combos faulted but no failure could be unwrapped to report");
-            return;
+            _logger.Error(ex, "GetFullImportObjects: The search of {ObjectType} objects in {Container} failed on page {Page}",
+                LogSanitiser.Sanitise(objectType.Name), LogSanitiser.Sanitise(container.Name), page);
+            throw;
         }
-
-        // Merge results from all combos
-        foreach (var comboResult in comboResults)
+        finally
         {
-            result.ImportObjects.AddRange(comboResult.ImportObjects);
-        }
-
-        stopwatch.Stop();
-        _logger.Information("GetFullImportObjectsParallel: Completed {ComboCount} combos in {Elapsed}. Total objects: {ObjectCount}",
-            combos.Count, stopwatch.Elapsed, result.ImportObjects.Count);
-    }
-
-    /// <summary>
-    /// Processes all container+objectType combos sequentially on the primary connection.
-    /// Each combo is fully drained (all pages) before moving to the next.
-    /// Used as a fallback when the connection factory is unavailable or concurrency is 1.
-    /// </summary>
-    private async Task GetFullImportObjectsSequentialAsync(
-        ConnectedSystemImportResult result,
-        List<(ConnectedSystemContainer Container, ConnectedSystemObjectType ObjectType)> combos)
-    {
-        foreach (var (container, objectType) in combos)
-        {
-            if (_cancellationToken.IsCancellationRequested)
-            {
-                _logger.Debug("GetFullImportObjectsSequential: Cancellation requested. Stopping");
-                return;
-            }
-
-            await DrainAllPagesAsync(result, _connection, container, objectType);
-        }
-    }
-
-    /// <summary>
-    /// Fully drains all pages for a single container+objectType combination on the given connection.
-    /// Keeps issuing paged search requests until the server returns an empty paging cookie.
-    /// </summary>
-    private async Task DrainAllPagesAsync(
-        ConnectedSystemImportResult result,
-        LdapConnection connection,
-        ConnectedSystemContainer container,
-        ConnectedSystemObjectType objectType)
-    {
-        byte[]? pagingCookie = null;
-        var page = 0;
-
-        while (true)
-        {
-            if (_cancellationToken.IsCancellationRequested)
-                return;
-
-            page++;
-            await _progress.EnterPhaseAsync(LdapConnectorPhases.Fetch, $"Fetching {objectType.Name} objects from {container.Name} (page {page:N0})...");
-
-            var comboResult = new ConnectedSystemImportResult();
-            GetFisoResults(comboResult, connection, container, objectType, pagingCookie);
-
-            result.ImportObjects.AddRange(comboResult.ImportObjects);
-            await ReportObjectsReadAsync(comboResult.ImportObjects.Count);
-
-            // Check if there are more pages
-            if (comboResult.PaginationTokens.Count > 0)
-            {
-                pagingCookie = comboResult.PaginationTokens[0].ByteValue;
-            }
-            else
-            {
-                // No more pages — this combo is fully drained
-                break;
-            }
+            dedicatedConnection?.Dispose();
         }
     }
 
@@ -989,9 +983,11 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         connectedSystemObjectType.Attributes.Where(a => a.Selected && a.IsConnectorDefined).Select(a => a.Name).ToList();
 
     private void GetFisoResults(ConnectedSystemImportResult connectedSystemImportResult, ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType, byte[]? lastRunsCookie)
-        => GetFisoResults(connectedSystemImportResult, _connection, connectedSystemContainer, connectedSystemObjectType, lastRunsCookie);
+        => GetFisoResults(connectedSystemImportResult, Executor, connectedSystemContainer, connectedSystemObjectType, lastRunsCookie);
 
-    private void GetFisoResults(ConnectedSystemImportResult connectedSystemImportResult, LdapConnection connection, ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType, byte[]? lastRunsCookie)
+    /// <param name="connection">Where the search goes: the import's own connection, through <see cref="Executor"/>, or a
+    /// connection dedicated to this one paged search, for a directory whose paging cookies are scoped to the connection.</param>
+    private void GetFisoResults(ConnectedSystemImportResult connectedSystemImportResult, ILdapOperationExecutor connection, ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType, byte[]? lastRunsCookie)
     {
         if (_cancellationToken.IsCancellationRequested)
         {
@@ -1031,11 +1027,7 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         SearchResponse searchResponse;
         try
         {
-            // The import's own connection is reached through the executor seam like every other read it makes, so a
-            // test can script the whole run; a parallel combo's dedicated connection is reached directly.
-            searchResponse = ReferenceEquals(connection, _connection)
-                ? (SearchResponse)Executor.SendRequest(searchRequest, _searchTimeout)
-                : (SearchResponse)connection.SendRequest(searchRequest, _searchTimeout);
+            searchResponse = (SearchResponse)connection.SendRequest(searchRequest, _searchTimeout);
         }
         catch (DirectoryOperationException ex) when (lastRunsCookie is { Length: > 0 } &&
             ex.Message.Contains("does not support the control", StringComparison.OrdinalIgnoreCase))

@@ -592,6 +592,12 @@ public partial class SyncImportTaskProcessor
                 if (callBasedImportConnector is IConnectorPartitionWatermarks partitionWatermarksConnector)
                     await HandTheConnectorItsPartitionWatermarksAsync(partitionWatermarksConnector);
 
+                // #2521 decision 7: a Full Import hands a Connector that reads its Object Types one search at a time the
+                // order a synchronisation pages them in (#2492), referenced types first, likewise before the connection
+                // opens. A Delta Import reads changes, which come in the order they were made.
+                if (callBasedImportConnector is IConnectorObjectTypeReadOrder readOrderConnector && _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
+                    await HandTheConnectorTheObjectTypeReadOrderAsync(readOrderConnector);
+
                 // Tracks whether the import phase below completed without throwing. Read from the
                 // finally block to decide whether a failure while persisting CloseImportConnection's
                 // return value may safely propagate on its own, or must be logged and swallowed so it
@@ -6103,6 +6109,32 @@ public partial class SyncImportTaskProcessor
             $"and on page {pageNumber:N0} that it {(result.CompleteRead ? "did" : "did not")}. Whether an object missing from the import has been deleted " +
             "depends on that answer, so the import stopped before saving anything, and the next import starts from the same point. " +
             "This is a fault in the Connector.");
+    }
+
+    /// <summary>
+    /// #2521 decision 7: hands a Connector that reads its Object Types one search at a time the order to read the selected
+    /// ones in, the order a Full Synchronisation pages them (#2492): each type after the types its mapped reference
+    /// attributes point at, as declared by the schema or, where it declares nothing (LDAP's <c>member</c> and
+    /// <c>manager</c>), as the values JIM holds point. The order only makes references more likely to find their targets
+    /// already read; JIM resolves a reference whichever page its target arrives on.
+    /// </summary>
+    private async Task HandTheConnectorTheObjectTypeReadOrderAsync(IConnectorObjectTypeReadOrder connector)
+    {
+        var selectedTypes = (_connectedSystem.ObjectTypes ?? []).Where(type => type.Selected).ToList();
+        var syncRules = await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, includeDisabled: false);
+
+        Dictionary<int, IReadOnlySet<int>>? observedTargetTypeIds = null;
+        var undeclaredAttributeIds = SyncObjectTypeOrdering.GetUndeclaredMappedReferenceAttributeIds(selectedTypes, syncRules);
+        if (undeclaredAttributeIds.Count > 0)
+            observedTargetTypeIds = await _syncRepo.GetReferencedObjectTypeIdsAsync(undeclaredAttributeIds.ToList());
+
+        var order = SyncObjectTypeOrdering.Compute(selectedTypes, syncRules, observedTargetTypeIds);
+        connector.SetObjectTypeReadOrder(order.Groups);
+
+        var namesById = selectedTypes.ToDictionary(type => type.Id, type => type.Name);
+        Log.Information("PerformImportAsync: Handed the Connector the order to read the {Count} selected Object Type(s) in: {TypeOrder}. Connected System {ConnectedSystemId}, Run Profile {RunProfileId}.",
+            selectedTypes.Count, LogSanitiser.Sanitise(order.Describe(id => namesById.GetValueOrDefault(id, id.ToString(CultureInfo.InvariantCulture)))),
+            _connectedSystem.Id, _connectedSystemRunProfile.Id);
     }
 
     /// <summary>
