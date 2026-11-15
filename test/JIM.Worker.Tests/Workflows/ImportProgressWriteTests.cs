@@ -12,6 +12,8 @@ using JIM.Worker.Processors;
 using JIM.Worker.Tests.Activities;
 using NUnit.Framework;
 using Serilog;
+using Serilog.Core;
+using Serilog.Events;
 
 namespace JIM.Worker.Tests.Workflows;
 
@@ -108,6 +110,43 @@ public class ImportProgressWriteTests : WorkflowTestBase
 
             Assert.That(written.ContainsKey(ActivityPhase.QualifyConnectorKey("fetch")), Is.True,
                 "The Connector's step changed during the read, so its state is among what was written");
+        }
+    }
+
+    [Test]
+    public async Task FullImport_ManyPages_EachPageSummaryCountsThatPageAsync()
+    {
+        // Arrange: three pages of five new objects each.
+        var (connectedSystem, csoType, runProfile, activity) = await ArrangeImportAsync("Summaries");
+        var connector = new PagingConnector(csoType, pages: 3);
+        var reporter = await ActivityPhaseReporter.StartAsync(SyncRepo, activity, connector, connectedSystem, runProfile);
+        var processor = BuildProcessor(connector, connectedSystem, runProfile, activity, reporter, new CancellationTokenSource(), new ManualTimeProvider());
+        var sink = new CapturingSink();
+        var original = Log.Logger;
+        Log.Logger = new LoggerConfiguration().MinimumLevel.Verbose().WriteTo.Sink(sink).CreateLogger();
+
+        // Act
+        try
+        {
+            await processor.PerformImportAsync();
+        }
+        finally
+        {
+            Log.Logger = original;
+        }
+
+        // Assert: each page's summary accounts for that page's objects, not the run's so far, so it costs no more on the
+        // last page than on the first.
+        var summaries = sink.Events.Where(e => e.MessageTemplate.Text.StartsWith("ProcessImportObjectsAsync: SUMMARY", StringComparison.Ordinal)).ToList();
+        Assert.That(summaries, Has.Count.EqualTo(3));
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var summary in summaries)
+            {
+                Assert.That(summary.Properties["Total"].ToString(), Is.EqualTo("5"));
+                Assert.That(summary.Properties["Success"].ToString(), Is.EqualTo("5"));
+                Assert.That(summary.Properties["Errors"].ToString(), Is.EqualTo("0"));
+            }
         }
     }
 
@@ -209,6 +248,26 @@ public class ImportProgressWriteTests : WorkflowTestBase
                 ImportObjects = importObjects,
                 PaginationTokens = _pagesReturned < pages ? [new ConnectedSystemPaginationToken("page", $"page-{_pagesReturned}")] : []
             };
+        }
+    }
+
+    private sealed class CapturingSink : ILogEventSink
+    {
+        private readonly List<LogEvent> _events = [];
+
+        public List<LogEvent> Events
+        {
+            get
+            {
+                lock (_events)
+                    return [.. _events];
+            }
+        }
+
+        public void Emit(LogEvent logEvent)
+        {
+            lock (_events)
+                _events.Add(logEvent);
         }
     }
 

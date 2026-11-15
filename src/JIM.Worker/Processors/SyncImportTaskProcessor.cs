@@ -68,13 +68,6 @@ public partial class SyncImportTaskProcessor
     /// </summary>
     private ActivityProgressThrottle? _progressThrottle;
 
-    /// <summary>
-    /// Running counts of the execution items <see cref="ProcessImportObjectsAsync"/> holds, by outcome, for the summary it
-    /// logs after each page (#2521).
-    /// </summary>
-    private int _summarySuccessCount;
-    private int _summaryErrorCount;
-    private int _summaryDuplicateCount;
     // The objects this run's batch hydration loaded whole and matched to an imported object, by instance (#2908). Only these
     // can be reconciled from the values the import holds once their batch is saved; any other object in the update list
     // (one found deleted, one found by another route, one loaded in part) is reloaded for reconciliation. Each batch's
@@ -3315,6 +3308,11 @@ public partial class SyncImportTaskProcessor
         if (_connectedSystem.ObjectTypes == null)
             throw new InvalidDataException("ProcessImportObjectsAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
 
+        // This page's items by outcome, for the summary logged at its end.
+        var pageSuccessCount = 0;
+        var pageErrorCount = 0;
+        var pageDuplicateCount = 0;
+
         // #2153: every imported date takes the form JIM holds it in (UTC, to the microsecond) before anything reads it,
         // so the content hash, duplicate detection, the diff and the database write all see one form. Without this a
         // sub-microsecond source value was "changed" on every honest diff and raised a false Verification Mode alarm.
@@ -3956,10 +3954,21 @@ public partial class SyncImportTaskProcessor
             finally
             {
                 // The object's item, if it is still held (an object that changed nothing has its item withdrawn), is
-                // counted for the summary below. It was added last, and nothing adds another while one object is
+                // counted for this page's summary below. It was added last, and nothing adds another while one object is
                 // processed, so it is held exactly when it is still the last item.
                 if (_activityRunProfileExecutionItems.Count > 0 && ReferenceEquals(_activityRunProfileExecutionItems[^1], activityRunProfileExecutionItem))
-                    CountHeldItemForSummary(activityRunProfileExecutionItem, 1);
+                {
+                    if (activityRunProfileExecutionItem.ErrorType is null or ActivityRunProfileExecutionItemErrorType.NotSet)
+                    {
+                        pageSuccessCount++;
+                    }
+                    else
+                    {
+                        pageErrorCount++;
+                        if (activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.DuplicateObject)
+                            pageDuplicateCount++;
+                    }
+                }
 
                 // Update progress for every object (including errored/skipped via continue).
                 // In-memory assignment is free; DB write only every N objects.
@@ -3993,28 +4002,10 @@ public partial class SyncImportTaskProcessor
             await ReportProgressAsync("Processing imported objects");
         }
 
-        // Summary statistics for duplicate detection, over every item held so far. Running counts (#2521): counting every
-        // held item again on every page made each page's summary cost as much as the whole run so far.
+        // Summary statistics for this page (#2521): counting every item held so far, on every page, made each page's
+        // summary cost as much as the whole run so far. The run's totals are the Activity's.
         Log.Information("ProcessImportObjectsAsync: SUMMARY - Total objects: {Total}, Processed successfully: {Success}, Errors: {Errors}, Duplicates detected: {Duplicates}. External IDs repeated on this page: {RepeatedCount}",
-            connectedSystemImportResult.ImportObjects.Count, _summarySuccessCount, _summaryErrorCount, _summaryDuplicateCount, repeatedOnThisPage.Count);
-    }
-
-    /// <summary>
-    /// Counts a held item into, or with <paramref name="sign"/> -1 out of, the running counts the import's per-page summary
-    /// logs. An item with no error, or <see cref="ActivityRunProfileExecutionItemErrorType.NotSet"/>, is a success; any
-    /// other is an error, and a duplicate is also counted as one.
-    /// </summary>
-    private void CountHeldItemForSummary(ActivityRunProfileExecutionItem item, int sign)
-    {
-        if (item.ErrorType is null or ActivityRunProfileExecutionItemErrorType.NotSet)
-        {
-            _summarySuccessCount += sign;
-            return;
-        }
-
-        _summaryErrorCount += sign;
-        if (item.ErrorType == ActivityRunProfileExecutionItemErrorType.DuplicateObject)
-            _summaryDuplicateCount += sign;
+            connectedSystemImportResult.ImportObjects.Count, pageSuccessCount, pageErrorCount, pageDuplicateCount, repeatedOnThisPage.Count);
     }
 
     /// <summary>
@@ -4561,7 +4552,6 @@ public partial class SyncImportTaskProcessor
             return null;
 
         _activityRunProfileExecutionItems.Remove(earlier.ExecutionItem);
-        CountHeldItemForSummary(earlier.ExecutionItem, -1);
         switch (earlier.CountedAs)
         {
             case EarlierPageCopyCount.Update:
