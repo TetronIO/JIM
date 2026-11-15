@@ -184,7 +184,7 @@ public sealed class ActivityProgressThrottle : IAsyncDisposable
         {
             await WriteUnwrittenAsync();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Nothing awaits a timer's write, so nothing may escape it.
             _logger.Warning(ex, "ActivityProgressThrottle: A timed write of Activity {ActivityId}'s progress failed. The run continues", _activity.Id);
