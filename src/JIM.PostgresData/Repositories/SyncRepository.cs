@@ -682,6 +682,17 @@ public partial class SyncRepository : ISyncRepository
         await _context.Database.ExecuteSqlRawAsync(sql, parameters);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Opens its connections with <see cref="ConnectionStringForParallelWrites"/>, the one other writes off the context's
+    /// own connection use, else with the context's; null when neither is known.
+    /// </remarks>
+    public IActivityProgressWriter? CreateActivityProgressWriter()
+    {
+        var connectionString = ConnectionStringForParallelWrites ?? _context.Database.GetConnectionString();
+        return string.IsNullOrEmpty(connectionString) ? null : new ActivityProgressWriter(connectionString);
+    }
+
     public async Task RecordExclusionDiscardCountsAsync(Guid activityId, IReadOnlyDictionary<int, long> entriesDiscardedByContainerId)
     {
         ArgumentNullException.ThrowIfNull(entriesDiscardedByContainerId);

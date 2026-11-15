@@ -790,6 +790,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task SaveActivityPhasesAsync(IReadOnlyList<ActivityPhase> phases)
         => throw new PreviewWriteAttemptedException(nameof(SaveActivityPhasesAsync));
 
+    public IActivityProgressWriter? CreateActivityProgressWriter()
+        => throw new PreviewWriteAttemptedException(nameof(CreateActivityProgressWriter));
+
     public Task RecordExclusionDiscardCountsAsync(Guid activityId, IReadOnlyDictionary<int, long> entriesDiscardedByContainerId)
         => throw new PreviewWriteAttemptedException(nameof(RecordExclusionDiscardCountsAsync));
 

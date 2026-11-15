@@ -1691,6 +1691,13 @@ public interface ISyncRepository
     Task SaveActivityPhasesAsync(IReadOnlyList<ActivityPhase> phases);
 
     /// <summary>
+    /// A writer for a Run Profile execution's progress that writes on a connection of its own, so it may be called from a
+    /// timer while this repository is in use (#2521). Null when this repository has no other connection to write on; a
+    /// caller then writes progress through <see cref="UpdateActivityMessageAsync"/> and <see cref="SaveActivityPhasesAsync"/>.
+    /// </summary>
+    IActivityProgressWriter? CreateActivityProgressWriter();
+
+    /// <summary>
     /// Records how many entries an import read from the Connected System and discarded because an excluded
     /// Container carved them out (#1255), keyed by that Container's id.
     /// </summary>
