@@ -25,6 +25,12 @@ namespace JIM.Worker;
 /// Narration is cosmetic and must never fail a synchronisation run, so every write here is guarded:
 /// a failure is logged and the run continues. Cancellation still propagates.
 /// </para>
+/// <para>
+/// While an <see cref="ActivityProgressThrottle"/> is open (#2521), a step change is recorded in memory and left for the
+/// throttle to write: a Connector handing over a page at a time moves between its step and JIM's on every page. The
+/// steps' timings are unaffected, because a step keeps the time it was first entered and the latest time it ended, and
+/// the throttle writes the state as it stands.
+/// </para>
 /// </remarks>
 public sealed class ActivityPhaseReporter
 {
@@ -32,6 +38,18 @@ public sealed class ActivityPhaseReporter
     private readonly Activity? _activity;
     private readonly ActivityPhaseSet? _phases;
     private readonly ILogger _logger;
+
+    /// <summary>
+    /// Guards the steps' state, which a throttle copies from its timer while the run moves between steps.
+    /// </summary>
+    private readonly object _sync = new();
+
+    /// <summary>
+    /// The steps changed since the throttle last wrote them, while one is open.
+    /// </summary>
+    private readonly HashSet<ActivityPhase> _unwrittenPhaseChanges = [];
+
+    private ActivityProgressThrottle? _throttle;
 
     private ActivityPhaseReporter(ISyncRepository? syncRepo, Activity? activity, ActivityPhaseSet? phases, ILogger? logger = null)
     {
@@ -108,7 +126,23 @@ public sealed class ActivityPhaseReporter
         if (_phases == null)
             return;
 
-        var changed = _phases.ExitConnectorPhases(DateTime.UtcNow);
+        IReadOnlyList<ActivityPhase> changed;
+        ActivityProgressThrottle? throttle;
+        lock (_sync)
+        {
+            changed = _phases.ExitConnectorPhases(DateTime.UtcNow);
+            throttle = _throttle;
+            if (throttle != null)
+                _unwrittenPhaseChanges.UnionWith(changed);
+        }
+
+        if (throttle != null)
+        {
+            if (changed.Count > 0)
+                await throttle.NoteChangeAsync();
+            return;
+        }
+
         if (changed.Count > 0)
             await PersistAsync(changed, "finishing the Connector's phases");
     }
@@ -123,9 +157,69 @@ public sealed class ActivityPhaseReporter
         if (_phases == null)
             return;
 
-        var changed = _phases.Finish(DateTime.UtcNow, failed);
+        IReadOnlyList<ActivityPhase> changed;
+        lock (_sync)
+            changed = _phases.Finish(DateTime.UtcNow, failed);
+
         if (changed.Count > 0)
             await PersistAsync(changed, "closing the run's phases");
+    }
+
+    /// <summary>
+    /// From now until <see cref="EndCoalescing"/>, records step changes in memory for <paramref name="throttle"/> to write,
+    /// rather than writing each as it happens.
+    /// </summary>
+    internal void BeginCoalescing(ActivityProgressThrottle throttle)
+    {
+        // A reporter that records nothing has no steps to coalesce, and is shared by every run that tracks none.
+        if (_phases == null)
+            return;
+
+        lock (_sync)
+        {
+            if (_throttle != null)
+                throw new InvalidOperationException("A progress throttle is already open for this run.");
+            _throttle = throttle;
+        }
+    }
+
+    /// <summary>
+    /// Writes step changes as they happen again. Called by the throttle once it has written the last of them.
+    /// </summary>
+    internal void EndCoalescing(ActivityProgressThrottle throttle)
+    {
+        lock (_sync)
+        {
+            if (_throttle == throttle)
+                _throttle = null;
+            _unwrittenPhaseChanges.Clear();
+        }
+    }
+
+    /// <summary>
+    /// The steps changed since this was last called, and a copy of each as it stands, for the throttle to write. The copies
+    /// are taken here, under the lock the steps change under, so a write never sees a step half way through a change.
+    /// </summary>
+    internal (IReadOnlyList<ActivityPhase> Changed, IReadOnlyList<ActivityPhase> Copies) TakeUnwrittenPhaseChanges()
+    {
+        lock (_sync)
+        {
+            var changed = _unwrittenPhaseChanges.ToList();
+            _unwrittenPhaseChanges.Clear();
+            return (changed, changed.Select(CopyOf).ToList());
+        }
+    }
+
+    /// <summary>
+    /// Puts back step changes a failed write did not record, so the next write carries them.
+    /// </summary>
+    internal void ReturnUnwrittenPhaseChanges(IEnumerable<ActivityPhase> changed)
+    {
+        lock (_sync)
+        {
+            if (_throttle != null)
+                _unwrittenPhaseChanges.UnionWith(changed);
+        }
     }
 
     /// <summary>
@@ -165,20 +259,50 @@ public sealed class ActivityPhaseReporter
         if (_phases == null || _syncRepo == null || _activity == null)
             return;
 
-        var changed = _phases.Enter(phaseKey, DateTime.UtcNow, message);
+        IReadOnlyList<ActivityPhase> changed;
+        string? text;
+        ActivityProgressThrottle? throttle;
+        lock (_sync)
+        {
+            changed = _phases.Enter(phaseKey, DateTime.UtcNow, message);
+
+            // The message is written even when the transition changed nothing (re-entering the phase
+            // already running), because that is how a Connector narrating within a phase reaches the
+            // Activity. Fall back to the step's own name so the message and the stepper never disagree.
+            text = string.IsNullOrWhiteSpace(message)
+                ? _phases.Phases.SingleOrDefault(p => p.Key == phaseKey)?.Name
+                : message;
+
+            throttle = _throttle;
+            if (throttle != null)
+                _unwrittenPhaseChanges.UnionWith(changed);
+        }
+
+        if (throttle != null)
+        {
+            await throttle.ReportAsync(string.IsNullOrWhiteSpace(text) ? null : text);
+            return;
+        }
+
         if (changed.Count > 0)
             await PersistAsync(changed, "recording a phase transition");
-
-        // The message is written even when the transition changed nothing (re-entering the phase
-        // already running), because that is how a Connector narrating within a phase reaches the
-        // Activity. Fall back to the step's own name so the message and the stepper never disagree.
-        var text = string.IsNullOrWhiteSpace(message)
-            ? _phases.Phases.SingleOrDefault(p => p.Key == phaseKey)?.Name
-            : message;
 
         if (!string.IsNullOrWhiteSpace(text))
             await GuardAsync(() => _syncRepo.UpdateActivityMessageAsync(_activity, text), "updating the Activity message");
     }
+
+    private static ActivityPhase CopyOf(ActivityPhase phase) => new()
+    {
+        Id = phase.Id,
+        ActivityId = phase.ActivityId,
+        Order = phase.Order,
+        Key = phase.Key,
+        Name = phase.Name,
+        ParentKey = phase.ParentKey,
+        Status = phase.Status,
+        Started = phase.Started,
+        Ended = phase.Ended
+    };
 
     private async Task PersistAsync(IReadOnlyList<ActivityPhase> phases, string what)
     {

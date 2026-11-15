@@ -2722,18 +2722,81 @@ public partial class SyncRepository : ISyncRepository
 
     public Task UpdateActivityAsync(Activity activity)
     {
+        Interlocked.Increment(ref _activityWriteCount);
         _activities[activity.Id] = activity;
         return Task.CompletedTask;
     }
 
     public Task UpdateActivityMessageAsync(Activity activity, string message)
     {
+        Interlocked.Increment(ref _activityWriteCount);
         if (FailActivityMessageUpdateFor != null && FailActivityMessageUpdateFor == message)
             throw new InvalidOperationException($"Simulated failure updating the Activity message to '{message}'.");
 
         activity.Message = message;
         _activities[activity.Id] = activity;
         return Task.CompletedTask;
+    }
+
+    private int _activityWriteCount;
+
+    /// <summary>
+    /// How many writes of an Activity or of its steps this repository has been asked for, through any method, a progress
+    /// writer's included, for tests asserting how often a run writes its progress (#2521). Each call counts once, as one
+    /// round trip to a real database would.
+    /// </summary>
+    public int ActivityWriteCount => Volatile.Read(ref _activityWriteCount);
+
+    /// <summary>
+    /// When false, <see cref="CreateActivityProgressWriter"/> returns null, as a repository with no connection of its own to
+    /// write on does, so a test can prove progress is still written through the repository's own methods.
+    /// </summary>
+    public bool ProvidesActivityProgressWriter { get; set; } = true;
+
+    /// <summary>
+    /// When set, a progress writer's write throws while this returns true for it, so tests can prove a failed progress
+    /// write neither fails the run nor loses what it was writing.
+    /// </summary>
+    public Func<ActivityProgressWrite, bool>? FailActivityProgressWrite { get; set; }
+
+    private readonly List<ActivityProgressWrite> _activityProgressWrites = [];
+
+    /// <summary>
+    /// Everything progress writers have written, in order, for tests asserting what a run showed and when (#2521).
+    /// </summary>
+    public IReadOnlyList<ActivityProgressWrite> ActivityProgressWrites
+    {
+        get
+        {
+            lock (_activityProgressWrites)
+                return _activityProgressWrites.ToList();
+        }
+    }
+
+    public IActivityProgressWriter? CreateActivityProgressWriter() =>
+        ProvidesActivityProgressWriter ? new InMemoryActivityProgressWriter(this) : null;
+
+    /// <summary>
+    /// Records what it is given, as a write on a connection of its own would: thread-safe, and keeping copies, so a test sees
+    /// what was written rather than the run's live state.
+    /// </summary>
+    private sealed class InMemoryActivityProgressWriter(SyncRepository repository) : IActivityProgressWriter
+    {
+        public Task WriteAsync(ActivityProgressWrite progress)
+        {
+            Interlocked.Increment(ref repository._activityWriteCount);
+            if (repository.FailActivityProgressWrite?.Invoke(progress) == true)
+                throw new InvalidOperationException("Simulated failure writing an Activity's progress.");
+
+            lock (repository._activityProgressWrites)
+            {
+                repository._activityProgressWrites.Add(progress);
+                foreach (var phase in progress.Phases)
+                    repository._activityPhases[phase.Id] = phase;
+            }
+
+            return Task.CompletedTask;
+        }
     }
 
     /// <summary>
@@ -2744,6 +2807,7 @@ public partial class SyncRepository : ISyncRepository
 
     public Task SaveActivityPhasesAsync(IReadOnlyList<ActivityPhase> phases)
     {
+        Interlocked.Increment(ref _activityWriteCount);
         if (FailActivityPhaseSaves)
             throw new InvalidOperationException("Simulated failure recording Activity phases.");
 
@@ -2786,6 +2850,7 @@ public partial class SyncRepository : ISyncRepository
 
     public Task UpdateActivityProgressOutOfBandAsync(Activity activity)
     {
+        Interlocked.Increment(ref _activityWriteCount);
         _activities[activity.Id] = activity;
         return Task.CompletedTask;
     }

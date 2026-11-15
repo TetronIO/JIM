@@ -56,6 +56,25 @@ public partial class SyncImportTaskProcessor
     /// not track phases get a reporter that records nothing.
     /// </summary>
     private readonly ActivityPhaseReporter _phases;
+
+    /// <summary>
+    /// The clock the run's progress writes are paced by (<see cref="ActivityProgressThrottle"/>); a test drives it.
+    /// </summary>
+    private readonly TimeProvider _time;
+
+    /// <summary>
+    /// Paces the progress writes of a call-based import's pages (#2521) while they are read; null otherwise, when progress
+    /// is written as it is reported. See <see cref="ReportProgressAsync"/>.
+    /// </summary>
+    private ActivityProgressThrottle? _progressThrottle;
+
+    /// <summary>
+    /// Running counts of the execution items <see cref="ProcessImportObjectsAsync"/> holds, by outcome, for the summary it
+    /// logs after each page (#2521).
+    /// </summary>
+    private int _summarySuccessCount;
+    private int _summaryErrorCount;
+    private int _summaryDuplicateCount;
     // The objects this run's batch hydration loaded whole and matched to an imported object, by instance (#2908). Only these
     // can be reconciled from the values the import holds once their batch is saved; any other object in the update list
     // (one found deleted, one found by another route, one loaded in part) is reloaded for reconciliation. Each batch's
@@ -381,9 +400,11 @@ public partial class SyncImportTaskProcessor
         WorkerTask workerTask,
         CancellationTokenSource cancellationTokenSource,
         IDbContextFactory<JIM.PostgresData.JimDbContext>? dbContextFactory = null,
-        ActivityPhaseReporter? phaseReporter = null)
+        ActivityPhaseReporter? phaseReporter = null,
+        TimeProvider? timeProvider = null)
     {
         _jim = jimApplication;
+        _time = timeProvider ?? TimeProvider.System;
         _syncRepo = syncRepository;
         _syncServer = syncServer;
         _syncEngine = syncEngine;
@@ -508,14 +529,14 @@ public partial class SyncImportTaskProcessor
             expectedObjectCount = count;
             _connectorExpectedObjectCount = count;
             ApplyFetchCountingWindow();
-            await _syncRepo.UpdateActivityAsync(_activity);
+            await ReportProgressAsync();
         }
 
         async Task ReportObjectsReadAsync(int count)
         {
             objectsReadInCurrentCall = count;
             ApplyFetchCountingWindow();
-            await _syncRepo.UpdateActivityAsync(_activity);
+            await ReportProgressAsync();
         }
 
         var importPhaseSw = System.Diagnostics.Stopwatch.StartNew();
@@ -633,7 +654,7 @@ public partial class SyncImportTaskProcessor
                     // (issue #637). Emits are serialised because a connector may fan out internally, and
                     // a failure to narrate must never fail the import.
                     var connectorProgress = _phases.CreateConnectorProgress(
-                        async message => await _syncRepo.UpdateActivityMessageAsync(_activity, message),
+                        message => ReportProgressAsync(message),
                         ReportExpectedObjectCountAsync,
                         ReportObjectsReadAsync);
 
@@ -647,111 +668,133 @@ public partial class SyncImportTaskProcessor
                     string? newPersistedData = null;
                     string? connectorWarningMessage = null;
 
-                    while (initialPage || paginationTokens.Count > 0)
+                    // A Connector handing over a page at a time reports progress several times per page; written as
+                    // reported, that was a commit each, thousands of them at scale (#2521). While the pages are read, the
+                    // Activity's message, counters and steps are written at most once a second instead, latest first, and
+                    // exactly as they stand when the read ends, stops or fails (the finally below).
+                    var progressThrottle = new ActivityProgressThrottle(_syncRepo, _activity, _phases, _time);
+                    _progressThrottle = progressThrottle;
+                    try
                     {
-                        if (_cancellationTokenSource.IsCancellationRequested)
+                        while (initialPage || paginationTokens.Count > 0)
                         {
-                            Log.Information("PerformImportAsync: Cancellation requested. Stopping before next import page.");
-                            break;
+                            if (_cancellationTokenSource.IsCancellationRequested)
+                            {
+                                Log.Information("PerformImportAsync: Cancellation requested. Stopping before next import page.");
+                                break;
+                            }
+
+                            // perform the import for this page
+                            // IMPORTANT: Always pass the ORIGINAL persisted data to ensure consistent
+                            // watermark queries across all pages of a delta import.
+                            ConnectedSystemImportResult result;
+                            var fetchMessage = pageNumber > 0
+                                ? $"Importing objects from Connected System (page {pageNumber + 1})"
+                                : "Importing objects from Connected System";
+                            await ReportProgressAsync(fetchMessage);
+                            using (Diagnostics.Connector.StartSpan("ImportPage")
+                                .SetTag("connectedSystemId", _connectedSystem.Id)
+                                .SetTag("pageNumber", pageNumber)
+                                .SetTag("cumulativeObjectCount", totalObjectsImported)
+                                .SetTag("wallClockOffsetMs", importPhaseSw.Elapsed.TotalMilliseconds))
+                            {
+                                result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, originalPersistedData, Log.Logger, _cancellationTokenSource.Token, connectorProgress);
+                            }
+
+                            // The Connector has finished with this page, so its steps stop being shown
+                            // as running; what happens next is JIM's.
+                            await _phases.ExitConnectorPhasesAsync();
+                            pageNumber++;
+
+                            // Decided from the first page, before any object is processed, and held to on every later one: whether
+                            // an object missing from this run is gone depends on it (#2720).
+                            RecordWhetherTheConnectorReadEveryObject(result, pageNumber);
+
+                            // Likewise before any of the page's objects is processed: a Partition watermark JIM did not hand the
+                            // Connector fails the run before anything is staged (#2715).
+                            CheckThePartitionWatermarksTheConnectorReturned(result, pageNumber);
+
+                            totalObjectsImported += result.ImportObjects.Count;
+
+                            Log.Information("MetricsCheckpoint: Import processed={ObjectsProcessed} elapsed={ElapsedMs}ms cs={ConnectedSystemName}",
+                                totalObjectsImported, (long)importPhaseSw.Elapsed.TotalMilliseconds, _connectedSystem.Name);
+
+                            // The page is delivered, so whatever the Connector reported while producing
+                            // it is now part of the running total rather than something to add to it.
+                            objectsReadInCurrentCall = 0;
+                            ApplyFetchCountingWindow();
+                            // How many have arrived is rendered from the Activity's counters, so the
+                            // message says only what those cannot: which page is being read. A single
+                            // page adds nothing over the running step's own name.
+                            var progressMessage = pageNumber > 1 || result.PaginationTokens.Count > 0
+                                ? $"Reading page {pageNumber:N0}"
+                                : string.Empty;
+                            await ReportProgressAsync(progressMessage);
+
+                            // add the external ids from this page worth of results to our external-id collection for later deletion calculation
+                            AddExternalIdsToCollection(result, externalIdsImported);
+
+                            // make sure we pass the pagination tokens back in on the next page (if there is one)
+                            paginationTokens = result.PaginationTokens;
+
+                            // Capture the new persisted connector data from the first page only.
+                            // Subsequent pages return null (indicating "no change"), so we only capture once.
+                            // We'll save this only once the run has staged everything it read (#1868), which
+                            // also keeps it from affecting watermark queries on subsequent pages.
+                            if (result.PersistedConnectorData != null && newPersistedData == null)
+                            {
+                                Log.Debug($"ExecuteAsync: captured new persisted connector data from page {pageNumber}. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(result.PersistedConnectorData)}'");
+                                newPersistedData = result.PersistedConnectorData;
+                            }
+
+                            // The Partition watermarks are taken the same way (#2715): from the first page that carries any,
+                            // copied so that nothing the Connector does afterwards can change them, and recorded only once the
+                            // run has staged everything it read.
+                            if (result.PartitionWatermarks != null && partitionWatermarksReached == null)
+                            {
+                                partitionWatermarksReached = new Dictionary<int, string?>(result.PartitionWatermarks);
+                                Log.Debug("PerformImportAsync: Captured the Connector's watermarks for {Count} Partition(s) from page {Page}; they are recorded once the run has staged everything it read.",
+                                    partitionWatermarksReached.Count, pageNumber);
+                            }
+
+                            // Capture connector warning from the first page that reports one
+                            if (result.WarningMessage != null && connectorWarningMessage == null)
+                            {
+                                connectorWarningMessage = result.WarningMessage;
+                            }
+
+                            AccumulateExclusionDiscards(result, entriesDiscardedByExclusion);
+
+                            // process the results from this page
+                            using (Diagnostics.Sync.StartSpan("ProcessImportObjects").SetTag("objectCount", result.ImportObjects.Count))
+                            {
+                                await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, crossPageSeenExternalIds);
+                            }
+
+                            SampleHeldAttributeValues(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+
+                            if (initialPage)
+                            {
+                                initialPage = false;
+
+                                // The first page's figures are the first an administrator sees of the read, so they are not
+                                // left to wait for the interval.
+                                await progressThrottle.FlushAsync();
+                            }
+
+                            if (_cancellationTokenSource.IsCancellationRequested)
+                            {
+                                Log.Information("PerformImportAsync: Cancellation requested after processing page {Page}. Stopping.", pageNumber);
+                                break;
+                            }
                         }
-
-                        // perform the import for this page
-                        // IMPORTANT: Always pass the ORIGINAL persisted data to ensure consistent
-                        // watermark queries across all pages of a delta import.
-                        ConnectedSystemImportResult result;
-                        var fetchMessage = pageNumber > 0
-                            ? $"Importing objects from Connected System (page {pageNumber + 1})"
-                            : "Importing objects from Connected System";
-                        await _syncRepo.UpdateActivityMessageAsync(_activity, fetchMessage);
-                        using (Diagnostics.Connector.StartSpan("ImportPage")
-                            .SetTag("connectedSystemId", _connectedSystem.Id)
-                            .SetTag("pageNumber", pageNumber)
-                            .SetTag("cumulativeObjectCount", totalObjectsImported)
-                            .SetTag("wallClockOffsetMs", importPhaseSw.Elapsed.TotalMilliseconds))
-                        {
-                            result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, originalPersistedData, Log.Logger, _cancellationTokenSource.Token, connectorProgress);
-                        }
-
-                        // The Connector has finished with this page, so its steps stop being shown
-                        // as running; what happens next is JIM's.
-                        await _phases.ExitConnectorPhasesAsync();
-                        pageNumber++;
-
-                        // Decided from the first page, before any object is processed, and held to on every later one: whether
-                        // an object missing from this run is gone depends on it (#2720).
-                        RecordWhetherTheConnectorReadEveryObject(result, pageNumber);
-
-                        // Likewise before any of the page's objects is processed: a Partition watermark JIM did not hand the
-                        // Connector fails the run before anything is staged (#2715).
-                        CheckThePartitionWatermarksTheConnectorReturned(result, pageNumber);
-
-                        totalObjectsImported += result.ImportObjects.Count;
-
-                        Log.Information("MetricsCheckpoint: Import processed={ObjectsProcessed} elapsed={ElapsedMs}ms cs={ConnectedSystemName}",
-                            totalObjectsImported, (long)importPhaseSw.Elapsed.TotalMilliseconds, _connectedSystem.Name);
-
-                        // The page is delivered, so whatever the Connector reported while producing
-                        // it is now part of the running total rather than something to add to it.
-                        objectsReadInCurrentCall = 0;
-                        ApplyFetchCountingWindow();
-                        // How many have arrived is rendered from the Activity's counters, so the
-                        // message says only what those cannot: which page is being read. A single
-                        // page adds nothing over the running step's own name.
-                        var progressMessage = pageNumber > 1 || result.PaginationTokens.Count > 0
-                            ? $"Reading page {pageNumber:N0}"
-                            : string.Empty;
-                        await _syncRepo.UpdateActivityMessageAsync(_activity, progressMessage);
-
-                        // add the external ids from this page worth of results to our external-id collection for later deletion calculation
-                        AddExternalIdsToCollection(result, externalIdsImported);
-
-                        // make sure we pass the pagination tokens back in on the next page (if there is one)
-                        paginationTokens = result.PaginationTokens;
-
-                        // Capture the new persisted connector data from the first page only.
-                        // Subsequent pages return null (indicating "no change"), so we only capture once.
-                        // We'll save this only once the run has staged everything it read (#1868), which
-                        // also keeps it from affecting watermark queries on subsequent pages.
-                        if (result.PersistedConnectorData != null && newPersistedData == null)
-                        {
-                            Log.Debug($"ExecuteAsync: captured new persisted connector data from page {pageNumber}. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(result.PersistedConnectorData)}'");
-                            newPersistedData = result.PersistedConnectorData;
-                        }
-
-                        // The Partition watermarks are taken the same way (#2715): from the first page that carries any,
-                        // copied so that nothing the Connector does afterwards can change them, and recorded only once the
-                        // run has staged everything it read.
-                        if (result.PartitionWatermarks != null && partitionWatermarksReached == null)
-                        {
-                            partitionWatermarksReached = new Dictionary<int, string?>(result.PartitionWatermarks);
-                            Log.Debug("PerformImportAsync: Captured the Connector's watermarks for {Count} Partition(s) from page {Page}; they are recorded once the run has staged everything it read.",
-                                partitionWatermarksReached.Count, pageNumber);
-                        }
-
-                        // Capture connector warning from the first page that reports one
-                        if (result.WarningMessage != null && connectorWarningMessage == null)
-                        {
-                            connectorWarningMessage = result.WarningMessage;
-                        }
-
-                        AccumulateExclusionDiscards(result, entriesDiscardedByExclusion);
-
-                        // process the results from this page
-                        using (Diagnostics.Sync.StartSpan("ProcessImportObjects").SetTag("objectCount", result.ImportObjects.Count))
-                        {
-                            await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, crossPageSeenExternalIds);
-                        }
-
-                        SampleHeldAttributeValues(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
-
-                        if (initialPage)
-                            initialPage = false;
-
-                        if (_cancellationTokenSource.IsCancellationRequested)
-                        {
-                            Log.Information("PerformImportAsync: Cancellation requested after processing page {Page}. Stopping.", pageNumber);
-                            break;
-                        }
+                    }
+                    finally
+                    {
+                        // Whatever has not been written yet is written now, before anything after the read (or the
+                        // failure handling above it) writes the Activity, so nothing the throttle writes lands after it.
+                        _progressThrottle = null;
+                        await progressThrottle.DisposeAsync();
                     }
 
                     // Every page has been read, but nothing has been staged yet, so the new watermark is only
@@ -2666,6 +2709,12 @@ public partial class SyncImportTaskProcessor
     /// read from the database for every attribute loaded whole, and taken from the answer for an attribute loaded in part,
     /// whose members' External IDs are the ones reading would cost. Every object has an entry.
     /// </summary>
+    /// <remarks>
+    /// #2521: the database is asked only about objects holding a resolved reference among the values they were loaded with,
+    /// which for an attribute loaded whole is every value the object holds. The question reads nothing else (a resolved
+    /// reference's own row), so any other object's answer is known to be empty without asking. An import reading pages of
+    /// 100 users who hold no references asked once per page for nothing: 5,000 round trips at 500,000 users.
+    /// </remarks>
     internal static async Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForComparisonAsync(ISyncRepository syncRepo,
         IReadOnlyCollection<ConnectedSystemObject> csos)
     {
@@ -2673,7 +2722,10 @@ public partial class SyncImportTaskProcessor
         if (csos.Count == 0)
             return result;
 
-        foreach (var lookupGroup in csos.GroupBy(cso => cso.PartiallyLoadedAttributes is { Count: > 0 } partial
+        foreach (var cso in csos.Where(cso => !HoldsResolvedReferenceToLookUp(cso)))
+            result[cso.Id] = new Dictionary<Guid, string>();
+
+        foreach (var lookupGroup in csos.Where(HoldsResolvedReferenceToLookUp).GroupBy(cso => cso.PartiallyLoadedAttributes is { Count: > 0 } partial
                      ? string.Join(",", partial.Keys.Order())
                      : string.Empty))
         {
@@ -2697,6 +2749,15 @@ public partial class SyncImportTaskProcessor
 
         return result;
     }
+
+    /// <summary>
+    /// #2521: whether the database could know the External ID of anything <paramref name="cso"/> references, for
+    /// <see cref="GetReferenceExternalIdsForComparisonAsync"/>: whether it holds a resolved reference in an attribute that
+    /// was loaded whole. An attribute loaded in part is left out of that question, and answered from what it was loaded by.
+    /// </summary>
+    private static bool HoldsResolvedReferenceToLookUp(ConnectedSystemObject cso) =>
+        cso.AttributeValues.Any(value => (value.ReferenceValueId.HasValue || value.ReferenceValue != null)
+            && cso.IsAttributeWhollyLoaded(value.AttributeId != 0 ? value.AttributeId : value.Attribute?.Id ?? 0));
 
     /// <summary>
     /// #2817: the answers a Delta Import loaded an object's attributes in part by, by attribute id; null for an object loaded
@@ -3231,6 +3292,22 @@ public partial class SyncImportTaskProcessor
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Reports the run's progress: the message given, if any, and the Activity's counters as they stand. Through the
+    /// throttle while a call-based import's pages are read (#2521), which writes at most once a second; written at once
+    /// otherwise.
+    /// </summary>
+    /// <param name="message">The Activity's new message, or null to report only its counters.</param>
+    private Task ReportProgressAsync(string? message = null)
+    {
+        if (_progressThrottle is { } throttle)
+            return throttle.ReportAsync(message);
+
+        return message != null
+            ? _syncRepo.UpdateActivityMessageAsync(_activity, message)
+            : _syncRepo.UpdateActivityAsync(_activity);
     }
 
     private async Task ProcessImportObjectsAsync(ConnectedSystemImportResult connectedSystemImportResult, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, HashSet<string>? crossPageSeenExternalIds = null)
@@ -3878,12 +3955,18 @@ public partial class SyncImportTaskProcessor
             }
             finally
             {
+                // The object's item, if it is still held (an object that changed nothing has its item withdrawn), is
+                // counted for the summary below. It was added last, and nothing adds another while one object is
+                // processed, so it is held exactly when it is still the last item.
+                if (_activityRunProfileExecutionItems.Count > 0 && ReferenceEquals(_activityRunProfileExecutionItems[^1], activityRunProfileExecutionItem))
+                    CountHeldItemForSummary(activityRunProfileExecutionItem, 1);
+
                 // Update progress for every object (including errored/skipped via continue).
                 // In-memory assignment is free; DB write only every N objects.
                 _activity.ObjectsProcessed = importIndex + 1;
                 if ((importIndex + 1) % progressUpdateInterval == 0)
                 {
-                    await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing imported objects");
+                    await ReportProgressAsync("Processing imported objects");
 
                     // Periodic memory diagnostics (#917): the import processing phase accumulates
                     // hydrated CSOs until the save phase, so at scale this is where peak memory
@@ -3907,16 +3990,31 @@ public partial class SyncImportTaskProcessor
         // Activity's counters carry what is left to say.
         if (totalObjectsInBatch > 0 && totalObjectsInBatch % progressUpdateInterval != 0)
         {
-            await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing imported objects");
+            await ReportProgressAsync("Processing imported objects");
         }
 
-        // DEBUG: Summary statistics for duplicate detection
-        // Note: ErrorType == null or NotSet means success; any other value is an actual error
-        var duplicateCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType == ActivityRunProfileExecutionItemErrorType.DuplicateObject);
-        var successCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType == null || x.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet);
-        var errorCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType != null && x.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
+        // Summary statistics for duplicate detection, over every item held so far. Running counts (#2521): counting every
+        // held item again on every page made each page's summary cost as much as the whole run so far.
         Log.Information("ProcessImportObjectsAsync: SUMMARY - Total objects: {Total}, Processed successfully: {Success}, Errors: {Errors}, Duplicates detected: {Duplicates}. External IDs repeated on this page: {RepeatedCount}",
-            connectedSystemImportResult.ImportObjects.Count, successCount, errorCount, duplicateCount, repeatedOnThisPage.Count);
+            connectedSystemImportResult.ImportObjects.Count, _summarySuccessCount, _summaryErrorCount, _summaryDuplicateCount, repeatedOnThisPage.Count);
+    }
+
+    /// <summary>
+    /// Counts a held item into, or with <paramref name="sign"/> -1 out of, the running counts the import's per-page summary
+    /// logs. An item with no error, or <see cref="ActivityRunProfileExecutionItemErrorType.NotSet"/>, is a success; any
+    /// other is an error, and a duplicate is also counted as one.
+    /// </summary>
+    private void CountHeldItemForSummary(ActivityRunProfileExecutionItem item, int sign)
+    {
+        if (item.ErrorType is null or ActivityRunProfileExecutionItemErrorType.NotSet)
+        {
+            _summarySuccessCount += sign;
+            return;
+        }
+
+        _summaryErrorCount += sign;
+        if (item.ErrorType == ActivityRunProfileExecutionItemErrorType.DuplicateObject)
+            _summaryDuplicateCount += sign;
     }
 
     /// <summary>
@@ -4463,6 +4561,7 @@ public partial class SyncImportTaskProcessor
             return null;
 
         _activityRunProfileExecutionItems.Remove(earlier.ExecutionItem);
+        CountHeldItemForSummary(earlier.ExecutionItem, -1);
         switch (earlier.CountedAs)
         {
             case EarlierPageCopyCount.Update:
