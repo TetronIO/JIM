@@ -13,6 +13,14 @@
     <InternalsVisibleTo Include="JIM.Worker.Tests" />
   </ItemGroup>
 
+  <!-- Most of what the Worker's heap holds at its peak is garbage from the batch just saved, which the server garbage
+       collector otherwise leaves for one late full collection. Conserving memory at level 7 collects it as the work goes:
+       at Scale500k25kGroups it cut a confirming Full Import's peak from 20.4 to 16.9 GiB at no cost in time (#2521).
+       Guarded by WorkerGarbageCollectionConfigurationTests. -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="10.0.15" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.15" />
