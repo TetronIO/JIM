@@ -113,11 +113,12 @@ public class LdapConnectorImportPagedFullReadTests
     }
 
     [Test]
-    public async Task GetFullImportObjectsAsync_ASearchFails_TheNextCallFailsWithItsErrorAndNoPageClaimsTheReadCompleteAsync()
+    public async Task GetFullImportObjectsAsync_ASearchFails_ACallFailsWithItsErrorAndNoPageClaimsTheReadCompleteAsync()
     {
-        // The directory stops the people search at its limit on that search's third page. Until then every page goes
-        // to JIM as usual; the failure reaches JIM on the next call, and no page ever says the read was complete, which
-        // would have JIM take every object not yet handed over as deleted.
+        // The directory stops the people search at its limit on that search's third page. The failure reaches JIM on the
+        // first call that starts or ends after it was recorded: which call that is depends on how far the search has run
+        // ahead, so how many pages go over first is not pinned here. What must hold is that no page handed over says the
+        // read was complete, which would have JIM take every object not yet handed over as deleted.
         _directory.AddPeople(60);
         _directory.FailSearchAt(PeopleDn, Person, page: 3, ResultCode.SizeLimitExceeded);
 
@@ -136,7 +137,6 @@ public class LdapConnectorImportPagedFullReadTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(failure!.Message, Does.Contain("stopped the import of inetOrgPerson objects from people at its search limit"));
-            Assert.That(pages, Is.Not.Empty, "the pages read before the failure were handed over");
             Assert.That(pages.Select(p => p.PaginationTokens.Count), Is.All.EqualTo(1), "every page handed over said there was more");
             Assert.That(_directory.Connections.Select(c => c.Disposed), Is.All.True, "the failed search's connection is closed");
         }
