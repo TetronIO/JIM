@@ -2325,11 +2325,17 @@ public partial class SyncImportTaskProcessor
             var set = new ImportedExternalIdSet(caseExact);
             foreach (var attribute in importedExternalIdAttributes)
             {
-                set._strings.UnionWith(attribute.StringValues);
-                set._ints.UnionWith(attribute.IntValues);
-                set._longs.UnionWith(attribute.LongValues);
-                set._decimals.UnionWith(attribute.DecimalValues);
-                set._guids.UnionWith(attribute.GuidValues);
+                // Only the lists that hold values are read: reading a list allocates it (#2521).
+                if (attribute.HasStringValues)
+                    set._strings.UnionWith(attribute.StringValues);
+                if (attribute.HasIntValues)
+                    set._ints.UnionWith(attribute.IntValues);
+                if (attribute.HasLongValues)
+                    set._longs.UnionWith(attribute.LongValues);
+                if (attribute.HasDecimalValues)
+                    set._decimals.UnionWith(attribute.DecimalValues);
+                if (attribute.HasGuidValues)
+                    set._guids.UnionWith(attribute.GuidValues);
             }
             return set;
         }
@@ -2563,7 +2569,7 @@ public partial class SyncImportTaskProcessor
                      a.Type == AttributeDataType.Reference && a.AttributePlurality == AttributePlurality.MultiValued && !unreadable.Contains(a.Name)))
         {
             var imported = importObject.Attributes.SingleOrDefault(a => a.Name.Equals(attribute.Name, StringComparison.OrdinalIgnoreCase));
-            if (imported is not { ReferenceValues.Count: > 0 })
+            if (imported is not { HasReferenceValues: true })
                 continue;
 
             var values = imported.ReferenceValues.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -4015,21 +4021,26 @@ public partial class SyncImportTaskProcessor
         {
             // first remove any null attribute values. this might mean we'll be left with no values at all.
             // the Guid/int/long/decimal collections hold non-nullable value types, so they cannot
-            // contain nulls and need no sweep; only the reference-typed collections can.
-            attribute.StringValues.RemoveAll(string.IsNullOrEmpty);
-            attribute.ByteValues.RemoveAll(q => q == null);
-            attribute.ReferenceValues.RemoveAll(string.IsNullOrEmpty);
+            // contain nulls and need no sweep; only the reference-typed collections can. Each list is read only when it
+            // holds something, and every probe below reads its Has property: reading a list allocates it, and this runs
+            // for every attribute of every object (#2521).
+            if (attribute.HasStringValues)
+                attribute.StringValues.RemoveAll(string.IsNullOrEmpty);
+            if (attribute.HasByteValues)
+                attribute.ByteValues.RemoveAll(q => q == null);
+            if (attribute.HasReferenceValues)
+                attribute.ReferenceValues.RemoveAll(string.IsNullOrEmpty);
 
             // now work out if we're left with any values at all
-            var noGuids = attribute.GuidValues.Count == 0;
-            var noIntegers = attribute.IntValues.Count == 0;
-            var noLongs = attribute.LongValues.Count == 0;
-            var noDecimals = attribute.DecimalValues.Count == 0;
-            var noStrings = attribute.StringValues.Count == 0;
+            var noGuids = !attribute.HasGuidValues;
+            var noIntegers = !attribute.HasIntValues;
+            var noLongs = !attribute.HasLongValues;
+            var noDecimals = !attribute.HasDecimalValues;
+            var noStrings = !attribute.HasStringValues;
             var noBool = !attribute.HasBoolValues;
             var noDateTime = !attribute.HasDateTimeValues;
-            var noBytes = attribute.ByteValues.Count == 0;
-            var noReferences = attribute.ReferenceValues.Count == 0;
+            var noBytes = !attribute.HasByteValues;
+            var noReferences = !attribute.HasReferenceValues;
 
             // if all types of values are empty, we'll add this attribute to a list for removal
             if (noGuids && noIntegers && noLongs && noDecimals && noStrings && noBool && noDateTime && noBytes && noReferences)
@@ -4563,29 +4574,30 @@ public partial class SyncImportTaskProcessor
         var importObjectAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(csioa => csioa.Name.Equals(externalIdAttribute.Name, StringComparison.OrdinalIgnoreCase)) ??
                                     throw new MissingExternalIdAttributeException($"The imported object is missing the External Id attribute '{externalIdAttribute.Name}'. It cannot be processed as we will not be able to determine if it's an existing object or not.");
 
-        if (importObjectAttribute.IntValues.Count > 1 ||
-            importObjectAttribute.LongValues.Count > 1 ||
-            importObjectAttribute.DecimalValues.Count > 1 ||
-            importObjectAttribute.StringValues.Count > 1 ||
-            importObjectAttribute.GuidValues.Count > 1)
+        // Each list is read only when it holds something: reading a list allocates it (#2521).
+        if ((importObjectAttribute.HasIntValues && importObjectAttribute.IntValues.Count > 1) ||
+            (importObjectAttribute.HasLongValues && importObjectAttribute.LongValues.Count > 1) ||
+            (importObjectAttribute.HasDecimalValues && importObjectAttribute.DecimalValues.Count > 1) ||
+            (importObjectAttribute.HasStringValues && importObjectAttribute.StringValues.Count > 1) ||
+            (importObjectAttribute.HasGuidValues && importObjectAttribute.GuidValues.Count > 1))
             throw new ExternalIdAttributeNotSingleValuedException($"External Id attribute ({externalIdAttribute.Name}) on the imported object has multiple values! The External Id attribute must be single-valued.");
 
         return externalIdAttribute.Type switch
         {
-            AttributeDataType.Text when importObjectAttribute.StringValues.Count == 0 =>
+            AttributeDataType.Text when !importObjectAttribute.HasStringValues =>
                 throw new ExternalIdAttributeValueMissingException($"External Id string attribute ({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.Text => IdentifierKey.For(importObjectAttribute.StringValues[0], caseExact ?? externalIdAttribute.CaseExact),
-            AttributeDataType.Number when importObjectAttribute.IntValues.Count == 0 =>
+            AttributeDataType.Number when !importObjectAttribute.HasIntValues =>
                 throw new ExternalIdAttributeValueMissingException($"External Id number attribute({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.Number => importObjectAttribute.IntValues[0].ToString(),
-            AttributeDataType.LongNumber when importObjectAttribute.LongValues.Count == 0 =>
+            AttributeDataType.LongNumber when !importObjectAttribute.HasLongValues =>
                 throw new ExternalIdAttributeValueMissingException($"External Id long number attribute({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.LongNumber => importObjectAttribute.LongValues[0].ToString(),
-            AttributeDataType.Decimal when importObjectAttribute.DecimalValues.Count == 0 =>
+            AttributeDataType.Decimal when !importObjectAttribute.HasDecimalValues =>
                 throw new ExternalIdAttributeValueMissingException($"External Id decimal attribute ({externalIdAttribute.Name}) on the imported object has no value."),
             // Canonical, so the key matches the one the repository built for the stored value (#1283).
             AttributeDataType.Decimal => ExternalIdValue.ToCanonicalString(importObjectAttribute.DecimalValues[0]),
-            AttributeDataType.Guid when importObjectAttribute.GuidValues.Count == 0 =>
+            AttributeDataType.Guid when !importObjectAttribute.HasGuidValues =>
                 throw new ExternalIdAttributeValueMissingException($"External Id guid attribute ({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.Guid => importObjectAttribute.GuidValues[0].ToString().ToLowerInvariant(),
             _ => throw new InvalidDataException($"LookupCsoByExternalId: Unsupported Connected System Object Type External Id attribute type: {externalIdAttribute.Type}")
@@ -4874,12 +4886,13 @@ public partial class SyncImportTaskProcessor
         // Defensively deduplicate imported attribute values before processing
         // This prevents corrupt source data from creating CSOs with duplicate values
         // Use a temporary identifier for logging since we haven't created the CSO yet
-        var tempExternalId = connectedSystemImportObject.Attributes
-            .FirstOrDefault(a => connectedSystemObjectType.Attributes.Any(csa => csa.IsExternalId && csa.Name.Equals(a.Name, StringComparison.OrdinalIgnoreCase)))
-            ?.StringValues.FirstOrDefault()
-            ?? connectedSystemImportObject.Attributes
-                .FirstOrDefault(a => connectedSystemObjectType.Attributes.Any(csa => csa.IsExternalId && csa.Name.Equals(a.Name, StringComparison.OrdinalIgnoreCase)))
-                ?.GuidValues.FirstOrDefault().ToString();
+        // Read through the Has properties, so naming the object allocates no list it does not hold (#2521).
+        var externalIdImportAttribute = connectedSystemImportObject.Attributes
+            .FirstOrDefault(a => connectedSystemObjectType.Attributes.Any(csa => csa.IsExternalId && csa.Name.Equals(a.Name, StringComparison.OrdinalIgnoreCase)));
+        var tempExternalId = externalIdImportAttribute == null
+            ? null
+            : (externalIdImportAttribute.HasStringValues ? externalIdImportAttribute.StringValues[0] : null)
+              ?? (externalIdImportAttribute.HasGuidValues ? externalIdImportAttribute.GuidValues[0] : Guid.Empty).ToString();
         DeduplicateImportObjectAttributes(connectedSystemImportObject, tempExternalId);
 
         // new object - create Connected System Object using data from an import object
@@ -5593,8 +5606,11 @@ public partial class SyncImportTaskProcessor
     {
         foreach (var attr in importObject.Attributes)
         {
+            // Each count is read through the list's Has property first: reading a list allocates it, and this runs for
+            // every attribute of every object the import creates or updates (#2521).
+
             // Check StringValues collection
-            var originalStringCount = attr.StringValues.Count;
+            var originalStringCount = attr.HasStringValues ? attr.StringValues.Count : 0;
             if (originalStringCount > 1)
             {
                 var uniqueStrings = attr.StringValues.Distinct(StringComparer.Ordinal).ToList();
@@ -5609,7 +5625,7 @@ public partial class SyncImportTaskProcessor
             }
 
             // Check IntValues collection
-            var originalIntCount = attr.IntValues.Count;
+            var originalIntCount = attr.HasIntValues ? attr.IntValues.Count : 0;
             if (originalIntCount > 1)
             {
                 var uniqueInts = attr.IntValues.Distinct().ToList();
@@ -5624,7 +5640,7 @@ public partial class SyncImportTaskProcessor
             }
 
             // Check LongValues collection
-            var originalLongCount = attr.LongValues.Count;
+            var originalLongCount = attr.HasLongValues ? attr.LongValues.Count : 0;
             if (originalLongCount > 1)
             {
                 var uniqueLongs = attr.LongValues.Distinct().ToList();
@@ -5639,7 +5655,7 @@ public partial class SyncImportTaskProcessor
             }
 
             // Check DecimalValues collection (decimal equality is scale-insensitive, so 5.0 and 5.00 dedupe to one value)
-            var originalDecimalCount = attr.DecimalValues.Count;
+            var originalDecimalCount = attr.HasDecimalValues ? attr.DecimalValues.Count : 0;
             if (originalDecimalCount > 1)
             {
                 var uniqueDecimals = attr.DecimalValues.Distinct().ToList();
@@ -5654,7 +5670,7 @@ public partial class SyncImportTaskProcessor
             }
 
             // Check GuidValues collection
-            var originalGuidCount = attr.GuidValues.Count;
+            var originalGuidCount = attr.HasGuidValues ? attr.GuidValues.Count : 0;
             if (originalGuidCount > 1)
             {
                 var uniqueGuids = attr.GuidValues.Distinct().ToList();
@@ -5669,7 +5685,7 @@ public partial class SyncImportTaskProcessor
             }
 
             // Check ReferenceValues collection (use case-insensitive comparison for DNs)
-            var originalRefCount = attr.ReferenceValues.Count;
+            var originalRefCount = attr.HasReferenceValues ? attr.ReferenceValues.Count : 0;
             if (originalRefCount > 1)
             {
                 var uniqueRefs = attr.ReferenceValues.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -5684,7 +5700,7 @@ public partial class SyncImportTaskProcessor
             }
 
             // Check ByteValues collection
-            var originalBinaryCount = attr.ByteValues.Count;
+            var originalBinaryCount = attr.HasByteValues ? attr.ByteValues.Count : 0;
             if (originalBinaryCount > 1)
             {
                 // Keyed by every byte (#2666): the comparer this replaced hashed only the length and the first and last
