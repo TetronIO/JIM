@@ -72,6 +72,37 @@ public class ImportObjectTypeReadOrderTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task FullImport_UndeclaredReferenceWithNoValuesHeldYet_ReadsTheTypesTogetherAsync()
+    {
+        // LDAP's member declares no target, and on a Connected System's first import JIM holds no values to see what it
+        // points at. Taking that as "points at nothing" would order the types by id alone (groups first here, the wrong
+        // way round); it is taken as "may point at anything", so the types are read together, as before.
+        var manager = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "manager",
+            Type = AttributeDataType.Reference,
+            Selected = true,
+            ConnectedSystemObjectType = _person
+        };
+        _person.Attributes.Add(manager);
+        var undeclaredMember = _group.Attributes.Single(a => a.Name == "member");
+        undeclaredMember.ReferencedObjectTypeId = null;
+        await DbContext.SaveChangesAsync();
+
+        var mvPerson = await CreateMvObjectTypeAsync("Person");
+        var managerMv = new MetaverseAttribute { Name = "Manager", Type = AttributeDataType.Reference };
+        var rule = await CreateImportSyncRuleAsync(_system.Id, _person, mvPerson, "Import people");
+        var mapping = new SyncRuleMapping { TargetMetaverseAttribute = managerMv };
+        mapping.Sources.Add(new SyncRuleMappingSource { ConnectedSystemAttribute = manager, ConnectedSystemAttributeId = manager.Id });
+        rule.AttributeFlowRules.Add(mapping);
+        var connector = new ReadOrderTestConnector();
+
+        await (await PrepareAsync(connector, ConnectedSystemRunType.FullImport)).PerformImportAsync();
+
+        Assert.That(connector.OrdersSet.Single().Select(group => group.ToList()), Is.EqualTo(new[] { new[] { _group.Id, _person.Id } }));
+    }
+
+    [Test]
     public async Task DeltaImport_ConnectorReadsObjectTypesInOrder_HandsItNoOrderAsync()
     {
         var connector = new ReadOrderTestConnector();

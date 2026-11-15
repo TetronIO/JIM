@@ -6123,10 +6123,17 @@ public partial class SyncImportTaskProcessor
         var selectedTypes = (_connectedSystem.ObjectTypes ?? []).Where(type => type.Selected).ToList();
         var syncRules = await _syncRepo.GetSyncRulesAsync(_connectedSystem.Id, includeDisabled: false);
 
+        // An attribute JIM holds no values of yet (every one, on a Connected System's first import) is left out, so it is
+        // taken to point at any type, as an unobserved one is, rather than at none: "none" would order the types by id
+        // alone, which can read groups before the people they name. Its types are read together instead.
         Dictionary<int, IReadOnlySet<int>>? observedTargetTypeIds = null;
         var undeclaredAttributeIds = SyncObjectTypeOrdering.GetUndeclaredMappedReferenceAttributeIds(selectedTypes, syncRules);
         if (undeclaredAttributeIds.Count > 0)
-            observedTargetTypeIds = await _syncRepo.GetReferencedObjectTypeIdsAsync(undeclaredAttributeIds.ToList());
+        {
+            observedTargetTypeIds = (await _syncRepo.GetReferencedObjectTypeIdsAsync(undeclaredAttributeIds.ToList()))
+                .Where(observed => observed.Value.Count > 0)
+                .ToDictionary(observed => observed.Key, observed => observed.Value);
+        }
 
         var order = SyncObjectTypeOrdering.Compute(selectedTypes, syncRules, observedTargetTypeIds);
         connector.SetObjectTypeReadOrder(order.Groups);
