@@ -5,15 +5,14 @@ using System.Collections;
 using System.Reflection;
 using JIM.Models.Activities;
 using JIM.Models.Staging;
-using JIM.Models.Transactional;
 using JIM.Worker.Processors;
 
 namespace JIM.Worker.Tests.Processors;
 
 /// <summary>
 /// Runs a confirming import's Pending Export reconciliation over objects a test hands it, as the import runs it alongside
-/// its save phase (#2908): begin with the run's list of updated objects, reconcile each saved batch, reconcile the objects
-/// saved more than once, complete. The objects were not loaded by an import's hydration, so reconciliation reloads them
+/// its save phase (#2908): begin with the ids of the run's updated objects, load each batch's Pending Exports and reconcile
+/// the batch once saved (#2521), reconcile the objects saved more than once, complete. The objects were not loaded by an import's hydration, so reconciliation reloads them
 /// from the repository, as it does any object it cannot judge from held values.
 /// </summary>
 internal static class ImportReconciliationInvoker
@@ -35,7 +34,7 @@ internal static class ImportReconciliationInvoker
         IEnumerable<List<ConnectedSystemObject>> savedBatches)
     {
         var beginTask = (Task)Method("BeginPendingExportReconciliationAsync").Invoke(processor,
-            [updated, (Task<Dictionary<Guid, PendingExport>>?)null])!;
+            [updated.Select(cso => cso.Id).ToList()])!;
         await beginTask;
         var run = beginTask.GetType().GetProperty("Result")!.GetValue(beginTask);
         if (run == null)
@@ -43,6 +42,7 @@ internal static class ImportReconciliationInvoker
 
         foreach (var savedBatch in savedBatches)
         {
+            await (Task)Method("LoadBatchPendingExportsAsync").Invoke(processor, [run, savedBatch, null])!;
             var valuesBeforeSave = (IDictionary)Method("CaptureValuesBeforeSave").Invoke(processor, [run, savedBatch])!;
             await (Task)Method("ReconcileSavedBatchAsync").Invoke(processor,
                 [run, savedBatch, valuesBeforeSave, new Dictionary<Guid, ActivityRunProfileExecutionItem>(), false])!;

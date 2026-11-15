@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A Full Import that marks an object deleted no longer also records **Export Not Confirmed** against it for a Pending Export the deletion had already removed. (#2521)
 - 🐛 JIM now records the name and External ID a target system reports as soon as an export creates, renames or moves an object. It kept the old name until the next import, so a group the moved person joined in the same run was given the old name as a member, and the portal showed the old name. (#2930)
 - 🐛 When a confirming import confirms, or fails to confirm, an export to an object it found unchanged, the execution item it records now names the object's type, so the Activity's breakdown by Object Type counts it. (#2908)
 - 🐛 An object leaving one import Synchronisation Rule's scope while another still covers it now gives up that rule's values under **Disconnect from Metaverse**; they no longer outrank the rules still covering it. The join stays, recorded as **Left scope, join kept**. (#2821)
@@ -87,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- ⚡ Imports use less memory: a confirming import loads the Pending Exports it reconciles batch by batch rather than all at once, and each imported attribute holds only the one list of values it uses. (#2521)
 - ⚡ Synchronising groups with hundreds of thousands of members does less database work: the members' names recorded in export changes are looked up once per synchronisation, 10,000 at a time, instead of again for every group that shares them, and members provisioned in the same synchronisation are not looked up at all. (#2939)
 - ⚡ Imports, synchronisations and exports do less database work writing new objects, values and Pending Exports to large Connected Systems: their ids are now time-ordered, so each write adds to the end of the database's indexes instead of a random page of each. (#2929)
 - ⚡ Full and Delta Synchronisations of directories with very large groups use far less memory: a page now also ends at 100,000 attribute values, so the largest groups no longer share one, where a single page of four groups once held two million members. (#2934)

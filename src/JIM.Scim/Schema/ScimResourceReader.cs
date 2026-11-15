@@ -298,13 +298,15 @@ public static class ScimResourceReader
 
     private static bool HasValue(ConnectedSystemImportObjectAttribute attribute)
     {
-        return attribute.StringValues.Count > 0
-               || attribute.ReferenceValues.Count > 0
-               || attribute.IntValues.Count > 0
-               || attribute.LongValues.Count > 0
-               || attribute.DecimalValues.Count > 0
-               || attribute.GuidValues.Count > 0
-               || attribute.ByteValues.Count > 0
+        // The Has properties read without allocating: reading a list allocates it, and this runs for every attribute of
+        // every resource read (#2521).
+        return attribute.HasStringValues
+               || attribute.HasReferenceValues
+               || attribute.HasIntValues
+               || attribute.HasLongValues
+               || attribute.HasDecimalValues
+               || attribute.HasGuidValues
+               || attribute.HasByteValues
                || attribute.HasDateTimeValues
                || attribute.HasBoolValues;
     }

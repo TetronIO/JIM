@@ -144,7 +144,7 @@ public class ReconcileAwaitingInitialPasswordTests
         var method = typeof(SyncImportTaskProcessor).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException(
                 $"SyncImportTaskProcessor.{methodName} was not found. Update this fixture to invoke the current production method.");
-        await (Task)method.Invoke(fixture.Processor, [new List<ConnectedSystemObject>()])!;
+        await (Task)method.Invoke(fixture.Processor, [new HashSet<Guid>()])!;
 
         var change = fixture.Repository.PendingExports[fixture.PendingExportId].AttributeValueChanges.Single();
         using (Assert.EnterMultipleScope())

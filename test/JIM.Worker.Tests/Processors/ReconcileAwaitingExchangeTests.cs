@@ -221,7 +221,7 @@ public class ReconcileAwaitingExchangeTests
             ?? throw new InvalidOperationException(
                 $"SyncImportTaskProcessor.{methodName} was not found. Update this fixture to invoke the current production method.");
 
-        await (Task)method.Invoke(fixture.Processor, [reconciled ?? new List<ConnectedSystemObject>()])!;
+        await (Task)method.Invoke(fixture.Processor, [(reconciled ?? []).Select(cso => cso.Id).ToHashSet()])!;
     }
 
     /// <summary>

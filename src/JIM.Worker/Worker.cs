@@ -1796,56 +1796,7 @@ public class Worker : BackgroundService
         if (rpeis.Count == 0)
             return;
 
-        var hasOutcomes = rpeis.Any(r => r.SyncOutcomes.Count > 0);
-
-        if (hasOutcomes)
-        {
-            var allOutcomes = rpeis.SelectMany(r => r.SyncOutcomes).ToList();
-
-            activity.TotalAdded += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded);
-            activity.TotalUpdated += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated);
-            activity.TotalDeleted += allOutcomes.Count(o => o.OutcomeType is
-                ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted
-                or ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected
-                or ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
-
-            activity.TotalProjected += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
-            activity.TotalJoined += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined);
-            activity.TotalAttributeFlows += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
-            activity.TotalDisconnected += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected);
-            activity.TotalDisconnectedOutOfScope += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope);
-
-            activity.TotalExported += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
-            activity.TotalDeprovisioned += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned);
-
-            activity.TotalPendingExports += allOutcomes.Count(o => SyncOutcomeTypes.IsPendingExport(o.OutcomeType));
-            activity.TotalDriftCorrections += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection);
-            activity.TotalProvisioned += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
-        }
-        else
-        {
-            activity.TotalAdded += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Added);
-            activity.TotalUpdated += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Updated);
-            activity.TotalDeleted += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Deleted);
-
-            activity.TotalProjected += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Projected);
-            activity.TotalJoined += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Joined);
-            activity.TotalAttributeFlows += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.AttributeFlow);
-
-            activity.TotalDisconnected += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Disconnected);
-            activity.TotalDisconnectedOutOfScope += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.DisconnectedOutOfScope);
-
-            activity.TotalExported += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Exported);
-            activity.TotalDeprovisioned += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Deprovisioned);
-
-            activity.TotalPendingExports += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.PendingExport);
-            activity.TotalDriftCorrections += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.DriftCorrection);
-        }
-
-        activity.TotalOutOfScopeRetainJoin += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.OutOfScopeRetainJoin);
-        activity.TotalCreated += rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Created);
-        activity.TotalErrors += rpeis.Count(r =>
-            r.ErrorType.HasValue && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
+        ExecutionItemTotals.Of(rpeis).AddTo(activity);
     }
 
     private static void CalculateActivitySummaryStatsInternal(Activity activity, IReadOnlyList<ActivityRunProfileExecutionItem> rpeis)

@@ -76,6 +76,29 @@ public partial class SyncImportTaskProcessor
     internal int ImportBatchSize { get; init; } = 2000;
 
     /// <summary>
+    /// When true, the run records <see cref="PeakHeldAttributeValues"/>: the Full Import memory harness's counter (#2521,
+    /// Phase 0). Off by default, so a run that is not being measured pays nothing for it.
+    /// </summary>
+    internal bool MeasureHeldAttributeValues { get; init; }
+
+    /// <summary>
+    /// The most attribute values the run held on Connected System Objects at once, while
+    /// <see cref="MeasureHeldAttributeValues"/> is set: a deterministic stand-in for the run's memory, which grows with the
+    /// pages a run holds before it saves them. Sampled after each Connector page is processed, once references are resolved,
+    /// and after each save batch; at each sample it counts every value and pending addition on the objects the run holds to
+    /// create or update. Values loaded and released between two samples (a page's hydration, reconciliation's reloads) are
+    /// not counted; nor are values held elsewhere, such as the import objects of the page being read.
+    /// </summary>
+    internal long PeakHeldAttributeValues { get; private set; }
+
+    /// <summary>
+    /// The base the deletion limits' percentage is measured against: the Connected System Objects in the run's scope that
+    /// are not already Obsolete, counted as the run starts, before it saves anything. Null when the Run Profile sets no
+    /// deletion limit, or before the run has started; deletion detection then counts it when asked.
+    /// </summary>
+    private int? _deletionLimitBaseAtStart;
+
+    /// <summary>
     /// When true, the Connected System has no existing CSOs, so all imported objects are known to be new.
     /// This eliminates N unnecessary DB round-trips during first-ever imports.
     /// </summary>
@@ -436,23 +459,10 @@ public partial class SyncImportTaskProcessor
             await LoadEveryCsoExternalIdAsync("a Full Import looks up every object");
         }
 
-        // Pre-load Pending Exports in the background while import processing runs.
-        // Uses a separate DbContext (via IDbContextFactory) to avoid thread-safety issues
-        // with the main DbContext used by import processing. The query is independent of
-        // import processing and takes several seconds at scale; by starting it now, the data
-        // is typically ready by the time reconciliation begins.
-        Task<Dictionary<Guid, PendingExport>>? pendingExportsTask = null;
-        if (!_csIsEmpty && _dbContextFactory != null)
-        {
-            var connectedSystemId = _connectedSystem.Id;
-            Log.Debug("PerformImportAsync: Starting background pre-load of Pending Exports for Connected System {ConnectedSystemId}", connectedSystemId);
-            pendingExportsTask = Task.Run(async () =>
-            {
-                using var bgContext = await _dbContextFactory.CreateDbContextAsync();
-                var bgRepo = new JIM.PostgresData.PostgresDataRepository(bgContext);
-                return await bgRepo.Sync.GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId);
-            });
-        }
+        // The deletion limits' percentage base is what JIM held when the run started (#2521): counted now, before anything
+        // is saved, so it stays the same whichever order the run saves and detects deletions in. The Pending Exports a
+        // confirming import reconciles are no longer loaded here: each save batch loads its own.
+        await CaptureDeletionLimitBaseAsync();
 
         // Load sync outcome tracking level once at start of import
         _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
@@ -726,6 +736,8 @@ public partial class SyncImportTaskProcessor
                             await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, crossPageSeenExternalIds);
                         }
 
+                        SampleHeldAttributeValues(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+
                         if (initialPage)
                             initialPage = false;
 
@@ -846,6 +858,8 @@ public partial class SyncImportTaskProcessor
                     await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
                 }
 
+                SampleHeldAttributeValues(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+
                 // Mark file processing complete
                 _activity.ObjectsProcessed = totalObjectsImported;
                 await _syncRepo.UpdateActivityAsync(_activity);
@@ -910,7 +924,8 @@ public partial class SyncImportTaskProcessor
             var retrySw = System.Diagnostics.Stopwatch.StartNew();
             using (Diagnostics.Sync.StartSpan("RetryUnconfirmedExportedCreates"))
             {
-                await RetryUnconfirmedExportedCreatesAsync(externalIdsImported, connectedSystemObjectsToBeUpdated, deletionPartitionId, totalObjectsImported);
+                await RetryUnconfirmedExportedCreatesAsync(externalIdsImported, connectedSystemObjectsToBeUpdated.Select(cso => cso.Id).ToHashSet(),
+                    deletionPartitionId, totalObjectsImported);
             }
             retrySw.Stop();
             Log.Information("PerformImportAsync: PHASE TIMING: Unconfirmed Create retry: {RetrySeconds:F1}s", retrySw.Elapsed.TotalSeconds);
@@ -969,6 +984,7 @@ public partial class SyncImportTaskProcessor
         resolveRefsSw.Stop();
         Log.Information("PerformImportAsync: PHASE TIMING — Reference resolution: {ResolveRefsSeconds:F1}s ({ObjectsWithRefs} objects with refs)",
             resolveRefsSw.Elapsed.TotalSeconds, objectsWithReferences);
+        SampleHeldAttributeValues(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
 
         // now persist all CSOs which will also create the required Change Objects within the Activity.
         var createdCount = connectedSystemObjectsToBeCreated.Count;
@@ -1002,192 +1018,7 @@ public partial class SyncImportTaskProcessor
                     string.Join("; ", rpeiWithErrors.Select(r => $"[Id={r.Id}, ErrorType={r.ErrorType}, Message={LogSanitiser.Sanitise(r.ErrorMessage)}]")));
             }
 
-            // Pre-generate IDs for ALL CSOs before batch saves begin. This eliminates
-            // the cross-batch FK gap where a group in batch 1 references a user in batch 3
-            // whose ID is still Guid.Empty. With all IDs assigned upfront, the per-batch
-            // ReferenceValueId fixup in CreateConnectedSystemObjectsAsync can resolve ALL
-            // reference FKs regardless of batch boundaries. Time-ordered, so the rows land on the
-            // growing end of each index keyed on them (#2929).
-            foreach (var cso in connectedSystemObjectsToBeCreated)
-                TimeOrderedIds.AssignMissing(cso);
-
-            // Sort CSOs so non-referencing objects (e.g., users) come before referencing objects
-            // (e.g., groups with member DNs). Combined with committed ID tracking below, this
-            // ensures referenced CSOs are already committed when referencing CSOs are persisted,
-            // eliminating most cross-batch FK violations and reducing FixupCrossBatchReferenceIdsAsync work.
-            connectedSystemObjectsToBeCreated.Sort((a, b) =>
-            {
-                var aHasRefs = a.AttributeValues.Any(av => av.ReferenceValueId.HasValue || av.ReferenceValue != null || !string.IsNullOrEmpty(av.UnresolvedReferenceValue));
-                var bHasRefs = b.AttributeValues.Any(av => av.ReferenceValueId.HasValue || av.ReferenceValue != null || !string.IsNullOrEmpty(av.UnresolvedReferenceValue));
-                return aHasRefs.CompareTo(bHasRefs); // false (0) before true (1)
-            });
-
-            // Process CSO creates in batches to bound memory. CreateConnectedSystemObjectsAsync
-            // creates ConnectedSystemObjectChange graphs (~20 ChangeAttribute + ChangeAttributeValue
-            // objects per CSO). At 100K CSOs this creates ~2-6M objects consuming 3-7GB if done at once.
-            // Batching ensures change objects are persisted with their batch and released per batch (#2909).
-            // We consume from the front of the list so processed CSOs and their attribute values
-            // (~400MB at 100K objects) become GC-eligible immediately.
-            var totalCreatedSoFar = 0;
-            var totalToCreate = connectedSystemObjectsToBeCreated.Count;
-
-            // Track CSO IDs committed in previous batches. Passed to CreateConnectedSystemObjectsAsync
-            // so that FKs pointing to already-committed CSOs are preserved instead of being nulled.
-            var committedCsoIds = new HashSet<Guid>();
-
-            while (connectedSystemObjectsToBeCreated.Count > 0)
-            {
-                var batchSize = Math.Min(ImportBatchSize, connectedSystemObjectsToBeCreated.Count);
-                Log.Information("PerformImportAsync: Starting batch {BatchStart}-{BatchEnd} of {Total}",
-                    totalCreatedSoFar, totalCreatedSoFar + batchSize, totalToCreate);
-                var csoBatch = connectedSystemObjectsToBeCreated.GetRange(0, batchSize);
-
-                // Extract just the RPEIs for this batch of CSOs using object references.
-                var batchCsoSet = new HashSet<ConnectedSystemObject>(csoBatch);
-                var batchRpeis = _activityRunProfileExecutionItems
-                    .Where(r => r.ConnectedSystemObject != null && batchCsoSet.Contains(r.ConnectedSystemObject))
-                    .ToList();
-
-                // The batch's objects and its history are written together (#2909): the execution items are readied
-                // first, so the change records built for the objects name them, and then the objects, their values,
-                // the items and the change records are written in one call, which leaves nothing of the batch if any
-                // part of it fails.
-                PrepareImportRpeisForWrite(batchRpeis);
-                var batchRpeiCount = batchRpeis.Count;
-                var batchSw = System.Diagnostics.Stopwatch.StartNew();
-                var usedRawSql = await _syncServer.CreateConnectedSystemObjectsAsync(csoBatch, batchRpeis, committedCsoIds);
-                Log.Debug("PerformImportAsync: CreateConnectedSystemObjectsAsync took {ElapsedMs}ms for {Count} CSOs and {RpeiCount} RPEIs",
-                    batchSw.ElapsedMilliseconds, batchSize, batchRpeiCount);
-
-                // Sync the FK on RPEIs from CSO IDs (pre-generated before the batch loop)
-                foreach (var rpei in batchRpeis)
-                {
-                    if (rpei.ConnectedSystemObject != null)
-                        rpei.ConnectedSystemObjectId = rpei.ConnectedSystemObject.Id;
-                }
-
-                // SPEC-1082 D7: stamp this create batch's requested hashes now that its attribute
-                // value writes (inside CreateConnectedSystemObjectsAsync) have committed.
-                await StampBatchImportStateAsync(csoBatch, batchRpeis);
-
-                // Track committed CSO IDs so future batches can preserve FK references to them
-                foreach (var cso in csoBatch)
-                    committedCsoIds.Add(cso.Id);
-
-                // Remove batch RPEIs from the main list and release them: they were written with their objects.
-                _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObject != null && batchCsoSet.Contains(r.ConnectedSystemObject));
-                ReleaseWrittenImportRpeis(batchRpeis, usedRawSql);
-
-                // Remove processed CSOs from the front of the list so their attribute values
-                // (~20 per CSO × ~200 bytes = ~4KB per CSO) become GC-eligible immediately.
-                connectedSystemObjectsToBeCreated.RemoveRange(0, batchSize);
-
-                totalCreatedSoFar += batchSize;
-                _activity.ObjectsProcessed = totalCreatedSoFar;
-                await _syncRepo.UpdateActivityMessageAsync(_activity, "Creating Connected System Objects");
-                Log.Information("PerformImportAsync: Batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
-                    totalCreatedSoFar, totalToCreate,
-                    GC.GetTotalMemory(false) / 1024 / 1024,
-                    System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
-                await _syncRepo.UpdateActivityProgressOutOfBandAsync(_activity);
-            }
-
-            // Defence-in-depth: fix up any remaining unresolved ReferenceValueId FKs via SQL.
-            // With upfront ID pre-generation, cross-batch references within the same import run
-            // should already be resolved. This fixup still handles edge cases such as cross-run
-            // references (e.g., groups imported in a later run referencing users from a prior run).
-            var crossBatchFixed = await _syncRepo.FixupCrossBatchReferenceIdsAsync(_connectedSystem.Id);
-            if (crossBatchFixed > 0)
-                Log.Information("PerformImportAsync: Fixed up {Count} cross-batch reference FKs after all create batches completed.", crossBatchFixed);
-
-            var changeRecordFixed = await _syncRepo.FixupCrossBatchChangeRecordReferenceIdsAsync(_connectedSystem.Id);
-            if (changeRecordFixed > 0)
-                Log.Information("PerformImportAsync: Fixed up {Count} cross-batch change record reference FKs after all create batches completed.", changeRecordFixed);
-
-            // Process CSO updates in batches to reduce EF change tracker pressure and report progress.
-            // UpdateConnectedSystemObjectsAsync builds ConnectedSystemObjectChange graphs and EF tracks
-            // child entity changes (attribute value adds/deletes). At 100K CSOs this creates millions of
-            // tracked entities consuming GBs if done at once. Batching ensures SaveChangesAsync processes
-            // only ~2K entities at a time and progress is reported after each batch.
-            // Note: unlike the create phase, we don't RemoveRange here because the holds judged after the
-            // save phase (JudgeUnreconciled*HoldsAsync) need the full list of updated CSO ids.
-            var totalToUpdate = connectedSystemObjectsToBeUpdated.Count;
-
-            // Pending Export reconciliation runs as each update batch is saved (#2908), judging each object from the values
-            // the import holds for it, exactly as saved, before they are released below. Reloading every object after the
-            // save phase cost the 500,000-object confirming import 79 s.
-            reconciliation = await BeginPendingExportReconciliationAsync(connectedSystemObjectsToBeUpdated, pendingExportsTask);
-
-            _activity.ObjectsProcessed = createdCount;
-            await _syncRepo.UpdateActivityAsync(_activity);
-
-            for (var batchStart = 0; batchStart < totalToUpdate; batchStart += ImportBatchSize)
-            {
-                var batchSize = Math.Min(ImportBatchSize, totalToUpdate - batchStart);
-                Log.Information("PerformImportAsync: Starting update batch {BatchStart}-{BatchEnd} of {Total}",
-                    batchStart, batchStart + batchSize, totalToUpdate);
-                var csoBatch = connectedSystemObjectsToBeUpdated.GetRange(batchStart, batchSize);
-
-                // Extract just the RPEIs for this batch of CSOs.
-                // Update-phase CSOs already have real IDs, so we match by ConnectedSystemObjectId.
-                var batchCsoIds = new HashSet<Guid>(csoBatch.Select(c => c.Id));
-                var batchRpeis = _activityRunProfileExecutionItems
-                    .Where(r => r.ConnectedSystemObjectId.HasValue && batchCsoIds.Contains(r.ConnectedSystemObjectId.Value))
-                    .ToList();
-
-                // What each object reconciliation may judge from memory holds before the save, so that afterwards it can be
-                // shown to hold exactly what was written (#2908). Not taken once cancellation is requested: the batches
-                // still saved are left to the next import to reconcile, as the whole run's were before.
-                var reconcileThisBatch = reconciliation != null && !_cancellationTokenSource.IsCancellationRequested;
-                var valuesBeforeSave = reconcileThisBatch ? CaptureValuesBeforeSave(reconciliation!, csoBatch) : null;
-
-                using (Diagnostics.Sync.StartSpan("UpdateConnectedSystemObjectsBatch").SetTag("csoCount", batchSize))
-                {
-                    await _syncServer.UpdateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
-                }
-
-                // SPEC-1082 D7: stamp this update batch's requested hashes now that its attribute
-                // value writes have committed, and BEFORE ReleaseHydratedAttributeValues below.
-                await StampBatchImportStateAsync(csoBatch, batchRpeis);
-
-                // The execution items reconciliation merges its outcomes onto, taken before the flush empties the list: an
-                // object's first. Only update-phase items are needed; a created object has no Pending Export.
-                var importItemsByCsoId = new Dictionary<Guid, ActivityRunProfileExecutionItem>(batchRpeis.Count);
-                foreach (var rpei in batchRpeis.Where(r => r.ConnectedSystemObjectId.HasValue))
-                    importItemsByCsoId.TryAdd(rpei.ConnectedSystemObjectId!.Value, rpei);
-
-                // Remove batch RPEIs from the main list and flush them
-                _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObjectId.HasValue && batchCsoIds.Contains(r.ConnectedSystemObjectId.Value));
-                await FlushImportRpeisAsync(batchRpeis);
-
-                // Reconcile this batch's Pending Exports while the import still holds its objects' values, and write the
-                // outcomes it merges onto the items just flushed, so neither the values nor the outcomes accumulate.
-                if (reconcileThisBatch)
-                    await ReconcileSavedBatchAsync(reconciliation!, csoBatch, valuesBeforeSave!, importItemsByCsoId, crossBatchFixed > 0);
-                foreach (var cso in csoBatch)
-                    _connectedSystemObjectsLoadedWhole.Remove(cso);
-
-                // Release this batch's hydrated AttributeValues now that it's been persisted. See
-                // ReleaseHydratedAttributeValues for why this is safe (#1079 Regression B: an OOM
-                // kill on 2026-07-21 traced to these values otherwise staying resident for the
-                // rest of the run). Note this batch was hydrated via GetConnectedSystemObjectsByIdsAsync
-                // with AsNoTrackingWithIdentityResolution, so it was never in the change tracker in
-                // the first place; ClearChangeTracker() below does not touch it.
-                ReleaseHydratedAttributeValues(csoBatch);
-
-                // Clear the change tracker after each update batch, in case anything else in this
-                // DbContext scope (e.g. RPEIs/Activity entities) was tracked during the batch. This
-                // prevents tracker bloat from accumulating across 50+ batches of 2000 CSOs each.
-                _syncRepo.ClearChangeTracker();
-
-                _activity.ObjectsProcessed = createdCount + batchStart + batchSize;
-                await _syncRepo.UpdateActivityMessageAsync(_activity, "Updating Connected System Objects");
-                Log.Information("PerformImportAsync: Update batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
-                    batchStart + batchSize, totalToUpdate,
-                    GC.GetTotalMemory(false) / 1024 / 1024,
-                    System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
-                await _syncRepo.UpdateActivityProgressOutOfBandAsync(_activity);
-            }
+            reconciliation = await StageImportedObjectsAsync(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
         }
 
         // Objects saved more than once are reconciled now, once each, as every object was once the save phase was over.
@@ -1207,15 +1038,16 @@ public partial class SyncImportTaskProcessor
             if (reconciliation != null)
             {
                 CompletePendingExportReconciliation(reconciliation);
-                await FlushImportRpeisAsync([], alsoCountInActivityTotals: reconciliation.RaisedItemsAwaitingTotals);
+                await FlushImportRpeisAsync([], alsoCountInActivityTotals: reconciliation.RaisedItemTotals);
             }
             return;
         }
 
         // Note: connectedSystemObjectsToBeUpdated's CSOs no longer have populated AttributeValues
         // at this point - ReleaseHydratedAttributeValues cleared each batch's above, once
-        // persisted and reconciled, to bound memory at scale (#1079 Regression B). Only the holds
-        // below read this list, and only for each CSO's Id.
+        // persisted and reconciled, to bound memory at scale (#1079 Regression B). The holds
+        // below need only their ids.
+        var updatedCsoIds = connectedSystemObjectsToBeUpdated.Select(cso => cso.Id).ToHashSet();
 
         _activity.ObjectsToProcess = reconciliation?.ReconciledCount ?? 0;
         _activity.ObjectsProcessed = _activity.ObjectsToProcess;
@@ -1234,13 +1066,13 @@ public partial class SyncImportTaskProcessor
         // is skipped by its hash on a Full Import and never returned by a Delta Import.
         using (Diagnostics.Sync.StartSpan("JudgeUnreconciledInitialPasswordHolds"))
         {
-            await JudgeUnreconciledInitialPasswordHoldsAsync(connectedSystemObjectsToBeUpdated);
+            await JudgeUnreconciledInitialPasswordHoldsAsync(updatedCsoIds);
         }
 
         // Likewise a change awaiting Exchange whose queued change has gone without Exchange touching the object (#2021).
         using (Diagnostics.Sync.StartSpan("JudgeUnreconciledExchangeHolds"))
         {
-            await JudgeUnreconciledExchangeHoldsAsync(connectedSystemObjectsToBeUpdated);
+            await JudgeUnreconciledExchangeHoldsAsync(updatedCsoIds);
         }
         reconcileSw.Stop();
         Log.Information("PerformImportAsync: PHASE TIMING — Reconciliation: {ReconcileSeconds:F1}s ({UpdateCount} CSOs)",
@@ -1272,7 +1104,7 @@ public partial class SyncImportTaskProcessor
         _activity.ObjectsToProcess = remainingRpeiCount;
         _activity.ObjectsProcessed = 0;
         await _phases.EnterAsync(RunPhaseKeys.ImportRecordResults, "Recording results");
-        await FlushImportRpeisAsync(alsoCountInActivityTotals: reconciliation?.RaisedItemsAwaitingTotals);
+        await FlushImportRpeisAsync(alsoCountInActivityTotals: reconciliation?.RaisedItemTotals);
         _activity.ObjectsProcessed = remainingRpeiCount;
 
         // Summary stats were accumulated incrementally during each FlushImportRpeisAsync call (production).
@@ -1396,6 +1228,220 @@ public partial class SyncImportTaskProcessor
     }
 
     /// <summary>
+    /// The save phase: writes the run's creates and updates in batches, with their execution items and change records, stamps
+    /// each batch's content hash, and reconciles each update batch's Pending Exports once it is saved, releasing each
+    /// batch's values as it goes. Called once, at the end of the run.
+    /// </summary>
+    /// <returns>The run's Pending Export reconciliation, for the caller to complete; null when there was nothing to reconcile.</returns>
+    private async Task<PendingExportReconciliationRun?> StageImportedObjectsAsync(List<ConnectedSystemObject> connectedSystemObjectsToBeCreated,
+        List<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    {
+        var createdCount = connectedSystemObjectsToBeCreated.Count;
+
+        // Pre-generate IDs for ALL CSOs before batch saves begin. This eliminates
+        // the cross-batch FK gap where a group in batch 1 references a user in batch 3
+        // whose ID is still Guid.Empty. With all IDs assigned upfront, the per-batch
+        // ReferenceValueId fixup in CreateConnectedSystemObjectsAsync can resolve ALL
+        // reference FKs regardless of batch boundaries. Time-ordered, so the rows land on the
+        // growing end of each index keyed on them (#2929).
+        foreach (var cso in connectedSystemObjectsToBeCreated)
+            TimeOrderedIds.AssignMissing(cso);
+
+        // Sort CSOs so non-referencing objects (e.g., users) come before referencing objects
+        // (e.g., groups with member DNs). Combined with committed ID tracking below, this
+        // ensures referenced CSOs are already committed when referencing CSOs are persisted,
+        // eliminating most cross-batch FK violations and reducing FixupCrossBatchReferenceIdsAsync work.
+        connectedSystemObjectsToBeCreated.Sort((a, b) =>
+        {
+            var aHasRefs = a.AttributeValues.Any(av => av.ReferenceValueId.HasValue || av.ReferenceValue != null || !string.IsNullOrEmpty(av.UnresolvedReferenceValue));
+            var bHasRefs = b.AttributeValues.Any(av => av.ReferenceValueId.HasValue || av.ReferenceValue != null || !string.IsNullOrEmpty(av.UnresolvedReferenceValue));
+            return aHasRefs.CompareTo(bHasRefs); // false (0) before true (1)
+        });
+
+        // Process CSO creates in batches to bound memory. CreateConnectedSystemObjectsAsync
+        // creates ConnectedSystemObjectChange graphs (~20 ChangeAttribute + ChangeAttributeValue
+        // objects per CSO). At 100K CSOs this creates ~2-6M objects consuming 3-7GB if done at once.
+        // Batching ensures change objects are persisted with their batch and released per batch (#2909).
+        // We consume from the front of the list so processed CSOs and their attribute values
+        // (~400MB at 100K objects) become GC-eligible immediately.
+        var totalCreatedSoFar = 0;
+        var totalToCreate = connectedSystemObjectsToBeCreated.Count;
+
+        // Track CSO IDs committed in previous batches. Passed to CreateConnectedSystemObjectsAsync
+        // so that FKs pointing to already-committed CSOs are preserved instead of being nulled.
+        var committedCsoIds = new HashSet<Guid>();
+
+        while (connectedSystemObjectsToBeCreated.Count > 0)
+        {
+            var batchSize = Math.Min(ImportBatchSize, connectedSystemObjectsToBeCreated.Count);
+            Log.Information("PerformImportAsync: Starting batch {BatchStart}-{BatchEnd} of {Total}",
+                totalCreatedSoFar, totalCreatedSoFar + batchSize, totalToCreate);
+            var csoBatch = connectedSystemObjectsToBeCreated.GetRange(0, batchSize);
+
+            // Extract just the RPEIs for this batch of CSOs using object references.
+            var batchCsoSet = new HashSet<ConnectedSystemObject>(csoBatch);
+            var batchRpeis = _activityRunProfileExecutionItems
+                .Where(r => r.ConnectedSystemObject != null && batchCsoSet.Contains(r.ConnectedSystemObject))
+                .ToList();
+
+            // The batch's objects and its history are written together (#2909): the execution items are readied
+            // first, so the change records built for the objects name them, and then the objects, their values,
+            // the items and the change records are written in one call, which leaves nothing of the batch if any
+            // part of it fails.
+            PrepareImportRpeisForWrite(batchRpeis);
+            var batchRpeiCount = batchRpeis.Count;
+            var batchSw = System.Diagnostics.Stopwatch.StartNew();
+            var usedRawSql = await _syncServer.CreateConnectedSystemObjectsAsync(csoBatch, batchRpeis, committedCsoIds);
+            Log.Debug("PerformImportAsync: CreateConnectedSystemObjectsAsync took {ElapsedMs}ms for {Count} CSOs and {RpeiCount} RPEIs",
+                batchSw.ElapsedMilliseconds, batchSize, batchRpeiCount);
+
+            // Sync the FK on RPEIs from CSO IDs (pre-generated before the batch loop)
+            foreach (var rpei in batchRpeis)
+            {
+                if (rpei.ConnectedSystemObject != null)
+                    rpei.ConnectedSystemObjectId = rpei.ConnectedSystemObject.Id;
+            }
+
+            // SPEC-1082 D7: stamp this create batch's requested hashes now that its attribute
+            // value writes (inside CreateConnectedSystemObjectsAsync) have committed.
+            await StampBatchImportStateAsync(csoBatch, batchRpeis);
+
+            // Track committed CSO IDs so future batches can preserve FK references to them
+            foreach (var cso in csoBatch)
+                committedCsoIds.Add(cso.Id);
+
+            // Remove batch RPEIs from the main list and release them: they were written with their objects.
+            _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObject != null && batchCsoSet.Contains(r.ConnectedSystemObject));
+            ReleaseWrittenImportRpeis(batchRpeis, usedRawSql);
+
+            // Remove processed CSOs from the front of the list so their attribute values
+            // (~20 per CSO × ~200 bytes = ~4KB per CSO) become GC-eligible immediately.
+            connectedSystemObjectsToBeCreated.RemoveRange(0, batchSize);
+
+            totalCreatedSoFar += batchSize;
+            _activity.ObjectsProcessed = totalCreatedSoFar;
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "Creating Connected System Objects");
+            Log.Information("PerformImportAsync: Batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
+                totalCreatedSoFar, totalToCreate,
+                GC.GetTotalMemory(false) / 1024 / 1024,
+                System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
+            await _syncRepo.UpdateActivityProgressOutOfBandAsync(_activity);
+            SampleHeldAttributeValues(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+        }
+
+        // Defence-in-depth: fix up any remaining unresolved ReferenceValueId FKs via SQL.
+        // With upfront ID pre-generation, cross-batch references within the same import run
+        // should already be resolved. This fixup still handles edge cases such as cross-run
+        // references (e.g., groups imported in a later run referencing users from a prior run).
+        var crossBatchFixed = await _syncRepo.FixupCrossBatchReferenceIdsAsync(_connectedSystem.Id);
+        if (crossBatchFixed > 0)
+            Log.Information("PerformImportAsync: Fixed up {Count} cross-batch reference FKs after all create batches completed.", crossBatchFixed);
+
+        var changeRecordFixed = await _syncRepo.FixupCrossBatchChangeRecordReferenceIdsAsync(_connectedSystem.Id);
+        if (changeRecordFixed > 0)
+            Log.Information("PerformImportAsync: Fixed up {Count} cross-batch change record reference FKs after all create batches completed.", changeRecordFixed);
+
+        // Process CSO updates in batches to reduce EF change tracker pressure and report progress.
+        // UpdateConnectedSystemObjectsAsync builds ConnectedSystemObjectChange graphs and EF tracks
+        // child entity changes (attribute value adds/deletes). At 100K CSOs this creates millions of
+        // tracked entities consuming GBs if done at once. Batching ensures SaveChangesAsync processes
+        // only ~2K entities at a time and progress is reported after each batch.
+        // Note: unlike the create phase, we don't RemoveRange here because the holds judged after the
+        // save phase (JudgeUnreconciled*HoldsAsync) need the full list of updated CSO ids.
+        var totalToUpdate = connectedSystemObjectsToBeUpdated.Count;
+
+        // Pending Export reconciliation runs as each update batch is saved (#2908), judging each object from the values
+        // the import holds for it, exactly as saved, before they are released below. Reloading every object after the
+        // save phase cost the 500,000-object confirming import 79 s.
+        var reconciliation = await BeginPendingExportReconciliationAsync(connectedSystemObjectsToBeUpdated.Select(cso => cso.Id).ToList());
+
+        _activity.ObjectsProcessed = createdCount;
+        await _syncRepo.UpdateActivityAsync(_activity);
+
+        for (var batchStart = 0; batchStart < totalToUpdate; batchStart += ImportBatchSize)
+        {
+            var batchSize = Math.Min(ImportBatchSize, totalToUpdate - batchStart);
+            Log.Information("PerformImportAsync: Starting update batch {BatchStart}-{BatchEnd} of {Total}",
+                batchStart, batchStart + batchSize, totalToUpdate);
+            var csoBatch = connectedSystemObjectsToBeUpdated.GetRange(batchStart, batchSize);
+
+            // Extract just the RPEIs for this batch of CSOs.
+            // Update-phase CSOs already have real IDs, so we match by ConnectedSystemObjectId.
+            var batchCsoIds = new HashSet<Guid>(csoBatch.Select(c => c.Id));
+            var batchRpeis = _activityRunProfileExecutionItems
+                .Where(r => r.ConnectedSystemObjectId.HasValue && batchCsoIds.Contains(r.ConnectedSystemObjectId.Value))
+                .ToList();
+
+            // The batch's Pending Exports, loaded as it is reached rather than all at once (#2521); the next batch's start
+            // loading alongside this one's save. Then what each object reconciliation may judge from memory holds before the
+            // save, so that afterwards it can be shown to hold exactly what was written (#2908). Neither is taken once
+            // cancellation is requested: the batches still saved are left to the next import to reconcile, as the whole
+            // run's were before.
+            var reconcileThisBatch = reconciliation != null && !_cancellationTokenSource.IsCancellationRequested;
+            if (reconcileThisBatch)
+            {
+                var nextBatchStart = batchStart + batchSize;
+                var nextBatch = nextBatchStart < totalToUpdate
+                    ? connectedSystemObjectsToBeUpdated.GetRange(nextBatchStart, Math.Min(ImportBatchSize, totalToUpdate - nextBatchStart))
+                    : null;
+                await LoadBatchPendingExportsAsync(reconciliation!, csoBatch, nextBatch);
+            }
+
+            var valuesBeforeSave = reconcileThisBatch ? CaptureValuesBeforeSave(reconciliation!, csoBatch) : null;
+
+            using (Diagnostics.Sync.StartSpan("UpdateConnectedSystemObjectsBatch").SetTag("csoCount", batchSize))
+            {
+                await _syncServer.UpdateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
+            }
+
+            // SPEC-1082 D7: stamp this update batch's requested hashes now that its attribute
+            // value writes have committed, and BEFORE ReleaseHydratedAttributeValues below.
+            await StampBatchImportStateAsync(csoBatch, batchRpeis);
+
+            // The execution items reconciliation merges its outcomes onto, taken before the flush empties the list: an
+            // object's first. Only update-phase items are needed; a created object has no Pending Export.
+            var importItemsByCsoId = new Dictionary<Guid, ActivityRunProfileExecutionItem>(batchRpeis.Count);
+            foreach (var rpei in batchRpeis.Where(r => r.ConnectedSystemObjectId.HasValue))
+                importItemsByCsoId.TryAdd(rpei.ConnectedSystemObjectId!.Value, rpei);
+
+            // Remove batch RPEIs from the main list and flush them
+            _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObjectId.HasValue && batchCsoIds.Contains(r.ConnectedSystemObjectId.Value));
+            await FlushImportRpeisAsync(batchRpeis);
+
+            // Reconcile this batch's Pending Exports while the import still holds its objects' values, and write the
+            // outcomes it merges onto the items just flushed, so neither the values nor the outcomes accumulate.
+            if (reconcileThisBatch)
+                await ReconcileSavedBatchAsync(reconciliation!, csoBatch, valuesBeforeSave!, importItemsByCsoId, crossBatchFixed > 0);
+            foreach (var cso in csoBatch)
+                _connectedSystemObjectsLoadedWhole.Remove(cso);
+
+            // Release this batch's hydrated AttributeValues now that it's been persisted. See
+            // ReleaseHydratedAttributeValues for why this is safe (#1079 Regression B: an OOM
+            // kill on 2026-07-21 traced to these values otherwise staying resident for the
+            // rest of the run). Note this batch was hydrated via GetConnectedSystemObjectsByIdsAsync
+            // with AsNoTrackingWithIdentityResolution, so it was never in the change tracker in
+            // the first place; ClearChangeTracker() below does not touch it.
+            ReleaseHydratedAttributeValues(csoBatch);
+
+            // Clear the change tracker after each update batch, in case anything else in this
+            // DbContext scope (e.g. RPEIs/Activity entities) was tracked during the batch. This
+            // prevents tracker bloat from accumulating across 50+ batches of 2000 CSOs each.
+            _syncRepo.ClearChangeTracker();
+
+            _activity.ObjectsProcessed = createdCount + batchStart + batchSize;
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "Updating Connected System Objects");
+            Log.Information("PerformImportAsync: Update batch complete ({Processed}/{Total}). GC heap: {HeapMB:N0}MB, Working set: {WorkingSetMB:N0}MB",
+                batchStart + batchSize, totalToUpdate,
+                GC.GetTotalMemory(false) / 1024 / 1024,
+                System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024);
+            await _syncRepo.UpdateActivityProgressOutOfBandAsync(_activity);
+            SampleHeldAttributeValues(connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated);
+        }
+
+        return reconciliation;
+    }
+
+    /// <summary>
     /// Run Profile Safeguards (#1618, Layer 2): what deletion detection found, sorted into the two
     /// groups <see cref="ApplyDeletionCandidatesAsync"/> treats differently. Objects not found in the
     /// Connector Space, and objects already processed elsewhere in this import run, are dropped before
@@ -1418,14 +1464,14 @@ public partial class SyncImportTaskProcessor
     /// (<see cref="ApplyDeletionCandidatesAsync"/>) can decide whether the whole run's worth of
     /// detected deletions is within the Run Profile's limits before anything is touched.
     /// </summary>
-    private async Task<DeletionCandidates> ResolveDeletionCandidatesAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId, IReadOnlyCollection<ConnectedSystemObjectType> objectTypesToCheck)
+    /// <param name="updatedCsoIds">The ids of the objects this run already updated. They are not deletion candidates even
+    /// if their External ID is not in the import (e.g. because their External ID was updated during import processing and
+    /// the new value is not in <paramref name="externalIdsImported"/>).</param>
+    private async Task<DeletionCandidates> ResolveDeletionCandidatesAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, IEnumerable<Guid> updatedCsoIds, int? partitionId, IReadOnlyCollection<ConnectedSystemObjectType> objectTypesToCheck)
     {
         var candidates = new DeletionCandidates([], []);
 
-        // Get the IDs of CSOs that were already processed in this import run
-        // These should not be marked as obsolete even if their external ID isn't in the import (e.g., because their
-        // external ID was updated during import processing and the new value isn't in externalIdsImported)
-        var processedCsoIds = connectedSystemObjectsToBeUpdated.Select(cso => cso.Id).ToHashSet();
+        var processedCsoIds = updatedCsoIds.ToHashSet();
 
         // An object the import returned under another Object Type, and that this run refused to re-type, is still
         // in the Connected System (#2049): its absence from its own type's External IDs is not a deletion.
@@ -1598,7 +1644,7 @@ public partial class SyncImportTaskProcessor
         var resolvedObjectTypes = await ResolveDeletionDetectionObjectTypesAsync();
         var objectTypesToCheck = HoldBackObjectTypesWithUnreadableExternalIds(resolvedObjectTypes);
         var everyObjectTypeChecked = objectTypesToCheck.Count == resolvedObjectTypes.Count;
-        var candidates = await ResolveDeletionCandidatesAsync(externalIdsImported, connectedSystemObjectsToBeUpdated, partitionId, objectTypesToCheck);
+        var candidates = await ResolveDeletionCandidatesAsync(externalIdsImported, connectedSystemObjectsToBeUpdated.Select(cso => cso.Id), partitionId, objectTypesToCheck);
 
         // The limits guard against objects the import did not find, which may mean the import itself is wrong. An
         // object retired by an Object Type change the Run Profile allows is not one of those: the import returned it,
@@ -1609,10 +1655,11 @@ public partial class SyncImportTaskProcessor
         var maxPercent = _connectedSystemRunProfile.MaxDetectedDeletionsPercent;
 
         // The base the percentage limit is measured against: the Connected System Objects in the run's scope that are
-        // not already Obsolete, counted before this run saves anything. An Obsolete object awaiting the synchronisation
-        // that removes it is no longer in the Connected System, so counting it would let a larger share through.
+        // not already Obsolete, counted before this run saves anything (as the run started, #2521). An Obsolete object
+        // awaiting the synchronisation that removes it is no longer in the Connected System, so counting it would let a
+        // larger share through.
         var existingCsoCount = maxCount.HasValue || maxPercent.HasValue
-            ? await _syncRepo.GetNonObsoleteConnectedSystemObjectCountAsync(_connectedSystem.Id, partitionId)
+            ? await GetDeletionLimitBaseAsync(partitionId)
             : 0;
 
         var countLimitExceeded = maxCount.HasValue && newlyMarkedCount > maxCount.Value;
@@ -1672,6 +1719,45 @@ public partial class SyncImportTaskProcessor
             connectedSystemObjectsToBeCreated);
 
         return everyObjectTypeChecked;
+    }
+
+    /// <summary>
+    /// Counts the deletion limits' percentage base as the run starts (#2521), when the Run Profile sets a limit: the
+    /// Connected System Objects in the Run Profile's scope that are not already Obsolete. A Connected System that held
+    /// nothing at the start holds nothing to count.
+    /// </summary>
+    private async Task CaptureDeletionLimitBaseAsync()
+    {
+        if (_connectedSystemRunProfile.MaxDetectedDeletions == null && _connectedSystemRunProfile.MaxDetectedDeletionsPercent == null)
+            return;
+
+        _deletionLimitBaseAtStart = _csIsEmpty
+            ? 0
+            : await _syncRepo.GetNonObsoleteConnectedSystemObjectCountAsync(_connectedSystem.Id, _connectedSystemRunProfile.Partition?.Id);
+    }
+
+    /// <summary>
+    /// The deletion limits' percentage base: the one counted as the run started, or, for deletion detection asked outside
+    /// a run, counted now.
+    /// </summary>
+    private async Task<int> GetDeletionLimitBaseAsync(int? partitionId) =>
+        _deletionLimitBaseAtStart is { } countedAtStart && partitionId == _connectedSystemRunProfile.Partition?.Id
+            ? countedAtStart
+            : await _syncRepo.GetNonObsoleteConnectedSystemObjectCountAsync(_connectedSystem.Id, partitionId);
+
+    /// <summary>
+    /// Records the attribute values the run holds on the objects it is to create or update, when measuring
+    /// (<see cref="PeakHeldAttributeValues"/>).
+    /// </summary>
+    private void SampleHeldAttributeValues(IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated,
+        IReadOnlyCollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    {
+        if (!MeasureHeldAttributeValues)
+            return;
+
+        var held = connectedSystemObjectsToBeCreated.Concat(connectedSystemObjectsToBeUpdated)
+            .Sum(cso => (long)cso.AttributeValues.Count + cso.PendingAttributeValueAdditions.Count);
+        PeakHeldAttributeValues = Math.Max(PeakHeldAttributeValues, held);
     }
 
     /// <summary>
@@ -1831,20 +1917,21 @@ public partial class SyncImportTaskProcessor
     /// and clears <see cref="_activityRunProfileExecutionItems"/>.</param>
     /// <param name="countInActivityTotals">False to write the items without counting them in the Activity's totals, for items
     /// a later flush counts (see <paramref name="alsoCountInActivityTotals"/>).</param>
-    /// <param name="alsoCountInActivityTotals">Items already written without being counted, counted now together with these:
-    /// the Activity's totals are worked out per flush (whether any item carries an outcome decides how items are counted), so
-    /// items always counted together are counted together still (#2908).</param>
+    /// <param name="alsoCountInActivityTotals">The totals of items already written without being counted, counted now together
+    /// with these: the Activity's totals are worked out per flush (whether any item carries an outcome decides how items are
+    /// counted), so items always counted together are counted together still (#2908). Held as totals, so the items
+    /// themselves were released when written (#2521).</param>
     /// <returns>Whether the items were written by the bulk writer, which counts them into the Activity's totals here; false
     /// where the repository records them on the Activity instead (the in-memory one), which totals them at the end.</returns>
     private async Task<bool> FlushImportRpeisAsync(List<ActivityRunProfileExecutionItem>? rpeisToFlush = null, bool countInActivityTotals = true,
-        IReadOnlyCollection<ActivityRunProfileExecutionItem>? alsoCountInActivityTotals = null)
+        ExecutionItemTotals? alsoCountInActivityTotals = null)
     {
         var rpeis = rpeisToFlush ?? _activityRunProfileExecutionItems;
 
         if (rpeis.Count == 0)
         {
-            if (countInActivityTotals && alsoCountInActivityTotals is { Count: > 0 })
-                Worker.AccumulateActivitySummaryStats(_activity, [.. alsoCountInActivityTotals]);
+            if (countInActivityTotals && alsoCountInActivityTotals is { IsEmpty: false })
+                alsoCountInActivityTotals.AddTo(_activity);
             return false;
         }
 
@@ -1905,10 +1992,10 @@ public partial class SyncImportTaskProcessor
     /// tracked by the in-memory test repository.</param>
     /// <param name="countInActivityTotals">False to release the items without counting them in the Activity's totals, for
     /// items a later flush counts; see <see cref="FlushImportRpeisAsync"/> (#2908).</param>
-    /// <param name="alsoCountInActivityTotals">Items already written without being counted, counted now together with
-    /// these; see <see cref="FlushImportRpeisAsync"/>.</param>
+    /// <param name="alsoCountInActivityTotals">The totals of items already written without being counted, counted now
+    /// together with these; see <see cref="FlushImportRpeisAsync"/>.</param>
     private void ReleaseWrittenImportRpeis(List<ActivityRunProfileExecutionItem> rpeis, bool usedRawSql, bool countInActivityTotals = true,
-        IReadOnlyCollection<ActivityRunProfileExecutionItem>? alsoCountInActivityTotals = null)
+        ExecutionItemTotals? alsoCountInActivityTotals = null)
     {
         // Release the change object graphs to allow GC. At 100K CSOs with ~20 attributes each,
         // the ConnectedSystemObjectChange + ChangeAttribute + ChangeAttributeValue objects
@@ -1921,9 +2008,15 @@ public partial class SyncImportTaskProcessor
             // Production: accumulate summary stats from this batch before releasing RPEIs.
             // Stats are computed incrementally per-flush, eliminating the need to keep all RPEIs
             // in memory for a final calculation (which caused OOM at 100K+ objects).
+            // Counted as one list with the items already written whose totals were held back, so the totals are those of
+            // counting every item together (#2908, #2521).
             if (countInActivityTotals)
-                Worker.AccumulateActivitySummaryStats(_activity,
-                    alsoCountInActivityTotals is { Count: > 0 } ? [.. rpeis, .. alsoCountInActivityTotals] : rpeis);
+            {
+                var totals = ExecutionItemTotals.Of(rpeis);
+                if (alsoCountInActivityTotals != null)
+                    totals.Add(alsoCountInActivityTotals);
+                totals.AddTo(_activity);
+            }
 
             // Null out CSO navigation on RPEIs so the CSO objects become GC-eligible.
             // The ConnectedSystemObjectId FK is already set, so the navigation is not needed.
@@ -2109,14 +2202,14 @@ public partial class SyncImportTaskProcessor
     /// </para>
     /// </summary>
     /// <param name="externalIdsImported">Every External Id this run actually saw, across all pages, by Object Type.</param>
-    /// <param name="connectedSystemObjectsToBeUpdated">CSOs already processed elsewhere in this import run: a CSO in here was
+    /// <param name="updatedCsoIds">The ids of the CSOs already processed elsewhere in this import run: a CSO named here was
     /// seen this run even if its current External Id is not (yet) reflected in <paramref name="externalIdsImported"/>.</param>
     /// <param name="partitionId">The run's partition, if partitioned.</param>
     /// <param name="totalObjectsImported">How many objects this run read in total, across every object type - the same
     /// "no objects imported means do nothing" guard the caller already applies before deletion detection.</param>
     private async Task RetryUnconfirmedExportedCreatesAsync(
         IReadOnlyCollection<ExternalIdPair> externalIdsImported,
-        ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated,
+        IReadOnlySet<Guid> updatedCsoIds,
         int? partitionId,
         int totalObjectsImported)
     {
@@ -2129,7 +2222,7 @@ public partial class SyncImportTaskProcessor
         if (!_syncEngine.IsExportedCreateUnseenByCompleteRead(ReadEveryObjectInScope, totalObjectsImported, wasSeen: false))
             return;
 
-        var processedCsoIds = connectedSystemObjectsToBeUpdated.Select(cso => cso.Id).ToHashSet();
+        var processedCsoIds = new HashSet<Guid>(updatedCsoIds);
         processedCsoIds.UnionWith(_csoIdsHeldUnderAnotherObjectType);
         var retried = new List<PendingExport>();
 
@@ -2232,11 +2325,17 @@ public partial class SyncImportTaskProcessor
             var set = new ImportedExternalIdSet(caseExact);
             foreach (var attribute in importedExternalIdAttributes)
             {
-                set._strings.UnionWith(attribute.StringValues);
-                set._ints.UnionWith(attribute.IntValues);
-                set._longs.UnionWith(attribute.LongValues);
-                set._decimals.UnionWith(attribute.DecimalValues);
-                set._guids.UnionWith(attribute.GuidValues);
+                // Only the lists that hold values are read: reading a list allocates it (#2521).
+                if (attribute.HasStringValues)
+                    set._strings.UnionWith(attribute.StringValues);
+                if (attribute.HasIntValues)
+                    set._ints.UnionWith(attribute.IntValues);
+                if (attribute.HasLongValues)
+                    set._longs.UnionWith(attribute.LongValues);
+                if (attribute.HasDecimalValues)
+                    set._decimals.UnionWith(attribute.DecimalValues);
+                if (attribute.HasGuidValues)
+                    set._guids.UnionWith(attribute.GuidValues);
             }
             return set;
         }
@@ -2470,7 +2569,7 @@ public partial class SyncImportTaskProcessor
                      a.Type == AttributeDataType.Reference && a.AttributePlurality == AttributePlurality.MultiValued && !unreadable.Contains(a.Name)))
         {
             var imported = importObject.Attributes.SingleOrDefault(a => a.Name.Equals(attribute.Name, StringComparison.OrdinalIgnoreCase));
-            if (imported is not { ReferenceValues.Count: > 0 })
+            if (imported is not { HasReferenceValues: true })
                 continue;
 
             var values = imported.ReferenceValues.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -3922,21 +4021,26 @@ public partial class SyncImportTaskProcessor
         {
             // first remove any null attribute values. this might mean we'll be left with no values at all.
             // the Guid/int/long/decimal collections hold non-nullable value types, so they cannot
-            // contain nulls and need no sweep; only the reference-typed collections can.
-            attribute.StringValues.RemoveAll(string.IsNullOrEmpty);
-            attribute.ByteValues.RemoveAll(q => q == null);
-            attribute.ReferenceValues.RemoveAll(string.IsNullOrEmpty);
+            // contain nulls and need no sweep; only the reference-typed collections can. Each list is read only when it
+            // holds something, and every probe below reads its Has property: reading a list allocates it, and this runs
+            // for every attribute of every object (#2521).
+            if (attribute.HasStringValues)
+                attribute.StringValues.RemoveAll(string.IsNullOrEmpty);
+            if (attribute.HasByteValues)
+                attribute.ByteValues.RemoveAll(q => q == null);
+            if (attribute.HasReferenceValues)
+                attribute.ReferenceValues.RemoveAll(string.IsNullOrEmpty);
 
             // now work out if we're left with any values at all
-            var noGuids = attribute.GuidValues.Count == 0;
-            var noIntegers = attribute.IntValues.Count == 0;
-            var noLongs = attribute.LongValues.Count == 0;
-            var noDecimals = attribute.DecimalValues.Count == 0;
-            var noStrings = attribute.StringValues.Count == 0;
+            var noGuids = !attribute.HasGuidValues;
+            var noIntegers = !attribute.HasIntValues;
+            var noLongs = !attribute.HasLongValues;
+            var noDecimals = !attribute.HasDecimalValues;
+            var noStrings = !attribute.HasStringValues;
             var noBool = !attribute.HasBoolValues;
             var noDateTime = !attribute.HasDateTimeValues;
-            var noBytes = attribute.ByteValues.Count == 0;
-            var noReferences = attribute.ReferenceValues.Count == 0;
+            var noBytes = !attribute.HasByteValues;
+            var noReferences = !attribute.HasReferenceValues;
 
             // if all types of values are empty, we'll add this attribute to a list for removal
             if (noGuids && noIntegers && noLongs && noDecimals && noStrings && noBool && noDateTime && noBytes && noReferences)
@@ -4301,9 +4405,8 @@ public partial class SyncImportTaskProcessor
             return false;
 
         // The base is the one a Full Import's percentage uses: the Connected System Objects in the Run Profile's scope
-        // that are not already Obsolete, counted before this run saves anything.
-        var partitionId = _connectedSystemRunProfile.Partition?.Id;
-        var existingCsoCount = await _syncRepo.GetNonObsoleteConnectedSystemObjectCountAsync(_connectedSystem.Id, partitionId);
+        // that are not already Obsolete, counted as the run started, before it saved anything.
+        var existingCsoCount = await GetDeletionLimitBaseAsync(_connectedSystemRunProfile.Partition?.Id);
 
         var countLimitExceeded = maxCount.HasValue && count > maxCount.Value;
         var percentLimitExceeded = maxPercent.HasValue && ShareThreshold.Exceeds(count, existingCsoCount, maxPercent.Value);
@@ -4471,29 +4574,30 @@ public partial class SyncImportTaskProcessor
         var importObjectAttribute = connectedSystemImportObject.Attributes.SingleOrDefault(csioa => csioa.Name.Equals(externalIdAttribute.Name, StringComparison.OrdinalIgnoreCase)) ??
                                     throw new MissingExternalIdAttributeException($"The imported object is missing the External Id attribute '{externalIdAttribute.Name}'. It cannot be processed as we will not be able to determine if it's an existing object or not.");
 
-        if (importObjectAttribute.IntValues.Count > 1 ||
-            importObjectAttribute.LongValues.Count > 1 ||
-            importObjectAttribute.DecimalValues.Count > 1 ||
-            importObjectAttribute.StringValues.Count > 1 ||
-            importObjectAttribute.GuidValues.Count > 1)
+        // Each list is read only when it holds something: reading a list allocates it (#2521).
+        if ((importObjectAttribute.HasIntValues && importObjectAttribute.IntValues.Count > 1) ||
+            (importObjectAttribute.HasLongValues && importObjectAttribute.LongValues.Count > 1) ||
+            (importObjectAttribute.HasDecimalValues && importObjectAttribute.DecimalValues.Count > 1) ||
+            (importObjectAttribute.HasStringValues && importObjectAttribute.StringValues.Count > 1) ||
+            (importObjectAttribute.HasGuidValues && importObjectAttribute.GuidValues.Count > 1))
             throw new ExternalIdAttributeNotSingleValuedException($"External Id attribute ({externalIdAttribute.Name}) on the imported object has multiple values! The External Id attribute must be single-valued.");
 
         return externalIdAttribute.Type switch
         {
-            AttributeDataType.Text when importObjectAttribute.StringValues.Count == 0 =>
+            AttributeDataType.Text when !importObjectAttribute.HasStringValues =>
                 throw new ExternalIdAttributeValueMissingException($"External Id string attribute ({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.Text => IdentifierKey.For(importObjectAttribute.StringValues[0], caseExact ?? externalIdAttribute.CaseExact),
-            AttributeDataType.Number when importObjectAttribute.IntValues.Count == 0 =>
+            AttributeDataType.Number when !importObjectAttribute.HasIntValues =>
                 throw new ExternalIdAttributeValueMissingException($"External Id number attribute({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.Number => importObjectAttribute.IntValues[0].ToString(),
-            AttributeDataType.LongNumber when importObjectAttribute.LongValues.Count == 0 =>
+            AttributeDataType.LongNumber when !importObjectAttribute.HasLongValues =>
                 throw new ExternalIdAttributeValueMissingException($"External Id long number attribute({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.LongNumber => importObjectAttribute.LongValues[0].ToString(),
-            AttributeDataType.Decimal when importObjectAttribute.DecimalValues.Count == 0 =>
+            AttributeDataType.Decimal when !importObjectAttribute.HasDecimalValues =>
                 throw new ExternalIdAttributeValueMissingException($"External Id decimal attribute ({externalIdAttribute.Name}) on the imported object has no value."),
             // Canonical, so the key matches the one the repository built for the stored value (#1283).
             AttributeDataType.Decimal => ExternalIdValue.ToCanonicalString(importObjectAttribute.DecimalValues[0]),
-            AttributeDataType.Guid when importObjectAttribute.GuidValues.Count == 0 =>
+            AttributeDataType.Guid when !importObjectAttribute.HasGuidValues =>
                 throw new ExternalIdAttributeValueMissingException($"External Id guid attribute ({externalIdAttribute.Name}) on the imported object has no value."),
             AttributeDataType.Guid => importObjectAttribute.GuidValues[0].ToString().ToLowerInvariant(),
             _ => throw new InvalidDataException($"LookupCsoByExternalId: Unsupported Connected System Object Type External Id attribute type: {externalIdAttribute.Type}")
@@ -4782,12 +4886,13 @@ public partial class SyncImportTaskProcessor
         // Defensively deduplicate imported attribute values before processing
         // This prevents corrupt source data from creating CSOs with duplicate values
         // Use a temporary identifier for logging since we haven't created the CSO yet
-        var tempExternalId = connectedSystemImportObject.Attributes
-            .FirstOrDefault(a => connectedSystemObjectType.Attributes.Any(csa => csa.IsExternalId && csa.Name.Equals(a.Name, StringComparison.OrdinalIgnoreCase)))
-            ?.StringValues.FirstOrDefault()
-            ?? connectedSystemImportObject.Attributes
-                .FirstOrDefault(a => connectedSystemObjectType.Attributes.Any(csa => csa.IsExternalId && csa.Name.Equals(a.Name, StringComparison.OrdinalIgnoreCase)))
-                ?.GuidValues.FirstOrDefault().ToString();
+        // Read through the Has properties, so naming the object allocates no list it does not hold (#2521).
+        var externalIdImportAttribute = connectedSystemImportObject.Attributes
+            .FirstOrDefault(a => connectedSystemObjectType.Attributes.Any(csa => csa.IsExternalId && csa.Name.Equals(a.Name, StringComparison.OrdinalIgnoreCase)));
+        var tempExternalId = externalIdImportAttribute == null
+            ? null
+            : (externalIdImportAttribute.HasStringValues ? externalIdImportAttribute.StringValues[0] : null)
+              ?? (externalIdImportAttribute.HasGuidValues ? externalIdImportAttribute.GuidValues[0] : Guid.Empty).ToString();
         DeduplicateImportObjectAttributes(connectedSystemImportObject, tempExternalId);
 
         // new object - create Connected System Object using data from an import object
@@ -5501,8 +5606,11 @@ public partial class SyncImportTaskProcessor
     {
         foreach (var attr in importObject.Attributes)
         {
+            // Each count is read through the list's Has property first: reading a list allocates it, and this runs for
+            // every attribute of every object the import creates or updates (#2521).
+
             // Check StringValues collection
-            var originalStringCount = attr.StringValues.Count;
+            var originalStringCount = attr.HasStringValues ? attr.StringValues.Count : 0;
             if (originalStringCount > 1)
             {
                 var uniqueStrings = attr.StringValues.Distinct(StringComparer.Ordinal).ToList();
@@ -5517,7 +5625,7 @@ public partial class SyncImportTaskProcessor
             }
 
             // Check IntValues collection
-            var originalIntCount = attr.IntValues.Count;
+            var originalIntCount = attr.HasIntValues ? attr.IntValues.Count : 0;
             if (originalIntCount > 1)
             {
                 var uniqueInts = attr.IntValues.Distinct().ToList();
@@ -5532,7 +5640,7 @@ public partial class SyncImportTaskProcessor
             }
 
             // Check LongValues collection
-            var originalLongCount = attr.LongValues.Count;
+            var originalLongCount = attr.HasLongValues ? attr.LongValues.Count : 0;
             if (originalLongCount > 1)
             {
                 var uniqueLongs = attr.LongValues.Distinct().ToList();
@@ -5547,7 +5655,7 @@ public partial class SyncImportTaskProcessor
             }
 
             // Check DecimalValues collection (decimal equality is scale-insensitive, so 5.0 and 5.00 dedupe to one value)
-            var originalDecimalCount = attr.DecimalValues.Count;
+            var originalDecimalCount = attr.HasDecimalValues ? attr.DecimalValues.Count : 0;
             if (originalDecimalCount > 1)
             {
                 var uniqueDecimals = attr.DecimalValues.Distinct().ToList();
@@ -5562,7 +5670,7 @@ public partial class SyncImportTaskProcessor
             }
 
             // Check GuidValues collection
-            var originalGuidCount = attr.GuidValues.Count;
+            var originalGuidCount = attr.HasGuidValues ? attr.GuidValues.Count : 0;
             if (originalGuidCount > 1)
             {
                 var uniqueGuids = attr.GuidValues.Distinct().ToList();
@@ -5577,7 +5685,7 @@ public partial class SyncImportTaskProcessor
             }
 
             // Check ReferenceValues collection (use case-insensitive comparison for DNs)
-            var originalRefCount = attr.ReferenceValues.Count;
+            var originalRefCount = attr.HasReferenceValues ? attr.ReferenceValues.Count : 0;
             if (originalRefCount > 1)
             {
                 var uniqueRefs = attr.ReferenceValues.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -5592,7 +5700,7 @@ public partial class SyncImportTaskProcessor
             }
 
             // Check ByteValues collection
-            var originalBinaryCount = attr.ByteValues.Count;
+            var originalBinaryCount = attr.HasByteValues ? attr.ByteValues.Count : 0;
             if (originalBinaryCount > 1)
             {
                 // Keyed by every byte (#2666): the comparer this replaced hashed only the length and the first and last
@@ -6588,14 +6696,13 @@ public partial class SyncImportTaskProcessor
     /// that; then one owed-password lookup for all of them, and a Pending Export load only for the objects to release.
     /// </para>
     /// </summary>
-    /// <param name="reconciledConnectedSystemObjects">The objects this import updated, which reconciliation has judged.</param>
-    private async Task JudgeUnreconciledInitialPasswordHoldsAsync(IReadOnlyCollection<ConnectedSystemObject> reconciledConnectedSystemObjects)
+    /// <param name="reconciledIds">The ids of the objects this import updated, which reconciliation has judged.</param>
+    private async Task JudgeUnreconciledInitialPasswordHoldsAsync(IReadOnlySet<Guid> reconciledIds)
     {
         var holds = await _syncRepo.GetInitialPasswordHoldSummariesAsync(_connectedSystem.Id);
         if (holds.Count == 0)
             return;
 
-        var reconciledIds = reconciledConnectedSystemObjects.Select(cso => cso.Id).ToHashSet();
         var unreconciled = holds.Where(hold => !reconciledIds.Contains(hold.ConnectedSystemObjectId)).ToList();
         if (unreconciled.Count == 0)
             return;
@@ -6668,14 +6775,13 @@ public partial class SyncImportTaskProcessor
     /// not reported as an item, since the import did not read the object: the next export sends it again and records it.
     /// </para>
     /// </summary>
-    /// <param name="reconciledConnectedSystemObjects">The objects this import updated, which reconciliation has judged.</param>
-    private async Task JudgeUnreconciledExchangeHoldsAsync(IReadOnlyCollection<ConnectedSystemObject> reconciledConnectedSystemObjects)
+    /// <param name="reconciledIds">The ids of the objects this import updated, which reconciliation has judged.</param>
+    private async Task JudgeUnreconciledExchangeHoldsAsync(IReadOnlySet<Guid> reconciledIds)
     {
         var released = await _syncRepo.GetConnectedSystemObjectIdsWithReleasedExchangeHoldsAsync(_connectedSystem.Id);
         if (released.Count == 0)
             return;
 
-        var reconciledIds = reconciledConnectedSystemObjects.Select(cso => cso.Id).ToHashSet();
         released.ExceptWith(reconciledIds);
 
         // Still queued when the import began reading: delivered since, so the values JIM holds may predate it. The next
