@@ -4,6 +4,7 @@
 using JIM.Application.Interfaces;
 using JIM.Application.Servers;
 using JIM.Connectors.Mock;
+using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -199,6 +200,29 @@ public class ImportIncompleteMarkerTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task DeltaImport_ReadingChanges_AnotherRunMarksItBeforeThisRunsFirstWrite_LeavesTheMarkerAsync()
+    {
+        // Unmarked as the run starts; a parallel run of the same Connected System (a Schedule step) marks it after this
+        // run has loaded the Connected System and before this run's first write. This run's completion says nothing
+        // about what the other run left half-saved, so it must not take that marker down.
+        var (connectedSystem, type) = await ArrangeAsync();
+        var connector = new MockCallConnector();
+        QueuePages(connector, [[NewObject(type)]]);
+        var marksSoFar = 0;
+        var syncRepository = InterceptingSyncRepositoryProxy.Create(SyncRepo, nameof(ISyncRepository.MarkImportIncompleteAsync), () =>
+        {
+            if (marksSoFar++ == 0)
+                SyncRepo.MarkImportIncompleteAsync(connectedSystem.Id, EarlierStop).GetAwaiter().GetResult();
+        });
+        var (processor, _) = await PrepareAsync(connectedSystem, connector, ConnectedSystemRunType.DeltaImport, syncRepository: syncRepository);
+
+        await processor.PerformImportAsync();
+
+        Assert.That(await StoredMarkerAsync(connectedSystem), Is.EqualTo(EarlierStop),
+            "a marker another run set after this run loaded the Connected System is that run's, and this run read only what changed");
+    }
+
+    [Test]
     public async Task DeltaImport_ReadingChanges_CompletesOnAnUnmarkedConnectedSystem_LeavesItUnmarkedAsync()
     {
         var (connectedSystem, type) = await ArrangeAsync();
@@ -320,7 +344,7 @@ public class ImportIncompleteMarkerTests : WorkflowTestBase
 
     private async Task<(SyncImportTaskProcessor Processor, Activity Activity)> PrepareAsync(ConnectedSystem connectedSystem, MockCallConnector connector,
         ConnectedSystemRunType runType, ISyncServer? syncServer = null, int? importBatchSize = null, CancellationTokenSource? cancellation = null,
-        int? maxDetectedDeletions = null, ConnectedSystemPartition? partition = null)
+        int? maxDetectedDeletions = null, ConnectedSystemPartition? partition = null, ISyncRepository? syncRepository = null)
     {
         var runProfile = await CreateRunProfileAsync(connectedSystem.Id, runType == ConnectedSystemRunType.FullImport ? "Full Import" : "Delta Import", runType);
         runProfile.MaxDetectedDeletions = maxDetectedDeletions;
@@ -333,7 +357,7 @@ public class ImportIncompleteMarkerTests : WorkflowTestBase
             Activity = activity
         };
 
-        var processor = new SyncImportTaskProcessor(Jim, SyncRepo, syncServer ?? new SyncServer(Jim), new SyncEngine(),
+        var processor = new SyncImportTaskProcessor(Jim, syncRepository ?? SyncRepo, syncServer ?? new SyncServer(Jim), new SyncEngine(),
             connector, connectedSystem, runProfile, workerTask, cancellation ?? new CancellationTokenSource())
         {
             ImportBatchSize = importBatchSize ?? 2000

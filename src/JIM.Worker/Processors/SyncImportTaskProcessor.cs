@@ -982,7 +982,6 @@ public partial class SyncImportTaskProcessor
             // retry below marks exports for retry.
             await MarkImportIncompleteBeforeFirstWriteAsync();
 
-
             // Get count of existing CSOs to determine how many we need to check for deletions.
             // Scope to the Run Profile's partition so that partition-scoped full imports only
             // check their own CSOs, not CSOs from other partitions (which would be false deletions).
@@ -1831,7 +1830,17 @@ public partial class SyncImportTaskProcessor
         if (_importIncompleteMarked)
             return;
 
-        _connectedSystem.ImportIncompleteSince = await _syncRepo.MarkImportIncompleteAsync(_connectedSystem.Id, _time.GetUtcNow().UtcDateTime);
+        // Whole microseconds, as the database stores a time, so the time held back can be compared with this run's own.
+        var now = _time.GetUtcNow().UtcDateTime;
+        var startedWritingAt = now.AddTicks(-(now.Ticks % 10));
+        var held = await _syncRepo.MarkImportIncompleteAsync(_connectedSystem.Id, startedWritingAt);
+
+        // A marker set since the run loaded the Connected System (a parallel Schedule step's import of the same system,
+        // or one that stopped in between) is not this run's to take down: treat it as one an earlier run left.
+        if (_importIncompleteAtStart == null && held != startedWritingAt)
+            _importIncompleteAtStart = held;
+
+        _connectedSystem.ImportIncompleteSince = held;
         _importIncompleteMarked = true;
         Log.Debug("MarkImportIncompleteBeforeFirstWriteAsync: Connected System {ConnectedSystemId} marked import incomplete (since {Since:o}) before the run's first write.",
             _connectedSystem.Id, _connectedSystem.ImportIncompleteSince);
