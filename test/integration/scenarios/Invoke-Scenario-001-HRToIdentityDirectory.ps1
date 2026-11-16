@@ -38,6 +38,11 @@
     account the flow creates disabled, is still disabled (#2064). OpenLDAP and 389 Directory Server run
     without one.
 
+    A full run (-Step All) ends with Test 6 (Final Reconciliation): a Full Synchronisation of every Connected
+    System and an export cycle, then an assertion that no system has Pending Exports, a missing Full
+    Synchronisation or configuration changes waiting to be applied, so the Connected Systems list is clean
+    after a passing run.
+
 .PARAMETER Step
     Which test step to execute (Joiner, Leaver, Mover, Reconnection, DeletedInTarget, All)
 
@@ -922,9 +927,11 @@ try {
             $crossDomainImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainImportProfileId -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $crossDomainImportResult.activityId -Name "Cross-Domain Import (Joiner)"
 
-            Write-Host "  Running Cross-Domain Delta Sync..." -ForegroundColor DarkGray
-            $crossDomainSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainDeltaSyncProfileId -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $crossDomainSyncResult.activityId -Name "Cross-Domain Delta Sync (Joiner)"
+            # The first synchronisation after a system's first import is a Full Synchronisation (initialisation best
+            # practice, as for the directory's baseline above); later cycles use Delta Synchronisation.
+            Write-Host "  Running Cross-Domain Full Sync (initialising)..." -ForegroundColor DarkGray
+            $crossDomainSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainFullSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $crossDomainSyncResult.activityId -Name "Cross-Domain Full Sync (Joiner)"
 
             Write-Host "✓ Cross-Domain export completed" -ForegroundColor Green
         }
@@ -2485,6 +2492,105 @@ try {
             }
         }
         $stepTimings["5. InitialExportOnly"] = (Get-Date) - $stepIeoStart
+    }
+
+    # Test 6: Final Reconciliation
+    #
+    # The tests above change configuration as they go (4b and 4c zero the User Object Type's Deletion Grace Period and
+    # restore it; 5 selects employeeType and adds an export mapping) and stage work they never finish (4e's and 5's
+    # joiners are exported to the directory only, leaving their Cross-Domain Creates pending). An administrator would
+    # end such a session with a Full Synchronisation of every system and an export cycle, so the scenario does the same
+    # and then asserts the Connected Systems list would show nothing outstanding: no Pending Exports, every system Fully
+    # Synchronised, and no configuration change waiting to be applied. A badge left after a passing run then means
+    # something, rather than being the scenario's own residue.
+    if ($Step -eq "All") {
+        $stepReconcileStart = Get-Date
+        Write-TestSection "Test 6: Final Reconciliation"
+
+        $reconcileSuccess = $true
+        $reconcileErrorMessage = ""
+
+        try {
+            $fullSyncs = @(
+                @{ Name = "HR CSV"; SystemId = $config.CSVSystemId; ProfileId = $config.CSVSyncProfileId }
+                @{ Name = "Training"; SystemId = $config.TrainingSystemId; ProfileId = $config.TrainingSyncProfileId }
+                @{ Name = "LDAP"; SystemId = $config.LDAPSystemId; ProfileId = $config.LDAPFullSyncProfileId }
+                @{ Name = "Cross-Domain"; SystemId = $config.CrossDomainSystemId; ProfileId = $config.CrossDomainFullSyncProfileId }
+            ) | Where-Object { $_.SystemId -and $_.ProfileId }
+
+            Write-Host "Running a Full Synchronisation of every Connected System..." -ForegroundColor Gray
+            foreach ($fullSync in $fullSyncs) {
+                Write-Host "  Running $($fullSync.Name) Full Sync..." -ForegroundColor DarkGray
+                $fullSyncResult = Start-JIMRunProfile -ConnectedSystemId $fullSync.SystemId -RunProfileId $fullSync.ProfileId -Wait -PassThru
+                Assert-ActivitySuccess -ActivityId $fullSyncResult.activityId -Name "$($fullSync.Name) Full Sync (Final Reconciliation)"
+            }
+
+            Write-Host "Exporting and confirming everything still pending..." -ForegroundColor Gray
+            $ldapExportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+            Assert-ExportSuccess -ActivityId $ldapExportResult.activityId -Name "LDAP Export (Final Reconciliation)"
+            Start-Sleep -Seconds 5
+            $ldapConfirmResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $ldapConfirmResult.activityId -Name "LDAP Delta Import (Final Reconciliation)"
+            $ldapConfirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $ldapConfirmSyncResult.activityId -Name "LDAP Delta Sync (Final Reconciliation)"
+
+            if ($config.CrossDomainSystemId -and $config.CrossDomainExportProfileId) {
+                $crossDomainExportResult = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainExportProfileId -Wait -PassThru
+                Assert-ExportSuccess -ActivityId $crossDomainExportResult.activityId -Name "Cross-Domain Export (Final Reconciliation)"
+                $crossDomainImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainImportProfileId -Wait -PassThru
+                Assert-ActivitySuccess -ActivityId $crossDomainImportResult.activityId -Name "Cross-Domain Import (Final Reconciliation)"
+                $crossDomainSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CrossDomainSystemId -RunProfileId $config.CrossDomainDeltaSyncProfileId -Wait -PassThru
+                Assert-ActivitySuccess -ActivityId $crossDomainSyncResult.activityId -Name "Cross-Domain Delta Sync (Final Reconciliation)"
+            }
+
+            Write-Host "Checking every Connected System is settled..." -ForegroundColor Gray
+            $unsettled = @()
+            foreach ($fullSync in $fullSyncs) {
+                $system = Get-JIMConnectedSystem -Id $fullSync.SystemId
+                $drift = $system.configurationDrift
+                if ([int]$system.pendingExportCount -ne 0) {
+                    $unsettled += "$($system.name): $($system.pendingExportCount) Pending Export(s)"
+                }
+                if (-not $drift) {
+                    $unsettled += "$($system.name): no configuration drift status returned"
+                    continue
+                }
+                if ($drift.neverFullySynchronised) {
+                    $unsettled += "$($system.name): never Fully Synchronised"
+                }
+                # With change tracking off (-DisableChangeTracking) drift cannot be determined, so only the checks above apply.
+                if (-not $drift.trackingDisabled -and $drift.hasPendingChanges) {
+                    $unsettled += "$($system.name): $($drift.changeCount) configuration change(s) since its last Full Synchronisation (highest: $($drift.highestChangeClass))"
+                }
+                if (@($drift.awaitingSynchronisation).Count -gt 0) {
+                    $unsettled += "$($system.name): $(@($drift.awaitingSynchronisation).Count) Object Type(s) awaiting synchronisation"
+                }
+                Write-Host "  $($system.name): $($system.pendingExportCount) Pending Exports, drift pending: $($drift.hasPendingChanges)" -ForegroundColor DarkGray
+            }
+
+            if ($unsettled.Count -gt 0) {
+                throw "Connected Systems are not settled after the final reconciliation: $($unsettled -join '; ')"
+            }
+            Write-Host "  OK Every Connected System is settled: no Pending Exports and no configuration waiting to be applied" -ForegroundColor Green
+        }
+        catch {
+            $reconcileSuccess = $false
+            $reconcileErrorMessage = $_.Exception.Message
+            Write-Host "  FAIL $_" -ForegroundColor Red
+        }
+
+        if ($reconcileSuccess) {
+            $testResults.Steps += @{ Name = "FinalReconciliation"; Success = $true }
+        }
+        else {
+            $testResults.Steps += @{ Name = "FinalReconciliation"; Success = $false; Error = $reconcileErrorMessage }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
+        }
+        $stepTimings["6. FinalReconciliation"] = (Get-Date) - $stepReconcileStart
     }
 
     # Summary
