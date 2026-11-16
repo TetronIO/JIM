@@ -10,4 +10,8 @@ namespace JIM.Web.Models;
 /// <param name="TotalItems">The total number of rows matching the current filters, or null when the request did
 /// not ask for the count (see <see cref="VirtualisedWindowRequest.IncludeTotalCount"/>). Null is deliberately
 /// distinct from zero: it means "not counted", never "no matches".</param>
-public sealed record VirtualisedWindow<TItem>(ICollection<TItem> Items, int? TotalItems);
+/// <param name="UnfilteredTotalItems">The total before the page's own filters and the search narrowed it, so the
+/// count can read "3 of 4" while a page-owned filter is applied. Null when the page has no filter of its own
+/// applied, or when the request did not ask for the count; the grid then takes the baseline from a count taken
+/// with no search.</param>
+public sealed record VirtualisedWindow<TItem>(ICollection<TItem> Items, int? TotalItems, int? UnfilteredTotalItems = null);

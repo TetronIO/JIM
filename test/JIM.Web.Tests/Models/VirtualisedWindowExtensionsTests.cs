@@ -65,4 +65,24 @@ public class VirtualisedWindowExtensionsTests
             Assert.That(window.TotalItems, Is.Zero);
         }
     }
+
+    [Test]
+    public void ToWindow_UnfilteredTotalGivenAndTotalRequested_CarriesTheBaseline()
+    {
+        var window = Source.Take(3).ToWindow(Request(0, 10, includeTotal: true), unfilteredTotal: 5);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(window.TotalItems, Is.EqualTo(3));
+            Assert.That(window.UnfilteredTotalItems, Is.EqualTo(5));
+        }
+    }
+
+    [Test]
+    public void ToWindow_UnfilteredTotalGivenButTotalNotRequested_ReturnsNullBaseline()
+    {
+        var window = Source.Take(3).ToWindow(Request(0, 10, includeTotal: false), unfilteredTotal: 5);
+
+        Assert.That(window.UnfilteredTotalItems, Is.Null);
+    }
 }

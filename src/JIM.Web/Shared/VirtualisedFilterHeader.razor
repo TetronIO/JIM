@@ -1,0 +1,63 @@
+@typeparam TValue
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A sortable column header that also filters its column. For a list whose only page-owned filter narrows one
+   column, the filter belongs beside that column's data: in the toolbar it crowded the page's primary action, and a
+   filter panel above the grid is a full row of chrome for one control. The title still sorts (it is a
+   VirtualisedSortHeader); the funnel beside it is a separate control, so opening the filter never re-sorts.
+   The funnel is tinted while a filter is applied (jim-filter-header-active in site.css), so a narrowed list is
+   visible from the header. *@
+<span class="d-inline-flex align-center">
+    <VirtualisedSortHeader Title="@Title" Name="@Name" />
+    <MudMenu Icon="@Icons.Material.Filled.FilterList" Size="Size.Small" Dense="true"
+             AriaLabel="@AriaLabel"
+             Class="@(IsFiltered ? "ml-1 jim-filter-header-active" : "ml-1")"
+             AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+        @foreach (var option in Options)
+        {
+            var selected = EqualityComparer<TValue>.Default.Equals(option.Value, Value);
+            <MudMenuItem OnClick="@(() => SelectAsync(option.Value))"
+                         Icon="@(selected ? Icons.Material.Filled.Check : null)"
+                         IconColor="Color.Primary">
+                @option.Label
+            </MudMenuItem>
+        }
+    </MudMenu>
+</span>
+
+@code {
+    /// <summary>The header text shown to the reader; also names the filter button ("Filter ...").</summary>
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>The server-side sort key this column sorts by. Defaults to <see cref="Title"/>.</summary>
+    [Parameter]
+    public string? Name { get; set; }
+
+    /// <summary>The choices the menu offers, in the order shown, including the one that applies no filter.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<VirtualisedFilterOption<TValue>> Options { get; set; } = [];
+
+    /// <summary>The value that means "no filter"; any other value marks the header as filtering.</summary>
+    [Parameter, EditorRequired]
+    public TValue UnfilteredValue { get; set; } = default!;
+
+    /// <summary>The filter currently applied.</summary>
+    [Parameter]
+    public TValue Value { get; set; } = default!;
+
+    /// <summary>Raised with the chosen value when the reader picks an option.</summary>
+    [Parameter]
+    public EventCallback<TValue> ValueChanged { get; set; }
+
+    private bool IsFiltered => !EqualityComparer<TValue>.Default.Equals(Value, UnfilteredValue);
+
+    // A screen reader user cannot see the funnel's colour, so the button's name says what the column is filtered to.
+    private string AriaLabel => IsFiltered
+        ? $"Filter {Title} ({Options.FirstOrDefault(o => EqualityComparer<TValue>.Default.Equals(o.Value, Value))?.Label ?? Value?.ToString()})"
+        : $"Filter {Title}";
+
+    private Task SelectAsync(TValue value) => ValueChanged.InvokeAsync(value);
+}

@@ -46,19 +46,6 @@
     <ToolBarExtras>
         <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Href="/admin/connected-systems/new"
                    Color="Color.Primary" DropShadow="false">Create Connected System</MudButton>
-        @* Beside the table rather than in a filter row of its own: it is the only page-owned filter here, and a
-           full row of chrome above the grid for one control would cost more than it explains. Outlined at the dense
-           margin, like every other filter in the portal and the search box it shares this toolbar with. *@
-        <MudSelect T="PasswordSynchronisationFilter" Label="Password Synchronisation" Value="_passwordSyncFilter"
-                   ValueChanged="OnPasswordSynchronisationFilterChangedAsync" Variant="Variant.Outlined" Dense="true"
-                   Margin="Margin.Dense" Class="mt-0" Style="max-width: 260px;">
-            <MudSelectItem T="PasswordSynchronisationFilter" Value="@PasswordSynchronisationFilter.Any">Any</MudSelectItem>
-            <MudSelectItem T="PasswordSynchronisationFilter" Value="@PasswordSynchronisationFilter.NeedsAttention">Needs attention</MudSelectItem>
-            <MudSelectItem T="PasswordSynchronisationFilter" Value="@PasswordSynchronisationFilter.Enabled">Enabled</MudSelectItem>
-            <MudSelectItem T="PasswordSynchronisationFilter" Value="@PasswordSynchronisationFilter.Disabled">Switched off</MudSelectItem>
-            <MudSelectItem T="PasswordSynchronisationFilter" Value="@PasswordSynchronisationFilter.NotConfigured">Not configured</MudSelectItem>
-            <MudSelectItem T="PasswordSynchronisationFilter" Value="@PasswordSynchronisationFilter.NotSupported">Not supported</MudSelectItem>
-        </MudSelect>
     </ToolBarExtras>
     <Columns>
         <TemplateColumn Title="Name" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
@@ -118,7 +105,13 @@
            state as well as a size, and the column is what the sort header can hang off (requirement 26). *@
         <TemplateColumn Title="Password Sync" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Password Sync" Name="passwordsync" />
+                @* The page's only own filter narrows this one column, so it sits on the column's header rather
+                   than crowding the toolbar's primary action or taking a filter row of its own. *@
+                <VirtualisedFilterHeader TValue="PasswordSynchronisationFilter" Title="Password Sync" Name="passwordsync"
+                                         Options="PasswordSynchronisationFilterOptions"
+                                         UnfilteredValue="PasswordSynchronisationFilter.Any"
+                                         Value="_passwordSyncFilter"
+                                         ValueChanged="OnPasswordSynchronisationFilterChangedAsync" />
             </HeaderTemplate>
             <CellTemplate>
                 <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
@@ -205,6 +198,16 @@
         NotSupported
     }
 
+    private static readonly IReadOnlyList<VirtualisedFilterOption<PasswordSynchronisationFilter>> PasswordSynchronisationFilterOptions =
+    [
+        new(PasswordSynchronisationFilter.Any, "Any"),
+        new(PasswordSynchronisationFilter.NeedsAttention, "Needs attention"),
+        new(PasswordSynchronisationFilter.Enabled, "Enabled"),
+        new(PasswordSynchronisationFilter.Disabled, "Switched off"),
+        new(PasswordSynchronisationFilter.NotConfigured, "Not configured"),
+        new(PasswordSynchronisationFilter.NotSupported, "Not supported")
+    ];
+
     private readonly List<BreadcrumbItem> _breadcrumbs = new()
     {
         new("Home", href: "/", icon: Icons.Material.Filled.Home),
@@ -290,7 +293,10 @@
                 : filtered.OrderBy(cs => cs.Name)
         };
 
-        return filtered.ToWindow(request);
+        // While the Password Synchronisation filter is applied, the whole list is the baseline the count reads against
+        // ("3 of 4"); the grid takes the search's baseline for itself.
+        var unfilteredTotal = _passwordSyncFilter != PasswordSynchronisationFilter.Any ? _connectedSystemHeaders!.Count : (int?)null;
+        return filtered.ToWindow(request, unfilteredTotal);
     }
 
     private ConfigurationDriftStatus? GetDrift(int connectedSystemId) =>

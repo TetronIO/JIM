@@ -16,7 +16,12 @@ public static class VirtualisedWindowExtensions
     /// Slices an already-filtered, already-sorted list into the requested window, counting the whole list only
     /// when <see cref="VirtualisedWindowRequest.IncludeTotalCount"/> asks for it.
     /// </summary>
-    public static VirtualisedWindow<T> ToWindow<T>(this IEnumerable<T> filteredAndSorted, VirtualisedWindowRequest request)
+    /// <param name="filteredAndSorted">The list after the page's filters, the search and the sort.</param>
+    /// <param name="request">The window the grid asked for.</param>
+    /// <param name="unfilteredTotal">The whole list's size, passed while one of the page's own filters is applied so
+    /// the count reads "3 of 4"; returned only alongside the total.</param>
+    public static VirtualisedWindow<T> ToWindow<T>(this IEnumerable<T> filteredAndSorted, VirtualisedWindowRequest request,
+        int? unfilteredTotal = null)
     {
         // Materialise once: the source may be a deferred LINQ pipeline, and counting plus slicing it twice
         // would re-run the page's filter for no benefit.
@@ -24,6 +29,7 @@ public static class VirtualisedWindowExtensions
 
         return new VirtualisedWindow<T>(
             items.Skip(request.StartIndex).Take(request.Count).ToList(),
-            request.IncludeTotalCount ? items.Count : null);
+            request.IncludeTotalCount ? items.Count : null,
+            request.IncludeTotalCount ? unfilteredTotal : null);
     }
 }

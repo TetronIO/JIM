@@ -570,4 +570,28 @@ public class VirtualisedDataGridTests : JimComponentTestContext
             }
         });
     }
+
+    [Test]
+    public void VirtualisedDataGrid_WindowCarriesUnfilteredTotal_CountReadsAgainstThatBaseline()
+    {
+        // A page-owned filter (the Connected Systems list's Password Synchronisation filter) narrows the list
+        // without a search, so the grid cannot take the baseline from its own count; the page supplies it, and the
+        // count reads "3 of 4" just as it does while a search narrows the list.
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(
+                new VirtualisedWindow<string>(new List<string> { "a", "b", "c" }, 3, UnfilteredTotalItems: 4)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "test-grid")
+            .Add(c => c.DefaultSortBy, "Name"));
+
+        cut.WaitForAssertion(() =>
+        {
+            var count = cut.FindComponent<TableObjectCount>().Instance;
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(count.Count, Is.EqualTo(3));
+                Assert.That(count.Total, Is.EqualTo(4));
+            }
+        });
+    }
 }

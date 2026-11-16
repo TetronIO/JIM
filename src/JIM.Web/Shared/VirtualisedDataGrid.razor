@@ -350,8 +350,9 @@ else if (ReservesHeight)
     /// reset it: reordering the same match set cannot change its size.</summary>
     public int? TotalItems { get; private set; }
 
-    /// <summary>The match count with no search text, held so the count can read "12 of 3,868" while a search is
-    /// active. Captured whenever a count returns and no search is narrowing the list.</summary>
+    /// <summary>The match count with no search text and no page-owned filter, held so the count can read "12 of 3,868"
+    /// while either narrows the list. Taken from the window when the page supplies it, otherwise captured whenever a
+    /// count returns and no search is narrowing the list.</summary>
     public int? UnfilteredTotalItems { get; private set; }
 
     /// <summary>Whether the grid is showing its loading state: a window has been in flight past the threshold
@@ -571,8 +572,11 @@ else if (ReservesHeight)
         var previousUnfilteredTotal = UnfilteredTotalItems;
         TotalItems = window.TotalItems ?? TotalItems;
 
-        // With no search narrowing the list, the count just taken is the unfiltered baseline.
-        if (string.IsNullOrWhiteSpace(SearchText))
+        // A page applying a filter of its own says what the list held before it; otherwise, with no search narrowing
+        // the list, the count just taken is the unfiltered baseline.
+        if (window.UnfilteredTotalItems.HasValue)
+            UnfilteredTotalItems = window.UnfilteredTotalItems;
+        else if (string.IsNullOrWhiteSpace(SearchText))
             UnfilteredTotalItems = TotalItems;
 
         // The toolbar's count is drawn by this component, and a window arriving re-renders only the virtualiser's rows.
