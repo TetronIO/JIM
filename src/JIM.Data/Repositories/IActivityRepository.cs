@@ -614,6 +614,21 @@ public interface IActivityRepository
     public Task<string?> GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType targetType, string targetObjectKey);
 
     /// <summary>
+    /// Gets the snapshot JSON of the configuration that was in force for a configuration object at a point in time: the
+    /// highest version recorded before <paramref name="at"/>. Null when no version was recorded before then, i.e. the
+    /// object was created (or first captured) afterwards. Used by the configuration drift indicator (#2973) to compare the
+    /// configuration the last Full Synchronisation ran with against the current one, so a change that has since been undone
+    /// is not reported.
+    /// </summary>
+    public Task<string?> GetConfigurationChangeSnapshotInForceAsync(ActivityTargetType targetType, int targetObjectId, DateTime at);
+
+    /// <summary>
+    /// The string-keyed counterpart of
+    /// <see cref="GetConfigurationChangeSnapshotInForceAsync(ActivityTargetType,int,DateTime)"/>, for a Service Setting.
+    /// </summary>
+    public Task<string?> GetConfigurationChangeSnapshotInForceAsync(ActivityTargetType targetType, string targetObjectKey, DateTime at);
+
+    /// <summary>
     /// Counts the versioned configuration-change activities recorded for a string-keyed configuration object (e.g. a
     /// <see cref="ActivityTargetType.ServiceSetting"/>).
     /// </summary>

@@ -179,17 +179,17 @@ and Destructive changes count, so a rename never registers here.
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `HasPendingChanges` | `bool` | Qualifying changes have been recorded since the last completed Full Synchronisation |
+| `HasPendingChanges` | `bool` | The configuration differs, in a way only a Full Synchronisation applies, from the configuration the last completed Full Synchronisation started with |
 | `IsDeterminable` | `bool` | The question has a meaningful answer; see the caution below |
 | `NeverFullySynchronised` | `bool` | No Full Synchronisation has ever completed, so there is no reference point |
 | `TrackingDisabled` | `bool` | Configuration change tracking is off, so JIM holds no record of what changed |
 | `LastFullSynchronisation` | `datetime?` | When the last completed Full Synchronisation started, or `$null` |
 | `MostRecentChange` | `datetime?` | When the most recent qualifying change was recorded, or `$null` |
-| `ChangeCount` | `int` | How many qualifying changes there are |
+| `ChangeCount` | `int` | How many qualifying changes there are. Changes since undone are not counted |
 | `HighestChangeClass` | `string` | `Cosmetic`, `SyncAffecting` or `Destructive`; `NotClassified` when there are no changes |
 | `AwaitingSynchronisation` | `object[]` | The Object Types whose objects the next synchronisation, Delta or Full, will all process because of saved import Synchronisation Rule or Object Matching Rule changes; none when nothing is waiting. These changes are not counted in `ChangeCount`, and are reported even when `IsDeterminable` is `$false` |
 
-Each `AwaitingSynchronisation` entry has `ObjectTypeName`, `ChangeCount`, `ObjectCount`, `EarliestSavedAt` and `Changes`. Each change has `Reason`, `SavedAt`, `ConfigurationChangeActivityId`, `InitiatedByName`, `AppliedAt` and `SynchronisationActivityId`. See [Changes awaiting synchronisation](../configuration/connected-systems.md#changes-awaiting-synchronisation).
+Each `AwaitingSynchronisation` entry has `ObjectTypeName`, `ChangeCount`, `ObjectCount`, `EarliestSavedAt` and `Changes`. Each change has `Reason`, `SavedAt`, `ConfigurationChangeActivityId`, `InitiatedByName`, `AppliedAt` and `SynchronisationActivityId`. See [Changes awaiting synchronisation](../configuration/changes-awaiting-synchronisation.md).
 
 ```powershell title="See what is waiting for a Connected System's next synchronisation"
 (Get-JIMConnectedSystem -Id 3).ConfigurationDrift.AwaitingSynchronisation |

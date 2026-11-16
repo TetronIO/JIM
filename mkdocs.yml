@@ -138,6 +138,7 @@ nav:
       - Configuration Changes: configuration/configuration-changes.md
       - Sync Preview: configuration/sync-preview.md
       - Connected Systems: configuration/connected-systems.md
+      - Changes Awaiting Synchronisation: configuration/changes-awaiting-synchronisation.md
       - Connector Space: configuration/connector-space.md
       - Partitions and Containers: configuration/partitions-and-containers.md
       - Unresolved References: configuration/unresolved-references.md

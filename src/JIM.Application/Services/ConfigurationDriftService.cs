@@ -1,9 +1,14 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text.Json;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Staging.DTOs;
+using JIM.Utilities;
+using Serilog;
+// The versioned configuration history one change belongs to: its target type, and its id or (for a Service Setting) key.
+using ConfigurationHistoryKey = (JIM.Models.Activities.ActivityTargetType TargetType, int Id, string? Key);
 
 namespace JIM.Application.Services;
 
@@ -23,7 +28,14 @@ namespace JIM.Application.Services;
 /// synchronisation of any Connected System, so the save judges it to need no Full Synchronisation and it is left out too
 /// (<see cref="JIM.Models.Activities.Activity.ConfigurationChangeNeedsFullSynchronisation"/>). What remains is what JIM does not apply by
 /// itself: an export Attribute Flow edit, a Metaverse Attribute or Object Type change, and a change recorded before that
-/// judgement existed.
+/// judgement existed. Nor is a change no synchronisation applies at all (#2973): a Metaverse Object Type's deletion
+/// settings, and an Initial Export Only Attribute Flow (<see cref="ConfigurationChangeSynchronisationPolicy.SectionsNeedingFullSynchronisation"/>).
+///
+/// What is counted is net difference, not edits (#2973). For each configuration object a remaining change belongs to, the
+/// configuration in force when the system's last Full Synchronisation started is compared with the current one, and the
+/// object's changes are left out when the two differ in nothing a Full Synchronisation applies: a change made and then
+/// undone (a grace period zeroed for a test and restored) leaves nothing to run. A change with nothing to compare (a
+/// deletion's tombstone, an object created since, a row naming more than one object) counts as it always did.
 /// </summary>
 public class ConfigurationDriftService
 {
@@ -52,7 +64,9 @@ public class ConfigurationDriftService
     /// <summary>
     /// The batch counterpart of <see cref="GetConnectedSystemDriftAsync(int)"/>, for list surfaces that need a status
     /// per system. Issues a fixed number of queries regardless of how many systems are asked about, so a list page
-    /// does not degrade into an N+1.
+    /// does not degrade into an N+1, plus two history reads per configuration object with a counted change since a
+    /// reference point (#2973), shared across the systems that have the same reference point. Configuration objects
+    /// changed between Full Synchronisations are few, so that is bounded by how much is being edited, not by scale.
     /// </summary>
     /// <returns>A status for every requested system id.</returns>
     public Task<Dictionary<int, ConfigurationDriftStatus>> GetConnectedSystemDriftAsync(IList<int> connectedSystemIds) =>
@@ -115,6 +129,10 @@ public class ConfigurationDriftService
         var scopes = (await Application.Repository.ConnectedSystems.GetConfigurationScopesAsync(synchronisedIds))
             .ToDictionary(s => s.ConnectedSystemId);
 
+        // Whether each configuration object differs, since a given reference point, in anything a Full Synchronisation
+        // applies. Shared across the batch: systems last synchronised at the same moment ask the same question of an object.
+        var netEffects = new Dictionary<(ConfigurationHistoryKey Object, DateTime ReferencePoint), bool>();
+
         // The reference point is projected alongside the id rather than looked up as the loop body's first statement,
         // which reads as a map-only foreach to the code-quality analyser (see the Select rule in src/CLAUDE.md).
         foreach (var (id, referencePoint) in synchronisedIds.Select(id => (id, referencePoint: lastFullSyncs[id])))
@@ -125,9 +143,8 @@ public class ConfigurationDriftService
                 ? found
                 : new ConnectedSystemConfigurationScope { ConnectedSystemId = id };
 
-            var qualifying = impacts
-                .Where(i => i.When >= referencePoint && Affects(i, scope))
-                .ToList();
+            var qualifying = await WithoutChangesUndoneSinceAsync(
+                impacts.Where(i => i.When >= referencePoint && Affects(i, scope)).ToList(), referencePoint, netEffects);
 
             results[id] = new ConfigurationDriftStatus
             {
@@ -179,6 +196,92 @@ public class ConfigurationDriftService
         }
 
         return listed;
+    }
+
+    /// <summary>
+    /// Leaves out the changes to each configuration object whose configuration now is no different, in anything a Full
+    /// Synchronisation applies, from the configuration in force at <paramref name="referencePoint"/> (#2973). A change that
+    /// cannot be traced to one object's versioned history is kept.
+    /// </summary>
+    private async Task<List<ConfigurationChangeImpactData>> WithoutChangesUndoneSinceAsync(List<ConfigurationChangeImpactData> qualifying,
+        DateTime referencePoint, Dictionary<(ConfigurationHistoryKey Object, DateTime ReferencePoint), bool> netEffects)
+    {
+        var kept = qualifying.Where(impact => HistoryOf(impact) == null).ToList();
+        foreach (var changesToObject in qualifying.Where(impact => HistoryOf(impact) != null).GroupBy(impact => HistoryOf(impact)!.Value))
+        {
+            var cacheKey = (changesToObject.Key, referencePoint);
+            if (!netEffects.TryGetValue(cacheKey, out var hasNetEffect))
+            {
+                hasNetEffect = await HasNetEffectSinceAsync(changesToObject.Key, referencePoint);
+                netEffects[cacheKey] = hasNetEffect;
+            }
+
+            if (hasNetEffect)
+                kept.AddRange(changesToObject);
+        }
+
+        return kept;
+    }
+
+    /// <summary>
+    /// Whether a configuration object's current configuration differs from the one in force at <paramref name="at"/> in
+    /// anything only a Full Synchronisation applies. True whenever that cannot be told: no version in force then (the object
+    /// was created since), no current version, or a snapshot that cannot be read.
+    /// </summary>
+    private async Task<bool> HasNetEffectSinceAsync(ConfigurationHistoryKey configurationObject, DateTime at)
+    {
+        var activities = Application.Repository.Activity;
+        var (targetType, id, key) = configurationObject;
+        var inForceJson = key != null
+            ? await activities.GetConfigurationChangeSnapshotInForceAsync(targetType, key, at)
+            : await activities.GetConfigurationChangeSnapshotInForceAsync(targetType, id, at);
+        if (inForceJson == null)
+            return true;
+
+        var currentJson = key != null
+            ? await activities.GetLatestConfigurationChangeSnapshotAsync(targetType, key)
+            : await activities.GetLatestConfigurationChangeSnapshotAsync(targetType, id);
+
+        try
+        {
+            var inForce = ConfigurationSnapshotService.Deserialise(inForceJson);
+            var current = ConfigurationSnapshotService.Deserialise(currentJson);
+            if (inForce == null || current == null)
+                return true;
+
+            var diff = Application.ConfigurationDiffs.Diff(inForce, current);
+            return ConfigurationChangeSynchronisationPolicy.SectionsNeedingFullSynchronisation(diff, key).Count > 0;
+        }
+        catch (JsonException ex)
+        {
+            // Counting the changes is the safe reading: leaving them out would tell the administrator their configuration
+            // is applied when JIM cannot say so.
+            Log.Warning(ex, "HasNetEffectSinceAsync: could not read the configuration history of {TargetType} {Id}{Key}; " +
+                "its changes are counted as needing a Full Synchronisation.", targetType, id, LogSanitiser.Sanitise(key));
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// The versioned configuration history a change belongs to: the one object its row names, by the column its capture
+    /// set. Null for an unversioned change (a deletion's tombstone), and for a row naming no object or more than one, which
+    /// no single history can answer for.
+    /// </summary>
+    private static ConfigurationHistoryKey? HistoryOf(ConfigurationChangeImpactData impact)
+    {
+        if (impact.Version == null)
+            return null;
+
+        ConfigurationHistoryKey?[] named =
+        [
+            impact.SyncRuleId is { } syncRuleId ? new(ActivityTargetType.SynchronisationRule, syncRuleId, null) : null,
+            impact.MetaverseObjectTypeId is { } objectTypeId ? new(ActivityTargetType.MetaverseObjectType, objectTypeId, null) : null,
+            impact.MetaverseAttributeId is { } attributeId ? new(ActivityTargetType.MetaverseAttribute, attributeId, null) : null,
+            impact.ServiceSettingKey is { } settingKey ? new(ActivityTargetType.ServiceSetting, 0, settingKey) : null,
+            impact.ConnectedSystemId is { } connectedSystemId ? new(ActivityTargetType.ConnectedSystem, connectedSystemId, null) : null
+        ];
+        var found = named.Where(history => history != null).ToList();
+        return found.Count == 1 ? found[0] : null;
     }
 
     /// <summary>

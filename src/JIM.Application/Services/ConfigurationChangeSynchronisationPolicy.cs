@@ -152,7 +152,7 @@ internal static class ConfigurationChangeSynchronisationPolicy
         for (var i = 0; i < outcome.ChangedKeys.Count; i++)
         {
             var key = outcome.ChangedKeys[i];
-            if (!outcome.ConsequentialKeys.Contains(key))
+            if (!outcome.FullSynchronisationKeys.Contains(key))
                 continue;
             if (flagsExportReview && ExportReviewSectionKeys.Contains(key))
                 continue;
@@ -160,6 +160,90 @@ internal static class ConfigurationChangeSynchronisationPolicy
         }
 
         return left;
+    }
+
+    /// <summary>
+    /// A Metaverse Object Type's deletion settings. They are read when an object is disconnected (to decide its fate) and
+    /// by housekeeping (to delete it once its grace period has passed), never by a synchronisation of objects that are
+    /// already disconnected, so a Full Synchronisation applies none of them (#2973). Destructive all the same: the class
+    /// says how much a change can destroy, this says what applies it.
+    /// </summary>
+    internal static readonly IReadOnlySet<string> MetaverseObjectTypeDeletionSettingKeys = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "deletionRule",
+        "deletionTriggerMode",
+        "deletionGracePeriod",
+        "deletionTriggerConnectedSystemIds"
+    };
+
+    private const string AttributeFlowRulesKey = "attributeFlowRules";
+    private const string InitialExportOnlyKey = "initialExportOnly";
+
+    /// <summary>
+    /// The keys of the changed top-level sections of a configuration whose change only a Full Synchronisation applies to the
+    /// objects that already exist (#2973): the Sync-affecting and Destructive sections, less a Metaverse Object Type's
+    /// deletion settings (<see cref="MetaverseObjectTypeDeletionSettingKeys"/>) and less a Synchronisation Rule's Attribute
+    /// Flows when every flow that changed is Initial Export Only after the change (before it, for a flow removed). Such a
+    /// flow writes only when an object is provisioned, so a Full Synchronisation would change nothing for the objects
+    /// already provisioned. A flow switched from Initial Export Only to managed does count: it now manages every object.
+    /// <para>
+    /// One rule for the two questions asked of it: what a save leaves for a Full Synchronisation (the capture's outcome,
+    /// <see cref="ConfigurationChangeCaptureOutcome.FullSynchronisationKeys"/>), and whether the configuration in force now
+    /// differs from the one the last Full Synchronisation ran with (the drift indicator's net comparison). A section that
+    /// cannot be classified counts: a change missed here is one the administrator is never told still needs a run.
+    /// </para>
+    /// </summary>
+    /// <param name="diff">The difference between two snapshots of the same configuration object.</param>
+    /// <param name="objectKey">The Service Setting's key, for classifying a Service Setting; ignored otherwise.</param>
+    internal static IReadOnlyList<string> SectionsNeedingFullSynchronisation(ConfigurationDiff diff, string? objectKey = null)
+    {
+        ArgumentNullException.ThrowIfNull(diff);
+
+        if (!diff.HasChanges || diff.Root?.Children == null)
+            return [];
+
+        return diff.Root.Children
+            .Where(section => section.ChangeType != ConfigurationDiffChangeType.Unchanged
+                              && SectionNeedsFullSynchronisation(diff.ObjectType, section, objectKey))
+            .Select(section => section.Key)
+            .ToList();
+    }
+
+    private static bool SectionNeedsFullSynchronisation(string objectType, ConfigurationDiffNode section, string? objectKey)
+    {
+        if (!IsConsequential(objectType, section, objectKey))
+            return false;
+
+        if (objectType == ConfigurationSnapshotService.MetaverseObjectTypeObjectType)
+            return !MetaverseObjectTypeDeletionSettingKeys.Contains(section.Key);
+
+        if (objectType == ConfigurationSnapshotService.SyncRuleObjectType && section.Key == AttributeFlowRulesKey)
+            return (section.Children ?? []).Any(flow => flow.ChangeType != ConfigurationDiffChangeType.Unchanged
+                                                        && !IsInitialExportOnly(flow)
+                                                        && IsConsequential(objectType, flow, objectKey));
+
+        return true;
+    }
+
+    // Whether a changed Attribute Flow is Initial Export Only as it now stands, or as it stood when it was removed.
+    private static bool IsInitialExportOnly(ConfigurationDiffNode flow)
+    {
+        var setting = flow.Children?.FirstOrDefault(child => child.Key == InitialExportOnlyKey);
+        var value = flow.ChangeType == ConfigurationDiffChangeType.Removed ? setting?.OldValue : setting?.NewValue;
+        return string.Equals(value, "true", StringComparison.Ordinal);
+    }
+
+    // Whether part of a diff is Sync-affecting or Destructive in itself. One that cannot be classified is taken to be.
+    private static bool IsConsequential(string objectType, ConfigurationDiffNode node, string? objectKey)
+    {
+        try
+        {
+            return ConfigurationChangeClassifier.ClassifyNode(objectType, node, objectKey) >= ConfigurationChangeClass.SyncAffecting;
+        }
+        catch (InvalidOperationException)
+        {
+            return true;
+        }
     }
 
     /// <summary>
