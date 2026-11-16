@@ -577,8 +577,7 @@ public partial class SyncRepository : ISyncRepository
         if (cso != null && cso.ConnectedSystemId != connectedSystemId)
             cso = null;
 
-        // Cloned per #1079 Regression B - see CloneForHydration. Callers such as
-        // SyncImportTaskProcessor.ApplyDeletionCandidateAsync add the result to the
+        // Cloned per #1079 Regression B - see CloneForHydration. Callers add the result to the
         // update-path working set and later release its AttributeValues.
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
@@ -635,6 +634,48 @@ public partial class SyncRepository : ISyncRepository
                 // Numeric equality, so a stored 4200.00 matches a supplied 4200 (#1283).
                 .Any(av => av.AttributeId == attributeId && av.DecimalValue == attributeValue));
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Mirrors the single-value lookups by attribute above: the first object in store order holding the value.</remarks>
+    public Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int attributeId,
+        IReadOnlyList<T> attributeValues) where T : notnull
+    {
+        Func<ConnectedSystemObjectAttributeValue, T, bool> holds;
+        if (typeof(T) == typeof(string))
+        {
+            var caseExact = IsCaseExact(attributeId);
+            holds = (av, value) => av.StringValue != null && IdentifierKey.AreSame(av.StringValue, (string)(object)value, caseExact);
+        }
+        else if (typeof(T) == typeof(int))
+            holds = (av, value) => av.IntValue == (int)(object)value;
+        else if (typeof(T) == typeof(long))
+            holds = (av, value) => av.LongValue == (long)(object)value;
+        else if (typeof(T) == typeof(decimal))
+            // Numeric equality, so a stored 4200.00 matches a supplied 4200 (#1283).
+            holds = (av, value) => av.DecimalValue == (decimal)(object)value;
+        else if (typeof(T) == typeof(Guid))
+            holds = (av, value) => av.GuidValue == (Guid)(object)value;
+        else
+            throw new ArgumentOutOfRangeException(nameof(attributeValues), typeof(T).Name,
+                $"Connected System Objects cannot be looked up by an External ID of type {typeof(T).Name}.");
+
+        var csos = GetCsosForSystem(connectedSystemId).ToList();
+        var matches = attributeValues
+            .Select(value => csos.Where(c => c.AttributeValues.Any(av => av.AttributeId == attributeId && holds(av, value))).ToList())
+            .Select(holders => holders.Count == 0
+                ? null
+                : new ConnectedSystemObjectExternalIdMatch(holders[0].Id, holders[0].Status, holders[0].TypeId, holders.Count))
+            .ToList();
+        return Task.FromResult(matches);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Each object is cloned, as the single-value lookups clone the object they return.</remarks>
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForDeletionDetectionAsync(int connectedSystemId, IReadOnlyCollection<Guid> csoIds)
+    {
+        var ids = csoIds.ToHashSet();
+        return Task.FromResult(GetCsosForSystem(connectedSystemId).Where(c => ids.Contains(c.Id)).Select(CloneForHydration).ToList());
     }
 
     public virtual Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(

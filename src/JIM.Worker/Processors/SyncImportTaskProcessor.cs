@@ -104,6 +104,25 @@ public partial class SyncImportTaskProcessor
     internal long PeakHeldAttributeValues { get; private set; }
 
     /// <summary>
+    /// How many Connected System Objects deletion detection loaded whole (#2521, Phase 3): the objects it marks deleted,
+    /// which go on to be saved with the run's updates. Always counted; it costs one increment per object loaded.
+    /// </summary>
+    internal int DeletionCandidatesLoadedWhole { get; private set; }
+
+    /// <summary>
+    /// How many Object Type change replacements (#2049) the run held apart from the objects it is to create when deletion
+    /// detection began (#2521, Phase 3): a replacement exists only on condition that deletion detection retires what it
+    /// replaces, so it is not one of the run's creates until then.
+    /// </summary>
+    internal int ObjectTypeChangeReplacementsHeldApart { get; private set; }
+
+    /// <summary>
+    /// How many External ID values the run held for deletion detection when it began (#2521, Phase 3): every value it
+    /// read, over every page, once per Object Type.
+    /// </summary>
+    internal long ImportedExternalIdValuesHeld { get; private set; }
+
+    /// <summary>
     /// The base the deletion limits' percentage is measured against: the Connected System Objects in the run's scope that
     /// are not already Obsolete, counted as the run starts, before it saves anything. Null when the Run Profile sets no
     /// deletion limit, or before the run has started; deletion detection then counts it when asked.
@@ -488,8 +507,9 @@ public partial class SyncImportTaskProcessor
         var connectedSystemObjectsToBeCreated = new List<ConnectedSystemObject>();
         var connectedSystemObjectsToBeUpdated = new List<ConnectedSystemObject>();
 
-        // we keep track of the external ids for all imported objects (over all pages, if applicable) so we can look for deletions later.
-        var externalIdsImported = new List<ExternalIdPair>();
+        // we keep track of the external ids for all imported objects (over all pages, if applicable) so we can look for deletions
+        // later: their values only, by Object Type, not the attributes that carried them (#2521).
+        var externalIdsImported = new ImportedExternalIds();
         var totalObjectsImported = 0;
 
         // Cross-page duplicate detection: Track external IDs seen across ALL pages of an import run.
@@ -972,6 +992,10 @@ public partial class SyncImportTaskProcessor
             retrySw.Stop();
             Log.Information("PerformImportAsync: PHASE TIMING: Unconfirmed Create retry: {RetrySeconds:F1}s", retrySw.Elapsed.TotalSeconds);
         }
+
+        // Deletion detection and the retry are the last to read the External IDs the run read, so they are released here
+        // rather than held through the save phase (#2521).
+        externalIdsImported.Clear();
 
         // A Delta Import that read every object stands in for a Full Import, and its deletions are found by absence rather
         // than read from a change log (#2720). Where that check did not run to completion (refused by the Run Profile's
@@ -1485,9 +1509,10 @@ public partial class SyncImportTaskProcessor
 
     /// <summary>
     /// Run Profile Safeguards (#1618, Layer 2): what deletion detection found, sorted into the two
-    /// groups <see cref="ApplyDeletionCandidatesAsync"/> treats differently. Objects not found in the
-    /// Connector Space, and objects already processed elsewhere in this import run, are dropped before
-    /// this point and never appear in either list; see <see cref="ResolveDeletionCandidateAsync{T}"/>.
+    /// groups <see cref="ApplyDeletionCandidatesAsync"/> treats differently, as summaries (#2521): a candidate is held as
+    /// its id, status and Object Type until it is applied, and only the ones marked as deleted are ever loaded whole.
+    /// Objects not found in the Connector Space, and objects already processed elsewhere in this import run, are dropped
+    /// before this point and never appear in either list; see <see cref="ResolveAndClassifyDeletionCandidatesAsync{T}"/>.
     /// </summary>
     /// <param name="AlreadyObsolete">
     /// Candidates already <see cref="ConnectedSystemObjectStatus.Obsolete"/> when resolved: this is not
@@ -1498,7 +1523,13 @@ public partial class SyncImportTaskProcessor
     /// <see cref="ConnectedSystemRunProfile.MaxDetectedDeletions"/> and
     /// <see cref="ConnectedSystemRunProfile.MaxDetectedDeletionsPercent"/> limits are checked against.
     /// </param>
-    private sealed record DeletionCandidates(List<ConnectedSystemObject> AlreadyObsolete, List<ConnectedSystemObject> NewlyMarked);
+    private sealed record DeletionCandidates(List<ConnectedSystemObjectExternalIdMatch> AlreadyObsolete, List<ConnectedSystemObjectExternalIdMatch> NewlyMarked);
+
+    /// <summary>
+    /// How many deletion candidates are resolved, or applied, at a time (#2521): one statement resolves this many missing
+    /// External IDs, and one clears this many candidates' stale Pending Exports and loads the ones to mark.
+    /// </summary>
+    private const int DeletionCandidateBatchSize = 1000;
 
     /// <summary>
     /// Run Profile Safeguards (#1618, Layer 2) Phase A: resolves which Connected System Objects
@@ -1509,7 +1540,7 @@ public partial class SyncImportTaskProcessor
     /// <param name="updatedCsoIds">The ids of the objects this run already updated. They are not deletion candidates even
     /// if their External ID is not in the import (e.g. because their External ID was updated during import processing and
     /// the new value is not in <paramref name="externalIdsImported"/>).</param>
-    private async Task<DeletionCandidates> ResolveDeletionCandidatesAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, IEnumerable<Guid> updatedCsoIds, int? partitionId, IReadOnlyCollection<ConnectedSystemObjectType> objectTypesToCheck)
+    private async Task<DeletionCandidates> ResolveDeletionCandidatesAsync(ImportedExternalIds externalIdsImported, IEnumerable<Guid> updatedCsoIds, int? partitionId, IReadOnlyCollection<ConnectedSystemObjectType> objectTypesToCheck)
     {
         var candidates = new DeletionCandidates([], []);
 
@@ -1526,80 +1557,42 @@ public partial class SyncImportTaskProcessor
         {
             // what's the external id attribute for this object type?
             var objectTypeExternalIdAttribute = objectType.Attributes.Single(q => q.IsExternalId);
+
+            // The External IDs this run read for the type. Whether a held text value is among them follows the External
+            // ID's case-exact declaration (#2051); the other types compare by value, a decimal numerically.
+            var imported = externalIdsImported.ForObjectType(objectType.Id, objectTypeExternalIdAttribute.CaseExact);
+
+            // For each type: the External IDs JIM holds (objects of the type in the run's scope, not Pending Provisioning),
+            // less the ones the run read, each held value once; each missing one is then resolved to the object it names.
             switch (objectTypeExternalIdAttribute.Type)
             {
                 case AttributeDataType.Number:
                 {
-                    // get the int Connected System Object external ids for this object type
-                    var connectedSystemObjectExternalIdsOfTypeInt = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeIntAsync(_connectedSystem.Id, objectType.Id, partitionId);
-
-                    // get the int import object external ids for this object type
-                    var connectedSystemIntExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectTypeId == objectType.Id)
-                        .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.IntValues);
-
-                    // create a collection with the Connected System Objects no longer in the Connected System for this object type
-                    var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeInt.Except(connectedSystemIntExternalIdValues);
-
-                    // resolve the Connected System Objects no longer in the Connected System for this object type into a candidate
-                    foreach (var externalId in connectedSystemObjectDeletesExternalIds)
-                        await ResolveAndClassifyDeletionCandidateAsync(externalId, objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
+                    var held = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeIntAsync(_connectedSystem.Id, objectType.Id, partitionId);
+                    await ResolveAndClassifyDeletionCandidatesAsync(HeldValuesNotImported(held, imported.Ints, EqualityComparer<int>.Default),
+                        objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
                     break;
                 }
                 case AttributeDataType.Text:
                 {
-                    // get the string Connected System Object external ids for this object type
-                    var connectedSystemObjectExternalIdsOfTypeString = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeStringAsync(_connectedSystem.Id, objectType.Id, partitionId);
-
-                    // get the string import object external ids for this object type
-                    var connectedSystemStringExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectTypeId == objectType.Id)
-                        .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.StringValues);
-
-                    // create a collection with the Connected System Objects no longer in the Connected System for this object type
-                    // Whether a held value is among the imported ones follows the External ID's case-exact declaration (#2051).
-                    var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeString.Except(
-                        connectedSystemStringExternalIdValues, IdentifierKey.Comparer(objectTypeExternalIdAttribute.CaseExact));
-
-                    // resolve the Connected System Objects no longer in the Connected System for this object type into a candidate
-                    foreach (var externalId in connectedSystemObjectDeletesExternalIds)
-                        await ResolveAndClassifyDeletionCandidateAsync(externalId, objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
+                    var held = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeStringAsync(_connectedSystem.Id, objectType.Id, partitionId);
+                    await ResolveAndClassifyDeletionCandidatesAsync(
+                        HeldValuesNotImported(held, imported.Strings, IdentifierKey.Comparer(objectTypeExternalIdAttribute.CaseExact)),
+                        objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
                     break;
                 }
                 case AttributeDataType.Guid:
                 {
-                    // get the guid Connected System Object external ids for this object type
-                    var connectedSystemObjectExternalIdsOfTypeGuid = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeGuidAsync(_connectedSystem.Id, objectType.Id, partitionId);
-
-                    // get the guid import object external ids for this object type
-                    var connectedSystemGuidExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectTypeId == objectType.Id)
-                        .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.GuidValues);
-
-                    // create a collection with the Connected System Objects no longer in the Connected System for this object type
-                    var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeGuid.Except(connectedSystemGuidExternalIdValues);
-
-                    // resolve the Connected System Objects no longer in the Connected System for this object type into a candidate
-                    foreach (var externalId in connectedSystemObjectDeletesExternalIds)
-                        await ResolveAndClassifyDeletionCandidateAsync(externalId, objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
+                    var held = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeGuidAsync(_connectedSystem.Id, objectType.Id, partitionId);
+                    await ResolveAndClassifyDeletionCandidatesAsync(HeldValuesNotImported(held, imported.Guids, EqualityComparer<Guid>.Default),
+                        objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
                     break;
                 }
                 case AttributeDataType.LongNumber:
                 {
-                    // get the long Connected System Object external ids for this object type
-                    var connectedSystemObjectExternalIdsOfTypeLong = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeLongAsync(_connectedSystem.Id, objectType.Id, partitionId);
-
-                    // get the long import object external ids for this object type
-                    var connectedSystemLongExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectTypeId == objectType.Id)
-                        .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.LongValues);
-
-                    // create a collection with the Connected System Objects no longer in the Connected System for this object type
-                    var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeLong.Except(connectedSystemLongExternalIdValues);
-
-                    // resolve the Connected System Objects no longer in the Connected System for this object type into a candidate
-                    foreach (var externalId in connectedSystemObjectDeletesExternalIds)
-                        await ResolveAndClassifyDeletionCandidateAsync(externalId, objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
+                    var held = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeLongAsync(_connectedSystem.Id, objectType.Id, partitionId);
+                    await ResolveAndClassifyDeletionCandidatesAsync(HeldValuesNotImported(held, imported.Longs, EqualityComparer<long>.Default),
+                        objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
                     break;
                 }
                 case AttributeDataType.Decimal:
@@ -1608,19 +1601,9 @@ public partial class SyncImportTaskProcessor
                     // primary key on that provider (#1283). Set comparison is safe without normalising
                     // the scale: equal decimals hash equally regardless of how many trailing zeros
                     // they carry, so 4200.00m and 4200m are the same member.
-                    var connectedSystemObjectExternalIdsOfTypeDecimal = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeDecimalAsync(_connectedSystem.Id, objectType.Id, partitionId);
-
-                    // get the decimal import object external ids for this object type
-                    var connectedSystemDecimalExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectTypeId == objectType.Id)
-                        .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.DecimalValues);
-
-                    // create a collection with the Connected System Objects no longer in the Connected System for this object type
-                    var connectedSystemObjectDeletesExternalIds = connectedSystemObjectExternalIdsOfTypeDecimal.Except(connectedSystemDecimalExternalIdValues);
-
-                    // resolve the Connected System Objects no longer in the Connected System for this object type into a candidate
-                    foreach (var externalId in connectedSystemObjectDeletesExternalIds)
-                        await ResolveAndClassifyDeletionCandidateAsync(externalId, objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
+                    var held = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeDecimalAsync(_connectedSystem.Id, objectType.Id, partitionId);
+                    await ResolveAndClassifyDeletionCandidatesAsync(HeldValuesNotImported(held, imported.Decimals, EqualityComparer<decimal>.Default),
+                        objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
                     break;
                 }
                 case AttributeDataType.NotSet:
@@ -1645,20 +1628,59 @@ public partial class SyncImportTaskProcessor
     }
 
     /// <summary>
-    /// Resolves one external id to its Connected System Object (dropping it, per
-    /// <see cref="ResolveDeletionCandidateAsync{T}"/>, if it cannot be found or was already processed
-    /// this run) and sorts it into <paramref name="candidates"/> by its current status.
+    /// The held External IDs the run did not read, each once, in the order held: what <c>Enumerable.Except</c> with
+    /// <paramref name="comparer"/> gives, without copying the imported set. <paramref name="imported"/> compares as
+    /// <paramref name="comparer"/> does.
     /// </summary>
-    private async Task ResolveAndClassifyDeletionCandidateAsync<T>(T externalId, int connectedSystemAttributeId, HashSet<Guid> processedCsoIds, DeletionCandidates candidates)
+    private static List<T> HeldValuesNotImported<T>(IEnumerable<T> held, IReadOnlySet<T> imported, IEqualityComparer<T> comparer)
     {
-        var cso = await ResolveDeletionCandidateAsync(externalId, connectedSystemAttributeId, processedCsoIds);
-        if (cso == null)
-            return;
+        var seen = new HashSet<T>(comparer);
+        return held.Where(value => !imported.Contains(value) && seen.Add(value)).ToList();
+    }
 
-        if (cso.Status == ConnectedSystemObjectStatus.Obsolete)
-            candidates.AlreadyObsolete.Add(cso);
-        else
-            candidates.NewlyMarked.Add(cso);
+    /// <summary>
+    /// Resolves each missing External ID to the Connected System Object it names, a batch at a time, as a summary, and
+    /// sorts it into <paramref name="candidates"/> by its status, with no side effects. An External ID no object holds
+    /// (already gone, or the External ID changed mid-run) is dropped, as is an object already processed elsewhere in this
+    /// import run (e.g. matched by a secondary External ID): neither is a deletion candidate.
+    /// </summary>
+    /// <param name="missingExternalIds">The values of the External ID attribute deletion detection found missing.</param>
+    /// <param name="connectedSystemAttributeId">The attribute that represents the External ID in the current Connected System.</param>
+    /// <param name="processedCsoIds">CSOs already updated elsewhere in this import run, which must not be treated as deletion
+    /// candidates even if their External ID is not in the import.</param>
+    /// <param name="candidates">Where each candidate is sorted.</param>
+    /// <typeparam name="T">The type for the External ID attribute.</typeparam>
+    private async Task ResolveAndClassifyDeletionCandidatesAsync<T>(List<T> missingExternalIds, int connectedSystemAttributeId, HashSet<Guid> processedCsoIds,
+        DeletionCandidates candidates) where T : notnull
+    {
+        foreach (var batch in missingExternalIds.Chunk(DeletionCandidateBatchSize))
+        {
+            var matches = await _syncRepo.GetConnectedSystemObjectExternalIdMatchesAsync(_connectedSystem.Id, connectedSystemAttributeId, batch);
+            for (var i = 0; i < batch.Length; i++)
+            {
+                var match = matches[i];
+                if (match == null)
+                {
+                    Log.Information("ResolveAndClassifyDeletionCandidatesAsync: CSO with external id '{ExternalId}' not found. No work to do.",
+                        LogSanitiser.Sanitise(batch[i].ToString()));
+                    continue;
+                }
+
+                // Skip CSOs that were already processed in this import run (e.g., matched by secondary external ID).
+                // Their external ID may have been updated during import, so they appear as "not in import" by old ID.
+                if (processedCsoIds.Contains(match.Id))
+                {
+                    Log.Debug("ResolveAndClassifyDeletionCandidatesAsync: CSO {CsoId} was already processed in this import run. Skipping obsolete.",
+                        match.Id);
+                    continue;
+                }
+
+                if (match.Status == ConnectedSystemObjectStatus.Obsolete)
+                    candidates.AlreadyObsolete.Add(match);
+                else
+                    candidates.NewlyMarked.Add(match);
+            }
+        }
     }
 
     /// <summary>
@@ -1676,10 +1698,17 @@ public partial class SyncImportTaskProcessor
     /// Synchronisation Rule still manages does not count against it: no import reads that type, so no later read could
     /// find what this one did not.
     /// </returns>
-    private async Task<bool> ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId)
+    private async Task<bool> ProcessConnectedSystemObjectDeletionsAsync(ImportedExternalIds externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId)
     {
         if (_connectedSystem.ObjectTypes == null)
             return false;
+
+        // What the run holds for deletion detection (#2521): the External IDs it read, and the Object Type change
+        // replacements it holds apart from its creates until deletion detection has decided them (#2049).
+        ImportedExternalIdValuesHeld = externalIdsImported.ValueCount;
+        ObjectTypeChangeReplacementsHeldApart = _objectTypeChangesCarriedOut.Count(change => !connectedSystemObjectsToBeCreated.Contains(change.Replacement));
+        Log.Information("ProcessConnectedSystemObjectDeletionsAsync: comparing against {ImportedExternalIdCount} imported External ID value(s); {ReplacementCount} Object Type change replacement(s) held until deletion detection decides them.",
+            ImportedExternalIdValuesHeld, ObjectTypeChangeReplacementsHeldApart);
 
         var typeChangeRetirements = PrepareObjectTypeChangeRetirements();
 
@@ -1691,7 +1720,7 @@ public partial class SyncImportTaskProcessor
         // The limits guard against objects the import did not find, which may mean the import itself is wrong. An
         // object retired by an Object Type change the Run Profile allows is not one of those: the import returned it,
         // under its new type, and its replacement exists only on condition it is retired (#2049).
-        var newlyMarkedCount = candidates.NewlyMarked.Count(cso => !typeChangeRetirements.Contains(cso.Id));
+        var newlyMarkedCount = candidates.NewlyMarked.Count(candidate => !typeChangeRetirements.Contains(candidate.Id));
 
         var maxCount = _connectedSystemRunProfile.MaxDetectedDeletions;
         var maxPercent = _connectedSystemRunProfile.MaxDetectedDeletionsPercent;
@@ -1706,6 +1735,9 @@ public partial class SyncImportTaskProcessor
 
         var countLimitExceeded = maxCount.HasValue && newlyMarkedCount > maxCount.Value;
         var percentLimitExceeded = maxPercent.HasValue && ShareThreshold.Exceeds(newlyMarkedCount, existingCsoCount, maxPercent.Value);
+
+        // The candidates marked as deleted this run, so that one named twice is marked once.
+        var markedThisRun = new HashSet<Guid>();
 
         if (countLimitExceeded || percentLimitExceeded)
         {
@@ -1724,14 +1756,12 @@ public partial class SyncImportTaskProcessor
             Log.Warning("ProcessConnectedSystemObjectDeletionsAsync: deletion detection refused. {NewlyMarkedCount} of {ExistingCsoCount} Connected System Objects in scope would have been newly marked as deleted, above the Run Profile's limit(s) (MaxDetectedDeletions={MaxCount}, MaxDetectedDeletionsPercent={MaxPercent}). None were marked; {AlreadyObsoleteCount} already-Obsolete candidate(s) also left untouched.",
                 newlyMarkedCount, existingCsoCount, maxCount, maxPercent, candidates.AlreadyObsolete.Count);
 
-            var retiredByTypeChange = new HashSet<Guid>();
-            foreach (var cso in candidates.AlreadyObsolete.Concat(candidates.NewlyMarked).Where(cso => typeChangeRetirements.Contains(cso.Id)))
-            {
-                await ApplyDeletionCandidateAsync(cso, connectedSystemObjectsToBeUpdated);
-                retiredByTypeChange.Add(cso.Id);
-            }
+            var retiredByTypeChange = candidates.AlreadyObsolete.Concat(candidates.NewlyMarked)
+                .Where(candidate => typeChangeRetirements.Contains(candidate.Id))
+                .ToList();
+            await ApplyDeletionCandidatesAsync(retiredByTypeChange, connectedSystemObjectsToBeUpdated, markedThisRun);
 
-            ReconcileCarriedOutObjectTypeChanges(retiredByTypeChange, connectedSystemObjectsToBeCreated);
+            ReconcileCarriedOutObjectTypeChanges(retiredByTypeChange.Select(candidate => candidate.Id).ToHashSet(), connectedSystemObjectsToBeCreated);
             return false;
         }
 
@@ -1740,11 +1770,8 @@ public partial class SyncImportTaskProcessor
         // Applied: exactly today's per-candidate behaviour. Already-Obsolete candidates only ever
         // needed the stale Pending Export cleanup (they were Obsolete before this run started); newly
         // marked candidates get the cleanup, an execution item and the status change.
-        foreach (var cso in candidates.AlreadyObsolete)
-            await ApplyDeletionCandidateAsync(cso, connectedSystemObjectsToBeUpdated);
-
-        foreach (var cso in candidates.NewlyMarked)
-            await ApplyDeletionCandidateAsync(cso, connectedSystemObjectsToBeUpdated);
+        await ApplyDeletionCandidatesAsync(candidates.AlreadyObsolete, connectedSystemObjectsToBeUpdated, markedThisRun);
+        await ApplyDeletionCandidatesAsync(candidates.NewlyMarked, connectedSystemObjectsToBeUpdated, markedThisRun);
 
         // The Activity's message reports these as no longer found (#2129), so it counts what the limits count: an object
         // retired by an Object Type change was found, under its new type, and is already counted once, as created.
@@ -1757,7 +1784,7 @@ public partial class SyncImportTaskProcessor
         }
 
         ReconcileCarriedOutObjectTypeChanges(
-            candidates.NewlyMarked.Concat(candidates.AlreadyObsolete).Select(cso => cso.Id).ToHashSet(),
+            candidates.NewlyMarked.Concat(candidates.AlreadyObsolete).Select(candidate => candidate.Id).ToHashSet(),
             connectedSystemObjectsToBeCreated);
 
         return everyObjectTypeChecked;
@@ -1797,7 +1824,9 @@ public partial class SyncImportTaskProcessor
         if (!MeasureHeldAttributeValues)
             return;
 
-        var held = connectedSystemObjectsToBeCreated.Concat(connectedSystemObjectsToBeUpdated)
+        // An Object Type change's replacement is held apart from the creates until deletion detection decides it (#2521).
+        IEnumerable<ConnectedSystemObject> heldApart = _objectTypeChangesReconciled ? [] : _objectTypeChangesCarriedOut.Select(change => change.Replacement);
+        var held = connectedSystemObjectsToBeCreated.Concat(connectedSystemObjectsToBeUpdated).Concat(heldApart)
             .Sum(cso => (long)cso.AttributeValues.Count + cso.PendingAttributeValueAdditions.Count);
         PeakHeldAttributeValues = Math.Max(PeakHeldAttributeValues, held);
     }
@@ -1811,28 +1840,34 @@ public partial class SyncImportTaskProcessor
         _objectTypeChangesCarriedOut.SelectMany(change => change.Held.CsoIds).ToHashSet();
 
     /// <summary>
-    /// #2049: keeps each carried-out Object Type change whose held objects were all retired, and withdraws the
-    /// replacement of any other before it is created, so one directory object never ends up as two Connected System
-    /// Objects. A held object outside deletion detection's reach (another partition, or a deselected Object Type an
-    /// enabled Synchronisation Rule still manages) is the case this exists for.
+    /// #2049: keeps each carried-out Object Type change whose held objects were all retired, adding its replacement to the
+    /// run's creates, and withdraws the replacement of any other, so one directory object never ends up as two Connected
+    /// System Objects. A held object outside deletion detection's reach (another partition, or a deselected Object Type
+    /// an enabled Synchronisation Rule still manages) is the case this exists for. Until now each replacement was held
+    /// apart from the creates (#2521).
     /// </summary>
     private void ReconcileCarriedOutObjectTypeChanges(HashSet<Guid> retiredCsoIds, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated)
     {
         _objectTypeChangesReconciled = true;
 
-        _objectTypeChangesAllowedCount += _objectTypeChangesCarriedOut.Count(change => change.Held.CsoIds.All(retiredCsoIds.Contains));
-
-        foreach (var change in _objectTypeChangesCarriedOut.Where(change => !change.Held.CsoIds.All(retiredCsoIds.Contains)))
-            WithdrawObjectTypeChange(change, connectedSystemObjectsToBeCreated);
+        foreach (var change in _objectTypeChangesCarriedOut)
+        {
+            if (change.Held.CsoIds.All(retiredCsoIds.Contains))
+            {
+                connectedSystemObjectsToBeCreated.Add(change.Replacement);
+                _objectTypeChangesAllowedCount++;
+            }
+            else
+                WithdrawObjectTypeChange(change);
+        }
     }
 
     /// <summary>
     /// #2049: takes back an Object Type change deletion detection could not complete: the replacement is not created,
     /// the item reports why, and the held object stays as it is.
     /// </summary>
-    private void WithdrawObjectTypeChange(CarriedOutObjectTypeChange change, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated)
+    private void WithdrawObjectTypeChange(CarriedOutObjectTypeChange change)
     {
-        connectedSystemObjectsToBeCreated.Remove(change.Replacement);
         _csoIdsHeldUnderAnotherObjectType.UnionWith(change.Held.CsoIds);
         _objectTypeChangesRefusedCount++;
 
@@ -2089,100 +2124,70 @@ public partial class SyncImportTaskProcessor
     }
 
     /// <summary>
-    /// Run Profile Safeguards (#1618, Layer 2) Phase A step: resolves one external id to the Connected
-    /// System Object deletion detection would act on, with no side effects. Returns null, having
-    /// logged why, for an id that cannot be found (already gone, or the External ID changed mid-run)
-    /// or that belongs to a CSO already processed elsewhere in this import run (e.g. matched by a
-    /// secondary external id): neither is a deletion candidate.
+    /// Run Profile Safeguards (#1618, Layer 2) Phase B: applies deletion detection to already-resolved candidates, in
+    /// order, a batch at a time (#2521). Every candidate has any stale Pending Export cleared, by id, one statement a
+    /// batch; a candidate not already Obsolete is then loaded whole, marked as deleted and queued for update, which records
+    /// its deletion. Called only once the whole run's worth of candidates has been confirmed within the Run Profile's
+    /// limits (or, when refused, for the retirements an allowed Object Type change needs), and never re-resolves a
+    /// candidate.
     /// </summary>
-    /// <param name="connectedSystemObjectExternalId">The value for the External ID attribute.</param>
-    /// <param name="connectedSystemAttributeId">The unique identifier for the attribute that represents the External ID in the current Connected System.</param>
-    /// <param name="processedCsoIds">CSOs already updated elsewhere in this import run, which must not be treated as deletion candidates even if their External ID is not in the import.</param>
-    /// <typeparam name="T">The type for the External ID attribute.</typeparam>
-    /// <exception cref="ArgumentOutOfRangeException">The External ID's runtime type has no known lookup.</exception>
-    private async Task<ConnectedSystemObject?> ResolveDeletionCandidateAsync<T>(T connectedSystemObjectExternalId, int connectedSystemAttributeId, HashSet<Guid> processedCsoIds)
+    /// <remarks>
+    /// A candidate named twice (two missing values resolving to one object) is marked once: the second time it is already
+    /// Obsolete, as it was when each candidate was held whole and the second application found the first one's status.
+    /// </remarks>
+    private async Task ApplyDeletionCandidatesAsync(IReadOnlyList<ConnectedSystemObjectExternalIdMatch> candidates,
+        ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, HashSet<Guid> markedThisRun)
     {
-        // find the cso
-        var cso = connectedSystemObjectExternalId switch
+        foreach (var batch in candidates.Chunk(DeletionCandidateBatchSize))
         {
-            int intId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, intId),
-            string stringId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, stringId),
-            Guid guidId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, guidId),
-            // long was missing here, though the deletion-detection switch has handed this method a
-            // LongNumber anchor since it was written and the repository overload existed the whole time.
-            // Every such deletion fell to the null arm below, reported itself as "not found. No work to
-            // do." and changed nothing, so a LongNumber-anchored Object Type never had a deletion
-            // detected, silently and with the run reporting success.
-            long longId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, longId),
-            decimal decimalId => await _syncRepo.GetConnectedSystemObjectByAttributeAsync(_connectedSystem.Id, connectedSystemAttributeId, decimalId),
-            // Deletion detection decides whether an object still exists, so an anchor type this method
-            // cannot fetch by is a programming error and must say so. Returning null here is what let
-            // the long gap above go unnoticed: it is indistinguishable from an object legitimately
-            // already gone, which is the one outcome deletion detection is entitled to shrug at.
-            _ => throw new ArgumentOutOfRangeException(
-                nameof(connectedSystemObjectExternalId),
-                connectedSystemObjectExternalId,
-                $"Deletion detection cannot obsolete a Connected System Object by an external ID of type {typeof(T).Name}.")
-        };
+            // Clean up any stale Pending Exports for these CSOs. When a CSO's object is deleted from the target system,
+            // any Exported-status Delete PEs (awaiting confirmation) or other stale PEs are no longer relevant. Without this
+            // cleanup, stale PEs accumulate and can cause duplicate PE errors when subsequent operations create new PEs
+            // for other CSOs.
+            //
+            // This runs for already-Obsolete candidates too, and must: export evaluation does not exclude Obsolete
+            // objects, so a synchronisation on another Connected System can stage an export against one at any point
+            // between imports, and that export would be sent to a target object that no longer exists. Reporting nothing
+            // must not become doing nothing.
+            var deletedPeCount = await _syncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync(batch.Select(candidate => candidate.Id).Distinct().ToList());
+            if (deletedPeCount > 0)
+                Log.Information("ApplyDeletionCandidatesAsync: Cleaned up {Count} stale Pending Export(s) for {CandidateCount} obsolete CSO(s)",
+                    deletedPeCount, batch.Length);
 
-        if (cso == null)
-        {
-            Log.Information($"ResolveDeletionCandidateAsync: CSO with external id '{LogSanitiser.Sanitise(connectedSystemObjectExternalId?.ToString())}' not found. No work to do.");
-            return null;
+            // An object stays Obsolete until a synchronisation run on its own Connected System deletes it, so every
+            // import in between finds it missing all over again. Only the first of those is a deletion: the rest need
+            // nothing of the object but the cleanup above, so they are never loaded.
+            var idsToMark = batch
+                .Where(candidate => candidate.Status != ConnectedSystemObjectStatus.Obsolete && !markedThisRun.Contains(candidate.Id))
+                .Select(candidate => candidate.Id)
+                .Distinct()
+                .ToList();
+            if (idsToMark.Count == 0)
+                continue;
+
+            var loaded = await _syncRepo.GetConnectedSystemObjectsForDeletionDetectionAsync(_connectedSystem.Id, idsToMark);
+            DeletionCandidatesLoadedWhole += loaded.Count;
+            if (loaded.Count != idsToMark.Count)
+                Log.Warning("ApplyDeletionCandidatesAsync: {Missing} of {Count} Connected System Object(s) resolved as deletion candidates were no longer found when loaded; they are not marked as deleted.",
+                    idsToMark.Count - loaded.Count, idsToMark.Count);
+
+            // In the candidates' order, as each was applied when they were held whole.
+            var loadedById = loaded.ToDictionary(cso => cso.Id);
+            foreach (var cso in idsToMark.Where(loadedById.ContainsKey).Select(id => loadedById[id]))
+            {
+                MarkDeletionDetected(cso, connectedSystemObjectsToBeUpdated);
+                markedThisRun.Add(cso.Id);
+            }
         }
-
-        // Skip CSOs that were already processed in this import run (e.g., matched by secondary external ID)
-        // Their external ID may have been updated during import, so they appear as "not in import" by old ID
-        if (processedCsoIds.Contains(cso.Id))
-        {
-            Log.Debug("ResolveDeletionCandidateAsync: CSO {CsoId} was already processed in this import run. Skipping obsolete.",
-                cso.Id);
-            return null;
-        }
-
-        return cso;
     }
 
     /// <summary>
-    /// Run Profile Safeguards (#1618, Layer 2) Phase B step: applies deletion detection to one
-    /// already-resolved candidate. Always clears any stale Pending Export against it; additionally
-    /// records the deletion and flips the status only when the candidate was not already Obsolete
-    /// (i.e. this is genuinely its first missing import). Called only once the whole run's worth of
-    /// candidates has been confirmed within the Run Profile's limits; never re-resolves the candidate,
-    /// so it costs no further lookup.
+    /// Records that deletion detection found an object missing for the first time: an execution item reporting the
+    /// deletion, the object marked Obsolete, and the object queued for update, which saves its status and records its
+    /// change. The synchronisation that follows deletes it.
     /// </summary>
-    private async Task ApplyDeletionCandidateAsync(ConnectedSystemObject cso, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
+    private void MarkDeletionDetected(ConnectedSystemObject cso, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
     {
-        // Clean up any stale Pending Exports for this CSO. When a CSO's object is deleted from the
-        // target system, any Exported-status Delete PEs (awaiting confirmation) or other stale PEs
-        // are no longer relevant. Without this cleanup, stale PEs accumulate and can cause duplicate
-        // PE errors when subsequent operations create new PEs for other CSOs.
-        //
-        // This runs ahead of the already-Obsolete guard below, and must: export evaluation does not
-        // exclude Obsolete objects, so a synchronisation on another Connected System can stage an
-        // export against this one at any point between imports, and that export would be sent to a
-        // target object that no longer exists. Reporting nothing must not become doing nothing.
-        var deletedPeCount = await _syncRepo
-            .DeletePendingExportsByConnectedSystemObjectIdsAsync(new[] { cso.Id });
-        if (deletedPeCount > 0)
-        {
-            Log.Information("ApplyDeletionCandidateAsync: Cleaned up {Count} stale Pending Export(s) for obsolete CSO {CsoId}",
-                deletedPeCount, cso.Id);
-        }
-
-        // An object stays Obsolete until a synchronisation run on its own Connected System deletes it,
-        // so every import in between finds it missing all over again. Only the first of those is a
-        // deletion. On the second the object was Obsolete before the run started and Obsolete after, so
-        // an execution item here would claim a deletion that never happened: it inflates the Activity's
-        // deleted total, and the causality graph draws it as the start of a fresh chain, because a
-        // deletion arriving out of nowhere is exactly what it looks like. Report nothing, write nothing.
-        if (cso.Status == ConnectedSystemObjectStatus.Obsolete)
-        {
-            Log.Debug("ApplyDeletionCandidateAsync: CSO {CsoId} is already Obsolete and awaiting a synchronisation run. Nothing to report.",
-                cso.Id);
-            return;
-        }
-
         // we need to create a Run Profile execution item for the object deletion. it will get persisted in the activity tree.
         var activityRunProfileExecutionItem = new ActivityRunProfileExecutionItem();
         _activityRunProfileExecutionItems.Add(activityRunProfileExecutionItem);
@@ -2250,7 +2255,7 @@ public partial class SyncImportTaskProcessor
     /// <param name="totalObjectsImported">How many objects this run read in total, across every object type - the same
     /// "no objects imported means do nothing" guard the caller already applies before deletion detection.</param>
     private async Task RetryUnconfirmedExportedCreatesAsync(
-        IReadOnlyCollection<ExternalIdPair> externalIdsImported,
+        ImportedExternalIds externalIdsImported,
         IReadOnlySet<Guid> updatedCsoIds,
         int? partitionId,
         int totalObjectsImported)
@@ -2276,9 +2281,7 @@ public partial class SyncImportTaskProcessor
             if (candidateSummaries.Count == 0)
                 continue;
 
-            var importedExternalIdsForType = ImportedExternalIdSet.Build(externalIdsImported
-                .Where(pair => pair.ConnectedSystemObjectTypeId == selectedObjectType.Id)
-                .Select(pair => pair.ConnectedSystemImportObjectAttribute),
+            var importedExternalIdsForType = externalIdsImported.ForObjectType(selectedObjectType.Id,
                 selectedObjectType.Attributes.FirstOrDefault(a => a.IsExternalId)?.CaseExact ?? false);
 
             // The runType/totalObjectsImported guard above already holds for every candidate; the only
@@ -2342,71 +2345,6 @@ public partial class SyncImportTaskProcessor
     }
 
     /// <summary>
-    /// The External Id values a Full Import reported for one Object Type, held as typed sets so each
-    /// Pending Provisioning CSO's own External Id is a constant-time lookup rather than a scan of every
-    /// imported object (per type, mirroring <see cref="ResolveDeletionCandidatesAsync"/>'s own per-type
-    /// comparison).
-    /// </summary>
-    private sealed class ImportedExternalIdSet
-    {
-        private readonly HashSet<string> _strings;
-        private readonly HashSet<int> _ints = [];
-        private readonly HashSet<long> _longs = [];
-        private readonly HashSet<decimal> _decimals = [];
-        private readonly HashSet<Guid> _guids = [];
-
-        private ImportedExternalIdSet(bool caseExact)
-        {
-            _strings = new HashSet<string>(IdentifierKey.Comparer(caseExact));
-        }
-
-        /// <param name="caseExact">The External ID attribute's case-exact declaration: a Text value in another case is the
-        /// same object unless it is set (#2051).</param>
-        public static ImportedExternalIdSet Build(IEnumerable<ConnectedSystemImportObjectAttribute> importedExternalIdAttributes, bool caseExact)
-        {
-            var set = new ImportedExternalIdSet(caseExact);
-            foreach (var attribute in importedExternalIdAttributes)
-            {
-                // Only the lists that hold values are read: reading a list allocates it (#2521).
-                if (attribute.HasStringValues)
-                    set._strings.UnionWith(attribute.StringValues);
-                if (attribute.HasIntValues)
-                    set._ints.UnionWith(attribute.IntValues);
-                if (attribute.HasLongValues)
-                    set._longs.UnionWith(attribute.LongValues);
-                if (attribute.HasDecimalValues)
-                    set._decimals.UnionWith(attribute.DecimalValues);
-                if (attribute.HasGuidValues)
-                    set._guids.UnionWith(attribute.GuidValues);
-            }
-            return set;
-        }
-
-        public bool Contains(ConnectedSystemObjectAttributeValue? externalIdValue)
-        {
-            if (externalIdValue == null)
-                return false;
-
-            return Contains(externalIdValue.StringValue, externalIdValue.IntValue, externalIdValue.LongValue,
-                externalIdValue.DecimalValue, externalIdValue.GuidValue);
-        }
-
-        /// <summary>
-        /// Overload for the lean <see cref="PendingExportRetryCandidateSummary"/> projection, which
-        /// carries the same typed nullable columns without materialising a
-        /// <see cref="ConnectedSystemObjectAttributeValue"/>.
-        /// </summary>
-        public bool Contains(string? stringValue, int? intValue, long? longValue, decimal? decimalValue, Guid? guidValue)
-        {
-            return (stringValue != null && _strings.Contains(stringValue)) ||
-                   (intValue.HasValue && _ints.Contains(intValue.Value)) ||
-                   (longValue.HasValue && _longs.Contains(longValue.Value)) ||
-                   (decimalValue.HasValue && _decimals.Contains(decimalValue.Value)) ||
-                   (guidValue.HasValue && _guids.Contains(guidValue.Value));
-        }
-    }
-
-    /// <summary>
     /// Applies the retry transition to one exported Create a Full Import did not see at all: the same
     /// transition reconciliation applies to a change that fails to confirm, applied here to every change
     /// still awaiting confirmation, since none of them were confirmed - nothing was seen at all. Each is
@@ -2431,7 +2369,7 @@ public partial class SyncImportTaskProcessor
     /// </summary>
     /// <param name="importResult">The entire, or a page's worth of import results from a Connected System to retrieve External IDs from.</param>
     /// <param name="externalIdsImported">The collection used to store all External IDs, over all pages of import results.</param>
-    private void AddExternalIdsToCollection(ConnectedSystemImportResult importResult, ICollection<ExternalIdPair> externalIdsImported)
+    private void AddExternalIdsToCollection(ConnectedSystemImportResult importResult, ImportedExternalIds externalIdsImported)
     {
         if (_connectedSystem.ObjectTypes == null)
             return;
@@ -2478,11 +2416,7 @@ public partial class SyncImportTaskProcessor
             // Objects the Connector flagged with an error stay in this collection when they do have a
             // usable external ID: they exist in the Connected System, and deleting their CSO because one
             // attribute failed to parse would be data loss.
-            externalIdsImported.Add(new ExternalIdPair
-            {
-                ConnectedSystemObjectTypeId = connectedSystemObjectType.Id,
-                ConnectedSystemImportObjectAttribute = externalIdAttribute
-            });
+            externalIdsImported.Add(connectedSystemObjectType.Id, externalIdAttribute);
         }
     }
 
@@ -3697,13 +3631,18 @@ public partial class SyncImportTaskProcessor
                     {
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
-                        connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
+
+                        // An Object Type change's replacement exists only on condition that deletion detection retires
+                        // what it replaces (#2049), so it is held apart from the run's creates until that is decided
+                        // (#2521); ReconcileCarriedOutObjectTypeChanges adds it to them if it stands.
+                        if (heldElsewhere != null)
+                            _objectTypeChangesCarriedOut.Add(new CarriedOutObjectTypeChange(activityRunProfileExecutionItem, connectedSystemObject, csObjectType, heldElsewhere));
+                        else
+                            connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
+
                         if (laterPagesSupersede && duplicateKey != null)
                             _earlierPageCopies[duplicateKey] = new EarlierPageCopy(activityRunProfileExecutionItem, HeldCso: null, HeldStatusBefore: default,
                                 connectedSystemObject, EarlierPageCopyCount.Creation);
-
-                        if (heldElsewhere != null)
-                            _objectTypeChangesCarriedOut.Add(new CarriedOutObjectTypeChange(activityRunProfileExecutionItem, connectedSystemObject, csObjectType, heldElsewhere));
 
                         // SPEC-1082 D7: Full Import created objects request a stamp with the incoming
                         // hash + current type fingerprint, written after this create batch commits

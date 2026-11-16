@@ -178,6 +178,28 @@ public class DeletionDetectionLimitTests
     }
 
     [Test]
+    public async Task ProcessConnectedSystemObjectDeletions_Refused_LoadsNoCandidateWholeAsync()
+    {
+        // A refused detection changes nothing, so it needs nothing of a candidate but its id and status (#2521, Phase 3).
+        // Loading each one whole is what made a mass deletion the limit exists for (a broken filter, a wrong base DN) cost
+        // one query and one whole object per object JIM holds, all held to the end of the run, only to refuse.
+        var result = await RunAsync(candidateCount: 5, maxDetectedDeletions: 4, maxDetectedDeletionsPercent: null, existingCsoCount: 100,
+            alreadyObsoleteCandidateCount: 3);
+
+        Assert.That(result.LoadedWhole, Is.Zero);
+    }
+
+    [Test]
+    public async Task ProcessConnectedSystemObjectDeletions_Applied_LoadsWholeOnlyTheObjectsItMarksAsync()
+    {
+        // An already-Obsolete candidate only has its stale Pending Exports cleared, by id (#2521, Phase 3).
+        var result = await RunAsync(candidateCount: 2, maxDetectedDeletions: null, maxDetectedDeletionsPercent: null, existingCsoCount: 100,
+            alreadyObsoleteCandidateCount: 3);
+
+        Assert.That(result.LoadedWhole, Is.EqualTo(2));
+    }
+
+    [Test]
     public void DetectedDeletionsWithheld_LeftNullUnlessDeletionDetectionRuns()
     {
         // Only a Full Import that runs deletion detection, or a Delta Import that completes (#2089, see
@@ -197,7 +219,8 @@ public class DeletionDetectionLimitTests
         List<ConnectedSystemObject> Updated,
         List<ActivityRunProfileExecutionItem> ExecutionItems,
         Activity Activity,
-        SyncRepository Repository);
+        SyncRepository Repository,
+        int LoadedWhole);
 
     /// <summary>
     /// Seeds <paramref name="existingCsoCount"/> Connected System Objects that are not Obsolete, of which
@@ -225,19 +248,13 @@ public class DeletionDetectionLimitTests
         var importedExternalIds = Enumerable.Range(0, Math.Max(0, existingCsoCount - candidateCount)).Select(i => $"present-{i}").ToList();
         foreach (var externalId in importedExternalIds)
             SeedCandidate(repository, externalId, ConnectedSystemObjectStatus.Normal, seedPendingExport: false);
-        var externalIdsImported = new List<ExternalIdPair>
+        var externalIdsImported = new ImportedExternalIds();
+        externalIdsImported.Add(ObjectTypeId, new ConnectedSystemImportObjectAttribute
         {
-            new()
-            {
-                ConnectedSystemObjectTypeId = ObjectTypeId,
-                ConnectedSystemImportObjectAttribute = new ConnectedSystemImportObjectAttribute
-                {
-                    Name = "id",
-                    Type = AttributeDataType.Text,
-                    StringValues = importedExternalIds
-                }
-            }
-        };
+            Name = "id",
+            Type = AttributeDataType.Text,
+            StringValues = importedExternalIds
+        });
 
         var connectedSystem = new ConnectedSystem
         {
@@ -309,7 +326,7 @@ public class DeletionDetectionLimitTests
                 $"SyncImportTaskProcessor.{fieldName} was not found. It is where the import accumulates the " +
                 "execution items it will persist, and whether an item lands there is the behaviour under test."));
 
-        return new DeletionResult(toBeUpdated, executionItems, activity, repository);
+        return new DeletionResult(toBeUpdated, executionItems, activity, repository, processor.DeletionCandidatesLoadedWhole);
     }
 
     private static void SeedCandidate(SyncRepository repository, string externalId, ConnectedSystemObjectStatus status, bool seedPendingExport)

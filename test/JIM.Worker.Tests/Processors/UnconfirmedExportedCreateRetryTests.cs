@@ -51,7 +51,7 @@ public class UnconfirmedExportedCreateRetryTests
 
         // Nothing in the imported set names this object, but the run did read something (totalObjectsImported
         // > 0), so the "no objects imported means do nothing" guard does not suppress the step.
-        await InvokeRetryStepAsync(processor, externalIdsImported: [], totalObjectsImported: 1);
+        await InvokeRetryStepAsync(processor, externalIdsImported: new ImportedExternalIds(), totalObjectsImported: 1);
 
         var pendingExport = repo.PendingExports[pendingExportId];
         using (Assert.EnterMultipleScope())
@@ -85,7 +85,7 @@ public class UnconfirmedExportedCreateRetryTests
         // the object still exists; marking a retry from it would be wrong.
         var (processor, repo, _, pendingExportId, attrChangeId) = BuildFixture(ConnectedSystemRunType.DeltaImport);
 
-        await InvokeRetryStepAsync(processor, externalIdsImported: [], totalObjectsImported: 1);
+        await InvokeRetryStepAsync(processor, externalIdsImported: new ImportedExternalIds(), totalObjectsImported: 1);
 
         var pendingExport = repo.PendingExports[pendingExportId];
         using (Assert.EnterMultipleScope())
@@ -114,10 +114,8 @@ public class UnconfirmedExportedCreateRetryTests
 
         var importAttribute = new ConnectedSystemImportObjectAttribute { Name = "id", Type = AttributeDataType.Text };
         importAttribute.StringValues.Add(ExternalIdValue.ToLowerInvariant());
-        var externalIdsImported = new List<ExternalIdPair>
-        {
-            new() { ConnectedSystemObjectTypeId = ObjectTypeId, ConnectedSystemImportObjectAttribute = importAttribute }
-        };
+        var externalIdsImported = new ImportedExternalIds();
+        externalIdsImported.Add(ObjectTypeId, importAttribute);
 
         await InvokeRetryStepAsync(processor, externalIdsImported, totalObjectsImported: 1);
 
@@ -133,10 +131,8 @@ public class UnconfirmedExportedCreateRetryTests
 
         var seenImportAttribute = new ConnectedSystemImportObjectAttribute { Name = "id", Type = AttributeDataType.Text };
         seenImportAttribute.StringValues.Add(ExternalIdValue);
-        var externalIdsImported = new List<ExternalIdPair>
-        {
-            new() { ConnectedSystemObjectTypeId = ObjectTypeId, ConnectedSystemImportObjectAttribute = seenImportAttribute }
-        };
+        var externalIdsImported = new ImportedExternalIds();
+        externalIdsImported.Add(ObjectTypeId, seenImportAttribute);
 
         await InvokeRetryStepAsync(processor, externalIdsImported, totalObjectsImported: 1);
 
@@ -162,7 +158,7 @@ public class UnconfirmedExportedCreateRetryTests
         // read as proof that every outstanding Create is now absent.
         var (processor, repo, _, pendingExportId, attrChangeId) = BuildFixture(ConnectedSystemRunType.FullImport);
 
-        await InvokeRetryStepAsync(processor, externalIdsImported: [], totalObjectsImported: 0);
+        await InvokeRetryStepAsync(processor, externalIdsImported: new ImportedExternalIds(), totalObjectsImported: 0);
 
         var pendingExport = repo.PendingExports[pendingExportId];
         using (Assert.EnterMultipleScope())
@@ -187,10 +183,8 @@ public class UnconfirmedExportedCreateRetryTests
 
         var seenImportAttribute = new ConnectedSystemImportObjectAttribute { Name = "id", Type = AttributeDataType.Text };
         seenImportAttribute.StringValues.Add(ExternalIdValue);
-        var externalIdsImported = new List<ExternalIdPair>
-        {
-            new() { ConnectedSystemObjectTypeId = ObjectTypeId, ConnectedSystemImportObjectAttribute = seenImportAttribute }
-        };
+        var externalIdsImported = new ImportedExternalIds();
+        externalIdsImported.Add(ObjectTypeId, seenImportAttribute);
 
         await InvokeRetryStepAsync(processor, externalIdsImported, totalObjectsImported: 2);
 
@@ -236,7 +230,7 @@ public class UnconfirmedExportedCreateRetryTests
     /// partition scoping.
     /// </summary>
     private static async Task InvokeRetryStepAsync(
-        SyncImportTaskProcessor processor, IReadOnlyCollection<ExternalIdPair> externalIdsImported, int totalObjectsImported)
+        SyncImportTaskProcessor processor, ImportedExternalIds externalIdsImported, int totalObjectsImported)
     {
         const string methodName = "RetryUnconfirmedExportedCreatesAsync";
         var method = typeof(SyncImportTaskProcessor).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)

@@ -3080,6 +3080,113 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         return allMatches.FirstOrDefault();
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Raw Npgsql over a typed <c>unnest(@values) WITH ORDINALITY</c> array, so each value keeps its position and a value
+    /// asked for twice is answered twice. The predicate is the single-value lookup's, statement for statement: the attribute
+    /// and the value (text exactly for a case-exact attribute, else <c>lower()</c> on both sides, #2051), any Object Type,
+    /// Partition and status, the first object by id. DISTINCT counts an object holding the value twice once, as the
+    /// lookup's <c>Any()</c> does. Each value probes <c>IX_ConnectedSystemObjectAttributeValues_AttributeId_*</c>, or
+    /// <c>IX_CsoAttrVal_Lower_StringValue</c> for text ignoring case.
+    /// </remarks>
+    public async Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int attributeId,
+        IReadOnlyList<T> attributeValues) where T : notnull
+    {
+        var matches = new List<ConnectedSystemObjectExternalIdMatch?>(attributeValues.Count);
+        matches.AddRange(Enumerable.Repeat<ConnectedSystemObjectExternalIdMatch?>(null, attributeValues.Count));
+        if (attributeValues.Count == 0)
+            return matches;
+
+        string valuePredicate;
+        NpgsqlTypes.NpgsqlDbType elementType;
+        if (typeof(T) == typeof(string))
+        {
+            var caseExact = await Repository.Database.ConnectedSystemAttributes
+                .Where(a => a.Id == attributeId)
+                .Select(a => a.CaseExact)
+                .FirstOrDefaultAsync();
+            valuePredicate = caseExact ? "av.\"StringValue\" = v.input" : "lower(av.\"StringValue\") = lower(v.input)";
+            elementType = NpgsqlTypes.NpgsqlDbType.Text;
+        }
+        else if (typeof(T) == typeof(int))
+            (valuePredicate, elementType) = ("av.\"IntValue\" = v.input", NpgsqlTypes.NpgsqlDbType.Integer);
+        else if (typeof(T) == typeof(long))
+            (valuePredicate, elementType) = ("av.\"LongValue\" = v.input", NpgsqlTypes.NpgsqlDbType.Bigint);
+        else if (typeof(T) == typeof(decimal))
+            // Numeric equality in the database, so a stored 4200.00 matches a supplied 4200 (#1283).
+            (valuePredicate, elementType) = ("av.\"DecimalValue\" = v.input", NpgsqlTypes.NpgsqlDbType.Numeric);
+        else if (typeof(T) == typeof(Guid))
+            (valuePredicate, elementType) = ("av.\"GuidValue\" = v.input", NpgsqlTypes.NpgsqlDbType.Uuid);
+        else
+            throw new ArgumentOutOfRangeException(nameof(attributeValues), typeof(T).Name,
+                $"Connected System Objects cannot be looked up by an External ID of type {typeof(T).Name}.");
+
+        var sql = $"""
+            SELECT m.ord, m."Id", m."Status", m."TypeId", m.matches
+            FROM (
+                SELECT x.ord, x."Id", x."Status", x."TypeId",
+                       count(*) OVER (PARTITION BY x.ord) AS matches,
+                       row_number() OVER (PARTITION BY x.ord ORDER BY x."Id") AS rn
+                FROM (
+                    SELECT DISTINCT v.ord, cso."Id", cso."Status", cso."TypeId"
+                    FROM unnest(@values) WITH ORDINALITY AS v(input, ord)
+                    JOIN "ConnectedSystemObjectAttributeValues" av
+                        ON av."AttributeId" = @attributeId
+                       AND {valuePredicate}
+                    JOIN "ConnectedSystemObjects" cso ON cso."Id" = av."ConnectedSystemObjectId"
+                    WHERE cso."ConnectedSystemId" = @connectedSystemId
+                ) x
+            ) m
+            WHERE m.rn = 1
+            """;
+
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        var transaction = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.Add(new NpgsqlParameter("values", NpgsqlTypes.NpgsqlDbType.Array | elementType) { Value = attributeValues.ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("attributeId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = attributeId });
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            var position = (int)reader.GetInt64(0) - 1;
+            var match = new ConnectedSystemObjectExternalIdMatch(reader.GetGuid(1), (ConnectedSystemObjectStatus)reader.GetInt32(2), reader.GetInt32(3),
+                (int)reader.GetInt64(4));
+            matches[position] = match;
+            if (match.MatchCount > 1)
+                Log.Warning("GetConnectedSystemObjectExternalIdMatchesAsync: Found {Count} Connected System Objects with the same external ID '{ExternalId}' in Connected System {ConnectedSystemId}. Returning the first, {CsoId}. This indicates duplicate CSOs that should be investigated.",
+                    match.MatchCount, LogSanitiser.Sanitise(attributeValues[position].ToString()), connectedSystemId, match.Id);
+        }
+
+        return matches;
+    }
+
+    /// <inheritdoc />
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForDeletionDetectionAsync(int connectedSystemId, IReadOnlyCollection<Guid> csoIds)
+    {
+        if (csoIds.Count == 0)
+            return [];
+
+        var ids = csoIds.ToList();
+        return await Repository.Database.ConnectedSystemObjects
+            .AsSplitQuery()
+            .Include(cso => cso.Type)
+            .ThenInclude(t => t.Attributes)
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            // Include resolved reference values with shallow refs (Type only, no AttributeValues), as the single-value
+            // lookup by attribute does. See #320.
+            .Include(cso => cso.AttributeValues)
+            .ThenInclude(av => av.ReferenceValue)
+            .ThenInclude(refCso => refCso!.Type)
+            .Where(cso => cso.ConnectedSystem.Id == connectedSystemId && ids.Contains(cso.Id))
+            .OrderBy(cso => cso.Id)
+            .ToListAsync();
+    }
+
     /// <summary>
     /// SPEC-1082 D8: bulk-loads all CSO import state for a Connected System into a lightweight
     /// dictionary, keyed by <see cref="CsoLookupKey"/>. Each entry carries the CSO ID with the stored
