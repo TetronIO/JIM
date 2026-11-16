@@ -1993,6 +1993,7 @@ return @{
     CrossDomainSystemId = $crossDomainSystem.id
     CrossDomainImportProfileId = $crossDomainImportProfile.id
     CrossDomainDeltaImportProfileId = $crossDomainDeltaImportProfile.id
+    CrossDomainFullSyncProfileId = $crossDomainFullSyncProfile.id
     CrossDomainDeltaSyncProfileId = $crossDomainDeltaSyncProfile.id
     CrossDomainExportProfileId = $crossDomainExportProfile.id
 }
