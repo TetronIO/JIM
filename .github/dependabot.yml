@@ -20,6 +20,11 @@ updates:
       # Ignore all major version updates
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # PowerShell 7.7 (System.Management.Automation 7.7.x) targets net11.0 only and
+      # fails restore on JIM's net10.0 projects (NU1202; see #2962). Remove this entry
+      # when JIM moves to .NET 11.
+      - dependency-name: "System.Management.Automation"
+        versions: [">= 7.7.0"]
     groups:
       # Group .NET runtime and SDK updates together
       dotnet-runtime:
