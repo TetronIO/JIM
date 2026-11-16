@@ -97,8 +97,8 @@ public interface IConnectedSystemRepository
     /// <summary>
     /// See <see cref="ISyncRepository.GetConnectedSystemObjectExternalIdMatchesAsync{T}"/>.
     /// </summary>
-    public Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int attributeId,
-        IReadOnlyList<T> attributeValues) where T : notnull;
+    public Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int objectTypeId, int? partitionId,
+        int attributeId, IReadOnlyList<T> attributeValues) where T : notnull;
 
     /// <summary>
     /// See <see cref="ISyncRepository.GetConnectedSystemObjectsForDeletionDetectionAsync"/>.
