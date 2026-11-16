@@ -18,19 +18,38 @@ public class FaultingSyncServerProxy : DispatchProxy
     private ISyncServer _inner = null!;
     private string _failingMethodName = null!;
     private Exception _exception = null!;
+    private int _failOnCall = 1;
+    private int _calls;
+    private Action? _onCall;
 
     /// <summary>
     /// Creates a proxy over <paramref name="inner"/> whose <paramref name="failingMethodName"/> returns a faulted
     /// task carrying <paramref name="exception"/>, as a failing asynchronous call does, instead of calling through.
-    /// The method may return <see cref="Task"/> or <see cref="Task{TResult}"/>.
+    /// The method may return <see cref="Task"/> or <see cref="Task{TResult}"/>. With <paramref name="failOnCall"/>, the
+    /// calls before that one go through, so a run can fail part-way through a step it repeats (a save batch).
     /// </summary>
-    public static ISyncServer Create(ISyncServer inner, string failingMethodName, Exception exception)
+    public static ISyncServer Create(ISyncServer inner, string failingMethodName, Exception exception, int failOnCall = 1)
     {
         var proxy = Create<ISyncServer, FaultingSyncServerProxy>();
         var faulting = (FaultingSyncServerProxy)(object)proxy;
         faulting._inner = inner;
         faulting._failingMethodName = failingMethodName;
         faulting._exception = exception;
+        faulting._failOnCall = failOnCall;
+        return proxy;
+    }
+
+    /// <summary>
+    /// Creates a proxy over <paramref name="inner"/> that runs <paramref name="onCall"/> as <paramref name="methodName"/>
+    /// is called, then calls through: a run can be cancelled while one of its steps is under way.
+    /// </summary>
+    public static ISyncServer CreateObserving(ISyncServer inner, string methodName, Action onCall)
+    {
+        var proxy = Create<ISyncServer, FaultingSyncServerProxy>();
+        var observing = (FaultingSyncServerProxy)(object)proxy;
+        observing._inner = inner;
+        observing._failingMethodName = methodName;
+        observing._onCall = onCall;
         return proxy;
     }
 
@@ -40,8 +59,14 @@ public class FaultingSyncServerProxy : DispatchProxy
         if (targetMethod == null)
             throw new InvalidOperationException("DispatchProxy invoked with no target method.");
 
-        if (targetMethod.Name != _failingMethodName)
+        if (targetMethod.Name != _failingMethodName || ++_calls < _failOnCall)
             return targetMethod.Invoke(_inner, args);
+
+        if (_onCall != null)
+        {
+            _onCall();
+            return targetMethod.Invoke(_inner, args);
+        }
 
         if (targetMethod.ReturnType == typeof(Task))
             return Task.FromException(_exception);

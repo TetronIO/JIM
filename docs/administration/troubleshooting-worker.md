@@ -30,7 +30,7 @@ answers:
 
 ## :material-alert-octagon-outline: `Task was abandoned due to worker crash or restart.`
 
-**What it means.** The worker stopped while it was running this Activity: it restarted, crashed, or its server went down. JIM marks the Activity **Failed with error** when the worker starts again, or when the worker has not reported progress for the [Stale task timeout](configuration.md#service-settings) Service Setting (five minutes by default). Whatever the run had already saved stays saved, and nothing is left half-written: the next run carries on from the state JIM's data is in.
+**What it means.** The worker stopped while it was running this Activity: it restarted, crashed, or its server went down. JIM marks the Activity **Failed with error** when the worker starts again, or when the worker has not reported progress for the [Stale task timeout](configuration.md#service-settings) Service Setting (five minutes by default). Whatever the run had already saved stays saved, and the next run carries on from the state JIM's data is in. An import stopped this way has saved only part of what it read, so JIM refuses to synchronise its Connected System until a Full Import of it completes ([why, and what to run](troubleshooting-synchronisation.md#failed-with-error-run-profile-cannot-run-an-import-of-connected-system-stopped-part-way-through-saving-what-it-read)).
 
 When the Worker's last heartbeat showed memory low, the message adds `The Worker most likely ran out of memory`, with the figures it last reported: the operating system stops a process that runs out of memory without a word, so that last reading is the evidence.
 
@@ -40,7 +40,7 @@ When the Worker's last heartbeat showed memory low, the message adds `The Worker
 
 ## :material-memory: `The Worker stopped this run because its memory was nearly exhausted`
 
-**What it means.** While the run was going, 92% or more of the memory the Worker can draw on was in use, most of it by the Worker, so the Worker stopped the run rather than be stopped by the operating system part-way through. The Activity is **Failed with error**, and the message gives the figures. What the run had already saved stays saved, as for any failed run. If the run did not stop when asked, the message says the Worker `restarted itself`: it recorded why and restarted, which is what the operating system would otherwise have done without a word. A run that finished while memory was above 85% is **Complete with warning** instead, saying `Memory was low while this ran`.
+**What it means.** While the run was going, 92% or more of the memory the Worker can draw on was in use, most of it by the Worker, so the Worker stopped the run rather than be stopped by the operating system part-way through. The Activity is **Failed with error**, and the message gives the figures. What the run had already saved stays saved, as for any failed run; for an import, that means synchronisation of its Connected System waits for a Full Import, as above. If the run did not stop when asked, the message says the Worker `restarted itself`: it recorded why and restarted, which is what the operating system would otherwise have done without a word. A run that finished while memory was above 85% is **Complete with warning** instead, saying `Memory was low while this ran`.
 
 **How to fix.** Give JIM more memory (the host's, or the Worker container's limit if you set one), or run less at once: a smaller page size on the Run Profile, or fewer Run Profiles in parallel. Then start the Run Profile again.
 

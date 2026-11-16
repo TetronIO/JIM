@@ -390,6 +390,11 @@ public class Worker : BackgroundService
                                                 if (await RefuseIfRunProfileDisabledAsync(taskJim, newWorkerTask.Activity, runProfile))
                                                     break;
 
+                                                // An import of this Connected System stopped part-way (#2521): a synchronisation would read the
+                                                // half-saved import. Refused the same way, before any step is declared.
+                                                if (await RefuseIfImportIncompleteAsync(taskJim, newWorkerTask.Activity, connectedSystem, runProfile))
+                                                    break;
+
                                                 // Record the steps this run can perform before it starts, so the
                                                 // Activity shows the whole journey rather than only the step it has
                                                 // reached (#454). Owned here because every run type needs it declared
@@ -1638,6 +1643,25 @@ public class Worker : BackgroundService
         Log.Warning("RefuseIfRunProfileDisabledAsync: Run Profile {RunProfileId} is disabled ({DisabledReason}); its run is refused.",
             runProfile.Id, runProfile.DisabledReason);
         await taskJim.Activities.FailActivityWithErrorAsync(activity, refusal);
+        return true;
+    }
+
+    /// <summary>
+    /// Refuses a Full or Delta Synchronisation of a Connected System marked import incomplete (#2521): an import stopped
+    /// part-way through writing what it read, and a synchronisation reading the half-saved Connector Space would remove
+    /// every Metaverse reference whose target the import had not yet saved, and export the removals. Fails the run's
+    /// Activity with the reason and the remedy, as <see cref="RefuseIfRunProfileDisabledAsync"/> does, so a Schedule
+    /// moves on under its failure rules with the step recorded as failed. Imports (the remedy) and exports run.
+    /// </summary>
+    /// <returns>True when the run was refused; false when it goes ahead.</returns>
+    internal static async Task<bool> RefuseIfImportIncompleteAsync(JimApplication taskJim, Activity activity, ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile)
+    {
+        if (connectedSystem.ImportIncompleteSince is not { } since || !ImportCompleteness.RefusesWhileImportIncomplete(runProfile.RunType))
+            return false;
+
+        Log.Warning("RefuseIfImportIncompleteAsync: Connected System {ConnectedSystemId} is marked import incomplete (since {Since:o}); Run Profile {RunProfileId} ({RunType}) is refused until a Full Import completes.",
+            connectedSystem.Id, since, runProfile.Id, runProfile.RunType);
+        await taskJim.Activities.FailActivityWithErrorAsync(activity, ImportCompleteness.DescribeSynchronisationRefusal(connectedSystem, runProfile));
         return true;
     }
 

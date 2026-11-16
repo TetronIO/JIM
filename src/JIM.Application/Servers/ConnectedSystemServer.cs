@@ -7438,7 +7438,8 @@ public partial class ConnectedSystemServer
     /// Causes all the Connected System Objects and their dependencies to be deleted for a Connected System.
     /// This includes: Pending Exports, CSO attribute values, change history, and disconnects CSOs from MVOs.
     /// It also removes every Delta Import starting point (#2715, #2724): each Partition's watermark, and the watermark the
-    /// Connector keeps in the persisted connector data, so the next Delta Import reads every object.
+    /// Connector keeps in the persisted connector data, so the next Delta Import reads every object. And it clears the
+    /// import-incomplete marker (#2521): nothing is left of an import that stopped part-way for a synchronisation to misread.
     /// Once performed, an admin must then re-synchronise all connectors to re-calculate any metaverse and Connected System Object changes.
     /// </summary>
     /// <remarks>
@@ -7485,6 +7486,9 @@ public partial class ConnectedSystemServer
         // Keep the instance in step with the database: on the Worker's tracking context it is the tracked one, and a later
         // save must not mistake the old value for the current one.
         connectedSystem.PersistedConnectorData = persistedConnectorDataAfterClear;
+
+        // The clear took the import-incomplete marker down with the objects it was about (#2521).
+        connectedSystem.ImportIncompleteSince = null;
 
         // Arm the stranded-value sweep (#1549) with this clear's UTC time: the clear just hard-deleted every
         // Connected System Object of this system without obsoletion, so any Metaverse attribute value it

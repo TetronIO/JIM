@@ -63,6 +63,13 @@ function Get-JIMConnectedSystem {
         Gets whether the Connected System's configuration has changed since its last Full Synchronisation.
 
     .EXAMPLE
+        Get-JIMConnectedSystem | Where-Object { $_.ImportIncompleteSince } | Select-Object Name, ImportIncompleteSince
+
+        Lists the Connected Systems whose Full and Delta Synchronisation are refused because an import stopped part-way
+        through saving what it read. A Full Import of each, reading all selected partitions, run to completion lets
+        synchronisation run again.
+
+    .EXAMPLE
         Get-JIMConnectedSystem -Id 1 -DeletionPreview
 
         Gets a preview of what would be affected by deleting the Connected System.

@@ -1879,6 +1879,29 @@ public interface ISyncRepository
 
     #endregion
 
+    #region Import completeness (#2521)
+
+    /// <summary>
+    /// Marks the Connected System's import incomplete (<see cref="ConnectedSystem.ImportIncompleteSince"/>): a narrow
+    /// single-column write an import makes before its first write, committed at once and touching no tracked state, so
+    /// a run that stops part-way, however it stops, leaves it standing. Where the marker is already set it is kept as it
+    /// is, so it says when the earliest import still unfinished began writing. While it is set, Full and Delta
+    /// Synchronisation of the Connected System refuse to run.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System the import is about to write to.</param>
+    /// <param name="startedWritingAt">The UTC time the import is about to begin writing.</param>
+    /// <returns>The marker as it now stands: <paramref name="startedWritingAt"/>, or the earlier time already held.</returns>
+    Task<DateTime> MarkImportIncompleteAsync(int connectedSystemId, DateTime startedWritingAt);
+
+    /// <summary>
+    /// Clears <see cref="ConnectedSystem.ImportIncompleteSince"/>: a narrow single-column write made by an import once it
+    /// has saved everything it read, touching no tracked state.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System whose import completed.</param>
+    Task ClearImportIncompleteAsync(int connectedSystemId);
+
+    #endregion
+
     #region Synchronisation Rules and Configuration
 
     /// <summary>

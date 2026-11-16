@@ -3325,6 +3325,28 @@ public partial class SyncRepository : ISyncRepository
 
     #endregion
 
+    #region Import completeness (#2521)
+
+    public Task<DateTime> MarkImportIncompleteAsync(int connectedSystemId, DateTime startedWritingAt)
+    {
+        if (!_connectedSystems.TryGetValue(connectedSystemId, out var connectedSystem))
+            throw new InvalidOperationException($"MarkImportIncompleteAsync: Connected System {connectedSystemId} was not seeded.");
+
+        connectedSystem.ImportIncompleteSince ??= startedWritingAt;
+        return Task.FromResult(connectedSystem.ImportIncompleteSince.Value);
+    }
+
+    public Task ClearImportIncompleteAsync(int connectedSystemId)
+    {
+        if (!_connectedSystems.TryGetValue(connectedSystemId, out var connectedSystem))
+            throw new InvalidOperationException($"ClearImportIncompleteAsync: Connected System {connectedSystemId} was not seeded.");
+
+        connectedSystem.ImportIncompleteSince = null;
+        return Task.CompletedTask;
+    }
+
+    #endregion
+
     #region Synchronisation Rules and Configuration
 
     public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled, bool withChangeTracking = false)

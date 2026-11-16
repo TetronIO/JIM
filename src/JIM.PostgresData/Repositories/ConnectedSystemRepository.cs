@@ -20,6 +20,7 @@ using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -195,7 +196,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             Description = cs.Description,
             Created = cs.Created,
             ConnectorName = cs.ConnectorDefinition.Name,
-            ConnectorId = cs.ConnectorDefinition.Id
+            ConnectorId = cs.ConnectorDefinition.Id,
+            ImportIncompleteSince = cs.ImportIncompleteSince
         });
 
     /// <summary>
@@ -801,6 +803,45 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         return new JimDbContext(options);
     }
 
+    /// <summary>
+    /// The import-incomplete marker (<see cref="ConnectedSystem.ImportIncompleteSince"/>, #2521) is written only by its own
+    /// narrow statements: set by an import before its first write, cleared by a completed import or a Connector Space
+    /// clear. A save of the whole Connected System (a settings change in the portal) would otherwise write back whatever
+    /// the caller loaded, which taken before an import marked it would let a synchronisation read the half-saved import,
+    /// and taken before an import cleared it would refuse synchronisation again. So the graph update leaves it out.
+    /// </summary>
+    private void KeepImportIncompleteMarkerOutOfGraphUpdate(ConnectedSystem connectedSystem)
+    {
+        EntityEntry<ConnectedSystem>? entry;
+        try
+        {
+            entry = Repository.Database.Entry(connectedSystem);
+        }
+        catch (InvalidOperationException)
+        {
+            // Another instance with the same key is tracked, and UpdateDetachedSafe copied the values onto that one.
+            entry = null;
+        }
+
+        if (entry is not { State: EntityState.Modified })
+        {
+            var previousAutoDetect = Repository.Database.ChangeTracker.AutoDetectChangesEnabled;
+            Repository.Database.ChangeTracker.AutoDetectChangesEnabled = false;
+            try
+            {
+                entry = Repository.Database.ChangeTracker.Entries<ConnectedSystem>()
+                    .FirstOrDefault(e => e.Entity.Id == connectedSystem.Id && e.State == EntityState.Modified);
+            }
+            finally
+            {
+                Repository.Database.ChangeTracker.AutoDetectChangesEnabled = previousAutoDetect;
+            }
+        }
+
+        if (entry != null)
+            entry.Property(cs => cs.ImportIncompleteSince).IsModified = false;
+    }
+
     public async Task UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem)
     {
         // Reconcile the object types/attributes against tracked current state first (adds + updates),
@@ -830,6 +871,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // after ClearChangeTracker() it would traverse Objects → MVO → Type → Attributes, causing PK violations on
         // the MetaverseObjectType ↔ MetaverseAttribute join table.
         Repository.UpdateDetachedSafe(connectedSystem);
+        KeepImportIncompleteMarkerOutOfGraphUpdate(connectedSystem);
 
         // Handle new partitions and containers explicitly - EF Core doesn't automatically detect new items
         // in collections that were loaded from a separate query and then modified.
@@ -9815,7 +9857,10 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // A single-column write that touches no tracked state; the caller keeps any tracked instance in step.
         await Repository.Database.ConnectedSystems
             .Where(cs => cs.Id == connectedSystemId)
-            .ExecuteUpdateAsync(setters => setters.SetProperty(cs => cs.PersistedConnectorData, persistedConnectorDataAfterClear));
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(cs => cs.PersistedConnectorData, persistedConnectorDataAfterClear)
+                // Nothing is left of an import that stopped part-way, so nothing is left for a synchronisation to misread (#2521).
+                .SetProperty(cs => cs.ImportIncompleteSince, (DateTime?)null));
 
         if (ownsTransaction)
             await transaction!.CommitAsync();

@@ -588,6 +588,12 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     #region Writes (always throw)
 
+    public Task<DateTime> MarkImportIncompleteAsync(int connectedSystemId, DateTime startedWritingAt)
+        => throw new PreviewWriteAttemptedException(nameof(MarkImportIncompleteAsync));
+
+    public Task ClearImportIncompleteAsync(int connectedSystemId)
+        => throw new PreviewWriteAttemptedException(nameof(ClearImportIncompleteAsync));
+
     public Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps)
         => throw new PreviewWriteAttemptedException(nameof(StampImportStateAsync));
 

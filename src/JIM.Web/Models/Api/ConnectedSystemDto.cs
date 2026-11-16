@@ -120,6 +120,17 @@ public class ConnectedSystemDetailDto
     public DateTime? LastSuccessfulFullImportCompletedAt { get; set; }
 
     /// <summary>
+    /// When an import that stopped part-way began saving what it read, or null. While set, Full and Delta
+    /// Synchronisation of this Connected System are refused until a Full Import of it completes.
+    /// </summary>
+    /// <remarks>
+    /// #2521. Set by every import before its first write and cleared when it completes; one an earlier stopped import left
+    /// is cleared only by a completed import that read every object with no Partition scope, or by clearing the Connector
+    /// Space. Deliberately read-only on every surface.
+    /// </remarks>
+    public DateTime? ImportIncompleteSince { get; set; }
+
+    /// <summary>
     /// On the response to an import-schema call that disabled or removed its dependents only: the
     /// Metaverse-Derived Attribute Flows, on any Connected System, that disabling or removing those Synchronisation
     /// Rules and mappings left with a missing input (an attribute they read lost its last enabled contributor). The
@@ -151,6 +162,7 @@ public class ConnectedSystemDetailDto
             ConfigurationDrift = configurationDrift == null ? null : ConfigurationDriftDto.FromStatus(configurationDrift),
             StrandedValueSweepArmedAt = entity.StrandedValueSweepArmedAt,
             LastSuccessfulFullImportCompletedAt = entity.LastSuccessfulFullImportCompletedAt,
+            ImportIncompleteSince = entity.ImportIncompleteSince,
             Id = entity.Id,
             Name = entity.Name,
             Description = entity.Description,
