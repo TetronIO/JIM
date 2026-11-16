@@ -64,7 +64,7 @@ $wasEnabled | Disable-JIMSchedule -ChangeReason "Paused for upgrade"
 
 **2. Let running Activities finish.** With no new runs starting, wait for in-flight work to drain. Check **Activities** in the administration UI and wait until nothing is In Progress. Large runs can take a while, which is the main reason to plan an upgrade window.
 
-A run you stop part-way anyway does not resume: when the worker starts again, it fails the run's Activity with an explanatory error and removes the task from the queue. Your data is not at risk, because JIM's synchronisation state lives in the database and the next run continues from it; draining first spares you the failed Activity and a long first run afterwards.
+A run you stop part-way anyway does not resume: when the worker starts again, it fails the run's Activity with an explanatory error and removes the task from the queue. Your data is not at risk, because JIM's synchronisation state lives in the database and the next run continues from it. An import stopped part-way is the one case that needs more: JIM refuses to synchronise its Connected System until a Full Import of it completes ([Troubleshooting Synchronisation](troubleshooting-synchronisation.md#failed-with-error-run-profile-cannot-run-an-import-of-connected-system-stopped-part-way-through-saving-what-it-read)). Draining first spares you the failed Activity and a long first run afterwards.
 
 ## :material-download-outline: Upgrading with the installer {#with-the-installer}
 

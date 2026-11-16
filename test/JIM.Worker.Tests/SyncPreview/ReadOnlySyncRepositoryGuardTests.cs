@@ -86,6 +86,24 @@ public class ReadOnlySyncRepositoryGuardTests
             It.IsAny<IReadOnlyList<MetaverseObjectChange>>(), It.IsAny<IReadOnlyList<MetaverseObjectChange>>(), 1, 1), Times.Once);
     }
 
+    /// <summary>
+    /// #2521: a preview never marks a Connected System import incomplete, nor takes the marker down; only an import does.
+    /// </summary>
+    [Test]
+    public void ImportIncompleteMarkerWrites_AreWrites_Throw()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(() => _guard.MarkImportIncompleteAsync(1, DateTime.UtcNow),
+                Throws.InstanceOf<PreviewWriteAttemptedException>().With.Message.Contain(nameof(ISyncRepository.MarkImportIncompleteAsync)));
+            Assert.That(() => _guard.ClearImportIncompleteAsync(1),
+                Throws.InstanceOf<PreviewWriteAttemptedException>().With.Message.Contain(nameof(ISyncRepository.ClearImportIncompleteAsync)));
+        }
+
+        _inner.Verify(r => r.MarkImportIncompleteAsync(It.IsAny<int>(), It.IsAny<DateTime>()), Times.Never);
+        _inner.Verify(r => r.ClearImportIncompleteAsync(It.IsAny<int>()), Times.Never);
+    }
+
     [Test]
     public void CreatePendingExportAsync_IsAWrite_Throws()
     {

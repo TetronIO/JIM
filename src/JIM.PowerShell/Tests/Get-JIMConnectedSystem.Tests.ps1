@@ -68,6 +68,40 @@ Describe 'Get-JIMConnectedSystem' {
         }
     }
 
+    Context 'Import incomplete marker (#2521)' {
+
+        It 'Passes the marker through on the list, so a script can find the Connected Systems waiting for a Full Import' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Get-JIMPagedItems {
+                    @(
+                        [PSCustomObject]@{ id = 1; name = 'HR System'; importIncompleteSince = '2026-11-16T10:03:12Z' }
+                        [PSCustomObject]@{ id = 2; name = 'Directory'; importIncompleteSince = $null }
+                    )
+                }
+
+                $waiting = @(Get-JIMConnectedSystem | Where-Object { $_.ImportIncompleteSince } | Select-Object Name, ImportIncompleteSince)
+
+                $waiting.Count | Should -Be 1
+                $waiting[0].Name | Should -Be 'HR System'
+                $waiting[0].ImportIncompleteSince | Should -Be '2026-11-16T10:03:12Z'
+            }
+        }
+
+        It 'Passes the marker through on a Connected System read by ID' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'HR System'; importIncompleteSince = '2026-11-16T10:03:12Z' } }
+
+                (Get-JIMConnectedSystem -Id 1).ImportIncompleteSince | Should -Be '2026-11-16T10:03:12Z'
+            }
+        }
+
+        It 'Offers no way to clear the marker by hand' {
+            (Get-Command Set-JIMConnectedSystem).Parameters.Keys | Should -Not -Contain 'ImportIncompleteSince'
+        }
+    }
+
     Context 'Requires Connection' {
 
         BeforeEach {

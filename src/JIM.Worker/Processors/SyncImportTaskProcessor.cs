@@ -136,6 +136,18 @@ public partial class SyncImportTaskProcessor
     private bool _csIsEmpty;
 
     /// <summary>
+    /// #2521: the Connected System's import-incomplete marker (<see cref="ConnectedSystem.ImportIncompleteSince"/>) as the
+    /// run started: set means an earlier import stopped part-way through writing what it read.
+    /// </summary>
+    private DateTime? _importIncompleteAtStart;
+
+    /// <summary>
+    /// #2521: whether this run has marked the Connected System import incomplete, which it does once, before its first
+    /// write (<see cref="MarkImportIncompleteBeforeFirstWriteAsync"/>).
+    /// </summary>
+    private bool _importIncompleteMarked;
+
+    /// <summary>
     /// External ID → CSO import state lookup, keyed by <see cref="CsoLookupKey"/>. This is the "lookup" phase of the
     /// Lookup/Hydrate seam (#440); SPEC-1082 D8 widened its projection to also carry each CSO's stored import content
     /// hash/fingerprint/status/partition, so the Full Import skip predicate can be evaluated with zero extra database
@@ -465,6 +477,9 @@ public partial class SyncImportTaskProcessor
         // #2723: prepared once for the whole run, so the Connector parses the Connected System's Partitions once rather
         // than once per object.
         _partitionPlacement = ConnectedSystemPartitionPlacement.Prepare(_connector, _connectedSystem.Partitions);
+
+        // #2521: whether an earlier import stopped part-way, which decides whether this run may take the marker down.
+        _importIncompleteAtStart = _connectedSystem.ImportIncompleteSince;
 
         // Check if the Connected System has any existing CSOs. If it's empty (first-ever import),
         // we can skip all FindMatchingCso lookups since every object is guaranteed to be new.
@@ -963,6 +978,10 @@ public partial class SyncImportTaskProcessor
         var deletionDetectionCompleted = false;
         if (totalObjectsImported > 0 && ReadEveryObjectInScope)
         {
+            // Deletion detection is the run's first write: it removes stale Pending Exports, and the Unconfirmed Create
+            // retry below marks exports for retry.
+            await MarkImportIncompleteBeforeFirstWriteAsync();
+
             // Get count of existing CSOs to determine how many we need to check for deletions.
             // Scope to the Run Profile's partition so that partition-scoped full imports only
             // check their own CSOs, not CSOs from other partitions (which would be false deletions).
@@ -1199,6 +1218,10 @@ public partial class SyncImportTaskProcessor
         if (watermarkReached != null)
             _activity.ImportWatermarkTo = watermarkReached;
 
+        // Everything the run read is saved, so what it marked is whole again, and so is what an earlier stopped run left,
+        // where this run read all of it (#2521).
+        await SettleImportIncompleteMarkerAsync(totalObjectsImported);
+
         // The run is done: leave the Activity describing the whole of it, not its last internal phase. Every
         // phase above set the counters to its own work (the flush just now to the handful of items it had
         // left, usually none) and the phase label as the message, so a finished import read "0 / 0" and
@@ -1303,6 +1326,11 @@ public partial class SyncImportTaskProcessor
         List<ConnectedSystemObject> connectedSystemObjectsToBeUpdated)
     {
         var createdCount = connectedSystemObjectsToBeCreated.Count;
+
+        // The batches below commit one at a time, so a run that stops between them leaves the Connector Space holding part
+        // of what it read: the Connected System is marked first (#2521). A run with nothing to save leaves it as it is.
+        if (createdCount > 0 || connectedSystemObjectsToBeUpdated.Count > 0)
+            await MarkImportIncompleteBeforeFirstWriteAsync();
 
         // Pre-generate IDs for ALL CSOs before batch saves begin. This eliminates
         // the cross-batch FK gap where a group in batch 1 references a user in batch 3
@@ -1788,6 +1816,75 @@ public partial class SyncImportTaskProcessor
             connectedSystemObjectsToBeCreated);
 
         return everyObjectTypeChecked;
+    }
+
+    /// <summary>
+    /// #2521: marks the Connected System import incomplete before the run's first write, once per run. Committed at once,
+    /// so however the run stops after this (a failure, cancellation, the Worker's memory guard, or the process ending)
+    /// the marker stands, and Full and Delta Synchronisation refuse to read the half-saved import. A run that stops before
+    /// calling this wrote nothing, and leaves the Connected System as it was. Every path that writes what the run read
+    /// calls this first; a run that saves in units calls it before its first unit.
+    /// </summary>
+    private async Task MarkImportIncompleteBeforeFirstWriteAsync()
+    {
+        if (_importIncompleteMarked)
+            return;
+
+        // Whole microseconds, as the database stores a time, so the time held back can be compared with this run's own.
+        var now = _time.GetUtcNow().UtcDateTime;
+        var startedWritingAt = now.AddTicks(-(now.Ticks % 10));
+        var held = await _syncRepo.MarkImportIncompleteAsync(_connectedSystem.Id, startedWritingAt);
+
+        // A marker set since the run loaded the Connected System (a parallel Schedule step's import of the same system,
+        // or one that stopped in between) is not this run's to take down: treat it as one an earlier run left.
+        if (_importIncompleteAtStart == null && held != startedWritingAt)
+            _importIncompleteAtStart = held;
+
+        _connectedSystem.ImportIncompleteSince = held;
+        _importIncompleteMarked = true;
+        Log.Debug("MarkImportIncompleteBeforeFirstWriteAsync: Connected System {ConnectedSystemId} marked import incomplete (since {Since:o}) before the run's first write.",
+            _connectedSystem.Id, _connectedSystem.ImportIncompleteSince);
+    }
+
+    /// <summary>
+    /// #2521: once the run has saved everything it read, takes the import-incomplete marker down where it may. The marker
+    /// this run set is cleared: the run completed. One an earlier stopped run left is cleared only by a run that read every
+    /// object of the whole Connected System, and so re-read whatever the stopped run left half-saved: a Full Import, or a
+    /// Delta Import whose Connector read every object (#2720), with no Partition scope, that read something or found the
+    /// Connected System empty. Detected deletions refused by the Run Profile's limits do not stop it: those objects are
+    /// kept as they were, not half-saved. Any other run leaves the marker standing and says so on its Activity.
+    /// </summary>
+    private async Task SettleImportIncompleteMarkerAsync(int totalObjectsImported)
+    {
+        if (_importIncompleteAtStart == null && !_importIncompleteMarked)
+            return;
+
+        var readTheWholeConnectedSystem = ReadEveryObjectInScope
+                                          && _connectedSystemRunProfile.Partition == null
+                                          && (totalObjectsImported > 0 || _csIsEmpty);
+
+        if (_importIncompleteAtStart == null || readTheWholeConnectedSystem)
+        {
+            await _syncRepo.ClearImportIncompleteAsync(_connectedSystem.Id);
+            _connectedSystem.ImportIncompleteSince = null;
+            if (_importIncompleteAtStart is { } stoppedRunBeganWriting)
+            {
+                Log.Information("SettleImportIncompleteMarkerAsync: This run read every object of Connected System {ConnectedSystemId} and saved it, so the import " +
+                    "that stopped part-way (it began writing at {StoppedAt:o}) is whole again. Synchronisation of the Connected System may run.",
+                    _connectedSystem.Id, stoppedRunBeganWriting);
+            }
+
+            return;
+        }
+
+        var warning = ImportCompleteness.DescribeStillIncompleteAfterImport(_connectedSystem,
+            readOnlyChanges: !ReadEveryObjectInScope, scopedToOnePartition: _connectedSystemRunProfile.Partition != null);
+        _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage) ? warning : $"{_activity.WarningMessage}\n{warning}";
+        Log.Warning("SettleImportIncompleteMarkerAsync: Connected System {ConnectedSystemId} stays marked import incomplete (since {Since:o}): this run " +
+            "(Run Profile {RunProfileId}, {RunType}, Partition {PartitionId}, {ObjectsRead} objects read, read every object in scope: {ReadEveryObject}) did not read every object " +
+            "of the whole Connected System. Synchronisation of it is refused until a Full Import of every selected Partition completes.",
+            _connectedSystem.Id, _connectedSystem.ImportIncompleteSince, _connectedSystemRunProfile.Id, _connectedSystemRunProfile.RunType,
+            _connectedSystemRunProfile.Partition?.Id, totalObjectsImported, ReadEveryObjectInScope);
     }
 
     /// <summary>

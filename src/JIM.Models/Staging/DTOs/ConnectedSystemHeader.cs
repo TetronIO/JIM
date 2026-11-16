@@ -59,5 +59,11 @@ public class ConnectedSystemHeader
     /// </summary>
     public int ConnectorId { get; set; }
 
+    /// <summary>
+    /// When an import that stopped part-way began saving what it read, or null. While set, Full and Delta
+    /// Synchronisation of this Connected System are refused until a Full Import of it completes.
+    /// </summary>
+    public DateTime? ImportIncompleteSince { get; set; }
+
     public override string ToString() => Name;
 }

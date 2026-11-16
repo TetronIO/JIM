@@ -710,6 +710,36 @@ public partial class SyncRepository : ISyncRepository
 
     #endregion
 
+    #region Import completeness (#2521)
+
+    /// <inheritdoc />
+    public async Task<DateTime> MarkImportIncompleteAsync(int connectedSystemId, DateTime startedWritingAt)
+    {
+        // A narrow status-mark update (exempt from the bulk column-list rule), committed on its own before the import's
+        // first write. It keeps a time already held: the marker says when the earliest unfinished import began writing.
+        await _context.ConnectedSystems
+            .Where(cs => cs.Id == connectedSystemId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(cs => cs.ImportIncompleteSince, cs => cs.ImportIncompleteSince ?? startedWritingAt));
+
+        var held = await _context.ConnectedSystems
+            .AsNoTracking()
+            .Where(cs => cs.Id == connectedSystemId)
+            .Select(cs => cs.ImportIncompleteSince)
+            .SingleAsync();
+        return held.HasValue ? DateTime.SpecifyKind(held.Value, DateTimeKind.Utc) : startedWritingAt;
+    }
+
+    /// <inheritdoc />
+    public async Task ClearImportIncompleteAsync(int connectedSystemId)
+    {
+        // A narrow status-mark update (exempt from the bulk column-list rule), made once the import has completed.
+        await _context.ConnectedSystems
+            .Where(cs => cs.Id == connectedSystemId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(cs => cs.ImportIncompleteSince, (DateTime?)null));
+    }
+
+    #endregion
+
     #region Synchronisation Rules and Configuration
 
     public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled, bool withChangeTracking = false)

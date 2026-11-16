@@ -209,6 +209,19 @@
     }
 }
 
+@* ─── Import incomplete notice ───
+   An import stopped part-way through saving what it read (#2521), so Full and Delta Synchronisation of this system are
+   refused until a Full Import completes. A warning rather than info: scheduled synchronisations fail until it is acted on. *@
+@if (_connectedSystem != null && _connectedSystem.ImportIncompleteSince is { } importIncompleteSince)
+{
+    <MudAlert Severity="Severity.Warning" Class="mt-2 mb-6" data-testid="jim-import-incomplete-notice">
+        <strong>An import stopped part-way.</strong> An import of this Connected System began saving what it read on
+        @importIncompleteSince.ToFriendlyDate() UTC and did not finish, so the Connector Space holds only part of it.
+        Full and Delta Synchronisation of this Connected System will not run until it is whole again.
+        @ImportCompleteness.DescribeRemedy(_connectedSystem)
+    </MudAlert>
+}
+
 @* ─── Objects awaiting deprovisioning ───
    Obsolescence is a transient state on a healthy system, lasting from the import that found an object
    gone until the synchronisation that deletes it, so this is Info rather than a warning. It earns a place

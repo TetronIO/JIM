@@ -35,7 +35,8 @@
         - Full Import and Full Synchronisation of the CSV baseline
         - Max detected deletions percent 10; remove one employee (33% on the Nano template) and run the
           Full Import: refused, nothing marked, the warning names the count, the share and the limit, and
-          LastSuccessfulFullImportCompletedAt does not move (the #1605 gate stays shut)
+          LastSuccessfulFullImportCompletedAt does not move (the #1605 gate stays shut), while the import-incomplete
+          marker stays clear (#2521): the run completed, and refused deletions leave objects as they were
         - Max detected deletions 0 with the share limit cleared, run again: refused on the count
         - Max detected deletions 1, run again: at the limit the detection is applied, the departed
           employee is marked as deleted, and the timestamp moves
@@ -468,6 +469,7 @@ try {
         $csvSystemBefore = Get-JIMConnectedSystem -Id $config.CSVSystemId
         $lastSuccessfulImportBefore = $csvSystemBefore.lastSuccessfulFullImportCompletedAt
         Assert-NotNull -Value $lastSuccessfulImportBefore -Message "The baseline Full Import stamped LastSuccessfulFullImportCompletedAt"
+        Assert-Condition -Condition ($null -eq $csvSystemBefore.importIncompleteSince) -Message "A completed Full Import leaves the Connected System unmarked, so synchronisation may run (#2521; got: $($csvSystemBefore.importIncompleteSince))"
 
         # Step 2b: Put Max detected deletions percent 10 on the CSV Full Import Run Profile
         Write-TestStep "2b" "Set Max detected deletions percent 10 on the CSV Full Import Run Profile"
@@ -495,6 +497,7 @@ try {
 
         $csvSystemAfterRefusal = Get-JIMConnectedSystem -Id $config.CSVSystemId
         Assert-Equal -Expected ([string]$lastSuccessfulImportBefore) -Actual ([string]$csvSystemAfterRefusal.lastSuccessfulFullImportCompletedAt) -Message "A refused Full Import does not move LastSuccessfulFullImportCompletedAt (the #1605 gate stays shut)"
+        Assert-Condition -Condition ($null -eq $csvSystemAfterRefusal.importIncompleteSince) -Message "A Full Import whose deletions were refused still completed, so it leaves the Connected System unmarked (#2521; got: $($csvSystemAfterRefusal.importIncompleteSince))"
 
         # Step 2d: Clear the share limit, set the count limit to zero and run again; refused on the count
         Write-TestStep "2d" "Clear the share limit, set Max detected deletions 0 and run the Full Import (refused on the count)"

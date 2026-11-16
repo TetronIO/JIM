@@ -76,6 +76,7 @@ ConfigurationDrift also carries AwaitingSynchronisation: the Object Types whose 
 | `PendingExportObjectsCount` | `int` | How many Pending Exports are waiting to be exported to the Connected System. |
 | `ConnectorName` | `string` | The name of the Connector the Connected System uses. |
 | `ConnectorId` | `int` | The ID of that Connector. |
+| `ImportIncompleteSince` | `datetime` | When an import that stopped part-way began saving what it read, or empty. While set, Full and Delta Synchronisation of this Connected System are refused until a Full Import of it completes. |
 
 **With `-Id`**:
 
@@ -99,6 +100,7 @@ ConfigurationDrift also carries AwaitingSynchronisation: the Object Types whose 
 | `ConfigurationDrift` | `object` | Whether the configuration has changed in a way that needs a Full Synchronisation to take effect. Empty on the create and update responses, which describe the write that just happened rather than the system's readiness. It has `HasPendingChanges`, `IsDeterminable`, `NeverFullySynchronised`, `TrackingDisabled`, `LastFullSynchronisation`, `MostRecentChange`, `ChangeCount`, `HighestChangeClass` and `AwaitingSynchronisation`. |
 | `StrandedValueSweepArmedAt` | `datetime` | When a stranded-value sweep was armed by a Connector Space clear, or empty when no sweep is armed. The sweep runs at the first Full Synchronisation of this Connected System after LastSuccessfulFullImportCompletedAt is later than this timestamp; until then it stays armed and a Full Synchronisation does nothing beyond ordinary synchronisation. |
 | `LastSuccessfulFullImportCompletedAt` | `datetime` | When the most recent Full Import of this Connected System completed successfully, or empty if none ever has. An import that completed with object-level errors does not count. |
+| `ImportIncompleteSince` | `datetime` | When an import that stopped part-way began saving what it read, or empty. While set, Full and Delta Synchronisation of this Connected System are refused until a Full Import of it completes. |
 | `DependentDerivedFlows` | `object[]` | On the response to an import-schema call that disabled or removed its dependents only: the Metaverse-Derived Attribute Flows, on any Connected System, that disabling or removing those Synchronisation Rules and mappings left with a missing input (an attribute they read lost its last enabled contributor). The refresh went ahead regardless; each flow's Missing Input Behaviour now decides what it contributes. Always present; empty on every other response. Each has `MappingId`, `TargetMetaverseAttributeName`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName` and `MissingInputs`. |
 
 **With `-ObjectTypes`**:

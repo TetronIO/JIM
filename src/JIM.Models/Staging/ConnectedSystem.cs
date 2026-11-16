@@ -222,6 +222,23 @@ public class ConnectedSystem : IAuditable
     public DateTime? LastSuccessfulFullImportCompletedAt { get; set; }
 
     /// <summary>
+    /// Set while an import of this Connected System has stopped part-way through writing what it read (#2521): the UTC
+    /// time an import that has not completed began writing. Null means the last import that wrote anything completed.
+    /// While it is set, Full and Delta Synchronisation of this Connected System refuse to run: the Connector Space holds
+    /// part of an import, and a synchronisation reading it would take a reference whose target is still unsaved as
+    /// removed, and export the removal.
+    /// </summary>
+    /// <remarks>
+    /// Every import sets it before its first write and keeps the earliest time when it is already set. Only a completed
+    /// import that read every object of the whole Connected System clears it (a Full Import, or a Delta Import that read
+    /// every object, #2720, with no Partition scope), including one whose detected deletions the Run Profile's limits
+    /// refused; so does clearing the Connector Space. A Delta Import that reads changes, or a run scoped to one Partition,
+    /// cannot tell whether it re-read what the stopped run left half-saved, so it leaves the marker as it is. Runtime
+    /// state, never part of a configuration snapshot, and there is deliberately no way to clear it by hand.
+    /// </remarks>
+    public DateTime? ImportIncompleteSince { get; set; }
+
+    /// <summary>
     /// EF back-link.
     /// </summary>
     public List<Activity>? Activities { get; set; }
