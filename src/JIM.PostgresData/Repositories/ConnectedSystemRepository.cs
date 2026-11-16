@@ -3137,14 +3137,14 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// <inheritdoc />
     /// <remarks>
     /// Raw Npgsql over a typed <c>unnest(@values) WITH ORDINALITY</c> array, so each value keeps its position and a value
-    /// asked for twice is answered twice. The predicate is the single-value lookup's, statement for statement: the attribute
-    /// and the value (text exactly for a case-exact attribute, else <c>lower()</c> on both sides, #2051), any Object Type,
-    /// Partition and status, the first object by id. DISTINCT counts an object holding the value twice once, as the
-    /// lookup's <c>Any()</c> does. Each value probes <c>IX_ConnectedSystemObjectAttributeValues_AttributeId_*</c>, or
+    /// asked for twice is answered twice. The predicate is the attribute and the value (text exactly for a case-exact
+    /// attribute, else <c>lower()</c> on both sides, #2051), scoped as <see cref="BuildDeletionDetectionQuery"/> scopes the
+    /// values deletion detection compared (#2948): the Object Type, the Partition when one is given, not Pending
+    /// Provisioning. The first object by id. DISTINCT counts an object holding the value twice once. Each value probes <c>IX_ConnectedSystemObjectAttributeValues_AttributeId_*</c>, or
     /// <c>IX_CsoAttrVal_Lower_StringValue</c> for text ignoring case.
     /// </remarks>
-    public async Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int attributeId,
-        IReadOnlyList<T> attributeValues) where T : notnull
+    public async Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int objectTypeId, int? partitionId,
+        int attributeId, IReadOnlyList<T> attributeValues) where T : notnull
     {
         var matches = new List<ConnectedSystemObjectExternalIdMatch?>(attributeValues.Count);
         matches.AddRange(Enumerable.Repeat<ConnectedSystemObjectExternalIdMatch?>(null, attributeValues.Count));
@@ -3189,6 +3189,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                        AND {valuePredicate}
                     JOIN "ConnectedSystemObjects" cso ON cso."Id" = av."ConnectedSystemObjectId"
                     WHERE cso."ConnectedSystemId" = @connectedSystemId
+                      AND cso."TypeId" = @objectTypeId
+                      AND cso."Status" <> @pendingProvisioning
+                      AND (@partitionId IS NULL OR cso."PartitionId" = @partitionId)
                 ) x
             ) m
             WHERE m.rn = 1
@@ -3202,6 +3205,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         command.Parameters.Add(new NpgsqlParameter("values", NpgsqlTypes.NpgsqlDbType.Array | elementType) { Value = attributeValues.ToArray() });
         command.Parameters.Add(new NpgsqlParameter("attributeId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = attributeId });
         command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+        command.Parameters.Add(new NpgsqlParameter("objectTypeId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = objectTypeId });
+        command.Parameters.Add(new NpgsqlParameter("pendingProvisioning", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)ConnectedSystemObjectStatus.PendingProvisioning });
+        command.Parameters.Add(new NpgsqlParameter("partitionId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)partitionId ?? DBNull.Value });
 
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())

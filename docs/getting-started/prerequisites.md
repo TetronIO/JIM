@@ -62,29 +62,24 @@ Storage scales with the number of identity objects and the frequency of synchron
 
 ### Memory scaling by object count
 
-During a Full Import, the Worker holds every object it imports from a Connected System in memory, together with its attribute values and the Activity's result for each object. Memory requirements therefore scale linearly with the number of objects in the largest Connected System.
+Memory grows with the size of the largest Connected System, and above all with its largest groups. A Full Import does not set it: the Worker saves what it reads in units of up to 2,000 objects, so an import's memory does not grow with the number of objects it reads. The peak comes in synchronisation and export, which compare and send each group's membership, and in the database, which caches what JIM reads most.
 
 These figures are for the **host machine** (or VM) running JIM (on Docker or Podman); they must cover the operating system, all JIM containers, and the database.
 
 | Connected System Size        | Minimum Host RAM | Recommended Host RAM |
 |------------------------------|------------------|----------------------|
 | Up to 10,000 objects         | 4 GB             | 8 GB                 |
-| 10,000 to 50,000 objects     | 8 GB             | 16 GB                |
-| 50,000 to 100,000 objects    | 20 GB            | 24 GB                |
-| 100,000 to 250,000 objects   | 24 GB            | 32 GB                |
-| 250,000 to 500,000 objects   | 32 GB            | 48 GB                |
+| 10,000 to 100,000 objects    | 8 GB             | 16 GB                |
+| 100,000 to 500,000 objects   | 16 GB            | 24 GB                |
 | 500,000 to 1,000,000 objects | 64 GB            | 96 GB                |
 
-!!! info "Why large imports need significant memory"
-    During a Full Import, the Worker holds every imported object and its attributes in memory until it has compared them all (to find duplicates, detect deleted objects, and link objects that refer to each other), and only then saves them. A Full Import of 100,000 objects with 20 attributes each peaks at approximately 2.3 GB of memory in the Worker, and PostgreSQL needs a further 1 to 2 GB while the results are saved. Combined with the web, scheduler, and operating system overhead, total system memory consumption reaches 8 to 10 GB for 100K objects.
+!!! info "Large group memberships drive memory more than object count"
+    A group's member references take memory as well as the group itself, so a few very large groups can cost more than many small objects. In JIM's validated scenario of 500,000 users and 25,000 groups synchronised between two directories, where the largest groups hold 500,000 and 400,000 members, JIM's four containers peaked at about **10 GB** together, during an export: the database at 6 GB, the Worker at 3.7 GB, and the web and scheduler at under 0.5 GB between them. Each Full Import peaked at under 2.7 GB in the Worker. A deployment of the same object count with only small groups needs considerably less. JIM is also validated with 1,000,000 users and 60,000 groups, two of which hold every user; size a deployment of that scale as the last row shows.
+
+    The database figure follows its own cache size more than the object count: the bundled PostgreSQL takes a quarter of the host's memory for its cache, up to 8 GB (see [Bundled PostgreSQL Memory](../administration/configuration.md#bundled-postgresql-memory)). The minimums above fit those peaks with room for the operating system. The recommended figures leave the Worker room to finish without the Operations page reporting **Memory low**, which it does from 85% in use. The Worker's runtime keeps memory it has finished with while the host has plenty to spare, so a peak shows what it held rather than the least it needs.
 
 !!! note
-    These requirements apply to the largest single Full Import. If you have multiple Connected Systems of 50K objects each but import them sequentially (not concurrently), size for 50K, not the sum. Delta Imports process only changed objects and require significantly less memory.
-
-!!! info "Large group memberships drive memory more than object count"
-    A group's member references take memory as well as the group itself, so a few very large groups can cost more than many small objects. JIM's largest validated scenario synchronises 1,000,000 users and 60,000 groups between two directories: two of the groups hold all 1,000,000 users, one holds 800,000, and 19 hold more than 100,000. JIM's services (the Worker, web, scheduler and database containers) peaked at about **50 GB** together in that scenario, the Worker at 38 GB and PostgreSQL at 13 GB. The equivalent scenario at 500,000 users, whose largest groups hold 500,000 and 400,000 members, peaked at about **26 GB**. A deployment of the same object count with only small groups needs considerably less.
-
-    The minimums above fit those peaks with room for the operating system. The recommended figures leave the Worker room to finish without the Operations page reporting **Memory low**, which it does from 85% in use. The Worker's runtime keeps memory it has finished with while the host has plenty to spare, so a peak shows what it held rather than the least it needs.
+    These requirements apply to the largest single Connected System. If you have several Connected Systems of 50,000 objects each and run them one after another (not in parallel), size for 50,000, not the sum. Delta Imports hold only what changed, so their memory follows the size of the change, not of the Connected System.
 
 If a host runs short anyway, JIM says so before the operating system steps in: the Operations page reports **Memory low** from 85% in use, and the Worker stops a run that would exhaust its memory, saying why on the run's Activity, rather than being killed part-way through it. See [Troubleshooting Worker Restarts and Memory](../administration/troubleshooting-worker.md).
 

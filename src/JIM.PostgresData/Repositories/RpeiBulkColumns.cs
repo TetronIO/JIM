@@ -44,7 +44,9 @@ internal static class RpeiBulkColumns
     /// Columns deliberately excluded from <see cref="ActivityRunProfileExecutionItemsUpdate"/>:
     /// the identity, snapshots and change classification are immutable once the RPEI is inserted.
     /// UnresolvedReferenceCount (#959) is too: an import records it while resolving references, before
-    /// the item is first inserted, and nothing later changes it. Leaving it out also means an update
+    /// the item is first inserted, and the only later writer is the narrow statement a Full Import's
+    /// end-of-run reference sweep uses for items saved before it ran (#2521,
+    /// <c>SyncRepository.UpdateUnresolvedReferenceReportsAsync</c>). Leaving it out also means an update
     /// built from a read that does not select it (the cross-page merge read) cannot null it. The same
     /// holds for AttributeValueErrorsJson and SourceLocation (#2066), which an import records from what the
     /// Connector reported, before the item is first inserted.

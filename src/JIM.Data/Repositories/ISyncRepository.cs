@@ -213,16 +213,21 @@ public interface ISyncRepository
 
     /// <summary>
     /// For each value, in order, the Connected System Object that holds it in the attribute, as a summary, or null where no
-    /// object holds it: the first object by id in the Connected System, whatever its Object Type, Partition or status, text
-    /// compared as the attribute declares (#2051) and decimals numerically (#1283), as the single-value lookup by attribute
-    /// (<see cref="IConnectedSystemRepository.GetConnectedSystemObjectByAttributeAsync(int, int, string)"/>) answers. One
-    /// round trip for every value, where deletion detection used to load each candidate whole, one query at a time (#2521).
+    /// object holds it: the first object by id among the objects deletion detection compared (#2948), those of the Object
+    /// Type, in the Partition when one is given, that are not Pending Provisioning. Text is compared as the attribute
+    /// declares (#2051) and decimals numerically (#1283). One round trip for every value, where deletion detection used to
+    /// load each candidate whole, one query at a time (#2521).
     /// </summary>
+    /// <param name="connectedSystemId">The Connected System.</param>
+    /// <param name="objectTypeId">The Object Type whose External IDs were compared.</param>
+    /// <param name="partitionId">The run's Partition, or null for a run of the whole Connected System.</param>
+    /// <param name="attributeId">The Object Type's External ID attribute.</param>
+    /// <param name="attributeValues">The values to resolve.</param>
     /// <typeparam name="T">The External ID's value type: <see cref="string"/>, <see cref="int"/>, <see cref="long"/>,
     /// <see cref="decimal"/> or <see cref="Guid"/>.</typeparam>
     /// <exception cref="ArgumentOutOfRangeException">Any other value type.</exception>
-    Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int attributeId,
-        IReadOnlyList<T> attributeValues) where T : notnull;
+    Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int objectTypeId, int? partitionId,
+        int attributeId, IReadOnlyList<T> attributeValues) where T : notnull;
 
     /// <summary>
     /// Loads Connected System Objects by id with the graph and tracking the single-value lookup by attribute loads one with
@@ -397,6 +402,47 @@ public interface ISyncRepository
     /// Returns a dictionary keyed by the secondary external ID value.
     /// </summary>
     Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues);
+
+    /// <summary>
+    /// As <see cref="GetConnectedSystemObjectsByAttributeValuesAsync"/>, answering with each object's id alone: the same
+    /// objects, matched the same way (each value read through the attribute's own data type, #1285, text compared as the
+    /// attribute declares, #2051), keyed by the value asked for. Loads and tracks no object, so a Full Import that resolves
+    /// each unit's references against what earlier units saved (#2521) holds nothing it did not read itself.
+    /// </summary>
+    Task<Dictionary<string, Guid>> GetConnectedSystemObjectIdsByAttributeValuesAsync(int connectedSystemId, int attributeId, IEnumerable<string> attributeValues);
+
+    /// <summary>
+    /// As <see cref="GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync"/>, answering with each object's id
+    /// alone, keyed by the value asked for. Loads and tracks no object (#2521).
+    /// </summary>
+    Task<Dictionary<string, Guid>> GetConnectedSystemObjectIdsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues);
+
+    /// <summary>
+    /// The given objects' reference values still held by identifier alone: an unresolved reference value and no referenced
+    /// object's id. What a Full Import's end-of-run reference sweep reads of the objects it saved with references to objects
+    /// it had not saved yet (#2521).
+    /// </summary>
+    Task<List<OutstandingReferenceValue>> GetOutstandingReferenceValuesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// Writes what a Full Import's end-of-run reference sweep resolved (#2521): each value is given its referenced object's
+    /// id where it still has none, and so is the value of the change record the run wrote for it (the holding object's
+    /// execution item's change record, under the same attribute, naming the same identifier and marked as an unresolved
+    /// reference), which loses that mark. Tracked instances of either are brought into line. Returns how many values were
+    /// resolved.
+    /// </summary>
+    Task<int> ApplyOutstandingReferenceResolutionsAsync(IReadOnlyList<OutstandingReferenceResolution> resolutions);
+
+    /// <summary>
+    /// Re-opens references a Full Import's unit resolved to objects an Object Type change then retired (#2521, #2049): each
+    /// value of the given objects naming one of the retired objects, and still holding the identifier it was read by, loses
+    /// the id, and so does the value the given execution items' change records added for it, which is marked as a reference
+    /// still to resolve. The end-of-run sweep then resolves them as it resolves every reference saved by identifier, as the
+    /// whole run's in-memory resolution did with the replacement in hand. Tracked instances of either are brought into line.
+    /// Returns how many values were re-opened.
+    /// </summary>
+    Task<int> ReopenReferencesToRetiredObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds, IReadOnlyCollection<Guid> retiredConnectedSystemObjectIds,
+        IReadOnlyCollection<Guid> executionItemIds);
 
     /// <summary>
     /// Gets all external ID attribute values of type int for a Connected System and object type.
@@ -1826,6 +1872,14 @@ public interface ISyncRepository
     /// Used by confirming imports to merge reconciliation outcomes onto existing RPEIs.
     /// </summary>
     Task BulkUpdateRpeiOutcomesAsync(List<ActivityRunProfileExecutionItem> rpeis, List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes);
+
+    /// <summary>
+    /// Records on already-written execution items what a Full Import's end-of-run reference sweep left unresolved (#2521):
+    /// each item's unresolved reference count, and, where the report carries one, the error that now holds the item's error
+    /// slot (its message written with it, and any stack trace cleared, as the three are always written together). Tracked
+    /// instances are brought into line.
+    /// </summary>
+    Task UpdateUnresolvedReferenceReportsAsync(IReadOnlyList<UnresolvedReferenceReport> reports);
 
     /// <summary>
     /// Loads persisted RPEIs (with their SyncOutcomes) and the id of each RPEI's existing

@@ -15,8 +15,9 @@ namespace JIM.Worker.Tests.Repositories;
 
 /// <summary>
 /// Deletion detection's two reads (#2521, Phase 3), against the single-value lookup by attribute they replace: resolving
-/// many missing External IDs in one statement must name, for each, exactly the object the lookup names (the first by id,
-/// any Object Type and status, text compared as the attribute declares, #2051, decimals numerically, #1283), and loading
+/// many missing External IDs in one statement must name, for each, the object the lookup names (the first by id, text
+/// compared as the attribute declares, #2051, decimals numerically, #1283), except that it looks only among the objects
+/// deletion detection compared (#2948): the Object Type, the run's Partition, not Pending Provisioning. And loading
 /// the objects it marks by id must give the graph the lookup gave, tracked as it was.
 /// </summary>
 /// <remarks>
@@ -70,9 +71,10 @@ public class DeletionCandidateLookupDatabaseTests
     [Test]
     public async Task GetConnectedSystemObjectExternalIdMatchesAsync_TextIgnoringCase_NamesWhatTheLookupNamesAsync()
     {
-        // Another case, two objects holding one value, two differing only in case, a non-ASCII value in another case, a
-        // value nobody holds, and a value asked for twice.
-        await AssertSameAsLookupAsync("user.id", ["KEPT", "duplicate", "twin", "émile", "nobody", "kept"],
+        // Another case, two objects holding one value, a non-ASCII value in another case, a value nobody holds, and a value
+        // asked for twice. ("twin" is also held by a Pending Provisioning object, which the lookup names and deletion
+        // detection's resolution does not: see the test below.)
+        await AssertSameAsLookupAsync("user.id", ["KEPT", "duplicate", "émile", "nobody", "kept"],
             (repository, value) => repository.GetConnectedSystemObjectByAttributeAsync(_systemId, _attributeIds["user.id"], value));
     }
 
@@ -113,11 +115,66 @@ public class DeletionCandidateLookupDatabaseTests
     }
 
     [Test]
+    public async Task GetConnectedSystemObjectExternalIdMatchesAsync_PendingProvisioningHolderWithALowerId_NamesTheObjectInScopeAsync()
+    {
+        // "twin" is held ignoring case by a Pending Provisioning object (c004) and a Normal one (c005). Deletion detection
+        // compares only objects that are not Pending Provisioning (#2948), so the missing value must resolve to c005, not to
+        // the Pending Provisioning object that happens to have the lower id.
+        await using var ctx = NewContext(trackAll: true);
+        var matches = await new PostgresDataRepository(ctx).ConnectedSystems
+            .GetConnectedSystemObjectExternalIdMatchesAsync(_systemId, _typeIds["user"], null, _attributeIds["user.id"], new[] { "twin" });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(matches[0]?.Id, Is.EqualTo(Guid.Parse("00000000-0000-0000-0000-00000000c005")));
+            Assert.That(matches[0]?.MatchCount, Is.EqualTo(1), "only objects in deletion detection's scope are counted");
+        }
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectExternalIdMatchesAsync_HolderInAnotherPartitionWithALowerId_NamesTheObjectInTheRunsPartitionAsync()
+    {
+        // Two Partitions, and "split" held in each, the lower id in Partition B. A run scoped to Partition A compared only
+        // Partition A's objects (#2948), so its missing "split" is Partition A's object; a run of the whole system names
+        // the first by id, as before.
+        int partitionA, partitionB;
+        await using (var seed = NewContext())
+        {
+            var system = await seed.ConnectedSystems.AsTracking().SingleAsync(cs => cs.Id == _systemId);
+            var a = new ConnectedSystemPartition { ConnectedSystem = system, ExternalId = "dc=a", Name = "A", Selected = true };
+            var b = new ConnectedSystemPartition { ConnectedSystem = system, ExternalId = "dc=b", Name = "B", Selected = true };
+            seed.AddRange(a, b);
+            await seed.SaveChangesAsync();
+            (partitionA, partitionB) = (a.Id, b.Id);
+        }
+
+        var inB = Cso("00000000-0000-0000-0000-00000000c071", "user", "id", av => av.StringValue = "split");
+        inB.PartitionId = partitionB;
+        var inA = Cso("00000000-0000-0000-0000-00000000c072", "user", "id", av => av.StringValue = "split");
+        inA.PartitionId = partitionA;
+        await using (var write = NewContext())
+            await new PostgresDataRepository(write).Sync.CreateConnectedSystemObjectsAsync([inB, inA]);
+
+        await using var ctx = NewContext(trackAll: true);
+        var repository = new PostgresDataRepository(ctx).ConnectedSystems;
+        var inPartitionA = await repository.GetConnectedSystemObjectExternalIdMatchesAsync(_systemId, _typeIds["user"], partitionA, _attributeIds["user.id"], new[] { "split" });
+        var wholeSystem = await repository.GetConnectedSystemObjectExternalIdMatchesAsync(_systemId, _typeIds["user"], null, _attributeIds["user.id"], new[] { "split" });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(inPartitionA[0]?.Id, Is.EqualTo(inA.Id), "a Partition-scoped run's missing value is its own Partition's object");
+            Assert.That(inPartitionA[0]?.MatchCount, Is.EqualTo(1));
+            Assert.That(wholeSystem[0]?.Id, Is.EqualTo(inB.Id), "a run of the whole system names the first by id");
+            Assert.That(wholeSystem[0]?.MatchCount, Is.EqualTo(2));
+        }
+    }
+
+    [Test]
     public async Task GetConnectedSystemObjectExternalIdMatchesAsync_NoValues_AnswersNothingAsync()
     {
         await using var ctx = NewContext();
         var matches = await new PostgresDataRepository(ctx).ConnectedSystems
-            .GetConnectedSystemObjectExternalIdMatchesAsync(_systemId, _attributeIds["user.id"], Array.Empty<string>());
+            .GetConnectedSystemObjectExternalIdMatchesAsync(_systemId, _typeIds["user"], null, _attributeIds["user.id"], Array.Empty<string>());
 
         Assert.That(matches, Is.Empty);
     }
@@ -164,7 +221,8 @@ public class DeletionCandidateLookupDatabaseTests
         await using var ctx = NewContext(trackAll: true);
         var repository = new PostgresDataRepository(ctx).ConnectedSystems;
 
-        var matches = await repository.GetConnectedSystemObjectExternalIdMatchesAsync(_systemId, _attributeIds[attribute], values);
+        var matches = await repository.GetConnectedSystemObjectExternalIdMatchesAsync(_systemId, _typeIds[attribute.Split('.')[0]], null,
+            _attributeIds[attribute], values);
 
         var expected = new List<string>();
         for (var i = 0; i < values.Length; i++)
