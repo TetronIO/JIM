@@ -7819,3 +7819,11 @@ html[lang] .mud-table tbody tr.jim-row-selected > td:first-child {
 .jim-filter-row > .mud-select {
     flex: 0 1 300px;
 }
+
+/* A column header's filter button while a filter is applied (VirtualisedFilterHeader). Its own colour and tint
+   rather than MudBlazor's Color.Primary, because themes mute .mud-primary-text to a grey for labels, which left an
+   applied filter looking exactly like an idle one. html[lang] so it outranks those theme rules. */
+html[lang] .jim-filter-header-active .mud-icon-button {
+    color: var(--jim-link-color) !important;
+    background-color: color-mix(in srgb, var(--jim-link-color) 16%, transparent);
+}

@@ -43,6 +43,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<TableObjectCount Count="@x" Total="@y" ... />` | The object count in a table toolbar's title slot | "Object counts in table toolbars" below |
 | `<TableEmptyState PrimaryText="..." ... />` | A table or data grid's no-rows fragment | "Table empty states" below |
 | `<VirtualisedDataGrid T="X" LoadWindow="..." ... />` | Every virtualised (infinite-scroll) list | "Virtualised lists" below |
+| `<VirtualisedFilterHeader TValue="X" Title="..." Name="..." Options="@o" UnfilteredValue="@any" Value="@v" ValueChanged="@h" />` | A virtualised grid's only page-owned filter when it narrows one column: a sortable header with a filter button beside it, in place of a select in the toolbar or a filter row of its own. Filters spanning several columns still go in a filter panel above the grid (`PendingExportList.razor`) | `Shared/VirtualisedFilterHeader.razor` |
 | `<AttributeTable TItem="X" Items="@xs" ... />` | A table of ONE object's attributes (Connected System Object, Pending Export, Metaverse Object Table view) | "Attribute tables" below |
 | `<AttributeValuesCell TValue="X" Values="@vs" TotalCount="@n">` | An attribute table's value cell: stacks up to 10 values, nests a virtualised table beyond | "Attribute tables" below |
 | `<OneLineText Text="@x" Secondary="@y" />` | A cell's text (and the secondary text that would otherwise sit under it) kept to one line | "One line per row" below |
