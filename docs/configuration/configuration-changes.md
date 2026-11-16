@@ -69,7 +69,7 @@ steps:
 
 1. **Preview**<br /> The rule editor's preview button reports which objects the change would move, changing nothing; see [Previewing a change](#previewing-a-change-before-you-make-it).
 2. **Save**<br /> The confirmation states when the change takes effect. For an import change it reads: "At the next synchronisation of {System}, Delta or Full. That run processes every {Type} object, not only the changed ones: {count} objects, about {N} minutes at the speed of its last Full Synchronisation. Other Object Types are processed as usual. Until then the Connected System's page lists it as awaiting synchronisation, with a button to run that synchronisation straight away." The estimate is left out until the Connected System has had a Full Synchronisation. REST and PowerShell callers get the same facts: the response to saving a Synchronisation Rule, an Attribute Flow or an Object Matching Rule, or to changing an Attribute Priority order, lists the Connected System, the Object Type, the object count and the estimated duration under `AwaitingSynchronisation`, and the cmdlets that make those changes warn of the same.
-3. **Awaiting synchronisation**<br /> The change shows on the Connected System, with **Run now**; see [Changes awaiting synchronisation](connected-systems.md#changes-awaiting-synchronisation).
+3. **Awaiting synchronisation**<br /> The change shows on the Connected System, with **Run now**; see [Changes awaiting synchronisation](changes-awaiting-synchronisation.md).
 4. **The synchronisation**<br /> The run processes every object of the affected Object Type, and only the changed objects of the others, then marks the change applied. Every Metaverse Object those objects join or project is processed too, so export evaluation runs on them as usual.
 5. **The Activities**<br /> The synchronisation's Activity lists the changes behind each Object Type it processed in full, and each change's own Activity says **Applied by** that run. Where a scope preview informed the save, it also shows what the preview predicted beside what the run did; see [Predicted and actual](#predicted-and-actual).
 
@@ -179,5 +179,5 @@ Changes made through the REST API and PowerShell are not prompted. An automated 
 - [Synchronisation Rules](deprovisioning.md#previewing-a-destructive-toggle-change): previewing a change to the destructive toggles
 - [Object Matching](object-matching-rules.md#previewing-an-object-matching-change): previewing a change to which identity an account joins
 - [Behaviour toggles](object-matching-rules.md#previewing-a-behaviour-change): previewing a change to whether a rule runs, and what it may create
-- [Connected Systems](connected-systems.md#changes-awaiting-synchronisation): the changes awaiting synchronisation, and the changed-since indicator
+- [Connected Systems](changes-awaiting-synchronisation.md): the changes awaiting synchronisation, and the changed-since indicator
 - [Service Settings](service-settings.md): switching configuration change tracking on or off
