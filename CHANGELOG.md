@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- 🔄 On the Connected Systems list, the Password Synchronisation filter is now the filter button on the Password Sync column's header, rather than a drop-down beside **Create Connected System**; the column's button is highlighted while a filter is applied.
+- 🔄 On the Connected Systems list, the Password Synchronisation filter is now the filter button on the Password Sync column's header, rather than a drop-down beside **Create Connected System**; the column's button is highlighted while a filter is applied, and the count reads "3 of 4 Connected Systems".
 - 🔄 A group membership change now exports only the members added or removed. A member removed from the target group by hand is no longer re-added by the group's next change; with Enforce State on, drift correction puts it back. A new group is still created with every member. (#2832)
 - 🔄 The Activity list and the Operations page fit narrower windows: when a table's columns no longer fit, its outcome chips show just their icon, and if it still doesn't fit, its Initiated By chips show just their tag (KEY, SCH, JIM and so on). On the Schedules tab each Schedule's Trigger and last Outcome show just their icon. Hovering a chip shows its full detail, including the exact count.
 - 🔄 A Connector can now warn about a Connected System's settings without refusing them: the settings save, and the warning shows beneath them in the portal, in the REST API's new `settingWarnings` on the update response, and as a PowerShell warning from `Set-JIMConnectedSystem`. (#2021)
