@@ -1,6 +1,6 @@
 # Bounded-Memory Full Import
 
-- **Status:** Doing (Phases 0 to 5 complete)
+- **Status:** Done (Phase 6 moved to [#2964](https://github.com/TetronIO/JIM/issues/2964))
 - **Issue:** [#2521](https://github.com/TetronIO/JIM/issues/2521)
 - **Related:** [#917](https://github.com/TetronIO/JIM/issues/917) ([Bounded-Memory Delta Import](../BOUNDED_MEMORY_DELTA_IMPORT.md)), [#2669](https://github.com/TetronIO/JIM/issues/2669)
 
@@ -261,11 +261,24 @@ What was found doing it:
 
 - Extending the held-reference questions Delta Import asks (#2817, #2836) to Full Import, to cut hydration and comparison on confirming imports, is no longer part of this plan: it moved to issue #2964, its own PR with measurements.
 
-### Phase 7: Validation, documentation, changelog
+### Phase 7: Validation, documentation, changelog ✅
 
-- Docs: `docs/configuration/import-watermarks.md`, `docs/administration/troubleshooting-worker.md` (sizing), `docs/connectors/jim-ldap-connector.md` (Page Size and Import Concurrency now govern Full Import memory), `engineering/notes/RUN_PROFILE_PHASES.md`.
-- Changelog: ⚡ for the memory change; 🔄 for a stopped Full Import keeping what it saved and synchronisation waiting for it.
-- Revise #917's plan against the staging core.
+- Docs: `docs/getting-started/prerequisites.md`'s hardware sizing rewritten from the 500k measurements below. Phase 5 had already updated `docs/configuration/unresolved-references.md` and `docs/administration/troubleshooting-synchronisation.md`. Of the other pages first listed here, `import-watermarks.md`, `troubleshooting-worker.md` and the LDAP Connector page made no claim that Phase 5 made false, so they are unchanged.
+- Changelog: Phase 5's 🔄 entry carries the measured memory figures; the ⚡ entries for Phases 1 to 3 shipped with them.
+- #917's plan was not revised. The 500k run showed Delta Import memory follows the size of the change (the 10,422-object Delta Import peaked at 1.71 GiB, the same as before), so #917 is parked, with the figures on the issue.
+
+**What was measured** (Scale500k25kGroups, OpenLDAP, Phase 5 against a `main` run on the same day):
+
+| Measure | Before | After |
+|---|---|---|
+| Test 1 | 1,104.7 s | 1,107.5 s |
+| Full Import, Docker peak (first / confirming) | 8.32 / 10.41 GiB | 2.63 / 2.35 GiB |
+| Live heap at unit boundaries | n/a | flat at 212 MB, unit 52 to 277 |
+| Unresolved references | 0 | 0 |
+
+- The whole run now peaks in the Target Export: JIM's four containers reach 10.2 GiB together (database 5.95, Worker 3.74).
+- Phase 0's 17.9 to 22.1 GiB confirming-import peak predates Phases 1 to 4 as well.
+- Every success criterion below is met, except that the stopped-run criterion is covered by tests and Scenario 001 rather than by a stopped 500k run.
 
 ## Success Criteria
 
