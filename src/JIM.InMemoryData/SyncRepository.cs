@@ -1149,6 +1149,71 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public async Task<Dictionary<string, Guid>> GetConnectedSystemObjectIdsByAttributeValuesAsync(
+        int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
+    {
+        // The same objects the whole-object lookup finds, as ids, keyed alike.
+        var objects = await GetConnectedSystemObjectsByAttributeValuesAsync(connectedSystemId, attributeId, attributeValues);
+        return objects.ToDictionary(pair => pair.Key, pair => pair.Value.Id, objects.Comparer);
+    }
+
+    public async Task<Dictionary<string, Guid>> GetConnectedSystemObjectIdsBySecondaryExternalIdAnyTypeValuesAsync(
+        int connectedSystemId, IEnumerable<string> secondaryExternalIdValues)
+    {
+        var objects = await GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(connectedSystemId, secondaryExternalIdValues);
+        return objects.ToDictionary(pair => pair.Key, pair => pair.Value.Id, objects.Comparer);
+    }
+
+    public Task<List<OutstandingReferenceValue>> GetOutstandingReferenceValuesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var values = connectedSystemObjectIds
+            .Distinct()
+            .Select(id => _csos.TryGetValue(id, out var cso) ? cso : null)
+            .OfType<ConnectedSystemObject>()
+            .SelectMany(cso => cso.AttributeValues
+                .Where(av => av.UnresolvedReferenceValue != null && !av.ReferenceValueId.HasValue)
+                .Select(av => new OutstandingReferenceValue(av.Id, cso.Id, cso.TypeId,
+                    av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id ?? 0, av.UnresolvedReferenceValue!)))
+            .ToList();
+        return Task.FromResult(values);
+    }
+
+    public Task<int> ApplyOutstandingReferenceResolutionsAsync(IReadOnlyList<OutstandingReferenceResolution> resolutions)
+    {
+        // Mirrors the Postgres writer: a value given its object's id only where it still has none, and the change record
+        // value the run wrote for it, under the item's change, the same attribute and identifier, and still marked.
+        var resolutionsByValueId = resolutions.GroupBy(r => r.AttributeValueId).ToDictionary(g => g.Key, g => g.First());
+        var resolved = 0;
+        foreach (var av in _csos.Values.SelectMany(cso => cso.AttributeValues)
+                     .Where(av => !av.ReferenceValueId.HasValue && resolutionsByValueId.ContainsKey(av.Id)))
+        {
+            var target = resolutionsByValueId[av.Id].ReferencedConnectedSystemObjectId;
+            av.ReferenceValueId = target;
+            av.ReferenceValue = _csos.GetValueOrDefault(target);
+            resolved++;
+        }
+
+        var byItem = resolutions.Where(r => r.ExecutionItemId.HasValue).ToLookup(r => r.ExecutionItemId!.Value);
+        foreach (var change in GetStoredCsoChanges().Where(change => change.ActivityRunProfileExecutionItemId.HasValue &&
+                                                                     byItem.Contains(change.ActivityRunProfileExecutionItemId.Value)))
+        {
+            foreach (var resolution in byItem[change.ActivityRunProfileExecutionItemId!.Value])
+            {
+                var values = change.AttributeChanges
+                    .Where(attributeChange => attributeChange.AttributeIdForWrite() == resolution.AttributeId)
+                    .SelectMany(attributeChange => attributeChange.ValueChanges)
+                    .Where(value => value.IsUnresolvedReference && value.StringValue == resolution.UnresolvedReferenceValue);
+                foreach (var value in values)
+                {
+                    value.ReferenceValueId = resolution.ReferencedConnectedSystemObjectId;
+                    value.IsUnresolvedReference = false;
+                }
+            }
+        }
+
+        return Task.FromResult(resolved);
+    }
+
     public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
     {
         // Excludes PendingProvisioning CSOs, mirroring ConnectedSystemRepository.BuildDeletionDetectionQuery
@@ -1382,6 +1447,7 @@ public partial class SyncRepository : ISyncRepository
             TimeOrderedIds.AssignMissing(cso);
 
             FixupCsoNavigationProperties(cso);
+            FixupReferenceNavigations(cso.AttributeValues);
             // A created object is pending synchronisation (#2092), as every production create writer records it.
             cso.SynchronisationPending = true;
             BumpRowVersion(cso);
@@ -1470,6 +1536,8 @@ public partial class SyncRepository : ISyncRepository
         // same object. Only genuinely new IDs adopt the incoming instance directly.
         // No EnsureWhollyLoaded (#2816, #2817): as in PostgreSQL, an object loaded in part is saved here, and WithValuesNotLoaded
         // keeps every value of an attribute it did not load.
+        if (pendingAdditions != null)
+            FixupReferenceNavigations(pendingAdditions.Select(addition => addition.Value));
         foreach (var cso in connectedSystemObjects)
         {
             if (_csos.TryGetValue(cso.Id, out var stored) && !ReferenceEquals(stored, cso))
@@ -1524,6 +1592,7 @@ public partial class SyncRepository : ISyncRepository
         // No EnsureWhollyLoaded: the pending values are applied to the instance, and the overload below keeps what it did not load.
         foreach (var cso in connectedSystemObjects)
         {
+            FixupReferenceNavigations(cso.PendingAttributeValueAdditions);
             foreach (var addition in cso.PendingAttributeValueAdditions)
             {
                 if (addition.Id == Guid.Empty)
@@ -3198,6 +3267,25 @@ public partial class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public Task UpdateUnresolvedReferenceReportsAsync(IReadOnlyList<UnresolvedReferenceReport> reports)
+    {
+        foreach (var report in reports)
+        {
+            if (!_rpeis.TryGetValue(report.ExecutionItemId, out var rpei))
+                continue;
+
+            rpei.UnresolvedReferenceCount = report.UnresolvedReferenceCount;
+            if (report.ErrorType == null)
+                continue;
+
+            rpei.ErrorType = report.ErrorType;
+            rpei.ErrorMessage = report.ErrorMessage;
+            rpei.ErrorStackTrace = null;
+        }
+
+        return Task.CompletedTask;
+    }
+
     public Task<List<CrossPageMergeRpei>> GetRpeisWithMvoChangeIdsForCrossPageMergeAsync(
         Guid activityId, IReadOnlyCollection<Guid> csoIds)
     {
@@ -4465,6 +4553,16 @@ public partial class SyncRepository : ISyncRepository
             else if (av.Attribute == null && av.AttributeId > 0 && cso.Type != null)
                 av.Attribute = cso.Type.Attributes.FirstOrDefault(a => a.Id == av.AttributeId)!;
         }
+    }
+
+    /// <summary>
+    /// Gives a reference value written by its referenced object's id alone the object, as a database read that includes the
+    /// reference gives it: a Full Import resolves a unit's references against what earlier units saved by id (#2521).
+    /// </summary>
+    private void FixupReferenceNavigations(IEnumerable<ConnectedSystemObjectAttributeValue> values)
+    {
+        foreach (var av in values.Where(av => av.ReferenceValue == null && av.ReferenceValueId.HasValue && _csos.ContainsKey(av.ReferenceValueId!.Value)))
+            av.ReferenceValue = _csos[av.ReferenceValueId!.Value];
     }
 
     /// <summary>

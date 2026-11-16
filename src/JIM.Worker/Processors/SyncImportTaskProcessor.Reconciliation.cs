@@ -41,9 +41,10 @@ public partial class SyncImportTaskProcessor
         /// Objects with a Pending Export that the save phase holds more than once: a Delta Import can update an object and
         /// then be told it was deleted under another Object Type (#2049), on the same page or a later one. Each is reconciled
         /// once, reloaded after every batch is saved, as all objects were before #2908. No batch loads their Pending Exports;
-        /// they are loaded once, when they are reconciled.
+        /// they are loaded once, when they are reconciled. A Full Import that saves each unit as it goes (#2521) sets them
+        /// for each unit, and reconciles them once that unit is saved.
         /// </summary>
-        public required IReadOnlySet<Guid> DeferredIds { get; init; }
+        public required IReadOnlySet<Guid> DeferredIds { get; set; }
 
         /// <summary>
         /// The Pending Exports of the save batch being reconciled, by object, loaded as the batch is reached (#2521). Every
@@ -138,6 +139,23 @@ public partial class SyncImportTaskProcessor
             "updated Connected System Objects are loaded and reconciled as each update batch is saved; objects reloaded from the database are read " +
             "in pages of {PageSize}", pendingExportCount, updatedCount, pageSize);
 
+        var deferredIds = await FindObjectsSavedMoreThanOnceWithPendingExportsAsync(updatedCsoIds);
+
+        return new PendingExportReconciliationRun
+        {
+            DeferredIds = deferredIds,
+            DatabaseFoldsCaseLikeIdentifierKey = databaseFoldsCaseLikeIdentifierKey,
+            PageSize = pageSize
+        };
+    }
+
+    /// <summary>
+    /// The objects with a Pending Export that the save phase (or a unit's save, #2521) holds more than once, which are
+    /// reconciled once each, after it.
+    /// </summary>
+    /// <param name="updatedCsoIds">The id of each object saved, once for each time it is saved.</param>
+    private async Task<IReadOnlySet<Guid>> FindObjectsSavedMoreThanOnceWithPendingExportsAsync(IReadOnlyCollection<Guid> updatedCsoIds)
+    {
         // An object saved more than once is in the list more than once, so which those are is read from the ids alone; only
         // they are asked about, and only whether each has a Pending Export (#2521).
         var savedMoreThanOnce = updatedCsoIds
@@ -151,13 +169,7 @@ public partial class SyncImportTaskProcessor
         if (deferredIds.Count > 0)
             Log.Information("BeginPendingExportReconciliationAsync: {Count} Connected System Object(s) with Pending Exports are saved more than once " +
                 "this run (updated, then reported deleted under another Object Type); each is reconciled once, after the save phase", deferredIds.Count);
-
-        return new PendingExportReconciliationRun
-        {
-            DeferredIds = deferredIds,
-            DatabaseFoldsCaseLikeIdentifierKey = databaseFoldsCaseLikeIdentifierKey,
-            PageSize = pageSize
-        };
+        return deferredIds;
     }
 
     /// <summary>

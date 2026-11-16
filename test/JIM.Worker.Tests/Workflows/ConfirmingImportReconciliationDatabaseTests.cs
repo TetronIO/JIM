@@ -153,10 +153,12 @@ public class ConfirmingImportReconciliationDatabaseTests
 
     /// <summary>
     /// The save phase's objects are reconciled as each batch is saved, from the values the import holds for them, never
-    /// reloaded (#2908): only Beta is read back, because it held an outstanding reference the run's cross-batch fix-up
-    /// resolved after it was loaded. Nothing is probed in the database: Alpha's member changes are answered from the
-    /// members the import holds. And the outcomes merged onto each batch's execution items are written with that batch,
-    /// not all at the end: the batches of three hold Ada and Grace, then Dorothy, then Alpha and Beta.
+    /// reloaded (#2908). Beta holds an outstanding reference the run's cross-batch fix-up resolves; a Full Import saves a
+    /// unit at a time and runs the fix-up once every unit is saved (#2521), so nothing changes Beta's values between its
+    /// save and its reconciliation, and it is judged from what it holds too. Nothing is probed in the database: Alpha's
+    /// member changes are answered from the members the import holds. And the outcomes merged onto each batch's execution
+    /// items are written with that batch, not all at the end: the batches of three hold Ada and Grace, then Dorothy, then
+    /// Alpha and Beta.
     /// </summary>
     [Test]
     public async Task FullImport_ConfirmingAcrossSaveBatches_JudgesHeldObjectsWithoutReloadingAndWritesOutcomesPerBatchAsync()
@@ -172,7 +174,7 @@ public class ConfirmingImportReconciliationDatabaseTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(reloaded, Is.EqualTo(new[] { Beta }), "only Beta is read back for reconciliation");
+            Assert.That(reloaded, Is.Empty, "no object is read back for reconciliation");
             Assert.That(probes, Is.Zero, "Alpha's member changes are answered from the values the import holds");
             Assert.That(outcomeWrites, Is.EqualTo(new int?[] { 2, 1, 2 }), "one write per save batch with merged outcomes");
         }
@@ -198,15 +200,16 @@ public class ConfirmingImportReconciliationDatabaseTests
     }
 
     /// <summary>
-    /// The same for a failure in reconciling a later batch itself: the third batch's reload (Beta's) fails as a probe that
-    /// cannot be answered does, which fails the run by design.
+    /// The same for a failure in reconciling a later batch itself: loading the Pending Exports of the third batch (Alpha's)
+    /// fails as a probe that cannot be answered does, which fails the run by design.
     /// </summary>
     [Test]
     public async Task FullImport_LaterBatchReconciliationFails_EveryPendingExportReconciliationDeletedHasItsExecutionItemAsync()
     {
         var (activity, _, failure) = await RunImportAsync(ConnectedSystemRunType.FullImport, DirectoryPages(), importBatchSize: 3,
-            arrange: (recorder, _) => recorder.FailWhen = (method, _) =>
-                method == nameof(ISyncRepository.GetConnectedSystemObjectsCoreByIdsNoTrackingAsync)
+            arrange: (recorder, _) => recorder.FailWhen = (method, args) =>
+                method == nameof(ISyncRepository.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync) &&
+                args.Length > 0 && args[0] is IEnumerable<Guid> ids && ids.Contains(Alpha)
                     ? new JIM.Models.Exceptions.ReconciliationProbeIncompleteException("Simulated: a probe that cannot be answered.")
                     : null);
 

@@ -147,6 +147,18 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues)
         => _inner.GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(connectedSystemId, secondaryExternalIdValues);
 
+    public Task<Dictionary<string, Guid>> GetConnectedSystemObjectIdsByAttributeValuesAsync(int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
+        => _inner.GetConnectedSystemObjectIdsByAttributeValuesAsync(connectedSystemId, attributeId, attributeValues);
+
+    public Task<Dictionary<string, Guid>> GetConnectedSystemObjectIdsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues)
+        => _inner.GetConnectedSystemObjectIdsBySecondaryExternalIdAnyTypeValuesAsync(connectedSystemId, secondaryExternalIdValues);
+
+    public Task<List<OutstandingReferenceValue>> GetOutstandingReferenceValuesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => _inner.GetOutstandingReferenceValuesAsync(connectedSystemObjectIds);
+
+    public Task<int> ApplyOutstandingReferenceResolutionsAsync(IReadOnlyList<OutstandingReferenceResolution> resolutions)
+        => throw new PreviewWriteAttemptedException(nameof(ApplyOutstandingReferenceResolutionsAsync));
+
     public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
         => _inner.GetAllExternalIdAttributeValuesOfTypeIntAsync(connectedSystemId, objectTypeId, partitionId);
 
@@ -828,6 +840,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task BulkUpdateRpeiOutcomesAsync(List<ActivityRunProfileExecutionItem> rpeis, List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes)
         => throw new PreviewWriteAttemptedException(nameof(BulkUpdateRpeiOutcomesAsync));
+
+    public Task UpdateUnresolvedReferenceReportsAsync(IReadOnlyList<UnresolvedReferenceReport> reports)
+        => throw new PreviewWriteAttemptedException(nameof(UpdateUnresolvedReferenceReportsAsync));
 
     public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis, bool allowParallelWrite = false)
         => throw new PreviewWriteAttemptedException(nameof(PersistRpeiCsoChangesAsync));
