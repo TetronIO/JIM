@@ -227,9 +227,9 @@ public partial class SyncRepository : ISyncRepository
             .SingleOrDefaultAsync(x => x.ConnectedSystemId == connectedSystemId && x.Id == csoId);
     }
 
-    public Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int attributeId,
-        IReadOnlyList<T> attributeValues) where T : notnull
-        => _repo.ConnectedSystems.GetConnectedSystemObjectExternalIdMatchesAsync(connectedSystemId, attributeId, attributeValues);
+    public Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int objectTypeId, int? partitionId,
+        int attributeId, IReadOnlyList<T> attributeValues) where T : notnull
+        => _repo.ConnectedSystems.GetConnectedSystemObjectExternalIdMatchesAsync(connectedSystemId, objectTypeId, partitionId, attributeId, attributeValues);
 
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForDeletionDetectionAsync(int connectedSystemId, IReadOnlyCollection<Guid> csoIds)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsForDeletionDetectionAsync(connectedSystemId, csoIds);

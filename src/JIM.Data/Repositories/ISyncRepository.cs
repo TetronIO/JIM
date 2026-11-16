@@ -213,16 +213,21 @@ public interface ISyncRepository
 
     /// <summary>
     /// For each value, in order, the Connected System Object that holds it in the attribute, as a summary, or null where no
-    /// object holds it: the first object by id in the Connected System, whatever its Object Type, Partition or status, text
-    /// compared as the attribute declares (#2051) and decimals numerically (#1283), as the single-value lookup by attribute
-    /// (<see cref="IConnectedSystemRepository.GetConnectedSystemObjectByAttributeAsync(int, int, string)"/>) answers. One
-    /// round trip for every value, where deletion detection used to load each candidate whole, one query at a time (#2521).
+    /// object holds it: the first object by id among the objects deletion detection compared (#2948), those of the Object
+    /// Type, in the Partition when one is given, that are not Pending Provisioning. Text is compared as the attribute
+    /// declares (#2051) and decimals numerically (#1283). One round trip for every value, where deletion detection used to
+    /// load each candidate whole, one query at a time (#2521).
     /// </summary>
+    /// <param name="connectedSystemId">The Connected System.</param>
+    /// <param name="objectTypeId">The Object Type whose External IDs were compared.</param>
+    /// <param name="partitionId">The run's Partition, or null for a run of the whole Connected System.</param>
+    /// <param name="attributeId">The Object Type's External ID attribute.</param>
+    /// <param name="attributeValues">The values to resolve.</param>
     /// <typeparam name="T">The External ID's value type: <see cref="string"/>, <see cref="int"/>, <see cref="long"/>,
     /// <see cref="decimal"/> or <see cref="Guid"/>.</typeparam>
     /// <exception cref="ArgumentOutOfRangeException">Any other value type.</exception>
-    Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int attributeId,
-        IReadOnlyList<T> attributeValues) where T : notnull;
+    Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int objectTypeId, int? partitionId,
+        int attributeId, IReadOnlyList<T> attributeValues) where T : notnull;
 
     /// <summary>
     /// Loads Connected System Objects by id with the graph and tracking the single-value lookup by attribute loads one with

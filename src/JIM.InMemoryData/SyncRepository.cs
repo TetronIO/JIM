@@ -637,9 +637,10 @@ public partial class SyncRepository : ISyncRepository
     }
 
     /// <inheritdoc />
-    /// <remarks>Mirrors the single-value lookups by attribute above: the first object in store order holding the value.</remarks>
-    public Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int attributeId,
-        IReadOnlyList<T> attributeValues) where T : notnull
+    /// <remarks>The first object in store order holding the value, among those deletion detection compared (#2948): the Object
+    /// Type, in the Partition when one is given, not Pending Provisioning.</remarks>
+    public Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int objectTypeId, int? partitionId,
+        int attributeId, IReadOnlyList<T> attributeValues) where T : notnull
     {
         Func<ConnectedSystemObjectAttributeValue, T, bool> holds;
         if (typeof(T) == typeof(string))
@@ -660,7 +661,10 @@ public partial class SyncRepository : ISyncRepository
             throw new ArgumentOutOfRangeException(nameof(attributeValues), typeof(T).Name,
                 $"Connected System Objects cannot be looked up by an External ID of type {typeof(T).Name}.");
 
-        var csos = GetCsosForSystem(connectedSystemId).ToList();
+        var csos = GetCsosForSystem(connectedSystemId)
+            .Where(c => c.TypeId == objectTypeId && c.Status != ConnectedSystemObjectStatus.PendingProvisioning
+                        && (partitionId == null || c.PartitionId == partitionId))
+            .ToList();
         var matches = attributeValues
             .Select(value => csos.Where(c => c.AttributeValues.Any(av => av.AttributeId == attributeId && holds(av, value))).ToList())
             .Select(holders => holders.Count == 0

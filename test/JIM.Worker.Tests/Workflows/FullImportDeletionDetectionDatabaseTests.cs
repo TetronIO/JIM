@@ -29,8 +29,8 @@ namespace JIM.Worker.Tests.Workflows;
 /// <para>
 /// The cases are the ones where the database, not the Worker, decides: an External ID held in another case ignoring case
 /// (#2051), two objects holding one External ID (the first by id is resolved, as the lookup always has), two objects whose
-/// External IDs differ only in case and are both missing, an object already Obsolete, one Pending Provisioning, and Number
-/// and Guid anchors. Opt-in via the <c>JIM_TEST_RESET_*</c> environment variables; <c>SetUp</c> TRUNCATEs every table.
+/// External IDs differ only in case and are both missing, an object already Obsolete, one Pending Provisioning, a
+/// missing External ID also held by a Pending Provisioning object with a lower id (#2948), and Number and Guid anchors. Opt-in via the <c>JIM_TEST_RESET_*</c> environment variables; <c>SetUp</c> TRUNCATEs every table.
 /// </para>
 /// </summary>
 [TestFixture]
@@ -50,6 +50,9 @@ public class FullImportDeletionDetectionDatabaseTests
     private static readonly Guid DuplicateSecond = Guid.Parse("00000000-0000-0000-0000-00000000f006");
     private static readonly Guid TwinFirst = Guid.Parse("00000000-0000-0000-0000-00000000f007");
     private static readonly Guid TwinSecond = Guid.Parse("00000000-0000-0000-0000-00000000f008");
+    // A Pending Provisioning object and a Normal one holding one External ID, the Pending Provisioning one with the lower id.
+    private static readonly Guid ShadowProvisioning = Guid.Parse("00000000-0000-0000-0000-00000000f009");
+    private static readonly Guid Shadowed = Guid.Parse("00000000-0000-0000-0000-00000000f00a");
     private static readonly Guid AccountKept = Guid.Parse("00000000-0000-0000-0000-00000000f101");
     private static readonly Guid AccountGone = Guid.Parse("00000000-0000-0000-0000-00000000f102");
     private static readonly Guid DeviceKept = Guid.Parse("00000000-0000-0000-0000-00000000f201");
@@ -70,6 +73,8 @@ public class FullImportDeletionDetectionDatabaseTests
           gone: Obsolete
           kept: Normal
           provisioning: PendingProvisioning
+          shadowProvisioning: PendingProvisioning
+          shadowed: Obsolete
           twinFirst: Obsolete
           twinSecond: Normal
         Pending Exports:
@@ -79,9 +84,10 @@ public class FullImportDeletionDetectionDatabaseTests
           deviceGone
           duplicateFirst
           gone
+          shadowed
           twinFirst
         Activity:
-          withheld=0 message=Import complete: 3 objects; 5 no longer found and marked as deleted
+          withheld=0 message=Import complete: 3 objects; 6 no longer found and marked as deleted
           warning=-
 
         """;
@@ -98,6 +104,8 @@ public class FullImportDeletionDetectionDatabaseTests
           gone: Normal
           kept: Normal
           provisioning: PendingProvisioning
+          shadowProvisioning: PendingProvisioning
+          shadowed: Normal
           twinFirst: Normal
           twinSecond: Normal
         Pending Exports:
@@ -106,8 +114,8 @@ public class FullImportDeletionDetectionDatabaseTests
           provisioning
         Deletion items:
         Activity:
-          withheld=5 message=Import complete: 3 objects
-          warning=Deletion detection found 5 objects (45% of 11) no longer in the Connected System, above this Run Profile's limit of 4; none were marked as deleted. Check the Connected System's scope and the connector's filters, or raise the limit, then run the Full Import again.
+          withheld=6 message=Import complete: 3 objects
+          warning=Deletion detection found 6 objects (46% of 13) no longer in the Connected System, above this Run Profile's limit of 4; none were marked as deleted. Check the Connected System's scope and the connector's filters, or raise the limit, then run the Full Import again.
 
         """;
 
@@ -225,6 +233,10 @@ public class FullImportDeletionDetectionDatabaseTests
             // Two External IDs differing only in case, both missing: one value, which resolves to the first by id.
             User(TwinFirst, "twinFirst", "twin"),
             User(TwinSecond, "twinSecond", "TWIN"),
+            // A missing External ID also held by a Pending Provisioning object with a lower id: deletion detection compares
+            // only objects that are not Pending Provisioning, so the missing value is the Normal object's (#2948).
+            User(ShadowProvisioning, "shadowProvisioning", "shadow", ConnectedSystemObjectStatus.PendingProvisioning),
+            User(Shadowed, "shadowed", "shadow"),
             Typed(AccountKept, "accountKept", "account", "number", value => value.IntValue = 1),
             Typed(AccountGone, "accountGone", "account", "number", value => value.IntValue = 2),
             Typed(DeviceKept, "deviceKept", "device", "deviceId", value => value.GuidValue = DeviceKeptAnchor),

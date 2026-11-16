@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A Full Import no longer marks the wrong object as deleted when two objects in a Connected System share an External ID. It looked for the missing object across the whole Connected System and took the first match, which could be an object in another Partition or one waiting to be provisioned, and the object actually missing was left as it was. It now looks only among the objects it compared. (#2948)
 - 🐛 Saving a Connected System's settings no longer puts back values JIM keeps for its own runs as they stood when the page was opened. A save made after **Clear Connector Space**, from a page opened before it, restored the old Delta Import watermark, so the next Delta Import did not re-read the cleared objects; it could also roll back when the last synchronisation or Full Import completed. A synchronisation completing while an import of the same system ran could likewise put back an older Delta Import watermark. (#2950)
 - 🐛 A Full Import that marks an object deleted no longer also records **Export Not Confirmed** against it for a Pending Export the deletion had already removed. (#2521)
 - 🐛 JIM now records the name and External ID a target system reports as soon as an export creates, renames or moves an object. It kept the old name until the next import, so a group the moved person joined in the same run was given the old name as a member, and the portal showed the old name. (#2930)

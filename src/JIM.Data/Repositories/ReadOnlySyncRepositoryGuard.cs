@@ -86,9 +86,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectWithAttributeValuesAsync(int connectedSystemId, Guid csoId)
         => _inner.GetConnectedSystemObjectWithAttributeValuesAsync(connectedSystemId, csoId);
 
-    public Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int attributeId,
-        IReadOnlyList<T> attributeValues) where T : notnull
-        => _inner.GetConnectedSystemObjectExternalIdMatchesAsync(connectedSystemId, attributeId, attributeValues);
+    public Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int objectTypeId, int? partitionId,
+        int attributeId, IReadOnlyList<T> attributeValues) where T : notnull
+        => _inner.GetConnectedSystemObjectExternalIdMatchesAsync(connectedSystemId, objectTypeId, partitionId, attributeId, attributeValues);
 
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForDeletionDetectionAsync(int connectedSystemId, IReadOnlyCollection<Guid> csoIds)
         => _inner.GetConnectedSystemObjectsForDeletionDetectionAsync(connectedSystemId, csoIds);

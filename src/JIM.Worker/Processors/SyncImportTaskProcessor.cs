@@ -1598,7 +1598,7 @@ public partial class SyncImportTaskProcessor
                 {
                     var held = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeIntAsync(_connectedSystem.Id, objectType.Id, partitionId);
                     await ResolveAndClassifyDeletionCandidatesAsync(HeldValuesNotImported(held, imported.Ints, EqualityComparer<int>.Default),
-                        objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
+                        objectType.Id, partitionId, objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
                     break;
                 }
                 case AttributeDataType.Text:
@@ -1606,21 +1606,21 @@ public partial class SyncImportTaskProcessor
                     var held = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeStringAsync(_connectedSystem.Id, objectType.Id, partitionId);
                     await ResolveAndClassifyDeletionCandidatesAsync(
                         HeldValuesNotImported(held, imported.Strings, IdentifierKey.Comparer(objectTypeExternalIdAttribute.CaseExact)),
-                        objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
+                        objectType.Id, partitionId, objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
                     break;
                 }
                 case AttributeDataType.Guid:
                 {
                     var held = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeGuidAsync(_connectedSystem.Id, objectType.Id, partitionId);
                     await ResolveAndClassifyDeletionCandidatesAsync(HeldValuesNotImported(held, imported.Guids, EqualityComparer<Guid>.Default),
-                        objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
+                        objectType.Id, partitionId, objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
                     break;
                 }
                 case AttributeDataType.LongNumber:
                 {
                     var held = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeLongAsync(_connectedSystem.Id, objectType.Id, partitionId);
                     await ResolveAndClassifyDeletionCandidatesAsync(HeldValuesNotImported(held, imported.Longs, EqualityComparer<long>.Default),
-                        objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
+                        objectType.Id, partitionId, objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
                     break;
                 }
                 case AttributeDataType.Decimal:
@@ -1631,7 +1631,7 @@ public partial class SyncImportTaskProcessor
                     // they carry, so 4200.00m and 4200m are the same member.
                     var held = await _syncRepo.GetAllExternalIdAttributeValuesOfTypeDecimalAsync(_connectedSystem.Id, objectType.Id, partitionId);
                     await ResolveAndClassifyDeletionCandidatesAsync(HeldValuesNotImported(held, imported.Decimals, EqualityComparer<decimal>.Default),
-                        objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
+                        objectType.Id, partitionId, objectTypeExternalIdAttribute.Id, processedCsoIds, candidates);
                     break;
                 }
                 case AttributeDataType.NotSet:
@@ -1673,17 +1673,20 @@ public partial class SyncImportTaskProcessor
     /// import run (e.g. matched by a secondary External ID): neither is a deletion candidate.
     /// </summary>
     /// <param name="missingExternalIds">The values of the External ID attribute deletion detection found missing.</param>
+    /// <param name="objectTypeId">The Object Type whose External IDs were compared.</param>
+    /// <param name="partitionId">The run's Partition, or null for a run of the whole Connected System. A missing value resolves
+    /// only among the objects compared, so an object holding the same value elsewhere is never the one marked (#2948).</param>
     /// <param name="connectedSystemAttributeId">The attribute that represents the External ID in the current Connected System.</param>
     /// <param name="processedCsoIds">CSOs already updated elsewhere in this import run, which must not be treated as deletion
     /// candidates even if their External ID is not in the import.</param>
     /// <param name="candidates">Where each candidate is sorted.</param>
     /// <typeparam name="T">The type for the External ID attribute.</typeparam>
-    private async Task ResolveAndClassifyDeletionCandidatesAsync<T>(List<T> missingExternalIds, int connectedSystemAttributeId, HashSet<Guid> processedCsoIds,
-        DeletionCandidates candidates) where T : notnull
+    private async Task ResolveAndClassifyDeletionCandidatesAsync<T>(List<T> missingExternalIds, int objectTypeId, int? partitionId,
+        int connectedSystemAttributeId, HashSet<Guid> processedCsoIds, DeletionCandidates candidates) where T : notnull
     {
         foreach (var batch in missingExternalIds.Chunk(DeletionCandidateBatchSize))
         {
-            var matches = await _syncRepo.GetConnectedSystemObjectExternalIdMatchesAsync(_connectedSystem.Id, connectedSystemAttributeId, batch);
+            var matches = await _syncRepo.GetConnectedSystemObjectExternalIdMatchesAsync(_connectedSystem.Id, objectTypeId, partitionId, connectedSystemAttributeId, batch);
             for (var i = 0; i < batch.Length; i++)
             {
                 var match = matches[i];
