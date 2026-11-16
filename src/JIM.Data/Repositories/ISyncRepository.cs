@@ -212,32 +212,25 @@ public interface ISyncRepository
     Task<ConnectedSystemObject?> GetConnectedSystemObjectWithAttributeValuesAsync(int connectedSystemId, Guid csoId);
 
     /// <summary>
-    /// Gets a CSO by its external ID attribute value (int type).
-    /// Used during import to match incoming objects to existing CSOs.
+    /// For each value, in order, the Connected System Object that holds it in the attribute, as a summary, or null where no
+    /// object holds it: the first object by id in the Connected System, whatever its Object Type, Partition or status, text
+    /// compared as the attribute declares (#2051) and decimals numerically (#1283), as the single-value lookup by attribute
+    /// (<see cref="IConnectedSystemRepository.GetConnectedSystemObjectByAttributeAsync(int, int, string)"/>) answers. One
+    /// round trip for every value, where deletion detection used to load each candidate whole, one query at a time (#2521).
     /// </summary>
-    Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, int attributeValue);
+    /// <typeparam name="T">The External ID's value type: <see cref="string"/>, <see cref="int"/>, <see cref="long"/>,
+    /// <see cref="decimal"/> or <see cref="Guid"/>.</typeparam>
+    /// <exception cref="ArgumentOutOfRangeException">Any other value type.</exception>
+    Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int attributeId,
+        IReadOnlyList<T> attributeValues) where T : notnull;
 
     /// <summary>
-    /// Gets a CSO by its external ID attribute value (string type).
+    /// Loads Connected System Objects by id with the graph and tracking the single-value lookup by attribute loads one with
+    /// (its Type with the Type's attributes, its values with their attributes, and each resolved reference
+    /// with the referenced object's Type), for the objects deletion detection marks deleted (#2521). Ids not found are left
+    /// out.
     /// </summary>
-    Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, string attributeValue);
-
-    /// <summary>
-    /// Gets a CSO by its external ID attribute value (Guid type).
-    /// </summary>
-    Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, Guid attributeValue);
-
-    /// <summary>
-    /// Gets a CSO by its external ID attribute value (long type).
-    /// </summary>
-    Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, long attributeValue);
-
-    /// <summary>
-    /// Gets a Connected System Object by a decimal attribute value. Oracle's <c>NUMBER</c> is discovered
-    /// as Decimal, so this covers the ordinary sequence-backed primary key on that provider (#1283).
-    /// Matching is numeric, so a stored 4200.00 matches a supplied 4200.
-    /// </summary>
-    Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int attributeId, decimal attributeValue);
+    Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForDeletionDetectionAsync(int connectedSystemId, IReadOnlyCollection<Guid> csoIds);
 
     /// <summary>
     /// Gets a CSO by its secondary external ID attribute value.

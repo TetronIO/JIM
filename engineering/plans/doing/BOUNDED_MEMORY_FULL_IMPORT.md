@@ -1,6 +1,6 @@
 # Bounded-Memory Full Import
 
-- **Status:** Doing (Phase 2 complete)
+- **Status:** Doing (Phases 0 to 3 complete)
 - **Issue:** [#2521](https://github.com/TetronIO/JIM/issues/2521)
 - **Related:** [#917](https://github.com/TetronIO/JIM/issues/917) ([Bounded-Memory Delta Import](../BOUNDED_MEMORY_DELTA_IMPORT.md)), [#2669](https://github.com/TetronIO/JIM/issues/2669)
 
@@ -189,11 +189,27 @@ What was found doing it:
       - The lookup is never updated during the run. Today that does no harm, since nothing an import changes is saved before its last page. Phase 5 saves each unit as it goes, after which a referenced object renamed on an earlier unit would be compared by its old DN, removing and re-adding the reference.
       - Carrying the Secondary External ID as held in the lookup, and keeping it current through Phase 5's saves, would add about 500,000 strings to what stays run-wide, against this plan's aim. With each External ID now read once per page, the remaining database cost is reading the references themselves (about 0.4 s for the 500k first page, the lab's `av` node).
 
-### Phase 3: Deletion detection over ids; #2049 replacements held apart (no behaviour change)
+### Phase 3: Deletion detection over ids; #2049 replacements held apart (no behaviour change) ✅
 
 - Deletion candidates as a summary (id, status, Object Type) applied in batches, not whole objects held to the end.
 - Tests: the existing deletion-limit and Object Type change tests pass unchanged; detection holds no hydrated candidates; replacements are kept apart from the run's creates.
 - Scenarios: 004, 021 (Test 2), 009, 007, 001.
+
+What was found doing it:
+- **What was held, and for how long:**
+  - The External IDs: each object's External ID attribute as the Connector returned it (`ExternalIdPair`), from its page to the end of `PerformImportAsync`. It was a local of the async method, so it lived through the save phase, which is where Phase 0 measured it.
+  - The candidates: each missing External ID was looked up on its own (`GetConnectedSystemObjectByAttributeAsync`), loading the whole object (values, Type and attributes, each resolved reference's object and Type), tracked on the run's context, and held until applied. Already-Obsolete candidates needed only their id; a refused run needed none of them, and still made one query and loaded one whole object per object JIM held that the import did not return.
+  - The #2049 replacements: in the run's creates from the page they arrived on, taken out again by `List.Remove` if withdrawn.
+- **Now:**
+  - The External IDs are values, in one set per Object Type and value type (`ImportedExternalIds`). Text is kept exactly as read and folded only when the caller asks to ignore case, so both readers compare as before whichever case-exact declaration they pass (#2051). The sets are released after the Unconfirmed Create retry, before the save phase.
+  - Measured with 100,000 objects (`ImportedExternalIdsTests`, explicit): 252 bytes an object as attributes against 44 as values for a Guid External ID, and 319 against 127 for a 36-character text one (the string itself is about 96 of those). At 525,000 objects that is about 130 MB down to 23 MB, held until deletion detection rather than through the save phase.
+  - Candidates are `ConnectedSystemObjectExternalIdMatch` summaries (id, status, Object Type, how many objects hold the value). `GetConnectedSystemObjectExternalIdMatchesAsync` resolves 1,000 missing values a statement. Applying works 1,000 at a time: stale Pending Exports are cleared by id in one statement, and only the objects to mark are loaded whole (`GetConnectedSystemObjectsForDeletionDetectionAsync`, with the lookup's graph and tracking). A refused run loads none. The objects marked still join the run's updates until the save phase, which is Phase 5's to bound.
+  - Replacements are held only in `_objectTypeChangesCarriedOut`, counted in the harness sample, and logged when deletion detection begins. `ReconcileCarriedOutObjectTypeChanges` adds the ones that stand to the creates.
+- **The resolution is the old lookup's, which is wider than deletion detection's own scope:** any Object Type, Partition or status, first by id. A missing External ID held also by an object in another Partition, or by a Pending Provisioning object, resolves to whichever has the lower id, and that object is the one marked. Kept exactly, as the phase changes no behaviour; `FullImportDeletionDetectionDatabaseTests` pins first-by-id with two objects in one Partition. Worth an issue of its own.
+- **A candidate named twice is marked once:** two missing values can resolve to one object (text the database folds where .NET does not). The run's tracked context returned the same instance twice, so the second application found it Obsolete; the batch keeps that by noting what it has marked.
+- **Guards:** `FullImportDeletionDetectionDatabaseTests` (committed passing on the old code first: applied and refused verdicts on PostgreSQL across case, duplicates, Obsolete, Pending Provisioning, Number and Guid anchors) and `DeletionCandidateLookupDatabaseTests` (the batched resolution against the single-value lookup for every value type, and the loaded graph against the lookup's). Reversing the lookup's order fails three of them.
+- **Scenarios** (OpenLDAP): 004, 009, 007 and 001 at Small and 021 at Nano, all passing. Scenario 021's Test 2 needs one CSV row to be more than 10% of the data, so it fails its own precondition at Small (100 rows) on any code; Nano is the template it documents.
+- **The per-value lookups left the sync repository:** deletion detection was their only caller there. The Connected System repository keeps them; its tests and the equivalence guard use them.
 
 ### Phase 4: The import-incomplete marker (behaviour change)
 

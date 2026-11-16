@@ -115,6 +115,24 @@ public class ImportObjectTypeChangeTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task FullImport_AllowObjectTypeChanges_HoldsTheReplacementApartFromTheRunsCreatesAsync()
+    {
+        // A replacement exists only on condition that deletion detection retires what it replaces (#2049), so it is held
+        // apart from the objects the run creates until deletion detection has decided it (#2521, Phase 3): a run that
+        // stages its creates as it goes must not stage one that may yet be withdrawn.
+        var context = await ArrangeAsync(allowObjectTypeChanges: true);
+        var held = SeedCso(context, context.UserType, Guid.NewGuid());
+
+        var processor = await RunImportAsync(context, ConnectedSystemRunType.FullImport, [ImportObject(context.ComputerType, held.ExternalId)]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(processor.ObjectTypeChangeReplacementsHeldApart, Is.EqualTo(1));
+            Assert.That(await SyncRepo.GetConnectedSystemObjectCountAsync(context.ConnectedSystem.Id), Is.EqualTo(2), "The replacement is still created");
+        }
+    }
+
+    [Test]
     public async Task FullImport_AllowObjectTypeChangesUnderADeletionLimit_StillRetiresTheHeldObjectAsync()
     {
         // The retirement is half of a change the administrator asked for, not a missing object: a deletion limit
@@ -464,7 +482,7 @@ public class ImportObjectTypeChangeTests : WorkflowTestBase
         return new HeldObject(cso, externalId);
     }
 
-    private async Task RunImportAsync(ImportContext context, ConnectedSystemRunType runType, List<ConnectedSystemImportObject> importObjects,
+    private async Task<SyncImportTaskProcessor> RunImportAsync(ImportContext context, ConnectedSystemRunType runType, List<ConnectedSystemImportObject> importObjects,
         bool forceAllowObjectTypeChanges = false, Action<ConnectedSystemRunProfile>? configure = null)
     {
         var runProfile = await CreateRunProfileAsync(context.ConnectedSystem.Id, runType.ToString(), runType);
@@ -485,6 +503,7 @@ public class ImportObjectTypeChangeTests : WorkflowTestBase
             new CancellationTokenSource());
 
         await processor.PerformImportAsync();
+        return processor;
     }
 
     private static List<ActivityRunProfileExecutionItem> ErroredRpeis(ImportContext context) =>

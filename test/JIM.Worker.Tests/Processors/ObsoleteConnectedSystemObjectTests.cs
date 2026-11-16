@@ -11,6 +11,7 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Worker.Models;
 using JIM.Worker.Processors;
 using NUnit.Framework;
 
@@ -20,12 +21,11 @@ namespace JIM.Worker.Tests.Processors;
 /// Deletion detection must be able to obsolete an object whatever type its anchor is.
 ///
 /// <c>ProcessConnectedSystemObjectDeletionsAsync</c> works out which Connected System Objects are no
-/// longer present and, via <c>ResolveDeletionCandidateAsync</c> (Run Profile Safeguards, #1618 Layer
-/// 2's resolve-then-apply split), hands each one's anchor to a lookup that dispatches on the anchor's
-/// runtime type to fetch the object; <c>ApplyDeletionCandidateAsync</c> then does the marking. An
-/// anchor type missing from the lookup's dispatch does not fail: it falls through to a null object,
-/// logs "not found. No work to do." and returns, so the object is never obsoleted and the following
-/// synchronisation never deletes it. Nothing is reported, and the run completes successfully.
+/// longer present and (Run Profile Safeguards, #1618 Layer 2's resolve-then-apply split) resolves each
+/// missing anchor to its object by a lookup typed by the anchor's data type, then applies what it
+/// found. An anchor type missing from that lookup once did not fail: it fell through to a null object,
+/// logged "not found. No work to do." and returned, so the object was never obsoleted and the following
+/// synchronisation never deleted it. Nothing was reported, and the run completed successfully.
 ///
 /// That was the state of the LongNumber anchor: the deletion-detection switch had handled it since it
 /// was written and the repository overload existed, but the dispatch here did not name it. A Connected
@@ -48,7 +48,7 @@ public class ObsoleteConnectedSystemObjectTests
     private const int Anchor = 40711;
 
     [Test]
-    public async Task ResolveAndApplyDeletionCandidateAsync_LongAnchor_ObsoletesTheObjectAsync()
+    public async Task ProcessConnectedSystemObjectDeletions_LongAnchor_ObsoletesTheObjectAsync()
     {
         // A bigint identity column, which is the ordinary shape of a large table's primary key.
         const long anchor = 9_007_199_254_740_993L;
@@ -61,7 +61,7 @@ public class ObsoleteConnectedSystemObjectTests
     }
 
     [Test]
-    public async Task ResolveAndApplyDeletionCandidateAsync_DecimalAnchor_ObsoletesTheObjectAsync()
+    public async Task ProcessConnectedSystemObjectDeletions_DecimalAnchor_ObsoletesTheObjectAsync()
     {
         var anchor = decimal.Parse("4200.00", CultureInfo.InvariantCulture);
         var result = await ObsoleteByAnchorAsync(anchor, av => av.DecimalValue = anchor);
@@ -71,7 +71,7 @@ public class ObsoleteConnectedSystemObjectTests
     }
 
     [Test]
-    public async Task ResolveAndApplyDeletionCandidateAsync_IntAnchor_ObsoletesTheObjectAsync()
+    public async Task ProcessConnectedSystemObjectDeletions_IntAnchor_ObsoletesTheObjectAsync()
     {
         // A control: Number has always been dispatched, so this passing while the others fail is what
         // shows the fixture itself is sound and the defect is the missing arm rather than the harness.
@@ -82,7 +82,7 @@ public class ObsoleteConnectedSystemObjectTests
     }
 
     [Test]
-    public async Task ResolveAndApplyDeletionCandidateAsync_ObjectNotYetObsolete_RecordsTheDeletionAsync()
+    public async Task ProcessConnectedSystemObjectDeletions_ObjectNotYetObsolete_RecordsTheDeletionAsync()
     {
         // The first import to find the object missing is the one entitled to report it, and the pair of
         // tests below only mean anything against this: they assert absence, so without a control showing
@@ -99,7 +99,7 @@ public class ObsoleteConnectedSystemObjectTests
     }
 
     [Test]
-    public async Task ResolveAndApplyDeletionCandidateAsync_ObjectAlreadyObsolete_ReportsAndChangesNothingAsync()
+    public async Task ProcessConnectedSystemObjectDeletions_ObjectAlreadyObsolete_ReportsAndChangesNothingAsync()
     {
         var result = await ObsoleteByAnchorAsync(Anchor, av => av.IntValue = Anchor,
             status: ConnectedSystemObjectStatus.Obsolete);
@@ -116,7 +116,7 @@ public class ObsoleteConnectedSystemObjectTests
     }
 
     [Test]
-    public async Task ResolveAndApplyDeletionCandidateAsync_ObjectAlreadyObsolete_StillClearsStalePendingExportsAsync()
+    public async Task ProcessConnectedSystemObjectDeletions_ObjectAlreadyObsolete_StillClearsStalePendingExportsAsync()
     {
         // Export evaluation does not exclude Obsolete objects, so a synchronisation on a *different*
         // Connected System can stage an export against one between imports. Clearing those is the one
@@ -135,11 +135,11 @@ public class ObsoleteConnectedSystemObjectTests
     }
 
     [Test]
-    public void ResolveDeletionCandidateAsync_AnchorTypeItCannotDispatch_ThrowsRatherThanDoingNothing()
+    public void ProcessConnectedSystemObjectDeletions_AnchorTypeItCannotLookUp_ThrowsRatherThanDoingNothing()
     {
-        // The arm that let LongNumber through silently. A type this method cannot fetch by is a
-        // programming error in deletion detection, and deletion detection is the phase that decides
-        // whether an object still exists, so it must fail loudly rather than report "no work to do".
+        // The shape of the gap that let LongNumber through silently. An anchor type deletion detection cannot
+        // look up by is a programming error, and deletion detection is the phase that decides whether an
+        // object still exists, so it must fail loudly rather than report "no work to do".
         var anchor = new DateTime(2026, 8, 11, 0, 0, 0, DateTimeKind.Utc);
 
         Assert.That(
@@ -148,7 +148,7 @@ public class ObsoleteConnectedSystemObjectTests
     }
 
     /// <summary>
-    /// What one invocation of the production obsoleting method did: the objects it queued for update,
+    /// What one run of deletion detection did: the objects it queued for update,
     /// the execution items it recorded, and the repository it acted on (so a test can ask what became
     /// of the Pending Exports it seeded).
     /// </summary>
@@ -159,7 +159,7 @@ public class ObsoleteConnectedSystemObjectTests
 
     /// <summary>
     /// Seeds one Connected System Object carrying the given anchor, then invokes the production
-    /// obsoleting method with that anchor, exactly as deletion detection does.
+    /// deletion detection with nothing imported, so that anchor is missing.
     /// </summary>
     /// <param name="anchor">The External ID value deletion detection found missing from the import.</param>
     /// <param name="populateAnchorColumn">Writes the anchor into the typed column the repository looks it up by.</param>
@@ -201,7 +201,34 @@ public class ObsoleteConnectedSystemObjectTests
                 ChangeType = PendingExportChangeType.Update
             });
 
-        var connectedSystem = new ConnectedSystem { Id = ConnectedSystemId, Name = "Glitterband" };
+        // The Object Type's External ID is declared with the anchor's data type, which is what deletion detection
+        // dispatches on.
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = ConnectedSystemId,
+            Name = "Glitterband",
+            ObjectTypes =
+            [
+                new ConnectedSystemObjectType
+                {
+                    Id = ObjectTypeId,
+                    Name = "User",
+                    ConnectedSystemId = ConnectedSystemId,
+                    Selected = true,
+                    Attributes =
+                    [
+                        new ConnectedSystemObjectTypeAttribute
+                        {
+                            Id = ExternalIdAttributeId,
+                            Name = "anchor",
+                            Type = DataTypeOf<T>(),
+                            IsExternalId = true,
+                            Selected = true
+                        }
+                    ]
+                }
+            ]
+        };
         var runProfile = new ConnectedSystemRunProfile
         {
             Name = "Full Import",
@@ -225,37 +252,18 @@ public class ObsoleteConnectedSystemObjectTests
             workerTask,
             cancellationTokenSource);
 
-        // Run Profile Safeguards (#1618, Layer 2) split deletion detection into a resolve phase (no
-        // side effects; dispatches on the anchor's runtime type) and an apply phase (acts on an
-        // already-resolved candidate). Invoking both in sequence, exactly as the production
-        // orchestrator does once it has decided the run's limits are not exceeded, exercises the same
-        // combined behaviour the single method used to.
-        const string resolveMethodName = "ResolveDeletionCandidateAsync";
-        var resolveMethod = typeof(SyncImportTaskProcessor).GetMethod(resolveMethodName, BindingFlags.Instance | BindingFlags.NonPublic)
+        // Deletion detection resolves each missing anchor to its object, dispatching on the anchor's data type, then
+        // applies what it found (Run Profile Safeguards, #1618 Layer 2). Invoking the production orchestrator with
+        // nothing imported makes the seeded object missing, so both halves run exactly as a Full Import runs them.
+        const string methodName = "ProcessConnectedSystemObjectDeletionsAsync";
+        var method = typeof(SyncImportTaskProcessor).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException(
-                $"SyncImportTaskProcessor.{resolveMethodName} was not found. If it has been renamed or its signature " +
+                $"SyncImportTaskProcessor.{methodName} was not found. If it has been renamed or its signature " +
                 "has changed, update this fixture to invoke the current production method; do not reimplement its " +
-                "anchor-type dispatch here, because that dispatch is the behaviour under test.");
-
-        const string applyMethodName = "ApplyDeletionCandidateAsync";
-        var applyMethod = typeof(SyncImportTaskProcessor).GetMethod(applyMethodName, BindingFlags.Instance | BindingFlags.NonPublic)
-            ?? throw new InvalidOperationException(
-                $"SyncImportTaskProcessor.{applyMethodName} was not found. If it has been renamed or its signature " +
-                "has changed, update this fixture to invoke the current production method; do not reimplement its " +
-                "obsoleting behaviour here, because that behaviour is what these tests pin.");
+                "anchor-type dispatch or its obsoleting here, because those are the behaviour under test.");
 
         var toBeUpdated = new List<ConnectedSystemObject>();
-
-        var resolveTask = (Task)resolveMethod.MakeGenericMethod(typeof(T))
-            .Invoke(processor, [anchor, ExternalIdAttributeId, new HashSet<Guid>()])!;
-        await resolveTask;
-        var cso = (ConnectedSystemObject?)resolveTask.GetType().GetProperty("Result")!.GetValue(resolveTask);
-
-        if (cso != null)
-        {
-            var applyTask = (Task)applyMethod.Invoke(processor, [cso, toBeUpdated])!;
-            await applyTask;
-        }
+        await (Task)method.Invoke(processor, [new ImportedExternalIds(), new List<ConnectedSystemObject>(), toBeUpdated, null])!;
 
         const string fieldName = "_activityRunProfileExecutionItems";
         var executionItems = (List<ActivityRunProfileExecutionItem>)(typeof(SyncImportTaskProcessor)
@@ -267,4 +275,16 @@ public class ObsoleteConnectedSystemObjectTests
 
         return new ObsoleteResult(toBeUpdated, executionItems, repository);
     }
+
+    /// <summary>The External ID data type an anchor of this .NET type is declared with.</summary>
+    private static AttributeDataType DataTypeOf<T>() => typeof(T) switch
+    {
+        var t when t == typeof(int) => AttributeDataType.Number,
+        var t when t == typeof(long) => AttributeDataType.LongNumber,
+        var t when t == typeof(decimal) => AttributeDataType.Decimal,
+        var t when t == typeof(Guid) => AttributeDataType.Guid,
+        var t when t == typeof(string) => AttributeDataType.Text,
+        var t when t == typeof(DateTime) => AttributeDataType.DateTime,
+        _ => throw new ArgumentOutOfRangeException(nameof(T), typeof(T).Name, "No External ID data type for this anchor type.")
+    };
 }

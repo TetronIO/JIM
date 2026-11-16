@@ -95,6 +95,17 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
 
     /// <summary>
+    /// See <see cref="ISyncRepository.GetConnectedSystemObjectExternalIdMatchesAsync{T}"/>.
+    /// </summary>
+    public Task<List<ConnectedSystemObjectExternalIdMatch?>> GetConnectedSystemObjectExternalIdMatchesAsync<T>(int connectedSystemId, int attributeId,
+        IReadOnlyList<T> attributeValues) where T : notnull;
+
+    /// <summary>
+    /// See <see cref="ISyncRepository.GetConnectedSystemObjectsForDeletionDetectionAsync"/>.
+    /// </summary>
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsForDeletionDetectionAsync(int connectedSystemId, IReadOnlyCollection<Guid> csoIds);
+
+    /// <summary>
     /// Batch loads Connected System Objects by multiple primary external ID string values in a single query.
     /// Used for reference resolution to eliminate N+1 individual lookups.
     /// Uses case-insensitive matching for string comparison.
