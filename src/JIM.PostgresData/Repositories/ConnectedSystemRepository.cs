@@ -804,13 +804,22 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// The import-incomplete marker (<see cref="ConnectedSystem.ImportIncompleteSince"/>, #2521) is written only by its own
-    /// narrow statements: set by an import before its first write, cleared by a completed import or a Connector Space
-    /// clear. A save of the whole Connected System (a settings change in the portal) would otherwise write back whatever
-    /// the caller loaded, which taken before an import marked it would let a synchronisation read the half-saved import,
-    /// and taken before an import cleared it would refuse synchronisation again. So the graph update leaves it out.
+    /// The Connected System's runtime state columns (<see cref="RuntimeStateAttribute"/>, #2950): the values the Worker maintains as it
+    /// runs, each written only by its own narrow statement.
     /// </summary>
-    private void KeepImportIncompleteMarkerOutOfGraphUpdate(ConnectedSystem connectedSystem)
+    private static readonly string[] RuntimeStateProperties = typeof(ConnectedSystem).GetProperties()
+        .Where(p => Attribute.IsDefined(p, typeof(RuntimeStateAttribute)))
+        .Select(p => p.Name)
+        .ToArray();
+
+    /// <summary>
+    /// A save of the whole Connected System (a settings change in the portal or over the API) writes back whatever the caller
+    /// loaded. For runtime state that is wrong whichever way the value moved since: a Delta Import watermark put back after a
+    /// Connector Space clear means the next Delta Import never re-reads the cleared objects (#2950), and an import-incomplete
+    /// marker loaded before an import set it would let a synchronisation read the half-saved import (#2521). So the graph
+    /// update leaves every runtime state column out; each has its own statement.
+    /// </summary>
+    private void KeepRuntimeStateOutOfGraphUpdate(ConnectedSystem connectedSystem)
     {
         EntityEntry<ConnectedSystem>? entry;
         try
@@ -838,8 +847,11 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             }
         }
 
-        if (entry != null)
-            entry.Property(cs => cs.ImportIncompleteSince).IsModified = false;
+        if (entry == null)
+            return;
+
+        foreach (var property in RuntimeStateProperties)
+            entry.Property(property).IsModified = false;
     }
 
     public async Task UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem)
@@ -871,7 +883,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // after ClearChangeTracker() it would traverse Objects → MVO → Type → Attributes, causing PK violations on
         // the MetaverseObjectType ↔ MetaverseAttribute join table.
         Repository.UpdateDetachedSafe(connectedSystem);
-        KeepImportIncompleteMarkerOutOfGraphUpdate(connectedSystem);
+        KeepRuntimeStateOutOfGraphUpdate(connectedSystem);
 
         // Handle new partitions and containers explicitly - EF Core doesn't automatically detect new items
         // in collections that were loaded from a separate query and then modified.

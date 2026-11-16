@@ -1487,10 +1487,11 @@ public abstract class SyncTaskProcessorBase
     {
         using var span = Diagnostics.Sync.StartSpan("UpdateDeltaSyncWatermark");
 
-        _connectedSystem.LastSyncCompletedAt = DateTime.UtcNow;
-
-        // Use repository directly to avoid validation that expects RunProfiles to be loaded
-        await _syncRepo.UpdateConnectedSystemAsync(_connectedSystem);
+        // Runtime state, written by its own statement (#2950): a save of the whole Connected System would put back
+        // whatever this run loaded at its start, such as a Delta Import watermark an import has advanced since.
+        var completedAt = DateTime.UtcNow;
+        await _syncRepo.SetLastSyncCompletedAtAsync(_connectedSystem.Id, completedAt);
+        _connectedSystem.LastSyncCompletedAt = completedAt;
 
         Log.Information("UpdateDeltaSyncWatermarkAsync: Updated delta sync watermark to {Timestamp}",
             _connectedSystem.LastSyncCompletedAt);

@@ -3345,6 +3345,15 @@ public partial class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public Task SetLastSyncCompletedAtAsync(int connectedSystemId, DateTime completedAt)
+    {
+        if (!_connectedSystems.TryGetValue(connectedSystemId, out var connectedSystem))
+            throw new InvalidOperationException($"SetLastSyncCompletedAtAsync: Connected System {connectedSystemId} was not seeded.");
+
+        connectedSystem.LastSyncCompletedAt = completedAt;
+        return Task.CompletedTask;
+    }
+
     #endregion
 
     #region Synchronisation Rules and Configuration
@@ -3580,12 +3589,6 @@ public partial class SyncRepository : ISyncRepository
             .Where(t => t.ConnectedSystemId == connectedSystemId)
             .ToList();
         return Task.FromResult(types);
-    }
-
-    public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)
-    {
-        _connectedSystems[connectedSystem.Id] = connectedSystem;
-        return Task.CompletedTask;
     }
 
     public Task<Dictionary<int, string>> GetConnectedSystemNamesAsync()
