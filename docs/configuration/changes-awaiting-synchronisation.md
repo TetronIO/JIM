@@ -9,6 +9,25 @@ audience: administrator
 
 A saved configuration change reaches existing objects only when a synchronisation next runs over them, so for a while the portal and the configuration are ahead of your data. A Connected System shows that wait in two ways, because they ask different things of you: a change the next synchronisation applies, and a change that is pending a Full Synchronisation. [When a change takes effect](configuration-changes.md#when-a-change-takes-effect) says which change is which.
 
+```jim-diagram
+archetype: decision
+title: Where a saved configuration change shows on a Connected System
+desc: A saved change the Connected System's next synchronisation applies, such as an import Synchronisation Rule or Object Matching Rule change, shows as awaiting synchronisation. Any other change shows as pending a Full Synchronisation only while the configuration still differs, in something a Full Synchronisation applies, from the configuration the last one started with. A change that was undone, or that no synchronisation acts on, such as a rename, a deletion setting or an Initial Export Only Attribute Flow, is not shown.
+start: { label: Saved change }
+questions:
+  - { id: next, label: "Applied by the next synchronisation?", sub: "import rule, Object Matching Rule" }
+  - { id: full, label: "Still differs from the last Full Synchronisation?", sub: in something it applies }
+outcomes:
+  - { id: awaiting, label: Awaiting synchronisation, sub: "Delta or Full applies it" }
+  - { id: pending, label: Pending a Full Synchronisation, sub: counted on the indicator }
+  - { id: none, label: Not shown, sub: "undone, or nothing to apply", good: true }
+answers:
+  - { from: next, to: awaiting, label: "yes" }
+  - { from: next, to: full, label: "no" }
+  - { from: full, to: pending, label: "yes" }
+  - { from: full, to: none, label: "no" }
+```
+
 ## :material-sync: Changes the next synchronisation applies
 
 Saving an import Synchronisation Rule, an Object Matching Rule or an Attribute Priority order records the change as awaiting synchronisation for the Connected System Object Type it affects. The Connected System's page shows one notice per Object Type, **Changes awaiting synchronisation: {Type}**, listing one row per changed rule; each change links to its Activity. **Run now** opens the queue dialog with the Delta Synchronisation Run Profile chosen, or the Full Synchronisation one where the system has no Delta; you can pick another. The Connected Systems list marks the system with a chip counting the changes waiting, and the rule shows an **Awaiting synchronisation** chip.
