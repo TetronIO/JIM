@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 Each LDAP partition now keeps its own Delta Import watermark. After upgrading, the first Delta Import to read each partition reads every object in it once, which also picks up any change a partition-targeted import skipped. (#2715)
 - 🔄 A hierarchy refresh selects a partition that a selected Container moves into, since a Container is only in scope while its partition is selected, and lists each partition it selected, with the Containers that moved in, in the portal, the REST API and PowerShell. (#2769)
 - 🔄 If an import stops part-way through saving what it read, synchronisation of that Connected System waits until a Full Import completes, rather than acting on a partial import; the Connected System's page, the REST API and PowerShell show when it stopped. (#2521)
+- 🔄 A Full Import now saves what it reads a few thousand objects at a time instead of all at once at the end, so the Worker's memory no longer grows with the size of the Connected System. A Full Import that stops part-way keeps what it saved, and the next Full Import completes it. A reference to an object read later in the same Full Import is resolved once everything is read, and only what is still unresolved then is reported on the object's execution item. (#2521)
 
 ### Fixed
 

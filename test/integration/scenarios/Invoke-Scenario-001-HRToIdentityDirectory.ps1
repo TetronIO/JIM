@@ -69,7 +69,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Disable", "Enable", "Reconnection", "DeletedInTarget", "WithdrawnBeforeExport", "WithdrawnAfterExport", "InitialExportOnly", "ImportOnly", "SyncOnly", "All")]
+    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Disable", "Enable", "Reconnection", "DeletedInTarget", "UnconfirmedCreate", "WithdrawnBeforeExport", "WithdrawnAfterExport", "InitialExportOnly", "ImportOnly", "SyncOnly", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -2157,6 +2157,125 @@ try {
             }
         }
         $stepTimings["4d. Deleted In Target"] = (Get-Date) - $stepDitStart
+    }
+
+    # Test 4e: Unconfirmed Create retried (#2521)
+    #
+    # An account is exported as a Create and deleted in the directory before any import reads it back. The confirming
+    # Full Import reads every object and does not find it, so it marks the Create for retry and reports it on an
+    # Export Not Confirmed item; the next export creates the account again. A Full Import saves what it reads a unit at
+    # a time and finds unconfirmed Creates once every unit is saved, so this is the end-to-end check that it still does.
+    if ($Step -eq "UnconfirmedCreate" -or $Step -eq "All") {
+        $stepUcStart = Get-Date
+        Write-TestSection "Test 4e: Unconfirmed Create (a Create no Full Import reads back is retried)"
+
+        $unconfirmedSuccess = $true
+        $unconfirmedErrorMessage = ""
+
+        try {
+            # A dedicated joiner, so the step stands alone. Its Account Name is generated from its names, Test Unconfirmed.
+            $unconfirmedAccountName = "test.unconfirmed"
+            $unconfirmedUser = New-TestUser -Index 8886
+            $csvPath = "$(Get-IntegrationTestDataPath)/hr-users.csv"
+            $csv = Import-Csv $csvPath
+            $csv = @($csv) + [PSCustomObject]@{
+                employeeId = "EMP888886"
+                firstName = "Test"
+                lastName = "Unconfirmed"
+                email = "$unconfirmedAccountName@$($DirectoryConfig.Domain)"
+                department = "IT"
+                title = "Developer"
+                company = $unconfirmedUser.Company
+                samAccountName = $unconfirmedAccountName
+                displayName = "Test Unconfirmed"
+                status = "Active"
+                userPrincipalName = "$unconfirmedAccountName@$($DirectoryConfig.Domain)"
+                employeeType = $unconfirmedUser.EmployeeType
+                employeeEndDate = ""
+            }
+            $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+            Copy-CsvToConnectorFiles -SourcePath $csvPath
+
+            # 1. HR import and synchronisation stage the Create; the LDAP Export performs it, and nothing reads it back.
+            $ucImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $ucImport.activityId -Name "CSV Full Import (Unconfirmed Create)"
+            $ucSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $ucSync.activityId -Name "CSV Delta Sync (Unconfirmed Create)"
+            $ucExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+            Assert-ExportSuccess -ActivityId $ucExport.activityId -Name "LDAP Export (Unconfirmed Create)"
+            if ($initialPasswordConfigured) {
+                Wait-ForInitialPasswordDelivery -ConnectedSystemId $config.LDAPSystemId -ConnectedSystemName $DirectoryConfig.ConnectedSystemName
+            }
+            if (-not (Test-LDAPUserExists -UserIdentifier $unconfirmedAccountName -DirectoryConfig $DirectoryConfig)) {
+                throw "$unconfirmedAccountName was not created in the directory by the LDAP Export"
+            }
+            Write-Host "  OK $unconfirmedAccountName exported as a Create" -ForegroundColor Green
+
+            # 2. Deleted in the directory before any import reads it back.
+            $deleteResult = if (Test-IsRfcDirectory $DirectoryConfig) {
+                Remove-DirectoryEntry -DirectoryConfig $DirectoryConfig -Dn "$($DirectoryConfig.UserRdnAttr)=$unconfirmedAccountName,$($DirectoryConfig.UserContainer)"
+            } else {
+                Remove-DirectoryUser -DirectoryConfig $DirectoryConfig -SamAccountName $unconfirmedAccountName
+            }
+            if ($deleteResult.Outcome -ne 'Deleted') { throw "Could not delete $unconfirmedAccountName in the directory: $($deleteResult.Output)" }
+            Write-Host "  OK Account deleted in the directory before any import read it" -ForegroundColor Green
+
+            # 3. The LDAP Full Import reads every object, does not find the account, and marks its Create for retry.
+            $ucFullImport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
+            $ucFullImportActivity = Get-JIMActivity -Id $ucFullImport.activityId
+            if ($ucFullImportActivity.status -notin @('Complete', 'CompleteWithWarning')) {
+                throw "LDAP Full Import (Unconfirmed Create) ended $($ucFullImportActivity.status): $($ucFullImportActivity.errorMessage)"
+            }
+            $notConfirmedItems = @(Get-JIMActivity -Id $ucFullImport.activityId -ExecutionItems |
+                Where-Object { [string]$_.errorType -eq 'ExportNotConfirmed' })
+            if ($notConfirmedItems.Count -ne 1) {
+                throw "Expected one Export Not Confirmed item, for the unread Create, on the LDAP Full Import; found $($notConfirmedItems.Count): $(($notConfirmedItems | ForEach-Object { $_.displayName }) -join ', ')"
+            }
+            $retriedCreates = @(Get-JIMPendingExport -ConnectedSystemId $config.LDAPSystemId -Search "Test Unconfirmed" -ChangeType Create -Status ExportNotConfirmed -All -ErrorAction SilentlyContinue)
+            if ($retriedCreates.Count -ne 1) {
+                throw "Expected the Create for Test Unconfirmed to be marked for retry after the LDAP Full Import, found $($retriedCreates.Count)"
+            }
+            Write-Host "  OK LDAP Full Import marked the unread Create for retry and reported it" -ForegroundColor Green
+
+            # 4. The next export creates the account again, and its confirming import settles it.
+            $ucRetryExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+            Assert-ExportSuccess -ActivityId $ucRetryExport.activityId -Name "LDAP Export (Unconfirmed Create retry)"
+            if ($initialPasswordConfigured) {
+                Wait-ForInitialPasswordDelivery -ConnectedSystemId $config.LDAPSystemId -ConnectedSystemName $DirectoryConfig.ConnectedSystemName
+            }
+            Start-Sleep -Seconds 5
+            $ucConfirmImport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $ucConfirmImport.activityId -Name "LDAP Full Import (Unconfirmed Create confirm)"
+            $ucConfirmSync = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $ucConfirmSync.activityId -Name "LDAP Delta Sync (Unconfirmed Create confirm)"
+
+            if (-not (Test-LDAPUserExists -UserIdentifier $unconfirmedAccountName -DirectoryConfig $DirectoryConfig)) {
+                throw "$unconfirmedAccountName was not created again by the retried export"
+            }
+            $remainingUcExports = @(Get-JIMPendingExport -ConnectedSystemId $config.LDAPSystemId -Search "Test Unconfirmed" -All -ErrorAction SilentlyContinue)
+            if ($remainingUcExports.Count -gt 0) {
+                throw "Found $($remainingUcExports.Count) Pending Export(s) still waiting for Test Unconfirmed after the confirming import"
+            }
+            Write-Host "  OK The retried Create recreated the account and was confirmed" -ForegroundColor Green
+        }
+        catch {
+            $unconfirmedSuccess = $false
+            $unconfirmedErrorMessage = $_.Exception.Message
+            Write-Host "  FAIL $_" -ForegroundColor Red
+        }
+
+        if ($unconfirmedSuccess) {
+            $testResults.Steps += @{ Name = "UnconfirmedCreate"; Success = $true }
+        }
+        else {
+            $testResults.Steps += @{ Name = "UnconfirmedCreate"; Success = $false; Error = $unconfirmedErrorMessage }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
+        }
+        $stepTimings["4e. Unconfirmed Create"] = (Get-Date) - $stepUcStart
     }
 
     # Test 5: Initial Export Only Attribute Flows (#223)

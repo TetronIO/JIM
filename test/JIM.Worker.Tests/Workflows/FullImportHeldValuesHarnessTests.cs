@@ -18,10 +18,9 @@ namespace JIM.Worker.Tests.Workflows;
 /// Objects at any of its sampling points (after each page is processed, before the save phase, after each save batch);
 /// it is deterministic, so it can be asserted where heap measurements cannot.
 /// <para>
-/// Today the import holds every object it read until a single save phase at the end, so the counter grows with N. The
-/// first test characterises that, and is meant to fail the day it stops being true: Phase 5 stages each unit as it
-/// arrives, and inverts it into "the counter is flat in N". Characterised rather than marked explicit so that nothing can
-/// make it flat by accident unnoticed.
+/// Until Phase 5 the import held every object it read until a single save phase at the end, so the counter grew with N.
+/// Phase 5 saves each unit as it arrives, so the counter is flat in N: a unit's values, whatever the run's size. A unit
+/// here is one page (<see cref="SyncImportTaskProcessor.ImportBatchSize"/> is a page's object count).
 /// </para>
 /// </summary>
 [TestFixture]
@@ -30,17 +29,21 @@ public class FullImportHeldValuesHarnessTests : WorkflowTestBase
     private const int MembersPerGroup = 40;
 
     /// <summary>
-    /// A page holds each member's External ID and name, and the group's External ID, name and every member; the run holds
-    /// every page's until the save phase, so the most held at once is that times the pages (Phase 5 makes it one unit's).
-    /// One Connected System per run, so the page counts are separate cases rather than two runs of one test.
+    /// A page holds each member's External ID and name, and the group's External ID, name and every member; each page is a
+    /// unit, saved and released before the next is processed, so the most held at once is one page's however many pages
+    /// the run reads. One Connected System per run, so the page counts are separate cases rather than two runs of one test.
     /// </summary>
     [TestCase(1)]
     [TestCase(4)]
-    public async Task FullImport_PagesOfLargeGroups_HoldsEveryPagesValuesAtOnceAsync(int pageCount)
+    public async Task FullImport_PagesOfLargeGroups_HoldsOneUnitsValuesAtOnceAsync(int pageCount)
     {
         var processor = await RunAsync(pageCount, measure: true);
 
-        Assert.That(processor.PeakHeldAttributeValues, Is.EqualTo(pageCount * (MembersPerGroup * 2 + 2 + MembersPerGroup)));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(processor.PeakHeldAttributeValues, Is.EqualTo(MembersPerGroup * 2 + 2 + MembersPerGroup), "flat in the number of pages");
+            Assert.That(processor.StagedUnitCount, Is.EqualTo(pageCount));
+        }
     }
 
     [Test]
@@ -96,7 +99,9 @@ public class FullImportHeldValuesHarnessTests : WorkflowTestBase
         var processor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(),
             new PagedImportConnector(pages, beforePage: beforePage), connectedSystem, runProfile, workerTask, new CancellationTokenSource())
         {
-            MeasureHeldAttributeValues = measure
+            MeasureHeldAttributeValues = measure,
+            // One page a unit: a page is a group and its members.
+            ImportBatchSize = membersPerGroup + 1
         };
 
         await processor.PerformImportAsync();
