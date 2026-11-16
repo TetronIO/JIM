@@ -882,20 +882,57 @@ try {
         # driftGroup2 is used for member removal, so it needs >1 member on OpenLDAP.
         $minMembersForRemoval = if ($isRfcDirectory) { 2 } else { 1 }
 
+        # All users in Target, read first so drift group 1 can be one that some user is not in (#2966)
+        $allUsers = @(Get-DirectoryUserList -Config $targetConfig | Where-Object {
+            $_ -notmatch "^(Administrator|Guest|krbtgt)" -and
+            $_ -notmatch "DNS"
+        })
+
+        # Drift group 1 receives the unauthorised addition, so it must have a user who is not a member: a group with
+        # fewer members than there are users necessarily has one. At Medium, more than half the Project groups hold every
+        # user, and taking the first group with members skipped the addition check on most runs (#2966). The first group
+        # with members stays the fallback, which skips the check with a warning, as before.
+        $fallbackGroup1 = $null
+        $fallbackGroup1Members = @()
+        $candidateGroups2 = [System.Collections.Generic.List[object]]::new()
+
         foreach ($grp in $testGroups) {
             $grpName = $grp.Trim()
             $memberList = @(Get-DirectoryGroupMembers -GroupName $grpName -Config $targetConfig)
-            if ($memberList.Count -gt 0) {
-                if (-not $driftGroup1) {
-                    $driftGroup1 = $grpName
-                    $driftGroup1Members = $memberList
+            if ($memberList.Count -eq 0) {
+                continue
+            }
+
+            if (-not $driftGroup1 -and $memberList.Count -lt $allUsers.Count) {
+                $driftGroup1 = $grpName
+                $driftGroup1Members = $memberList
+            }
+            else {
+                if (-not $fallbackGroup1) {
+                    $fallbackGroup1 = $grpName
+                    $fallbackGroup1Members = $memberList
                 }
-                elseif (-not $driftGroup2 -and $grpName -ne $driftGroup1 -and $memberList.Count -ge $minMembersForRemoval) {
-                    $driftGroup2 = $grpName
-                    $driftGroup2Members = $memberList
-                    break
+                # Two candidates are enough for drift group 2 whichever group ends up as drift group 1; keeping no more
+                # bounds memory at the Scale templates, where a group can hold hundreds of thousands of members.
+                if ($memberList.Count -ge $minMembersForRemoval -and $candidateGroups2.Count -lt 2) {
+                    $candidateGroups2.Add([pscustomobject]@{ Name = $grpName; Members = $memberList })
                 }
             }
+
+            if ($driftGroup1 -and $candidateGroups2.Count -gt 0) {
+                break
+            }
+        }
+
+        if (-not $driftGroup1 -and $fallbackGroup1) {
+            $driftGroup1 = $fallbackGroup1
+            $driftGroup1Members = $fallbackGroup1Members
+        }
+
+        $group2Candidate = $candidateGroups2 | Where-Object { $_.Name -ne $driftGroup1 } | Select-Object -First 1
+        if ($group2Candidate) {
+            $driftGroup2 = $group2Candidate.Name
+            $driftGroup2Members = $group2Candidate.Members
         }
 
         if (-not $driftGroup1 -or -not $driftGroup2) {
@@ -905,13 +942,8 @@ try {
         Write-Host "    Drift test group 1: $driftGroup1 (members: $($driftGroup1Members.Count))" -ForegroundColor Cyan
         Write-Host "    Drift test group 2: $driftGroup2 (members: $($driftGroup2Members.Count))" -ForegroundColor Cyan
 
-        # Step 3.2: Get all users in Target AD (to find a user NOT in driftGroup1)
+        # Step 3.2: Find a user NOT in driftGroup1
         Write-Host "  Finding user to add to group (unauthorised addition)..." -ForegroundColor Gray
-
-        $allUsers = @(Get-DirectoryUserList -Config $targetConfig | Where-Object {
-            $_ -notmatch "^(Administrator|Guest|krbtgt)" -and
-            $_ -notmatch "DNS"
-        })
 
         # Find a user NOT in driftGroup1 to add (simulating unauthorised addition)
         $userToAddToDrift = $null
