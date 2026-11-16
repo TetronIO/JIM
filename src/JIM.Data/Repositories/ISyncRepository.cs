@@ -1900,6 +1900,15 @@ public interface ISyncRepository
     /// <param name="connectedSystemId">The Connected System whose import completed.</param>
     Task ClearImportIncompleteAsync(int connectedSystemId);
 
+    /// <summary>
+    /// Records when a synchronisation of the Connected System completed (<see cref="ConnectedSystem.LastSyncCompletedAt"/>), the
+    /// watermark the next Delta Synchronisation reads from: a narrow single-column write touching no tracked state (#2950).
+    /// The caller keeps its own instance in step.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System the synchronisation ran against.</param>
+    /// <param name="completedAt">The UTC time the synchronisation completed.</param>
+    Task SetLastSyncCompletedAtAsync(int connectedSystemId, DateTime completedAt);
+
     #endregion
 
     #region Synchronisation Rules and Configuration
@@ -2015,11 +2024,6 @@ public interface ISyncRepository
     /// Used during sync to resolve attribute mappings.
     /// </summary>
     Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId);
-
-    /// <summary>
-    /// Updates a Connected System's fields (e.g., LastSyncCompletedAt watermark).
-    /// </summary>
-    Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
 
     /// <summary>
     /// Gets the id-to-display-name map of every Connected System. Used to resolve source system names

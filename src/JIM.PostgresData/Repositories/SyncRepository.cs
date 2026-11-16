@@ -738,6 +738,16 @@ public partial class SyncRepository : ISyncRepository
             .ExecuteUpdateAsync(setters => setters.SetProperty(cs => cs.ImportIncompleteSince, (DateTime?)null));
     }
 
+    /// <inheritdoc />
+    public async Task SetLastSyncCompletedAtAsync(int connectedSystemId, DateTime completedAt)
+    {
+        // A narrow status-mark update (exempt from the bulk column-list rule): runtime state is written only by its own
+        // statement, never by a save of the whole Connected System (#2950).
+        await _context.ConnectedSystems
+            .Where(cs => cs.Id == connectedSystemId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(cs => cs.LastSyncCompletedAt, completedAt));
+    }
+
     #endregion
 
     #region Synchronisation Rules and Configuration
@@ -776,9 +786,6 @@ public partial class SyncRepository : ISyncRepository
 
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
-
-    public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)
-        => _repo.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
     public Task<Dictionary<int, string>> GetConnectedSystemNamesAsync()
         // EF projection is fine here: a tiny table read at most once per run profile execution (the

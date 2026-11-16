@@ -58,14 +58,15 @@ public class SyncRepositoryRemainingTests
     }
 
     [Test]
-    public async Task UpdateConnectedSystemAsync_UpdatesInStoreAsync()
+    public async Task SetLastSyncCompletedAtAsync_SetsTheWatermarkAsync()
     {
         var cs = new ConnectedSystem { Id = CsId, Name = "HR" };
         _repo.SeedConnectedSystem(cs);
+        var completedAt = new DateTime(2026, 11, 16, 10, 3, 12, DateTimeKind.Utc);
 
-        cs.LastSyncCompletedAt = DateTime.UtcNow;
-        await _repo.UpdateConnectedSystemAsync(cs);
-        // No exception = success
+        await _repo.SetLastSyncCompletedAtAsync(CsId, completedAt);
+
+        Assert.That(_repo.ConnectedSystems[CsId].LastSyncCompletedAt, Is.EqualTo(completedAt));
     }
 
     #endregion

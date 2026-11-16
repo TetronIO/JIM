@@ -594,6 +594,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task ClearImportIncompleteAsync(int connectedSystemId)
         => throw new PreviewWriteAttemptedException(nameof(ClearImportIncompleteAsync));
 
+    public Task SetLastSyncCompletedAtAsync(int connectedSystemId, DateTime completedAt)
+        => throw new PreviewWriteAttemptedException(nameof(SetLastSyncCompletedAtAsync));
+
     public Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps)
         => throw new PreviewWriteAttemptedException(nameof(StampImportStateAsync));
 
@@ -831,9 +834,6 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes, bool allowParallelWrite = false)
         => throw new PreviewWriteAttemptedException(nameof(PersistCsoChangesAsync));
-
-    public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem)
-        => throw new PreviewWriteAttemptedException(nameof(UpdateConnectedSystemAsync));
 
     public Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change)
         => throw new PreviewWriteAttemptedException(nameof(CreateMetaverseObjectChangeDirectAsync));

@@ -64,6 +64,7 @@ public class ConnectedSystem : IAuditable
     /// Information that connector developers want to have persisted between synchronisation runs can be stored here.
     /// This is to suppose use-cases such as needing to store the last change id for an LDAP sytem, to enable delta imports.
     /// </summary>
+    [RuntimeState]
     public string? PersistedConnectorData { get; set; }
 
     /// <summary>
@@ -131,6 +132,7 @@ public class ConnectedSystem : IAuditable
     /// Used by Delta Synchronisation to determine which CSOs have been modified since the last run. A Full
     /// Synchronisation advances it but never reads it: it evaluates every object (#891).
     /// </summary>
+    [RuntimeState]
     public DateTime? LastSyncCompletedAt { get; set; }
 
     /// <summary>
@@ -208,6 +210,7 @@ public class ConnectedSystem : IAuditable
     /// treat every previously joined object as departed. The sweep clears this back to null on completion;
     /// an interrupted sweep leaves it set, so the arming survives a retry.
     /// </summary>
+    [RuntimeState]
     public DateTime? StrandedValueSweepArmedAt { get; set; }
 
     /// <summary>
@@ -219,6 +222,7 @@ public class ConnectedSystem : IAuditable
     /// departed. Compared against <see cref="StrandedValueSweepArmedAt"/> to gate the sweep; null means no
     /// Full Import of this system has ever completed successfully.
     /// </summary>
+    [RuntimeState]
     public DateTime? LastSuccessfulFullImportCompletedAt { get; set; }
 
     /// <summary>
@@ -236,6 +240,7 @@ public class ConnectedSystem : IAuditable
     /// cannot tell whether it re-read what the stopped run left half-saved, so it leaves the marker as it is. Runtime
     /// state, never part of a configuration snapshot, and there is deliberately no way to clear it by hand.
     /// </remarks>
+    [RuntimeState]
     public DateTime? ImportIncompleteSince { get; set; }
 
     /// <summary>
