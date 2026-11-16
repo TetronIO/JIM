@@ -159,6 +159,10 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> ApplyOutstandingReferenceResolutionsAsync(IReadOnlyList<OutstandingReferenceResolution> resolutions)
         => throw new PreviewWriteAttemptedException(nameof(ApplyOutstandingReferenceResolutionsAsync));
 
+    public Task<int> ReopenReferencesToRetiredObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds, IReadOnlyCollection<Guid> retiredConnectedSystemObjectIds,
+        IReadOnlyCollection<Guid> executionItemIds)
+        => throw new PreviewWriteAttemptedException(nameof(ReopenReferencesToRetiredObjectsAsync));
+
     public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
         => _inner.GetAllExternalIdAttributeValuesOfTypeIntAsync(connectedSystemId, objectTypeId, partitionId);
 

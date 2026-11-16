@@ -434,6 +434,17 @@ public interface ISyncRepository
     Task<int> ApplyOutstandingReferenceResolutionsAsync(IReadOnlyList<OutstandingReferenceResolution> resolutions);
 
     /// <summary>
+    /// Re-opens references a Full Import's unit resolved to objects an Object Type change then retired (#2521, #2049): each
+    /// value of the given objects naming one of the retired objects, and still holding the identifier it was read by, loses
+    /// the id, and so does the value the given execution items' change records added for it, which is marked as a reference
+    /// still to resolve. The end-of-run sweep then resolves them as it resolves every reference saved by identifier, as the
+    /// whole run's in-memory resolution did with the replacement in hand. Tracked instances of either are brought into line.
+    /// Returns how many values were re-opened.
+    /// </summary>
+    Task<int> ReopenReferencesToRetiredObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds, IReadOnlyCollection<Guid> retiredConnectedSystemObjectIds,
+        IReadOnlyCollection<Guid> executionItemIds);
+
+    /// <summary>
     /// Gets all external ID attribute values of type int for a Connected System and object type.
     /// Used during import to build the full set of known external IDs for deletion detection.
     /// </summary>

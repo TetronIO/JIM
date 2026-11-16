@@ -1214,6 +1214,39 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(resolved);
     }
 
+    public Task<int> ReopenReferencesToRetiredObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds, IReadOnlyCollection<Guid> retiredConnectedSystemObjectIds,
+        IReadOnlyCollection<Guid> executionItemIds)
+    {
+        // Mirrors the Postgres writer: the objects' values naming a retired object by an identifier they still hold lose the
+        // id, and so do the values the items' change records added for them, which are marked as references still to resolve.
+        var retired = retiredConnectedSystemObjectIds.ToHashSet();
+        var reopened = 0;
+        foreach (var av in connectedSystemObjectIds.Distinct()
+                     .Select(id => _csos.TryGetValue(id, out var cso) ? cso : null)
+                     .OfType<ConnectedSystemObject>()
+                     .SelectMany(cso => cso.AttributeValues)
+                     .Where(av => av.UnresolvedReferenceValue != null && (av.ReferenceValueId ?? av.ReferenceValue?.Id) is { } target && retired.Contains(target)))
+        {
+            av.ReferenceValueId = null;
+            av.ReferenceValue = null;
+            reopened++;
+        }
+
+        var items = executionItemIds.ToHashSet();
+        foreach (var value in GetStoredCsoChanges()
+                     .Where(change => change.ActivityRunProfileExecutionItemId is { } itemId && items.Contains(itemId))
+                     .SelectMany(change => change.AttributeChanges)
+                     .SelectMany(attributeChange => attributeChange.ValueChanges)
+                     .Where(value => value.ValueChangeType == ValueChangeType.Add && value.StringValue != null &&
+                                     value.ReferenceValueId is { } target && retired.Contains(target)))
+        {
+            value.ReferenceValueId = null;
+            value.IsUnresolvedReference = true;
+        }
+
+        return Task.FromResult(reopened);
+    }
+
     public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
     {
         // Excludes PendingProvisioning CSOs, mirroring ConnectedSystemRepository.BuildDeletionDetectionQuery

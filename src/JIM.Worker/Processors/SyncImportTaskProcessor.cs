@@ -2045,6 +2045,7 @@ public partial class SyncImportTaskProcessor
             {
                 connectedSystemObjectsToBeCreated.Add(change.Replacement);
                 standing.Add(change.Replacement);
+                (_csoIdsRetiredByStandingObjectTypeChanges ??= []).UnionWith(change.Held.CsoIds);
                 _objectTypeChangesAllowedCount++;
 
                 var newlyRetiredTypeNames = change.Held.Matches
@@ -6136,6 +6137,9 @@ public partial class SyncImportTaskProcessor
         // #2521: a unit's values found nowhere yet, by object; the sweep resolves or reports them once the last unit is saved.
         var outstandingHolders = new Dictionary<ConnectedSystemObject, OutstandingReferenceHolder>(ReferenceEqualityComparer.Instance);
 
+        // #2049: where an Object Type change carried out by a later unit could retire what the database resolved a value to.
+        var resolvedThroughDatabase = stagingUnit && ObjectTypeChangesAllowed ? new List<(ConnectedSystemObject Cso, Guid TargetId)>() : null;
+
         if (stagingUnit && !unresolvedItems.IsEmpty)
         {
             // A value naming an Object Type change replacement held apart (#2049) is left for the sweep, which resolves it to
@@ -6158,6 +6162,7 @@ public partial class SyncImportTaskProcessor
                     Log.Debug("ResolveReferencesAsync: Matched an unresolved reference ({UnresolvedRef}) to CSO: {CsoId} (from database batch query)",
                         LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), id);
                     attrValue.ReferenceValueId = id;
+                    resolvedThroughDatabase?.Add((cso, id));
                 }
                 else if (ambiguousWith != null)
                 {
@@ -6353,7 +6358,11 @@ public partial class SyncImportTaskProcessor
 
         // A unit's resolution says nothing on the Activity: the sweep reports the run's totals once it is over (#2521).
         if (stagingUnit)
+        {
+            if (resolvedThroughDatabase is { Count: > 0 })
+                KeepReferencesForObjectTypeChangeRecheck(resolvedThroughDatabase, rpeiLookup);
             return;
+        }
 
         // Summary statistics, logged and (under Warn) added to the Activity's warning.
         ReportReferenceResolutionSummary();

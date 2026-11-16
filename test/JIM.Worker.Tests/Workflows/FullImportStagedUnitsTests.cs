@@ -293,6 +293,93 @@ public class FullImportStagedUnitsTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task FullImport_ReferenceReadBeforeAnObjectTypeChangeRetiresItsObjectThisRun_IsAmbiguousAsBeforeAsync()
+    {
+        // The group is read before the computer, so its unit resolves the reference through the database while the user is
+        // the only object holding the External ID, and nothing yet marks a change. The computer's change then stands and
+        // deletion detection retires the user. The single save phase resolved the reference with the replacement and the
+        // user both in memory, so an undeclared reference was ambiguous between them; the sweep rechecks it and says so,
+        // rather than leaving it naming the user being retired.
+        var schema = await ArrangeAsync(allowObjectTypeChanges: true);
+        schema.ConnectedSystem.UnresolvedReferenceHandling = UnresolvedReferenceHandling.Error;
+        var held = SeedUser(schema, Guid.NewGuid());
+        var heldExternalId = held.AttributeValues.Single(v => v.GuidValue.HasValue).GuidValue!.Value;
+        var groupId = Guid.NewGuid();
+
+        var (processor, activity) = await RunAsync(schema,
+        [
+            [Group(schema, groupId, heldExternalId)],
+            [Computer(schema, heldExternalId)]
+        ], importBatchSize: 1);
+
+        var group = Held(schema.Group, groupId);
+        var item = ItemFor(activity, group);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(processor.StagedUnitCount, Is.GreaterThanOrEqualTo(2));
+            Assert.That(held.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete), "the change stood");
+            Assert.That(Referenced(group.AttributeValues.Single(v => v.Attribute?.Name == "member")), Is.Null, "never the user being retired");
+            Assert.That(item.UnresolvedReferenceCount, Is.EqualTo(1));
+            Assert.That(item.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.UnresolvedReference));
+            Assert.That(item.ErrorMessage, Does.Contain("more than one Object Type (computer, user)"));
+            Assert.That(group.ImportStateHash, Is.Null, "an item that ends the run errored keeps no hash, so the next run compares it again");
+        }
+    }
+
+    [Test]
+    public async Task FullImport_ReferenceReadBeforeAnObjectTypeChangeOfAnAlreadyObsoleteObject_ResolvesToTheReplacementAsync()
+    {
+        // As above, but the user was already Obsolete: the single save phase held only the replacement in memory and resolved
+        // the reference to it. The sweep's recheck re-points it from the user to the replacement.
+        var schema = await ArrangeAsync(allowObjectTypeChanges: true);
+        schema.ConnectedSystem.UnresolvedReferenceHandling = UnresolvedReferenceHandling.Error;
+        var held = SeedUser(schema, Guid.NewGuid(), ConnectedSystemObjectStatus.Obsolete);
+        var heldExternalId = held.AttributeValues.Single(v => v.GuidValue.HasValue).GuidValue!.Value;
+        var groupId = Guid.NewGuid();
+
+        var (_, activity) = await RunAsync(schema,
+        [
+            [Group(schema, groupId, heldExternalId)],
+            [Computer(schema, heldExternalId)]
+        ], importBatchSize: 1);
+
+        var replacement = Held(schema.Computer, heldExternalId);
+        var group = Held(schema.Group, groupId);
+        var item = ItemFor(activity, group);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Referenced(group.AttributeValues.Single(v => v.Attribute?.Name == "member")), Is.EqualTo(replacement.Id));
+            Assert.That(item.UnresolvedReferenceCount, Is.Null);
+            Assert.That(item.ErrorType, Is.Null.Or.EqualTo(ActivityRunProfileExecutionItemErrorType.NotSet));
+        }
+    }
+
+    [TestCase(false, TestName = "FullImport_ReferencesResolvedThroughTheDatabase_KeepNothingForARecheckWhereTypeChangesAreNotAllowedAsync")]
+    [TestCase(true, TestName = "FullImport_ReferencesToObjectsAlreadyReadThisRun_KeepNothingForARecheckEvenWhereTypeChangesAreAllowedAsync")]
+    public async Task FullImport_ReferencesResolvedThroughTheDatabase_KeepNothingForARecheckAsync(bool allowObjectTypeChanges)
+    {
+        // A recheck costs memory only where an Object Type change could retire what a reference names: a run that allows
+        // them, and an object it has not read itself (one read this run under its own type is never retired).
+        var schema = await ArrangeAsync(allowObjectTypeChanges);
+        var users = Ids(3);
+        var groupId = Guid.NewGuid();
+
+        var (processor, _) = await RunAsync(schema,
+        [
+            [.. users.Select(id => User(schema, id))],
+            [Group(schema, groupId, [.. users])]
+        ], importBatchSize: 3);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(processor.StagedUnitCount, Is.EqualTo(2), "the group's unit resolves its members through the database");
+            Assert.That(Held(schema.Group, groupId).AttributeValues.Where(v => v.Attribute?.Name == "member").Select(Referenced),
+                Is.EquivalentTo(users.Select(id => (Guid?)Held(schema.User, id).Id)));
+            Assert.That(processor.ReferencesKeptForObjectTypeChangeRecheck, Is.Zero);
+        }
+    }
+
+    [Test]
     public async Task FullImport_PageOfLargeGroupsOverTheValueBudget_IsSplitIntoUnitsAsync()
     {
         var schema = await ArrangeAsync();

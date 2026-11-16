@@ -4,6 +4,7 @@
 using System.Globalization;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
@@ -275,6 +276,113 @@ public partial class SyncRepository
 
         FixUpTrackedReferenceResolutions(resolvedValueIds, resolvedChangeValueIds);
         return resolvedValueIds.Count;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> ReopenReferencesToRetiredObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds, IReadOnlyCollection<Guid> retiredConnectedSystemObjectIds,
+        IReadOnlyCollection<Guid> executionItemIds)
+    {
+        if (connectedSystemObjectIds.Count == 0 || retiredConnectedSystemObjectIds.Count == 0)
+            return 0;
+
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        var transaction = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+        var retired = retiredConnectedSystemObjectIds.Distinct().ToArray();
+
+        // Only a value that still holds the identifier it was read by: the sweep resolves it again by that identifier.
+        var reopenedValueIds = new HashSet<Guid>();
+        foreach (var chunk in connectedSystemObjectIds.Distinct().Chunk(ReferenceSweepWriteChunkSize))
+        {
+            await using var valueCommand = new NpgsqlCommand("""
+                UPDATE "ConnectedSystemObjectAttributeValues" av
+                SET "ReferenceValueId" = NULL
+                WHERE av."ConnectedSystemObjectId" = ANY(@csoIds)
+                  AND av."ReferenceValueId" = ANY(@retiredIds)
+                  AND av."UnresolvedReferenceValue" IS NOT NULL
+                RETURNING av."Id"
+                """, connection, transaction) { CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds };
+            valueCommand.Parameters.Add(new NpgsqlParameter("csoIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = chunk });
+            valueCommand.Parameters.Add(new NpgsqlParameter("retiredIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = retired });
+            await using var reader = await valueCommand.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                reopenedValueIds.Add(reader.GetGuid(0));
+        }
+
+        // The change record the run wrote for each object added the value with the retired object's id: it loses the id and
+        // is marked as a reference still to resolve (#2690), which the sweep's writer then resolves with the value.
+        var reopenedChangeValueIds = new HashSet<Guid>();
+        foreach (var chunk in executionItemIds.Distinct().Chunk(ReferenceSweepWriteChunkSize))
+        {
+            await using var changeCommand = new NpgsqlCommand("""
+                UPDATE "ConnectedSystemObjectChangeAttributeValues" cav
+                SET "ReferenceValueId" = NULL, "IsUnresolvedReference" = true
+                FROM "ConnectedSystemObjectChanges" cc
+                JOIN "ConnectedSystemObjectChangeAttributes" ca ON ca."ConnectedSystemChangeId" = cc."Id"
+                WHERE cc."ActivityRunProfileExecutionItemId" = ANY(@itemIds)
+                  AND cav."ConnectedSystemObjectChangeAttributeId" = ca."Id"
+                  AND cav."ValueChangeType" = @add
+                  AND cav."ReferenceValueId" = ANY(@retiredIds)
+                  AND cav."StringValue" IS NOT NULL
+                RETURNING cav."Id"
+                """, connection, transaction) { CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds };
+            changeCommand.Parameters.Add(new NpgsqlParameter("itemIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = chunk });
+            changeCommand.Parameters.Add(new NpgsqlParameter("retiredIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = retired });
+            changeCommand.Parameters.Add(new NpgsqlParameter("add", NpgsqlDbType.Integer) { Value = (int)ValueChangeType.Add });
+            await using var changeReader = await changeCommand.ExecuteReaderAsync();
+            while (await changeReader.ReadAsync())
+                reopenedChangeValueIds.Add(changeReader.GetGuid(0));
+        }
+
+        FixUpTrackedReopenedReferences(reopenedValueIds, reopenedChangeValueIds);
+        return reopenedValueIds.Count;
+    }
+
+    /// <summary>
+    /// Brings tracked instances of the values and change record values <see cref="ReopenReferencesToRetiredObjectsAsync"/>
+    /// re-opened into line with what it wrote, as <see cref="FixUpTrackedReferenceResolutions"/> does for the sweep's own
+    /// writes. Change detection is suppressed while enumerating.
+    /// </summary>
+    private void FixUpTrackedReopenedReferences(IReadOnlySet<Guid> reopenedValueIds, IReadOnlySet<Guid> reopenedChangeValueIds)
+    {
+        if (reopenedValueIds.Count == 0 && reopenedChangeValueIds.Count == 0)
+            return;
+
+        var autoDetectChanges = _context.ChangeTracker.AutoDetectChangesEnabled;
+        _context.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            foreach (var entry in _context.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>()
+                         .Where(e => e.State is not (EntityState.Detached or EntityState.Added) && reopenedValueIds.Contains(e.Entity.Id))
+                         .ToList())
+            {
+                var navigation = entry.Navigation(nameof(ConnectedSystemObjectAttributeValue.ReferenceValue));
+                navigation.CurrentValue = null;
+                var property = entry.Property(value => value.ReferenceValueId);
+                property.CurrentValue = null;
+                property.OriginalValue = null;
+                property.IsModified = false;
+            }
+
+            foreach (var entry in _context.ChangeTracker.Entries<ConnectedSystemObjectChangeAttributeValue>()
+                         .Where(e => e.State is not (EntityState.Detached or EntityState.Added) && reopenedChangeValueIds.Contains(e.Entity.Id))
+                         .ToList())
+            {
+                var reference = entry.Property(value => value.ReferenceValueId);
+                reference.CurrentValue = null;
+                reference.OriginalValue = null;
+                reference.IsModified = false;
+
+                var mark = entry.Property(value => value.IsUnresolvedReference);
+                mark.CurrentValue = true;
+                mark.OriginalValue = true;
+                mark.IsModified = false;
+            }
+        }
+        finally
+        {
+            _context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
     }
 
     /// <summary>

@@ -57,6 +57,12 @@ public partial class SyncImportTaskProcessor
     /// </summary>
     internal int ObjectsWithOutstandingReferences => _outstandingReferenceHolders.Count;
 
+    /// <summary>
+    /// How many references the run's units resolved through the database to an object an Object Type change could still
+    /// retire, kept for the sweep to recheck (#2049): zero on a run that does not allow Object Type changes.
+    /// </summary>
+    internal int ReferencesKeptForObjectTypeChangeRecheck { get; private set; }
+
     /// <summary>Whether this run saves each unit as it goes: a Full Import (#2521). A Delta Import is unchanged.</summary>
     private bool StagesUnits => _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport;
 
@@ -101,6 +107,24 @@ public partial class SyncImportTaskProcessor
     /// </summary>
     private readonly Dictionary<ConnectedSystemObject, List<string>> _standingReplacementsBesideRetiredObjects = new(ReferenceEqualityComparer.Instance);
 
+    /// <summary>
+    /// #2049: on a run that allows Object Type changes, the objects a unit's references were resolved to through the
+    /// database, each with the objects naming it. A change carried out by a later unit may retire one of them, which the
+    /// single save phase would have known when it resolved the reference; the sweep rechecks the references to each object
+    /// a standing change retired. Only objects the run had not read when the reference was resolved are kept: one read this
+    /// run under its own Object Type is not a deletion candidate, so no change can retire it. Null on any other run.
+    /// </summary>
+    private Dictionary<Guid, List<Guid>>? _referencesKeptForRecheck;
+
+    /// <summary>
+    /// #2049: the objects naming those kept for a recheck that are not otherwise noted for the sweep: what it needs of them,
+    /// their stamps held as an outstanding reference's are, so a run that stops before the recheck compares them again.
+    /// </summary>
+    private Dictionary<Guid, OutstandingReferenceHolder>? _holdersKeptForRecheck;
+
+    /// <summary>#2049: the held objects the standing Object Type changes retired, once deletion detection has decided them.</summary>
+    private HashSet<Guid>? _csoIdsRetiredByStandingObjectTypeChanges;
+
     /// <summary>The run's sync page size, read once: the whole-object database reference lookups are asked in pages of it.</summary>
     private int? _referenceLookupPageSize;
 
@@ -131,7 +155,8 @@ public partial class SyncImportTaskProcessor
     /// then leaves it to be compared again rather than skipped by its hash.
     /// </summary>
     private sealed class OutstandingReferenceHolder(Guid csoId, int objectTypeId, Guid? executionItemId,
-        ActivityRunProfileExecutionItemErrorType? itemErrorWhenWritten, bool stampRequested, Guid? stampHash, Guid? stampFingerprint)
+        ActivityRunProfileExecutionItemErrorType? itemErrorWhenWritten, bool stampRequested, Guid? stampHash, Guid? stampFingerprint,
+        int unresolvedCountWhenWritten = 0)
     {
         public Guid CsoId { get; } = csoId;
         public int ObjectTypeId { get; } = objectTypeId;
@@ -140,6 +165,12 @@ public partial class SyncImportTaskProcessor
         public bool StampRequested { get; } = stampRequested;
         public Guid? StampHash { get; } = stampHash;
         public Guid? StampFingerprint { get; } = stampFingerprint;
+
+        /// <summary>
+        /// The values its item already reported as unresolved or ambiguous when it was written: those of an object noted only
+        /// for an Object Type change recheck (#2049), which the sweep's report adds to rather than replaces.
+        /// </summary>
+        public int UnresolvedCountWhenWritten { get; } = unresolvedCountWhenWritten;
 
         /// <summary>What the object was left with: unresolved values, and those ambiguous across Object Types.</summary>
         public List<(string AttributeName, string Value, IReadOnlyList<string>? AmbiguousWith)> LeftUnresolved { get; } = [];
@@ -360,6 +391,77 @@ public partial class SyncImportTaskProcessor
     }
 
     /// <summary>
+    /// #2049: on a run that allows Object Type changes, keeps the references a unit resolved through the database to objects
+    /// the run had not read, so the sweep can recheck those an Object Type change carried out by a later unit retires. An
+    /// object holding one has its stamp held, as an outstanding reference's is, with its execution item's error and count
+    /// as written, for the recheck's report.
+    /// </summary>
+    private void KeepReferencesForObjectTypeChangeRecheck(IReadOnlyCollection<(ConnectedSystemObject Cso, Guid TargetId)> resolvedThroughDatabase,
+        IReadOnlyDictionary<ConnectedSystemObject, ActivityRunProfileExecutionItem> itemsByCso)
+    {
+        foreach (var (cso, targetId) in resolvedThroughDatabase.Where(pair =>
+                     !_csoIdsCreatedThisRun.Contains(pair.TargetId) && !_csoIdsQueuedForUpdate.Contains(pair.TargetId)))
+        {
+            _referencesKeptForRecheck ??= new Dictionary<Guid, List<Guid>>();
+            _holdersKeptForRecheck ??= new Dictionary<Guid, OutstandingReferenceHolder>();
+            if (!_referencesKeptForRecheck.TryGetValue(targetId, out var holders))
+            {
+                holders = [];
+                _referencesKeptForRecheck[targetId] = holders;
+            }
+
+            holders.Add(cso.Id);
+            ReferencesKeptForObjectTypeChangeRecheck++;
+            if (_outstandingReferenceHolders.ContainsKey(cso.Id) || _holdersKeptForRecheck.ContainsKey(cso.Id))
+                continue;
+
+            itemsByCso.TryGetValue(cso, out var item);
+            if (item is { Id: var itemId } && itemId == Guid.Empty)
+                item.Id = TimeOrderedIds.New();
+
+            _holdersKeptForRecheck[cso.Id] = new OutstandingReferenceHolder(cso.Id, cso.Type?.Id ?? cso.TypeId, item?.Id, item?.ErrorType,
+                cso.PendingImportStateStampRequested, cso.PendingImportStateHash, cso.PendingImportStateFingerprint, item?.UnresolvedReferenceCount ?? 0);
+
+            // Stamped once the recheck is decided: a stamp now would let a run that stops before it leave the object to be
+            // skipped by its hash, still naming an object a change may retire.
+            cso.PendingImportStateStampRequested = false;
+        }
+    }
+
+    /// <summary>
+    /// #2049: re-opens the kept references to objects a standing Object Type change retired, so the sweep resolves them by
+    /// its rules as the single save phase would have with the replacement in hand: ambiguous where the retired object was
+    /// newly marked this run, the replacement where it was already Obsolete. Their objects join the sweep's notes; the kept
+    /// references are released.
+    /// </summary>
+    private async Task ReopenReferencesRetiredByObjectTypeChangesAsync()
+    {
+        var kept = _referencesKeptForRecheck;
+        _referencesKeptForRecheck = null;
+        if (kept == null || _csoIdsRetiredByStandingObjectTypeChanges is not { Count: > 0 } retired)
+            return;
+
+        var retiredNamed = kept.Keys.Where(retired.Contains).ToList();
+        var affected = retiredNamed.SelectMany(targetId => kept[targetId]).ToHashSet();
+        if (affected.Count == 0)
+            return;
+
+        foreach (var csoId in affected.Where(id => _holdersKeptForRecheck?.ContainsKey(id) == true))
+        {
+            _outstandingReferenceHolders[csoId] = _holdersKeptForRecheck![csoId];
+            _holdersKeptForRecheck.Remove(csoId);
+        }
+
+        var itemIds = affected
+            .Select(csoId => _outstandingReferenceHolders.TryGetValue(csoId, out var holder) ? holder.ExecutionItemId : null)
+            .OfType<Guid>()
+            .ToList();
+        var reopened = await _syncRepo.ReopenReferencesToRetiredObjectsAsync(affected, retiredNamed, itemIds);
+        Log.Information("ReopenReferencesRetiredByObjectTypeChangesAsync: {ValueCount} reference value(s) on {ObjectCount} object(s) named {RetiredCount} object(s) an Object Type change retired after the reference was resolved; the sweep resolves them again.",
+            reopened, affected.Count, retiredNamed.Count);
+    }
+
+    /// <summary>
     /// The end-of-run reference sweep (#2521): reads the outstanding reference values of the objects saved before what they
     /// name, a bounded batch of objects at a time, resolves each by the rules a unit's resolution follows (a standing
     /// Object Type change replacement first, #2049, then the database: a declared target type alone, #1285, compared as
@@ -368,8 +470,14 @@ public partial class SyncImportTaskProcessor
     /// </summary>
     private async Task ResolveOutstandingReferencesAsync()
     {
+        await ReopenReferencesRetiredByObjectTypeChangesAsync();
         if (_outstandingReferenceHolders.Count == 0)
+        {
+            await StampHoldersAsync();
             return;
+        }
+
+        _activity.ObjectsToProcess = _outstandingReferenceHolders.Count;
 
         using var span = Diagnostics.Sync.StartSpan("ResolveOutstandingReferences").SetTag("objectCount", _outstandingReferenceHolders.Count);
         var (candidatesByTypeId, allCandidates) = ReferenceTargetCandidates();
@@ -502,7 +610,7 @@ public partial class SyncImportTaskProcessor
             var takesTheErrorSlot = handling == UnresolvedReferenceHandling.Error && !holder.ItemHadAnError;
             if (takesTheErrorSlot)
                 newlyErrored++;
-            reports.Add(new UnresolvedReferenceReport(itemId, holder.LeftUnresolved.Count,
+            reports.Add(new UnresolvedReferenceReport(itemId, holder.UnresolvedCountWhenWritten + holder.LeftUnresolved.Count,
                 takesTheErrorSlot ? ActivityRunProfileExecutionItemErrorType.UnresolvedReference : null,
                 takesTheErrorSlot ? ImportOutcomeMessage.ForUnresolvedReferences(holder.LeftUnresolved) : null));
         }
@@ -522,12 +630,14 @@ public partial class SyncImportTaskProcessor
     /// <summary>
     /// Writes the stamps the sweep held back (SPEC-1082 D7), by the rule the save phase applies to every other object: a
     /// requested clear always, and a hash only where the object's item ends the run without an error of its own (Verification
-    /// Mode's report aside).
+    /// Mode's report aside). Those of the objects kept only for an Object Type change recheck that needed none are written
+    /// too, and released (#2049).
     /// </summary>
     private async Task StampHoldersAsync()
     {
         var handling = _connectedSystem.UnresolvedReferenceHandling;
         var stamps = _outstandingReferenceHolders.Values
+            .Concat(_holdersKeptForRecheck?.Values ?? Enumerable.Empty<OutstandingReferenceHolder>())
             .Where(holder => holder.StampRequested)
             .Where(holder =>
             {
@@ -540,6 +650,7 @@ public partial class SyncImportTaskProcessor
 
         foreach (var chunk in stamps.Chunk(DeletionCandidateBatchSize))
             await _syncRepo.StampImportStateAsync(chunk);
+        _holdersKeptForRecheck = null;
     }
 
     /// <summary>

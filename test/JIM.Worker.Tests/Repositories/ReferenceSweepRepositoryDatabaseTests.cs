@@ -146,6 +146,60 @@ public class ReferenceSweepRepositoryDatabaseTests
     }
 
     [Test]
+    public async Task ReopenReferencesToRetiredObjectsAsync_OnAContextTrackingTheValues_ReopensOnlyValuesNamingARetiredObjectByIdentifierAsync()
+    {
+        var retiredId = await SeedObjectAsync("text", "retired");
+        var otherId = await SeedObjectAsync("text", "other");
+        var holderId = Guid.NewGuid();
+        var (byIdentifier, toAnother, byIdAlone) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var holder = new ConnectedSystemObject
+        {
+            Id = holderId, ConnectedSystemId = _systemId, TypeId = _typeIds["holder"], ExternalIdAttributeId = _attributeIds["holder"],
+            Status = ConnectedSystemObjectStatus.Normal, Created = DateTime.UtcNow
+        };
+        holder.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = _attributeIds["holder"], StringValue = "holder" });
+        holder.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = byIdentifier, AttributeId = _attributeIds["member"], UnresolvedReferenceValue = "retired" });
+        holder.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = toAnother, AttributeId = _attributeIds["member"], UnresolvedReferenceValue = "other" });
+        holder.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = byIdAlone, AttributeId = _attributeIds["member"] });
+        await using (var write = NewContext())
+        {
+            // Created by identifier, then given their objects' ids, as an update's values resolved through the database are.
+            var sync = new PostgresDataRepository(write).Sync;
+            await sync.CreateConnectedSystemObjectsAsync([holder]);
+            await sync.ApplyOutstandingReferenceResolutionsAsync(
+            [
+                new OutstandingReferenceResolution(byIdentifier, retiredId, ExecutionItemId: null, _attributeIds["member"], "retired"),
+                new OutstandingReferenceResolution(toAnother, otherId, ExecutionItemId: null, _attributeIds["member"], "other"),
+                new OutstandingReferenceResolution(byIdAlone, retiredId, ExecutionItemId: null, _attributeIds["member"], "")
+            ]);
+        }
+
+        await using var ctx = NewContext(trackAll: true);
+        var tracked = await ctx.ConnectedSystemObjects.Include(o => o.AttributeValues).SingleAsync(o => o.Id == holderId);
+        var reopened = await new PostgresDataRepository(ctx).Sync.ReopenReferencesToRetiredObjectsAsync([holderId], [retiredId], []);
+        var trackedValue = tracked.AttributeValues.Single(v => v.Id == byIdentifier);
+        var trackedState = ctx.Entry(trackedValue).Property(v => v.ReferenceValueId).IsModified;
+        tracked.LastUpdated = DateTime.UtcNow;
+        Assert.That(async () => await ctx.SaveChangesAsync(), Throws.Nothing, "a later save on the context neither fails nor writes the id back");
+
+        await using var read = NewContext();
+        var stored = await read.ConnectedSystemObjectAttributeValues.AsNoTracking()
+            .Where(v => v.ConnectedSystemObject.Id == holderId && v.AttributeId == _attributeIds["member"])
+            .ToDictionaryAsync(v => v.Id, v => v.ReferenceValueId);
+        var outstanding = await new PostgresDataRepository(read).Sync.GetOutstandingReferenceValuesAsync([holderId]);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(reopened, Is.EqualTo(1));
+            Assert.That(stored[byIdentifier], Is.Null, "re-opened, for the sweep to resolve by its identifier");
+            Assert.That(stored[toAnother], Is.EqualTo(otherId), "a value naming another object is left as it is");
+            Assert.That(stored[byIdAlone], Is.EqualTo(retiredId), "a value holding no identifier could never be resolved again, so is left");
+            Assert.That(outstanding.Select(v => v.AttributeValueId), Is.EqualTo(new[] { byIdentifier }), "the sweep reads it as outstanding");
+            Assert.That(trackedValue.ReferenceValueId, Is.Null);
+            Assert.That(trackedState, Is.False);
+        }
+    }
+
+    [Test]
     public async Task UpdateUnresolvedReferenceReportsAsync_WritesTheCountAndOnlyTheErrorsItCarriesAsync()
     {
         await using (var seed = NewContext())
