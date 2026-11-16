@@ -20,15 +20,17 @@ namespace JIM.Models.Activities;
 /// or "enabled"), for a caller that must decide on which setting changed without depending on a display label. Parallel
 /// to <paramref name="ChangedSections"/>; empty unless <paramref name="Kind"/> is
 /// <see cref="ConfigurationChangeCaptureKind.Changed"/>.</param>
-/// <param name="ConsequentialKeys">The keys, among <paramref name="ChangedKeys"/>, of the sections whose own change is
-/// Sync-affecting or Destructive, for deciding what a change leaves to a Full Synchronisation without re-reading the diff.
-/// Empty unless <paramref name="Kind"/> is <see cref="ConfigurationChangeCaptureKind.Changed"/>.</param>
+/// <param name="FullSynchronisationKeys">The keys, among <paramref name="ChangedKeys"/>, of the sections whose change only a
+/// Full Synchronisation applies to the objects that already exist: Sync-affecting or Destructive sections, less those a Full
+/// Synchronisation never acts on, such as a Metaverse Object Type's deletion settings and Initial Export Only Attribute Flows
+/// (#2973). For deciding what a change leaves to a Full Synchronisation without re-reading the diff. Empty unless
+/// <paramref name="Kind"/> is <see cref="ConfigurationChangeCaptureKind.Changed"/>.</param>
 public sealed record ConfigurationChangeCaptureOutcome(
     ConfigurationChangeCaptureKind Kind,
     ConfigurationChangeClass Class,
     IReadOnlyList<string> ChangedSections,
     IReadOnlyList<string> ChangedKeys,
-    IReadOnlyList<string> ConsequentialKeys)
+    IReadOnlyList<string> FullSynchronisationKeys)
 {
     /// <summary>Tracking is off; nothing was compared.</summary>
     public static ConfigurationChangeCaptureOutcome NotTracked { get; } = new(ConfigurationChangeCaptureKind.NotTracked, ConfigurationChangeClass.NotClassified, [], [], []);
@@ -46,12 +48,12 @@ public sealed record ConfigurationChangeCaptureOutcome(
     /// <param name="changeClass">How consequential the change is overall.</param>
     /// <param name="changedSections">The labels of the changed top-level sections.</param>
     /// <param name="changedKeys">The keys of the same sections.</param>
-    /// <param name="consequentialKeys">The keys, among <paramref name="changedKeys"/>, of the sections that are consequential
-    /// in themselves. Omitted, every changed section counts as consequential when the change is Sync-affecting or Destructive
-    /// overall and none does otherwise: the safe reading when the sections were not classified one by one.</param>
+    /// <param name="fullSynchronisationKeys">The keys, among <paramref name="changedKeys"/>, of the sections only a Full
+    /// Synchronisation applies. Omitted, every changed section counts when the change is Sync-affecting or Destructive overall
+    /// and none does otherwise: the safe reading when the sections were not judged one by one.</param>
     public static ConfigurationChangeCaptureOutcome Changed(
         ConfigurationChangeClass changeClass, IReadOnlyList<string> changedSections, IReadOnlyList<string> changedKeys,
-        IReadOnlyList<string>? consequentialKeys = null) =>
+        IReadOnlyList<string>? fullSynchronisationKeys = null) =>
         new(ConfigurationChangeCaptureKind.Changed, changeClass, changedSections, changedKeys,
-            consequentialKeys ?? (changeClass >= ConfigurationChangeClass.SyncAffecting ? changedKeys : []));
+            fullSynchronisationKeys ?? (changeClass >= ConfigurationChangeClass.SyncAffecting ? changedKeys : []));
 }

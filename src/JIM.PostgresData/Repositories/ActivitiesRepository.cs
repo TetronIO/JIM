@@ -1303,6 +1303,24 @@ public partial class ActivityRepository : IActivityRepository
             .FirstOrDefaultAsync();
     }
 
+    public async Task<string?> GetConfigurationChangeSnapshotInForceAsync(ActivityTargetType targetType, int targetObjectId, DateTime at)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectId)
+            .Where(a => a.Created < at)
+            .OrderByDescending(a => a.ConfigurationChangeVersion)
+            .Select(a => a.ConfigurationChangeSnapshot)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<string?> GetConfigurationChangeSnapshotInForceAsync(ActivityTargetType targetType, string targetObjectKey, DateTime at)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectKey)
+            .Where(a => a.Created < at)
+            .OrderByDescending(a => a.ConfigurationChangeVersion)
+            .Select(a => a.ConfigurationChangeSnapshot)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task<int> GetConfigurationChangeCountAsync(ActivityTargetType targetType, int targetObjectId)
     {
         return await ConfigurationChangeQuery(targetType, targetObjectId).CountAsync();
@@ -2514,6 +2532,7 @@ public partial class ActivityRepository : IActivityRepository
             {
                 When = a.Created,
                 Class = a.ConfigurationChangeClass,
+                Version = a.ConfigurationChangeVersion,
                 ConnectedSystemId = a.ConnectedSystemId,
                 SyncRuleId = a.SyncRuleId,
                 MetaverseObjectTypeId = a.MetaverseObjectTypeId,

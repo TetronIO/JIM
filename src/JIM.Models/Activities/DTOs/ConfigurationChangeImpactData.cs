@@ -21,6 +21,13 @@ public class ConfigurationChangeImpactData
     public ConfigurationChangeClass Class { get; init; }
 
     /// <summary>
+    /// The configuration-change version the change recorded in its object's history, or null when it has none (a
+    /// deletion's tombstone). A versioned change can be compared with the configuration in force at an earlier point
+    /// (#2973); an unversioned one cannot.
+    /// </summary>
+    public int? Version { get; init; }
+
+    /// <summary>
     /// Set when the change targets a Connected System directly (including its Run Profiles, object types, partitions
     /// and Simple Mode Object Matching Rules), and on a Synchronisation Rule deletion, where it is the only surviving
     /// link back to the owning system.

@@ -14,9 +14,9 @@ namespace JIM.Web.Models.Api;
 public class ConfigurationDriftDto
 {
     /// <summary>
-    /// True when Sync-affecting or Destructive configuration changes have been recorded since the last completed Full
-    /// Synchronisation. Always false when <see cref="IsDeterminable"/> is false, so never read this on its own as
-    /// "the configuration is settled".
+    /// True when the configuration differs, in a way only a Full Synchronisation applies, from the configuration the last
+    /// completed Full Synchronisation started with. Changes made and then undone since do not count. Always false when
+    /// IsDeterminable is false, so never read this on its own as "the configuration is settled".
     /// </summary>
     public bool HasPendingChanges { get; set; }
 
@@ -50,7 +50,7 @@ public class ConfigurationDriftDto
     public DateTime? MostRecentChange { get; set; }
 
     /// <summary>
-    /// How many qualifying changes have been recorded since the last Full Synchronisation.
+    /// How many qualifying changes have been recorded since the last Full Synchronisation, leaving out changes since undone.
     /// </summary>
     public int ChangeCount { get; set; }
 

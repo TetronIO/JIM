@@ -23,9 +23,10 @@ public class ConfigurationDriftStatus
 
     /// <summary>
     /// True when at least one Sync-affecting or Destructive configuration change affecting this system was recorded
-    /// after the reference point (the start of the last completed Full Synchronisation). False when the configuration
-    /// is settled, and also false whenever the answer is not knowable: check <see cref="IsDeterminable"/> before
-    /// presenting this as "no changes pending".
+    /// after the reference point (the start of the last completed Full Synchronisation) and has not since been undone:
+    /// the configuration it changed still differs from the one in force at the reference point in something only a Full
+    /// Synchronisation applies (#2973). False when the configuration is settled, and also false whenever the answer is not
+    /// knowable: check <see cref="IsDeterminable"/> before presenting this as "no changes pending".
     /// </summary>
     public bool HasPendingChanges { get; init; }
 

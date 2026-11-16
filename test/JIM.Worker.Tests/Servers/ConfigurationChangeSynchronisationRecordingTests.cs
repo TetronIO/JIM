@@ -40,6 +40,7 @@ public class ConfigurationChangeSynchronisationRecordingTests
     private Mock<IActivityRepository> _activityRepo = null!;
     private Mock<IServiceSettingsRepository> _settingsRepo = null!;
     private Mock<IConnectedSystemRepository> _csRepo = null!;
+    private Mock<IMetaverseRepository> _metaverseRepo = null!;
     private FakeProtection _protection = null!;
     private JimApplication _jim = null!;
     private List<ConfigurationChangeSynchronisation> _recorded = null!;
@@ -64,9 +65,9 @@ public class ConfigurationChangeSynchronisationRecordingTests
         _repo.Setup(r => r.ServiceSettings).Returns(_settingsRepo.Object);
         _repo.Setup(r => r.ConnectedSystems).Returns(_csRepo.Object);
 
-        var metaverseRepo = new Mock<IMetaverseRepository>();
-        metaverseRepo.Setup(r => r.GetContributedValuesSummaryAsync(It.IsAny<int>(), It.IsAny<int?>())).ReturnsAsync(new ContributedValuesSummary());
-        _repo.Setup(r => r.Metaverse).Returns(metaverseRepo.Object);
+        _metaverseRepo = new Mock<IMetaverseRepository>();
+        _metaverseRepo.Setup(r => r.GetContributedValuesSummaryAsync(It.IsAny<int>(), It.IsAny<int?>())).ReturnsAsync(new ContributedValuesSummary());
+        _repo.Setup(r => r.Metaverse).Returns(_metaverseRepo.Object);
 
         // The repository gives an Activity its id on create; the saves link the row to it.
         _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>()))
@@ -339,6 +340,59 @@ public class ConfigurationChangeSynchronisationRecordingTests
         await _jim.ConnectedSystems.CreateSyncRuleMappingAsync(NewMapping(), NewApiKey());
 
         Assert.That(_recorded, Is.Empty);
+    }
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ExportRuleManagedFlow_RecordsThatAFullSynchronisationIsNeededAsync()
+    {
+        // An export Attribute Flow edit is applied to existing objects only by a Full Synchronisation (#2615).
+        SetupStoredRule(BuildExportRule(), reloadedWithMapping: true);
+
+        await _jim.ConnectedSystems.CreateSyncRuleMappingAsync(NewMapping(), NewApiKey());
+
+        Assert.That(_createdActivities.Single().ConfigurationChangeNeedsFullSynchronisation, Is.True);
+    }
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ExportRuleInitialExportOnlyFlow_RecordsThatNoFullSynchronisationIsNeededAsync()
+    {
+        // An Initial Export Only flow writes only when an object is provisioned, so a Full Synchronisation would change
+        // nothing for the objects already provisioned (#2973).
+        SetupStoredRule(BuildExportRule(), reloadedWithMapping: true, reloadedMappingIsInitialExportOnly: true);
+
+        await _jim.ConnectedSystems.CreateSyncRuleMappingAsync(NewMapping(), NewApiKey());
+
+        Assert.That(_createdActivities.Single().ConfigurationChangeNeedsFullSynchronisation, Is.False,
+            "an explicit false, not a null the drift indicator would count");
+    }
+
+    // -- Metaverse Object Type saves (#2973) ---------------------------------------------------------------------------
+
+    [Test]
+    public async Task UpdateMetaverseObjectTypeAsync_DeletionSettingsOnly_RecordsThatNoFullSynchronisationIsNeededAsync()
+    {
+        // Deletion settings are read when an object is disconnected and when housekeeping runs, never by a Full
+        // Synchronisation, so changing them must not raise the drift indicator.
+        var after = SetupStoredObjectType(type => type.DeletionGracePeriod = TimeSpan.Zero);
+
+        await _jim.Metaverse.UpdateMetaverseObjectTypeAsync(after, NewApiKey());
+
+        var activity = _createdActivities.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.ConfigurationChangeClass, Is.EqualTo(ConfigurationChangeClass.Destructive), "precondition: the change is graded");
+            Assert.That(activity.ConfigurationChangeNeedsFullSynchronisation, Is.False);
+        }
+    }
+
+    [Test]
+    public async Task UpdateMetaverseObjectTypeAsync_AttributeBound_RecordsThatAFullSynchronisationIsNeededAsync()
+    {
+        var after = SetupStoredObjectType(type => type.Attributes.Add(new MetaverseAttribute { Id = 31, Name = "Employee Type" }));
+
+        await _jim.Metaverse.UpdateMetaverseObjectTypeAsync(after, NewApiKey());
+
+        Assert.That(_createdActivities.Single().ConfigurationChangeNeedsFullSynchronisation, Is.True);
     }
 
     [Test]
@@ -658,7 +712,8 @@ public class ConfigurationChangeSynchronisationRecordingTests
 
     // The rule as the change history last saw it (so the capture has a baseline to diff against) and as a reload finds
     // it after the save.
-    private void SetupStoredRule(SyncRule stored, bool reloadedWithMapping = false, bool reloadedWithMatchingRule = false)
+    private void SetupStoredRule(SyncRule stored, bool reloadedWithMapping = false, bool reloadedWithMatchingRule = false,
+        bool reloadedMappingIsInitialExportOnly = false)
     {
         _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SynchronisationRule, stored.Id))
             .ReturnsAsync(ConfigurationSnapshotService.Serialise(_jim.ConfigurationSnapshots.CreateSnapshot(stored, HashKey)));
@@ -668,10 +723,31 @@ public class ConfigurationChangeSynchronisationRecordingTests
         reloaded.Id = stored.Id;
         reloaded.Enabled = stored.Enabled;
         if (reloadedWithMapping)
-            reloaded.AttributeFlowRules = [new SyncRuleMapping { Id = 101, TargetMetaverseAttributeId = 42 }];
+            reloaded.AttributeFlowRules = [new SyncRuleMapping { Id = 101, TargetMetaverseAttributeId = 42, InitialExportOnly = reloadedMappingIsInitialExportOnly }];
         if (reloadedWithMatchingRule)
             reloaded.ObjectMatchingRules = [new ObjectMatchingRule { Id = 9, SyncRuleId = stored.Id, TargetMetaverseAttributeId = 201, CaseSensitive = true }];
         _csRepo.Setup(r => r.GetSyncRuleAsync(stored.Id)).ReturnsAsync(reloaded);
+    }
+
+    // The Metaverse Object Type as its change history last saw it, and as a reload finds it after the save (with the edit).
+    private MetaverseObjectType SetupStoredObjectType(Action<MetaverseObjectType> edit)
+    {
+        static MetaverseObjectType Build() => new()
+        {
+            Id = 20,
+            Name = "User",
+            DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
+            DeletionGracePeriod = TimeSpan.FromDays(7),
+            Attributes = [new MetaverseAttribute { Id = 30, Name = "Display Name" }]
+        };
+
+        _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.MetaverseObjectType, 20))
+            .ReturnsAsync(ConfigurationSnapshotService.Serialise(_jim.ConfigurationSnapshots.CreateSnapshot(Build(), HashKey)));
+        var after = Build();
+        edit(after);
+        _metaverseRepo.Setup(r => r.UpdateMetaverseObjectTypeAsync(It.IsAny<MetaverseObjectType>())).Returns(Task.CompletedTask);
+        _metaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(20, It.IsAny<bool>())).ReturnsAsync(after);
+        return after;
     }
 
     private void SetupReloadedPriorityRule(int ruleId, int objectTypeId, int connectedSystemId, int priority)

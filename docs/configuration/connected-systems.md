@@ -116,9 +116,16 @@ Some changes no ordinary synchronisation applies by itself. A Connected System w
 | Class | Examples | How it shows |
 |-------|----------|--------------|
 | Sync-affecting | An export Attribute Flow, a Metaverse Attribute, schema selection | Amber, with the number of changes |
-| Destructive | Deletion rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning |
+| Destructive | Deselecting an Object Type or partition, deleting a Synchronisation Rule | Red, because applying it can cascade deletions or mass deprovisioning |
 
 A change to an import Synchronisation Rule or an Object Matching Rule is not counted: the next synchronisation applies it. Nor is a change to an export rule's scope or Deprovisioning Action: the next synchronisation of any Connected System reviews every Metaverse Object against the rule as it now stands. Only what no synchronisation applies by itself counts, so a save that changes an export rule's scope and its Attribute Flow raises the indicator for the Attribute Flow edit alone.
+
+Nor does a change a Full Synchronisation would not act on:
+
+- **A Metaverse Object Type's deletion settings**<br /> The Deletion Rule, its trigger Connected Systems and the grace period are applied when an object is disconnected, and by housekeeping when the grace period ends. A Full Synchronisation does not revisit objects that are already disconnected.
+- **An Initial Export Only Attribute Flow**<br /> Its value is written only when an object is provisioned, so adding, editing or removing one changes nothing for objects already provisioned. Switching a flow from Initial Export Only to managed does count, because the flow then manages every object.
+
+**The net change counts, not each edit.** For each Synchronisation Rule, Connected System, Metaverse Object Type or Metaverse Attribute with a counted change, JIM compares its configuration now with its configuration when the last Full Synchronisation started. If you change a setting and then change it back, the indicator clears: there is nothing for a Full Synchronisation to apply. Deleting a Synchronisation Rule always counts, because nothing is left to compare with.
 
 **Attribution is precise.** Editing a Metaverse Attribute raises the indicator only on the Connected Systems whose Synchronisation Rules actually reference that attribute, not on every system. Deleting a Synchronisation Rule raises it on the system that rule belonged to.
 

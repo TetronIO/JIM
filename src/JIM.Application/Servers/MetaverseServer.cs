@@ -449,10 +449,16 @@ public partial class MetaverseServer
     /// ConfigurationChangeCaptureService (which owns the toggle, dedupe-guard, versioning and best-effort behaviours).
     /// The object type is reloaded with its attributes so the snapshot reflects persisted truth rather than the
     /// caller's partial in-memory graph; call it after the change has been persisted.
+    /// <para>
+    /// Also records on the Activity whether the change leaves anything for a Full Synchronisation (#2973), so the drift
+    /// indicator does not prompt for one after a change to the type's deletion settings, which no synchronisation applies.
+    /// Nothing synchronises the type's objects by itself, so nothing is recorded as awaiting synchronisation or flagged for
+    /// export review; what remains is left for a Full Synchronisation.
+    /// </para>
     /// </summary>
     private async Task CaptureObjectTypeConfigurationChangeAsync(Activity activity, int objectTypeId, string? changeReason)
     {
-        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+        var outcome = await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
             ActivityTargetType.MetaverseObjectType, objectTypeId,
             async hashKey =>
             {
@@ -460,6 +466,9 @@ public partial class MetaverseServer
                 return persisted == null ? null : Application.ConfigurationSnapshots.CreateSnapshot(persisted, hashKey);
             },
             $"Metaverse Object Type {objectTypeId}");
+
+        activity.ConfigurationChangeNeedsFullSynchronisation = ConfigurationChangeSynchronisationPolicy.NeedsFullSynchronisation(
+            outcome, recordsAwaitingSynchronisation: false, flagsExportReview: false);
     }
 
     /// <summary>

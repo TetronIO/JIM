@@ -179,13 +179,13 @@ and Destructive changes count, so a rename never registers here.
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `HasPendingChanges` | `bool` | Qualifying changes have been recorded since the last completed Full Synchronisation |
+| `HasPendingChanges` | `bool` | The configuration differs, in a way only a Full Synchronisation applies, from the configuration the last completed Full Synchronisation started with |
 | `IsDeterminable` | `bool` | The question has a meaningful answer; see the caution below |
 | `NeverFullySynchronised` | `bool` | No Full Synchronisation has ever completed, so there is no reference point |
 | `TrackingDisabled` | `bool` | Configuration change tracking is off, so JIM holds no record of what changed |
 | `LastFullSynchronisation` | `datetime?` | When the last completed Full Synchronisation started, or `$null` |
 | `MostRecentChange` | `datetime?` | When the most recent qualifying change was recorded, or `$null` |
-| `ChangeCount` | `int` | How many qualifying changes there are |
+| `ChangeCount` | `int` | How many qualifying changes there are. Changes since undone are not counted |
 | `HighestChangeClass` | `string` | `Cosmetic`, `SyncAffecting` or `Destructive`; `NotClassified` when there are no changes |
 | `AwaitingSynchronisation` | `object[]` | The Object Types whose objects the next synchronisation, Delta or Full, will all process because of saved import Synchronisation Rule or Object Matching Rule changes; none when nothing is waiting. These changes are not counted in `ChangeCount`, and are reported even when `IsDeterminable` is `$false` |
 

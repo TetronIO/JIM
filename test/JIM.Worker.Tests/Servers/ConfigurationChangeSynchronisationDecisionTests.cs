@@ -189,8 +189,8 @@ public class ConfigurationChangeSynchronisationDecisionTests
 
     // -- SectionsLeftForFullSynchronisation and NeedsFullSynchronisation -----------------------------------------------
 
-    private static ConfigurationChangeCaptureOutcome Change(string[] labels, string[] keys, string[] consequentialKeys) =>
-        ConfigurationChangeCaptureOutcome.Changed(ConfigurationChangeClass.SyncAffecting, labels, keys, consequentialKeys);
+    private static ConfigurationChangeCaptureOutcome Change(string[] labels, string[] keys, string[] fullSynchronisationKeys) =>
+        ConfigurationChangeCaptureOutcome.Changed(ConfigurationChangeClass.SyncAffecting, labels, keys, fullSynchronisationKeys);
 
     [Test]
     public void SectionsLeftForFullSynchronisation_ChangeThatIsRecorded_LeavesNothing()

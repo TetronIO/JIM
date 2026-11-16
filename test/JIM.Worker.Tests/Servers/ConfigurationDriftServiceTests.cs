@@ -2,11 +2,13 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application;
+using JIM.Application.Services;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
+using JIM.Models.Logic;
 using JIM.Models.Staging.DTOs;
 using Moq;
 using NUnit.Framework;
@@ -476,7 +478,185 @@ public class ConfigurationDriftServiceTests
 
     #endregion
 
+    #region Net difference since the last Full Synchronisation (#2973)
+
+    // The indicator answers "is the configuration in force different, in a way only a Full Synchronisation applies, from
+    // the configuration the last one ran with?". Counting edits instead reports a change that was made and then undone,
+    // which an administrator can do nothing about.
+
+    [Test]
+    public async Task GetConnectedSystemDriftAsync_ObjectTypeChangeThatWasUndone_IsNotPendingAsync()
+    {
+        // Scenario 001 zeroes the User type's grace period for a test and restores it afterwards: two Destructive edits,
+        // and a configuration identical to the one the last Full Synchronisation ran with.
+        SetImpacts(
+            Impact(AfterSync, ConfigurationChangeClass.Destructive, metaverseObjectTypeId: 20, version: 2),
+            Impact(AfterSync.AddMinutes(5), ConfigurationChangeClass.Destructive, metaverseObjectTypeId: 20, version: 3));
+        SetObjectTypeHistory(inForceAtLastFullSync: ObjectType(), latest: ObjectType());
+
+        var result = await _jim.ConfigurationDrift.GetConnectedSystemDriftAsync(SystemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasPendingChanges, Is.False);
+            Assert.That(result.ChangeCount, Is.EqualTo(0));
+        }
+    }
+
+    [Test]
+    public async Task GetConnectedSystemDriftAsync_NetChangeOnlyToDeletionSettings_IsNotPendingAsync()
+    {
+        // Recorded before the save judged it (a null judgement counts), but a Full Synchronisation still has nothing to do.
+        SetImpacts(Impact(AfterSync, ConfigurationChangeClass.Destructive, metaverseObjectTypeId: 20, version: 2));
+        SetObjectTypeHistory(inForceAtLastFullSync: ObjectType(), latest: ObjectType(t => t.DeletionGracePeriod = TimeSpan.Zero));
+
+        var result = await _jim.ConfigurationDrift.GetConnectedSystemDriftAsync(SystemId);
+
+        Assert.That(result.HasPendingChanges, Is.False);
+    }
+
+    [Test]
+    public async Task GetConnectedSystemDriftAsync_NetChangeAFullSynchronisationApplies_CountsEveryChangeBehindItAsync()
+    {
+        SetImpacts(
+            Impact(AfterSync, ConfigurationChangeClass.Destructive, metaverseObjectTypeId: 20, version: 2),
+            Impact(AfterSync.AddMinutes(5), ConfigurationChangeClass.SyncAffecting, metaverseObjectTypeId: 20, version: 3));
+        SetObjectTypeHistory(inForceAtLastFullSync: ObjectType(),
+            latest: ObjectType(t => t.Attributes.Add(new MetaverseAttribute { Id = 31, Name = "Employee Type" })));
+
+        var result = await _jim.ConfigurationDrift.GetConnectedSystemDriftAsync(SystemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasPendingChanges, Is.True);
+            Assert.That(result.ChangeCount, Is.EqualTo(2));
+            Assert.That(result.HighestChangeClass, Is.EqualTo(ConfigurationChangeClass.Destructive));
+        }
+    }
+
+    [Test]
+    public async Task GetConnectedSystemDriftAsync_SynchronisationRuleFlowEditThatWasUndone_IsNotPendingAsync()
+    {
+        SetImpacts(
+            Impact(AfterSync, ConfigurationChangeClass.SyncAffecting, syncRuleId: 100, version: 5),
+            Impact(AfterSync.AddMinutes(5), ConfigurationChangeClass.SyncAffecting, syncRuleId: 100, version: 6));
+        var rule = ExportRule();
+        _activityRepo.Setup(r => r.GetConfigurationChangeSnapshotInForceAsync(ActivityTargetType.SynchronisationRule, 100, LastFullSync))
+            .ReturnsAsync(Serialised(rule));
+        _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SynchronisationRule, 100))
+            .ReturnsAsync(Serialised(rule));
+
+        var result = await _jim.ConfigurationDrift.GetConnectedSystemDriftAsync(SystemId);
+
+        Assert.That(result.HasPendingChanges, Is.False);
+    }
+
+    [Test]
+    public async Task GetConnectedSystemDriftAsync_ConfigurationCreatedSinceTheLastFullSynchronisation_IsPendingAsync()
+    {
+        // With no version in force at the reference point there is nothing to compare against, so the change counts.
+        SetImpacts(Impact(AfterSync, ConfigurationChangeClass.SyncAffecting, syncRuleId: 100, version: 1));
+        _activityRepo.Setup(r => r.GetConfigurationChangeSnapshotInForceAsync(ActivityTargetType.SynchronisationRule, 100, LastFullSync))
+            .ReturnsAsync((string?)null);
+        _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SynchronisationRule, 100))
+            .ReturnsAsync(Serialised(ExportRule()));
+
+        var result = await _jim.ConfigurationDrift.GetConnectedSystemDriftAsync(SystemId);
+
+        Assert.That(result.HasPendingChanges, Is.True);
+    }
+
+    [Test]
+    public async Task GetConnectedSystemDriftAsync_UnversionedChange_IsPendingWithoutAComparisonAsync()
+    {
+        // A deletion carries an unversioned tombstone: the configuration it belonged to has no history left to compare.
+        SetImpacts(Impact(AfterSync, ConfigurationChangeClass.Destructive, connectedSystemId: SystemId));
+
+        var result = await _jim.ConfigurationDrift.GetConnectedSystemDriftAsync(SystemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasPendingChanges, Is.True);
+            _activityRepo.Verify(r => r.GetConfigurationChangeSnapshotInForceAsync(It.IsAny<ActivityTargetType>(), It.IsAny<int>(), It.IsAny<DateTime>()), Times.Never);
+        }
+    }
+
+    [Test]
+    public async Task GetConnectedSystemDriftAsync_TwoSystemsSynchronisedAtDifferentTimes_CompareAgainstTheirOwnReferencePointsAsync()
+    {
+        // The Object Type changed once before the other system's Full Synchronisation and was undone after both, so for
+        // this system the configuration is back where it started while the other ran with the changed one.
+        var otherLastFullSync = LastFullSync.AddHours(1);
+        _activityRepo.Setup(r => r.GetLastFullSynchronisationStartsAsync(It.IsAny<IList<int>>()))
+            .ReturnsAsync(new Dictionary<int, DateTime> { [SystemId] = LastFullSync, [OtherSystemId] = otherLastFullSync });
+        _connectedSystemRepo.Setup(r => r.GetConfigurationScopesAsync(It.IsAny<IList<int>>()))
+            .ReturnsAsync([Scope(SystemId, objectTypeIds: [20]), Scope(OtherSystemId, objectTypeIds: [20])]);
+        SetImpacts(
+            Impact(LastFullSync.AddMinutes(30), ConfigurationChangeClass.SyncAffecting, metaverseObjectTypeId: 20, version: 2),
+            Impact(AfterSync, ConfigurationChangeClass.SyncAffecting, metaverseObjectTypeId: 20, version: 3));
+        var changed = ObjectType(t => t.Attributes.Add(new MetaverseAttribute { Id = 31, Name = "Employee Type" }));
+        _activityRepo.Setup(r => r.GetConfigurationChangeSnapshotInForceAsync(ActivityTargetType.MetaverseObjectType, 20, LastFullSync))
+            .ReturnsAsync(Serialised(ObjectType()));
+        _activityRepo.Setup(r => r.GetConfigurationChangeSnapshotInForceAsync(ActivityTargetType.MetaverseObjectType, 20, otherLastFullSync))
+            .ReturnsAsync(Serialised(changed));
+        _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.MetaverseObjectType, 20))
+            .ReturnsAsync(Serialised(ObjectType()));
+
+        var results = await _jim.ConfigurationDrift.GetConnectedSystemDriftAsync([SystemId, OtherSystemId]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[SystemId].HasPendingChanges, Is.False, "back to what this system last ran with");
+            Assert.That(results[OtherSystemId].HasPendingChanges, Is.True, "the other system ran with the changed type");
+            Assert.That(results[OtherSystemId].ChangeCount, Is.EqualTo(1), "only the change after its own reference point");
+        }
+    }
+
+    #endregion
+
     #region helpers
+
+    private static readonly byte[] SnapshotHashKey = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+
+    private string Serialised(MetaverseObjectType objectType) =>
+        ConfigurationSnapshotService.Serialise(_jim.ConfigurationSnapshots.CreateSnapshot(objectType, SnapshotHashKey));
+
+    private string Serialised(SyncRule rule) =>
+        ConfigurationSnapshotService.Serialise(_jim.ConfigurationSnapshots.CreateSnapshot(rule, SnapshotHashKey));
+
+    private void SetObjectTypeHistory(MetaverseObjectType inForceAtLastFullSync, MetaverseObjectType latest)
+    {
+        _activityRepo.Setup(r => r.GetConfigurationChangeSnapshotInForceAsync(ActivityTargetType.MetaverseObjectType, 20, LastFullSync))
+            .ReturnsAsync(Serialised(inForceAtLastFullSync));
+        _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.MetaverseObjectType, 20))
+            .ReturnsAsync(Serialised(latest));
+    }
+
+    private static MetaverseObjectType ObjectType(Action<MetaverseObjectType>? edit = null)
+    {
+        var type = new MetaverseObjectType
+        {
+            Id = 20,
+            Name = "User",
+            DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected,
+            DeletionGracePeriod = TimeSpan.FromDays(7),
+            Attributes = [new MetaverseAttribute { Id = 30, Name = "Display Name" }]
+        };
+        edit?.Invoke(type);
+        return type;
+    }
+
+    private static SyncRule ExportRule() => new()
+    {
+        Id = 100,
+        Name = "AD Export",
+        Direction = SyncRuleDirection.Export,
+        Enabled = true,
+        ProvisionToConnectedSystem = true,
+        ConnectedSystemId = SystemId,
+        ConnectedSystemObjectTypeId = 7,
+        MetaverseObjectTypeId = 20
+    };
     private static ConfigurationChangeSynchronisationSummary Summary(long id, int objectTypeId, string objectTypeName, string reason, DateTime when) => new()
     {
         Id = id,
@@ -521,9 +701,10 @@ public class ConfigurationDriftServiceTests
 
     private static ConfigurationChangeImpactData Impact(DateTime when, ConfigurationChangeClass changeClass,
         int? connectedSystemId = null, int? syncRuleId = null, int? metaverseObjectTypeId = null,
-        int? metaverseAttributeId = null, string? serviceSettingKey = null) => new()
+        int? metaverseAttributeId = null, string? serviceSettingKey = null, int? version = null) => new()
     {
         When = when,
+        Version = version,
         Class = changeClass,
         ConnectedSystemId = connectedSystemId,
         SyncRuleId = syncRuleId,
