@@ -675,6 +675,71 @@ function ConvertFrom-LabVmNote {
     }
 }
 
+function Test-LabHostMemory {
+    <#
+    .SYNOPSIS
+        Whether the host has the free memory to start a lab VM, and if not, a message saying why.
+
+    .DESCRIPTION
+        Every lab VM has static memory, and Hyper-V refuses to start one the host cannot hold ("Not enough memory in
+        the system"), which part way through a run reads as an unexplained failure. Restore-LabDomainController.ps1
+        asks this before it reverts anything, so a run that cannot fit fails at once, names the VM and the shortfall,
+        and leaves the lab as it was (#2412: refuse rather than overcommit). The runner's power plan makes this
+        unlikely; this catches what it cannot, such as a VM left running by hand or a stop that did not happen.
+
+    .PARAMETER VmName
+        The VM to start, for the message.
+
+    .PARAMETER RequiredBytes
+        The VM's startup memory.
+
+    .PARAMETER FreeBytes
+        The host's free physical memory now.
+
+    .PARAMETER ReleasedBytes
+        The memory the VM holds now, which reverting it to a checkpoint taken while it was off releases first. 0 when
+        it is off.
+
+    .PARAMETER ReserveBytes
+        Memory to leave free for the host and Hyper-V's own per-VM overhead. Default 1 GB.
+
+    .OUTPUTS
+        Fits, ShortBytes (0 when it fits) and Message.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$VmName,
+
+        [Parameter(Mandatory)]
+        [uint64]$RequiredBytes,
+
+        [Parameter(Mandatory)]
+        [uint64]$FreeBytes,
+
+        [uint64]$ReleasedBytes = 0,
+
+        [uint64]$ReserveBytes = 1GB
+    )
+
+    $available = [double]$FreeBytes + [double]$ReleasedBytes
+    $needed = [double]$RequiredBytes + [double]$ReserveBytes
+    $short = [uint64][math]::Max([double]0, $needed - $available)
+    $toGb = { param($bytes) ([double]$bytes / 1GB).ToString('0.0', [cultureinfo]::InvariantCulture) }
+
+    $message = if ($short -eq 0) {
+        "The host can start ${VmName}: it needs $(& $toGb $RequiredBytes) GB, and $(& $toGb $available) GB is available."
+    }
+    else {
+        "Not enough free memory on the host to start ${VmName}: it needs $(& $toGb $RequiredBytes) GB plus $(& $toGb $ReserveBytes) GB to spare, and the host has $(& $toGb $FreeBytes) GB free" +
+        $(if ($ReleasedBytes -gt 0) { " (plus $(& $toGb $ReleasedBytes) GB the revert releases)" } else { '' }) +
+        ", $(& $toGb $short) GB short. Nothing was reverted. Stop a lab VM this run does not need (Stop-LabMachine.ps1 -Name <vm>), such as an Exchange server or dc-target, and try again."
+    }
+
+    [pscustomobject]@{ Fits = ($short -eq 0); ShortBytes = $short; Message = $message }
+}
+
 function Get-LabReadinessPort {
     <#
     .SYNOPSIS
@@ -5031,7 +5096,7 @@ Export-ModuleMember -Function @(
     'ConvertTo-LabDelegationSddl', 'Get-LabDaclAce', 'Test-LabSddlContainsSid', 'Test-LabAclGrant', 'Merge-LabDelegationSddl',
     'Get-LabCheckpointName', 'Test-LabCheckpointName', 'Test-LabVmName',
     'Get-LabDomainInfo', 'Get-LabCertificateName', 'Get-LabAdministratorUserName',
-    'ConvertTo-LabVmNote', 'Test-LabVmNote', 'ConvertFrom-LabVmNote',
+    'ConvertTo-LabVmNote', 'Test-LabVmNote', 'ConvertFrom-LabVmNote', 'Test-LabHostMemory',
     'Get-LabAvmaKey', 'ConvertTo-LabUnattendPassword', 'Get-LabUnattendPlaceholder', 'ConvertTo-LabUnattendXml',
     'ConvertTo-LabKeylessUnattend', 'Test-LabEvaluationEdition', 'Get-LabAdProviderPath', 'Get-LabDirectoryResultCode',
     'ConvertFrom-LabDirectoryExtensionSetting', 'Get-LabDirectoryExtensionBuildParameter', 'Get-LabExchangeOrganizationName',

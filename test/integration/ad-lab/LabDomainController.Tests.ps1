@@ -1369,6 +1369,31 @@ Describe 'Get-LabReadinessPort' {
     }
 }
 
+Describe 'Test-LabHostMemory' {
+    It 'lets a VM start when the free memory covers it and the reserve' {
+        $verdict = Test-LabHostMemory -VmName 'exchange-primary' -RequiredBytes 12GB -FreeBytes 20GB
+        $verdict.Fits | Should -BeTrue
+        $verdict.ShortBytes | Should -Be 0
+    }
+
+    It 'refuses when the free memory covers the VM but not the reserve, naming the VM and the shortfall' {
+        $verdict = Test-LabHostMemory -VmName 'exchange-source' -RequiredBytes 12GB -FreeBytes 12.5GB -ReserveBytes 1GB
+        $verdict.Fits | Should -BeFalse
+        $verdict.ShortBytes | Should -Be 0.5GB
+        $verdict.Message | Should -BeLike "*exchange-source*12.0 GB*12.5 GB free*"
+    }
+
+    It 'counts the memory a running VM holds, since the revert stops it first' {
+        # Reverting a running VM to an offline checkpoint releases its memory before it starts again.
+        $verdict = Test-LabHostMemory -VmName 'dc-primary' -RequiredBytes 4GB -FreeBytes 1GB -ReleasedBytes 4GB
+        $verdict.Fits | Should -BeTrue
+    }
+
+    It 'names Stop-LabMachine.ps1 as the way to make room' {
+        (Test-LabHostMemory -VmName 'exchange-source' -RequiredBytes 12GB -FreeBytes 3GB).Message | Should -BeLike '*Stop-LabMachine.ps1*'
+    }
+}
+
 Describe 'Test-LabVmName' {
     It 'accepts the lab names and ordinary Hyper-V names' {
         Test-LabVmName -Name 'dc-primary' | Should -BeTrue
