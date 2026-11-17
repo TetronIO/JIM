@@ -19,6 +19,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 - [Attribute Priority](https://docs.junctional.io/concepts/attribute-priority/): deterministic precedence when multiple systems contribute the same attribute
 - Extensible Metaverse schema: create your own Object Types and Attributes, with SCIM 2.0 and LDAP Standard Mappings on the built-ins
 - Multi-directory LDAP support: AD DS, OpenLDAP, 389 Directory Server, and RFC 4512-compliant ones
+- [Exchange recipient provisioning](https://docs.junctional.io/connectors/jim-ldap-connector-exchange/): the LDAP Connector creates on-premises mailboxes, mail users, mail contacts and mail-enabled groups that an export Synchronisation Rule declares, retrying while Exchange is unreachable
 - Built-in scheduler that supports parallel operations
 - Validated at 1,000,000-user scale, with very large groups handled comfortably: 60,000 groups synchronised between two directories, two of them holding all 1,000,000 users, one holding 800,000 and 19 holding more than 100,000
 - Transform data using expressions with extensive built-in functions for common identity operations

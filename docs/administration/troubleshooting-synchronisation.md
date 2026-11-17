@@ -3,7 +3,7 @@ title: Troubleshooting Synchronisation
 description: What each synchronisation error and Activity message means, how to fix and check it, and what JIM keeps safe in the meantime.
 type: troubleshooting
 audience: operator
-validated: v0.17.0
+validated: v0.18.0
 ---
 
 # Troubleshooting Synchronisation
@@ -163,6 +163,14 @@ For a value held under its old data type, run a Full Import of the Connected Sys
 **How to fix.** Run a Full Synchronisation of the Connected System named: it processes every object.
 
 **Check.** The Full Synchronisation's Activity ends **Complete**.
+
+## :material-pause-circle-outline: **Failed with error**: `Run Profile '...' is disabled, so it cannot run.`
+
+**What it means.** The Run Profile is [disabled](../configuration/run-profiles.md#disable-a-run-profile), so JIM refused the run and changed nothing. The message says why: an administrator disabled it, or [a hierarchy refresh removed its partition](../configuration/partitions-and-containers.md#when-a-refresh-removes-a-partition-a-run-profile-targets).
+
+**How to fix.** Turn **Enabled** on in its edit dialog, or `Set-JIMRunProfile -Enabled $true`; if its partition was removed, choose another (`-PartitionId` or `-AllSelectedPartitions`). If it should stay disabled, take it out of the Schedule.
+
+**Check.** `Get-JIMRunProfile` returns it with `Enabled` true, and its next run's Activity ends **Complete**.
 
 ## :material-play-circle-outline: A run ends **Failed with error** before processing anything
 

@@ -3,7 +3,7 @@ title: Connected Systems
 description: What a Connected System is and holds, and where to configure its Connector Space, scope, schema, passwords and removal.
 type: object
 audience: administrator
-validated: v0.17.0
+validated: v0.18.0
 ---
 
 # Connected Systems
@@ -33,9 +33,9 @@ Every Connected System is associated with a [connector](../connectors/index.md) 
 
 ## :material-server-network-outline: What a Connected System contains
 
-- **Connection details**<br /> How to reach the external system: server address, credentials, file path, and other connector-specific settings. The Settings tab groups these into a collapsible accordion by category (Connectivity, General, Export, and so on) so dense connector configuration stays easy to scan.
+- **Connection details**<br /> How to reach the external system: server address, credentials, file path, and other connector-specific settings. The Settings tab groups these into a collapsible accordion by category (Connectivity, General, Export, and so on) so dense connector configuration stays easy to scan. Credentials and other secret settings, such as a password or a client secret, are encrypted at rest, whether entered in the portal, the REST API or PowerShell.
 
-    The Schema, Scope and Matching tabs stay unavailable until the required settings are filled in, because none of them can do anything useful without them. That gate is about the settings themselves, not about the external system being reachable: saving the Settings tab also tests the connection and tells you what it found, but a system that is down for maintenance does not take those tabs away, and you can keep working on the configuration while it is.
+    The Schema, Scope and Matching tabs stay unavailable until the required settings are filled in, because none of them can do anything useful without them. That gate is about the settings themselves, not about the external system being reachable: saving the Settings tab also tests the connection and tells you what it found, but a system that is down for maintenance does not take those tabs away, and you can keep working on the configuration while it is. A Connector can also warn about settings it accepts but that will not work as they stand: the settings save, and the warning shows beneath them until the next save (`settingWarnings` in the REST API's update response, and a warning from `Set-JIMConnectedSystem`).
 - **Discovered schema**<br /> The object types and attributes available in the external system, populated on first contact.
 - **Connector Space**<br /> A staging area that holds JIM's local copy of the external system's data.
 - **Run Profiles**<br /> Configured operations (import, sync, export) that can be executed against the system.

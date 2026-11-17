@@ -3,7 +3,7 @@ title: Synchronisation Pipeline
 description: How JIM moves identity data through three phases, Import, Synchronisation and Export, and what each one does and protects.
 type: concept
 audience: implementer
-validated: v0.17.0
+validated: v0.18.0
 ---
 
 # Synchronisation Pipeline
@@ -24,11 +24,13 @@ A **Full Import** reads every object from the Connected System and compares it a
 
 Full Imports are used for:
 
-- **Initial setup**<br /> Bringing in all data from a new Connected System for the first time.
-- **Periodic reconciliation**<br /> Checking that the Connector Space still matches the source system.
-- **Recovery**<br /> Reloading all data to restore consistency after errors or data issues.
+- **Initial setup**<br /> Loading a new Connected System.
+- **Periodic reconciliation**<br /> Confirming the Connector Space matches the source.
+- **Recovery**<br /> Restoring consistency after errors.
 
-A Full Import Run Profile can limit how many objects one run may newly mark as deleted, so a broken filter or base DN cannot turn a Full Import into a mass deprovisioning; [Run Profiles > Safeguards](../configuration/run-profiles.md#full-import) covers the limits and what a run that exceeds one does.
+An import that stops part-way through saving blocks synchronisation until a Full Import completes ([why](../administration/troubleshooting-synchronisation.md#failed-with-error-run-profile-cannot-run-an-import-of-connected-system-stopped-part-way-through-saving-what-it-read)).
+
+A Full Import Run Profile can cap how many objects one run may mark as deleted, so a broken filter or base DN cannot cause mass deprovisioning ([Safeguards](../configuration/run-profiles.md#full-import)).
 
 ### Delta Import
 

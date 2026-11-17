@@ -1,6 +1,6 @@
 # Delta Sync Flow
 
-> Last updated: 2026-11-11, JIM v0.17.0
+> Last updated: 2026-11-17, JIM v0.18.0
 
 This diagram shows how Delta Synchronisation differs from Full Synchronisation. Both use identical per-CSO processing logic; the only difference is CSO selection and a few lifecycle steps.
 
@@ -8,13 +8,14 @@ This diagram shows how Delta Synchronisation differs from Full Synchronisation. 
 
 | Aspect | Full Sync | Delta Sync |
 |--------|-----------|------------|
-| CSO Selection | ALL CSOs, every run (#891) | Only CSOs marked `SynchronisationPending` (#2092), `DerivedInputChangePending` (#1750) or `ScopeReviewPending` (#892), or created or updated since the watermark (`Created` or `LastUpdated` > watermark) |
-| Early Exit | Never | Yes, if 0 modified CSOs, no Metaverse Object awaits an export scope review (#892, #1925) and no generated value an export corrected awaits carrying (#242) |
+| CSO Selection | ALL CSOs, every run (#891) | Only CSOs marked `SynchronisationPending` (#2092), `DerivedInputChangePending` (#1750) or `ScopeReviewPending` (#892), or created or updated since the watermark (`Created` or `LastUpdated` > watermark), plus every CSO of an Object Type a claimed configuration change awaiting synchronisation names (#2615) |
+| Early Exit | Never | Yes, if 0 modified CSOs, no configuration change was claimed (#2615), no Metaverse Object awaits an export scope review (#892, #1925) and no generated value an export corrected awaits carrying (#242) |
 | Paging | One Object Type at a time, in dependency order (#2492), then a closing sweep | The same, over the selected CSOs |
 | Per-page pipeline | Identical | Identical |
 | Watermark Update | Yes (establishes the baseline for the next Delta Sync) | Yes (even when 0 changes) |
 | Stranded-value sweep after a Connector Space clear (#1549, #1605) | Runs if armed and gated open | Never |
-| Use Case | Initial sync, periodic reconciliation, applying configuration changes | Incremental updates |
+| Configuration changes awaiting synchronisation (#2615) | Claimed at the start, marked applied on completion | The same: an import Synchronisation Rule, Attribute Flow, Object Matching Rule or Attribute Priority change takes effect at the next synchronisation, Delta or Full |
+| Use Case | Initial sync, periodic reconciliation, changes a Delta Sync does not apply | Incremental updates |
 
 Neither run type filters by partition: a Run Profile's partition (#353) scopes imports only.
 
@@ -22,10 +23,11 @@ Neither run type filters by partition: a Run Profile's partition (#353) scopes i
 
 ```mermaid
 flowchart TD
-    Start([PerformDeltaSyncAsync]) --> Watermark[Determine watermark:<br/>LastSyncCompletedAt<br/>or DateTime.MinValue if first run]
+    Start([PerformDeltaSyncAsync]) --> Claim[Claim the configuration changes<br/>awaiting synchronisation #2615<br/>before any Synchronisation Rule is loaded<br/>Each names an Object Type to<br/>process in full this run]
+    Claim --> Watermark[Determine watermark:<br/>LastSyncCompletedAt<br/>or DateTime.MinValue if first run]
 
-    Watermark --> CountModified[Count CSOs modified<br/>since watermark]
-    CountModified --> HasChanges{Modified CSOs > 0,<br/>any MVO flagged<br/>ScopeReviewPending, or any<br/>generated value revision<br/>pending, #242?}
+    Watermark --> CountModified[Count CSOs modified<br/>since watermark, plus every<br/>CSO of the claimed types]
+    CountModified --> HasChanges{Modified CSOs > 0,<br/>any change claimed #2615,<br/>any MVO flagged<br/>ScopeReviewPending, or any<br/>generated value revision<br/>pending, #242?}
 
     HasChanges -->|No| EarlyWatermark[Update watermark<br/>to UtcNow<br/>marks untouched]
     EarlyWatermark --> EarlyDone([Return - no work needed])
@@ -35,7 +37,7 @@ flowchart TD
 
     LoadCaches --> PageLoop{Next page<br/>non-empty?}
 
-    PageLoop -->|Yes| LoadPage[Load next page of CSOs: marked,<br/>or Created or LastUpdated > watermark<br/>One Object Type at a time, referenced<br/>types first #2492, each ordered by Id<br/>with its own keyset cursor:<br/>Id > last row of previous page #1858<br/>each page ending at the page size or at<br/>100,000 attribute values, whichever<br/>comes first #2934<br/>then a closing sweep of objects<br/>created mid-run behind a walked type<br/>Capture each marked row's xmin<br/>Seed page identity map #1612]
+    PageLoop -->|Yes| LoadPage[Load next page of CSOs: marked,<br/>or Created or LastUpdated > watermark,<br/>or of a claimed type, loaded as Full Sync #2615<br/>One Object Type at a time, referenced<br/>types first #2492, each ordered by Id<br/>with its own keyset cursor:<br/>Id > last row of previous page #1858<br/>each page ending at the page size or at<br/>100,000 attribute values, whichever<br/>comes first #2934<br/>then a closing sweep of objects<br/>created mid-run behind a walked type<br/>Capture each marked row's xmin<br/>Seed page identity map #1612]
     LoadPage --> CsoLoop{More CSOs<br/>in page?}
 
     CsoLoop -->|Yes| CheckCancel{Cancellation<br/>requested?}
@@ -51,7 +53,8 @@ flowchart TD
     PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>in batches bounded by objects and<br/>reference values #2492<br/>Merge reference-attribute changes under<br/>the existing MvoChange parent RPEI<br/>Re-run persist/flush pipeline]
     CrossPage --> PostPasses[FlushDeferredRecallRpeisAsync<br/>ProcessScopeReviewPendingMetaverseObjectsAsync #892 #1925<br/>ProcessGeneratedValueRevisionsPendingAsync #242<br/>Return undrawn sequence numbers #2044<br/>See Full Sync for the export scope review]
     PostPasses --> UpdateWatermark[Update watermark<br/>LastSyncCompletedAt = UtcNow]
-    UpdateWatermark --> Done([Sync Complete])
+    UpdateWatermark --> ApplyClaimed[Mark the claimed configuration<br/>changes applied #2615<br/>Only on completion: a cancelled or<br/>failed run leaves them for the next]
+    ApplyClaimed --> Done([Sync Complete])
 ```
 
 ## Watermark Mechanism

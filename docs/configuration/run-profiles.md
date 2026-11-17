@@ -3,7 +3,7 @@ title: Run Profiles
 description: What each run type does, and the settings that scope a run, verify an import and stop a run becoming a mass change.
 type: object
 audience: administrator
-validated: v0.17.0
+validated: v0.18.0
 ---
 
 # Run Profiles

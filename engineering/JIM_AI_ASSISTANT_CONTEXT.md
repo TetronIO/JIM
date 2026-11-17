@@ -4,9 +4,9 @@
 >
 > **Repository**: https://github.com/TetronIO/JIM
 >
-> **Document Version**: 2.3
+> **Document Version**: 2.4
 >
-> **Last Updated**: 2026-10-29
+> **Last Updated**: 2026-11-17
 >
 > **Note**: This is a snapshot. For current implementation details, check the repository or ask the user to provide updated code/docs.
 
@@ -24,7 +24,7 @@
 | **Auth** | OpenID Connect (OIDC) with PKCE |
 | **Deployment** | Docker or Podman containers, HTTPS by default, air-gapped capable |
 | **License** | Source-available (free non-production, commercial for production) |
-| **Status** | Active development, v0.17.0 released |
+| **Status** | Active development, v0.18.0 released |
 | **Language** | British English (en-GB) for all text |
 
 ---
@@ -192,8 +192,8 @@ Grace periods allow time before actual deletion (e.g., 30 days).
 
 | Connector | Import | Export | Notes |
 |-----------|--------|--------|-------|
-| **LDAP/Active Directory** | ✓ | ✓ | Full CRUD, includes Samba AD, SSL/TLS, container creation |
-| **OpenLDAP/RFC 4512** | ✓ | ✓ | OpenLDAP, 389 Directory Server, RFC 4512-compliant directories; parallel imports, delta import from OpenLDAP's accesslog or a changelog (389 Directory Server's Retro Changelog, deletions and renames included), partition-scoped imports |
+| **LDAP/Active Directory** | ✓ | ✓ | Full CRUD, includes Samba AD, SSL/TLS, container creation; provisions on-premises Exchange mailboxes, mail users, mail contacts and mail-enabled groups an export Synchronisation Rule declares |
+| **OpenLDAP/RFC 4512** | ✓ | ✓ | OpenLDAP, 389 Directory Server, RFC 4512-compliant directories; parallel, paged Full Imports, delta import from OpenLDAP's accesslog or a changelog (389 Directory Server's Retro Changelog, deletions and renames included), partition-scoped imports with a Delta Import watermark per partition |
 | **File (CSV/Text)** | ✓ | ✓ | Configurable delimiters, multi-valued columns split by the Multi-Value Delimiter, auto-confirm export |
 | **SCIM 2.0 Client** | ✓ | ✓ | Any RFC 7643/7644 service provider; last-modified delta import, optional bulk operations, rate-limit aware |
 | **SCIM 2.0 Service Provider** (Preview) | ✓ | | Identity providers push Users and Groups to JIM's own SCIM endpoint with a key scoped to one Connected System; JIM keeps what arrives in a SCIM store and imports it on a Schedule (full and delta import), journalling every request |
@@ -318,6 +318,7 @@ Both are sent as a bearer token in the `Authorization` header (`Authorization: B
 | `GET /api/v1/logs` | Unified log viewer (app + PostgreSQL) |
 | `GET /api/v1/synchronisation/sync-rules/{id}/matching-rules` | Manage Object Matching Rules |
 | `GET /api/v1/password-synchronisation/queue` | Password Synchronisation queue (list, retry, cancel) |
+| `GET /api/v1/exchange/queue` | Exchange recipient change queue (list, retry) |
 | `GET /api/v1/metaverse/objects/{id}/sync-preview` | Sync Preview: what synchronising an object would do |
 | `GET /api/v1/previews/{activityId}` | Configuration Change Preview results |
 | `GET /api/v1/features` | Feature flags (list, enable and disable Preview features) |
@@ -330,7 +331,7 @@ Full interactive Scalar API reference available at `/api/reference` in all envir
 
 ### PowerShell Module
 
-210 cmdlets for automation:
+212 cmdlets for automation:
 
 ```powershell
 # Connect interactively (opens browser for SSO)
@@ -395,14 +396,25 @@ New-JIMConnectedSystem -Name "AD" -ConnectorType LdapConnector
 - ✅ Scheduler service with cron/interval triggers and multi-step execution
 - ✅ Admin UI (operations, config, monitoring)
 - ✅ Dashboard home page with system overview
-- ✅ API with JWT and API key auth (25 controllers)
-- ✅ PowerShell module (210 cmdlets)
+- ✅ API with JWT and API key auth (26 controllers)
+- ✅ PowerShell module (212 cmdlets)
 - ✅ Docker and Podman deployment (rootful or rootless, systemd, Ansible) with air-gapped bundles and HTTPS by default
-- ✅ Integration testing framework (31 scenarios, Scenarios 001-002 and 004-032, including an Active Directory lab with an AD FS server)
+- ✅ Integration testing framework (34 scenarios, Scenarios 001-034, including an Active Directory lab with AD FS and Exchange servers)
 - ✅ Credential encryption
 - ✅ Change history/audit with timeline UI and deleted objects view
 - ✅ Real-time progress indication on Operations page
 - ✅ Unified log viewer (application + PostgreSQL logs)
+
+### Recent Enhancements (v0.18.0)
+
+- ✅ **Exchange Recipient Provisioning** (#2021) - The LDAP Connector makes on-premises Exchange mailboxes, mail users, mail contacts and mail-enabled groups an export Synchronisation Rule declares, through a queued, retried Exchange Delivery Service in the Worker, with an Exchange tab on the Operations page
+- ✅ **Import Rule Changes at the Next Synchronisation** (#2615) - A saved import Synchronisation Rule, Attribute Flow or Object Matching Rule change takes effect at the next Delta or Full Synchronisation, which processes the affected Object Type in full; saving says when and how much
+- ✅ **Bounded-Memory Full Import** (#2521) - A Full Import saves in units of up to 2,000 objects, LDAP directories other than Active Directory are read a page at a time, and a stopped import holds synchronisation back until a Full Import completes
+- ✅ **Per-Partition LDAP Watermarks** (#2712, #2715) - Each LDAP partition keeps its own Delta Import watermark, so partition-targeted imports no longer skip changes
+- ✅ **Several Synchronisation Rules per Object Type** (#2820, #2821, #2822, #2823) - Rule order no longer matters, overlapping export rules are reported, and a person moving between export rules keeps their account
+- ✅ **Run Profiles Can Be Disabled** (#2740) - In the portal, REST API and PowerShell
+- ✅ **Credentials Encrypted from the Portal** (#2680, #2684) - Connector credentials entered in the portal are encrypted at rest, and the plain-text OpenID Connect secret copy is gone
+- ✅ **Scale Performance** (#2598, #2669, #2929, #2834 and many more) - Large groups no longer cost the square of their size anywhere in import, synchronisation or export; time-ordered ids, leaner indexes and JIT off on the bundled PostgreSQL
 
 ### Recent Enhancements (v0.17.0)
 

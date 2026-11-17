@@ -131,16 +131,16 @@ JIM runs as a set of container services (a Docker Compose stack on Docker, or tw
 | Service | Description |
 |---------|-------------|
 | **jim.web** | Blazor Server UI with integrated REST API at `/api/`. Serves HTTPS on port 8443 in-container in production, published on host port 443 by default (`JIM_WEB_PORT` on Docker, `PublishPort` in `jim.kube` on Podman), with plain HTTP on 8080 kept for the container health check; the development Docker stack serves plain HTTP at `http://localhost:5200`. Interactive [Scalar](https://scalar.com/) API reference available at `/api/reference` in every environment, backed by a build-time OpenAPI document for instant loading. Also serves the SCIM 2.0 Service Provider endpoints at `/scim/v2/{connectedSystemId}`, where identity providers push Users and Groups into a JIM-owned SCIM store that the Worker imports on a Schedule. |
-| **jim.worker** | Background task processor. Polls the task queue, processes sync/import/export operations. Uses `ISyncEngine`/`ISyncRepository` separation for testability. Also hosts the Password Delivery Service, which delivers queued password changes independently of the task queue, and a memory guard that stops running work before memory is exhausted. |
+| **jim.worker** | Background task processor. Polls the task queue, processes sync/import/export operations. Uses `ISyncEngine`/`ISyncRepository` separation for testability. Also hosts the Password Delivery Service and the Exchange Delivery Service (#2021), which deliver queued password changes and Exchange recipient changes independently of the task queue, and a memory guard that stops running work before memory is exhausted. |
 | **jim.scheduler** | Schedule management. Reacts to task completion instantly via PostgreSQL notifications, with a 30-second polling cycle as the fallback. Detects parallel step groups and queues them for concurrent worker dispatch. |
 | **jim.database** | PostgreSQL 18 database. |
 | **jim.keycloak** | Bundled Keycloak IdP for development SSO (port 8181). Not included in production deployments. |
 
-The Worker (for both its synchronisation loop and its Password Delivery Service) and the Scheduler each write a heartbeat to the database every 5 seconds, carrying the service's own memory and the memory it can draw on; `GET /api/v1/system/health` and the Service Health panel on **Operations** read them to report whether each service is alive, what it is doing, and whether it is running short of memory. See [Operations > Service Health](../../docs/configuration/operations.md#service-health).
+The Worker (for its synchronisation loop, its Password Delivery Service and its Exchange Delivery Service) and the Scheduler each write a heartbeat to the database every 5 seconds, carrying the service's own memory and the memory it can draw on; `GET /api/v1/system/health` and the Service Health panel on **Operations** read them to report whether each service is alive, what it is doing, and whether it is running short of memory. See [Operations > Service Health](../../docs/configuration/operations.md#service-health).
 
 ### Real-Time Notifications
 
-The services coordinate through the database, and the database also tells them when something changed: triggers on the Worker Task, Activity and Password Synchronisation queue tables publish PostgreSQL `NOTIFY` events (on commit) that services receive over a dedicated `LISTEN` connection. The Scheduler uses them to react to task completion in under a second, and the web application pushes them to the browser, so the Operations page updates without frequent polling. A SignalR hub at `/hubs/notifications` broadcasts the same events for non-Blazor consumers.
+The services coordinate through the database, and the database also tells them when something changed: triggers on the Worker Task, Activity, Password Synchronisation queue and Exchange change queue tables publish PostgreSQL `NOTIFY` events (on commit) that services receive over a dedicated `LISTEN` connection. The Scheduler uses them to react to task completion in under a second, and the web application pushes them to the browser, so the Operations page updates without frequent polling. A SignalR hub at `/hubs/notifications` broadcasts the same events for non-Blazor consumers.
 
 Notifications are fire-and-forget hints carrying identifiers only; the database remains the source of truth. Every consumer keeps a polling fallback (the Scheduler's 30-second cycle, the UI's background refresh), so a dropped notification degrades latency, never correctness. No additional infrastructure is required, keeping JIM self-contained and air-gap deployable.
 
@@ -151,7 +151,7 @@ The Worker is the engine that processes all synchronisation operations. Its desi
 ### Core Interfaces
 
 - **`ISyncEngine`**<br /> Stateless domain engine with methods for join resolution, projection, Attribute Flow, scoping, and more. Zero I/O dependencies; receives all data as parameters and returns results. Fully unit-testable without mocks.
-- **`ISyncRepository`**<br /> Data access boundary with approximately 230 methods. Production implementation: `JIM.PostgresData.Repositories.SyncRepository`. Test implementation: `JIM.InMemoryData.SyncRepository`.
+- **`ISyncRepository`**<br /> Data access boundary with approximately 290 methods. Production implementation: `JIM.PostgresData.Repositories.SyncRepository`. Test implementation: `JIM.InMemoryData.SyncRepository`.
 
 ### Dependency Injection
 

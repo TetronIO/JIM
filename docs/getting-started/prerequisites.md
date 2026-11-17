@@ -3,7 +3,7 @@ title: Prerequisites
 description: "What you need before deploying JIM: container runtime, identity provider, and hardware requirements."
 type: reference
 audience: implementer
-validated: v0.17.0
+validated: v0.18.0
 ---
 
 # Prerequisites

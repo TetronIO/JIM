@@ -1,6 +1,6 @@
 # Full Synchronisation - CSO Processing Flow
 
-> Last updated: 2026-11-11, JIM v0.17.0
+> Last updated: 2026-11-17, JIM v0.18.0
 
 This diagram shows the core decision tree for processing a single Connected System Object (CSO) during Full or Delta Synchronisation. This is the central flow of JIM's identity management engine.
 
@@ -21,7 +21,8 @@ Since v0.7.1, sync decisions are split across three layers:
 
 ```mermaid
 flowchart TD
-    Start([Start Sync]) --> Prepare[Prepare: count CSOs, the progress estimate only<br/>Load Synchronisation Rules, object types via ISyncRepository<br/>Build the derived flow graph #1750:<br/>a cycle fails the run before any object<br/>Build drift detection cache<br/>Build export evaluation cache: export rules to<br/>every Connected System, this one included #1284<br/>Prepare Unique Value Generation #242<br/>Order the Object Types in use by dependency #2492]
+    Start([Start Sync]) --> Claim[Claim the configuration changes<br/>awaiting synchronisation #2615,<br/>before any rule is loaded; marked<br/>applied only when the run completes<br/>Delta Sync processes their<br/>Object Types in full]
+    Claim --> Prepare[Prepare: count CSOs, the progress estimate only<br/>Load Synchronisation Rules, object types via ISyncRepository<br/>Build the derived flow graph #1750:<br/>a cycle fails the run before any object<br/>Build drift detection cache<br/>Build export evaluation cache: export rules to<br/>every Connected System, this one included #1284<br/>Prepare Unique Value Generation #242<br/>Order the Object Types in use by dependency #2492]
     Prepare --> PageLoop{More CSO<br/>pages?}
 
     PageLoop -->|Yes| LoadPage[Load the next page of CSOs<br/>one Object Type at a time, referenced<br/>types first #2492, each with its own<br/>keyset cursor on Id #1858, paged until<br/>a page comes back empty #2092, each page<br/>ending at the page size or at 100,000<br/>attribute values, counted first, ids only,<br/>whichever comes first #2934, then<br/>a closing sweep of objects created<br/>mid-run behind a type already walked<br/>Capture each marked row's xmin<br/>Prefetch generated value assignments<br/>Seed page identity map #1612 with<br/>the page's joined MVOs]

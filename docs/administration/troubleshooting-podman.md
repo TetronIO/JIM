@@ -3,7 +3,7 @@ title: Troubleshooting Podman
 description: Fix a Podman installation of JIM that cannot be seen, started, reached or kept running, by the message it shows.
 type: troubleshooting
 audience: operator
-validated: v0.17.0
+validated: v0.18.0
 ---
 
 # Troubleshooting Podman

@@ -129,7 +129,7 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
 @media (prefers-reduced-motion: reduce) { .jimdg-packet { display: none; } }
 </style>
   <title id="jimdg-sc-title">JIM System Context</title>
-  <desc id="jimdg-sc-desc">Administrators manage JIM through the web UI and PowerShell, and automation clients call its REST API. An Identity Provider authenticates sign-in over OIDC, and can push Users and Groups to JIM over SCIM 2.0. JIM synchronises with Directory Services over LDAP and LDAPS, imports from HR systems via CSV, reads and writes file systems, reads and writes enterprise databases over SQL, and synchronises with cloud applications over SCIM 2.0.</desc>
+  <desc id="jimdg-sc-desc">Administrators manage JIM through the web UI and PowerShell, and automation clients call its REST API. An Identity Provider authenticates sign-in over OIDC, and can push Users and Groups to JIM over SCIM 2.0. JIM synchronises with Directory Services over LDAP and LDAPS, and on Active Directory makes on-premises Exchange recipients through Exchange's remote PowerShell; it imports from HR systems via CSV, reads and writes file systems, reads and writes enterprise databases over SQL, and synchronises with cloud applications over SCIM 2.0.</desc>
   <defs>
     <mask id="jimdg-sc-labelcut" maskUnits="userSpaceOnUse" x="0" y="0" width="1160" height="630">
       <rect x="0" y="0" width="1160" height="630" fill="#ffffff"/>
@@ -166,7 +166,7 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
   <g id="jimdg-sc-systems">
     <rect class="jimdg-system" x="30" y="520" width="200" height="64" rx="8"/>
     <text class="jimdg-system-name" x="130" y="548">Directory Services</text>
-    <text class="jimdg-system-sub" x="130" y="569">Active Directory · LDAP</text>
+    <text class="jimdg-system-sub" x="130" y="569">AD · Exchange · LDAP</text>
     <rect class="jimdg-system" x="255" y="520" width="200" height="64" rx="8"/>
     <text class="jimdg-system-name" x="355" y="548">HR Systems</text>
     <text class="jimdg-system-sub" x="355" y="569">authoritative source</text>

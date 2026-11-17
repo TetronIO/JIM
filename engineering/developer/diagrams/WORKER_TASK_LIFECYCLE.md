@@ -1,6 +1,6 @@
 # Worker Task Lifecycle
 
-> Last updated: 2026-10-29, JIM v0.17.0
+> Last updated: 2026-11-17, JIM v0.18.0
 
 This diagram shows how the JIM Worker service picks up, executes, and completes tasks. It covers the main polling loop, task dispatch, heartbeat management, cancellation handling, the memory guard, and housekeeping.
 
@@ -65,7 +65,10 @@ flowchart TD
     %% --- Sync task ---
     TaskType -->|SynchronisationWorkerTask| ResolveConnector[Resolve connector<br/>LDAP / File / SCIM / SQL]
     ResolveConnector --> ResolveRP[Get RunProfile from<br/>ConnectedSystem.RunProfiles]
-    ResolveRP --> DeclarePhases[ActivityPhaseReporter.StartAsync<br/>Declare the run's steps on the Activity<br/>including any the connector declares]
+    ResolveRP --> Refusals{Run Profile disabled, #2740?<br/>Or a synchronisation of a<br/>Connected System whose import<br/>stopped part-way, #2521?}
+    Refusals -->|Yes| Refused[Fail the Activity, saying why<br/>Nothing declared, nothing run<br/>A Schedule moves on under<br/>its failure rules]
+    Refused --> CompleteTask
+    Refusals -->|No| DeclarePhases[ActivityPhaseReporter.StartAsync<br/>Declare the run's steps on the Activity<br/>including any the connector declares]
     DeclarePhases --> RunType{RunProfile<br/>RunType?}
 
     RunType -->|FullImport| FI[SyncImportTaskProcessor<br/>PerformImportAsync<br/>Uses ISyncEngine + ISyncServer + ISyncRepository]
