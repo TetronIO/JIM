@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-17
+
 ### Added
 
 - ✨ The LDAP Connector provisions on-premises Exchange mailboxes, mail users, mail contacts and mail-enabled groups that an export Synchronisation Rule declares, retrying while Exchange is unreachable; each change shows on the Operations page's Exchange tab. (#2021)
@@ -1960,7 +1962,8 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/TetronIO/JIM/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/TetronIO/JIM/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/TetronIO/JIM/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/TetronIO/JIM/compare/v0.14.0...v0.15.0
