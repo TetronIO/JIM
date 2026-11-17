@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 A Schedule's step rail on the Operations page names each step that runs a Run Profile by its Connected System, so a long Schedule's step names fit; the full Connected System and Run Profile show on hover. The REST API and `Get-JIMScheduleExecution` give each step group's `connectedSystemName` in its `progress`.
 - 🔄 On the Connected Systems list, the Password Synchronisation filter is now the filter button on the Password Sync column's header, rather than a drop-down beside **Create Connected System**; the column's button is highlighted while a filter is applied, and the count reads "3 of 4 Connected Systems".
 - 🔄 A group membership change now exports only the members added or removed. A member removed from the target group by hand is no longer re-added by the group's next change; with Enforce State on, drift correction puts it back. A new group is still created with every member. (#2832)
 - 🔄 The Activity list and the Operations page fit narrower windows: when a table's columns no longer fit, its outcome chips show just their icon, and if it still doesn't fit, its Initiated By chips show just their tag (KEY, SCH, JIM and so on). On the Schedules tab each Schedule's Trigger and last Outcome show just their icon. Hovering a chip shows its full detail, including the exact count.
@@ -39,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 On the Operations page's Activity tab, the Queued and In Progress tables no longer scroll sideways when a Schedule has many steps, and their rows, text and headings now match the Completed table beneath them. They also follow its compact or normal row spacing toggle. Completed's compact rows are the height its scrolling assumes, so the scroll position no longer drifts on a long list.
 - 🐛 A Full Import no longer marks the wrong object as deleted when two objects in a Connected System share an External ID. It looked for the missing object across the whole Connected System and took the first match, which could be an object in another Partition or one waiting to be provisioned, and the object actually missing was left as it was. It now looks only among the objects it compared. (#2948)
 - 🐛 Saving a Connected System's settings no longer puts back values JIM keeps for its own runs as they stood when the page was opened. A save made after **Clear Connector Space**, from a page opened before it, restored the old Delta Import watermark, so the next Delta Import did not re-read the cleared objects; it could also roll back when the last synchronisation or Full Import completed. A synchronisation completing while an import of the same system ran could likewise put back an older Delta Import watermark. (#2950)
 - 🐛 A Full Import that marks an object deleted no longer also records **Export Not Confirmed** against it for a Pending Export the deletion had already removed. (#2521)

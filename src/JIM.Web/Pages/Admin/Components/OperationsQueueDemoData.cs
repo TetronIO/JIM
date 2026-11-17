@@ -86,11 +86,8 @@ internal static class OperationsQueueDemoData
         {
             ["Nightly Full Sync"] =
             [
-                new ScheduleStepObservation
-                {
-                    StepIndex = 0, Name = "Legacy CRM - Full Import", ActivityId = Guid.NewGuid(),
-                    ActivityStatus = ActivityStatus.Complete
-                }
+                ScheduleStepReading.FromActivity(0, Guid.NewGuid(), ActivityTargetType.ConnectedSystemRunProfile,
+                    "Legacy CRM", "Full Import", ActivityStatus.Complete)
             ]
         };
 

@@ -270,6 +270,14 @@ else if (ReservesHeight)
     public bool Embedded { get; set; }
 
     /// <summary>
+    /// Raised with the density the grid draws at: once the saved preference has been read, and on every toggle after.
+    /// For a host drawing other tables beside this grid that must keep the same row height (the Operations page's
+    /// Activity tab draws Queued and In Progress as plain tables above its Completed grid).
+    /// </summary>
+    [Parameter]
+    public EventCallback<bool> DenseChanged { get; set; }
+
+    /// <summary>
     /// Pins the grid to dense rows and drops the density toggle, for a list that is a working surface rather than
     /// something to read: the attribute selection table on a Connected System's schema, where a directory object
     /// type runs to several hundred rows and the task is scanning and ticking them, not reading each one.
@@ -498,6 +506,7 @@ else if (ReservesHeight)
             _dense = AlwaysDense || await PreferenceService.GetTableDenseAsync() != false;
             _preferencesLoaded = true;
             StateHasChanged();
+            await DenseChanged.InvokeAsync(_dense);
             return;
         }
 
@@ -723,6 +732,8 @@ else if (ReservesHeight)
     /// </summary>
     private async Task OnDensityChangedAsync()
     {
+        await DenseChanged.InvokeAsync(_dense);
+
         if (_firstVisibleRow > 0)
             await InvokeInteropAsync<bool>("jimVirtualList.scrollToRow", ScrollContainerSelector, _firstVisibleRow, RowHeight, ScrollRestoreTimeoutMilliseconds);
 

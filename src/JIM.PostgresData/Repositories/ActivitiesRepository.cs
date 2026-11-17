@@ -1156,6 +1156,7 @@ public partial class ActivityRepository : IActivityRepository
                 ScheduleExecutionId = a.ScheduleExecutionId!.Value,
                 StepIndex = a.ScheduleStepIndex!.Value,
                 ActivityId = a.Id,
+                a.TargetType,
                 a.TargetContext,
                 a.TargetName,
                 a.Status
@@ -1164,13 +1165,8 @@ public partial class ActivityRepository : IActivityRepository
 
         return rows
             .GroupBy(r => r.ScheduleExecutionId)
-            .ToDictionary(g => g.Key, g => g.Select(r => new ScheduleStepObservation
-            {
-                StepIndex = r.StepIndex,
-                Name = ScheduleStepReading.NameOf(r.TargetContext, r.TargetName, r.StepIndex),
-                ActivityId = r.ActivityId,
-                ActivityStatus = r.Status
-            }).ToList());
+            .ToDictionary(g => g.Key, g => g.Select(r => ScheduleStepReading.FromActivity(
+                r.StepIndex, r.ActivityId, r.TargetType, r.TargetContext, r.TargetName, r.Status)).ToList());
     }
 
     public async Task<List<Activity>> GetActivitiesByScheduleExecutionStepAsync(Guid scheduleExecutionId, int stepIndex)

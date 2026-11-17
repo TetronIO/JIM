@@ -49,7 +49,7 @@
         </div>
         <MudCollapse Expanded="@QueuedExpanded">
             <MudPaper Outlined="true" Class="jim-activity-table-paper" id="@QueuedBodyId">
-                <MudSimpleTable Hover="true" Elevation="0" Class="jim-activity-table">
+                <MudSimpleTable Hover="true" Dense="@Dense" Elevation="0" Class="jim-activity-table">
                     <colgroup>
                         <col style="@ActivityTableColumns.State" />
                         <col style="@ActivityTableColumns.ConnectedSystem" />
@@ -167,7 +167,7 @@
         </div>
         <MudCollapse Expanded="@InProgressExpanded">
             <MudPaper Outlined="true" Class="jim-activity-table-paper" id="@RunningBodyId">
-                <MudSimpleTable Hover="true" Elevation="0" Class="jim-activity-table">
+                <MudSimpleTable Hover="true" Dense="@Dense" Elevation="0" Class="jim-activity-table">
                     <colgroup>
                         <col style="@ActivityTableColumns.State" />
                         <col style="@ActivityTableColumns.ConnectedSystem" />
@@ -294,6 +294,9 @@
 
     /// <summary>Whether the In progress section's table is unfolded under its heading.</summary>
     [Parameter] public bool InProgressExpanded { get; set; } = true;
+
+    /// <summary>The density the Completed grid draws at; both tables here draw their rows at it too.</summary>
+    [Parameter] public bool Dense { get; set; } = true;
 
     /// <summary>Raised when a section's chevron is clicked; the tab flips that section and writes the choice to the URL.</summary>
     [Parameter] public EventCallback<ActivitySection> ToggleRequested { get; set; }

@@ -21,6 +21,12 @@ public class ScheduleStepProgress
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
+    /// The Connected System the step runs a Run Profile against, where it runs exactly one Run Profile; null for a
+    /// step running several tasks at once, or one that runs no Run Profile.
+    /// </summary>
+    public string? ConnectedSystemName { get; set; }
+
+    /// <summary>
     /// Where the step group as a whole has got to.
     /// </summary>
     public ScheduleExecutionStepStatus Status { get; set; }

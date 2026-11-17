@@ -221,6 +221,7 @@ public static class ScheduleStepReading
                 Name = stepObservations.Count == 1
                     ? stepObservations[0].Name
                     : $"{stepObservations.Count} in parallel",
+                ConnectedSystemName = stepObservations.Count == 1 ? stepObservations[0].ConnectedSystemName : null,
                 Status = Aggregate(taskStatuses),
                 TaskStatuses = OrderWedges(taskStatuses)
             });
@@ -254,6 +255,33 @@ public static class ScheduleStepReading
     }
 
     /// <summary>
+    /// What one of a Schedule Execution's Activities says about its step: named as <see cref="NameOf"/> names it,
+    /// and labelled by its Connected System where it is a Run Profile execution.
+    /// </summary>
+    /// <remarks>
+    /// Only a Run Profile execution's Target Context is read as a Connected System: the field holds something
+    /// different for each kind of Activity (a Synchronisation Rule's name for an Object Matching Rule's, for one).
+    /// An Activity naming no Run Profile is known by its position alone, so it carries no Connected System either,
+    /// or its label would say more than its name does.
+    /// </remarks>
+    public static ScheduleStepObservation FromActivity(
+        int stepIndex,
+        Guid activityId,
+        ActivityTargetType targetType,
+        string? targetContext,
+        string? targetName,
+        ActivityStatus status) => new()
+    {
+        StepIndex = stepIndex,
+        Name = NameOf(targetContext, targetName, stepIndex),
+        ConnectedSystemName = targetType == ActivityTargetType.ConnectedSystemRunProfile && !string.IsNullOrEmpty(targetName)
+            ? targetContext
+            : null,
+        ActivityId = activityId,
+        ActivityStatus = status
+    };
+
+    /// <summary>
     /// A Schedule Execution's shape from the per-step state a detail read has already assembled.
     /// </summary>
     /// <remarks>
@@ -270,6 +298,7 @@ public static class ScheduleStepReading
         {
             StepIndex = s.StepIndex,
             Name = LabelOf(s),
+            ConnectedSystemName = NamesARunProfile(s) ? s.ConnectedSystemName : null,
             Status = s.Status
         });
 
@@ -281,9 +310,10 @@ public static class ScheduleStepReading
     /// how the Operations queue names the same task, and the step's stored name otherwise.
     /// </summary>
     private static string LabelOf(DTOs.ScheduleExecutionStepState step) =>
-        !string.IsNullOrEmpty(step.ConnectedSystemName) && !string.IsNullOrEmpty(step.RunProfileName)
-            ? $"{step.ConnectedSystemName} - {step.RunProfileName}"
-            : step.Name;
+        NamesARunProfile(step) ? $"{step.ConnectedSystemName} - {step.RunProfileName}" : step.Name;
+
+    private static bool NamesARunProfile(DTOs.ScheduleExecutionStepState step) =>
+        !string.IsNullOrEmpty(step.ConnectedSystemName) && !string.IsNullOrEmpty(step.RunProfileName);
 
     /// <summary>
     /// A Schedule Execution's shape as the Operations queue sees it: the tasks of one Schedule
@@ -318,6 +348,7 @@ public static class ScheduleStepReading
             {
                 StepIndex = t.ScheduleStepIndex!.Value,
                 Name = t.Name,
+                ConnectedSystemName = t.ConnectedSystemName,
                 ActivityId = t.ActivityId,
                 TaskStatus = t.Status
             })

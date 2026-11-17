@@ -136,6 +136,25 @@ public class OperationsQueueSectionsTests : JimComponentTestContext
         });
     }
 
+    [TestCase(true)]
+    [TestCase(false)]
+    public void OperationsQueueSections_Density_DrawsBothTablesAtIt(bool dense)
+    {
+        ArrangeQueue([Task("HR System", status: WorkerTaskStatus.Processing), Task("LDAP Directory")]);
+
+        var cut = Render<OperationsQueueSections>(p => p.Add(c => c.Dense, dense));
+
+        cut.WaitForAssertion(() =>
+        {
+            var tables = cut.FindComponents<MudBlazor.MudSimpleTable>();
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(tables, Has.Count.EqualTo(2));
+                Assert.That(tables.Select(t => t.Instance.Dense), Is.All.EqualTo(dense));
+            }
+        });
+    }
+
     [Test]
     public void OperationsQueueSections_SeveralQueued_PutsTheNextRunLastSoItSitsAboveInProgress()
     {

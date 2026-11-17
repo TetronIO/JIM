@@ -15,6 +15,7 @@ using JIM.Models.Utility;
 using JIM.Web.Models;
 using JIM.Web.Pages.Admin.Components;
 using JIM.Web.Services;
+using JIM.Web.Shared;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -37,9 +38,11 @@ public class OperationsActivityTabTests : JimComponentTestContext
     private Mock<ITaskingRepository> _taskingRepository = null!;
     private Mock<IActivityRepository> _activityRepository = null!;
     private NavigationManager _navigation = null!;
+    private readonly FakeUserPreferenceService _preferences = new();
 
     protected override void ConfigureAdditionalServices()
     {
+        Services.AddSingleton<IUserPreferenceService>(_preferences);
         var repository = new Mock<IRepository>();
         _taskingRepository = new Mock<ITaskingRepository>();
         _activityRepository = new Mock<IActivityRepository>();
@@ -270,5 +273,22 @@ public class OperationsActivityTabTests : JimComponentTestContext
         public string ContentRootPath { get; set; } = string.Empty;
 
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+    }
+
+    [Test]
+    public void OperationsActivityTab_CompletedDensityChanges_QueuedAndInProgressFollowIt()
+    {
+        // Queued, In Progress and Completed are read as one list, top to bottom, so their rows must be one height.
+        // Completed's toggle is the tab's only density control: Queued and In Progress take whatever it draws at.
+        _preferences.TableDenseRead = Task.FromResult<bool?>(false);
+        _navigation.NavigateTo("/admin/operations?t=activity");
+
+        var cut = Render<OperationsActivityTab>();
+
+        cut.WaitForAssertion(() => Assert.That(cut.FindComponent<OperationsQueueSections>().Instance.Dense, Is.False));
+
+        cut.FindComponent<OperationsCompletedSection>().FindComponent<TableDensityToggle>().Find("button").Click();
+
+        cut.WaitForAssertion(() => Assert.That(cut.FindComponent<OperationsQueueSections>().Instance.Dense, Is.True));
     }
 }

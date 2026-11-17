@@ -31,6 +31,12 @@ public sealed class ScheduleStepObservation
     public required string Name { get; init; }
 
     /// <summary>
+    /// The Connected System this task runs a Run Profile against, or null where it runs none. A step running one
+    /// task is labelled by it beneath the step rail, where a long Schedule has no room for the full name.
+    /// </summary>
+    public string? ConnectedSystemName { get; init; }
+
+    /// <summary>
     /// The Activity this observation describes, where it has one. Carried so that a caller holding
     /// both records of the same task can tell they are the same task: the two are read at slightly
     /// different moments, and counting one task twice would put a phantom wedge in a parallel step.
