@@ -137,6 +137,7 @@ public static class ExportChangeHistoryBuilder
                     AttributeId = peChange.Attribute.Id,
                     AttributeName = peChange.Attribute.Name,
                     AttributeType = peChange.Attribute.Type,
+                    AttributePlurality = peChange.Attribute.AttributePlurality,
                     ConnectedSystemChange = change
                 };
                 change.AttributeChanges.Add(attributeChange);

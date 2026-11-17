@@ -19,8 +19,9 @@ public class ConnectedSystemObjectChangeAttribute
     /// <summary>
     /// The id of the Connected System attribute this change is to. Written once and never rewritten (#2931): once the
     /// attribute is deleted it names an attribute that no longer exists, so readers decide whether the attribute is live
-    /// by looking it up, and otherwise show <see cref="AttributeName"/> and <see cref="AttributeType"/>. Null only on
-    /// rows whose id an earlier release cleared when the attribute was deleted.
+    /// by looking it up, and describe it by the row's own <see cref="AttributeName"/>, <see cref="AttributeType"/> and
+    /// <see cref="AttributePlurality"/> either way. Null only on rows whose id an earlier release cleared when the
+    /// attribute was deleted.
     /// </summary>
     public int? AttributeId { get; set; }
 
@@ -54,6 +55,13 @@ public class ConnectedSystemObjectChangeAttribute
     /// Preserved even if the attribute definition is later deleted.
     /// </summary>
     public AttributeDataType AttributeType { get; set; }
+
+    /// <summary>
+    /// Snapshot of the attribute's plurality at the time of the change (#2936).
+    /// Preserved even if the attribute definition is later deleted, so a multi-valued attribute's history still reads
+    /// as independent additions and removals rather than as single-valued replacements.
+    /// </summary>
+    public AttributePlurality AttributePlurality { get; set; }
 
     /// <summary>
     /// A list of what values were added to or removed from this attribute.

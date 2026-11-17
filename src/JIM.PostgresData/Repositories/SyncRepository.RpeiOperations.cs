@@ -983,6 +983,7 @@ public partial class SyncRepository
             await writer.WriteAsync(attributeId, NpgsqlTypes.NpgsqlDbType.Integer);
             await writer.WriteAsync(attrChange.AttributeName, NpgsqlTypes.NpgsqlDbType.Text);
             await writer.WriteAsync((int)attrChange.AttributeType, NpgsqlTypes.NpgsqlDbType.Integer);
+            await writer.WriteAsync((int)attrChange.AttributePlurality, NpgsqlTypes.NpgsqlDbType.Integer);
         }
 
         await writer.CompleteAsync();

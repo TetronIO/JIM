@@ -70,108 +70,108 @@ CsoChange(Item(Activity2|HR:E02|4|Kim Kid|0)|1|Directory:for MVO:Kim Kid): Activ
 CsoChange(Item(Activity2|HR:E03|4|Tom Team|0)|1|Directory:for MVO:Tom Team): ActivityRunProfileExecutionItemId=Item(Activity2|HR:E03|4|Tom Team|0); ChangeType=1; ConnectedSystemId=2; ConnectedSystemObjectId=Directory:for MVO:Tom Team; DeletedConnectedSystemObjectId=null; DeletedObjectDisplayName=null; DeletedObjectExternalId=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0
 CsoChange(Item(Activity2|HR:E05|4|Pat Peer|0)|1|Directory:for MVO:Pat Peer): ActivityRunProfileExecutionItemId=Item(Activity2|HR:E05|4|Pat Peer|0); ChangeType=1; ConnectedSystemId=2; ConnectedSystemObjectId=Directory:for MVO:Pat Peer; DeletedConnectedSystemObjectId=null; DeletedObjectDisplayName=null; DeletedObjectExternalId=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0
 CsoChange(Item(Activity2|HR:E11|7|Lee Leaver|0)|3|HR:E11): ActivityRunProfileExecutionItemId=Item(Activity2|HR:E11|7|Lee Leaver|0); ChangeType=3; ConnectedSystemId=1; ConnectedSystemObjectId=HR:E11; DeletedConnectedSystemObjectId=HR:E11; DeletedObjectDisplayName=Lee Leaver; DeletedObjectExternalId=E11; DeletedObjectTypeId=1; InitiatedById=null; InitiatedByName=null; InitiatedByType=0
-  attribute: AttributeId=1; AttributeName=employeeId; AttributeType=1
+  attribute: AttributeId=1; AttributeName=employeeId; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; IsPendingExportStub=False; IsUnresolvedReference=False; LongValue=null; ReferenceValueId=null; StringValue=E11; SyncRuleId=null; SyncRuleName=null; ValueChangeType=2
-  attribute: AttributeId=2; AttributeName=displayName; AttributeType=1
+  attribute: AttributeId=2; AttributeName=displayName; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; IsPendingExportStub=False; IsUnresolvedReference=False; LongValue=null; ReferenceValueId=null; StringValue=Lee Leaver; SyncRuleId=null; SyncRuleName=null; ValueChangeType=2
-  attribute: AttributeId=3; AttributeName=manager; AttributeType=5
+  attribute: AttributeId=3; AttributeName=manager; AttributePlurality=0; AttributeType=5
     value: BoolValue=null; ByteValueLength=null; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; IsPendingExportStub=False; IsUnresolvedReference=False; LongValue=null; ReferenceValueId=HR:E10; StringValue=null; SyncRuleId=null; SyncRuleName=null; ValueChangeType=2
 CsoChange(Item(Activity2|HR:E13|6|Fay Flowed|0)|1|Directory:for MVO:Fay Flowed): ActivityRunProfileExecutionItemId=Item(Activity2|HR:E13|6|Fay Flowed|0); ChangeType=1; ConnectedSystemId=2; ConnectedSystemObjectId=Directory:for MVO:Fay Flowed; DeletedConnectedSystemObjectId=null; DeletedObjectDisplayName=null; DeletedObjectExternalId=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0
 CsoChange(Item(Activity2|MVO:Rita Review|17|Rita Review|0)|1|Directory:for MVO:Rita Review): ActivityRunProfileExecutionItemId=Item(Activity2|MVO:Rita Review|17|Rita Review|0); ChangeType=1; ConnectedSystemId=2; ConnectedSystemObjectId=Directory:for MVO:Rita Review; DeletedConnectedSystemObjectId=null; DeletedObjectDisplayName=null; DeletedObjectExternalId=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0
 CsoChange(of Item(Activity2|Directory:E12|14|Rob Report|0)/14#0): ActivityRunProfileExecutionItemId=null; ChangeType=14; ConnectedSystemId=2; ConnectedSystemObjectId=Directory:E12; DeletedConnectedSystemObjectId=null; DeletedObjectDisplayName=null; DeletedObjectExternalId=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0
-  attribute: AttributeId=6; AttributeName=manager; AttributeType=5
+  attribute: AttributeId=6; AttributeName=manager; AttributePlurality=0; AttributeType=5
 CsoChange(of Item(Activity2|HR:E01|4|Ned New|0)/6#0/8#0/13#0/14#0): ActivityRunProfileExecutionItemId=null; ChangeType=14; ConnectedSystemId=2; ConnectedSystemObjectId=Directory:for MVO:Ned New; DeletedConnectedSystemObjectId=null; DeletedObjectDisplayName=null; DeletedObjectExternalId=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0
-  attribute: AttributeId=4; AttributeName=accountId; AttributeType=1
+  attribute: AttributeId=4; AttributeName=accountId; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; IsPendingExportStub=False; IsUnresolvedReference=False; LongValue=null; ReferenceValueId=null; StringValue=E01; SyncRuleId=2; SyncRuleName=Directory Export; ValueChangeType=1
-  attribute: AttributeId=5; AttributeName=cn; AttributeType=1
+  attribute: AttributeId=5; AttributeName=cn; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; IsPendingExportStub=False; IsUnresolvedReference=False; LongValue=null; ReferenceValueId=null; StringValue=Ned New; SyncRuleId=2; SyncRuleName=Directory Export; ValueChangeType=1
 CsoChange(of Item(Activity2|HR:E02|4|Kim Kid|0)/6#0/8#0/13#0/14#0): ActivityRunProfileExecutionItemId=null; ChangeType=14; ConnectedSystemId=2; ConnectedSystemObjectId=Directory:for MVO:Kim Kid; DeletedConnectedSystemObjectId=null; DeletedObjectDisplayName=null; DeletedObjectExternalId=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0
-  attribute: AttributeId=4; AttributeName=accountId; AttributeType=1
+  attribute: AttributeId=4; AttributeName=accountId; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; IsPendingExportStub=False; IsUnresolvedReference=False; LongValue=null; ReferenceValueId=null; StringValue=E02; SyncRuleId=2; SyncRuleName=Directory Export; ValueChangeType=1
-  attribute: AttributeId=5; AttributeName=cn; AttributeType=1
+  attribute: AttributeId=5; AttributeName=cn; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; IsPendingExportStub=False; IsUnresolvedReference=False; LongValue=null; ReferenceValueId=null; StringValue=Kim Kid; SyncRuleId=2; SyncRuleName=Directory Export; ValueChangeType=1
-  attribute: AttributeId=6; AttributeName=manager; AttributeType=5
+  attribute: AttributeId=6; AttributeName=manager; AttributePlurality=0; AttributeType=5
     value: BoolValue=null; ByteValueLength=null; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; IsPendingExportStub=True; IsUnresolvedReference=False; LongValue=null; ReferenceValueId=null; StringValue=Directory:for MVO:Tom Team; SyncRuleId=2; SyncRuleName=Directory Export; ValueChangeType=1
 CsoChange(of Item(Activity2|HR:E03|4|Tom Team|0)/6#0/8#0/13#0/14#0): ActivityRunProfileExecutionItemId=null; ChangeType=14; ConnectedSystemId=2; ConnectedSystemObjectId=Directory:for MVO:Tom Team; DeletedConnectedSystemObjectId=null; DeletedObjectDisplayName=null; DeletedObjectExternalId=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0
-  attribute: AttributeId=4; AttributeName=accountId; AttributeType=1
+  attribute: AttributeId=4; AttributeName=accountId; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; IsPendingExportStub=False; IsUnresolvedReference=False; LongValue=null; ReferenceValueId=null; StringValue=E03; SyncRuleId=2; SyncRuleName=Directory Export; ValueChangeType=1
-  attribute: AttributeId=5; AttributeName=cn; AttributeType=1
+  attribute: AttributeId=5; AttributeName=cn; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; IsPendingExportStub=False; IsUnresolvedReference=False; LongValue=null; ReferenceValueId=null; StringValue=Tom Team; SyncRuleId=2; SyncRuleName=Directory Export; ValueChangeType=1
 CsoChange(of Item(Activity2|HR:E05|4|Pat Peer|0)/6#0/8#0/13#0/14#0): ActivityRunProfileExecutionItemId=null; ChangeType=14; ConnectedSystemId=2; ConnectedSystemObjectId=Directory:for MVO:Pat Peer; DeletedConnectedSystemObjectId=null; DeletedObjectDisplayName=null; DeletedObjectExternalId=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0
-  attribute: AttributeId=4; AttributeName=accountId; AttributeType=1
+  attribute: AttributeId=4; AttributeName=accountId; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; IsPendingExportStub=False; IsUnresolvedReference=False; LongValue=null; ReferenceValueId=null; StringValue=E05; SyncRuleId=2; SyncRuleName=Directory Export; ValueChangeType=1
-  attribute: AttributeId=5; AttributeName=cn; AttributeType=1
+  attribute: AttributeId=5; AttributeName=cn; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; IsPendingExportStub=False; IsUnresolvedReference=False; LongValue=null; ReferenceValueId=null; StringValue=Pat Peer; SyncRuleId=2; SyncRuleName=Directory Export; ValueChangeType=1
 CsoChange(of Item(Activity2|HR:E13|6|Fay Flowed|0)/8#0/13#0/14#0): ActivityRunProfileExecutionItemId=null; ChangeType=14; ConnectedSystemId=2; ConnectedSystemObjectId=Directory:for MVO:Fay Flowed; DeletedConnectedSystemObjectId=null; DeletedObjectDisplayName=null; DeletedObjectExternalId=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0
-  attribute: AttributeId=4; AttributeName=accountId; AttributeType=1
+  attribute: AttributeId=4; AttributeName=accountId; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; IsPendingExportStub=False; IsUnresolvedReference=False; LongValue=null; ReferenceValueId=null; StringValue=E13; SyncRuleId=2; SyncRuleName=Directory Export; ValueChangeType=1
-  attribute: AttributeId=5; AttributeName=cn; AttributeType=1
+  attribute: AttributeId=5; AttributeName=cn; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; IsPendingExportStub=False; IsUnresolvedReference=False; LongValue=null; ReferenceValueId=null; StringValue=Fay Flowed; SyncRuleId=2; SyncRuleName=Directory Export; ValueChangeType=1
 CsoChange(of Item(Activity2|MVO:Rita Review|17|Rita Review|0)/13#0/14#0): ActivityRunProfileExecutionItemId=null; ChangeType=14; ConnectedSystemId=2; ConnectedSystemObjectId=Directory:for MVO:Rita Review; DeletedConnectedSystemObjectId=null; DeletedObjectDisplayName=null; DeletedObjectExternalId=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0
-  attribute: AttributeId=4; AttributeName=accountId; AttributeType=1
+  attribute: AttributeId=4; AttributeName=accountId; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; IsPendingExportStub=False; IsUnresolvedReference=False; LongValue=null; ReferenceValueId=null; StringValue=E90; SyncRuleId=2; SyncRuleName=Directory Export; ValueChangeType=1
-  attribute: AttributeId=5; AttributeName=cn; AttributeType=1
+  attribute: AttributeId=5; AttributeName=cn; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; IsPendingExportStub=False; IsUnresolvedReference=False; LongValue=null; ReferenceValueId=null; StringValue=Rita Review; SyncRuleId=2; SyncRuleName=Directory Export; ValueChangeType=1
 
 ## Metaverse Object changes
 MvoChange(Item(Activity1|HR:E10|4|Mia Manager|0)|4|MVO:Mia Manager|Activity1): ActivityId=Activity1; ActivityRunProfileExecutionItemId=Item(Activity1|HR:E10|4|Mia Manager|0); ChangeInitiatorType=4; ChangeType=4; DeletedByRunProfileExecutionItemId=null; DeletedMetaverseObjectId=null; DeletedObjectDisplayName=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0; MetaverseObjectId=MVO:Mia Manager; SyncRuleId=1; SyncRuleName=HR Import
-  attribute: AttributeId=1; AttributeName=Display Name; AttributeType=1
+  attribute: AttributeId=1; AttributeName=Display Name; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=Mia Manager; ValueChangeType=1
-  attribute: AttributeId=2; AttributeName=Employee Id; AttributeType=1
+  attribute: AttributeId=2; AttributeName=Employee Id; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=E10; ValueChangeType=1
 MvoChange(Item(Activity1|HR:E11|4|Lee Leaver|0)|4|MVO:Lee Leaver|Activity1): ActivityId=Activity1; ActivityRunProfileExecutionItemId=Item(Activity1|HR:E11|4|Lee Leaver|0); ChangeInitiatorType=4; ChangeType=4; DeletedByRunProfileExecutionItemId=null; DeletedMetaverseObjectId=null; DeletedObjectDisplayName=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0; MetaverseObjectId=MVO:Lee Leaver; SyncRuleId=1; SyncRuleName=HR Import
-  attribute: AttributeId=1; AttributeName=Display Name; AttributeType=1
+  attribute: AttributeId=1; AttributeName=Display Name; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=Lee Leaver; ValueChangeType=1
-  attribute: AttributeId=2; AttributeName=Employee Id; AttributeType=1
+  attribute: AttributeId=2; AttributeName=Employee Id; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=E11; ValueChangeType=1
-  attribute: AttributeId=3; AttributeName=Manager; AttributeType=5
+  attribute: AttributeId=3; AttributeName=Manager; AttributePlurality=0; AttributeType=5
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=MVO:Mia Manager; StringValue=null; ValueChangeType=1
 MvoChange(Item(Activity1|HR:E12|4|Rob Report|0)|4|MVO:Rob Report|Activity1): ActivityId=Activity1; ActivityRunProfileExecutionItemId=Item(Activity1|HR:E12|4|Rob Report|0); ChangeInitiatorType=4; ChangeType=4; DeletedByRunProfileExecutionItemId=null; DeletedMetaverseObjectId=null; DeletedObjectDisplayName=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0; MetaverseObjectId=MVO:Rob Report; SyncRuleId=1; SyncRuleName=HR Import
-  attribute: AttributeId=1; AttributeName=Display Name; AttributeType=1
+  attribute: AttributeId=1; AttributeName=Display Name; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=Rob Report; ValueChangeType=1
-  attribute: AttributeId=2; AttributeName=Employee Id; AttributeType=1
+  attribute: AttributeId=2; AttributeName=Employee Id; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=E12; ValueChangeType=1
-  attribute: AttributeId=3; AttributeName=Manager; AttributeType=5
+  attribute: AttributeId=3; AttributeName=Manager; AttributePlurality=0; AttributeType=5
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=MVO:Lee Leaver; StringValue=null; ValueChangeType=1
 MvoChange(Item(Activity1|HR:E13|4|Fay Flow|0)|4|MVO:Fay Flowed|Activity1): ActivityId=Activity1; ActivityRunProfileExecutionItemId=Item(Activity1|HR:E13|4|Fay Flow|0); ChangeInitiatorType=4; ChangeType=4; DeletedByRunProfileExecutionItemId=null; DeletedMetaverseObjectId=null; DeletedObjectDisplayName=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0; MetaverseObjectId=MVO:Fay Flowed; SyncRuleId=1; SyncRuleName=HR Import
-  attribute: AttributeId=1; AttributeName=Display Name; AttributeType=1
+  attribute: AttributeId=1; AttributeName=Display Name; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=Fay Flow; ValueChangeType=1
-  attribute: AttributeId=2; AttributeName=Employee Id; AttributeType=1
+  attribute: AttributeId=2; AttributeName=Employee Id; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=E13; ValueChangeType=1
 MvoChange(Item(Activity2|HR:E01|4|Ned New|0)|4|MVO:Ned New|Activity2): ActivityId=Activity2; ActivityRunProfileExecutionItemId=Item(Activity2|HR:E01|4|Ned New|0); ChangeInitiatorType=4; ChangeType=4; DeletedByRunProfileExecutionItemId=null; DeletedMetaverseObjectId=null; DeletedObjectDisplayName=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0; MetaverseObjectId=MVO:Ned New; SyncRuleId=1; SyncRuleName=HR Import
-  attribute: AttributeId=1; AttributeName=Display Name; AttributeType=1
+  attribute: AttributeId=1; AttributeName=Display Name; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=Ned New; ValueChangeType=1
-  attribute: AttributeId=2; AttributeName=Employee Id; AttributeType=1
+  attribute: AttributeId=2; AttributeName=Employee Id; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=E01; ValueChangeType=1
-  attribute: AttributeId=3; AttributeName=Manager; AttributeType=5
+  attribute: AttributeId=3; AttributeName=Manager; AttributePlurality=0; AttributeType=5
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=MVO:Pat Peer; StringValue=null; ValueChangeType=1
 MvoChange(Item(Activity2|HR:E02|4|Kim Kid|0)|4|MVO:Kim Kid|Activity2): ActivityId=Activity2; ActivityRunProfileExecutionItemId=Item(Activity2|HR:E02|4|Kim Kid|0); ChangeInitiatorType=4; ChangeType=4; DeletedByRunProfileExecutionItemId=null; DeletedMetaverseObjectId=null; DeletedObjectDisplayName=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0; MetaverseObjectId=MVO:Kim Kid; SyncRuleId=1; SyncRuleName=HR Import
-  attribute: AttributeId=1; AttributeName=Display Name; AttributeType=1
+  attribute: AttributeId=1; AttributeName=Display Name; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=Kim Kid; ValueChangeType=1
-  attribute: AttributeId=2; AttributeName=Employee Id; AttributeType=1
+  attribute: AttributeId=2; AttributeName=Employee Id; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=E02; ValueChangeType=1
-  attribute: AttributeId=3; AttributeName=Manager; AttributeType=5
+  attribute: AttributeId=3; AttributeName=Manager; AttributePlurality=0; AttributeType=5
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=MVO:Tom Team; StringValue=null; ValueChangeType=1
 MvoChange(Item(Activity2|HR:E03|4|Tom Team|0)|4|MVO:Tom Team|Activity2): ActivityId=Activity2; ActivityRunProfileExecutionItemId=Item(Activity2|HR:E03|4|Tom Team|0); ChangeInitiatorType=4; ChangeType=4; DeletedByRunProfileExecutionItemId=null; DeletedMetaverseObjectId=null; DeletedObjectDisplayName=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0; MetaverseObjectId=MVO:Tom Team; SyncRuleId=1; SyncRuleName=HR Import
-  attribute: AttributeId=1; AttributeName=Display Name; AttributeType=1
+  attribute: AttributeId=1; AttributeName=Display Name; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=Tom Team; ValueChangeType=1
-  attribute: AttributeId=2; AttributeName=Employee Id; AttributeType=1
+  attribute: AttributeId=2; AttributeName=Employee Id; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=E03; ValueChangeType=1
 MvoChange(Item(Activity2|HR:E05|4|Pat Peer|0)|4|MVO:Pat Peer|Activity2): ActivityId=Activity2; ActivityRunProfileExecutionItemId=Item(Activity2|HR:E05|4|Pat Peer|0); ChangeInitiatorType=4; ChangeType=4; DeletedByRunProfileExecutionItemId=null; DeletedMetaverseObjectId=null; DeletedObjectDisplayName=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0; MetaverseObjectId=MVO:Pat Peer; SyncRuleId=1; SyncRuleName=HR Import
-  attribute: AttributeId=1; AttributeName=Display Name; AttributeType=1
+  attribute: AttributeId=1; AttributeName=Display Name; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=Pat Peer; ValueChangeType=1
-  attribute: AttributeId=2; AttributeName=Employee Id; AttributeType=1
+  attribute: AttributeId=2; AttributeName=Employee Id; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=E05; ValueChangeType=1
 MvoChange(Item(Activity2|HR:E13|6|Fay Flowed|0)|6|MVO:Fay Flowed|Activity2): ActivityId=Activity2; ActivityRunProfileExecutionItemId=Item(Activity2|HR:E13|6|Fay Flowed|0); ChangeInitiatorType=4; ChangeType=6; DeletedByRunProfileExecutionItemId=null; DeletedMetaverseObjectId=null; DeletedObjectDisplayName=null; DeletedObjectTypeId=null; InitiatedById=null; InitiatedByName=null; InitiatedByType=0; MetaverseObjectId=MVO:Fay Flowed; SyncRuleId=null; SyncRuleName=null
-  attribute: AttributeId=1; AttributeName=Display Name; AttributeType=1
+  attribute: AttributeId=1; AttributeName=Display Name; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=Fay Flow; ValueChangeType=2
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=Fay Flowed; ValueChangeType=1
 MvoChange(none|3|MVO:Lee Leaver|Activity2): ActivityId=Activity2; ActivityRunProfileExecutionItemId=null; ChangeInitiatorType=0; ChangeType=3; DeletedByRunProfileExecutionItemId=Item(Activity2|HR:E11|7|Lee Leaver|0); DeletedMetaverseObjectId=MVO:Lee Leaver; DeletedObjectDisplayName=Lee Leaver; DeletedObjectTypeId=1; InitiatedById=null; InitiatedByName=null; InitiatedByType=0; MetaverseObjectId=MVO:Lee Leaver; SyncRuleId=null; SyncRuleName=null
-  attribute: AttributeId=1; AttributeName=Display Name; AttributeType=1
+  attribute: AttributeId=1; AttributeName=Display Name; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=Lee Leaver; ValueChangeType=2
-  attribute: AttributeId=2; AttributeName=Employee Id; AttributeType=1
+  attribute: AttributeId=2; AttributeName=Employee Id; AttributePlurality=0; AttributeType=1
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=null; StringValue=E11; ValueChangeType=2
-  attribute: AttributeId=3; AttributeName=Manager; AttributeType=5
+  attribute: AttributeId=3; AttributeName=Manager; AttributePlurality=0; AttributeType=5
     value: BoolValue=null; ByteValueLength=null; ContributedByClaimType=null; ContributedByKind=1; ContributedBySyncRuleId=1; ContributedBySyncRuleName=HR Import; DateTimeValue=null; DecimalValue=null; GuidValue=null; IntValue=null; LongValue=null; ReferenceValueId=MVO:Mia Manager; StringValue=null; ValueChangeType=2
 
 ## Stat counters

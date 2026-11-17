@@ -477,7 +477,8 @@ public class ChangeValueRowsDatabaseTests
         var ordinal = idBase;
         var member = new ConnectedSystemObjectChangeAttribute
         {
-            AttributeName = "member", AttributeType = AttributeDataType.Reference, ConnectedSystemChange = change
+            AttributeName = "member", AttributeType = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued,
+            ConnectedSystemChange = change
         };
         ctx.Entry(member).Property("AttributeId").CurrentValue = schema.MemberAttributeId;
         for (var i = 0; i < memberAdds; i++)
@@ -577,7 +578,8 @@ public class ChangeValueRowsDatabaseTests
         var ordinal = 0;
         var proxies = new MetaverseObjectChangeAttribute
         {
-            Attribute = proxyAddresses, AttributeName = proxyAddresses.Name, AttributeType = AttributeDataType.Text, MetaverseObjectChange = change
+            Attribute = proxyAddresses, AttributeName = proxyAddresses.Name, AttributeType = AttributeDataType.Text,
+            AttributePlurality = proxyAddresses.AttributePlurality, MetaverseObjectChange = change
         };
         for (var i = 0; i < proxyAddressAdds; i++)
             proxies.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(proxies, ValueChangeType.Add, $"smtp:dan{i:D2}@example.com") { Id = IdFor(++ordinal) });
@@ -593,7 +595,8 @@ public class ChangeValueRowsDatabaseTests
         {
             var managerChange = new MetaverseObjectChangeAttribute
             {
-                Attribute = manager, AttributeName = manager.Name, AttributeType = AttributeDataType.Reference, MetaverseObjectChange = change
+                Attribute = manager, AttributeName = manager.Name, AttributeType = AttributeDataType.Reference,
+                AttributePlurality = manager.AttributePlurality, MetaverseObjectChange = change
             };
             managerChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(managerChange, ValueChangeType.Add, people[0]) { Id = IdFor(++ordinal) });
             change.AttributeChanges.Add(managerChange);

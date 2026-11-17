@@ -177,6 +177,7 @@ public class MetaverseObjectChange
                 AttributeId = value.Attribute.Id,
                 AttributeName = value.Attribute.Name,
                 AttributeType = value.Attribute.Type,
+                AttributePlurality = value.Attribute.AttributePlurality,
                 MetaverseObjectChange = this
             };
             AttributeChanges.Add(attributeChange);

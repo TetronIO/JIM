@@ -29,7 +29,7 @@ internal static class CsoChangeBulkColumns
     /// </summary>
     internal static readonly string[] ConnectedSystemObjectChangeAttributes =
     [
-        "Id", "ConnectedSystemChangeId", "AttributeId", "AttributeName", "AttributeType"
+        "Id", "ConnectedSystemChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality"
     ];
 
     /// <summary>

@@ -7568,6 +7568,7 @@ public partial class ConnectedSystemServer
                 AttributeId = connectedSystemObjectAttributeValue.Attribute.Id,
                 AttributeName = connectedSystemObjectAttributeValue.Attribute.Name,
                 AttributeType = connectedSystemObjectAttributeValue.Attribute.Type,
+                AttributePlurality = connectedSystemObjectAttributeValue.Attribute.AttributePlurality,
                 ConnectedSystemChange = connectedSystemObjectChange
             };
             connectedSystemObjectChange.AttributeChanges.Add(attributeChange);

@@ -118,6 +118,24 @@ public class MetaverseObjectChangeTests
     }
 
     /// <summary>
+    /// The change row copies the attribute's plurality as it copies its name and type (#2936), so the history of a
+    /// multi-valued attribute still reads as multi-valued once the attribute is deleted.
+    /// </summary>
+    [TestCase(AttributePlurality.SingleValued)]
+    [TestCase(AttributePlurality.MultiValued)]
+    public void AddAttributeValueChange_CopiesTheAttributesPluralityOntoItsChangeAttribute(AttributePlurality plurality)
+    {
+        var change = new MetaverseObjectChange();
+        var attribute = new MetaverseAttribute { Id = 2, Name = "proxyAddresses", Type = AttributeDataType.Text, AttributePlurality = plurality };
+
+        change.AddAttributeValueChange(
+            new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), Attribute = attribute, AttributeId = 2, StringValue = "smtp:tina@panoply.local" },
+            ValueChangeType.Add);
+
+        Assert.That(change.AttributeChanges.Single().AttributePlurality, Is.EqualTo(plurality));
+    }
+
+    /// <summary>
     /// Contributor provenance (#1519): AddAttributeValueChange must copy the contributing Synchronisation
     /// Rule's id and name onto the recorded change, so change history is self-describing about which rule
     /// contributed the value even after the live value's own provenance has moved on.

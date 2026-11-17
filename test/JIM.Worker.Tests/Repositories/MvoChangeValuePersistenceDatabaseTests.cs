@@ -166,6 +166,57 @@ public class MvoChangeValuePersistenceDatabaseTests
     }
 
     /// <summary>
+    /// The attribute's plurality, copied onto the change record's attribute row (#2936), must survive both raw
+    /// change-history write paths (the sync engine's bulk COPY and the direct insert).
+    /// </summary>
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task ChangeHistoryWritePaths_AttributePlurality_PersistsAsync(bool bulkPath)
+    {
+        await using var seedContext = NewContext();
+        var mvoType = new MetaverseObjectType { Name = $"TestType-{Guid.NewGuid():N}", PluralName = "TestTypes" };
+        var singleValued = new MetaverseAttribute { Name = $"jobTitle-{Guid.NewGuid():N}", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+        var multiValued = new MetaverseAttribute { Name = $"proxyAddresses-{Guid.NewGuid():N}", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.MultiValued };
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = mvoType, Created = DateTime.UtcNow };
+        seedContext.MetaverseAttributes.AddRange(singleValued, multiValued);
+        seedContext.MetaverseObjects.Add(mvo);
+        await seedContext.SaveChangesAsync();
+
+        var change = new MetaverseObjectChange
+        {
+            MetaverseObjectId = mvo.Id,
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = bulkPath ? ObjectChangeType.Created : ObjectChangeType.Updated,
+            InitiatedByType = ActivityInitiatorType.System
+        };
+        change.AddAttributeValueChange(
+            new MetaverseObjectAttributeValue { Attribute = singleValued, AttributeId = singleValued.Id, StringValue = "Engineer" },
+            ValueChangeType.Add);
+        change.AddAttributeValueChange(
+            new MetaverseObjectAttributeValue { Attribute = multiValued, AttributeId = multiValued.Id, StringValue = "smtp:tina@panoply.local" },
+            ValueChangeType.Add);
+
+        await using (var writeContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeContext);
+            if (bulkPath)
+                await new SyncRepository(repository).PersistPendingMvoChangesAsync(new List<MetaverseObjectChange> { change }, new List<MetaverseObjectChange>());
+            else
+                await repository.Metaverse.CreateMetaverseObjectChangeDirectAsync(change);
+        }
+
+        await using var readContext = NewContext();
+        var persisted = await readContext.MetaverseObjectChangeAttributes
+            .Where(ac => ac.MetaverseObjectChange.Id == change.Id)
+            .ToListAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.Single(ac => ac.AttributeName == singleValued.Name).AttributePlurality, Is.EqualTo(AttributePlurality.SingleValued));
+            Assert.That(persisted.Single(ac => ac.AttributeName == multiValued.Name).AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
+        }
+    }
+
+    /// <summary>
     /// Real-PostgreSQL verification for #399: the projecting Synchronisation Rule's scalar id and name
     /// snapshot, set on <see cref="MetaverseObjectChange.SyncRuleId"/>/<see cref="MetaverseObjectChange.SyncRuleName"/>
     /// (never the <see cref="MetaverseObjectChange.SyncRule"/> navigation), must survive the bulk COPY path
@@ -363,7 +414,8 @@ public class MvoChangeValuePersistenceDatabaseTests
         }
 
         await using var readContext = NewContext();
-        Assert.That(await readContext.MetaverseObjectChangeAttributes.CountAsync(), Is.Zero);
+        Assert.That(await readContext.MetaverseObjectChangeAttributes
+            .CountAsync(ac => ac.MetaverseObjectChange.MetaverseObjectId == mvo.Id), Is.Zero);
     }
 
     [Test]

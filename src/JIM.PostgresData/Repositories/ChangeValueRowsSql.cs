@@ -31,7 +31,6 @@ internal static class ChangeValueRowsSql
         string ChangeForeignKey,
         string ValuesTable,
         string AttributeChangeForeignKey,
-        string AttributesTable,
         Func<string, string> ReferenceName,
         Func<string, string> DeletedReferenceName,
         bool ReferenceNameReadsNameParameters,
@@ -44,7 +43,6 @@ internal static class ChangeValueRowsSql
         ChangeForeignKey: "ConnectedSystemChangeId",
         ValuesTable: "ConnectedSystemObjectChangeAttributeValues",
         AttributeChangeForeignKey: "ConnectedSystemObjectChangeAttributeId",
-        AttributesTable: "ConnectedSystemAttributes",
         ReferenceName: ConnectedSystemObjectNameSql,
         DeletedReferenceName: ObjectReferenceSql.ConnectedSystemObjectDeletionLabelSql,
         ReferenceNameReadsNameParameters: true,
@@ -57,7 +55,6 @@ internal static class ChangeValueRowsSql
         ChangeForeignKey: "MetaverseObjectChangeId",
         ValuesTable: "MetaverseObjectChangeAttributeValues",
         AttributeChangeForeignKey: "MetaverseObjectChangeAttributeId",
-        AttributesTable: "MetaverseAttributes",
         ReferenceName: ObjectReferenceSql.MetaverseObjectLiveLabelSql,
         DeletedReferenceName: ObjectReferenceSql.MetaverseObjectDeletionLabelSql,
         ReferenceNameReadsNameParameters: false,
@@ -157,14 +154,13 @@ internal static class ChangeValueRowsSql
         return $"""
             WITH base AS NOT MATERIALIZED (
                 SELECT v."Id" AS value_id, ac."{side.ChangeForeignKey}" AS change_id, ac."Id" AS attribute_change_id,
-                       ac."AttributeName" AS attribute_name, COALESCE(a."AttributePlurality", @single_valued) AS plurality,
+                       ac."AttributeName" AS attribute_name, ac."AttributePlurality" AS plurality,
                        v."ValueChangeType" AS value_change_type, v."ReferenceValueId" AS reference_id, {stubColumn} AS is_stub,
                        v."StringValue" AS string_value, v."DateTimeValue" AS date_time_value, v."IntValue" AS int_value,
                        v."LongValue" AS long_value, v."DecimalValue" AS decimal_value, v."GuidValue" AS guid_value,
                        v."BoolValue" AS bool_value, v."{side.SyncRuleIdColumn}" AS rule_id, v."{side.SyncRuleNameColumn}" AS rule_name
                 FROM "{side.AttributeChangesTable}" ac
                 JOIN "{side.ValuesTable}" v ON v."{side.AttributeChangeForeignKey}" = ac."Id"
-                LEFT JOIN "{side.AttributesTable}" a ON a."Id" = ac."AttributeId"
                 WHERE ac."{side.ChangeForeignKey}" = ANY(@change_ids) {attributeFilter}
             ){paired},
             normalised AS (
