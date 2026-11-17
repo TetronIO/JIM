@@ -228,7 +228,7 @@ Page-owned filters (chips, presence deep links) call `RefreshAsync(invalidateTot
 
 ## One line per row
 
-**Every cell of a virtualised grid must render to exactly one line, in both densities.** The virtualiser positions rows arithmetically from a single fixed `ItemSize` (50px comfortable, 36px dense), so one taller row drifts the scroll position, the row index written to the URL and the reserved scroll space away from what is on screen, for every row below it. This is not a styling preference; it is what makes the grid able to place a row without having drawn the rows above it.
+**Every cell of a virtualised grid must render to exactly one line, in both densities.** The virtualiser positions rows arithmetically from a single fixed `ItemSize` (52px comfortable, 36px dense), so one taller row drifts the scroll position, the row index written to the URL and the reserved scroll space away from what is on screen, for every row below it. This is not a styling preference; it is what makes the grid able to place a row without having drawn the rows above it. Height is the other half: `site.css` fits a cell's common controls (chips, small and icon buttons, an icon on its own) into 24px at both densities, so a row is exactly 52px or 36px; a control that cannot fit 24px grows its row and brings the drift back.
 
 A table of one object's attributes is the one exception, because it is not virtualised at all; see "Attribute tables" below.
 
