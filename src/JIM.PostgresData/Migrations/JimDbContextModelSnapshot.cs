@@ -1068,6 +1068,9 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("AttributePlurality")
+                        .HasColumnType("integer");
+
                     b.Property<int>("AttributeType")
                         .HasColumnType("integer");
 
@@ -3903,6 +3906,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("AttributeName")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int>("AttributePlurality")
+                        .HasColumnType("integer");
 
                     b.Property<int>("AttributeType")
                         .HasColumnType("integer");

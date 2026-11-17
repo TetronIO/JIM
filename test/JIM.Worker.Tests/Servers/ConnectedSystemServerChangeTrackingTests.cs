@@ -298,6 +298,55 @@ public class ConnectedSystemServerChangeTrackingTests
         Assert.That(attrChange.AttributeType, Is.EqualTo(AttributeDataType.Guid));
     }
 
+    /// <summary>
+    /// The change row copies the attribute's plurality as it copies its name and type (#2936), so the history of a
+    /// multi-valued attribute still reads as multi-valued once the attribute is deleted.
+    /// </summary>
+    [Test]
+    public async Task CreateConnectedSystemObjectsAsync_CopiesEachAttributesPluralityOntoItsChangeAttributeAsync()
+    {
+        // Arrange
+        var groupType = new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Name = "Group",
+            Attributes = new List<ConnectedSystemObjectTypeAttribute> { _externalIdAttr, _memberAttr }
+        };
+        var groupCso = new ConnectedSystemObject
+        {
+            Id = Guid.Empty,
+            ConnectedSystemId = 1,
+            TypeId = 1,
+            Type = groupType,
+            ExternalIdAttributeId = _externalIdAttr.Id
+        };
+        groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Attribute = _externalIdAttr, AttributeId = _externalIdAttr.Id, GuidValue = Guid.NewGuid(), ConnectedSystemObject = groupCso
+        });
+        groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Attribute = _memberAttr, AttributeId = _memberAttr.Id, UnresolvedReferenceValue = "CN=Tina Adams,OU=People,DC=panoply,DC=local",
+            ConnectedSystemObject = groupCso
+        });
+        var rpei = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ConnectedSystemObject = groupCso };
+
+        // Act
+        await _jim.ConnectedSystems.CreateConnectedSystemObjectsAsync(
+            new List<ConnectedSystemObject> { groupCso },
+            new List<ActivityRunProfileExecutionItem> { rpei });
+
+        // Assert
+        var attributeChanges = rpei.ConnectedSystemObjectChange!.AttributeChanges;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(attributeChanges.Single(ac => ac.AttributeName == "objectGUID").AttributePlurality,
+                Is.EqualTo(AttributePlurality.SingleValued));
+            Assert.That(attributeChanges.Single(ac => ac.AttributeName == "member").AttributePlurality,
+                Is.EqualTo(AttributePlurality.MultiValued));
+        }
+    }
+
     [Test]
     public void CsoChangeAttribute_WhenAttributeIsNull_SiblingPropertiesStillAvailable()
     {

@@ -103,16 +103,15 @@ public partial class MetaverseRepository
     /// <summary>
     /// Reads the given value changes in full, naming each referenced Metaverse Object from its cached display name as the
     /// change-history projection does, and keeping the id each reference holds whether or not its object is still there,
-    /// for the caller to resolve (#2669). The attribute is named by the row's own copied name and type; its id is given
-    /// only while the attribute is still there (#2931), so nothing links to one that has gone. Only ever called for one
-    /// window's rows.
+    /// for the caller to resolve (#2669). The attribute is described by the row's own copied name, type and plurality
+    /// (#2936); its id is given only while the attribute is still there (#2931), so nothing links to one that has gone.
+    /// Only ever called for one window's rows.
     /// </summary>
     private static async Task<Dictionary<Guid, MvoChangeValueDetail>> ReadMvoChangeValueDetailsAsync(DbConnection connection, Guid[] valueIds)
     {
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT v."Id", c."MetaverseObjectId", ac."AttributeName", a."Id", ac."AttributeType",
-                   COALESCE(a."AttributePlurality", @single_valued),
+            SELECT v."Id", c."MetaverseObjectId", ac."AttributeName", a."Id", ac."AttributeType", ac."AttributePlurality",
                    v."ValueChangeType", v."StringValue", v."DateTimeValue", v."IntValue", v."LongValue", v."DecimalValue",
                    v."ByteValueLength", v."GuidValue", v."BoolValue",
                    v."ContributedBySyncRuleId", v."ContributedBySyncRuleName", v."ContributedByKind", v."ContributedByClaimType",
@@ -126,7 +125,6 @@ public partial class MetaverseRepository
             WHERE v."Id" = ANY(@value_ids)
             """;
         ChangeValueRowsSql.AddParameter(command, "value_ids", valueIds, NpgsqlDbType.Array | NpgsqlDbType.Uuid);
-        ChangeValueRowsSql.AddParameter(command, "single_valued", (int)AttributePlurality.SingleValued, NpgsqlDbType.Integer);
 
         var details = new Dictionary<Guid, MvoChangeValueDetail>();
         await using var reader = await command.ExecuteReaderAsync();

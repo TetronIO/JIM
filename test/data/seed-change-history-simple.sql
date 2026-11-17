@@ -426,8 +426,9 @@ BEGIN
     VALUES (change_id, alice_id, 2, NOW() - INTERVAL '25 days', 4, 1, alice_id, 'Alice Anderson', rpei_id, hr_sync_rule_id, 'HR User Import');  -- Updated, SynchronisationRule, initiated by User
 
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_jobtitle_id, 'Job Title', 1);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_jobtitle_id, 'Job Title', 1,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_jobtitle_id));
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 2, 'Senior Software Engineer');  -- Remove
@@ -445,8 +446,9 @@ BEGIN
     VALUES (change_id, alice_id, 2, NOW() - INTERVAL '20 days', 4, 1, alice_id, 'Alice Anderson', rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_jobtitle_id, 'Job Title', 1);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_jobtitle_id, 'Job Title', 1,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_jobtitle_id));
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 2, 'Lead Software Engineer');  -- Remove
@@ -464,8 +466,9 @@ BEGIN
     VALUES (change_id, alice_id, 2, NOW() - INTERVAL '15 days', 4, 1, alice_id, 'Alice Anderson', rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_department_id, 'Department', 1);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_department_id, 'Department', 1,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_department_id));
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 2, 'Engineering - Development');  -- Remove
@@ -483,8 +486,9 @@ BEGIN
     VALUES (change_id, alice_id, 2, NOW() - INTERVAL '10 days', 4, 1, alice_id, 'Alice Anderson', rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_email_id, 'Email', 1);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_email_id, 'Email', 1,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_email_id));
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 2, 'a.anderson@contoso.com');  -- Remove
@@ -504,8 +508,9 @@ BEGIN
 
     -- Attribute 1: Job Title update
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_jobtitle_id, 'Job Title', 1);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_jobtitle_id, 'Job Title', 1,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_jobtitle_id));
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 2, 'Engineering Manager');  -- Remove
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
@@ -513,8 +518,9 @@ BEGIN
 
     -- Attribute 2: Department update
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_department_id, 'Department', 1);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_department_id, 'Department', 1,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_department_id));
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 2, 'Engineering - Platform Team');  -- Remove
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
@@ -522,8 +528,9 @@ BEGIN
 
     -- Attribute 3: Display Name update
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_displayname_id, 'Display Name', 1);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_displayname_id, 'Display Name', 1,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_displayname_id));
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 2, 'Alice Anderson');  -- Remove
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
@@ -531,8 +538,9 @@ BEGIN
 
     -- Attribute 4: Email update
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_email_id, 'Email', 1);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_email_id, 'Email', 1,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_email_id));
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 2, 'alice.anderson@contoso.enterprise.com');  -- Remove
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
@@ -540,15 +548,17 @@ BEGIN
 
     -- Attribute 5: Description update
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_description_id, 'Description', 1);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_description_id, 'Description', 1,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_description_id));
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 1, 'Director of Engineering - Platform Division');  -- Add (new attribute)
 
     -- Attribute 6: Manager reference update (becomes her own boss for org chart purposes)
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_manager_id, 'Manager', 5);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_manager_id, 'Manager', 5,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_manager_id));
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
     VALUES (gen_random_uuid(), attr_change_id, 2, alice_id);  -- Remove self-reference if existed
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
@@ -556,8 +566,9 @@ BEGIN
 
     -- Attribute 7: Static Members update (adding direct reports)
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_members_id, 'Static Members', 5);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_members_id, 'Static Members', 5,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_members_id));
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
     VALUES (gen_random_uuid(), attr_change_id, 1, charlie_id);  -- Add Charlie as direct report
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
@@ -581,8 +592,9 @@ BEGIN
     VALUES (change_id, bob_id, 2, NOW() - INTERVAL '24 days', 4, 1, alice_id, 'Alice Anderson', rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_manager_id, 'Manager', 5);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_manager_id, 'Manager', 5,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_manager_id));
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
     VALUES (gen_random_uuid(), attr_change_id, 1, alice_id);  -- Add Alice as manager
@@ -597,8 +609,9 @@ BEGIN
     VALUES (change_id, bob_id, 2, NOW() - INTERVAL '18 days', 4, 1, alice_id, 'Alice Anderson', rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_jobtitle_id, 'Job Title', 1);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_jobtitle_id, 'Job Title', 1,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_jobtitle_id));
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 2, 'Software Engineer');  -- Remove
@@ -616,8 +629,9 @@ BEGIN
     VALUES (change_id, bob_id, 2, NOW() - INTERVAL '12 days', 4, 1, alice_id, 'Alice Anderson', rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_manager_id, 'Manager', 5);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_manager_id, 'Manager', 5,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_manager_id));
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
     VALUES (gen_random_uuid(), attr_change_id, 2, alice_id);  -- Remove
@@ -641,8 +655,9 @@ BEGIN
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '19 days', 4, 1, alice_id, 'Alice Anderson', rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_displayname_id, 'Display Name', 1);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_displayname_id, 'Display Name', 1,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_displayname_id));
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 2, 'Engineers');  -- Remove
@@ -660,8 +675,9 @@ BEGIN
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '18 days', 4, 1, alice_id, 'Alice Anderson', rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_members_id, 'Static Members', 5);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_members_id, 'Static Members', 5,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_members_id));
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
     VALUES (gen_random_uuid(), attr_change_id, 1, alice_id);  -- Add Alice
@@ -684,8 +700,9 @@ BEGIN
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '16 days', 4, 1, alice_id, 'Alice Anderson', rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_description_id, 'Description', 1);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_description_id, 'Description', 1,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_description_id));
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 2, 'Engineering team');  -- Remove
@@ -703,8 +720,9 @@ BEGIN
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '15 days', 4, 1, alice_id, 'Alice Anderson', rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_members_id, 'Static Members', 5);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_members_id, 'Static Members', 5,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_members_id));
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
     VALUES (gen_random_uuid(), attr_change_id, 1, diana_id);  -- Add Diana
@@ -725,8 +743,9 @@ BEGIN
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '14 days', 4, 1, alice_id, 'Alice Anderson', rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_displayname_id, 'Display Name', 1);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_displayname_id, 'Display Name', 1,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_displayname_id));
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 2, 'Software Engineers');  -- Remove
@@ -746,8 +765,9 @@ BEGIN
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '12 days', 4, 1, alice_id, 'Alice Anderson', rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_members_id, 'Static Members', 5);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_members_id, 'Static Members', 5,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_members_id));
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
     VALUES (gen_random_uuid(), attr_change_id, 2, charlie_id);  -- Remove Charlie
@@ -762,8 +782,9 @@ BEGIN
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '11 days', 4, 1, alice_id, 'Alice Anderson', rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_description_id, 'Description', 1);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_description_id, 'Description', 1,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_description_id));
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 2, 'Engineering team group for software developers');  -- Remove
@@ -781,8 +802,9 @@ BEGIN
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '10 days', 4, 1, alice_id, 'Alice Anderson', rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_members_id, 'Static Members', 5);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_members_id, 'Static Members', 5,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_members_id));
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
     VALUES (gen_random_uuid(), attr_change_id, 1, grace_id);  -- Add Grace
@@ -805,8 +827,9 @@ BEGIN
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '8 days', 4, 1, alice_id, 'Alice Anderson', rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_members_id, 'Static Members', 5);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_members_id, 'Static Members', 5,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_members_id));
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
     VALUES (gen_random_uuid(), attr_change_id, 2, diana_id);  -- Remove Diana
@@ -827,8 +850,9 @@ BEGIN
     VALUES (change_id, engineers_group_id, 2, NOW() - INTERVAL '7 days', 4, 1, alice_id, 'Alice Anderson', rpei_id, hr_sync_rule_id, 'HR User Import');
 
     attr_change_id := gen_random_uuid();
-    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType")
-    VALUES (attr_change_id, change_id, attr_displayname_id, 'Display Name', 1);
+    INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality")
+    VALUES (attr_change_id, change_id, attr_displayname_id, 'Display Name', 1,
+        (SELECT "AttributePlurality" FROM "MetaverseAttributes" WHERE "Id" = attr_displayname_id));
 
     INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "StringValue")
     VALUES (gen_random_uuid(), attr_change_id, 2, 'Platform Engineering Team');  -- Remove

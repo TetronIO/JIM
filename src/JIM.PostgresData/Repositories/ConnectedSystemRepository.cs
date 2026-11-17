@@ -8671,12 +8671,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                 {
                     AttributeName = ac.AttributeName,
                     AttributeType = ac.AttributeType,
-                    // The attribute is named by plain id (#2931): its plurality is the live definition's while it is
-                    // there; the name and type are the row's own copies either way.
-                    AttributePlurality = database.ConnectedSystemAttributes
-                        .Where(attribute => attribute.Id == ac.AttributeId)
-                        .Select(attribute => (Models.Core.AttributePlurality?)attribute.AttributePlurality)
-                        .FirstOrDefault() ?? Models.Core.AttributePlurality.SingleValued,
+                    // The row's own copies (#2936), so a deleted attribute's history reads as it did while it was there.
+                    AttributePlurality = ac.AttributePlurality,
                     // Capped as the detail loads cap an object's values (#2498): a large group's change carries one
                     // value change per member, and the rest are read a window at a time.
                     ValueChangeTotal = ac.ValueChanges.Count(),

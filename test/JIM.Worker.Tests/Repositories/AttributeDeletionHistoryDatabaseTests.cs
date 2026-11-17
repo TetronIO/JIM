@@ -127,6 +127,61 @@ public class AttributeDeletionHistoryDatabaseTests
         }
     }
 
+    /// <summary>
+    /// A deleted multi-valued attribute's history still reads as multi-valued (#2936): an addition and a removal were two
+    /// independent membership changes, never one replacement. Plurality is the row's own copy, as the name and type are.
+    /// </summary>
+    [Test]
+    public async Task DeletingAMultiValuedConnectedSystemAttribute_ItsHistoryStillReadsAsMultiValuedAsync()
+    {
+        var (connectedSystemId, typeId, externalIdAttributeId, proxyAddresses) =
+            await SeedConnectedSystemAsync("proxyAddresses", AttributePlurality.MultiValued);
+        var csoId = await CreateCsoAsync(connectedSystemId, typeId, externalIdAttributeId);
+
+        var change = new ConnectedSystemObjectChange
+        {
+            ConnectedSystemId = connectedSystemId,
+            ConnectedSystemObjectId = csoId,
+            ChangeType = ObjectChangeType.Updated,
+            ChangeTime = T0
+        };
+        var attributeChange = new ConnectedSystemObjectChangeAttribute
+        {
+            Attribute = proxyAddresses, AttributeName = proxyAddresses.Name, AttributeType = proxyAddresses.Type,
+            AttributePlurality = proxyAddresses.AttributePlurality, ConnectedSystemChange = change
+        };
+        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue
+        {
+            ConnectedSystemObjectChangeAttribute = attributeChange, ValueChangeType = ValueChangeType.Add, StringValue = "smtp:tina@panoply.local"
+        });
+        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue
+        {
+            ConnectedSystemObjectChangeAttribute = attributeChange, ValueChangeType = ValueChangeType.Remove, StringValue = "smtp:t.adams@panoply.local"
+        });
+        change.AttributeChanges.Add(attributeChange);
+        await using (var ctx = NewContext())
+            await new PostgresDataRepository(ctx).Sync.PersistCsoChangesAsync([change]);
+
+        await ExecuteAsync("""DELETE FROM "ConnectedSystemAttributes" WHERE "Id" = @id""", proxyAddresses.Id);
+
+        var jim = NewJim();
+        var (items, _) = await jim.ConnectedSystems.GetCsoChangeHistoryAsync(csoId, 1, 10);
+        var rows = await jim.ConnectedSystems.GetCsoChangeValueRowsAsync(
+            new ChangeValueRowQuery { ChangeIds = [change.Id], Count = 10, IncludeTotalCount = true });
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(items.Single().AttributeChanges.Single().AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
+            Assert.That(rows.TotalResults, Is.EqualTo(2), "an addition and a removal are two rows, not one replacement");
+            Assert.That(rows.Results.Select(r => (r.Operation, r.Value.StringValue)), Is.EquivalentTo(new[]
+            {
+                (ChangeValueOperation.Add, (string?)"smtp:tina@panoply.local"),
+                (ChangeValueOperation.Remove, (string?)"smtp:t.adams@panoply.local")
+            }));
+            Assert.That(rows.Results.Select(r => r.AttributePlurality), Has.All.EqualTo(AttributePlurality.MultiValued));
+            Assert.That(rows.Results.Select(r => r.PreviousValue), Has.All.Null);
+        }
+    }
+
     // ─── Metaverse Objects ───
 
     [Test]
@@ -228,9 +283,65 @@ public class AttributeDeletionHistoryDatabaseTests
         }
     }
 
+    /// <summary>
+    /// The Metaverse side of <see cref="DeletingAMultiValuedConnectedSystemAttribute_ItsHistoryStillReadsAsMultiValuedAsync"/>,
+    /// deleted as an administrator deletes a Metaverse Attribute.
+    /// </summary>
+    [Test]
+    public async Task DeletingAMultiValuedMetaverseAttribute_ItsHistoryStillReadsAsMultiValuedAsync()
+    {
+        var (typeId, proxyAddresses) = await SeedMetaverseAsync("proxyAddresses", AttributePlurality.MultiValued);
+        var mvoId = await CreateMvoAsync(typeId);
+
+        var change = new MetaverseObjectChange
+        {
+            MetaverseObjectId = mvoId,
+            ChangeType = ObjectChangeType.Updated,
+            ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule,
+            ChangeTime = T0
+        };
+        var attributeChange = new MetaverseObjectChangeAttribute
+        {
+            Attribute = proxyAddresses, AttributeName = proxyAddresses.Name, AttributeType = proxyAddresses.Type,
+            AttributePlurality = proxyAddresses.AttributePlurality, MetaverseObjectChange = change
+        };
+        attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue
+        {
+            MetaverseObjectChangeAttribute = attributeChange, ValueChangeType = ValueChangeType.Add, StringValue = "smtp:tina@panoply.local"
+        });
+        attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue
+        {
+            MetaverseObjectChangeAttribute = attributeChange, ValueChangeType = ValueChangeType.Remove, StringValue = "smtp:t.adams@panoply.local"
+        });
+        change.AttributeChanges.Add(attributeChange);
+        await using (var ctx = NewContext())
+            await new PostgresDataRepository(ctx).Metaverse.CreateMetaverseObjectChangeDirectAsync(change);
+
+        var impact = await NewJim().Metaverse.DeleteMetaverseAttributeWithCascadeAsync(proxyAddresses, TestUtilities.GetInitiatedBy());
+        Assert.That(impact.BlockedByValues || impact.BlockedByReaders, Is.False, "the attribute was deleted");
+
+        var jim = NewJim();
+        var (items, _) = await jim.Metaverse.GetMvoChangeHistoryAsync(mvoId, 1, 10);
+        var rows = await jim.Metaverse.GetMvoChangeValueRowsAsync(
+            new ChangeValueRowQuery { ChangeIds = [change.Id], Count = 10, IncludeTotalCount = true });
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(items.Single().AttributeChanges.Single().AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
+            Assert.That(rows.TotalResults, Is.EqualTo(2), "an addition and a removal are two rows, not one replacement");
+            Assert.That(rows.Results.Select(r => (r.Operation, r.Value.StringValue)), Is.EquivalentTo(new[]
+            {
+                (ChangeValueOperation.Add, (string?)"smtp:tina@panoply.local"),
+                (ChangeValueOperation.Remove, (string?)"smtp:t.adams@panoply.local")
+            }));
+            Assert.That(rows.Results.Select(r => r.AttributePlurality), Has.All.EqualTo(AttributePlurality.MultiValued));
+            Assert.That(rows.Results.Select(r => r.PreviousValue), Has.All.Null);
+        }
+    }
+
     // ─── Seeding and reading ───
 
-    private async Task<(int ConnectedSystemId, int TypeId, int ExternalIdAttributeId, ConnectedSystemObjectTypeAttribute Title)> SeedConnectedSystemAsync()
+    private async Task<(int ConnectedSystemId, int TypeId, int ExternalIdAttributeId, ConnectedSystemObjectTypeAttribute Title)> SeedConnectedSystemAsync(
+        string name = "title", AttributePlurality plurality = AttributePlurality.SingleValued)
     {
         await using var ctx = NewContext();
         var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
@@ -242,8 +353,8 @@ public class AttributeDeletionHistoryDatabaseTests
         };
         var title = new ConnectedSystemObjectTypeAttribute
         {
-            Name = "title", ConnectedSystemObjectType = type, Type = AttributeDataType.Text,
-            AttributePlurality = AttributePlurality.SingleValued, Selected = true
+            Name = name, ConnectedSystemObjectType = type, Type = AttributeDataType.Text,
+            AttributePlurality = plurality, Selected = true
         };
         type.Attributes.AddRange([externalId, title]);
         ctx.AddRange(connectorDefinition, system, type);
@@ -268,11 +379,12 @@ public class AttributeDeletionHistoryDatabaseTests
         return cso.Id;
     }
 
-    private async Task<(int TypeId, MetaverseAttribute JobTitle)> SeedMetaverseAsync()
+    private async Task<(int TypeId, MetaverseAttribute JobTitle)> SeedMetaverseAsync(
+        string name = "jobTitle", AttributePlurality plurality = AttributePlurality.SingleValued)
     {
         await using var ctx = NewContext();
         var type = new MetaverseObjectType { Name = "Person", PluralName = "People" };
-        var jobTitle = new MetaverseAttribute { Name = "jobTitle", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+        var jobTitle = new MetaverseAttribute { Name = name, Type = AttributeDataType.Text, AttributePlurality = plurality };
         ctx.MetaverseObjectTypes.Add(type);
         ctx.MetaverseAttributes.Add(jobTitle);
         await ctx.SaveChangesAsync();

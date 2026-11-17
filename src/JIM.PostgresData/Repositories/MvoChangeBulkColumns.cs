@@ -37,7 +37,7 @@ internal static class MvoChangeBulkColumns
     /// </summary>
     internal static readonly string[] MetaverseObjectChangeAttributes =
     [
-        "Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType"
+        "Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType", "AttributePlurality"
     ];
 
     /// <summary>

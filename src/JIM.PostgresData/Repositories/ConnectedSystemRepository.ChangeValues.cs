@@ -137,7 +137,7 @@ public partial class ConnectedSystemRepository
     {
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
-            SELECT v."Id", ac."AttributeName", ac."AttributeType", COALESCE(a."AttributePlurality", @single_valued),
+            SELECT v."Id", ac."AttributeName", ac."AttributeType", ac."AttributePlurality",
                    v."ValueChangeType", v."StringValue", v."DateTimeValue", v."IntValue", v."LongValue", v."DecimalValue",
                    v."ByteValueLength", v."GuidValue", v."BoolValue", v."IsPendingExportStub", v."SyncRuleId", v."SyncRuleName",
                    r."Id", r."ConnectedSystemId", rt."Name", {ChangeValueRowsSql.ConnectedSystemObjectNameSql("r.\"Id\"")},
@@ -147,13 +147,11 @@ public partial class ConnectedSystemRepository
                    v."ReferenceValueId"
             FROM "ConnectedSystemObjectChangeAttributeValues" v
             JOIN "ConnectedSystemObjectChangeAttributes" ac ON ac."Id" = v."ConnectedSystemObjectChangeAttributeId"
-            LEFT JOIN "ConnectedSystemAttributes" a ON a."Id" = ac."AttributeId"
             LEFT JOIN "ConnectedSystemObjects" r ON r."Id" = v."ReferenceValueId"
             LEFT JOIN "ConnectedSystemObjectTypes" rt ON rt."Id" = r."TypeId"
             WHERE v."Id" = ANY(@value_ids)
             """;
         ChangeValueRowsSql.AddParameter(command, "value_ids", valueIds, NpgsqlDbType.Array | NpgsqlDbType.Uuid);
-        ChangeValueRowsSql.AddParameter(command, "single_valued", (int)AttributePlurality.SingleValued, NpgsqlDbType.Integer);
         ChangeValueRowsSql.AddNameParameters(command);
 
         var details = new Dictionary<Guid, CsoChangeValueDetail>();

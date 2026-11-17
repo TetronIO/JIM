@@ -1985,13 +1985,10 @@ public partial class MetaverseRepository : IMetaverseRepository
                 {
                     AttributeName = ac.AttributeName,
                     AttributeType = ac.AttributeType,
-                    // The attribute is named by plain id (#2931): its plurality is the live definition's while it is
-                    // there, and its id is given only then, so nothing links to an attribute that has gone. The name and
-                    // type are the row's own copies either way.
-                    AttributePlurality = database.MetaverseAttributes
-                        .Where(attribute => attribute.Id == ac.AttributeId)
-                        .Select(attribute => (AttributePlurality?)attribute.AttributePlurality)
-                        .FirstOrDefault() ?? AttributePlurality.SingleValued,
+                    // The name, type and plurality are the row's own copies (#2936), so a deleted attribute's history
+                    // reads as it did while it was there. The attribute is named by plain id (#2931), and its id is
+                    // given only while it is still there, so nothing links to an attribute that has gone.
+                    AttributePlurality = ac.AttributePlurality,
                     AttributeId = database.MetaverseAttributes
                         .Where(attribute => attribute.Id == ac.AttributeId)
                         .Select(attribute => (int?)attribute.Id)
@@ -4394,7 +4391,7 @@ public partial class MetaverseRepository : IMetaverseRepository
               VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}}, {{12}}, {{13}}, {{14}}, {{15}})";
         var insertAttributeSql =
             $@"INSERT INTO ""MetaverseObjectChangeAttributes"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChangeAttributes)})
-              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}})";
+              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}})";
         var insertValueSql =
             $@"INSERT INTO ""MetaverseObjectChangeAttributeValues"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChangeAttributeValues)})
               VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}}, {{12}}, {{13}}, {{14}}, {{15}})";
@@ -4429,7 +4426,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             await Repository.Database.Database.ExecuteSqlRawAsync(
                 insertAttributeSql,
                 attrChangeId, changeId, attrChange.RequiredAttributeIdForWrite(),
-                attrChange.AttributeName, (int)attrChange.AttributeType);
+                attrChange.AttributeName, (int)attrChange.AttributeType, (int)attrChange.AttributePlurality);
 
             foreach (var valueChange in attrChange.ValueChanges)
             {

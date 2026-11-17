@@ -179,6 +179,39 @@ public class ExportChangeHistoryBuilderTests
         Assert.That(attrChange.ValueChanges.First().ValueChangeType, Is.EqualTo(ValueChangeType.Add));
     }
 
+    [Test]
+    public void BuildFromProcessedExportItem_CopiesTheAttributesPluralityOntoItsChangeAttribute()
+    {
+        // Arrange
+        var proxyAddresses = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 10, Name = "proxyAddresses", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.MultiValued
+        };
+        var exportItem = CreateExportItem(PendingExportChangeType.Update,
+            new PendingExportAttributeValueChange
+            {
+                Attribute = proxyAddresses, ChangeType = PendingExportAttributeChangeType.Add, StringValue = "smtp:tina@panoply.local"
+            },
+            new PendingExportAttributeValueChange
+            {
+                Attribute = _textAttribute, ChangeType = PendingExportAttributeChangeType.Update, StringValue = "Tina Adams"
+            });
+
+        // Act
+        var result = ExportChangeHistoryBuilder.BuildFromProcessedExportItem(
+            exportItem, connectedSystemId: 1, CreateRpei(),
+            ActivityInitiatorType.System, null, null);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.AttributeChanges.Single(ac => ac.AttributeName == "proxyAddresses").AttributePlurality,
+                Is.EqualTo(AttributePlurality.MultiValued));
+            Assert.That(result.AttributeChanges.Single(ac => ac.AttributeName == "displayName").AttributePlurality,
+                Is.EqualTo(AttributePlurality.SingleValued));
+        }
+    }
+
     #endregion
 
     #region BuildFromPendingExport
