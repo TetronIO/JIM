@@ -77,7 +77,7 @@ Have these ready, whichever way you install:
     ALTER DATABASE jim SET jit = off;
     ```
 
-    The last line turns off JIT compilation for JIM's database, as the bundled PostgreSQL does, which makes synchronisation faster (see [JIT Compilation Off](configuration.md#jit)).
+    The last line turns JIT compilation off, as the bundled PostgreSQL does ([why](configuration.md#jit)).
 
     JIM's user must own the database: since PostgreSQL 15, only a database's owner can create tables in its `public` schema, and `GRANT ALL PRIVILEGES ON DATABASE` does not allow it. A database JIM's user does not own stops JIM on its first start; [Troubleshooting](troubleshooting.md#the-worker-stops-with-permission-denied-for-schema-public) shows how to correct one.
 

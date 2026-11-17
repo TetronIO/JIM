@@ -41,8 +41,6 @@ A Run Profile is one of:
 - **Delta Synchronisation**<br /> Evaluate objects changed since the last sync, and every object of an Object Type [awaiting synchronisation](changes-awaiting-synchronisation.md). Faster.
 - **Export**<br /> Flush Pending Exports out to the Connected System.
 
-If an import stops part-way through saving what it read, JIM refuses Full and Delta Synchronisation of that Connected System until a Full Import completes; imports and exports still run ([why, and what to run](../administration/troubleshooting-synchronisation.md#failed-with-error-run-profile-cannot-run-an-import-of-connected-system-stopped-part-way-through-saving-what-it-read)).
-
 A synchronisation works through the Connected System's Object Types in dependency order, so people come before their groups and membership resolves as each group is processed. Where the schema does not name an attribute's target type (LDAP `member` and `manager`), a Full Synchronisation reads the types its values point at; a Delta Synchronisation assumes any. References within one type (managers, nested groups) can still need the **Resolving cross-page references** step. A member JIM never joins to a Metaverse Object (a contact, or an object outside every Synchronisation Rule's scope) is skipped; the rest of the membership flows, removals included. The service log records the order in a line starting `Full Synchronisation type order:` or `Delta Synchronisation type order:`.
 
 ## :material-file-document-outline: Page size

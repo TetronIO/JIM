@@ -166,9 +166,9 @@ For a value held under its old data type, run a Full Import of the Connected Sys
 
 ## :material-pause-circle-outline: **Failed with error**: `Run Profile '...' is disabled, so it cannot run.`
 
-**What it means.** The Run Profile is [disabled](../configuration/run-profiles.md#disable-a-run-profile), so JIM refused the run, a run already queued or a Schedule step included, and changed nothing. The message says why it is disabled: `An administrator disabled it.`, or `A hierarchy refresh removed the partition it targeted, '...'`, when [a refresh removed its partition](../configuration/partitions-and-containers.md#when-a-refresh-removes-a-partition-a-run-profile-targets). A Schedule records the step as failed and follows its failure rules.
+**What it means.** The Run Profile is [disabled](../configuration/run-profiles.md#disable-a-run-profile), so JIM refused the run and changed nothing. The message says why: an administrator disabled it, or [a hierarchy refresh removed its partition](../configuration/partitions-and-containers.md#when-a-refresh-removes-a-partition-a-run-profile-targets).
 
-**How to fix.** If the Run Profile should run, enable it again: turn **Enabled** on in its edit dialog, or use `Set-JIMRunProfile -Enabled $true`. For one whose partition was removed, choose in the same change the partition it should read, or **All selected partitions** (`-PartitionId` or `-AllSelectedPartitions`). If it should stay disabled, take its step out of the Schedule.
+**How to fix.** Turn **Enabled** on in its edit dialog, or `Set-JIMRunProfile -Enabled $true`; if its partition was removed, choose another (`-PartitionId` or `-AllSelectedPartitions`). If it should stay disabled, take it out of the Schedule.
 
 **Check.** `Get-JIMRunProfile` returns it with `Enabled` true, and its next run's Activity ends **Complete**.
 
