@@ -22,6 +22,10 @@
     run (Get-LabExchangeReadinessProbe, Test-LabExchangeReady). That can only be asked through PowerShell Direct, so
     an Exchange server needs JIM_AD_LAB_ADMIN_PASSWORD, and its default timeout is 1800 seconds.
 
+    Before it reverts anything, it checks the host has the free memory to start the VM (its static memory plus 1 GB to
+    spare, counting the memory a running VM releases), and refuses with the shortfall if not (Test-LabHostMemory), so
+    a run fails at once with the reason rather than with Hyper-V refusing the VM part way through.
+
     A revert is a restore from backup as far as the directory is concerned: the domain controller boots fresh,
     the clock comes from the host, and it renews its invocationId, so a Delta Import watermark taken before the
     revert is no longer valid (JIM fails fast and names the change; a Full Import re-establishes the baseline).
@@ -117,6 +121,18 @@ try {
         throw "'$Name' has no checkpoint called '$Checkpoint'."
     }
     $snapshot = $snapshots | Sort-Object -Property CreationTime -Descending | Select-Object -First 1
+
+    # Refuse rather than overcommit (#2412): checked before the revert, so a run that cannot fit changes nothing and
+    # says why, instead of Hyper-V refusing to start the VM afterwards. A running VM's memory counts as available,
+    # since the revert stops it first. Where the host's free memory cannot be read, Hyper-V's own refusal still stands.
+    $freeBytes = $null
+    try { $freeBytes = [uint64](Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop).FreePhysicalMemory * 1KB }
+    catch { Write-Progress-Line "Could not read the host's free memory ($($_.Exception.Message)); starting $Name without checking it." 'Yellow' }
+    if ($null -ne $freeBytes) {
+        $released = if ($vm.State -eq 'Running') { [uint64]$vm.MemoryAssigned } else { [uint64]0 }
+        $memory = Test-LabHostMemory -VmName $Name -RequiredBytes ([uint64]$vm.MemoryStartup) -FreeBytes $freeBytes -ReleasedBytes $released
+        if (-not $memory.Fits) { throw $memory.Message }
+    }
 
     $started = Get-Date
     Restore-VMSnapshot -VMSnapshot $snapshot -Confirm:$false
