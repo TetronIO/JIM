@@ -155,7 +155,7 @@ The list and `-Active` return a summary of each Schedule Execution; `-Id` return
 |----------|-------------|
 | `Progress.CurrentStepNumber` | The step group being run, 1-based. |
 | `Progress.TotalSteps` | How many step groups the Schedule has. |
-| `Progress.Steps` | One entry per step group, each with its `StepIndex`, `Name`, `Status` (`Pending`, `Running`, `Completed`, `Failed` or `Cancelled`), `IsParallel`, and `TaskStatuses`, every concurrent task's own outcome. |
+| `Progress.Steps` | One entry per step group, each with its `StepIndex`, `Name`, `ConnectedSystemName` (the Connected System the step's Run Profile runs against; empty for a step running several tasks or no Run Profile), `Status` (`Pending`, `Running`, `Completed`, `Failed` or `Cancelled`), `IsParallel`, and `TaskStatuses`, every concurrent task's own outcome. |
 | `Steps.CancellationReason` | Why a `Cancelled` step did not run, such as `Not run: an earlier step stopped the Schedule.`; empty for any other step, including one that was already running when it was cancelled. |
 | `Steps.ContinueOnFailure` | Whether the Schedule Execution carries on past this step if it fails: the step's own setting, or its Schedule's when it follows the Schedule. |
 | `Steps.FailureBehaviourSource` | Where `Steps.ContinueOnFailure` comes from: `Step` or `Schedule`. |

@@ -1,11 +1,13 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using JIM.Models.Activities;
 using JIM.Models.Scheduling;
 using JIM.Models.Tasking;
+using JIM.Models.Tasking.DTOs;
 using NUnit.Framework;
 
 namespace JIM.Models.Tests.Scheduling;
@@ -398,6 +400,129 @@ public class ScheduleStepReadingTests
     public void Read_NothingToReport_IsNothingRatherThanAnEmptyRail()
     {
         Assert.That(ScheduleStepReading.Read(0, 0, Running, []), Is.Null);
+    }
+
+    #endregion
+
+    #region what a step is labelled by
+
+    [Test]
+    public void Read_StepRunningOneRunProfile_CarriesItsConnectedSystemBesideItsFullName()
+    {
+        // A nine-step Schedule cannot fit nine "Connected System - Run Profile" names under its rail, so the rail
+        // labels a step by its Connected System and keeps the full name for the tooltip. Both have to arrive.
+        var progress = Read(totalSteps: 1, currentStepIndex: 0,
+            new ScheduleStepObservation
+            {
+                StepIndex = 0,
+                Name = "HR CSV Source - Full Synchronisation",
+                ConnectedSystemName = "HR CSV Source",
+                TaskStatus = WorkerTaskStatus.Queued
+            });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(progress.Steps[0].ConnectedSystemName, Is.EqualTo("HR CSV Source"));
+            Assert.That(progress.Steps[0].Name, Is.EqualTo("HR CSV Source - Full Synchronisation"));
+        }
+    }
+
+    [Test]
+    public void Read_StepRunningSeveralTasks_HasNoOneConnectedSystemToBeLabelledBy()
+    {
+        var progress = Read(totalSteps: 1, currentStepIndex: 0,
+            new ScheduleStepObservation { StepIndex = 0, Name = "AD - Full Import", ConnectedSystemName = "AD", TaskStatus = WorkerTaskStatus.Processing },
+            new ScheduleStepObservation { StepIndex = 0, Name = "HR - Full Import", ConnectedSystemName = "HR", TaskStatus = WorkerTaskStatus.Processing });
+
+        Assert.That(progress.Steps[0].ConnectedSystemName, Is.Null);
+    }
+
+    [Test]
+    public void FromQueue_QueuedRunProfileTask_CarriesItsConnectedSystemToItsStep()
+    {
+        var executionId = Guid.NewGuid();
+        var progress = ScheduleStepReading.FromQueue(
+            [
+                new WorkerTaskHeader
+                {
+                    Name = "Yellowstone OpenLDAP - Delta Import",
+                    ConnectedSystemName = "Yellowstone OpenLDAP",
+                    RunProfileName = "Delta Import",
+                    Status = WorkerTaskStatus.Queued,
+                    ScheduleExecutionId = executionId,
+                    ScheduleStepIndex = 0,
+                    ScheduleTotalSteps = 1,
+                    ScheduleCurrentStepIndex = 0
+                }
+            ],
+            []);
+
+        Assert.That(progress!.Steps[0].ConnectedSystemName, Is.EqualTo("Yellowstone OpenLDAP"));
+    }
+
+    [Test]
+    public void FromActivity_RunProfileExecution_IsNamedInFullAndCarriesItsConnectedSystem()
+    {
+        // A finished step is known only by its Activity, whose Target Context holds the Connected System for a
+        // Run Profile execution. It must label the same way as the queued task it used to be.
+        var observation = ScheduleStepReading.FromActivity(2, Guid.NewGuid(), ActivityTargetType.ConnectedSystemRunProfile,
+            "Cross-Domain Export", "Full Synchronisation", ActivityStatus.Complete);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(observation.Name, Is.EqualTo("Cross-Domain Export - Full Synchronisation"));
+            Assert.That(observation.ConnectedSystemName, Is.EqualTo("Cross-Domain Export"));
+            Assert.That(observation.StepIndex, Is.EqualTo(2));
+            Assert.That(observation.ActivityStatus, Is.EqualTo(ActivityStatus.Complete));
+        }
+    }
+
+    [Test]
+    public void FromActivity_ActivityNotForARunProfile_IsNotLabelledByItsTargetContext()
+    {
+        // Target Context means something different for each kind of Activity (a Synchronisation Rule's name for an
+        // Object Matching Rule, for one), so only a Run Profile execution's is read as a Connected System.
+        var observation = ScheduleStepReading.FromActivity(0, Guid.NewGuid(), ActivityTargetType.SynchronisationRule,
+            "Some Context", "Some Target", ActivityStatus.Complete);
+
+        Assert.That(observation.ConnectedSystemName, Is.Null);
+    }
+
+    [Test]
+    public void FromActivity_RunProfileExecutionNamingNoRunProfile_FallsBackToItsPositionWithNoConnectedSystem()
+    {
+        var observation = ScheduleStepReading.FromActivity(4, Guid.NewGuid(), ActivityTargetType.ConnectedSystemRunProfile,
+            "HR", null, ActivityStatus.Complete);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(observation.Name, Is.EqualTo("Step 5"));
+            Assert.That(observation.ConnectedSystemName, Is.Null);
+        }
+    }
+
+    [Test]
+    public void FromStepStates_RunProfileStep_CarriesItsConnectedSystem()
+    {
+        var execution = new ScheduleExecution { TotalSteps = 1, CurrentStepIndex = 0, Status = ScheduleExecutionStatus.InProgress };
+        var progress = ScheduleStepReading.FromStepStates(
+            [
+                new JIM.Models.Scheduling.DTOs.ScheduleExecutionStepState
+                {
+                    StepIndex = 0,
+                    Name = "Step 1",
+                    ConnectedSystemName = "HR CSV Source",
+                    RunProfileName = "Full Import",
+                    Status = ScheduleExecutionStepStatus.Processing
+                }
+            ],
+            execution);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(progress!.Steps[0].Name, Is.EqualTo("HR CSV Source - Full Import"));
+            Assert.That(progress.Steps[0].ConnectedSystemName, Is.EqualTo("HR CSV Source"));
+        }
     }
 
     #endregion

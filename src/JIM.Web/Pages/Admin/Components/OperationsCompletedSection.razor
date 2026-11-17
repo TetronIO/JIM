@@ -35,6 +35,7 @@
                      SearchPlaceholder="Search target or initiator"
                      ToolBarAboveGrid="true"
                      Collapsed="@(!Expanded)"
+                     DenseChanged="DenseChanged"
                      GridClass="mt-0 jim-activity-fixed-grid">
     <ToolBarLeading>
         <MudTooltip Text="@(Expanded ? "Collapse Completed" : "Expand Completed")" Arrow="true" Placement="Placement.Top">
@@ -613,6 +614,9 @@
 
     /// <summary>Raised when the heading's chevron is clicked; the tab flips the section and writes the choice to the URL.</summary>
     [Parameter] public EventCallback ToggleRequested { get; set; }
+
+    /// <summary>Raised with the density the grid draws at, so Queued and In Progress can draw their rows at it too.</summary>
+    [Parameter] public EventCallback<bool> DenseChanged { get; set; }
 
     @* ─── Worker Task preset ─── *@
     @* This section shows Worker Task Activities: the operations the worker service executes. There is one

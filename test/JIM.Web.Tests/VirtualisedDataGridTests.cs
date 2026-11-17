@@ -594,4 +594,26 @@ public class VirtualisedDataGridTests : JimComponentTestContext
             }
         });
     }
+
+    [Test]
+    public void VirtualisedDataGrid_DensityLoadedThenToggled_ReportsEachDensityToItsHost()
+    {
+        // The Operations page's Activity tab draws Queued and In Progress as plain tables beside the Completed grid,
+        // and all three must share one row height, so the grid tells its host which density it is drawing at: the
+        // saved preference once read, and every toggle after.
+        _preferences.TableDenseRead = Task.FromResult<bool?>(false);
+        var reported = new List<bool>();
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 1)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "test-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.DenseChanged, (bool dense) => reported.Add(dense)));
+
+        cut.WaitForAssertion(() => Assert.That(reported, Is.EqualTo(new[] { false })));
+
+        cut.FindComponent<TableDensityToggle>().Find("button").Click();
+
+        cut.WaitForAssertion(() => Assert.That(reported, Is.EqualTo(new[] { false, true })));
+    }
 }

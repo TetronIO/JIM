@@ -124,4 +124,33 @@ public class ScheduleStepRailTests : JimComponentTestContext
 
         Assert.That(cut.FindAll(RailSelector), Is.Empty);
     }
+
+    [Test]
+    public void ScheduleStepRail_StepNamingItsConnectedSystem_IsLabelledByItAndKeepsTheFullNameInItsTooltip()
+    {
+        // A long Schedule cannot fit "Connected System - Run Profile" under every marker, so the label is the
+        // Connected System alone and the full name stays one hover away, on the label and on the marker.
+        var step = Step(0, "HR CSV Source - Full Synchronisation", ScheduleExecutionStepStatus.Completed);
+        step.ConnectedSystemName = "HR CSV Source";
+
+        var cut = RenderRail(Progress(null, step));
+
+        var label = cut.Find(LabelSelector);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(label.TextContent.Trim(), Is.EqualTo("HR CSV Source"));
+            Assert.That(label.GetAttribute("title"), Is.EqualTo("HR CSV Source - Full Synchronisation"));
+            Assert.That(cut.Find(StepSelector).GetAttribute("title"), Is.EqualTo("HR CSV Source - Full Synchronisation"));
+        }
+    }
+
+    [Test]
+    public void ScheduleStepRail_StepWithNoConnectedSystem_IsLabelledByItsName()
+    {
+        var cut = RenderRail(Progress(1,
+            Step(0, "3 in parallel", ScheduleExecutionStepStatus.Processing,
+                ScheduleExecutionStepStatus.Processing, ScheduleExecutionStepStatus.Waiting, ScheduleExecutionStepStatus.Waiting)));
+
+        Assert.That(cut.Find(LabelSelector).TextContent.Trim(), Is.EqualTo("3 in parallel"));
+    }
 }

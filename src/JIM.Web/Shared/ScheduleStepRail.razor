@@ -33,6 +33,7 @@
 
                 <span class="jim-schedule-node jim-schedule-node--@Modifier(step.Status) @(step.IsParallel ? "jim-schedule-node--divided" : "")"
                       style="@WedgeStyle(step)"
+                      title="@step.Name"
                       data-testid="jim-schedule-step"
                       data-status="@Modifier(step.Status)">
                     @if (!step.IsParallel && Icon(step.Status) is { } icon)
@@ -42,10 +43,13 @@
                 </span>
             }
         </div>
+        @* A step is labelled by its Connected System where it runs one Run Profile: a long Schedule has no room for
+           "Connected System - Run Profile" under every marker, and the Connected System is what tells two steps
+           apart at a glance. The full name stays on the label's and the marker's title. *@
         <div class="jim-schedule-labels">
             @foreach (var step in Progress.Steps)
             {
-                <span data-testid="jim-schedule-step-label" title="@step.Name">@step.Name</span>
+                <span data-testid="jim-schedule-step-label" title="@step.Name">@(step.ConnectedSystemName ?? step.Name)</span>
             }
         </div>
     </div>

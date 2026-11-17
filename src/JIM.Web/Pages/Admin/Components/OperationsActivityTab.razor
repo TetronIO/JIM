@@ -126,12 +126,15 @@
 @* One compact state for all three tables: when the Completed grid's chips would not fit, Queued's and In Progress's
    collapse with them (jimCompactFit marks this scope), so the three read alike. Queued and In Progress cannot decide
    for themselves: they are fixed-layout tables, which clip rather than overflow. *@
+@* One density too: the toggle on Completed's toolbar sets all three, so a row is the same height whichever section it
+   sits in. Completed owns the toggle because its grid owns the saved preference. *@
 <div class="d-flex flex-column gap-4" data-jim-compact-scope>
     <OperationsQueueSections QueuedExpanded="_sections.Queued" InProgressExpanded="_sections.InProgress"
-                             ToggleRequested="OnToggleSectionAsync"
+                             ToggleRequested="OnToggleSectionAsync" Dense="_dense"
                              Filters="_filters" ScheduleName="ScheduleNameFor" />
     <OperationsCompletedSection Expanded="_sections.Completed"
                                 ToggleRequested="@(() => OnToggleSectionAsync(ActivitySection.Completed))"
+                                DenseChanged="@(dense => _dense = dense)"
                                 Filters="_filters" OnClearFilters="ClearFiltersAsync" />
 </div>
 
@@ -139,6 +142,7 @@
     private const string SectionsQueryParameter = "s";
 
     private ActivitySectionState _sections = ActivitySectionState.All;
+    private bool _dense = true;
     private OperationsActivityFilters _filters = OperationsActivityFilters.None;
     private ActivityFilterOptions? _filterOptions;
     private bool _filtersOpen;
