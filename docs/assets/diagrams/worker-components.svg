@@ -1,8 +1,8 @@
 <!-- Copyright (c) Tetron Limited. All rights reserved. -->
 <!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
 <!-- Inside the Worker Service (C4 level 3, simplified for customer docs): -->
-<!-- the task processors, the Sync Engine, the Password Delivery Service -->
-<!-- that runs alongside them, and the Connectors the Worker hosts. The -->
+<!-- the task processors, the Sync Engine, the Password and Exchange -->
+<!-- Delivery Services that run alongside them, and the Connectors the Worker hosts. The -->
 <!-- Connector chips are sized to their names, 18 units apart. -->
 <!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
 <!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
@@ -11,7 +11,7 @@
 <!-- snippets inlines this into markdown); structure uses <g> groups. -->
 <svg class="jim-diagram" viewBox="0 0 1160 810" role="img" aria-labelledby="jimdg-wk-title jimdg-wk-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-wk-title">Inside the Worker Service</title>
-  <desc id="jimdg-wk-desc">The Worker Host polls the PostgreSQL task queue and dispatches processors for import, synchronisation and export, and its memory guard stops the running work before the Worker runs out of memory, recording why on the Activity; the service reads and writes staged and Metaverse data in the same database. Import processors stage data arriving through the Connectors; synchronisation processors use the Sync Engine to apply projection, attribute flow, and deletion and matching rules; the export processor sends outbound changes back through the Connectors to Connected Systems. Alongside the Worker Host, the Password Delivery Service runs as a separate loop in the same process, woken by changes to the password queue rather than dispatched as a task, and delivers initial and synchronised passwords through the Connectors. The Connectors layer hosts the LDAP, File/CSV, SQL, SCIM 2.0 Client and SCIM 2.0 Service Provider connectors; the SCIM 2.0 Service Provider Connector imports what identity providers have pushed to JIM's SCIM endpoint, kept in the same database, rather than reaching out to a system.</desc>
+  <desc id="jimdg-wk-desc">The Worker Host polls the PostgreSQL task queue and dispatches processors for import, synchronisation and export, and its memory guard stops the running work before the Worker runs out of memory, recording why on the Activity; the service reads and writes staged and Metaverse data in the same database. Import processors stage data arriving through the Connectors; synchronisation processors use the Sync Engine to apply projection, attribute flow, and deletion and matching rules; the export processor sends outbound changes back through the Connectors to Connected Systems. Alongside the Worker Host, the Password and Exchange Delivery Services run as separate loops in the same process, each woken by changes to its queue rather than dispatched as a task: one delivers initial and synchronised passwords, the other makes on-premises Exchange recipients, both through the Connectors. The Connectors layer hosts the LDAP, File/CSV, SQL, SCIM 2.0 Client and SCIM 2.0 Service Provider connectors; the SCIM 2.0 Service Provider Connector imports what identity providers have pushed to JIM's SCIM endpoint, kept in the same database, rather than reaching out to a system.</desc>
   <defs>
     <mask id="jimdg-wk-labelcut" maskUnits="userSpaceOnUse" x="0" y="0" width="1160" height="810">
       <rect x="0" y="0" width="1160" height="810" fill="#ffffff"/>
@@ -56,9 +56,9 @@
   </g>
   <g id="jimdg-wk-delivery">
     <rect class="jimdg-stage" x="615" y="500" width="230" height="90" rx="8"/>
-    <text class="jimdg-stage-label" x="730" y="529">Password Delivery</text>
-    <text class="jimdg-system-sub" x="730" y="551">own loop · password queue</text>
-    <text class="jimdg-system-sub" x="730" y="570">initial &amp; synchronised</text>
+    <text class="jimdg-stage-label" x="730" y="529">Delivery Services</text>
+    <text class="jimdg-system-sub" x="730" y="551">own loops · not tasks</text>
+    <text class="jimdg-system-sub" x="730" y="570">passwords · Exchange</text>
   </g>
   <g id="jimdg-wk-connectors">
     <rect class="jimdg-layer" x="340" y="626" width="770" height="96" rx="8"/>

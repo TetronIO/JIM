@@ -52,7 +52,7 @@ The web application (`jim.web`) provides both the **administrative user interfac
 
 ### Worker Service
 
-The Worker Service (`jim.worker`) is the background processor that executes all identity operations: imports, synchronisation, and exports. When an operation is triggered (manually, via the API, or by the scheduler), the Worker picks it up and processes it asynchronously. It handles batch processing, error reporting, and activity logging. The Worker also hosts the [Password Delivery Service](password-synchronisation.md#the-password-delivery-service), which delivers queued password changes to Connected Systems on its own clock, and writes a heartbeat that the portal's [Service Health](../configuration/operations.md#service-health) panel reads.
+The Worker Service (`jim.worker`) is the background processor that executes all identity operations: imports, synchronisation, and exports. When an operation is triggered (manually, via the API, or by the scheduler), the Worker picks it up and processes it asynchronously. It handles batch processing, error reporting, and activity logging. The Worker also hosts the [Password Delivery Service](password-synchronisation.md#the-password-delivery-service), which delivers queued password changes to Connected Systems on its own clock, and the Exchange delivery service, which makes the [on-premises Exchange recipients](../connectors/jim-ldap-connector-exchange.md) an export declares; it writes a heartbeat that the portal's [Service Health](../configuration/operations.md#service-health) panel reads.
 
 --8<-- "assets/diagrams/worker-components.svg"
 

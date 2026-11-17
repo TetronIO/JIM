@@ -1,6 +1,6 @@
 # Full Import Flow
 
-> Last updated: 2026-11-11, JIM v0.17.0
+> Last updated: 2026-11-17, JIM v0.18.0
 
 This diagram shows how objects are imported from a Connected System into JIM's connector space. Both Full Import and Delta Import use the same processor (`SyncImportTaskProcessor`); the connector handles delta filtering internally via watermark/persisted data.
 
@@ -9,6 +9,8 @@ Since v0.7.1, the import processor uses `ISyncServer` for orchestration (setting
 Since #1082, Full Imports keep a stored content hash on each Connected System Object: an unchanged object (incoming hash matches the stored hash and fingerprint) is skipped before hydration and diffing, and hashes are stamped only after each batch's attribute value writes have committed. A Run Profile Verification Mode disables the skip and reports any disagreement between the stored hash and the honest comparison.
 
 Since v0.8.0, LDAP connectors for OpenLDAP/Generic directories import using **parallel connections**: each container+objectType combination runs on its own dedicated `LdapConnection`, bypassing RFC 2696 paging cookie limitations (#72). CSO persistence uses **two-phase parallel writes** when writing large batches (#427). Run Profiles can optionally **target a specific partition**, filtering which containers are imported (#353).
+
+Since v0.18.0, a Full Import saves what it reads **in units** as it goes, rather than all at once after the last page (#2521): see [Saving a Full Import in units](#saving-a-full-import-in-units-2521). A Delta Import still saves once, at the end. Before a run's first write, the Connected System is marked import incomplete (`ConnectedSystem.ImportIncompleteSince`); a run that stops part-way leaves the mark, and the Worker refuses Full and Delta Synchronisation of that Connected System until an import that read every object of it completes. The LDAP Connector now hands a Full Import of OpenLDAP, 389 Directory Server and other non-Active Directory directories over a page at a time, and the import's progress is written at most once a second (`ActivityProgressThrottle`).
 
 Since v0.15.0:
 
@@ -38,62 +40,62 @@ Since v0.17.0:
 
 ```mermaid
 flowchart TD
-    Start([PerformImportAsync]) --> ConnType{Connector<br/>type?}
+    Start([PerformImportAsync<br/>Note whether an earlier import<br/>stopped part-way, #2521<br/>Count the deletion limits' base<br/>before anything is saved]) --> ConnType{Connector<br/>type?}
 
     %% --- Call-based connector (e.g., LDAP) ---
-    ConnType -->|IConnectorImportUsingCalls| InjectServices[Inject CertificateProvider<br/>and CredentialProtection<br/>if connector supports them<br/>Refuse a Connector whose feature<br/>flag is now off; hand the SCIM 2.0<br/>Service Provider Connector its store #124]
+    ConnType -->|IConnectorImportUsingCalls| InjectServices[Inject CertificateProvider<br/>and CredentialProtection<br/>if connector supports them<br/>Refuse a Connector whose feature<br/>flag is now off; hand the SCIM 2.0<br/>Service Provider Connector its store #124<br/>Hand Partition watermarks #2715 and,<br/>for a Full Import, the Object Type<br/>read order #2521]
     InjectServices --> OpenConn[OpenImportConnection<br/>with system settings]
-    OpenConn --> PartFilter[GetTargetPartitions:<br/>Run Profile partition set?<br/>Use it. Otherwise all selected.]
-    PartFilter --> InitPage[initialPage = true<br/>paginationTokens = empty<br/>Capture original PersistedConnectorData]
+    OpenConn --> InitPage[initialPage = true<br/>paginationTokens = empty<br/>Capture original PersistedConnectorData<br/>Progress written at most once a second]
 
-    InitPage --> PagingCheck{Connection-scoped<br/>paging? OpenLDAP/Generic}
-    PagingCheck -->|Yes, parallel path| ParallelImport[Build container+objectType combos<br/>One dedicated LdapConnection per combo<br/>Concurrency capped at ImportConcurrency<br/>See Parallel LDAP Import below]
-    ParallelImport --> UpdateProgressP[Update activity progress<br/>Imported N objects]
-    UpdateProgressP --> CollectExtIdsP[Add external IDs<br/>to collection]
-    CollectExtIdsP --> ProcessPageP[ProcessImportObjectsAsync]
-    ProcessPageP --> CloseConn
-
-    PagingCheck -->|No, AD or sequential| PageLoop{More pages?<br/>initialPage OR<br/>tokens present}
-    PageLoop -->|Yes| Import[connector.ImportAsync<br/>Pass original persisted data<br/>to ensure consistent watermark]
+    InitPage --> PageLoop{More pages?<br/>initialPage OR<br/>tokens present}
+    PageLoop -->|Yes| Import[connector.ImportAsync<br/>Pass original persisted data<br/>to ensure consistent watermark<br/>Non-AD LDAP Full Import: next page<br/>of the full-read cursor, see<br/>Paged LDAP Full Import below]
     Import --> UpdateProgress[Update activity progress<br/>Imported N objects page M]
     UpdateProgress --> CollectExtIds[Add external IDs from this page<br/>to externalIdsImported collection]
     CollectExtIds --> CaptureWatermark{First page with<br/>new persisted data?}
     CaptureWatermark -->|Yes| SaveWatermark[Capture new watermark<br/>Don't save yet - save once staged]
     CaptureWatermark -->|No| ProcessPage
-    SaveWatermark --> ProcessPage[ProcessImportObjectsAsync<br/>See Per-Object Processing below]
+    SaveWatermark --> ProcessPage[ProcessImportedPageAsync<br/>See Per-Object Processing below<br/>Full Import: a page that would take the<br/>unit past 2,000 objects or 250,000 values<br/>saves the unit first #2521<br/>See Saving a Full Import in units below]
     ProcessPage --> PassTokens[Pass pagination tokens<br/>for next page]
     PassTokens --> PageLoop
 
     PageLoop -->|No| CloseConn[CloseImportConnection<br/>Returned connector data? Persist it<br/>and drop the captured watermark]
 
-    %% Cancellation: the current page is finished, no further pages are read, and nothing is staged
+    %% Cancellation: the current page is finished and no further pages are read; a Delta Import has saved nothing,
+    %% a Full Import keeps the units it saved and its import-incomplete mark
     %% Change tracker: hydration is untracked; ClearChangeTracker runs after each CSO update batch
 
     %% --- File-based connector ---
     ConnType -->|IConnectorImportUsingFiles| FileImport[connector.ImportAsync<br/>Returns all objects at once]
     FileImport --> FileProgress[Update activity:<br/>Processing N objects]
     FileProgress --> FileCollect[Add external IDs<br/>to collection]
-    FileCollect --> FileProcess[ProcessImportObjectsAsync]
+    FileCollect --> FileProcess[ProcessImportedPageAsync<br/>Full Import: in units, as above]
     FileProcess --> RecordExclusions
 
-    CloseConn --> RecordExclusions[Record entries discarded by<br/>excluded Containers on the Activity #1255<br/>Cancelled? Stop here, nothing persisted]
-    RecordExclusions --> DeltaLimits{Delta Import and its<br/>explicit deletes above<br/>MaxDetectedDeletions or<br/>MaxDetectedDeletionsPercent? #2089}
+    CloseConn --> RecordExclusions[Record entries discarded by<br/>excluded Containers on the Activity #1255<br/>Cancelled? Stop here: a Delta Import<br/>has saved nothing; a Full Import keeps<br/>the units it saved, still marked<br/>import incomplete #2521]
+    RecordExclusions --> LastUnit[Full Import: save the last unit #2521]
+    LastUnit --> DeltaLimits{Delta Import and its<br/>explicit deletes above<br/>MaxDetectedDeletions or<br/>MaxDetectedDeletionsPercent? #2089}
     DeltaLimits -->|Yes| WithholdDeletes[Withhold every explicit delete<br/>Restore each CSO's status, drop its RPEI<br/>DetectedDeletionsWithheld = count, warning<br/>Drop the captured watermark]
     DeltaLimits -->|No| PostImport
-    WithholdDeletes --> PostImport{Full Import<br/>and objects > 0?}
+    WithholdDeletes --> PostImport{Read every object in scope<br/>Full Import, or a Delta Import<br/>that read everything #2720<br/>and objects > 0?}
 
     %% --- Deletion detection ---
-    PostImport -->|Yes| DeletionDetection[Deletion Detection<br/>Resolve candidates, check the<br/>Run Profile's deletion limits #1618,<br/>then mark missing CSOs Obsolete or refuse<br/>Scoped to target partition if set<br/>See Deletion Detection below]
-    PostImport -->|No, Delta Import<br/>or 0 objects| RefResolution
+    PostImport -->|Yes| DeletionDetection[Mark import incomplete if not already<br/>Deletion Detection<br/>Resolve candidates a thousand at a time,<br/>as summaries, check the Run Profile's<br/>deletion limits #1618, then mark missing<br/>CSOs Obsolete or refuse<br/>Scoped to target partition if set<br/>See Deletion Detection below]
+    PostImport -->|No| SaveBranch
 
     DeletionDetection --> RetryCreates[Retry unconfirmed exported Creates #1695<br/>Exported Create Pending Export whose<br/>Pending Provisioning CSO this run did not see:<br/>mark for retry, RPEI: ExportNotConfirmed]
-    RetryCreates --> RefResolution[Reference Resolution<br/>Resolve unresolved reference strings<br/>into CSO links by external ID<br/>Every value an object is left with,<br/>unresolved or ambiguous, counted on<br/>its item, #959; under Error handling:<br/>RPEI UnresolvedReference]
+    RetryCreates --> SaveBranch{Full Import?}
 
-    %% --- Persist via ISyncRepository ---
-    RefResolution --> PersistCreate[Batch create new CSOs<br/>with their RPEIs and change records #2909<br/>via ISyncRepository, in one write per batch<br/>History written beside the objects<br/>for large batches<br/>See Two-Phase CSO Persistence below]
+    %% --- Full Import: what is left after the units ---
+    SaveBranch -->|Yes| StageMarked[Save what deletion detection marked<br/>and the Object Type change<br/>replacements that stood, #2049]
+    StageMarked --> Sweep[Reference sweep #2521<br/>Resolve references a unit saved before<br/>the object they name was read<br/>Report what is still unresolved on<br/>the execution items already saved<br/>Then the cross-batch fix-ups]
+    Sweep --> Reconcile
+
+    %% --- Delta Import: one save phase ---
+    SaveBranch -->|No, Delta Import| RefResolution[Reference Resolution<br/>Resolve unresolved reference strings<br/>into CSO links by external ID<br/>Every value an object is left with,<br/>unresolved or ambiguous, counted on<br/>its item, #959; under Error handling:<br/>RPEI UnresolvedReference]
+    RefResolution --> PersistCreate[Mark import incomplete<br/>Batch create new CSOs<br/>with their RPEIs and change records #2909<br/>via ISyncRepository, in one write per batch<br/>History written beside the objects<br/>for large batches<br/>See Two-Phase CSO Persistence below]
     PersistCreate --> PersistUpdate[Batch update existing CSOs<br/>with change objects via ISyncRepository<br/>change records partitioned by row<br/>for large batches #2909<br/>ClearChangeTracker after each batch]
     PersistUpdate --> StampHashes[Stamp import content hashes #1082<br/>per batch, only AFTER that batch's<br/>attribute value writes committed<br/>never touches LastUpdated]
-    StampHashes --> ReconcileBatch[Reconcile the batch's Pending Exports #2908<br/>from the values the import holds, as saved<br/>then release them<br/>See Confirming Import below]
+    StampHashes --> ReconcileBatch[Reconcile the batch's Pending Exports #2908<br/>loaded for the batch as it is reached<br/>from the values the import holds, as saved<br/>then release them<br/>See Confirming Import below]
     ReconcileBatch -->|Next update batch| PersistUpdate
     ReconcileBatch -->|Last batch saved| Reconcile
 
@@ -103,9 +105,27 @@ flowchart TD
     ValidateRpeis --> PersistRpeis[Flush remaining RPEIs<br/>via raw SQL bulk insert<br/>create/update batches flushed<br/>their own RPEIs as they committed]
     PersistRpeis --> RecordWatermark{Watermark captured<br/>and not overridden at close<br/>or dropped by withheld deletes?}
     RecordWatermark -->|Yes| PersistWatermark[Update ConnectedSystem<br/>PersistedConnectorData #1868<br/>only now that everything read is staged]
-    RecordWatermark -->|No| End
-    PersistWatermark --> End([Import Complete<br/>Activity counters and message<br/>describe the whole run])
+    RecordWatermark -->|No| Settle
+    PersistWatermark --> Settle[Settle the import-incomplete mark #2521<br/>Clear this run's own mark; clear an earlier<br/>stopped run's only if this run read every<br/>object of the whole Connected System<br/>otherwise leave it, with a warning]
+    Settle --> End([Import Complete<br/>Activity counters and message<br/>describe the whole run])
 ```
+
+## Saving a Full Import in units (#2521)
+
+A Full Import no longer holds everything it reads until the last page. `ProcessImportedPageAsync` adds each page to the **unit** being built, and saves the unit first when the page would take it past `ImportBatchSize` objects (2,000) or `DefaultImportUnitValueBudget` values (250,000, so a page of large groups still fits in memory); a page larger than a unit on its own is classified as a whole (duplicates, #2063) and then split. `StageUnitAsync` saves a unit exactly as the single save phase saves its batches (create, update, stamp hashes, reconcile Pending Exports), then releases it, so the Worker's memory no longer grows with the size of the Connected System. Deletion detection saves the objects it marks the same way, a unit at a time.
+
+```mermaid
+flowchart TD
+    Start([StageUnitAsync]) --> Mark[Before the run's first write:<br/>mark the Connected System<br/>import incomplete, committed at once]
+    Mark --> Resolve[Resolve the unit's references<br/>against this run's earlier units<br/>and what the database holds<br/>A reference to an object not saved yet<br/>is saved by its identifier and noted<br/>for the end-of-run sweep]
+    Resolve --> Save[Create, update, stamp hashes<br/>and reconcile the unit's Pending Exports<br/>as the Delta Import save phase does<br/>A noted object's hash stamp is held back<br/>until the sweep settles its references]
+    Save --> Release[Release the unit<br/>Count it; record the live heap<br/>at the unit boundary]
+    Release --> Done([Carry on reading])
+```
+
+- **A run that stops keeps what it saved.** Cancellation, a failure, the Worker's memory guard or the process ending leaves the saved units and the import-incomplete mark. Full and Delta Synchronisation of the Connected System are refused (`Worker.RefuseIfImportIncompleteAsync`) until a run that read every object of the whole Connected System (a Full Import with no Partition, or a Delta Import whose Connector read everything) completes and clears the mark. The next Full Import completes what the stopped one saved: a noted object's content hash was never stamped, so it is compared again rather than skipped.
+- **References are resolved once everything is read.** A unit can name an object a later unit reads. Only the references still unresolved after the sweep are reported on the object's execution item, so a forward reference within one Full Import is not reported as unresolved.
+- **The deletion limits' percentage base** is counted as the run starts, before any unit is saved, so it is the same whatever order the run saves and detects deletions in.
 
 ## Per-Object Processing
 
@@ -181,7 +201,7 @@ flowchart TD
     GetImported --> Compare[Except: find CSO external IDs<br/>not in imported set]
     Compare --> Loop{More missing<br/>external IDs?}
     Loop -->|No| NextType([Next object type])
-    Loop -->|Yes| FindCso[Find CSO by external ID<br/>and attribute ID]
+    Loop -->|Yes| FindCso[Resolve the next 1,000 missing<br/>external IDs in one query, as summaries:<br/>id, status, Object Type #2521<br/>Only among the CSOs compared:<br/>same Object Type and partition #2948]
     FindCso --> Found{CSO found and not<br/>already processed<br/>in this import run, nor<br/>refused an Object Type change?}
     Found -->|No| Drop[Not a candidate<br/>Not found, or ext ID may have<br/>been updated during import]
     Drop --> Loop
@@ -197,20 +217,22 @@ flowchart TD
     Obsolete --> Reconcile
     StillGone --> Reconcile
     Reconcile[Reconcile allowed Object Type changes #2049:<br/>a replacement whose held CSO was not retired<br/>is withdrawn before it is created<br/>RPEI: ObjectTypeChanged]
-    Limits -->|No, or no limits set| Apply[Apply each candidate]
-    Apply --> ClearPes[Clear stale Pending Exports<br/>export evaluation does not<br/>exclude Obsolete CSOs]
+    Limits -->|No, or no limits set| Apply[Apply the candidates<br/>1,000 at a time #2521]
+    Apply --> ClearPes[Clear stale Pending Exports<br/>one statement per batch<br/>export evaluation does not<br/>exclude Obsolete CSOs]
     ClearPes --> WasObsolete{Already<br/>Obsolete?}
     WasObsolete -->|Yes| StillGone[Reported by an earlier import<br/>Awaiting a synchronisation run<br/>No RPEI, no status write]
-    WasObsolete -->|No| Obsolete[Set CSO Status = Obsolete<br/>Set LastUpdated = UtcNow<br/>RPEI: Deleted, DeletionDetected outcome<br/>Add to update list]
+    WasObsolete -->|No| Obsolete[Load only these CSOs whole #2521<br/>Set CSO Status = Obsolete<br/>Set LastUpdated = UtcNow<br/>RPEI: Deleted, DeletionDetected outcome<br/>Add to update list, saved a unit<br/>at a time on a Full Import]
 ```
 
 **Refused, not partially applied**: when either limit is exceeded, no candidate is marked, because the import that fed detection may itself be wrong (a broken filter or base DN). The warning makes the Activity complete with a warning, and a run that withheld deletions never counts as a successful Full Import for the stranded-value sweep gate (`FullImportSuccessEvaluator`, #1605). The percentage is measured against the number of CSOs in the run's scope at the start of deletion detection.
 
 **Reported once, not once per run**: a CSO stays Obsolete until a synchronisation run on its own Connected System deletes it, so every import in between finds it missing again. Only the first records a deletion; the rest change nothing and report nothing, because the object was Obsolete before the run started and Obsolete after. The Pending Export cleanup still runs each time (unless the run is refused): export evaluation does not exclude Obsolete CSOs, so a synchronisation on another Connected System can stage an export against one at any point between imports.
 
+**Summaries, not whole objects (#2521)**: the run holds the External IDs it read by Object Type, as values only, and releases them once deletion detection and the unconfirmed Create retry have read them. A candidate is held as its id, status and Object Type until it is applied, and only the objects newly marked as deleted are ever loaded whole, so a run that finds many objects missing, or that the deletion limits refuse, holds little memory. A missing External ID resolves only among the objects compared (the run's Object Type and Partition, never one waiting to be provisioned), so two objects sharing an External ID across Partitions can no longer mark the wrong one deleted (#2948).
+
 **Safety rule**: If zero objects were imported, deletion detection is skipped entirely. This prevents accidental mass-deletion when the Connected System returns no data due to connectivity issues.
 
-**Delta Import exception**: Deletion detection only runs for Full Import. Delta Imports handle explicit deletes via `ObjectChangeType.Deleted` from the connector (e.g., LDAP tombstone/changelog entries).
+**Delta Import exception**: Deletion detection runs for a Full Import, and for a Delta Import whose Connector read every object instead of its changes (one with no watermark to continue from, #2720). Other Delta Imports handle explicit deletes via `ObjectChangeType.Deleted` from the connector (e.g., LDAP tombstone/changelog entries).
 
 ### Delta Import deletion limits
 
@@ -223,31 +245,25 @@ The count excludes replays for CSOs already Obsolete and deletes for objects JIM
 
 **The watermark is kept on a refusal.** A Full Import that refuses loses nothing, because the next one looks for every object again; a Delta Import whose watermark moved past the withheld deletes would never read them again. A refused run therefore drops the captured watermark, as a failed run does (#1868), and each following Delta Import re-reads the same window and refuses again until an administrator fixes the source, raises the limit, runs an unlimited Delta Import Run Profile by hand (the watermark belongs to the Connected System, not the Run Profile), or runs a Full Import.
 
-## Parallel LDAP Import (#72)
+## Paged LDAP Full Import (#72, #2521)
 
-For OpenLDAP and Generic LDAP directories, RFC 2696 paging cookies are connection-scoped; starting a new search on the same connection invalidates all outstanding paging cursors. To work around this, the LDAP connector gives each container+objectType combination its own dedicated `LdapConnection` and runs them concurrently, capped by the Import Concurrency setting (default 4, max 8). Each connection fully drains all pages for its combo before being disposed.
+For OpenLDAP, 389 Directory Server and Generic LDAP directories, RFC 2696 paging cookies are connection-scoped; starting a new search on the same connection invalidates all outstanding paging cursors. The LDAP Connector therefore reads each Container and Object Type pair with a search on a dedicated `LdapConnection`, at most Import Concurrency at once (default 4, max 8). Until v0.18.0 those searches were read to the end inside the first call, which handed JIM the whole directory as one page; now each search pages into one bounded buffer held by `LdapFullReadCursor`, and each call to the Connector takes one Run Profile Page Size of objects from it, returning a continuation token while anything is left (#2521). JIM processes each page while the searches read the next, and holds about one page handed over, one page buffered and one directory page per search, whatever the size of the directory.
 
-AD directories are unaffected; they support multiple concurrent paged searches on a single connection and continue to use the original multi-combo-per-page logic.
+Active Directory is unaffected: it supports multiple concurrent paged searches on a single connection, and its cookies survive between calls, so it pages every Container and Object Type pair on each call as before.
 
 ```mermaid
 flowchart TD
-    Start([OpenLDAP/Generic<br/>directory detected]) --> BuildCombos[Build ordered list of<br/>container+objectType combos<br/>from target partitions]
-    BuildCombos --> CheckFactory{Connection factory<br/>available AND<br/>concurrency > 1?}
-
-    CheckFactory -->|No| Sequential[Sequential fallback:<br/>Drain each combo on primary<br/>connection, one at a time]
-    Sequential --> Merge
-
-    CheckFactory -->|Yes| Semaphore[Create SemaphoreSlim<br/>capped at ImportConcurrency<br/>default 4, max 8]
-    Semaphore --> SpawnTasks[Spawn one Task per combo]
-
-    SpawnTasks --> ComboTask[Each task:<br/>1. Acquire semaphore slot<br/>2. Create dedicated LdapConnection<br/>3. DrainAllPages on that connection<br/>4. Dispose connection<br/>5. Release semaphore]
-
-    ComboTask --> WaitAll[Task.WaitAll<br/>with cancellation support]
-    WaitAll --> Merge[Merge ImportObjects<br/>from all combo results]
-    Merge --> Done([Return combined result<br/>No pagination tokens;<br/>processor sees single-page result])
+    Start([First call of a Full Import<br/>OpenLDAP, 389 or Generic<br/>directory detected]) --> BuildSearches[One search per Container and<br/>selected Object Type, in groups:<br/>the Object Type read order JIM<br/>handed over, referenced types first]
+    BuildSearches --> StartCursor[LdapFullReadCursor.Start<br/>Up to Import Concurrency searches,<br/>each on its own LdapConnection<br/>1 without a connection factory<br/>A group starts once the group<br/>before it is read to the end]
+    StartCursor --> Buffer[Each search pages into one<br/>bounded buffer, waiting<br/>while the buffer is full]
+    Buffer --> Take[TakePageAsync: up to one<br/>Run Profile Page Size of objects]
+    Take --> More{Anything left<br/>to read?}
+    More -->|Yes| Token([Return the page with a<br/>continuation token<br/>The next call takes the next page])
+    More -->|No| Last([Return the last page<br/>no token])
+    Buffer -->|A search fails| Fail([The failure is thrown by the next call<br/>never reported as the end of the read])
 ```
 
-**Key properties**: Each combo runs independently with its own paging cursor. The import processor receives the merged result as a single page (no cross-call pagination tokens). If any combo fails, the exception propagates and the import is aborted.
+**Key properties**: a search that fails stops the others, and its error is thrown to JIM rather than ending the read early, which would have deletion detection take every unread object as deleted. The cursor lives from the first call to `CloseImportConnection`, which stops the searches and waits for each to close its connection.
 
 ## Two-Phase CSO Persistence (#427)
 
@@ -313,7 +329,7 @@ The change record writer used by update batches (`PersistCsoChangesAsync`) parti
 
 As each batch of updated CSOs is saved, the import processor reconciles previously exported changes against the values it has just saved (#2908). This is how JIM confirms that exports actually took effect.
 
-The Pending Exports are loaded once, at the first update batch (in the background during the read where a context factory is available). Each batch then reconciles while the import still holds its objects' values, before they are released. A CSO the run's hydration loaded whole, and which holds after the save exactly what the save wrote, is judged from those values: the probe questions a reload would put to the database (#2669) are answered from them instead (`SyncEngine.AnswerReconciliationProbes`), so every verdict and every recorded last imported value is the same. Any other CSO is reloaded from the database in pages of the sync page size and probed, as all of them were before: one found deleted or by another route, one loaded in part, one compared on two pages, one whose save was not applied to it as written, and one holding an outstanding reference when the cross-batch fix-up resolved references. Each batch writes its results before the next batch is saved, execution items first: the items reconciliation raises for objects the import did not change, then the outcomes it merges onto the import's own items, then the Pending Export deletions and updates. The raised items are still counted in the Activity's totals with the run's last items, as before. An object the save phase holds twice (a Delta Import that updates it and is then told it was deleted under another Object Type, #2049) is reconciled once, reloaded, after every batch is saved.
+Each update batch loads only its own objects' Pending Exports as it is reached, the next batch's alongside the current one's save (#2521), rather than every Pending Export of the Connected System at once. Each batch then reconciles while the import still holds its objects' values, before they are released. A CSO the run's hydration loaded whole, and which holds after the save exactly what the save wrote, is judged from those values: the probe questions a reload would put to the database (#2669) are answered from them instead (`SyncEngine.AnswerReconciliationProbes`), so every verdict and every recorded last imported value is the same. Any other CSO is reloaded from the database in pages of the sync page size and probed, as all of them were before: one found deleted or by another route, one loaded in part, one compared on two pages, one whose save was not applied to it as written, and one holding an outstanding reference when the cross-batch fix-up resolved references. Each batch writes its results before the next batch is saved, execution items first: the items reconciliation raises for objects the import did not change, then the outcomes it merges onto the import's own items, then the Pending Export deletions and updates. The raised items are still counted in the Activity's totals with the run's last items, as before. An object the save phase holds twice (a Delta Import that updates it and is then told it was deleted under another Object Type, #2049) is reconciled once, reloaded, after every batch is saved.
 
 ```mermaid
 flowchart TD
@@ -374,14 +390,14 @@ flowchart TD
 
 - **Holds are judged at every import, returned or not (#2039)**<br /> Reconciliation runs only over the CSOs an import updated, but a change held until an Initial Password is delivered usually sits on an account that stops changing: the confirming import stamped its disabled state, so a later Full Import skips it by its content hash, and a Delta Import never returns it. A password that then expires or is cancelled, or is delivered without enabling the account, changes nothing an import reads. So after reconciliation every import, Full or Delta, judges each held change on a CSO it did not reconcile (`JudgeUnreconciledInitialPasswordHoldsAsync`): still held while a password is owed to the Metaverse Object, released otherwise. It releases and nothing more, because that CSO's values may predate the export. The held set comes from one query per run (`ISyncRepository.GetInitialPasswordHoldSummariesAsync`) led by the partial index on `AwaitsInitialPassword`, so a Connected System with nothing held pays an empty index probe. See "The hold" in [Export Execution Flow](EXPORT_EXECUTION_FLOW.md#key-design-decisions).
 
-- **Parallel LDAP connections (#72)**<br /> OpenLDAP/Generic directories use connection-scoped RFC 2696 paging cookies, so each container+objectType combo gets its own `LdapConnection`. Concurrency is capped by the Import Concurrency setting (default 4, max 8). AD directories are unaffected; they multiplex paged searches on a single connection. When the connection factory is unavailable or concurrency is 1, the connector falls back to sequential single-connection processing.
+- **Parallel LDAP connections (#72), paged (#2521)**<br /> OpenLDAP, 389 Directory Server and Generic directories use connection-scoped RFC 2696 paging cookies, so each Container and Object Type pair gets its own `LdapConnection`. Concurrency is capped by the Import Concurrency setting (default 4, max 8). The searches page into one bounded buffer that JIM takes a page from per call, so a Full Import holds one page at a time rather than the whole directory. AD directories are unaffected; they multiplex paged searches on a single connection. Without a connection factory the searches share the import's connection, one at a time.
 
 - **Two-phase parallel write (#427)**<br /> CSO persistence splits INSERT into two committed phases (CSO rows first, then attribute values) so that cross-partition FK references (ReferenceValueId pointing to a CSO on a different parallel connection) succeed without post-hoc fixup. Batches writing fewer rows (CSOs plus values) than `ParallelBatchWriter.MinimumRowsForParallelWrite` (5,000) bypass this and write on a single connection (#2872), and larger ones use one connection per 1,250 rows up to the write parallelism (#2669). Write parallelism, the most connections one write uses, defaults to `Environment.ProcessorCount` (minimum 2) and is tuneable via `JIM_WRITE_PARALLELISM`.
 
 - **Partition-scoped imports (#353)**<br /> Run Profiles can target a specific partition via `GetTargetPartitions()`. When set, only containers within that partition are imported; otherwise all selected partitions are included. This applies to both the import data collection and deletion detection scope. Deletion detection is scoped to the target partition, so CSOs in other partitions are not incorrectly marked as obsolete. A CSO's Partition is where its Connector places it (`IConnectorPartitionPlacement`, #2723; the LDAP Connector by distinguished name), not the Run Profile that first read it, so that scope holds every object in the Partition, including those an unscoped run created or JIM provisioned; see `engineering/developer/connectors.md` > Saying which Partition an object is in.
 
-- **Cancellation safety**<br /> When a cancellation is requested, the page being read is finished and no further pages are requested. Staging happens only after every page has been read, so a run cancelled while reading persists no Connected System Objects at all; one cancelled after deletion detection skips persistence, and one cancelled while saving stops reconciling at the next batch, recording the execution items reconciliation has raised so far, so no Pending Export it deleted goes unreported. In every case the run's new watermark is not recorded (#1868), so the next Delta Import re-reads anything the cancelled run did not stage.
+- **Cancellation safety**<br /> When a cancellation is requested, the page being read is finished and no further pages are requested. A Delta Import stages only after every page has been read, so one cancelled while reading persists no Connected System Objects at all; one cancelled after deletion detection skips persistence. A Full Import keeps the units it has already saved and discards the one it was building (#2521); the import-incomplete mark it set before its first unit holds Full and Delta Synchronisation of the Connected System back until an import that reads every object completes. A run cancelled while saving stops reconciling at the next batch, recording the execution items reconciliation has raised so far, so no Pending Export it deleted goes unreported. In every case the run's new watermark is not recorded (#1868), so the next Delta Import re-reads anything the cancelled run did not stage.
 
-- **Bounded change tracker**<br /> Existing Connected System Objects are hydrated without tracking (`AsNoTrackingWithIdentityResolution`, #917), so reading pages adds nothing to the EF Core change tracker. `ClearChangeTracker` is called after each update batch, and each batch's hydrated attribute values are released once persisted and reconciled, keeping memory consumption bounded regardless of total import size. Reconciliation holds nothing across batches either: its outcomes are written with each batch, and no lookup of every execution item is kept for the end (#2908).
+- **Bounded change tracker**<br /> Existing Connected System Objects are hydrated without tracking (`AsNoTrackingWithIdentityResolution`, #917), so reading pages adds nothing to the EF Core change tracker. `ClearChangeTracker` is called after each update batch, and each batch's hydrated attribute values are released once persisted and reconciled, keeping memory consumption bounded regardless of total import size; a Full Import also releases each unit once saved, so it never holds more than one unit's objects (#2521). Reconciliation holds nothing across batches either: its outcomes are written with each batch, and no lookup of every execution item is kept for the end (#2908).
 
 - **Optimistic export apply** (#1079)<br /> No import-side behaviour changed for this feature; it is purely an export-side optimisation (see [Pending Export Lifecycle](PENDING_EXPORT_LIFECYCLE.md)). It changes the practical *outcome* of the "Update CSO attributes" step above: a CSO whose export was optimistically applied already carries the exported values, so the confirming import's set-diff typically finds nothing to stage, and no `Updated` RPEI is created for it.

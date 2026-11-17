@@ -3,7 +3,7 @@ title: Activities
 description: What an Activity records about each operation JIM performs, from a Run Profile execution to a configuration change, and how to find one.
 type: object
 audience: administrator
-validated: v0.17.0
+validated: v0.18.0
 ---
 
 # Activities
@@ -51,7 +51,7 @@ Activities for Run Profile executions carry counters relevant to the operation t
 
 - **Imports**<br /> `totalAdded`, `totalUpdated`, `totalDeleted`.
 - **Synchronisation**<br /> `totalProjected`, `totalJoined`, `totalAttributeFlows`, `totalDisconnected`, `totalDisconnectedOutOfScope`, `totalOutOfScopeRetainJoin` (out of scope, but kept joined), `totalDriftCorrections` (drift found, and a correcting Pending Export staged), `totalProvisioned`.
-- **Exports**<br /> `totalExported`, `totalDeprovisioned`, `totalPendingExports`.
+- **Exports**<br /> `totalExported`, `totalDeprovisioned`, `totalPendingExports`. `Get-JIMActivityStats` and the Activity's stats endpoint also return `followUps`: where the Initial Passwords and Exchange recipient changes the run queued stand now (delivered, retrying, parked and so on), counted by state. Unlike the other counters, these change after the run as the work is delivered, and the run's row on the Activity list shows them at a glance.
 - **Other operations**<br /> `totalCreated`: Metaverse Objects created directly, such as by example data generation, rather than by projection.
 - **All operations**<br /> `totalErrors`, `totalActivityTime`, `executionTime`.
 
@@ -137,7 +137,7 @@ A few properties of this model:
 - **Versioned snapshots, not diffs**<br /> Each change stores the full post-change state and a per-object version number, so any two versions can be compared and the change rendered as a structured diff.
 - **Secrets are redacted**<br /> Sensitive values (for example encrypted Connected System settings, encrypted Service Setting values, or a Schedule step's SQL connection string) are never stored. A changed secret is recorded as changed, using a keyed hash that proves it differs without revealing it; its value is never written to, or shown from, the history. Trusted Certificate history likewise stores only metadata, never the certificate material itself. API Key history stores metadata and Role assignments only; the key secret never appears in the history in any form, not even as a hash.
 - **Carried with the Activity**<br /> Because the snapshot lives on the Activity, retrieving the full Activity record also retrieves its change payload; no separate call is needed.
-- **Says when it took effect**<br /> A change to an import Synchronisation Rule or an Object Matching Rule shows on its Activity either **Applied by** the synchronisation that applied it, or **Awaiting the next synchronisation** of its Connected System. That synchronisation's Activity has a section, **Processed every {Type} object**, listing the changes behind each Object Type it processed in full and whether it applied them. `Get-JIMActivity -Id` returns both as `ConfigurationChangeSynchronisations`; see [Changes awaiting synchronisation](changes-awaiting-synchronisation.md).
+- **Says when it took effect**<br /> A change to an import Synchronisation Rule or an Object Matching Rule shows on its Activity either **Applied by** the synchronisation that applied it, or **Awaiting the next synchronisation** of its Connected System. That synchronisation's Activity has a section, **Processed every {Type} object**, listing the changes behind each Object Type it processed in full and whether it applied them. `Get-JIMActivity -Id` returns both as `ConfigurationChangeSynchronisations`; see [Changes awaiting synchronisation](changes-awaiting-synchronisation.md). A Synchronisation Rule scope change saved from a current [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) also shows, beside **Applied by**, what the preview predicted and what the synchronisation did (Projected and Joined), where that synchronisation applied no other change and both numbers measure the same thing; it is returned as `PredictionComparison`.
 - **Retained on its own schedule**<br /> Configuration Change History is kept for the `History.ConfigurationChangeRetentionPeriod` [Service Setting](../administration/configuration.md#service-settings) (default ~10 years), independently of, and typically much longer than, the general history retention period. The routine history cleanup never touches it; only its own retention period removes it.
 
 !!! note "Coverage"

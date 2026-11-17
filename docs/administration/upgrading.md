@@ -3,7 +3,7 @@ title: Upgrading
 description: Upgrade JIM to a newer release, connected, air-gapped or on Podman, verify it, and roll back if you must.
 type: how-to
 audience: operator
-validated: v0.17.0
+validated: v0.18.0
 ---
 
 # Upgrading
@@ -38,6 +38,10 @@ You can upgrade from v0.16.0 or any later release straight to the latest, withou
 - [ ] **Let in-flight work finish.** With Schedules disabled, wait for any running Activities to complete before stopping the services. See [Pausing work first](#pausing-work) for what happens if you do not.
 - [ ] **Keep the outgoing images.** Do not run `docker image prune` before the new version has been verified; the previous images are your fastest rollback path. Air-gapped, keep the previous bundle too.
 - [ ] **Compare `.env.example` with your `.env`.** New releases can introduce configuration variables. See the [Configuration Reference](configuration.md).
+- [ ] **Upgrading from v0.17.0 or earlier:**
+    - **With your own PostgreSQL server, turn JIT compilation off** for JIM's database, as the bundled PostgreSQL now does: `ALTER DATABASE jim SET jit = off;` ([JIT Compilation Off](configuration.md#jit)).
+    - **Allow for a longer first Delta Import from each LDAP partition.** Each partition now keeps its own Delta Import watermark, so the first Delta Import to read a partition after the upgrade reads every object in it once.
+    - **On OpenLDAP, check the accesslog's purge age.** Keep `olcAccessLogPurge` longer than twice the longest gap between Delta Imports of any one partition ([why twice](../connectors/jim-ldap-connector-permissions.md#openldap)).
 - [ ] **Upgrading from v0.16.0 or earlier:**
     - **Reinstall rather than upgrade, where you can**, starting from an empty database. Five built-in Metaverse Attributes are renamed: `objectGUID`, `objectSid`, `sIDHistory`, `StreetAddress` and `WebPage` become **Object GUID**, **Object SID**, **SID History**, **Street Address** and **Web Page**. An upgrade in place keeps the old attributes and adds the renamed ones beside them.
     - **With AD FS, run `Register-JIMIdentityProvider -Provider ADFS` again first** ([Keep the registration right](sso-setup/ad-fs.md#keep-the-registration-right)): the portal asks AD FS for the `allatclaims` scope, and AD FS refuses sign-in until the registration permits it.

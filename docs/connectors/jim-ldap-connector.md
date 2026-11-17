@@ -3,7 +3,7 @@ title: JIM LDAP Connector
 description: Synchronise identities with Active Directory, OpenLDAP, 389 Directory Server and other LDAP directories, and the settings it takes.
 type: object
 audience: administrator
-validated: v0.17.0
+validated: v0.18.0
 ---
 
 # JIM LDAP Connector
@@ -203,7 +203,7 @@ A naming context or crossRef partition the service account cannot read (a least-
 |---------|-------------|---------|
 | Delete Behaviour | How to handle object deletions: Delete (remove the object) or Disable (set the disable attribute). | `Delete` |
 | Disable Attribute | Attribute to set when disabling objects. Only shown, and required, when Delete Behaviour is Disable. | `userAccountControl` |
-| Export Concurrency | Concurrent LDAP operations per export batch ([Export Performance](../configuration/export-performance.md)). | `4` |
+| Export Concurrency | Concurrent LDAP operations per export batch, from 1 to 64 ([Export Performance](../configuration/export-performance.md)). Left at the default, JIM raises it when it imports the schema: to 16 for Active Directory and 389 Directory Server, and to 8 for OpenLDAP. A value you have set yourself is kept. | `4` |
 | Modify Batch Size | Maximum number of values per multi-valued attribute modification in a single LDAP request. Lower values improve compatibility; higher values improve throughput, especially for very large groups. Recommended range: 100 to 2000. | `1000` |
 | Group Placeholder Member DN | Placeholder DN used for group classes that require at least one member (e.g. groupOfNames). Automatically filtered during import. Only applies to non-AD directories. | `cn=placeholder` |
 | Manage Exchange recipients | Active Directory only. Makes provisioned objects Exchange recipients. | `false` |

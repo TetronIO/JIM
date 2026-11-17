@@ -3,7 +3,7 @@ title: Deployment
 description: Install JIM in production with Docker or Podman, connected or air-gapped, and prepare it for use.
 type: how-to
 audience: implementer
-validated: v0.17.0
+validated: v0.18.0
 ---
 
 # Deployment
@@ -74,7 +74,10 @@ Have these ready, whichever way you install:
     ```sql
     CREATE USER jim WITH ENCRYPTED PASSWORD 'your_secure_password';
     CREATE DATABASE jim OWNER jim;
+    ALTER DATABASE jim SET jit = off;
     ```
+
+    The last line turns off JIT compilation for JIM's database, as the bundled PostgreSQL does, which makes synchronisation faster (see [JIT Compilation Off](configuration.md#jit)).
 
     JIM's user must own the database: since PostgreSQL 15, only a database's owner can create tables in its `public` schema, and `GRANT ALL PRIVILEGES ON DATABASE` does not allow it. A database JIM's user does not own stops JIM on its first start; [Troubleshooting](troubleshooting.md#the-worker-stops-with-permission-denied-for-schema-public) shows how to correct one.
 

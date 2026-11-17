@@ -494,8 +494,8 @@ public class MetaverseController : ControllerBase
 
 The Worker separates pure domain logic from I/O via two core interfaces:
 
-- **`ISyncEngine`**: stateless domain engine (28 methods: projection, Attribute Flow and contribution recall, out-of-scope and Metaverse Object deletion decisions, outbound staging and Pending Export merging, export matching rule selection, Pending Export confirmation, etc.). Zero I/O dependencies; receives all data as parameters and returns results. Unit-testable without mocks. Sync Preview (#288) evaluates through the same engine, which is what keeps a preview faithful to a real run.
-- **`ISyncRepository`**: ~230-method data access boundary. Production implementation: `JIM.PostgresData.Repositories.SyncRepository`. Test implementation: `JIM.InMemoryData.SyncRepository`.
+- **`ISyncEngine`**: stateless domain engine (31 methods: projection, Attribute Flow and contribution recall, out-of-scope and Metaverse Object deletion decisions, outbound staging and Pending Export merging, export matching rule selection, Pending Export confirmation, etc.). Zero I/O dependencies; receives all data as parameters and returns results. Unit-testable without mocks. Sync Preview (#288) evaluates through the same engine, which is what keeps a preview faithful to a real run.
+- **`ISyncRepository`**: ~290-method data access boundary. Production implementation: `JIM.PostgresData.Repositories.SyncRepository`. Test implementation: `JIM.InMemoryData.SyncRepository`.
 
 **Dependency Injection**: The Worker and Scheduler use `IJimApplicationFactory` and `IConnectorFactory` for per-task context isolation. Each dispatched task gets its own DI scope with independent `DbContext` and connector instances. `JimApplicationFactory.Create()` resolves every instance from a DI scope of its own and disposing the instance disposes that scope (#2115): the factory is a singleton, and resolving from the root provider kept every `JimApplication`, repository and `DbContext` it ever created alive until the process exited, in JIM.Web as much as the Worker. Always dispose what `Create()` returns (`using var jim = ...`).
 

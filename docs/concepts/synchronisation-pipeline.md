@@ -3,7 +3,7 @@ title: Synchronisation Pipeline
 description: How JIM moves identity data through three phases, Import, Synchronisation and Export, and what each one does and protects.
 type: concept
 audience: implementer
-validated: v0.17.0
+validated: v0.18.0
 ---
 
 # Synchronisation Pipeline
@@ -27,6 +27,8 @@ Full Imports are used for:
 - **Initial setup**<br /> Bringing in all data from a new Connected System for the first time.
 - **Periodic reconciliation**<br /> Checking that the Connector Space still matches the source system.
 - **Recovery**<br /> Reloading all data to restore consistency after errors or data issues.
+
+A Full Import saves what it reads as it goes, in units of up to 2,000 objects, so its memory does not grow with the size of the Connected System. An import that stops part-way through saving keeps what it saved, and JIM refuses to synchronise that Connected System until a Full Import completes, so a synchronisation never acts on half an import ([why, and what to run](../administration/troubleshooting-synchronisation.md#failed-with-error-run-profile-cannot-run-an-import-of-connected-system-stopped-part-way-through-saving-what-it-read)).
 
 A Full Import Run Profile can limit how many objects one run may newly mark as deleted, so a broken filter or base DN cannot turn a Full Import into a mass deprovisioning; [Run Profiles > Safeguards](../configuration/run-profiles.md#full-import) covers the limits and what a run that exceeds one does.
 
