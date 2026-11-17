@@ -94,12 +94,12 @@ This means:
 
 ### Import Operations
 
-No special cancellation handling needed:
+A Delta Import needs no special cancellation handling; a Full Import relies on the import-incomplete mark (#2521):
 
-- Imports accumulate all CSO creates/updates in memory
-- Persistence happens only after every page has been read, in batches of `ImportBatchSize`, with no cancellation check between those batches: once persistence starts it runs to completion
-- If cancellation fires mid-import, unpersisted in-memory state is discarded cleanly: the processor checks before and after each connector page, and again after deletion detection, and skips deletions, reference resolution and persistence if cancellation was requested
-- One checkpoint sits after persistence: a cancellation there skips confirming-import reconciliation of Pending Exports, and the persisted CSO changes stand
+- **Delta Import** accumulates all CSO creates and updates in memory. Persistence happens only after every page has been read, in batches of `ImportBatchSize`. If cancellation fires mid-import, the unpersisted in-memory state is discarded cleanly: the processor checks before and after each connector page, and again after deletion detection, and skips deletions, reference resolution and persistence if cancellation was requested
+- **Full Import** saves what it reads in units of up to `ImportBatchSize` objects (2,000) or 250,000 values as it goes, so a cancellation keeps the units already saved and discards only the one being built. Before the run's first write it marks the Connected System import incomplete (`ConnectedSystem.ImportIncompleteSince`), committed at once; a run that stops for any reason (cancellation, failure, the memory guard, or the process ending) leaves the mark, and the Worker refuses Full and Delta Synchronisation of that Connected System (`RefuseIfImportIncompleteAsync`) until a run that read every object of the whole Connected System completes and clears it. The next Full Import completes what the stopped one saved: an object saved with a reference still to resolve has no content hash stamp, so it is compared again rather than skipped
+- Once a save phase starts, each batch runs to completion; a cancellation between batches skips confirming-import reconciliation of the batches still to come, and the persisted CSO changes stand
+- The run's new Delta Import watermark is recorded only on completion, so a cancelled run of either kind leaves the next Delta Import reading from where the last completed run left off
 - Activity progress updates are idempotent and don't affect data integrity
 - The cancellation token is passed to connectors for network/file I/O responsiveness
 
@@ -110,6 +110,10 @@ The Password Delivery Service is not a Worker Task, so it has no cancellation re
 - **Claims are leases, not locks.** A delivery pass claims due queue rows with one `FOR UPDATE SKIP LOCKED` statement that marks them `Delivering` and stamps `ClaimedAt` / `ClaimedBy`. A claim is honoured for `PendingPasswordChange.ClaimLease` (60 seconds) and then ignored, so a deliverer that dies or is stopped mid-flight cannot strand a row in `Delivering`; the change becomes claimable again about a minute later.
 - **Outcome writes are guarded.** A deliverer's attempt write only applies while the row is still `Delivering`, so a row taken away in the meantime (cancelled, retried, or superseded by a newer password) keeps that outcome rather than having it overwritten by the attempt.
 - **Administrator cancellation is an outcome.** Cancelling a queued change (queue page, REST API or `Stop-JIMPendingPasswordChange`) records it as `Cancelled`, with who and when, rather than deleting it, because the person's password stays divergent in that system either way. Cancelling mid-delivery wins: the row stays cancelled unless the password actually landed, in which case the row is deleted as delivered. A cancelled change can be put back on the queue by retrying it.
+
+### Exchange Delivery
+
+The Exchange Delivery Service (#2021) is a third hosted service in the Worker, on the same delivery hosting and loop as password delivery, and is safe for the same reasons: a lane claims queued `PendingExchangeChange` rows as leases (`ClaimedAt` / `ClaimedBy`), so a lane that stops mid-flight strands nothing, and the change becomes claimable again once the lease lapses. Converging a change reads Exchange first and does only what is missing, so delivering a change twice is harmless. An administrator cannot cancel an Exchange change, only replace it with a newer declaration; unticking **Manage Exchange recipients** holds the Connected System's queue without discarding it.
 
 ### The Worker's Memory Guard
 
