@@ -6364,8 +6364,8 @@ html[lang] .jim-virtualised-list .mud-table-root>tbody>tr:nth-last-of-type(2)>.m
    virtualiser's ItemSize and the scroll restore's estimate until a row renders (jimVirtualList.measuredRowHeight
    then reads a real one). Left to the text, rows come out fractional (31.6px dense, 51.6px normal at the 13px table
    size) and move with the type scale; pinning them keeps the estimate true. The two numbers must match RowHeight,
-   and the pin is a minimum: a cell's content taller than it grows the row, which is what the dense content rules
-   below exist to prevent. */
+   and the pin is a minimum: a cell's content taller than it grows the row, which is what the content rules below
+   exist to prevent. */
 html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-table-row,
 html[lang] .jim-activity-table > .mud-table-container > table > tbody > tr.jim-activity-row {
     height: 52px;
@@ -6376,84 +6376,92 @@ html[lang] .jim-activity-table.mud-table-dense > .mud-table-container > table > 
     height: 36px;
 }
 
-/* Dense rows hold their content in 24px. A dense row is pinned at 36px above, and 5.5px of cell padding plus the
-   cell's 1px bottom border leave 24px for what is in it, which is a line of 13px text, a Text chip, or a small
-   control. MudBlazor sizes the controls a list puts in its cells past that (a chip carries a 4px margin, a small
-   button is 28px, an icon button 30-48px), and a row takes the height of its tallest cell, so dense lists came out
-   at 45-60px and dense barely differed from normal. These rules fit the common in-cell controls into the row
-   instead: chips lose their vertical margin, buttons give back vertical padding, icon buttons shrink to a 20px
-   icon in a 24px target. Scoped to the body of a dense virtualised list, and of the Operations page's Queued and
-   In Progress tables, which must match the Completed grid beneath them row for row; normal density and headers
-   keep MudBlazor's sizes. A control that cannot sit in 24px (a select, a full-size switch) still grows its row; use
-   the small size, or accept the taller row where the control earns it. The row was 32px with 3.5px of padding,
-   which left a column of chips a hair from touching; 36px gives each one 6px either side. */
+/* Rows hold their content in 24px at either density, so every row comes out at exactly the height it is pinned at
+   above. The pin is a minimum: MudBlazor sizes the controls a list puts in its cells past 24px (a chip carries a 4px
+   margin, a small button is 28px, an icon button 30-48px), and a row takes the height of its tallest cell, so rows
+   came out at 41-60px dense and 57-68px normal, and the virtualiser, laying them out at 36px and 52px, drifted the
+   scroll position and the row written to the URL further from what was on screen the further a list was scrolled.
+   These rules fit the common in-cell controls into 24px instead: chips lose their vertical margin, buttons give back
+   vertical padding, icon buttons shrink to a 20px icon in a 24px target. The densities then differ in cell padding
+   alone: 13.5px or 5.5px each side, plus the cell's 1px bottom border, makes 52px or 36px. Scoped to the bodies of
+   virtualised lists and of the Operations page's Queued and In Progress tables, which must match the Completed grid
+   beneath them row for row; headers keep MudBlazor's sizes. A control that cannot sit in 24px (a select, a full-size
+   switch) still grows its row; use the small size, or accept the taller row where the control earns it. The dense
+   row was 32px with 3.5px of padding, which left a column of chips a hair from touching; 36px gives each one 6px
+   either side. */
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-table-cell,
+html[lang] .jim-activity-table > .mud-table-container > table > tbody td {
+    padding-top: 13.5px;
+    padding-bottom: 13.5px;
+}
+
 html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-table-cell,
 html[lang] .jim-activity-table.mud-table-dense > .mud-table-container > table > tbody td {
     padding-top: 5.5px;
     padding-bottom: 5.5px;
 }
 
-html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-chip,
-html[lang] .jim-activity-table.mud-table-dense > .mud-table-container > table > tbody .mud-chip {
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-chip,
+html[lang] .jim-activity-table > .mud-table-container > table > tbody .mud-chip {
     margin-top: 0;
     margin-bottom: 0;
 }
 
 /* A chip's leading icon is 20px, which with the chip's own padding makes an icon chip 27px against the 24px of
    every other chip; 17px brings it back to 24. */
-html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-chip .mud-chip-icon,
-html[lang] .jim-activity-table.mud-table-dense > .mud-table-container > table > tbody .mud-chip .mud-chip-icon {
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-chip .mud-chip-icon,
+html[lang] .jim-activity-table > .mud-table-container > table > tbody .mud-chip .mud-chip-icon {
     font-size: 1.0625rem;
 }
 
 /* An inline-block on a text line sits on the baseline, so the line box grows by the font's descent below it and a
    24px chip or button makes a 27px line. Top alignment lets a 24px control make a 24px line. */
-html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-table-cell :is(.mud-tooltip-inline, .mud-menu, .mud-chip, .mud-button-root, .jim-object-chip),
-html[lang] .jim-activity-table.mud-table-dense > .mud-table-container > table > tbody td :is(.mud-tooltip-inline, .mud-menu, .mud-chip, .mud-button-root, .jim-object-chip) {
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-table-cell :is(.mud-tooltip-inline, .mud-menu, .mud-chip, .mud-button-root, .jim-object-chip),
+html[lang] .jim-activity-table > .mud-table-container > table > tbody td :is(.mud-tooltip-inline, .mud-menu, .mud-chip, .mud-button-root, .jim-object-chip) {
     vertical-align: top;
 }
 
 /* The same for an icon on a text line of its own: placed straight in a cell (the chevron that opens a Completed
    row), where the baseline made a 29px line and each Completed row 41px against the 36px the virtualiser lays it
    out at; or alone in a tooltip (the parallel-step marker beside a queued task's position). */
-html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-table-cell > .mud-icon-root,
-html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-tooltip-inline > .mud-icon-root,
-html[lang] .jim-activity-table.mud-table-dense > .mud-table-container > table > tbody td > .mud-icon-root,
-html[lang] .jim-activity-table.mud-table-dense > .mud-table-container > table > tbody .mud-tooltip-inline > .mud-icon-root {
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-table-cell > .mud-icon-root,
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-tooltip-inline > .mud-icon-root,
+html[lang] .jim-activity-table > .mud-table-container > table > tbody td > .mud-icon-root,
+html[lang] .jim-activity-table > .mud-table-container > table > tbody .mud-tooltip-inline > .mud-icon-root {
     vertical-align: middle;
 }
 
-html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body :is(.mud-button-filled-size-small, .mud-button-text-size-small),
-html[lang] .jim-activity-table.mud-table-dense > .mud-table-container > table > tbody :is(.mud-button-filled-size-small, .mud-button-text-size-small) {
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-body :is(.mud-button-filled-size-small, .mud-button-text-size-small),
+html[lang] .jim-activity-table > .mud-table-container > table > tbody :is(.mud-button-filled-size-small, .mud-button-text-size-small) {
     padding-top: 2px;
     padding-bottom: 2px;
 }
 
-html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-button-outlined-size-small,
-html[lang] .jim-activity-table.mud-table-dense > .mud-table-container > table > tbody .mud-button-outlined-size-small {
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-button-outlined-size-small,
+html[lang] .jim-activity-table > .mud-table-container > table > tbody .mud-button-outlined-size-small {
     padding-top: 1px;
     padding-bottom: 1px;
 }
 
-html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-icon-button:not(.mud-switch-base),
-html[lang] .jim-activity-table.mud-table-dense > .mud-table-container > table > tbody .mud-icon-button:not(.mud-switch-base) {
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-icon-button:not(.mud-switch-base),
+html[lang] .jim-activity-table > .mud-table-container > table > tbody .mud-icon-button:not(.mud-switch-base) {
     padding: 2px;
 }
 
-html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-icon-button:not(.mud-switch-base) .mud-icon-root,
-html[lang] .jim-activity-table.mud-table-dense > .mud-table-container > table > tbody .mud-icon-button:not(.mud-switch-base) .mud-icon-root {
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-icon-button:not(.mud-switch-base) .mud-icon-root,
+html[lang] .jim-activity-table > .mud-table-container > table > tbody .mud-icon-button:not(.mud-switch-base) .mud-icon-root {
     font-size: 1.25rem;
 }
 
 /* A filled or outlined icon button carries a 1px border, so it gives back one more pixel of padding. */
-html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .mud-icon-button:is(.mud-button-filled, .mud-button-outlined),
-html[lang] .jim-activity-table.mud-table-dense > .mud-table-container > table > tbody .mud-icon-button:is(.mud-button-filled, .mud-button-outlined) {
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .mud-icon-button:is(.mud-button-filled, .mud-button-outlined),
+html[lang] .jim-activity-table > .mud-table-container > table > tbody .mud-icon-button:is(.mud-button-filled, .mud-button-outlined) {
     padding: 1px;
 }
 
 /* The object chip (the CSO / MVO badge beside a name) is its 24px glyph plus 2px of padding either side. */
-html[lang] .jim-virtualised-list .mud-table-dense .mud-table-body .jim-object-chip,
-html[lang] .jim-activity-table.mud-table-dense > .mud-table-container > table > tbody .jim-object-chip {
+html[lang] .jim-virtualised-list .mud-table-root .mud-table-body .jim-object-chip,
+html[lang] .jim-activity-table > .mud-table-container > table > tbody .jim-object-chip {
     padding-top: 0;
     padding-bottom: 0;
 }
