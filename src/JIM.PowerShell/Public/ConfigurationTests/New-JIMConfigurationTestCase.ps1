@@ -48,6 +48,11 @@ function New-JIMConfigurationTestCase {
     .PARAMETER Attributes
         For a Scope or Object Matching Rule case, the object's values, keyed by attribute name, as for CsAttributes.
 
+    .PARAMETER ConnectedObjectTypeId
+        For a Scope case of an export rule, the IDs of the Connected System Object Types the object is joined to, as
+        Test-JIMScope takes them, for the rule's connection criteria. Each must be one the rule's Scope tests. Omit it
+        for joined to none.
+
     .PARAMETER RunAsOf
         The instant to run the case as of: what Now() and Today() read, and what relative date criteria resolve
         against. Omit it to run as of the time the case runs. A time without a time zone is read as UTC.
@@ -77,6 +82,12 @@ function New-JIMConfigurationTestCase {
 
         Saves a case checking that someone who left on 15 January is out of scope of Synchronisation Rule 12 on 1
         March, whatever the date the case runs.
+
+    .EXAMPLE
+        New-JIMConfigurationTestCase -Name 'Directory users stay in scope' -SyncRuleId 14 -ConnectedObjectTypeId 70 -Expect InScope
+
+        Saves a case checking that someone joined to Object Type 70 (a user in PANOPLY AD, say) is in scope of an export
+        rule whose Scope is "Has user in PANOPLY AD".
 
     .EXAMPLE
         New-JIMConfigurationTestCase -Name 'Account name base' -SyncRuleMappingId 14 -Kind GeneratedValue -MvAttributes @{ 'First Name' = 'Joe'; 'Last Name' = 'Bloggs' } -Expect Values -ExpectedValues 'jbloggs'
@@ -122,6 +133,10 @@ function New-JIMConfigurationTestCase {
         [Parameter(ParameterSetName = 'ObjectMatchingRule')]
         [hashtable]$Attributes,
 
+        [Parameter(ParameterSetName = 'Scope')]
+        [AllowEmptyCollection()]
+        [int[]]$ConnectedObjectTypeId,
+
         [Parameter()]
         [datetime]$RunAsOf,
 
@@ -162,6 +177,7 @@ function New-JIMConfigurationTestCase {
                 $body.kind = 'Scope'
                 $body.syncRuleId = $SyncRuleId
                 if ($Attributes) { $body.attributes = ConvertTo-JIMTestCaseAttributes $Attributes }
+                if ($PSBoundParameters.ContainsKey('ConnectedObjectTypeId')) { $body.connectedObjectTypeIds = @($ConnectedObjectTypeId) }
             }
             'ObjectMatchingRule' {
                 $body.kind = 'ObjectMatchingRule'

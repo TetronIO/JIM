@@ -31,7 +31,11 @@
         <MudText Typo="Typo.subtitle2" Class="mt-5">Inputs</MudText>
         @if (_rows.Count == 0)
         {
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">What this case tests reads no attributes, so it gives the same result for every object.</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                @(Connections.Count > 0
+                    ? "What this case tests reads no attributes, only the connections below."
+                    : "What this case tests reads no attributes, so it gives the same result for every object.")
+            </MudText>
         }
         else
         {
@@ -87,6 +91,20 @@
                     }
                 </tbody>
             </MudSimpleTable>
+        }
+
+        @if (Connections.Count > 0)
+        {
+            @* A Scope case records what its sample is joined to, for an export rule's connection criteria (#2787) *@
+            <MudText Typo="Typo.subtitle2" Class="mt-5">Connections</MudText>
+            <div class="d-flex flex-column" data-testid="jim-test-case-connections">
+                @foreach (var connection in Connections)
+                {
+                    var typeId = connection.ConnectedObjectTypeId;
+                    <MudCheckBox T="bool" @key="typeId" Value="_connected.Contains(typeId)" ValueChanged="@(v => SetConnected(typeId, v))" Dense="true"
+                                 Label="@($"Has {connection.Description}")" />
+                }
+            </div>
         }
 
         <RunAsOfPicker @bind-Value="_runAsOf" Class="mt-4" />
@@ -156,9 +174,17 @@
     [Parameter, EditorRequired]
     public IReadOnlyList<ConfigurationTestCaseDisplay.InputSlot> Slots { get; set; } = [];
 
+    /// <summary>
+    /// For a Scope case, the connections its rule's criteria test, which the case can record as joined; none
+    /// otherwise.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<ConnectionSampleDescriptor> Connections { get; set; } = [];
+
     private string? _name;
     private string? _description;
     private List<ConfigurationTestCaseDisplay.InputRow> _rows = [];
+    private readonly HashSet<int> _connected = [];
     private DateTime? _runAsOf;
     private ConfigurationTestExpectationKind _expect;
     private List<string> _expectedValues = [];
@@ -172,6 +198,7 @@
         _name = TestCase.Name;
         _description = TestCase.Description;
         _rows = ConfigurationTestCaseDisplay.InputRows(TestCase, Slots);
+        _connected.UnionWith(ConfigurationTestCaseDisplay.RecordedConnections(Connections, TestCase.ConnectedObjectTypeIds));
         _runAsOf = TestCase.RunAsOfUtc;
         var expectation = TestCase.Expectation;
         _expect = ConfigurationTestCase.ExpectationsFor(TestCase.Kind).Contains(expectation.Kind)
@@ -187,6 +214,14 @@
     /// </summary>
     private bool CanSave() =>
         !string.IsNullOrWhiteSpace(_name) && (_expect != ConfigurationTestExpectationKind.Values || _expectedValues.Count > 0 || !string.IsNullOrEmpty(_pendingValue));
+
+    private void SetConnected(int connectedObjectTypeId, bool connected)
+    {
+        if (connected)
+            _connected.Add(connectedObjectTypeId);
+        else
+            _connected.Remove(connectedObjectTypeId);
+    }
 
     private void AddValue()
     {
@@ -220,6 +255,7 @@
             Description = string.IsNullOrWhiteSpace(_description) ? null : _description.Trim(),
             RunAsOfUtc = _runAsOf,
             Inputs = ConfigurationTestCaseDisplay.ToInputs(_rows),
+            ConnectedObjectTypeIds = ConfigurationTestCaseDisplay.RecordedConnections(Connections, _connected),
             Expectation = new ConfigurationTestExpectation(_expect,
                 _expect == ConfigurationTestExpectationKind.Values ? _expectedValues.ToList() : [],
                 _expect == ConfigurationTestExpectationKind.Values && _expectedValues.Count > 1 && _inOrder)
@@ -248,16 +284,19 @@
     }
 
     /// <summary>
-    /// Shows the dialog for <paramref name="testCase"/>, returning the case as saved, or null when it was cancelled.
+    /// Shows the dialog for <paramref name="testCase"/>, with the <paramref name="connections"/> a Scope case can record,
+    /// returning the case as saved, or null when it was cancelled.
     /// </summary>
     public static async Task<ConfigurationTestCase?> ShowAsync(IDialogService dialogService, ConfigurationTestCase testCase,
-        string coverageLabel, IReadOnlyList<ConfigurationTestCaseDisplay.InputSlot> slots)
+        string coverageLabel, IReadOnlyList<ConfigurationTestCaseDisplay.InputSlot> slots,
+        IReadOnlyList<ConnectionSampleDescriptor>? connections = null)
     {
         var parameters = new DialogParameters<ConfigurationTestCaseDialog>
         {
             { d => d.TestCase, testCase },
             { d => d.CoverageLabel, coverageLabel },
-            { d => d.Slots, slots }
+            { d => d.Slots, slots },
+            { d => d.Connections, connections ?? [] }
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true };
         var dialog = await dialogService.ShowAsync<ConfigurationTestCaseDialog>(null, parameters, options);

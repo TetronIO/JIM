@@ -299,6 +299,60 @@ public class ConfigurationTestsControllerTests
     }
 
     [Test]
+    public async Task CreateAsync_ScopeCaseWithConnections_StoresAndReturnsThemAsync()
+    {
+        // #2787: a Scope case records the connections it is tested with.
+        var exportRule = ExportRuleTestingAConnection();
+        ConfigurationTestCase? created = null;
+        _testRepository.Setup(r => r.CreateTestCaseAsync(It.IsAny<ConfigurationTestCase>())).Callback<ConfigurationTestCase>(c => created = c).Returns(Task.CompletedTask);
+
+        var result = await _controller.CreateAsync(new CreateConfigurationTestCaseRequest
+        {
+            Name = "Directory users are in scope",
+            Kind = ConfigurationTestCaseKind.Scope,
+            SyncRuleId = exportRule.Id,
+            ConnectedObjectTypeIds = [70],
+            Expectation = new ConfigurationTestExpectationDto { Kind = ConfigurationTestExpectationKind.InScope }
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+            Assert.That(created!.ConnectedObjectTypeIds, Is.EqualTo(new[] { 70 }));
+            Assert.That(((ConfigurationTestCaseDto)((CreatedAtRouteResult)result).Value!).ConnectedObjectTypeIds, Is.EqualTo(new[] { 70 }));
+        }
+    }
+
+    [Test]
+    public async Task UpdateAsync_ConnectionsGiven_ReplaceThemAndLeftOut_LeaveThemAsync()
+    {
+        var exportRule = ExportRuleTestingAConnection();
+        var stored = new ConfigurationTestCase
+        {
+            Id = 43, Name = "Directory users are in scope", Kind = ConfigurationTestCaseKind.Scope, SyncRuleId = exportRule.Id,
+            ConnectedObjectTypeIds = [70], Expectation = new ConfigurationTestExpectation(ConfigurationTestExpectationKind.InScope)
+        };
+        // Each read returns a fresh copy, as the database does.
+        _testRepository.Setup(r => r.GetTestCaseAsync(43)).ReturnsAsync(() => new ConfigurationTestCase
+        {
+            Id = stored.Id, Name = stored.Name, Kind = stored.Kind, SyncRuleId = stored.SyncRuleId,
+            ConnectedObjectTypeIds = [.. stored.ConnectedObjectTypeIds], Expectation = stored.Expectation
+        });
+        ConfigurationTestCase? updated = null;
+        _testRepository.Setup(r => r.UpdateTestCaseAsync(It.IsAny<ConfigurationTestCase>())).Callback<ConfigurationTestCase>(c => updated = c).Returns(Task.CompletedTask);
+
+        await _controller.UpdateAsync(43, new UpdateConfigurationTestCaseRequest { Name = "Renamed" });
+        var leftOut = updated!.ConnectedObjectTypeIds.ToList();
+        await _controller.UpdateAsync(43, new UpdateConfigurationTestCaseRequest { ConnectedObjectTypeIds = [] });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(leftOut, Is.EqualTo(new[] { 70 }));
+            Assert.That(updated.ConnectedObjectTypeIds, Is.Empty);
+        }
+    }
+
+    [Test]
     public async Task UpdateAsync_OnlyAName_LeavesEverythingElseAsItIsAsync()
     {
         var stored = StoredFlowCase();
@@ -456,6 +510,25 @@ public class ConfigurationTestsControllerTests
     }
 
     #endregion
+
+    /// <summary>
+    /// An export Synchronisation Rule (id 8) whose Scope is "Has user in PANOPLY AD" (Object Type 70).
+    /// </summary>
+    private SyncRule ExportRuleTestingAConnection()
+    {
+        var panoply = new ConnectedSystem { Id = 4, Name = "PANOPLY AD" };
+        var user = new ConnectedSystemObjectType { Id = 70, Name = "user", ConnectedSystemId = 4, ConnectedSystem = panoply };
+        var rule = new SyncRule
+        {
+            Id = 8, Name = "Directory Export", Direction = SyncRuleDirection.Export,
+            ConnectedSystemObjectType = _rule.ConnectedSystemObjectType, MetaverseObjectType = _rule.MetaverseObjectType
+        };
+        var group = new SyncRuleScopingCriteriaGroup();
+        group.Criteria.Add(new SyncRuleScopingCriteria { ConnectedObjectType = user, ConnectedObjectTypeId = 70, ComparisonType = JIM.Models.Search.SearchComparisonType.HasValue });
+        rule.ObjectScopingCriteriaGroups.Add(group);
+        _connectedSystems.Setup(r => r.GetSyncRuleAsync(rule.Id)).ReturnsAsync(rule);
+        return rule;
+    }
 
     private static ConfigurationTestCase StoredFlowCase() => new()
     {

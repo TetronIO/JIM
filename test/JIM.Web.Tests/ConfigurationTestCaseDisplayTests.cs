@@ -20,6 +20,16 @@ public class ConfigurationTestCaseDisplayTests
     private static readonly SyncRule Rule = BuildRule();
 
     [Test]
+    public void RecordedConnections_KeepsTheTickedOnesTheScopeTestsInItsOrder()
+    {
+        // #2787: a tick for a connection the Scope no longer tests (Object Type 99) is dropped, since it cannot change
+        // the outcome.
+        IReadOnlyList<ConnectionSampleDescriptor> offered = [new(71, "contact in PANOPLY AD"), new(70, "user in PANOPLY AD")];
+
+        Assert.That(ConfigurationTestCaseDisplay.RecordedConnections(offered, [99, 70, 71]), Is.EqualTo(new[] { 71, 70 }));
+    }
+
+    [Test]
     public void DescribeCoverage_AttributeFlowCase_NamesItsTarget()
     {
         var testCase = new ConfigurationTestCase { Kind = ConfigurationTestCaseKind.AttributeFlow, SyncRuleMappingId = 3 };

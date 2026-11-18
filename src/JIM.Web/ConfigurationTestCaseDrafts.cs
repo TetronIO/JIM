@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Servers.ConfigurationTests;
+using JIM.Application.Servers.Scoping;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Logic.Scoping;
@@ -79,14 +80,16 @@ public static class ConfigurationTestCaseDrafts
 
     /// <summary>
     /// A test of a Synchronisation Rule's Scope. Nothing to save when synchronisation could not tell whether the
-    /// object is in scope: the criteria need fixing first.
+    /// object is in scope: the criteria need fixing first. Of the connections the test was run with, the case records
+    /// those the rule's criteria test (#2787); any other cannot change the outcome.
     /// </summary>
     public static ConfigurationTestCase? FromScopeTest(SyncRule syncRule, IReadOnlyList<(string AttributeName, TestInputState State)> inputs,
-        ScopeTestResult result, DateTime? asOfUtc, DateTime ranAtUtc)
+        ScopeTestResult result, IReadOnlyCollection<int> connectedObjectTypeIds, DateTime? asOfUtc, DateTime ranAtUtc)
     {
         ArgumentNullException.ThrowIfNull(syncRule);
         ArgumentNullException.ThrowIfNull(inputs);
         ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(connectedObjectTypeIds);
         if (syncRule.Id <= 0 || result.InputErrors.Count > 0 || result.Explanation is not { } explanation ||
             explanation.Outcome == ScopingRuleOutcome.Undetermined)
             return null;
@@ -98,6 +101,7 @@ public static class ConfigurationTestCaseDrafts
             Kind = ConfigurationTestCaseKind.Scope,
             SyncRuleId = syncRule.Id,
             Inputs = inputs.Select(input => new ConfigurationTestInput(null, input.AttributeName, ValuesOf(input.State))).ToList(),
+            ConnectedObjectTypeIds = ConfigurationTestCaseDisplay.RecordedConnections(ScopeTester.DescribeConnections(syncRule), connectedObjectTypeIds),
             RunAsOfUtc = asOfUtc ?? (ConfigurationTestRunner.ScopeReadsTheClock(syncRule) ? ranAtUtc : null),
             Expectation = new ConfigurationTestExpectation(inScope ? ConfigurationTestExpectationKind.InScope : ConfigurationTestExpectationKind.OutOfScope)
         };

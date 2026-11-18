@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using JIM.Application.Servers.Scoping;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
@@ -168,7 +169,7 @@ public class ConfigurationSnapshotService
         children.Add(BuildAttributeFlowRules(rule.AttributeFlowRules, connectedSystemNames));
         children.Add(BuildObjectMatchingRules(rule.ObjectMatchingRules));
         children.Add(BuildScopingCriteriaGroups("objectScopingCriteriaGroups", "Scope", rule.ObjectScopingCriteriaGroups));
-        AddTestCases(children, testCases, rule.AttributeFlowRules, hashKey);
+        AddTestCases(children, testCases, rule.AttributeFlowRules, ScopeTester.DescribeConnections(rule), hashKey);
 
         return new ConfigurationSnapshot
         {
@@ -467,7 +468,7 @@ public class ConfigurationSnapshotService
         children.Add(BuildRunProfiles(connectedSystem.RunProfiles));
         children.Add(BuildObjectTypes(connectedSystem.ObjectTypes));
         children.Add(BuildPartitions(connectedSystem.Partitions));
-        AddTestCases(children, testCases, attributeFlows: [], hashKey);
+        AddTestCases(children, testCases, attributeFlows: [], connections: [], hashKey);
 
         return new ConfigurationSnapshot
         {
@@ -592,7 +593,7 @@ public class ConfigurationSnapshotService
     /// </para>
     /// </summary>
     private static void AddTestCases(List<ConfigurationSnapshotNode> nodes, IReadOnlyList<ConfigurationTestCase> testCases,
-        IReadOnlyList<SyncRuleMapping> attributeFlows, byte[] hashKey)
+        IReadOnlyList<SyncRuleMapping> attributeFlows, IReadOnlyList<ConnectionSampleDescriptor> connections, byte[] hashKey)
     {
         if (testCases.Count == 0)
             return;
@@ -621,6 +622,21 @@ public class ConfigurationSnapshotService
 
             children.Add(ConfigurationSnapshotNode.Secret("testCaseInputs",
                 ComputePlaintextHash(JsonSerializer.Serialize(testCase.Inputs, SerialiserOptions), hashKey), "Inputs"));
+
+            // The connections a Scope case records (#2787) name Object Types, not personal data, so they are kept as
+            // they are. Recorded only when there are some, so snapshots taken before they existed compare as unchanged.
+            if (testCase.ConnectedObjectTypeIds.Count > 0)
+            {
+                var connectionItems = new List<ConfigurationSnapshotNode>();
+                foreach (var id in testCase.ConnectedObjectTypeIds.Order())
+                {
+                    var node = ConfigurationSnapshotNode.Scalar("testCaseConnectedObjectTypeId", Render(id), "Connection",
+                        connections.FirstOrDefault(c => c.ConnectedObjectTypeId == id)?.Description);
+                    node.ItemId = id;
+                    connectionItems.Add(node);
+                }
+                children.Add(ConfigurationSnapshotNode.CollectionNode("testCaseConnections", connectionItems, "Connections"));
+            }
             items.Add(ConfigurationSnapshotNode.ObjectNode("testCase", children, testCase.Name, testCase.Id));
         }
 

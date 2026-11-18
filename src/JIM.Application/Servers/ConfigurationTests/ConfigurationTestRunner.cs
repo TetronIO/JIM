@@ -129,7 +129,7 @@ public sealed class ConfigurationTestRunner
         if (problems.Count > 0)
             return NeedsReview(testCase, problems, asOf, ranAsOfNow);
 
-        var tested = ScopeTester.Test(syncRule, Samples(testCase), asOf);
+        var tested = ScopeTester.Test(syncRule, Samples(testCase), asOf, testCase.ConnectedObjectTypeIds);
         if (tested.InputErrors.Count > 0)
             return NeedsReview(testCase, tested.InputErrors, asOf, ranAsOfNow);
 

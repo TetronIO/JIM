@@ -53,6 +53,11 @@ public class ConfigurationTestCase : IAuditable
     public const int MaxAttributeNameLength = 400;
 
     /// <summary>
+    /// The most connections a Scope test case may record.
+    /// </summary>
+    public const int MaxConnections = 100;
+
+    /// <summary>
     /// The most test cases one owner may hold: a Synchronisation Rule, or a Connected System's Simple mode Object
     /// Matching Rules. Every save of what a case covers runs it twice in the save gate, so the number is bounded.
     /// </summary>
@@ -102,6 +107,14 @@ public class ConfigurationTestCase : IAuditable
     /// criteria resolve against. Null runs it as of the time it runs.
     /// </summary>
     public DateTime? RunAsOfUtc { get; set; }
+
+    /// <summary>
+    /// For a <see cref="ConfigurationTestCaseKind.Scope"/> case of an export rule, the Connected System Object Types the
+    /// sample Metaverse Object is joined to, which the rule's connection criteria test (#2787); empty for joined to none,
+    /// and for every other kind. A connection no criterion tests any more changes nothing when the case runs, and is
+    /// dropped when the case is next saved.
+    /// </summary>
+    public List<int> ConnectedObjectTypeIds { get; set; } = [];
 
     /// <summary>
     /// The inputs as stored: a JSON array of <see cref="ConfigurationTestInput"/>. Read and write
@@ -223,6 +236,16 @@ public class ConfigurationTestCase : IAuditable
             return $"A test case can expect at most {MaxValues} values; this one expects {expectation.Values.Count}.";
         if (expectation.Values.Any(value => value.Length > MaxValueLength))
             return $"Each expected value can be at most {MaxValueLength:N0} characters.";
+
+        var connections = ConnectedObjectTypeIds ?? [];
+        if (connections.Count > 0 && Kind != ConfigurationTestCaseKind.Scope)
+            return $"Only a Scope test case records connections; a {Kind} test case cannot.";
+        if (connections.Count > MaxConnections)
+            return $"A test case can record at most {MaxConnections} connections; this one records {connections.Count}.";
+        if (connections.Any(id => id <= 0))
+            return "Each connection a test case records names an Object Type by its id, which is a positive number.";
+        if (connections.Distinct().Count() != connections.Count)
+            return "A connection is recorded more than once; record each Object Type once.";
 
         var inputs = Inputs;
         if (inputs.Count > MaxInputs)

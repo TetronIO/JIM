@@ -170,7 +170,9 @@ public static class ConfigurationChangeClassifier
         ["testCaseExpectation"] = C,
         ["testCaseInOrder"] = C,
         ["testCaseExpectedValues"] = C,
-        ["testCaseInputs"] = C
+        ["testCaseInputs"] = C,
+        ["testCaseConnections"] = C,
+        ["testCaseConnectedObjectTypeId"] = C
     };
 
     private static readonly Dictionary<string, ConfigurationChangeClass> ConnectedSystemKeys = new(StringComparer.Ordinal)
@@ -301,7 +303,9 @@ public static class ConfigurationChangeClassifier
         ["testCaseExpectation"] = C,
         ["testCaseInOrder"] = C,
         ["testCaseExpectedValues"] = C,
-        ["testCaseInputs"] = C
+        ["testCaseInputs"] = C,
+        ["testCaseConnections"] = C,
+        ["testCaseConnectedObjectTypeId"] = C
     };
 
     /// <summary>

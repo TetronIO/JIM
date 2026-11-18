@@ -31,6 +31,10 @@ function Set-JIMConfigurationTestCase {
     .PARAMETER Attributes
         For a Scope or Object Matching Rule case, the object's values, replacing those the case holds.
 
+    .PARAMETER ConnectedObjectTypeId
+        For a Scope case, the IDs of the Connected System Object Types the object is joined to, replacing the
+        connections the case records. Give an empty list to record none.
+
     .PARAMETER RunAsOf
         A new instant to run the case as of. A time without a time zone is read as UTC.
 
@@ -97,6 +101,10 @@ function Set-JIMConfigurationTestCase {
         [hashtable]$Attributes,
 
         [Parameter()]
+        [AllowEmptyCollection()]
+        [int[]]$ConnectedObjectTypeId,
+
+        [Parameter()]
         [datetime]$RunAsOf,
 
         [Parameter()]
@@ -139,6 +147,8 @@ function Set-JIMConfigurationTestCase {
         if ($PSBoundParameters.ContainsKey('CsAttributes')) { $body.csAttributes = ConvertTo-JIMTestCaseAttributes $CsAttributes }
         if ($PSBoundParameters.ContainsKey('MvAttributes')) { $body.mvAttributes = ConvertTo-JIMTestCaseAttributes $MvAttributes }
         if ($PSBoundParameters.ContainsKey('Attributes')) { $body.attributes = ConvertTo-JIMTestCaseAttributes $Attributes }
+        # Sent even when empty: an empty list records no connections, where leaving it out keeps those recorded.
+        if ($PSBoundParameters.ContainsKey('ConnectedObjectTypeId')) { $body.connectedObjectTypeIds = @($ConnectedObjectTypeId) }
         if ($PSBoundParameters.ContainsKey('RunAsOf')) { $body.runAsOf = ConvertTo-JIMTestCaseValue $RunAsOf }
         if ($ClearRunAsOf) { $body.clearRunAsOf = $true }
         if ($PSBoundParameters.ContainsKey('Expect')) {

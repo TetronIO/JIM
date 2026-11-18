@@ -38,7 +38,7 @@ The quickest way to make a case is from a test you have just run.
 
 1. Open the tester: the **Try it** pane in an Attribute Flow's dialog, or **Test this scope** on a Synchronisation Rule's Scope tab.
 2. Give the inputs values. An Attribute Flow's result follows them as you type; for a scope, choose **Run test**.
-3. Choose **Save as test case**. The dialog holds the values you tested as the inputs, and today's result as what the case expects.
+3. Choose **Save as test case**. The dialog holds the values you tested as the inputs, the connections you ticked for a scope, and today's result as what the case expects.
 4. Give the case a name that says what it checks, change anything you need, and choose **Save**.
 
 **Save as test case** appears once the Attribute Flow or Synchronisation Rule is saved. The case runs against the configuration as saved, so save any edits you were testing before you rely on the case.
@@ -48,7 +48,8 @@ The quickest way to make a case is from a test you have just run.
 1. Open the Synchronisation Rule's **Tests** tab, or for a Connected System in Simple mode, its **Matching** tab.
 2. Choose **New test case**, then what it tests: the **Scope**, an Attribute Flow, a Generated Value, or an Object Matching Rule.
 3. Give each input the configuration reads a value. Each value is edited as its attribute's type: a date for a date and time attribute, several values for a multi-valued attribute. Tick **No value** for an input that should have none.
-4. Choose what the case expects (see [What a case can expect](#what-a-case-can-expect)) and choose **Save**.
+4. For a Scope with a [connection criterion](scoping-criteria.md#scoping-by-connection), tick under **Connections** each one the object should have, such as **Has user in PANOPLY AD**. One left unticked is a connection the object does not have.
+5. Choose what the case expects (see [What a case can expect](#what-a-case-can-expect)) and choose **Save**.
 
 ## :material-play-circle-outline: Run test cases
 
@@ -83,7 +84,7 @@ From a script, the cmdlets that save these changes take `-AcceptNewResult` and `
 
 ## :material-pencil-outline: Edit or delete a test case
 
-Choose the edit button on a case to change its name, inputs, run-as-of time or expectation. The editor lists each input the configuration reads now; one the case gives that the configuration no longer reads is shown as **No longer read**, and you can remove it. What a case covers and what it tests cannot change: create another case to test something else.
+Choose the edit button on a case to change its name, inputs, connections, run-as-of time or expectation. The editor lists each input the configuration reads now; one the case gives that the configuration no longer reads is shown as **No longer read**, and you can remove it. It lists only the connections the Scope tests now: a connection whose criterion has been removed cannot change the result, so the case ignores it when it runs and drops it when you next save it. What a case covers and what it tests cannot change: create another case to test something else.
 
 Deleting a case changes nothing it covered.
 
@@ -125,6 +126,7 @@ A test case is refused when it is larger than these, in the portal, the REST API
 | Values | 100 per input, and 100 expected values |
 | Value length | 4,000 characters, for an input value or an expected value |
 | Input attribute name | 400 characters |
+| Connections | 100 per case |
 
 A Synchronisation Rule holds at most 200 test cases, and so do a Connected System's Simple mode Object Matching Rules between them, because every save runs the cases it could affect. A new case past that is refused.
 

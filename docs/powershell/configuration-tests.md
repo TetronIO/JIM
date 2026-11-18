@@ -80,6 +80,7 @@ Each test case, with its inputs (CsAttributes and MvAttributes for an Attribute 
 | `CsAttributes` | `hashtable` | For an Attribute Flow or Generated Value case, the Connected System Object's values by attribute name: a list of text values, empty for an attribute with no value. Left out of a list unless it asks for `include=inputs`. |
 | `MvAttributes` | `hashtable` | For an Attribute Flow or Generated Value case, the Metaverse Object's values by attribute name. Left out of a list unless it asks for `include=inputs`. |
 | `Attributes` | `hashtable` | For a Scope or Object Matching Rule case, the object's values by attribute name. Left out of a list unless it asks for `include=inputs`. |
+| `ConnectedObjectTypeIds` | `int[]` | For a Scope case, the ids of the Connected System Object Types the sample object is joined to, which an export rule's connection criteria test ("Has user in ..."); empty for joined to none. Empty for every other kind. |
 | `Expectation` | `object` | What the case expects. It has `Kind`, `Values` and `InOrder`. |
 | `Created` | `datetime` | When the case was saved, in UTC. |
 | `CreatedByName` | `string` | Who saved the case. |
@@ -111,7 +112,7 @@ Saves a test case covering one Attribute Flow (`-SyncRuleMappingId`, with `-Kind
 New-JIMConfigurationTestCase -Name <string> -SyncRuleMappingId <int> -Expect <string> [-Description <string>] [-Kind <string>] [-CsAttributes <hashtable>] [-MvAttributes <hashtable>] [-RunAsOf <datetime>] [-ExpectedValues <object[]>] [-InOrder] [-WhatIf] [-Confirm]
 
 # Scope
-New-JIMConfigurationTestCase -Name <string> -SyncRuleId <int> -Expect <string> [-Description <string>] [-Attributes <hashtable>] [-RunAsOf <datetime>] [-ExpectedValues <object[]>] [-InOrder] [-WhatIf] [-Confirm]
+New-JIMConfigurationTestCase -Name <string> -SyncRuleId <int> -Expect <string> [-Description <string>] [-Attributes <hashtable>] [-ConnectedObjectTypeId <int[]>] [-RunAsOf <datetime>] [-ExpectedValues <object[]>] [-InOrder] [-WhatIf] [-Confirm]
 
 # ObjectMatchingRule
 New-JIMConfigurationTestCase -Name <string> -ObjectMatchingRuleId <int> -Expect <string> [-Description <string>] [-Attributes <hashtable>] [-RunAsOf <datetime>] [-ExpectedValues <object[]>] [-InOrder] [-WhatIf] [-Confirm]
@@ -130,6 +131,7 @@ New-JIMConfigurationTestCase -Name <string> -ObjectMatchingRuleId <int> -Expect 
 | `CsAttributes` | `hashtable` | No (AttributeFlow) |  | For an Attribute Flow or Generated Value case, the Connected System Object's values, keyed by attribute name. `$null` is no value, and an array gives several values. A [datetime] is sent as ISO 8601. |
 | `MvAttributes` | `hashtable` | No (AttributeFlow) |  | For an Attribute Flow or Generated Value case, the Metaverse Object's values, keyed by attribute name, as for CsAttributes. |
 | `Attributes` | `hashtable` | No (Scope, ObjectMatchingRule) |  | For a Scope or Object Matching Rule case, the object's values, keyed by attribute name, as for CsAttributes. |
+| `ConnectedObjectTypeId` | `int[]` | No (Scope) |  | For a Scope case of an export rule, the IDs of the Connected System Object Types the object is joined to, as `Test-JIMScope` takes them, for the rule's connection criteria. Each must be one the rule's Scope tests. Omit it for joined to none. |
 | `RunAsOf` | `datetime` | No |  | The instant to run the case as of: what Now() and Today() read, and what relative date criteria resolve against. Omit it to run as of the time the case runs. A time without a time zone is read as UTC. |
 | `Expect` | `string` | Yes |  | The outcome expected. Values, NoValue, Error or AnyValue for an Attribute Flow, Generated Value or Object Matching Rule case; InScope or OutOfScope for a Scope case. One of `Values`, `NoValue`, `Error`, `AnyValue`, `InScope` or `OutOfScope`. |
 | `ExpectedValues` | `object[]` | No |  | With `-Expect` Values, the values expected. Each is compared with what the configuration gives as a value of its type, so a date can be written 2026-03-02. |
@@ -152,6 +154,10 @@ New-JIMConfigurationTestCase -Name 'Hire date as ISO' -SyncRuleMappingId 9 -CsAt
 New-JIMConfigurationTestCase -Name 'Leavers drop out of scope' -SyncRuleId 12 -Attributes @{ leaveDate = '2026-01-15' } -RunAsOf '2026-03-01' -Expect OutOfScope
 ```
 
+```powershell title="Check a Scope that tests a connection"
+New-JIMConfigurationTestCase -Name 'Directory users stay in scope' -SyncRuleId 14 -ConnectedObjectTypeId 70 -Expect InScope
+```
+
 ```powershell title="Check a Generated Value's base"
 New-JIMConfigurationTestCase -Name 'Account name base' -SyncRuleMappingId 14 -Kind GeneratedValue -MvAttributes @{ 'First Name' = 'Joe'; 'Last Name' = 'Bloggs' } -Expect Values -ExpectedValues 'jbloggs'
 ```
@@ -170,7 +176,7 @@ Changes a test case's name, description, inputs, run-as-of time or expectation; 
 ### Syntax
 
 ```powershell
-Set-JIMConfigurationTestCase [-Id] <int> [-Name <string>] [-Description <string>] [-CsAttributes <hashtable>] [-MvAttributes <hashtable>] [-Attributes <hashtable>] [-RunAsOf <datetime>] [-ClearRunAsOf] [-Expect <string>] [-ExpectedValues <object[]>] [-InOrder] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMConfigurationTestCase [-Id] <int> [-Name <string>] [-Description <string>] [-CsAttributes <hashtable>] [-MvAttributes <hashtable>] [-Attributes <hashtable>] [-ConnectedObjectTypeId <int[]>] [-RunAsOf <datetime>] [-ClearRunAsOf] [-Expect <string>] [-ExpectedValues <object[]>] [-InOrder] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -183,6 +189,7 @@ Set-JIMConfigurationTestCase [-Id] <int> [-Name <string>] [-Description <string>
 | `CsAttributes` | `hashtable` | No |  | For an Attribute Flow or Generated Value case, the Connected System Object's values, replacing those the case holds for that side. `$null` is no value, and an array gives several values. |
 | `MvAttributes` | `hashtable` | No |  | For an Attribute Flow or Generated Value case, the Metaverse Object's values, replacing those the case holds for that side. |
 | `Attributes` | `hashtable` | No |  | For a Scope or Object Matching Rule case, the object's values, replacing those the case holds. |
+| `ConnectedObjectTypeId` | `int[]` | No |  | For a Scope case, the IDs of the Connected System Object Types the object is joined to, replacing the connections the case records. Give an empty list to record none. |
 | `RunAsOf` | `datetime` | No |  | A new instant to run the case as of. A time without a time zone is read as UTC. |
 | `ClearRunAsOf` | `switch` | No |  | Runs the case as of the time it runs rather than a fixed instant. |
 | `Expect` | `string` | No |  | A new expected outcome, replacing the case's expectation: Values, NoValue, Error or AnyValue for an Attribute Flow, Generated Value or Object Matching Rule case; InScope or OutOfScope for a Scope case. One of `Values`, `NoValue`, `Error`, `AnyValue`, `InScope` or `OutOfScope`. |
