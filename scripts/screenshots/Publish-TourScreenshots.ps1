@@ -123,3 +123,10 @@ if ($env:GITHUB_STEP_SUMMARY) {
     "### Product tour screenshots`n`n[$Repository pull request]($url) for $Version ($($result.Published.Count) images). $outcome" |
         Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 }
+if ($MergeWhenReleased -and $merged) {
+    # release.yml refreshed nothing (the pull request was not open then), so this is the only chance to refresh GitHub's
+    # cached copies of the README's homepage screenshots for this release.
+    $env:README_TOKEN = $env:JIM_RELEASE_TOKEN
+    & (Join-Path $PSScriptRoot 'Clear-ReadmeScreenshotCache.ps1') -Version $Version -SiteRepository $Repository
+    exit $LASTEXITCODE
+}
