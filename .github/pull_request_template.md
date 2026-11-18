@@ -60,7 +60,7 @@ reviewers) can see the reason.
 ## Checklist
 
 - [ ] My commit messages are descriptive and reference the relevant Issue (if any)
-- [ ] My code follows the conventions in [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md)
+- [ ] My code follows the conventions in [`engineering/DEVELOPER_GUIDE.md`](/engineering/DEVELOPER_GUIDE.md)
 - [ ] User-facing text uses British English (en-GB)
 - [ ] This PR does **not** include security-sensitive information (real credentials, customer data, internal hostnames)
 
