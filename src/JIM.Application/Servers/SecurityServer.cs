@@ -458,10 +458,8 @@ public class SecurityServer
     /// The keys scoped to a Connected System's SCIM 2.0 Service Provider endpoint, usable or not, so an administrator
     /// can see each one's expiry and last use and tell when an old key has gone quiet after a rotation.
     /// </summary>
-    /// <exception cref="Exceptions.FeatureDisabledException">The SCIM 2.0 Service Provider feature is off.</exception>
     public async Task<List<ApiKey>> GetScimServiceProviderKeysAsync(int connectedSystemId)
     {
-        await Application.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogue.ScimServiceProvider.Key);
         return await Application.Repository.ApiKeys.GetByScopeConnectedSystemAsync(connectedSystemId);
     }
 
@@ -475,7 +473,6 @@ public class SecurityServer
     /// <param name="expiresAt">When the key stops working; a year from now when null, and at most two years.</param>
     /// <param name="initiatedBy">Who is minting it.</param>
     /// <param name="changeReason">Why, for the configuration change history.</param>
-    /// <exception cref="Exceptions.FeatureDisabledException">The SCIM 2.0 Service Provider feature is off.</exception>
     /// <exception cref="ArgumentException">The Connected System does not exist or uses another Connector, or the expiry is in the past or beyond two years.</exception>
     /// <exception cref="InvalidOperationException">The Connected System already has two keys that can be used.</exception>
     public async Task<CreatedApiKey> CreateScimServiceProviderKeyAsync(int connectedSystemId, string name, string? description,
@@ -505,8 +502,6 @@ public class SecurityServer
     private async Task<(ApiKey Key, string Secret)> PrepareScimServiceProviderKeyAsync(int connectedSystemId, string name,
         string? description, DateTime? expiresAt)
     {
-        await Application.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogue.ScimServiceProvider.Key);
-
         var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId)
             ?? throw new ArgumentException($"Connected System {connectedSystemId} was not found.", nameof(connectedSystemId));
         if (connectedSystem.ConnectorDefinition?.Name != ConnectorConstants.ScimServiceProviderConnectorName)

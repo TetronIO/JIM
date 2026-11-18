@@ -97,15 +97,13 @@ Write-Host "People: $UserCount" -ForegroundColor Gray
 Write-Host ""
 
 # Step 1: Connect and turn the feature on
-Write-TestStep "Step 1" "Connecting to JIM and turning on the SCIM 2.0 Service Provider"
+Write-TestStep "Step 1" "Connecting to JIM"
 if (-not $ApiKey) { throw "API key required for authentication" }
 $modulePath = "$PSScriptRoot/../../src/JIM.PowerShell/JIM.psd1"
 Remove-Module JIM -Force -ErrorAction SilentlyContinue
 Import-Module $modulePath -Force -ErrorAction Stop
 Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
-# In Development: only a development host or this harness can turn it on.
-Enable-JIMFeature -Name "Features.ScimServiceProvider" | Out-Null
-Write-Host "  OK Connected; Features.ScimServiceProvider on" -ForegroundColor Green
+Write-Host "  OK Connected" -ForegroundColor Green
 
 # Step 2: Resolve connector definitions
 Write-TestStep "Step 2" "Resolving connector definitions"
@@ -115,7 +113,7 @@ $clientConnector = $connectors | Where-Object { $_.name -eq "JIM SCIM 2.0 Client
 $serviceProviderConnector = $connectors | Where-Object { $_.name -eq "JIM SCIM 2.0 Service Provider Connector" }
 if (-not $fileConnector) { throw "JIM File Connector definition not found." }
 if (-not $clientConnector) { throw "JIM SCIM 2.0 Client Connector definition not found." }
-if (-not $serviceProviderConnector) { throw "JIM SCIM 2.0 Service Provider Connector definition not found. Is Features.ScimServiceProvider on?" }
+if (-not $serviceProviderConnector) { throw "JIM SCIM 2.0 Service Provider Connector definition not found." }
 Write-Host "  OK File ($($fileConnector.id)), SCIM client ($($clientConnector.id)), SCIM service provider ($($serviceProviderConnector.id))" -ForegroundColor Green
 
 function Get-ConnectorSettingId {

@@ -65,7 +65,6 @@ public class ScimServiceProviderKeyDatabaseTests
             await ctx.SaveChangesAsync();
         }
 
-        await SetFlagAsync(true);
         _systemId = await CreateConnectedSystemAsync(ConnectorConstants.ScimServiceProviderConnectorName);
     }
 
@@ -142,14 +141,6 @@ public class ScimServiceProviderKeyDatabaseTests
     public void CreateScimServiceProviderKeyAsync_NoSuchConnectedSystem_RefusedAsync()
     {
         Assert.That(() => MintAsync(connectedSystemId: int.MaxValue), Throws.ArgumentException);
-    }
-
-    [Test]
-    public async Task CreateScimServiceProviderKeyAsync_FlagOff_RefusedAsync()
-    {
-        await SetFlagAsync(false);
-
-        Assert.That(() => MintAsync(), Throws.InstanceOf<FeatureDisabledException>());
     }
 
     [Test]
@@ -258,9 +249,6 @@ public class ScimServiceProviderKeyDatabaseTests
         await WithJimAsync(jim => jim.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, _administrator));
         return connectedSystem.Id;
     }
-
-    private Task SetFlagAsync(bool enabled) =>
-        WithJimAsync(jim => jim.FeatureFlags.SetFeatureFlagAsync(FeatureFlagCatalogue.ScimServiceProvider.Key, enabled, _administrator, allowInDevelopment: true));
 
     private async Task<T> WithJimAsync<T>(Func<JimApplication, Task<T>> call)
     {

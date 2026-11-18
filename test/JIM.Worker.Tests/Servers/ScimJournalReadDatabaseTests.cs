@@ -68,7 +68,6 @@ public class ScimJournalReadDatabaseTests
             await ctx.SaveChangesAsync();
         }
 
-        await SetFlagAsync(true);
         var definition = await WithJimAsync(jim => jim.ConnectedSystems.GetConnectorDefinitionAsync(ConnectorConstants.ScimServiceProviderConnectorName));
         var connectedSystem = new ConnectedSystem { Name = "Entra provisioning", ConnectorDefinitionId = definition!.Id };
         await WithJimAsync(jim => jim.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, _administrator));
@@ -105,14 +104,6 @@ public class ScimJournalReadDatabaseTests
         var middle = await WithJimAsync(jim => jim.Scim.GetJournalAsync(_systemId, alice, all[0].ChangeSequence, all[1].ChangeSequence));
 
         Assert.That(middle.Select(e => e.ChangeSequence), Is.EqualTo(new[] { all[1].ChangeSequence }));
-    }
-
-    [Test]
-    public async Task GetJournalAsync_FlagOff_RefusedAsync()
-    {
-        await SetFlagAsync(false);
-
-        Assert.That(() => WithJimAsync(jim => jim.Scim.GetJournalAsync(_systemId, Guid.NewGuid(), null, null)), Throws.InstanceOf<FeatureDisabledException>());
     }
 
     [Test]
@@ -231,9 +222,6 @@ public class ScimJournalReadDatabaseTests
     }
 
     private ScimRequestContext Context() => new(_systemId, "https://jim.example/scim/v2", _administrator.Id, _administrator.Name, "203.0.113.9");
-
-    private Task SetFlagAsync(bool enabled) =>
-        WithJimAsync(jim => jim.FeatureFlags.SetFeatureFlagAsync(FeatureFlagCatalogue.ScimServiceProvider.Key, enabled, _administrator, allowInDevelopment: true));
 
     private async Task<T> WithJimAsync<T>(Func<JimApplication, Task<T>> call)
     {

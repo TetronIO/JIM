@@ -372,14 +372,11 @@ else if (_drift is { TrackingDisabled: true })
         </MudTabPanel>
 
         @* The SCIM endpoint's own tab, beside Details: only a Connected System using the SCIM 2.0 Service Provider
-           Connector has one, and only while the Preview feature is on, so its label carries the Preview chip. *@
+           Connector has one. *@
         @if (_hasScimEndpoint)
         {
             <MudTabPanel Text="SCIM">
-                <TabContent>SCIM <PreviewChip Class="ml-1" /></TabContent>
-                <ChildContent>
-                    <ConnectedSystemScimTab ConnectedSystem="_connectedSystem" />
-                </ChildContent>
+                <ConnectedSystemScimTab ConnectedSystem="_connectedSystem" />
             </MudTabPanel>
         }
 
@@ -535,8 +532,7 @@ else if (_drift is { TrackingDisabled: true })
             return;
         }
 
-        _hasScimEndpoint = _connectedSystem.ConnectorDefinition.Name == JIM.Connectors.ConnectorConstants.ScimServiceProviderConnectorName
-            && await jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.ScimServiceProvider.Key);
+        _hasScimEndpoint = _connectedSystem.ConnectorDefinition.Name == JIM.Connectors.ConnectorConstants.ScimServiceProviderConnectorName;
 
         // Where each partition's next Delta Import starts (#2715), for the Scope tab. Read by id, on a Core load of its own:
         // describing a watermark creates the Connector, which must never touch the instance this page edits.

@@ -7,7 +7,7 @@ audience: automation-author
 
 # SCIM Service Provider
 
-A Connected System that uses the SCIM 2.0 Service Provider Connector has a SCIM endpoint of its own, which identity providers push Users and Groups to. These cmdlets manage the keys those identity providers call it with, and read the endpoint's base URL, what it holds and the resource types and schemas it serves. The SCIM 2.0 Service Provider is a [Preview feature](../administration/preview-features.md); every cmdlet here fails while it is turned off.
+A Connected System that uses the SCIM 2.0 Service Provider Connector has a SCIM endpoint of its own, which identity providers push Users and Groups to. These cmdlets manage the keys those identity providers call it with, and read the endpoint's base URL, what it holds and the resource types and schemas it serves.
 
 ```jim-diagram
 archetype: flow

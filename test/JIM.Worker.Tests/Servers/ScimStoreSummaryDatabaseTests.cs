@@ -67,7 +67,6 @@ public class ScimStoreSummaryDatabaseTests
             await ctx.SaveChangesAsync();
         }
 
-        await SetFlagAsync(true);
         _systemId = await CreateServiceProviderSystemAsync("Entra provisioning");
     }
 
@@ -147,14 +146,6 @@ public class ScimStoreSummaryDatabaseTests
     }
 
     [Test]
-    public async Task GetStoreSummaryAsync_FlagOff_RefusedAsync()
-    {
-        await SetFlagAsync(false);
-
-        Assert.That(() => WithJimAsync(jim => jim.Scim.GetStoreSummaryAsync(_systemId)), Throws.InstanceOf<FeatureDisabledException>());
-    }
-
-    [Test]
     public async Task GetScimServiceProviderKeysAsync_OnlyThisConnectedSystemsKeysAsync()
     {
         var other = await CreateServiceProviderSystemAsync("Okta provisioning");
@@ -164,14 +155,6 @@ public class ScimStoreSummaryDatabaseTests
         var keys = await WithJimAsync(jim => jim.Security.GetScimServiceProviderKeysAsync(_systemId));
 
         Assert.That(keys.Select(k => k.Id), Is.EqualTo(new[] { mine.Key.Id }));
-    }
-
-    [Test]
-    public async Task GetScimServiceProviderKeysAsync_FlagOff_RefusedAsync()
-    {
-        await SetFlagAsync(false);
-
-        Assert.That(() => WithJimAsync(jim => jim.Security.GetScimServiceProviderKeysAsync(_systemId)), Throws.InstanceOf<FeatureDisabledException>());
     }
 
     #region helpers
@@ -217,9 +200,6 @@ public class ScimStoreSummaryDatabaseTests
         await WithJimAsync(jim => jim.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, _administrator));
         return connectedSystem.Id;
     }
-
-    private Task SetFlagAsync(bool enabled) =>
-        WithJimAsync(jim => jim.FeatureFlags.SetFeatureFlagAsync(FeatureFlagCatalogue.ScimServiceProvider.Key, enabled, _administrator, allowInDevelopment: true));
 
     private async Task<T> WithJimAsync<T>(Func<JimApplication, Task<T>> call)
     {

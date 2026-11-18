@@ -69,7 +69,6 @@ public class ScimServiceProviderControllerDatabaseTests
             await ctx.SaveChangesAsync();
         }
 
-        await SetFlagAsync(true);
         _systemId = await CreateServiceProviderSystemAsync();
     }
 
@@ -351,33 +350,6 @@ public class ScimServiceProviderControllerDatabaseTests
         }
     }
 
-    [Test]
-    public async Task Endpoints_FlagOff_RefusedAsync()
-    {
-        var created = Value<ApiKeyCreateResponseDto>(await CallAsync(c => c.CreateKeyAsync(_systemId, new ScimKeyCreateRequestDto { Name = "Entra key" })));
-        await SetFlagAsync(false);
-        try
-        {
-            using (Assert.EnterMultipleScope())
-            {
-                Assert.That(() => CallAsync(c => c.GetKeysAsync(_systemId)), Throws.InstanceOf<FeatureDisabledException>());
-                Assert.That(() => CallAsync(c => c.GetKeyAsync(_systemId, created.Id)), Throws.InstanceOf<FeatureDisabledException>());
-                Assert.That(() => CallAsync(c => c.UpdateKeyAsync(_systemId, created.Id, new ScimKeyUpdateRequestDto { IsEnabled = false })),
-                    Throws.InstanceOf<FeatureDisabledException>());
-                Assert.That(() => CallAsync(c => c.DeleteKeyAsync(_systemId, created.Id)), Throws.InstanceOf<FeatureDisabledException>());
-                Assert.That(() => CallAsync(c => c.GetSummaryAsync(_systemId)), Throws.InstanceOf<FeatureDisabledException>());
-                Assert.That(() => CallAsync(c => c.GetResourceTypesAsync(_systemId)), Throws.InstanceOf<FeatureDisabledException>());
-                Assert.That(() => CallAsync(c => c.GetSchemasAsync(_systemId)), Throws.InstanceOf<FeatureDisabledException>());
-                Assert.That(() => CallAsync(c => c.GetJournalAsync(_systemId, Guid.NewGuid(), null, null)), Throws.InstanceOf<FeatureDisabledException>());
-                Assert.That(() => CallAsync(c => c.GetRequestsBehindChangeAsync(_systemId, Guid.NewGuid())), Throws.InstanceOf<FeatureDisabledException>());
-            }
-        }
-        finally
-        {
-            await SetFlagAsync(true);
-        }
-    }
-
     #region helpers
 
     private async Task<Guid> CreateUserAsync(int connectedSystemId, string userName)
@@ -465,9 +437,6 @@ public class ScimServiceProviderControllerDatabaseTests
         await WithJimAsync(jim => jim.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, _administrator));
         return connectedSystem.Id;
     }
-
-    private Task SetFlagAsync(bool enabled) =>
-        WithJimAsync(jim => jim.FeatureFlags.SetFeatureFlagAsync(FeatureFlagCatalogue.ScimServiceProvider.Key, enabled, _administrator, allowInDevelopment: true));
 
     private JimDbContext NewContext() => new(new DbContextOptionsBuilder<JimDbContext>()
         .UseNpgsql(_connectionString)

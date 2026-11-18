@@ -93,11 +93,9 @@ public class ScimServer
     /// <summary>
     /// What a Connected System's store holds and how far its imports have read it, for an administrator.
     /// </summary>
-    /// <exception cref="Exceptions.FeatureDisabledException">The SCIM 2.0 Service Provider feature is off.</exception>
     /// <exception cref="ArgumentException">The Connected System does not exist.</exception>
     public async Task<ScimStoreSummary> GetStoreSummaryAsync(int connectedSystemId, CancellationToken cancellationToken = default)
     {
-        await Application.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogue.ScimServiceProvider.Key);
         var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId)
             ?? throw new ArgumentException($"Connected System {connectedSystemId} was not found.", nameof(connectedSystemId));
 
@@ -209,11 +207,9 @@ public class ScimServer
     /// A resource's accepted writes (D17), oldest first: after <paramref name="afterSequence"/> (exclusive) and up to
     /// <paramref name="upToSequence"/> (inclusive) where given, at most <see cref="MaxJournalEntries"/>.
     /// </summary>
-    /// <exception cref="Exceptions.FeatureDisabledException">The SCIM 2.0 Service Provider feature is off.</exception>
     public async Task<List<ScimStoreJournalEntry>> GetJournalAsync(int connectedSystemId, Guid resourceId, long? afterSequence, long? upToSequence,
         CancellationToken cancellationToken = default)
     {
-        await Application.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogue.ScimServiceProvider.Key);
         return await Store.GetJournalEntriesAsync(connectedSystemId, resourceId, afterSequence, upToSequence, MaxJournalEntries, cancellationToken);
     }
 
@@ -223,12 +219,9 @@ public class ScimServer
     /// reached (inclusive). Null when the change is unknown, was not recorded against an import, or its import reached
     /// no watermark (it failed or was cancelled), since then there is no range to read.
     /// </summary>
-    /// <exception cref="Exceptions.FeatureDisabledException">The SCIM 2.0 Service Provider feature is off.</exception>
     public async Task<ScimRequestsBehindChange?> GetRequestsBehindChangeAsync(Guid connectedSystemObjectChangeId,
         CancellationToken cancellationToken = default)
     {
-        await Application.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogue.ScimServiceProvider.Key);
-
         var context = await Store.GetChangeImportContextAsync(connectedSystemObjectChangeId, cancellationToken);
         if (context == null || !Guid.TryParse(context.ExternalId, out var resourceId))
             return null;

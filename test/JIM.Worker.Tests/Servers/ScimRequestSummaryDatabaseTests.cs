@@ -67,7 +67,6 @@ public class ScimRequestSummaryDatabaseTests
             await ctx.SaveChangesAsync();
         }
 
-        await WithJimAsync(jim => jim.FeatureFlags.SetFeatureFlagAsync(FeatureFlagCatalogue.ScimServiceProvider.Key, true, _administrator, allowInDevelopment: true));
         _systemId = await CreateServiceProviderSystemAsync("Entra provisioning");
         _key = (await WithJimAsync(jim => jim.Security.CreateScimServiceProviderKeyAsync(_systemId, "Entra key", null, null, _administrator))).Key;
     }
