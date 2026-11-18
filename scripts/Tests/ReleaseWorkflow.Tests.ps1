@@ -76,7 +76,7 @@ Describe 'publishing the screenshots in release.yml' {
 
     It 'hands the merge script both sites and the release tag' {
         $step = [regex]::Match((Get-WorkflowJob 'publish-screenshots'),
-            '(?ms)^      - name: Merge the screenshot pull requests\s*$.*?^        run: \|\s*$\n(?<run>(?:^          .*\n?)+)').Groups['run'].Value
+            '(?ms)^      - name: Merge the screenshot pull requests\s*$.*?^        run: \|\s*$\n(?<run>(?:^          [^\n]*\n?)+)').Groups['run'].Value
         $step | Should -Not -BeNullOrEmpty
         $run = ($step -split "`n" | ForEach-Object { if ($_.Length -ge 10) { $_.Substring(10) } else { $_ } }) -join "`n"
 
@@ -97,5 +97,47 @@ param([string]`$Version, [string[]]`$Repository)
         $received = Get-Content -LiteralPath $record -Raw | ConvertFrom-Json
         $received.Version | Should -Be 'v0.17.0'
         @($received.Repository) | Should -Be @('TetronIO/junctional.io', 'TetronIO/tetron.io')
+    }
+
+    # The README shows junctional.io's homepage screenshots through GitHub's image proxy, which went on showing
+    # v0.17.0's after v0.18.0 published new ones (#582).
+    Context 'refreshing the README''s screenshots' {
+        BeforeAll {
+            $script:refresh = [regex]::Match((Get-WorkflowJob 'publish-screenshots'),
+                '(?ms)^      - name: Refresh the README''s screenshots\s*$.*?(?=^      - name:|\z)').Value
+        }
+
+        It 'runs after the merge, even when one site failed to merge' {
+            $refresh | Should -Not -BeNullOrEmpty
+            $job = Get-WorkflowJob 'publish-screenshots'
+            $job.IndexOf('- name: Refresh the README''s screenshots') | Should -BeGreaterThan $job.IndexOf('- name: Merge the screenshot pull requests')
+            $refresh | Should -Match '(?m)^        if: \$\{\{ !cancelled\(\) \}\}\s*$'
+            $refresh | Should -Not -Match 'continue-on-error'
+        }
+
+        It 'hands the refresh script the release tag and both tokens' {
+            $run = [regex]::Match($refresh, '(?ms)^        run: \|\s*$\n(?<run>(?:^          [^\n]*\n?)+)').Groups['run'].Value
+            $run = ($run -split "`n" | ForEach-Object { if ($_.Length -ge 10) { $_.Substring(10) } else { $_ } }) -join "`n"
+            $refresh | Should -Match '(?m)^          GH_TOKEN: \$\{\{ steps\.app-token\.outputs\.token \}\}\s*$'
+            $refresh | Should -Match '(?m)^          README_TOKEN: \$\{\{ github\.token \}\}\s*$'
+
+            $record = Join-Path $TestDrive 'refresh.json'
+            $stub = Join-Path $TestDrive 'Clear-ReadmeScreenshotCache.ps1'
+            Set-Content -LiteralPath $stub -Value @"
+param([string]`$Version, [string]`$SiteRepository)
+@{ Version = `$Version; SiteRepository = `$SiteRepository } | ConvertTo-Json | Set-Content -LiteralPath '$record'
+"@
+            $script = Join-Path $TestDrive 'refresh-step.ps1'
+            Set-Content -LiteralPath $script -Value ($run.Replace('./scripts/screenshots/Clear-ReadmeScreenshotCache.ps1', $stub))
+
+            $env:VERSION_TAG = 'v0.18.0'; $env:OWNER = 'TetronIO'
+            try { & pwsh -NoProfile -NonInteractive -Command ". '$script'" 2>&1 | Out-Null }
+            finally { Remove-Item Env:VERSION_TAG, Env:OWNER }
+
+            $LASTEXITCODE | Should -Be 0
+            $received = Get-Content -LiteralPath $record -Raw | ConvertFrom-Json
+            $received.Version | Should -Be 'v0.18.0'
+            $received.SiteRepository | Should -Be 'TetronIO/junctional.io'
+        }
     }
 }

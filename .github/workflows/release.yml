@@ -1036,3 +1036,18 @@ jobs:
           ./scripts/screenshots/Merge-ReleaseScreenshots.ps1 -Version $env:VERSION_TAG `
             -Repository "$env:OWNER/junctional.io", "$env:OWNER/tetron.io"
           exit $LASTEXITCODE
+
+      # The README shows junctional.io's homepage screenshots through GitHub's image proxy, which keeps its own copy and
+      # went on showing v0.17.0's after v0.18.0 published new ones. Once the site serves the new images, the proxy's
+      # copies are purged. Run even when tetron.io failed to merge; when junctional.io's pull request has not merged,
+      # the script leaves the images alone and the job that merges it refreshes them.
+      - name: Refresh the README's screenshots
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          README_TOKEN: ${{ github.token }}
+          VERSION_TAG: ${{ github.ref_name }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          ./scripts/screenshots/Clear-ReadmeScreenshotCache.ps1 -Version $env:VERSION_TAG -SiteRepository "$env:OWNER/junctional.io"
+          exit $LASTEXITCODE

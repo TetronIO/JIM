@@ -1,6 +1,6 @@
 # Screenshot Automation
 
-- **Status:** Doing (all phases built: the release's pre-release run captures and checks the library and opens pull requests on junctional.io and tetron.io, which the release merges when it is published, and the README reads junctional.io's fixed address; junctional.io's first publish was TetronIO/junctional.io#17, merged by hand, and the first unattended publish to both sites is at the next release)
+- **Status:** Done (v0.18.0 was the first release published to junctional.io and tetron.io unattended; its README image stayed stale in GitHub's image proxy, so the release now purges the proxy's copies and junctional.io serves the fixed-address images with `Cache-Control: no-cache`, TetronIO/junctional.io#22)
 - **Created:** 2026-10-11
 - **Author:** JayVDZ
 - **Issue:** [#582](https://github.com/TetronIO/JIM/issues/582)
@@ -121,7 +121,7 @@ The integration runner resets the environment at the start of a run and leaves i
 2. **Scenario 8 data and Production mode** ✅. `-PrepareData`, then the remaining tour entries.
 3. **Terminal screenshots** ✅. The HTML terminal window, built after the mock-ups were approved: `powershell-1` (signing in) to `powershell-3` (a session longer than the terminal).
 4. **The rest of the library** ✅. The 54 images in junctional.io's asset folder that are not on a tour page. Reaching a particular object (a user, a group, the first Full Sync) uses a `fill` step to type into a page's search box, or a list's own URL state (`?q=`, `desc=0`), never an id that changes from run to run.
-5. **Distribution** ✅. The junctional.io pull request; the README reading the fixed address (the address added by TetronIO/junctional.io#16); the tetron.io pull request (`Publish-TetronScreenshots.ps1`).
+5. **Distribution** ✅. The junctional.io pull request; the README reading the fixed address (the address added by TetronIO/junctional.io#16); the tetron.io pull request (`Publish-TetronScreenshots.ps1`); and, after v0.18.0's README image stayed stale in GitHub's image proxy, purging the proxy's copies once the site serves a release's images (`Clear-ReadmeScreenshotCache.ps1`).
 6. **Release workflow** ✅. The `jim-screenshots` job in `pre-release.yml`, after a passing suite, on the same runner and commit. A job there rather than a workflow of its own, because the `jim-prerelease` runner group admits that one file; it cannot hold up a release, since the gate reads the status the suite has already posted.
 7. **Unattended publishing** ✅. The blank and same-theme checks (`ScreenshotChecks.ps1`), junctional.io's build before committing, and the merge when the release is published: `release.yml`'s `publish-screenshots` job (`Merge-ReleaseScreenshots.ps1`), or the screenshots job when the release came first (`-MergeWhenReleased`).
 
