@@ -10538,12 +10538,18 @@ public partial class ConnectedSystemServer
 
     /// <summary>
     /// Stamps <see cref="SyncRule.RuleSaveWarnings"/> for the rule being saved, which other enabled rules it would
-    /// conflict with. An import rule: see <see cref="StampConflictingProjectionWarningsAsync"/> (#2823). An export rule:
-    /// warns when the enabled export rule being saved shares its Metaverse
-    /// Object Type, Connected System and Connected System Object Type with another enabled export rule (#2820). Only one
-    /// export rule may manage an object: a synchronisation exports nothing for an object both rules have in scope, and
-    /// records an ExportRuleOverlap item. Rules for different Metaverse Object Types never cover one object, so they raise
-    /// nothing.
+    /// conflict with. An import rule: see <see cref="StampConflictingProjectionWarningsAsync"/> (#2823). An export rule
+    /// sharing its Metaverse Object Type and Connected System with another enabled export rule is warned about either way:
+    /// <list type="bullet">
+    /// <item>The same Connected System Object Type (#2820): only one export rule may manage an object, so a
+    /// synchronisation exports nothing for an object both rules have in scope, and records an ExportRuleOverlap item.</item>
+    /// <item>A different Connected System Object Type (#2824): a Metaverse Object holds one Connected System Object per
+    /// Connected System, so for an object both rules have in scope, whichever rule provisions it first keeps it and the
+    /// other records a CouldNotExportDueToExistingConnectedSystemObject item on every synchronisation.</item>
+    /// </list>
+    /// Both are warnings, never refusals: rules whose scopes never overlap are a valid configuration, and whether two
+    /// scopes overlap depends on the data. Rules for different Metaverse Object Types never cover one object, so they
+    /// raise nothing.
     /// </summary>
     private async Task StampRuleSaveWarningsAsync(SyncRule syncRule)
     {
@@ -10560,16 +10566,29 @@ public partial class ConnectedSystemServer
         var exportRules = await Application.Repository.ConnectedSystems.GetSyncRuleHeadersAsync(
             syncRule.ResolveMetaverseObjectTypeId(), SyncRuleDirection.Export);
         var objectTypeId = syncRule.ConnectedSystemObjectType?.Id ?? syncRule.ConnectedSystemObjectTypeId;
-        syncRule.RuleSaveWarnings.AddRange(exportRules
-            .Where(other => other.Enabled && other.Id != syncRule.Id &&
-                            other.ConnectedSystemId == syncRule.ConnectedSystemId &&
-                            other.ConnectedSystemObjectTypeId == objectTypeId)
+        var otherRulesInThisSystem = exportRules
+            .Where(other => other.Enabled && other.Id != syncRule.Id && other.ConnectedSystemId == syncRule.ConnectedSystemId)
             .OrderBy(other => other.Name, StringComparer.Ordinal)
+            .ToList();
+
+        syncRule.RuleSaveWarnings.AddRange(otherRulesInThisSystem
+            .Where(other => other.ConnectedSystemObjectTypeId == objectTypeId)
             .Select(other =>
                 $"The export Synchronisation Rule '{other.Name}' also manages '{other.ConnectedSystemObjectTypeName}' objects in " +
                 $"'{other.ConnectedSystemName}' for '{other.MetaverseObjectTypeName}'. Only one export rule may manage an object: " +
                 "a synchronisation exports nothing to this Connected System for an object both rules have in scope, and reports it " +
                 "as Export Rules Overlap. Give the rules scopes that never overlap, or combine them into one rule."));
+
+        var thisObjectTypeName = syncRule.ConnectedSystemObjectType?.Name;
+        var thisRuleProvisionsThemAs = thisObjectTypeName != null ? $"'{thisObjectTypeName}'" : "a different Object Type";
+        syncRule.RuleSaveWarnings.AddRange(otherRulesInThisSystem
+            .Where(other => other.ConnectedSystemObjectTypeId != objectTypeId)
+            .Select(other =>
+                $"The export Synchronisation Rule '{other.Name}' provisions '{other.MetaverseObjectTypeName}' objects to " +
+                $"'{other.ConnectedSystemName}' as '{other.ConnectedSystemObjectTypeName}', and this rule provisions them as " +
+                $"{thisRuleProvisionsThemAs}. Each can have only one object in '{other.ConnectedSystemName}', so where both " +
+                "rules' scopes cover the same one, only one rule provisions it and the other reports Synchronisation Failed for " +
+                "it on every synchronisation. Make sure the scopes never overlap."));
     }
 
     /// <param name="previewActivityId">
