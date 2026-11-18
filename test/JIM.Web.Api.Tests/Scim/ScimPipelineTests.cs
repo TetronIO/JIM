@@ -29,9 +29,9 @@ using NUnit.Framework;
 namespace JIM.Web.Api.Tests.Scim;
 
 /// <summary>
-/// The <c>/scim</c> request pipeline (#124, Phase 4b; D3, D15, D16): dark while the feature flag is off, a single
-/// indistinguishable 401 for every credential that is not a key scoped to the Connected System in the URL (with the
-/// real reason audited), and SCIM-shaped errors rather than the portal's or the REST API's.
+/// The <c>/scim</c> request pipeline (#124, Phase 4b; D3, D15): a single indistinguishable 401 for every credential
+/// that is not a key scoped to the Connected System in the URL (with the real reason audited), and SCIM-shaped errors
+/// rather than the portal's or the REST API's.
 /// </summary>
 [TestFixture]
 public class ScimPipelineTests
@@ -45,40 +45,6 @@ public class ScimPipelineTests
         _recorder.Setup(r => r.RecordAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>()))
             .Returns(Task.CompletedTask);
     }
-
-    #region Feature gate
-
-    [Test]
-    public async Task FeatureGate_FlagOff_AnswersScim404AndGoesNoFurtherAsync()
-    {
-        var context = Request("/scim/v2/7/Users");
-        var reachedNext = false;
-
-        await new ScimFeatureGateMiddleware(_ => { reachedNext = true; return Task.CompletedTask; })
-            .InvokeAsync(context, Factory(flagOn: false));
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(reachedNext, Is.False);
-            Assert.That(context.Response.StatusCode, Is.EqualTo(StatusCodes.Status404NotFound));
-            Assert.That(context.Response.ContentType, Does.StartWith(ScimResponses.ContentType));
-            Assert.That(Body(context)?["schemas"]?[0]?.GetValue<string>(), Is.EqualTo(ScimUrns.Error));
-        }
-    }
-
-    [Test]
-    public async Task FeatureGate_FlagOn_PassesTheRequestOnAsync()
-    {
-        var context = Request("/scim/v2/7/Users");
-        var reachedNext = false;
-
-        await new ScimFeatureGateMiddleware(_ => { reachedNext = true; return Task.CompletedTask; })
-            .InvokeAsync(context, Factory(flagOn: true));
-
-        Assert.That(reachedNext, Is.True);
-    }
-
-    #endregion
 
     #region Secure transport
 
@@ -285,17 +251,6 @@ public class ScimPipelineTests
         context.Response.Body.Position = 0;
         var text = new StreamReader(context.Response.Body, Encoding.UTF8).ReadToEnd();
         return text.Length == 0 ? null : JsonNode.Parse(text);
-    }
-
-    private static IJimApplicationFactory Factory(bool flagOn)
-    {
-        var repository = new Mock<IRepository>();
-        repository.Setup(r => r.ServiceSettings).Returns(flagOn
-            ? InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled()
-            : new InMemoryServiceSettingsRepository());
-        var factory = new Mock<IJimApplicationFactory>();
-        factory.Setup(f => f.Create()).Returns(() => new JimApplication(repository.Object));
-        return factory.Object;
     }
 
     private static ClaimsPrincipal ScopedPrincipal(int connectedSystemId) => Principal(new ApiKey

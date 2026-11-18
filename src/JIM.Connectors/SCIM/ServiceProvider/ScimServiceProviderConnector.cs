@@ -33,7 +33,7 @@ namespace JIM.Connectors.SCIM.ServiceProvider;
 /// Declares no phases (<see cref="IConnectorPhases"/>): each page is one read of a local table, and JIM's own per-page
 /// counts already say everything a step would.
 /// </para>
-/// Implementation plan: engineering/plans/doing/SCIM_SERVER_DESIGN.md.
+/// Implementation plan: engineering/plans/done/SCIM_SERVER_DESIGN.md.
 /// </remarks>
 public class ScimServiceProviderConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingCalls, IConnectorScimResourceStoreAware, IConnectorImportWatermark
 {

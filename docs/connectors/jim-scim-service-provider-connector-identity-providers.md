@@ -53,6 +53,9 @@ Where the base URL and key go in particular identity providers:
 
 The labels in another product's portal are its own and can change; its documentation is authoritative for them. Any identity provider that sends a static bearer token to a SCIM 2.0 endpoint works in the same way.
 
+!!! note "What has been tested"
+    Another JIM, using the JIM SCIM 2.0 Client Connector, is tested against this endpoint end to end before every release. Microsoft Entra ID and other identity providers have not yet been tested with JIM. The endpoint accepts the variations identity providers are known to send, such as a lower-case `bearer` or a trailing slash, but check the first provisioning run from a new identity provider closely, on the identity provider's own provisioning log and on the Connected System's **SCIM** tab.
+
 ### From another JIM
 
 A JIM using the JIM SCIM 2.0 Client Connector is an identity provider like any other, and also reads back what it sent:

@@ -1,12 +1,13 @@
 # SCIM 2.0 Service Provider Design
 
-- **Status:** Doing (Phases 1 to 6 complete, and the feature is in Preview: the SCIM store, the server's writes, Get and list, the Service Provider Connector, scoped API keys, the `/scim` HTTP surface, key management, the store summary and the definitions, the SCIM summary Activity and the requests behind a change, across the portal, REST and PowerShell, the JIM-to-JIM acceptance scenario, and the public documentation; removing the flag after a release in Preview (D16) remains)
+- **Status:** Done
+- **Note:** Out of Preview in #2372: the feature flag is removed. Only JIM's own SCIM 2.0 Client Connector has been verified against the endpoint (Scenario 029); no third-party identity provider has been tested yet. A second authentication method (D4) and custom resource types (D18, D19) remain Future Work, without issues of their own.
 - **Issue:** [#124](https://github.com/TetronIO/JIM/issues/124)
 - **Sub-issues fixed as part of this work:** [#2088](https://github.com/TetronIO/JIM/issues/2088) (API keys as Bearer only), [#2089](https://github.com/TetronIO/JIM/issues/2089) (Delta Import deletion safeguards), [#2090](https://github.com/TetronIO/JIM/issues/2090) (JIM.Scim multi-value writer), [#2091](https://github.com/TetronIO/JIM/issues/2091) (SCIM `password` exposure), [#2092](https://github.com/TetronIO/JIM/issues/2092) (Delta Synchronisation watermark race), [#2093](https://github.com/TetronIO/JIM/issues/2093) (SCIM client token endpoint HTTPS), [#2094](https://github.com/TetronIO/JIM/issues/2094) (SCIM client and Keycloak), [#2095](https://github.com/TetronIO/JIM/issues/2095) (SCIM Standard Mapping hints), [#2096](https://github.com/TetronIO/JIM/issues/2096) (API key Activity attribution), [#2097](https://github.com/TetronIO/JIM/issues/2097) (Keycloak SSO guide and development realm)
 - **Related Issues:** [#123](https://github.com/TetronIO/JIM/issues/123) (Event-Based Synchronisation; owns everything deferred below), [#545](https://github.com/TetronIO/JIM/issues/545) (SCIM 2.0 Client Connector, shipped), [#1119](https://github.com/TetronIO/JIM/issues/1119) (Password Synchronisation), [#1709](https://github.com/TetronIO/JIM/issues/1709) (SCIM client sets passwords), [#1566](https://github.com/TetronIO/JIM/issues/1566) (password capture ingress API), [#1104](https://github.com/TetronIO/JIM/issues/1104) (Metaverse schema policy and Standard Mappings)
 - **Backlog and parked follow-ups:** [#2098](https://github.com/TetronIO/JIM/issues/2098) (Reset SCIM store, backlog), [#2099](https://github.com/TetronIO/JIM/issues/2099) (SCIM inbound password channel, parked; sub-issue of #1119)
-- **Related Plans:** [`../done/SCIM_CLIENT_CONNECTOR_DESIGN.md`](../done/SCIM_CLIENT_CONNECTOR_DESIGN.md), [`../METAVERSE_SCHEMA_POLICY.md`](../METAVERSE_SCHEMA_POLICY.md), [`../done/OUTBOUND_SYNC_DESIGN.md`](../done/OUTBOUND_SYNC_DESIGN.md) (Event-Based Sync Roadmap)
-- **Last Updated:** 2026-10-17
+- **Related Plans:** [`SCIM_CLIENT_CONNECTOR_DESIGN.md`](SCIM_CLIENT_CONNECTOR_DESIGN.md), [`../METAVERSE_SCHEMA_POLICY.md`](../METAVERSE_SCHEMA_POLICY.md), [`OUTBOUND_SYNC_DESIGN.md`](OUTBOUND_SYNC_DESIGN.md) (Event-Based Sync Roadmap)
+- **Last Updated:** 2026-11-18
 
 > **October 2026 rewrite.** This document replaces the original design (December 2025, amended by the July 2026 cross-design review with #545). A design review on 11 October 2026 validated every claim in the original against the shipped SCIM 2.0 Client Connector and the current codebase, researched how mainstream SCIM clients and servers behave (authentication in particular), and ran a judge panel on where SCIM pushes should enter JIM. The original's central mechanism, running the inbound sync engine inline on each SCIM request, turned out to be the core of #123 built in the least safe place, and the method it relied on does not exist. The decisions below supersede the original in full; git history holds the previous text.
 
@@ -469,6 +470,10 @@ As built:
 - **Unit:** `primary` as a string, a capitalised `Remove` with a value list, the path-less single-element array, and every coercion recorded without the values sent, each mutation-checked.
 - **Found:** the SCIM Client Connector sends `If-Match` only when `meta.version` is a selected attribute, which nothing selects or explains ([#2404](https://github.com/TetronIO/JIM/issues/2404)); the scenario selects it, as Scenario 015 does.
 
+### Phase 7: Out of Preview ✅
+
+D16's third stage, in #2372, after 0.17.0 and 0.18.0 shipped the feature in Preview. Every change since 0.17.0 that touched the Service Provider came from work shared with other Connectors (#2720 and #2724 among them), none from a defect in the Service Provider itself. Removed: the `Features.ScimServiceProvider` catalogue entry; every gate (the `/scim` pipeline's 404, Connected System creation and the Connector choice, the import-time check, scoped key management, the store summary, the journal and the requests behind a change); the whole-Connector gating built for it (`ConnectedSystemServer.FeatureFlagFor`); the Preview chips and docs labels; and Scenario 029's `Enable-JIMFeature` step. The public documentation now says which SCIM clients have been verified.
+
 ## Success Criteria
 
 1. The shipped SCIM 2.0 Client Connector completes a paginated Full Import, a `meta.lastModified`-filtered Delta Import, and POST/PUT/PATCH exports with `If-Match` and a confirming import against this server.
@@ -515,6 +520,6 @@ As built:
 - [RFC 7644, SCIM Protocol](https://www.rfc-editor.org/rfc/rfc7644)
 - [RFC 9865, SCIM cursor-based pagination](https://www.rfc-editor.org/rfc/rfc9865)
 - [RFC 6750, Bearer Token Usage](https://www.rfc-editor.org/rfc/rfc6750)
-- [`../done/SCIM_CLIENT_CONNECTOR_DESIGN.md`](../done/SCIM_CLIENT_CONNECTOR_DESIGN.md)
-- [`../done/OUTBOUND_SYNC_DESIGN.md`](../done/OUTBOUND_SYNC_DESIGN.md), Event-Based Sync Roadmap
+- [`SCIM_CLIENT_CONNECTOR_DESIGN.md`](SCIM_CLIENT_CONNECTOR_DESIGN.md)
+- [`OUTBOUND_SYNC_DESIGN.md`](OUTBOUND_SYNC_DESIGN.md), Event-Based Sync Roadmap
 - [`../../notes/SCIM_TEST_PROVIDER_ANALYSIS.md`](../../notes/SCIM_TEST_PROVIDER_ANALYSIS.md)

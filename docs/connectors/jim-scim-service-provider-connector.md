@@ -9,9 +9,6 @@ audience: administrator
 
 The JIM SCIM 2.0 Service Provider Connector lets an identity provider push Users and Groups to JIM over [SCIM 2.0](https://datatracker.ietf.org/doc/html/rfc7644), instead of JIM reading them from it. Each Connected System that uses this Connector has a SCIM endpoint of its own: the identity provider writes to it with a key JIM gives it, JIM keeps what it writes, and the Connector imports those Users and Groups into the Connector Space on a Schedule, from where Synchronisation Rules carry them on like any other source.
 
-!!! info "Preview"
-    The SCIM 2.0 Service Provider is a [Preview feature](../administration/preview-features.md). Turn on **SCIM 2.0 Service Provider** on the Service Settings page (or run `Enable-JIMFeature -Name "Features.ScimServiceProvider"`) before creating a Connected System with this Connector.
-
 !!! note "Direction matters"
     This Connector is for systems that **push** to JIM. To have JIM read from and write to a system that publishes a SCIM interface of its own, use the [JIM SCIM 2.0 Client Connector](jim-scim-connector.md).
 
@@ -120,14 +117,13 @@ To keep a Metaverse Object when an identity provider deletes a User and creates 
 
 Create one Connected System for each identity provider, and for each tenant of one. Each has its own base URL, keys, uniqueness of `userName` and Connector Space, so two identity providers can never overwrite each other. The same person arriving from both becomes two Users that join one Metaverse Object through an Object Matching Rule, as an HR source and a directory do.
 
-1. Turn on the **SCIM 2.0 Service Provider** Preview feature.
-2. Create a Connected System and choose **JIM SCIM 2.0 Service Provider Connector**. It has no settings to fill in.
-3. On the **Schema** tab, import the schema and select the **User** and **Group** Object Types and the attributes you will flow.
-4. On the **SCIM** tab, use **Create Key**, name it after the identity provider that will hold it, and copy the key from the dialog. It is shown once.
-5. Give the identity provider the base URL and the key. [Identity Providers](jim-scim-service-provider-connector-identity-providers.md) says where each goes.
-6. Add Object Matching Rules and inbound Synchronisation Rules, create **Full Import**, **Delta Import**, **Full Synchronisation** and **Delta Synchronisation** Run Profiles, and [schedule the import](#schedule-the-import).
+1. Create a Connected System and choose **JIM SCIM 2.0 Service Provider Connector**. It has no settings to fill in.
+2. On the **Schema** tab, import the schema and select the **User** and **Group** Object Types and the attributes you will flow.
+3. On the **SCIM** tab, use **Create Key**, name it after the identity provider that will hold it, and copy the key from the dialog. It is shown once.
+4. Give the identity provider the base URL and the key. [Identity Providers](jim-scim-service-provider-connector-identity-providers.md) says where each goes.
+5. Add Object Matching Rules and inbound Synchronisation Rules, create **Full Import**, **Delta Import**, **Full Synchronisation** and **Delta Synchronisation** Run Profiles, and [schedule the import](#schedule-the-import).
 
-From PowerShell, steps 2 and 4 are:
+From PowerShell, steps 1 and 3 are:
 
 ```powershell
 $connector = Get-JIMConnectorDefinition -Name "JIM SCIM 2.0 Service Provider Connector"
@@ -187,7 +183,7 @@ The Connector has no settings of its own. The rules that govern its endpoint:
 : The request reached JIM over plain HTTP. Give the identity provider an `https://` base URL; where TLS ends at a reverse proxy, set `JIM_TRUSTED_PROXIES` to that proxy ([Trusting the Reverse Proxy](../administration/tls-and-reverse-proxy.md#trusting-the-reverse-proxy)).
 
 **The identity provider gets `404` for every request.**
-: The SCIM 2.0 Service Provider feature is off. Turn it on; everything the store held is still there.
+: The base URL does not lead to a SCIM endpoint. It must be exactly the base URL on the SCIM tab: `/scim/v2/` followed by this Connected System's ID. Copy it from the SCIM tab again.
 
 **The identity provider gets `409` with `uniqueness`.**
 : Another User on this Connected System already has that `userName` (compared ignoring case), or that `externalId`. Usually the identity provider has lost track of a User it created before and is creating it again. Find the existing User with `Get-JIMScimJournal` or in the Connector Space, then either have the identity provider delete it, or correct the value at the identity provider. Nothing is written for the refused request.
@@ -201,9 +197,6 @@ The Connector has no settings of its own. The rules that govern its endpoint:
 **A Delta Import fails with "This Delta Import cannot run".**
 : The Connector cannot be sure it would see every deletion. Run a Full Import, which finds every deletion by what it no longer reads; the next Delta Import then runs normally.
 
-**Imports fail with "...feature, which is turned off."**
-: The SCIM 2.0 Service Provider feature was turned off after the Connected System was created. Turn it on again; nothing was lost.
-
 **The identity provider's changes take a long time to reach the Metaverse.**
 : Changes are imported on the Connected System's Schedule, not as they arrive. Check **Awaiting Import** on the SCIM tab: above zero, the Schedule has not run since the change; shorten its interval or check that it is enabled.
 
@@ -212,5 +205,4 @@ The Connector has no settings of its own. The rules that govern its endpoint:
 - [Identity Providers](jim-scim-service-provider-connector-identity-providers.md): where the base URL and key go in each identity provider
 - [SCIM Service Provider cmdlets](../powershell/scim-service-provider.md): keys, the store summary and the request history from PowerShell
 - [JIM SCIM 2.0 Client Connector](jim-scim-connector.md): JIM calling a system's SCIM interface, the opposite direction
-- [Preview Features](../administration/preview-features.md)
 - [Schedules](../configuration/schedules.md)

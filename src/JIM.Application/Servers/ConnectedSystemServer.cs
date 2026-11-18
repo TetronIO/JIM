@@ -342,23 +342,10 @@ public partial class ConnectedSystemServer
 
     #region Connector Definitions
     /// <summary>
-    /// The Connector Definitions an administrator can choose from: every one, less any whose Connector is behind a
-    /// feature flag that is off (<see cref="FeatureFlagFor"/>).
+    /// The Connector Definitions an administrator can choose from.
     /// </summary>
-    public async Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync()
-    {
-        var headers = await Application.Repository.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
-
-        var hidden = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (name, featureFlag) in headers.Select(h => (h.Name, Flag: FeatureFlagFor(h.Name))).Where(h => h.Flag != null))
-        {
-            var enabled = await Application.FeatureFlags.IsEnabledAsync(featureFlag!.Key);
-            if (!enabled)
-                hidden.Add(name);
-        }
-
-        return hidden.Count == 0 ? headers : headers.Where(h => !hidden.Contains(h.Name)).ToList();
-    }
+    public async Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync() =>
+        await Application.Repository.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
 
     public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id, bool withChangeTracking = false)
     {
@@ -571,7 +558,6 @@ public partial class ConnectedSystemServer
     /// Validates a new Connected System and gives it a setting value for each of its Connector's settings, before
     /// anything is written.
     /// </summary>
-    /// <exception cref="FeatureDisabledException">The Connector is behind a feature flag that is off.</exception>
     private async Task PrepareNewConnectedSystemAsync(ConnectedSystem connectedSystem)
     {
         if (connectedSystem == null)
@@ -585,9 +571,6 @@ public partial class ConnectedSystemServer
             ?? throw new ArgumentException($"ConnectorDefinition with ID {connectedSystem.ConnectorDefinitionId} not found.");
 
         connectedSystem.ConnectorDefinition = connectorDefinition;
-
-        if (FeatureFlagFor(connectorDefinition.Name) is { } featureFlag)
-            await Application.FeatureFlags.EnsureEnabledAsync(featureFlag.Key);
 
         // A definition without settings is right only for a built-in Connector that declares none; for any other it
         // means the settings were never loaded, and the Connected System would be created with no setting values.
@@ -629,15 +612,6 @@ public partial class ConnectedSystemServer
         await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
-
-    /// <summary>
-    /// The feature flag a built-in Connector is behind while it is being built, if any. While the flag is off the
-    /// Connector is left out of the Connector choice and no Connected System can be created with it; while its tier is
-    /// In Development the Connector is not publicly documented either, since nothing about it is surfaced.
-    /// </summary>
-    public static FeatureFlagDefinition? FeatureFlagFor(string connectorName) =>
-        // The SCIM 2.0 Service Provider (D16 in SCIM_SERVER_DESIGN.md, #2372).
-        connectorName == ConnectorConstants.ScimServiceProviderConnectorName ? FeatureFlagCatalogue.ScimServiceProvider : null;
 
     /// <summary>
     /// Whether an administrator can see and set this Connector setting now: every setting can, except one whose

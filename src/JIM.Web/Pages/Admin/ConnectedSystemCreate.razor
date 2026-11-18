@@ -29,10 +29,6 @@
                 {
                     <MudSelectItem Value="@header.Id.ToString()">
                         @header.Name
-                        @if (Helpers.IsPreviewConnector(header.Name))
-                        {
-                            <PreviewChip Class="ml-1" />
-                        }
                     </MudSelectItem>
                 }
             }

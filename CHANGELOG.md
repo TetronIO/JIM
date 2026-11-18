@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- 🔄 The SCIM 2.0 Service Provider is out of Preview: identity providers can push Users and Groups to JIM with no Preview feature to turn on first. (#124)
+
 ## [0.18.0] - 2026-11-17
 
 ### Added

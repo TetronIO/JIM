@@ -21,23 +21,10 @@ namespace JIM.Models.Core;
 public static class FeatureFlagCatalogue
 {
     /// <summary>
-    /// The SCIM 2.0 Service Provider (#124): JIM's own SCIM endpoint and the Connector that imports what SCIM clients
-    /// write to it. Built hidden, layer by layer on <c>main</c>, then promoted to Preview once the JIM-to-JIM acceptance
-    /// scenario passed, for at least one release before the flag is removed (design decision D16 in
-    /// <c>engineering/plans/doing/SCIM_SERVER_DESIGN.md</c>).
-    /// </summary>
-    public static readonly FeatureFlagDefinition ScimServiceProvider = new(
-        "Features.ScimServiceProvider",
-        "SCIM 2.0 Service Provider",
-        "Lets SCIM 2.0 clients, such as an identity provider, provision Users and Groups into JIM through its own SCIM endpoint, imported through the SCIM 2.0 Service Provider Connector.",
-        FeatureFlagTier.Preview,
-        TrackingIssueNumber: 2372);
-
-    /// <summary>
     /// The declared flags. Add a <c>public static readonly FeatureFlagDefinition</c> field above this for each new
     /// flag (so gates can reference it by name), and list it here.
     /// </summary>
-    private static readonly IReadOnlyList<FeatureFlagDefinition> Declared = [ScimServiceProvider];
+    private static readonly IReadOnlyList<FeatureFlagDefinition> Declared = [];
 
     /// <summary>
     /// A test's substitute catalogue, scoped to its own asynchronous flow so concurrently running tests cannot see

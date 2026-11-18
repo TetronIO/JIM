@@ -17,8 +17,8 @@ namespace JIM.Worker.Tests.Servers;
 
 /// <summary>
 /// The SCIM 2.0 Service Provider Connector as an administrator meets it (#124, Phase 3): seeded as a built-in Connector
-/// Definition with no settings, hidden and refused while <c>Features.ScimServiceProvider</c> is off (D16), and a
-/// Connected System created with it starting with the core User and Group definitions in its store.
+/// Definition with no settings, offered with the other Connectors, and a Connected System created with it starting
+/// with the core User and Group definitions in its store.
 /// </summary>
 /// <remarks>
 /// Real PostgreSQL and a no-tracking context, as JIM.Web runs; opt-in via the <c>JIM_TEST_RESET_*</c> environment
@@ -83,44 +83,20 @@ public class ScimServiceProviderConnectedSystemDatabaseTests
     }
 
     [Test]
-    public async Task GetConnectorDefinitionHeadersAsync_FlagOff_LeavesTheServiceProviderOutAsync()
+    public async Task GetConnectorDefinitionHeadersAsync_IncludesTheServiceProviderAsync()
     {
         var names = await WithJimAsync(async jim => (await jim.ConnectedSystems.GetConnectorDefinitionHeadersAsync()).Select(h => h.Name).ToList());
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(names, Does.Not.Contain(ConnectorConstants.ScimServiceProviderConnectorName));
+            Assert.That(names, Does.Contain(ConnectorConstants.ScimServiceProviderConnectorName));
             Assert.That(names, Does.Contain(ConnectorConstants.ScimClientConnectorName));
         }
     }
 
     [Test]
-    public async Task GetConnectorDefinitionHeadersAsync_FlagOn_IncludesTheServiceProviderAsync()
+    public async Task CreateConnectedSystemAsync_CreatesItWithTheCoreDefinitionsInItsStoreAsync()
     {
-        await EnableFlagAsync();
-
-        var names = await WithJimAsync(async jim => (await jim.ConnectedSystems.GetConnectorDefinitionHeadersAsync()).Select(h => h.Name).ToList());
-
-        Assert.That(names, Does.Contain(ConnectorConstants.ScimServiceProviderConnectorName));
-    }
-
-    [Test]
-    public async Task CreateConnectedSystemAsync_FlagOff_RefusedAndNothingCreatedAsync()
-    {
-        var definitionId = await ServiceProviderDefinitionIdAsync();
-
-        Assert.That(() => WithJimAsync(jim => jim.ConnectedSystems.CreateConnectedSystemAsync(
-                new ConnectedSystem { Name = "Entra provisioning", ConnectorDefinitionId = definitionId }, _key)),
-            Throws.InstanceOf<FeatureDisabledException>());
-
-        await using var ctx = NewContext();
-        Assert.That(await ctx.ConnectedSystems.CountAsync(), Is.Zero);
-    }
-
-    [Test]
-    public async Task CreateConnectedSystemAsync_FlagOn_CreatesItWithTheCoreDefinitionsInItsStoreAsync()
-    {
-        await EnableFlagAsync();
         var definitionId = await ServiceProviderDefinitionIdAsync();
         var connectedSystem = new ConnectedSystem { Name = "Entra provisioning", ConnectorDefinitionId = definitionId };
 
@@ -141,7 +117,6 @@ public class ScimServiceProviderConnectedSystemDatabaseTests
     [Test]
     public async Task ImportConnectedSystemSchemaAsync_NoSettings_ImportsTheStoresResourceTypesAnchoredOnIdAsync()
     {
-        await EnableFlagAsync();
         var definitionId = await ServiceProviderDefinitionIdAsync();
         var created = new ConnectedSystem { Name = "Entra provisioning", ConnectorDefinitionId = definitionId };
         await WithJimAsync(jim => jim.ConnectedSystems.CreateConnectedSystemAsync(created, _key));
@@ -172,10 +147,6 @@ public class ScimServiceProviderConnectedSystemDatabaseTests
                 new ConnectedSystem { Name = "Directory", ConnectorDefinition = ldap, ConnectorDefinitionId = ldap.Id }, _key)),
             Throws.ArgumentException);
     }
-
-    private async Task EnableFlagAsync() =>
-        await WithJimAsync(jim => jim.FeatureFlags.SetFeatureFlagAsync(FeatureFlagCatalogue.ScimServiceProvider.Key, true,
-            _key, allowInDevelopment: true));
 
     private async Task<int> ServiceProviderDefinitionIdAsync() =>
         (await WithJimAsync(jim => jim.ConnectedSystems.GetConnectorDefinitionAsync(ConnectorConstants.ScimServiceProviderConnectorName)))!.Id;

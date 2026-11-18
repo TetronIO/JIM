@@ -23,7 +23,7 @@ namespace JIM.Web.Controllers.Api;
 /// Only for a Connected System that uses the SCIM 2.0 Service Provider Connector; any other answers 404. A key is
 /// reached only through the Connected System it is scoped to. To rotate a key, create a new one, give it to the
 /// identity provider, then disable or delete the old one; a Connected System has at most two usable keys so the two
-/// can overlap. Every endpoint is refused while the SCIM 2.0 Service Provider feature is off.
+/// can overlap.
 /// </remarks>
 [Route("api/v{version:apiVersion}/synchronisation/connected-systems/{connectedSystemId:int}/scim")]
 [ApiController]
@@ -48,7 +48,6 @@ public class ScimServiceProviderController(ILogger<ScimServiceProviderController
     /// <response code="404">No such Connected System, or it does not use the SCIM 2.0 Service Provider Connector.</response>
     [HttpGet("keys", Name = "GetScimKeys")]
     [ProducesResponseType(typeof(IEnumerable<ApiKeyDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -70,7 +69,6 @@ public class ScimServiceProviderController(ILogger<ScimServiceProviderController
     /// <response code="404">No such Connected System or key, or the key is not scoped to this Connected System.</response>
     [HttpGet("keys/{keyId:guid}", Name = "GetScimKey")]
     [ProducesResponseType(typeof(ApiKeyDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -217,7 +215,6 @@ public class ScimServiceProviderController(ILogger<ScimServiceProviderController
     /// <response code="404">No such Connected System, or it does not use the SCIM 2.0 Service Provider Connector.</response>
     [HttpGet("summary", Name = "GetScimSummary")]
     [ProducesResponseType(typeof(ScimServiceProviderSummaryDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -242,7 +239,6 @@ public class ScimServiceProviderController(ILogger<ScimServiceProviderController
     /// <response code="404">No such Connected System, or it does not use the SCIM 2.0 Service Provider Connector.</response>
     [HttpGet("resource-types", Name = "GetScimResourceTypes")]
     [ProducesResponseType(typeof(IEnumerable<ScimResourceType>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -266,7 +262,6 @@ public class ScimServiceProviderController(ILogger<ScimServiceProviderController
     /// <response code="404">No such Connected System, or it does not use the SCIM 2.0 Service Provider Connector.</response>
     [HttpGet("schemas", Name = "GetScimSchemas")]
     [ProducesResponseType(typeof(IEnumerable<ScimSchema>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -295,7 +290,6 @@ public class ScimServiceProviderController(ILogger<ScimServiceProviderController
     /// <response code="404">No such Connected System, or it does not use the SCIM 2.0 Service Provider Connector.</response>
     [HttpGet("journal", Name = "GetScimJournal")]
     [ProducesResponseType(typeof(IEnumerable<ScimJournalEntryDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -322,7 +316,6 @@ public class ScimServiceProviderController(ILogger<ScimServiceProviderController
     /// <response code="404">No such change in this Connected System, or its import recorded no range to read.</response>
     [HttpGet("journal/changes/{changeId:guid}", Name = "GetScimRequestsBehindChange")]
     [ProducesResponseType(typeof(ScimRequestsBehindChangeDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -339,13 +332,10 @@ public class ScimServiceProviderController(ILogger<ScimServiceProviderController
     }
 
     /// <summary>
-    /// Refuses the request while the feature is off (by throwing, which the API reports as 400), and answers 404 for a
-    /// Connected System that does not exist or has no SCIM endpoint; null when the request may proceed.
+    /// Answers 404 for a Connected System that does not exist or has no SCIM endpoint; null when the request may proceed.
     /// </summary>
     private async Task<IActionResult?> RequireServiceProviderAsync(int connectedSystemId)
     {
-        await _application.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogue.ScimServiceProvider.Key);
-
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System {connectedSystemId} was not found."));

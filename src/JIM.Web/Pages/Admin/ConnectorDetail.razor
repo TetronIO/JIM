@@ -14,10 +14,6 @@
 
 <PageTitle>Connector: @_connector?.Name</PageTitle>
 <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Power" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connector:</span> <span class="mud-primary-text">@_connector?.Name</span>
-    @if (_connector != null && Helpers.IsPreviewConnector(_connector.Name))
-    {
-        <PreviewChip Class="ml-1" />
-    }
     @* A built-in Connector links to its own page; any other, to the Connectors overview. Each page is a literal
        so the docs coverage check (COV-5) can confirm it exists. *@
     <PageInfo Title="Connector"

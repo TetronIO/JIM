@@ -745,13 +745,12 @@ try
         appBuilder => appBuilder.UseGlobalExceptionHandler()
     );
 
-    // The SCIM 2.0 Service Provider endpoints (#124): SCIM-shaped errors for anything unhandled, dark (404) while the
-    // feature flag is off, and refused over an unconfirmed transport, all decided before authentication reads a key.
+    // The SCIM 2.0 Service Provider endpoints (#124): SCIM-shaped errors for anything unhandled, and refused over an
+    // unconfirmed transport, both decided before authentication reads a key.
     app.UseWhen(
         context => ScimRoutes.IsScimRequest(context.Request),
         appBuilder => appBuilder
             .UseMiddleware<ScimExceptionMiddleware>()
-            .UseMiddleware<ScimFeatureGateMiddleware>()
             .UseMiddleware<ScimSecureTransportMiddleware>()
     );
 

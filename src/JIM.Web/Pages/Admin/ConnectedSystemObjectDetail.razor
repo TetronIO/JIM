@@ -586,8 +586,7 @@
             NavManager.NavigateTo($"/admin/connected-systems/");
             return;
         }
-        _showScimRequests = ConnectedSystemHeader.ConnectorName == JIM.Connectors.ConnectorConstants.ScimServiceProviderConnectorName
-            && await jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.ScimServiceProvider.Key);
+        _showScimRequests = ConnectedSystemHeader.ConnectorName == JIM.Connectors.ConnectorConstants.ScimServiceProviderConnectorName;
 
         var csoIdValid = Guid.TryParse(CsoId, out var connectedSystemObjectId);
         if (!csoIdValid)

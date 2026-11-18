@@ -113,12 +113,9 @@ public class ConnectorSettingDocsCoverageTests
     }
 
     /// <summary>
-    /// The built-in Connectors an administrator can meet. One behind an In Development feature flag is surfaced nowhere,
-    /// so it has no public page until its flag reaches Preview, when this starts requiring one.
+    /// The built-in Connectors an administrator can meet: every one.
     /// </summary>
-    private static List<IConnector> Connectors() => SeedingServer.BuiltInConnectors()
-        .Where(c => ConnectedSystemServer.FeatureFlagFor(c.Name)?.Tier != FeatureFlagTier.InDevelopment)
-        .ToList();
+    private static List<IConnector> Connectors() => SeedingServer.BuiltInConnectors().ToList();
 
     /// <summary>
     /// The settings a Connector asks an administrator for, by the name the settings form shows. A setting behind an In
