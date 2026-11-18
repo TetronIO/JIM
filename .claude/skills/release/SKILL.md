@@ -447,6 +447,9 @@ The curated `CHANGELOG.md` / GitHub Release notes are intentionally terse. The d
    - **Under the hood** — the engineering, performance, quality, and testing improvements that were (rightly) kept out of the changelog, reframed as outcomes ("X is now faster / more robust") rather than internal method names;
    - **Upgrade notes** — anything an operator must know (e.g. a licence change, a config change);
    - links to the GitHub Release and the full changelog.
+
+   **Emoji on every feature heading (house style, enforced).** Each `###` heading opens with one emoji that fits its topic, e.g. `### 📬 Exchange recipient provisioning`, `### 🔑 Initial Passwords where you expect them`. Reuse an earlier post's emoji when the topic recurs (🌐 SCIM, 🧩 auxiliary classes, 🔍 causality, 🔮 previews). `##` section headings stay plain. `Publish-ReleaseDiscussion.ps1` refuses a body with a plain `###` heading, so the `-WhatIf` dry run catches it. (Rule added after the v0.16.0 to v0.18.0 posts went out without the emoji v0.15.0 had.)
+
    Write it to `/tmp/release-discussion-v<version>.md` (outside the repo; do NOT commit it).
 
 2. **Human review is mandatory.** This is public, customer-facing, AI-drafted content. Present the draft path to the user and ask them to review and edit `/tmp/release-discussion-v<version>.md` before anything is posted. Do NOT post unreviewed; there is no "draft" state in GitHub Discussions, so review happens before publishing, not after.

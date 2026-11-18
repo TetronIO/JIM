@@ -59,6 +59,13 @@ if (-not (Test-Path -LiteralPath $BodyFile)) { Fail "Body file not found: $BodyF
 $body = Get-Content -Raw -LiteralPath $BodyFile
 if ([string]::IsNullOrWhiteSpace($body)) { Fail "Body file is empty: $BodyFile" 2 }
 
+# House style: every feature heading (###) opens with an emoji, e.g. "### 📬 Exchange recipient provisioning".
+# Posts after v0.15.0 lost them because nothing checked; refuse to publish without them.
+$plainHeadings = @([regex]::Matches($body, '(?m)^###\s+[A-Za-z0-9].*$') | ForEach-Object { $_.Value.Trim() })
+if ($plainHeadings.Count -gt 0) {
+    Fail ("Every '###' heading must start with an emoji (release announcement house style). Missing on:`n  " + ($plainHeadings -join "`n  ")) 2
+}
+
 # Resolve the repository node ID and the target category ID.
 $query = 'query($owner:String!,$repo:String!){repository(owner:$owner,name:$repo){id discussionCategories(first:25){nodes{id name}}}}'
 $lookupJson = gh api graphql -f "query=$query" -f "owner=$Owner" -f "repo=$Repo"
