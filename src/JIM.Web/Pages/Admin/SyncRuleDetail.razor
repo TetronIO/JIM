@@ -973,8 +973,10 @@ else if (_syncRule != null)
     /// </summary>
     private void ReportSaveWarnings()
     {
+        // A save warning runs to several sentences, more than the default five seconds allows anyone to read, so it
+        // stays until the administrator closes it.
         foreach (var warning in _syncRule?.SaveWarnings ?? [])
-            Snackbar.Add(warning, Severity.Warning);
+            Snackbar.Add(warning, Severity.Warning, options => options.RequireInteraction = true);
     }
 
     private void ReportSequenceSkips()

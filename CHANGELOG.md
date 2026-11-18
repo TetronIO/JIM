@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- ✨ Saving an export Synchronisation Rule warns you when another enabled export rule provisions the same Metaverse Object Type as a different Object Type in the same Connected System, such as people as users and as contacts: only one can provision a person both cover. (#2824)
+
 ### Changed
 
 - 🔄 The SCIM 2.0 Service Provider is out of Preview: identity providers can push Users and Groups to JIM with no Preview feature to turn on first. (#124)
