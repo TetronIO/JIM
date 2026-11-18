@@ -63,6 +63,16 @@ public class DeltaImportGroupMembershipComparisonTests : WorkflowTestBase
 
         public override Task<bool> DoesDatabaseFoldCaseLikeIdentifierKeyAsync() => Task.FromResult(FoldsCaseLikeIdentifierKey);
 
+        /// <summary>Each lookup of referenced External IDs: the objects asked about, and the attributes left out (#2986).</summary>
+        public List<(IReadOnlyCollection<Guid> CsoIds, IReadOnlyCollection<int> Excluded)> ReferenceExternalIdLookups { get; } = new();
+
+        public override Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds,
+            IReadOnlyCollection<int>? excludedAttributeIds = null)
+        {
+            ReferenceExternalIdLookups.Add((csoIds.ToList(), excludedAttributeIds?.ToList() ?? []));
+            return base.GetReferenceExternalIdsForCsosAsync(csoIds, excludedAttributeIds);
+        }
+
         /// <summary>The change record each execution item carried when it was written, which the import releases after.</summary>
         public Dictionary<ActivityRunProfileExecutionItem, ConnectedSystemObjectChange?> WrittenChanges { get; } = new();
 
@@ -359,6 +369,54 @@ public class DeltaImportGroupMembershipComparisonTests : WorkflowTestBase
             Assert.That((await StoredMembersAsync(lab)).Select(av => av.Id), Is.EquivalentTo(lab.MemberValueIds.Skip(1)));
             Assert.That(_spy.Questions, Is.Empty, "A Full Import asks nothing");
             Assert.That(_spy.PartialLoads, Is.Empty);
+            Assert.That(_spy.ReferenceExternalIdLookups.Where(l => l.CsoIds.Contains(lab.Group.Id)).Select(l => l.Excluded),
+                Is.EqualTo(new[] { Array.Empty<int>() }), "A member was removed, so the members' External IDs are looked up as before");
+        }
+    }
+
+    /// <summary>
+    /// #2986: a confirming Full Import finds a group holding exactly the DNs it imports. No member's External ID can change
+    /// that comparison, so none is looked up; at 500,000 users the lookup cost the confirming Full Import 20 s.
+    /// </summary>
+    [Test]
+    public async Task FullImport_GroupHoldingTheImportedDns_LooksUpNoMemberExternalIdAsync()
+    {
+        var lab = await ArrangeAsync();
+
+        var activity = await RunImportAsync(lab,
+            [[GroupImport(lab, Members(0, MemberCount - 1).Reverse()), .. lab.Users.Take(MemberCount + 1).Select(u => UserImport(lab, u))]],
+            ConnectedSystemRunType.FullImport);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Errors(activity), Is.Empty);
+            Assert.That(activity.RunProfileExecutionItems.Where(i => i.ConnectedSystemObjectId == lab.Group.Id && i.ObjectChangeType == ObjectChangeType.Updated),
+                Is.Empty, "The group did not change");
+            Assert.That((await StoredMembersAsync(lab)).Select(av => av.Id), Is.EquivalentTo(lab.MemberValueIds), "Every member kept, as held");
+            Assert.That(_spy.ReferenceExternalIdLookups.Where(l => l.CsoIds.Contains(lab.Group.Id) && !l.Excluded.Contains(lab.Member.Id)), Is.Empty,
+                "No member's External ID looked up");
+        }
+    }
+
+    /// <summary>
+    /// #2986: a group whose DNs differ from those imported only in case is compared through its members' External IDs, so
+    /// they are looked up, and the change of case is no change, as before.
+    /// </summary>
+    [Test]
+    public async Task FullImport_MemberDnCaseChanged_LooksUpTheMembersAndIsNoChangeAsync()
+    {
+        var lab = await ArrangeAsync();
+        var imported = Members(0, MemberCount - 1).Select((dn, i) => i == 7 ? dn.ToUpperInvariant() : dn);
+
+        var activity = await RunImportAsync(lab,
+            [[GroupImport(lab, imported), .. lab.Users.Take(MemberCount + 1).Select(u => UserImport(lab, u))]],
+            ConnectedSystemRunType.FullImport);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Errors(activity), Is.Empty);
+            Assert.That(_spy.ReferenceExternalIdLookups.Where(l => l.CsoIds.Contains(lab.Group.Id)).Select(l => l.Excluded),
+                Is.EqualTo(new[] { Array.Empty<int>() }), "Looked up as before");
         }
     }
 

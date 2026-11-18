@@ -2664,20 +2664,8 @@ public partial class SyncImportTaskProcessor
     {
         var answersByCsoId = new Dictionary<Guid, Dictionary<int, HeldReferenceValueAnswer>>();
 
-        // An object two import objects on the page are matched to is compared twice (or rejected as a repeat), each time
-        // with other values: it is loaded whole.
-        var comparedOnce = hydration.MatchedImportState
-            .GroupBy(m => m.Value.CsoId)
-            .Where(g => g.Count() == 1)
-            .Select(g => g.Single())
-            .Where(m => csoIdsToHydrate.Contains(m.Value.CsoId)
-                        && m.Key.ChangeType != ObjectChangeType.Deleted
-                        && m.Key.ErrorType is null or ConnectedSystemImportObjectError.NotSet or ConnectedSystemImportObjectError.AttributeValueError
-                        && !hydration.CrossTypeMatches.ContainsKey(m.Key)
-                        && matchedObjectTypes.ContainsKey(m.Key));
-
-        var questions = comparedOnce
-            .SelectMany(m => HeldReferenceValueQuestionsFor(m.Key, m.Value.CsoId, matchedObjectTypes[m.Key]))
+        var questions = ComparedOnceAsAnUpdate(hydration, matchedObjectTypes, csoIdsToHydrate)
+            .SelectMany(m => HeldReferenceValueQuestionsFor(m.ImportObject, m.CsoId, m.ObjectType))
             .ToList();
         if (questions.Count == 0)
             return answersByCsoId;
@@ -2735,6 +2723,50 @@ public partial class SyncImportTaskProcessor
 
         return answersByCsoId;
     }
+
+    /// <summary>
+    /// #2817: the page's matched objects that one imported object, and only one, is compared with as an update: neither a
+    /// delete, nor matched under another Object Type, nor flagged by the Connector beyond an unreadable value (#2066). An
+    /// object two import objects on the page are matched to is compared twice (or rejected as a repeat), each time with
+    /// other values, so nothing about one comparison stands for it.
+    /// </summary>
+    private static IEnumerable<(ConnectedSystemImportObject ImportObject, Guid CsoId, ConnectedSystemObjectType ObjectType)> ComparedOnceAsAnUpdate(
+        CsoHydrationPageResult hydration, IReadOnlyDictionary<ConnectedSystemImportObject, ConnectedSystemObjectType> matchedObjectTypes,
+        IReadOnlySet<Guid> hydratedCsoIds) =>
+        hydration.MatchedImportState
+            .GroupBy(m => m.Value.CsoId)
+            .Where(g => g.Count() == 1)
+            .Select(g => g.Single())
+            .Where(m => hydratedCsoIds.Contains(m.Value.CsoId)
+                        && m.Key.ChangeType != ObjectChangeType.Deleted
+                        && m.Key.ErrorType is null or ConnectedSystemImportObjectError.NotSet or ConnectedSystemImportObjectError.AttributeValueError
+                        && !hydration.CrossTypeMatches.ContainsKey(m.Key)
+                        && matchedObjectTypes.ContainsKey(m.Key))
+            .Select(m => (m.Key, m.Value.CsoId, matchedObjectTypes[m.Key]));
+
+    /// <summary>
+    /// #2986: of the page's objects compared once as an update, the reference attributes their kept DNs settle (see
+    /// <see cref="FindReferenceAttributesSettledByHeldDns"/>), by object, each with the imported object it was found settled
+    /// against. Objects with none are left out.
+    /// </summary>
+    private static Dictionary<Guid, SettledReferenceAttributes> FindSettledReferenceAttributes(CsoHydrationPageResult hydration)
+    {
+        var settledByCsoId = new Dictionary<Guid, SettledReferenceAttributes>();
+        foreach (var (importObject, csoId, objectType) in ComparedOnceAsAnUpdate(hydration, hydration.MatchedObjectTypes, hydration.HydratedCsos.Keys.ToHashSet()))
+        {
+            var settled = FindReferenceAttributesSettledByHeldDns(importObject, hydration.HydratedCsos[csoId], objectType);
+            if (settled.Count > 0)
+                settledByCsoId[csoId] = new SettledReferenceAttributes(importObject, hydration.HydratedCsos[csoId], settled);
+        }
+
+        return settledByCsoId;
+    }
+
+    /// <summary>
+    /// #2986: the reference attributes left out of an object's External ID lookup because its kept DNs settle them, and
+    /// what they were found settled for: one imported object, compared with one loaded instance.
+    /// </summary>
+    private sealed record SettledReferenceAttributes(ConnectedSystemImportObject ImportObject, ConnectedSystemObject Instance, IReadOnlySet<int> AttributeIds);
 
     /// <summary>
     /// #2817: what a Delta Import asks the database about an object it is about to compare with <paramref name="importObject"/>:
@@ -2855,22 +2887,32 @@ public partial class SyncImportTaskProcessor
     /// 100 users who hold no references asked once per page for nothing: 5,000 round trips at 500,000 users.
     /// </remarks>
     internal static async Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForComparisonAsync(ISyncRepository syncRepo,
-        IReadOnlyCollection<ConnectedSystemObject> csos)
+        IReadOnlyCollection<ConnectedSystemObject> csos, IReadOnlyDictionary<Guid, IReadOnlySet<int>>? settledAttributeIdsByCsoId = null)
     {
         var result = new Dictionary<Guid, Dictionary<Guid, string>>(csos.Count);
         if (csos.Count == 0)
             return result;
 
-        foreach (var cso in csos.Where(cso => !HoldsResolvedReferenceToLookUp(cso)))
+        // Left out of the question: an attribute loaded in part (answered from what it was loaded by), and an attribute whose
+        // comparison its kept DNs settle (#2986).
+        List<int> LeftOut(ConnectedSystemObject cso) =>
+            (cso.PartiallyLoadedAttributes?.Keys ?? [])
+            .Concat(settledAttributeIdsByCsoId?.GetValueOrDefault(cso.Id) ?? (IEnumerable<int>)[])
+            .Distinct()
+            .Order()
+            .ToList();
+
+        var leftOutByCso = csos.ToDictionary(cso => cso, LeftOut, (IEqualityComparer<ConnectedSystemObject>)ReferenceEqualityComparer.Instance);
+
+        foreach (var cso in csos.Where(cso => !HoldsResolvedReferenceToLookUp(cso, leftOutByCso[cso])))
             result[cso.Id] = new Dictionary<Guid, string>();
 
-        foreach (var lookupGroup in csos.Where(HoldsResolvedReferenceToLookUp).GroupBy(cso => cso.PartiallyLoadedAttributes is { Count: > 0 } partial
-                     ? string.Join(",", partial.Keys.Order())
-                     : string.Empty))
+        foreach (var lookupGroup in csos.Where(cso => HoldsResolvedReferenceToLookUp(cso, leftOutByCso[cso]))
+                     .GroupBy(cso => string.Join(",", leftOutByCso[cso])))
         {
             var ids = lookupGroup.Select(cso => cso.Id).ToList();
-            var excluded = lookupGroup.First().PartiallyLoadedAttributes?.Keys.ToList();
-            foreach (var (csoId, externalIds) in await syncRepo.GetReferenceExternalIdsForCsosAsync(ids, excluded))
+            var excluded = leftOutByCso[lookupGroup.First()];
+            foreach (var (csoId, externalIds) in await syncRepo.GetReferenceExternalIdsForCsosAsync(ids, excluded.Count > 0 ? excluded : null))
                 result[csoId] = externalIds;
         }
 
@@ -2890,13 +2932,61 @@ public partial class SyncImportTaskProcessor
     }
 
     /// <summary>
+    /// #2986: the reference attributes of <paramref name="cso"/> whose comparison with <paramref name="importObject"/> no
+    /// referenced object's External ID can change, so the lookup can leave them out. The comparison
+    /// (<see cref="UpdateConnectedSystemObjectFromImportObject"/>) keeps a held value whose kept DN
+    /// (<see cref="ConnectedSystemObjectAttributeValue.UnresolvedReferenceValue"/>) matches an imported value exactly, and
+    /// adds an imported value only when no kept DN matches it exactly; External IDs are consulted only past those two
+    /// checks. So where every held value of an attribute kept a DN among the imported values, and every imported value is
+    /// among the kept DNs, the External IDs decide nothing. A confirming Full Import finds every group so.
+    /// </summary>
+    /// <remarks>
+    /// Named only where the attribute was loaded whole and holds a resolved reference (otherwise the lookup reads nothing
+    /// for it), and never: where the imported object carries the attribute twice (it is rejected), where the Connector
+    /// could not read one of its values (#2066; the comparison passes it over), or where an imported value repeats
+    /// ignoring case (the comparison de-duplicates first, and the value it drops could then leave a held DN unmatched).
+    /// </remarks>
+    internal static HashSet<int> FindReferenceAttributesSettledByHeldDns(ConnectedSystemImportObject importObject, ConnectedSystemObject cso,
+        ConnectedSystemObjectType objectType)
+    {
+        var settled = new HashSet<int>();
+        var unreadable = UnreadableAttributeNames(importObject);
+        foreach (var attribute in objectType.Attributes.Where(a =>
+                     a.Type == AttributeDataType.Reference && !unreadable.Contains(a.Name) && cso.IsAttributeWhollyLoaded(a.Id)))
+        {
+            var imported = importObject.Attributes.Where(a => a.Name.Equals(attribute.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (imported.Count != 1 || !imported[0].HasReferenceValues)
+                continue;
+
+            var importedValues = imported[0].ReferenceValues;
+            var importedOrdinal = new HashSet<string>(importedValues, StringComparer.Ordinal);
+            if (new HashSet<string>(importedValues, StringComparer.OrdinalIgnoreCase).Count != importedValues.Count)
+                continue;
+
+            var held = cso.AttributeValues.Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == attribute.Id).ToList();
+            if (!held.Any(av => av.ReferenceValueId.HasValue)
+                || held.Any(av => av.UnresolvedReferenceValue == null || !importedOrdinal.Contains(av.UnresolvedReferenceValue)))
+                continue;
+
+            var keptDns = held.Select(av => av.UnresolvedReferenceValue!).ToHashSet(StringComparer.Ordinal);
+            if (importedOrdinal.All(keptDns.Contains))
+                settled.Add(attribute.Id);
+        }
+
+        return settled;
+    }
+
+    /// <summary>
     /// #2521: whether the database could know the External ID of anything <paramref name="cso"/> references, for
     /// <see cref="GetReferenceExternalIdsForComparisonAsync"/>: whether it holds a resolved reference in an attribute that
-    /// was loaded whole. An attribute loaded in part is left out of that question, and answered from what it was loaded by.
+    /// was loaded whole and is not left out of the question. An attribute loaded in part is left out, and answered from what
+    /// it was loaded by; so is one whose kept DNs settle its comparison (#2986).
     /// </summary>
-    private static bool HoldsResolvedReferenceToLookUp(ConnectedSystemObject cso) =>
+    private static bool HoldsResolvedReferenceToLookUp(ConnectedSystemObject cso, IReadOnlyCollection<int> leftOutAttributeIds) =>
         cso.AttributeValues.Any(value => (value.ReferenceValueId.HasValue || value.ReferenceValue != null)
-            && cso.IsAttributeWhollyLoaded(value.AttributeId != 0 ? value.AttributeId : value.Attribute?.Id ?? 0));
+            && (value.AttributeId != 0 ? value.AttributeId : value.Attribute?.Id ?? 0) is var attributeId
+            && cso.IsAttributeWhollyLoaded(attributeId)
+            && !leftOutAttributeIds.Contains(attributeId));
 
     /// <summary>
     /// #2817: the answers a Delta Import loaded an object's attributes in part by, by attribute id; null for an object loaded
@@ -2969,6 +3059,13 @@ public partial class SyncImportTaskProcessor
         public Dictionary<Guid, ConnectedSystemObject> HydratedCsos { get; } = new();
         public Dictionary<ConnectedSystemImportObject, Guid> IncomingHashes { get; } = new();
         public Dictionary<ConnectedSystemImportObject, CsoImportStateLookupEntry> MatchedImportState { get; } = new();
+
+        /// <summary>
+        /// The Object Type each matched import object was matched under: what the questions a Delta Import asks (#2817) and
+        /// the reference attributes settled by kept DNs (#2986) are worked out against.
+        /// </summary>
+        public Dictionary<ConnectedSystemImportObject, ConnectedSystemObjectType> MatchedObjectTypes { get; } = new();
+
         public HashSet<ConnectedSystemImportObject> SkipEligible { get; } = new();
 
         /// <summary>
@@ -3112,8 +3209,9 @@ public partial class SyncImportTaskProcessor
 
         var csoIdsToHydrate = new HashSet<Guid>();
 
-        // The Object Type each matched import object was matched under, for the questions a Delta Import asks (#2817).
-        var matchedObjectTypes = new Dictionary<ConnectedSystemImportObject, ConnectedSystemObjectType>();
+        // The Object Type each matched import object was matched under, for the questions a Delta Import asks (#2817) and the
+        // reference attributes settled by kept DNs (#2986).
+        var matchedObjectTypes = result.MatchedObjectTypes;
 
         // Secondary external ID candidates for this page's import objects with NO primary match,
         // batched per object type so HydrateCsoAsync's Pending Provisioning confirmation (one query
@@ -3489,9 +3587,16 @@ public partial class SyncImportTaskProcessor
         // is guaranteed a (possibly empty) entry, so only CSOs matched outside the hydrated page
         // fall back to the single-CSO query.
         // #2817: an attribute a Delta Import loaded in part has its members' External IDs from the answer it loaded them by.
+        // #2986: an attribute whose kept DNs settle its comparison is left out: no External ID can change what it stages.
         Dictionary<Guid, Dictionary<Guid, string>> pageReferenceExternalIds;
-        using (Diagnostics.Sync.StartSpan("LoadReferenceExternalIds").SetTag("csoCount", hydratedCsoPage.Count))
-            pageReferenceExternalIds = await GetReferenceExternalIdsForComparisonAsync(_syncRepo, hydratedCsoPage.Values);
+        var settledReferenceAttributes = FindSettledReferenceAttributes(hydrationResult);
+        using (Diagnostics.Sync.StartSpan("LoadReferenceExternalIds")
+                   .SetTag("csoCount", hydratedCsoPage.Count)
+                   .SetTag("settledAttributeCount", settledReferenceAttributes.Values.Sum(s => s.AttributeIds.Count)))
+        {
+            pageReferenceExternalIds = await GetReferenceExternalIdsForComparisonAsync(_syncRepo, hydratedCsoPage.Values,
+                settledReferenceAttributes.ToDictionary(pair => pair.Key, pair => pair.Value.AttributeIds));
+        }
 
         // Find the External IDs this page returns more than once, and those an earlier page already returned, before
         // any object is processed (#2063). Every copy of an object repeated on this page is then rejected before
@@ -3950,7 +4055,12 @@ public partial class SyncImportTaskProcessor
                     // removal and re-addition of resolved reference attribute values.
                     // Served from the page-level batch fetch above; only CSOs matched outside the
                     // hydrated page (e.g. per-object cache-miss lookups) query individually.
-                    if (!pageReferenceExternalIds.TryGetValue(connectedSystemObject.Id, out var refExternalIds))
+                    // #2986: an attribute left out of the page's lookup was found settled for this imported object against
+                    // the instance the page loaded; compared with anything else (an earlier page's instance, #2074), it is
+                    // looked up whole, as before.
+                    if (!pageReferenceExternalIds.TryGetValue(connectedSystemObject.Id, out var refExternalIds)
+                        || (settledReferenceAttributes.TryGetValue(connectedSystemObject.Id, out var settled)
+                            && (!ReferenceEquals(settled.ImportObject, importObject) || !ReferenceEquals(settled.Instance, connectedSystemObject))))
                         refExternalIds = await _syncRepo.GetReferenceExternalIdsAsync(connectedSystemObject.Id);
 
                     // Calculate attribute changes before processing
@@ -5679,12 +5789,16 @@ public partial class SyncImportTaskProcessor
                         // navigation with a populated ReferenceValueId is the expected shape, not a
                         // materialisation failure. The problem case is a resolved reference the
                         // dictionary has no entry for; that would cause a spurious removal/re-add.
+                        // A value whose kept DN matches an imported value exactly is kept without its
+                        // External ID, so is no such case (#2986: an attribute its kept DNs settle is left
+                        // out of the lookup altogether).
                         if (lookupForAttribute != null)
                         {
                             var unmatchableCount = csoRefAttrValues.Count(av =>
                                 av.ReferenceValueId.HasValue &&
                                 av.ReferenceValue == null &&
-                                !lookupForAttribute.ContainsKey(av.ReferenceValueId.Value));
+                                !lookupForAttribute.ContainsKey(av.ReferenceValueId.Value) &&
+                                (av.UnresolvedReferenceValue == null || !importRefsOrdinalSet.Contains(av.UnresolvedReferenceValue)));
                             if (unmatchableCount > 0)
                             {
                                 Log.Warning("UpdateConnectedSystemObjectFromImportObject: {UnmatchableCount} of {TotalCount} resolved reference values " +

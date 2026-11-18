@@ -1417,7 +1417,7 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public async Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds,
+    public virtual async Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds,
         IReadOnlyCollection<int>? excludedAttributeIds = null)
     {
         // Mirrors the production contract: every requested ID gets an entry, empty when the
