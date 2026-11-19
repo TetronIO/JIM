@@ -1,6 +1,6 @@
 # Microsoft Entra ID SSO Verification
 
-- **Status:** Planned
+- **Status:** Doing (decisions agreed; Layer 1 under way)
 - **Created:** 2026-11-19
 - **Issue:** [#2367](https://github.com/TetronIO/JIM/issues/2367)
 
@@ -24,11 +24,11 @@ It follows the AD FS work closely, because that work already solved most of the 
 
 ## Decisions
 
-Each needs the user's agreement before its phase starts. The recommendation is first.
+All five were agreed on 2026-11-19, as recommended below (D2 as revised against Microsoft's guidance).
 
-### D1. Which claim identifies a person: `oid`, matched to Object Identifier
+### D1. Which claim identifies a person: `oid`, matched to Object Identifier (agreed)
 
-**Recommended: `JIM_SSO_CLAIM_TYPE=oid`, `JIM_SSO_MV_ATTRIBUTE=Object Identifier`** (a built-in Metaverse attribute that already exists).
+**Agreed: `JIM_SSO_CLAIM_TYPE=oid`, `JIM_SSO_MV_ATTRIBUTE=Object Identifier`** (a built-in Metaverse attribute that already exists).
 
 The issue's principle 2 says `sub`, for the same shape across providers. Two facts argue against it for Entra ID:
 
@@ -38,33 +38,36 @@ The issue's principle 2 says `sub`, for the same shape across providers. Two fac
 
 The alternative, `sub` matched to Subject Identifier, keeps the issue's wording but keeps Step 7 as a sign-in-then-look-it-up step.
 
-### D2. Access tokens: version 2, with JIM accepting their audience
+### D2. Access tokens: version 2, the client ID as the only audience, and `scp` required (agreed)
 
-**Recommended: the registration sets `requestedAccessTokenVersion` to 2, and JIM accepts the client ID as an access token's audience when `JIM_SSO_API_SCOPE` is `api://{client ID}/...`, provided the token's `scp` claim grants that scope.**
+**Agreed: the registration sets `requestedAccessTokenVersion` to 2; for Entra ID, JIM accepts only the client ID as an access token's audience; and every bearer token must carry an `scp` claim granting JIM's API scope (`access_as_user`).**
 
-Version 2 is what Microsoft recommends. A v2 token's `aud` is the application's client ID rather than `api://{id}`, so today JIM refuses it with `401` (the #2353 failure class). Accepting the client ID alone would let an ID token, whose `aud` is also the client ID, pass as an access token; requiring `scp` to name JIM's API scope closes that, since ID tokens carry no `scp`. Version 1 tokens keep working: their audience is still accepted.
+This is Microsoft's guidance, checked on 2026-11-19:
 
-The alternative is to pin version 1 in the registration and change nothing in JIM. It works, but it goes against Entra ID's grain, and a customer who follows Microsoft's defaults elsewhere hits the `401`.
+- A resource application (an API, which JIM is) should use version 2 access tokens, and once it does, "ensure the application's audience validation logic is modified to **only** accept its `appId`" ([Security best practices for app registration](https://learn.microsoft.com/entra/identity-platform/security-best-practices-for-app-registration#access-token-version)). A v2 token's `aud` is the client ID; today JIM expects `api://{id}` and refuses it with `401` (the #2353 failure class).
+- A delegated token's `scp` must be validated, and its absence checked for, since ID tokens carry none ([Validate the actor](https://learn.microsoft.com/entra/identity-platform/claims-validation#validate-the-actor)). An ID token's `aud` is also the client ID, so without the `scp` requirement it would pass as an access token.
 
-### D3. How the checks sign people in: browserless, like AD FS
+A version 1 configuration stops working, deliberately (JIM is pre-release: no compatibility path); the changelog and the guide say so. Considered and rejected: pinning version 1 and changing nothing in JIM, which goes against Entra ID's grain; accepting both audiences, which Microsoft advises against.
 
-**Recommended: an Entra ID variant of the AD FS checks' browserless sign-in client**: plain HTTP from the toolbox container, following Entra ID's sign-in page (its embedded configuration, the credential post, the "stay signed in" step) to JIM's redirect URI. No new dependency, and the same harness, result format and checks as Scenario 031.
+### D3. How the checks sign people in: browserless, like AD FS (agreed)
+
+**Agreed: an Entra ID variant of the AD FS checks' browserless sign-in client**: plain HTTP from the toolbox container, following Entra ID's sign-in page (its embedded configuration, the credential post, the "stay signed in" step) to JIM's redirect URI. No new dependency, and the same harness, result format and checks as Scenario 031.
 
 The cost is that the client depends on Microsoft's sign-in page, which Microsoft can change. The client will name that failure as "Entra ID's sign-in page did not behave as expected" so it is never mistaken for a JIM fault, and `jim-sso-entra` being its own status keeps it from colouring anything else.
 
 The alternative is a real headless browser (Playwright and Chromium in the toolbox), which survives page changes better but is a new third-party dependency (needs approval under the dependency policy) and a heavier container.
 
-### D4. The release gate: generalise first, in its own stack layer
+### D4. The release gate: generalise first, in its own stack layer (agreed)
 
-**Recommended: replace the four per-status gate scripts with one, `scripts/Test-ReleaseGate.ps1 -Context <status>`, driven by a table of statuses (context, enforcement variable, remedy), with one matrix job in `release.yml` and one loop in `/release`.** It lands as the bottom layer of a stack, with the Entra ID work on top, since that work's gate is just one more row.
+**Agreed: replace the four per-status gate scripts with one, `scripts/Test-ReleaseGate.ps1 -Context <status>`, driven by a table of statuses (context, enforcement variable, remedy), with one matrix job in `release.yml` and one loop in `/release`.** It lands as the bottom layer of a stack, with the Entra ID work on top, since that work's gate is just one more row.
 
 The four existing scripts (`Test-AdLabReleaseGate`, `Test-AdLabFederationReleaseGate`, `Test-PreReleaseGate`, `Test-DeployLabReleaseGate`) already share `scripts/ReleaseGate.ps1` and differ only in their constants; a fifth copy, and a fifth job and skill step, is the drift the issue asked to stop.
 
 The alternative is a fifth sibling script, `Test-EntraSsoReleaseGate.ps1`: smaller now, more to keep in step later.
 
-### D5. Who first creates JIM's registration in the tenant: the administrator, once
+### D5. Who first creates JIM's registration in the tenant: the administrator, once (agreed)
 
-**Recommended: run `Register-JIMIdentityProvider -Provider EntraId` once, from the devcontainer, as the tenant administrator (device code), which creates the registration and grants tenant-wide consent for its delegated permissions; then add the CI app as an owner.** From then on the nightly run repairs it with only `Application.ReadWrite.OwnedBy`, and resets its client secret each night.
+**Agreed: run `Register-JIMIdentityProvider -Provider EntraId` once, from the devcontainer, as the tenant administrator (device code), which creates the registration and grants tenant-wide consent for its delegated permissions; then add the CI app as an owner.** From then on the nightly run repairs it with only `Application.ReadWrite.OwnedBy`, and resets its client secret each night.
 
 The CI app cannot grant consent: that needs `DelegatedPermissionGrant.ReadWrite.All` (or an admin role), which can grant any delegated permission to any application, far beyond what CI should hold. Without consent, a test user meets a consent prompt they are not allowed to answer. A customer runs the cmdlet as an administrator, so the cmdlet grants consent when it can, and says so plainly when it cannot.
 
@@ -84,8 +87,8 @@ The alternative is to give the CI app the consent permission, so the nightly run
 ### Layer 2: Entra ID verification
 
 **Phase 1: access tokens (D2), in JIM.Web.**
-- `ApiAudienceResolver` returns the audiences JIM accepts (`api://{id}` and, for an `api://{client ID}` scope, the client ID).
-- A token validated against the client-ID audience must carry an `scp` naming JIM's API scope; otherwise it is refused with a reason `SignInProblemDiagnosis` can show.
+- For Entra ID (an authority on `login.microsoftonline.com`), the audience JIM accepts is the client ID only; the other providers keep today's resolution (`ApiAudienceResolver`).
+- Every bearer token must carry an `scp` (or `scope`, for providers that name it so) granting JIM's API scope; otherwise it is refused with a reason `SignInProblemDiagnosis` can show. Check first that Keycloak's and AD FS's access tokens carry the scope, so the requirement can apply to every provider rather than Entra ID alone.
 - Unit tests first, in `JIM.Web.Api.Tests`, including an ID token refused as a bearer token.
 
 **Phase 2: `Register-JIMIdentityProvider -Provider EntraId`.**
