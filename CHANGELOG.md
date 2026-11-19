@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 A Scope test case remembers the connections it was tested with, such as "Has user in PANOPLY AD", so it gives the same result every time it runs; set them in the portal, the REST API or PowerShell. (#2787)
+- 🐛 Changing which Object Type a connection Scoping Criterion checks, such as "Has user in PANOPLY AD", is recorded in Configuration History as a change that affects synchronisation; it was saved with no change class and an error in the log.
 
 ### Performance
 

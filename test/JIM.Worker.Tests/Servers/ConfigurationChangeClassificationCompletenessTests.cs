@@ -8,6 +8,7 @@ using JIM.Data;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
+using JIM.Models.Search;
 using JIM.Models.Staging;
 using Moq;
 using NUnit.Framework;
@@ -322,7 +323,21 @@ public class ConfigurationChangeClassificationCompletenessTests
             DateTimeValue = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             BoolValue = true,
             GuidValue = Guid.Empty,
-            CaseSensitive = true
+            CaseSensitive = true,
+            Expression = "z",
+            CompareAs = AttributeDataType.DateTime,
+            ComparisonType = SearchComparisonType.Equals,
+            ValueMode = DateCriteriaValueMode.Relative,
+            RelativeCount = 30,
+            RelativeUnit = RelativeDateUnit.Days,
+            RelativeDirection = RelativeDateDirection.Ago
+        });
+        // A connection criterion ("Has user in ...") emits a key no attribute criterion does.
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            Id = 601,
+            ConnectedObjectTypeId = 15,
+            ComparisonType = SearchComparisonType.HasValue
         });
 
         var rule = new SyncRule
