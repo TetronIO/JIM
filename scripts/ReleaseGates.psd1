@@ -38,6 +38,15 @@
             NotEnforcedMessage = 'The Active Directory lab AD FS gate is not enforced yet (JIM_AD_LAB_ADFS_GATE_ENFORCED is not true), so this release has not been proven to sign people in through a real AD FS.'
         }
         @{
+            Context            = 'jim-sso-entra'
+            Name               = 'Entra ID sign-in gate'
+            Workflow           = 'ad-lab.yml'
+            EnforcedVariable   = 'JIM_SSO_ENTRA_GATE_ENFORCED'
+            Remedy             = 'There is no override: fix the cause, then dispatch ad-lab.yml so it runs on {0} (gh workflow run ad-lab.yml --ref main -f scenario=35, while {0} is the head of main), wait for it to finish, and check again. A red run can be an Entra ID or test tenant outage: the run says which.'
+            NotReportedReason  = 'the Active Directory lab''s Entra ID sign-in checks have not run on this exact commit. The nightly run tests the head of main as it stood then, so a commit made since has none.'
+            NotEnforcedMessage = 'The Entra ID sign-in gate is not enforced yet (JIM_SSO_ENTRA_GATE_ENFORCED is not true), so this release has not been proven to sign people in through Microsoft Entra ID.'
+        }
+        @{
             Context            = 'jim-pre-release'
             Name               = 'Pre-release integration gate'
             Workflow           = 'pre-release.yml'

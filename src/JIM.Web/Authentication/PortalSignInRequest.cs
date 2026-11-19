@@ -36,7 +36,7 @@ public static class PortalSignInRequest
         // With no Web API configured there are no claim rules to bring into the ID token.
         if (IsAdfsAuthority(authority) && !string.IsNullOrEmpty(apiScope))
         {
-            options.Resource = ApiAudienceResolver.Resolve(apiScope, clientId);
+            options.Resource = ApiAudienceResolver.Resolve(authority, apiScope, clientId);
             options.Scope.Add("allatclaims");
         }
     }

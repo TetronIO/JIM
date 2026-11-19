@@ -1,0 +1,24 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+# The Active Directory lab's Entra ID sign-in checks (Scenario 035, #2367): jim.web signs people in through the JIM test
+# tenant (tetronjim.onmicrosoft.com), with JIM registered there by Register-JIMIdentityProvider -Provider EntraId.
+# Added after docker-compose.ad-lab.yml by Get-JimComposeArgument, for Scenario 035 only.
+#
+# The registration's values reach jim.web through the JIM_AD_LAB_ENTRA_* variables of the runner's process
+# (Set-EntraIdLabSsoEnvironment, Run-IntegrationTests.ps1 Step 4f), never a file: the client secret among them, which
+# each run replaces. The placeholders below only let compose parse this file before the registration exists.
+services:
+  jim.web:
+    environment:
+      - JIM_SSO_AUTHORITY=${JIM_AD_LAB_ENTRA_AUTHORITY:-https://login.microsoftonline.com/unregistered/v2.0}
+      - JIM_SSO_PUBLIC_AUTHORITY=${JIM_AD_LAB_ENTRA_AUTHORITY:-https://login.microsoftonline.com/unregistered/v2.0}
+      - JIM_SSO_CLIENT_ID=${JIM_AD_LAB_ENTRA_CLIENT_ID:-unregistered}
+      - JIM_SSO_SECRET=${JIM_AD_LAB_ENTRA_CLIENT_SECRET:-unregistered}
+      - JIM_SSO_API_SCOPE=${JIM_AD_LAB_ENTRA_API_SCOPE:-unregistered}
+      - JIM_SSO_PUBLIC_CLIENT_ID=${JIM_AD_LAB_ENTRA_PUBLIC_CLIENT_ID:-unregistered}
+      - JIM_SSO_CLAIM_TYPE=${JIM_AD_LAB_ENTRA_CLAIM_TYPE:-oid}
+      - JIM_SSO_MV_ATTRIBUTE=${JIM_AD_LAB_ENTRA_MV_ATTRIBUTE:-Object Identifier}
+      - JIM_SSO_INITIAL_ADMIN=${JIM_AD_LAB_ENTRA_INITIAL_ADMIN:-00000000-0000-0000-0000-000000000001}
+      # Entra ID's issuer is derived from the authority; the development stack's own list must not apply.
+      - JIM_SSO_VALID_ISSUERS=

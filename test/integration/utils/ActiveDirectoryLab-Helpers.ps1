@@ -70,6 +70,29 @@ function Test-ActiveDirectoryLabFederationScenario {
     return ($null -ne $ScenarioNumber -and $ScenarioNumber -in $script:AdLabFederationScenarios)
 }
 
+# The scenario that signs in through the JIM test tenant in Microsoft Entra ID (#2367). It starts JIM with Entra ID as
+# the identity provider (docker-compose.ad-lab-entra.yml) and needs no machine beyond dc-primary.
+$script:AdLabEntraIdScenarios = @(35)
+
+function Test-ActiveDirectoryLabEntraIdScenario {
+    <#
+    .SYNOPSIS
+        Whether a scenario signs in through the JIM test tenant in Microsoft Entra ID.
+
+    .PARAMETER ScenarioNumber
+        The scenario's number, or $null when there is none.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory=$false)]
+        [AllowNull()]
+        [Nullable[int]]$ScenarioNumber
+    )
+
+    return ($null -ne $ScenarioNumber -and $ScenarioNumber -in $script:AdLabEntraIdScenarios)
+}
+
 function Get-JimComposeArgument {
     <#
     .SYNOPSIS
@@ -117,6 +140,9 @@ function Get-JimComposeArgument {
         $composeArguments += @('-f', 'test/integration/docker/docker-compose.ad-lab.yml')
         if (Test-ActiveDirectoryLabFederationScenario -ScenarioNumber $ScenarioNumber) {
             $composeArguments += @('-f', 'test/integration/docker/docker-compose.ad-lab-adfs.yml')
+        }
+        if (Test-ActiveDirectoryLabEntraIdScenario -ScenarioNumber $ScenarioNumber) {
+            $composeArguments += @('-f', 'test/integration/docker/docker-compose.ad-lab-entra.yml')
         }
     }
     return [string[]]$composeArguments

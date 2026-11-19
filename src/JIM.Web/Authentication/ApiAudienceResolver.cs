@@ -14,16 +14,22 @@ public static class ApiAudienceResolver
     /// Returns the audience JIM expects on SSO bearer tokens.
     /// </summary>
     /// <remarks>
-    /// An <c>api://</c> scope names an application ID URI, optionally followed by a permission:
+    /// For Microsoft Entra ID, the client ID: its version 2 access tokens, which JIM's registration asks for, carry the
+    /// application's client ID as their audience, never its App ID URI (#2367). Otherwise, an <c>api://</c> scope names
+    /// an application ID URI, optionally followed by a permission:
     /// <c>api://{id}/access_as_user</c> (Entra ID) gives <c>api://{id}</c>, and a bare <c>api://{id}</c>
     /// (AD FS, Okta's <c>api://default</c>) is the audience as it stands. Any other scope, or none, gives the
     /// client ID. Only the part after <c>api://</c> is searched for a path separator, so the scheme's own
     /// slashes are never mistaken for one (issue #2353).
     /// </remarks>
+    /// <param name="authority">The value of <c>JIM_SSO_AUTHORITY</c>.</param>
     /// <param name="apiScope">The value of <c>JIM_SSO_API_SCOPE</c>.</param>
     /// <param name="clientId">The value of <c>JIM_SSO_CLIENT_ID</c>.</param>
-    public static string? Resolve(string? apiScope, string? clientId)
+    public static string? Resolve(string? authority, string? apiScope, string? clientId)
     {
+        if (EntraIdAuthority.IsEntraId(authority))
+            return clientId;
+
         if (string.IsNullOrEmpty(apiScope) || !apiScope.StartsWith(ApiScheme, StringComparison.Ordinal))
             return clientId;
 

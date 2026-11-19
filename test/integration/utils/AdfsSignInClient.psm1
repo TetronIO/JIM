@@ -3,7 +3,8 @@
 
 <#
 .SYNOPSIS
-    A browserless sign-in to JIM through AD FS, for the Active Directory lab's AD FS sign-in checks (#2441).
+    A browserless sign-in to JIM through AD FS or Microsoft Entra ID, for the Active Directory lab's sign-in checks: AD FS
+    (#2441, Scenario 031) and Entra ID (#2367, Scenario 035).
 
 .DESCRIPTION
     It does over plain HTTP what a browser does: follows JIM's redirect to AD FS, fills in AD FS's forms sign-in page
@@ -15,6 +16,12 @@
     administrator's workstation: that container resolves jim.web and the AD FS server's name and trusts their
     certificates (Initialize-AdfsSignInClient.ps1). The functions that read a page are pure and tested on any platform
     (AdfsSignInClient.Tests.ps1); the ones that make requests run only there.
+
+    Entra ID's sign-in page is a script-driven application, but the requests behind it are plain form posts: the page
+    carries its state in a $Config object (ConvertFrom-EntraIdSignInPage), and Complete-EntraIdSignIn posts the person's
+    name and password with that state, as the page's script does. It depends on Microsoft's page, which Microsoft can
+    change, so a page it does not recognise is reported as Entra ID's, never as JIM's. Complete-IdentityProviderSignIn
+    signs in on whichever of the two pages it is shown.
 
     No function writes a password anywhere: not to the output, an error message or a file.
 #>
@@ -251,6 +258,120 @@ function Complete-AdfsSignIn {
     return $result
 }
 
+function ConvertFrom-EntraIdSignInPage {
+    <#
+    .SYNOPSIS
+        Reads Microsoft Entra ID's sign-in page state (its $Config object): the page's id, where it posts, the flow token,
+        context and canary a post must carry, and any error. $null for a page that is not Entra ID's.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Html)
+
+    # The object ends where its script block does; a "};" inside one of its strings must not end it.
+    $match = [regex]::Match($Html, '(?s)\$Config=(?<json>\{.*?\});\s*(?://\]\]>|</script>)')
+    if (-not $match.Success) { return $null }
+    $config = $match.Groups['json'].Value | ConvertFrom-Json -ErrorAction Stop
+    $read = { param($name) if ($config.PSObject.Properties[$name]) { [string]$config.$name } else { $null } }
+    if (-not (& $read 'urlPost') -and -not (& $read 'pgid')) { return $null }
+    [pscustomobject]@{
+        PageId    = & $read 'pgid'
+        PostTo    = & $read 'urlPost'
+        FlowToken = & $read 'sFT'
+        Context   = & $read 'sCtx'
+        Canary    = & $read 'canary'
+        ErrorCode = & $read 'sErrorCode'
+        ErrorText = & $read 'strServiceExceptionMessage'
+    }
+}
+
+function New-EntraIdSignInFields {
+    <#
+    .SYNOPSIS
+        What Entra ID's sign-in page posts for a password sign-in: the person's name and password, with the page's flow
+        token, context and canary. LoginOptions 3 declines to stay signed in.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', '', Justification = 'A lab account''s password, posted in a form body as a browser posts it.')]
+    [CmdletBinding()]
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param(
+        [Parameter(Mandatory)][object]$Page,
+        [Parameter(Mandatory)][string]$UserName,
+        [Parameter(Mandatory)][string]$Password
+    )
+
+    [ordered]@{
+        login = $UserName; loginfmt = $UserName; passwd = $Password; type = '11'; LoginOptions = '3'
+        ctx = $Page.Context; flowToken = $Page.FlowToken; canary = $Page.Canary
+    }
+}
+
+function Complete-EntraIdSignIn {
+    <#
+    .SYNOPSIS
+        Signs in on Microsoft Entra ID's sign-in page with a password, answers "stay signed in?" if asked, and returns
+        where Entra ID sends the browser next: a page with the form_post reply for the portal, or a redirect to the
+        loopback callback for the PowerShell module. Throws, with Entra ID's own reason, when it refuses the sign-in.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', '', Justification = 'A lab account''s password, posted in a form body as a browser posts it.')]
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][Microsoft.PowerShell.Commands.WebRequestSession]$Session,
+        [Parameter(Mandatory)][object]$Response,
+        [Parameter(Mandatory)][string]$UserName,
+        [Parameter(Mandatory)][string]$Password
+    )
+
+    $page = ConvertFrom-EntraIdSignInPage -Html $Response.Content
+    if (-not $page) {
+        throw "Entra ID's sign-in did not go as expected: it did not show its sign-in page ($($Response.StatusCode) at $($Response.Uri.GetLeftPart([UriPartial]::Path)))."
+    }
+    $posted = Invoke-SignInRequest -Session $Session -Uri (Resolve-SignInUri -Base $Response.Uri.AbsoluteUri -Reference $page.PostTo) -Method POST `
+        -Body (New-EntraIdSignInFields -Page $page -UserName $UserName -Password $Password)
+    $result = Invoke-SignInRedirects -Session $Session -Response $posted
+
+    # Entra ID may interrupt once more, to ask whether to stay signed in; anything else it shows is a refusal or a page
+    # this client does not know, and both are Entra ID's to explain.
+    for ($interrupts = 0; $interrupts -lt 3; $interrupts++) {
+        $next = ConvertFrom-EntraIdSignInPage -Html $result.Content
+        if (-not $next) { return $result }
+        if ($next.ErrorCode) {
+            throw "Entra ID refused the sign-in for ${UserName}: $($next.ErrorCode)$(if ($next.ErrorText) { " ($($next.ErrorText))" })"
+        }
+        if ($next.PageId -ne 'KmsiInterrupt') {
+            throw "Entra ID's sign-in did not go as expected: it showed the page '$($next.PageId)' after the password, which a person would have to answer. Check the account in the Entra admin centre."
+        }
+        $posted = Invoke-SignInRequest -Session $Session -Uri (Resolve-SignInUri -Base $result.Uri.AbsoluteUri -Reference $next.PostTo) -Method POST `
+            -Body ([ordered]@{ LoginOptions = '3'; type = '28'; ctx = $next.Context; flowToken = $next.FlowToken; canary = $next.Canary })
+        $result = Invoke-SignInRedirects -Session $Session -Response $posted
+    }
+    throw "Entra ID's sign-in did not go as expected: it kept asking to stay signed in."
+}
+
+function Complete-IdentityProviderSignIn {
+    <#
+    .SYNOPSIS
+        Signs in on the identity provider's sign-in page the browser was sent to, AD FS's or Entra ID's, and returns where
+        it sends the browser next.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', '', Justification = 'A lab account''s password, posted in a form body as a browser posts it.')]
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][Microsoft.PowerShell.Commands.WebRequestSession]$Session,
+        [Parameter(Mandatory)][object]$Response,
+        [Parameter(Mandatory)][string]$UserName,
+        [Parameter(Mandatory)][string]$Password
+    )
+
+    if (Find-AdfsSignInForm -Html $Response.Content) {
+        return Complete-AdfsSignIn -Session $Session -Response $Response -UserName $UserName -Password $Password
+    }
+    if (ConvertFrom-EntraIdSignInPage -Html $Response.Content) {
+        return Complete-EntraIdSignIn -Session $Session -Response $Response -UserName $UserName -Password $Password
+    }
+    throw "The identity provider did not show a sign-in page this client knows (AD FS's or Entra ID's): $($Response.StatusCode) at $($Response.Uri.GetLeftPart([UriPartial]::Path))."
+}
+
 function Invoke-PortalSignIn {
     <#
     .SYNOPSIS
@@ -269,11 +390,11 @@ function Invoke-PortalSignIn {
 
     $session = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
     $atAdfs = Invoke-SignInRedirects -Session $session -Response (Invoke-SignInRequest -Session $session -Uri "$JimUrl/")
-    $reply = Complete-AdfsSignIn -Session $session -Response $atAdfs -UserName $UserName -Password $Password
+    $reply = Complete-IdentityProviderSignIn -Session $session -Response $atAdfs -UserName $UserName -Password $Password
 
     $formPost = @(ConvertFrom-HtmlForm -Html $reply.Content) | Where-Object { $_.Action -like '*/signin-oidc*' } | Select-Object -First 1
     if (-not $formPost) {
-        throw "After signing in, AD FS did not send the form_post reply to JIM's /signin-oidc: $($reply.StatusCode) at $($reply.Uri.GetLeftPart([UriPartial]::Path))."
+        throw "After signing in, the identity provider did not send the form_post reply to JIM's /signin-oidc: $($reply.StatusCode) at $($reply.Uri.GetLeftPart([UriPartial]::Path))."
     }
     $callback = Invoke-SignInRequest -Session $session -Uri (Resolve-SignInUri -Base $reply.Uri.AbsoluteUri -Reference $formPost.Action) -Method POST -Body $formPost.Fields
     $landed = Invoke-SignInRedirects -Session $session -Response $callback
@@ -332,13 +453,12 @@ function Complete-BrowserSignIn {
 
     $session = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
     $atAdfs = Invoke-SignInRedirects -Session $session -Response (Invoke-SignInRequest -Session $session -Uri $Url)
-    # Already signed in to AD FS (its own session cookie), it would redirect straight to the callback.
-    $result = if (Find-AdfsSignInForm -Html $atAdfs.Content) {
-        Complete-AdfsSignIn -Session $session -Response $atAdfs -UserName $UserName -Password $Password
-    } else { $atAdfs }
+    # Already signed in to the identity provider (its own session cookie), it would redirect straight to the callback.
+    $result = if ($atAdfs.Location -and (Test-LoopbackCallback -Uri $atAdfs.Location.AbsoluteUri)) { $atAdfs }
+        else { Complete-IdentityProviderSignIn -Session $session -Response $atAdfs -UserName $UserName -Password $Password }
 
     if (-not $result.Location -or -not (Test-LoopbackCallback -Uri $result.Location.AbsoluteUri)) {
-        throw "AD FS did not send the browser to the module's loopback callback: $($result.StatusCode) at $($result.Uri.GetLeftPart([UriPartial]::Path))."
+        throw "The identity provider did not send the browser to the module's loopback callback: $($result.StatusCode) at $($result.Uri.GetLeftPart([UriPartial]::Path))."
     }
     $delivered = Invoke-SignInRequest -Session $session -Uri $result.Location
     if ($delivered.StatusCode -ne 200) { throw "The module's loopback listener answered $($delivered.StatusCode)." }
@@ -417,9 +537,9 @@ function Invoke-TryItSignIn {
     $queryString = ($query.GetEnumerator() | ForEach-Object { "$($_.Key)=$([uri]::EscapeDataString($_.Value))" }) -join '&'
 
     $atAdfs = Invoke-SignInRedirects -Session $session -Response (Invoke-SignInRequest -Session $session -Uri "$($settings.AuthorizationUrl)?$queryString")
-    $returned = Complete-AdfsSignIn -Session $session -Response $atAdfs -UserName $UserName -Password $Password
+    $returned = Complete-IdentityProviderSignIn -Session $session -Response $atAdfs -UserName $UserName -Password $Password
     if ($returned.Uri.GetLeftPart([UriPartial]::Path) -ne $redirectUri) {
-        throw "AD FS did not return the browser to $($redirectUri): $($returned.StatusCode) at $($returned.Uri.GetLeftPart([UriPartial]::Path))."
+        throw "The identity provider did not return the browser to $($redirectUri): $($returned.StatusCode) at $($returned.Uri.GetLeftPart([UriPartial]::Path))."
     }
     $code = [regex]::Match($returned.Uri.Query, '[?&]code=([^&]+)').Groups[1].Value
     if (-not $code) {
@@ -431,7 +551,7 @@ function Invoke-TryItSignIn {
         grant_type = 'authorization_code'; code = [uri]::UnescapeDataString($code); redirect_uri = $redirectUri
         client_id = $settings.ClientId; code_verifier = $verifier
     }
-    if ([int]$token.StatusCode -ne 200) { throw "AD FS refused Try It's token request: $([int]$token.StatusCode) $($token.Content)" }
+    if ([int]$token.StatusCode -ne 200) { throw "The identity provider refused Try It's token request: $([int]$token.StatusCode) $($token.Content)" }
     $allowedOrigin = if ($token.Headers.ContainsKey('Access-Control-Allow-Origin')) { [string]@($token.Headers['Access-Control-Allow-Origin'])[0] } else { $null }
 
     return [pscustomobject]@{
@@ -462,6 +582,7 @@ function Get-BearerApiResult {
 Export-ModuleMember -Function @(
     'ConvertFrom-HtmlForm', 'Find-AdfsSignInForm', 'Get-AdfsSignInError', 'New-AdfsSignInFields', 'Resolve-SignInUri',
     'Test-LoopbackCallback', 'Invoke-SignInRequest', 'Invoke-SignInRedirects', 'Complete-AdfsSignIn', 'Invoke-PortalSignIn',
+    'ConvertFrom-EntraIdSignInPage', 'New-EntraIdSignInFields', 'Complete-EntraIdSignIn', 'Complete-IdentityProviderSignIn',
     'Get-PortalUserInfo', 'Get-PortalAdministratorApiStatus', 'Complete-BrowserSignIn', 'Get-TryItSignInSetting',
     'Invoke-TryItSignIn', 'Get-BearerApiResult'
 )

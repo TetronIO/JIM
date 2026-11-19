@@ -10,10 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - ✨ Connector-defined Attributes, such as the LDAP Connector's Exchange Alias, now carry a chip wherever you read or pick one, and saving a Synchronisation Rule warns when it flows one alongside the directory attribute it is written through from a different source. (#2756)
+- ✨ `Register-JIMIdentityProvider` registers JIM with Microsoft Entra ID in one command: one application for the portal, the PowerShell module, Try It and JIM's API, with consent given for everyone and your object ID returned to make you JIM's first administrator. (#2367)
 - ✨ Saving an export Synchronisation Rule warns you when another enabled export rule provisions the same Metaverse Object Type as a different Object Type in the same Connected System, such as people as users and as contacts: only one can provision a person both cover. (#2824)
 
 ### Changed
 
+- 🔄 With Microsoft Entra ID, JIM's API takes version 2 access tokens, as Microsoft recommends: their audience is the application's client ID and they must grant `access_as_user`. Version 1 tokens are no longer accepted, and JIM's sign-in diagnosis says how to switch. (#2367)
 - 🔄 The SCIM 2.0 Service Provider is out of Preview: identity providers can push Users and Groups to JIM with no Preview feature to turn on first. (#124)
 
 ### Security

@@ -2,8 +2,8 @@
 # Triggered by pushing a tag like v0.2.0
 #
 # This workflow first refuses the release outright unless the tagged commit has a green commit status for every
-# release gate in scripts/ReleaseGates.psd1 (the Active Directory lab, its AD FS sign-in checks, the pre-release
-# integration suite and the deployment lab), each once its own *_GATE_ENFORCED variable is true; see the release-gates
+# release gate in scripts/ReleaseGates.psd1 (the Active Directory lab, its AD FS and Entra ID sign-in checks, the
+# pre-release integration suite and the deployment lab), each once its own *_GATE_ENFORCED variable is true; see the release-gates
 # job. Then:
 # 1. Validates the build, tests, and version consistency
 # 2. Builds, scans, smoke-tests, and pushes Docker images to ghcr.io
@@ -40,6 +40,8 @@ jobs:
   #                     (nightly on main, and on dispatch);
   #   jim-ad-lab-adfs   ad-lab.yml, the same run: people signing in to JIM through the lab's real AD FS (#2441), a
   #                     status of its own so a sign-in failure never turns the LDAP result red or the reverse;
+  #   jim-sso-entra     ad-lab.yml, the same run: people signing in to JIM through Microsoft Entra ID, against the JIM
+  #                     test tenant (#2367), a status of its own so an Entra ID outage never colours the others;
   #   jim-pre-release   pre-release.yml: every scenario against Samba AD, OpenLDAP and 389 Directory Server (by itself
   #                     when a change to VERSION reaches main, which is to say when the release pull request merges);
   #   jim-deploy-lab    deploy-lab.yml: install, upgrade, roll back, re-run and soak a bundle of the commit on fresh
@@ -69,6 +71,8 @@ jobs:
             variable: JIM_AD_LAB_GATE_ENFORCED
           - context: jim-ad-lab-adfs
             variable: JIM_AD_LAB_ADFS_GATE_ENFORCED
+          - context: jim-sso-entra
+            variable: JIM_SSO_ENTRA_GATE_ENFORCED
           - context: jim-pre-release
             variable: JIM_PRE_RELEASE_GATE_ENFORCED
           - context: jim-deploy-lab

@@ -211,7 +211,7 @@ try
     var apiScope = Environment.GetEnvironmentVariable(Constants.Config.SsoApiScope);
 
     // Extract the API identifier from the scope for JWT validation
-    var apiAudience = ApiAudienceResolver.Resolve(apiScope, clientId);
+    var apiAudience = ApiAudienceResolver.Resolve(authority, apiScope, clientId);
     // When that audience is the portal's own client ID, its ID token carries it too, so a bearer token must also grant
     // JIM's API scope; see BearerScopeRequirement.
     var apiScopeRequirement = BearerScopeRequirement.For(apiScope, clientId, apiAudience);
@@ -1194,7 +1194,7 @@ static Microsoft.IdentityModel.Protocols.IConfigurationManager<Microsoft.Identit
 
 /// <summary>
 /// Gets the valid token issuers for JWT validation.
-/// Auto-detects Entra ID and configures both v1 and v2 issuer formats.
+/// Auto-detects Entra ID and accepts its version 2 issuer.
 /// For other IDPs, uses the authority as the issuer.
 /// </summary>
 static string[] GetValidIssuers(string? authority)
@@ -1209,24 +1209,11 @@ static string[] GetValidIssuers(string? authority)
     if (string.IsNullOrEmpty(authority))
         return [];
 
-    // Auto-detect Entra ID and handle v1/v2 token format quirks
-    // Entra ID authority format: https://login.microsoftonline.com/{tenant-id}/v2.0
-    if (authority.Contains("login.microsoftonline.com"))
+    // Entra ID: the tenant's version 2 issuer, which the access tokens JIM's registration asks for carry (#2367).
+    if (EntraIdAuthority.IsEntraId(authority))
     {
-        // Extract tenant ID from the authority URL
-        var uri = new Uri(authority);
-        var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (segments.Length >= 1)
-        {
-            var tenantId = segments[0];
-            Log.Information("Detected Entra ID authority, configuring v1 and v2 issuers for tenant {TenantId}", tenantId);
-
-            return
-            [
-                $"https://sts.windows.net/{tenantId}/",                 // v1 issuer format
-                $"https://login.microsoftonline.com/{tenantId}/v2.0"    // v2 issuer format
-            ];
-        }
+        Log.Information("Detected an Entra ID authority; accepting its version 2 issuer");
+        return EntraIdAuthority.ValidIssuers(authority);
     }
 
     // For other IDPs, the issuer typically matches the authority

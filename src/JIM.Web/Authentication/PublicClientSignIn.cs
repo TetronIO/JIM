@@ -40,7 +40,7 @@ public static class PublicClientSignIn
             return null;
 
         return PortalSignInRequest.IsAdfsAuthority(authority)
-            ? $"{ApiAudienceResolver.Resolve(apiScope, clientId)}/openid"
+            ? $"{ApiAudienceResolver.Resolve(authority, apiScope, clientId)}/openid"
             : apiScope;
     }
 }

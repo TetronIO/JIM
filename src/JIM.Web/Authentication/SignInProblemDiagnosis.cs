@@ -125,7 +125,7 @@ public static partial class SignInProblemDiagnosis
                 var issuers = new[] { options.TokenValidationParameters.ValidIssuer }
                     .Concat(options.TokenValidationParameters.ValidIssuers ?? [])
                     .Concat(DiscoveredIssuers.From(configuration));
-                return DiagnoseAccessToken(result.SecurityToken, NonEmpty(audiences), NonEmpty(issuers));
+                return DiagnoseAccessToken(result.SecurityToken, NonEmpty(audiences), NonEmpty(issuers), options.Authority);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -139,10 +139,11 @@ public static partial class SignInProblemDiagnosis
 
     /// <summary>
     /// Diagnoses an access token the identity provider issued: whether it carries an audience JIM expects, and comes
-    /// from an issuer JIM accepts.
+    /// from an issuer JIM accepts. A version 1 token from Microsoft Entra ID fails both, and both are fixed by asking for
+    /// version 2 tokens (#2367), so that is the fix each names.
     /// </summary>
     public static IReadOnlyList<SignInProblemReport> DiagnoseAccessToken(SecurityToken token, IReadOnlyCollection<string> expectedAudiences,
-        IReadOnlyCollection<string> acceptedIssuers)
+        IReadOnlyCollection<string> acceptedIssuers, string? authority = null)
     {
         ArgumentNullException.ThrowIfNull(token);
         ArgumentNullException.ThrowIfNull(expectedAudiences);
@@ -155,6 +156,9 @@ public static partial class SignInProblemDiagnosis
             _ => []
         };
 
+        var entraIdVersion1 = EntraIdAuthority.IsEntraId(authority)
+            && token.Issuer.StartsWith(EntraIdVersion1IssuerPrefix, StringComparison.OrdinalIgnoreCase);
+
         var reports = new List<SignInProblemReport>();
         if (expectedAudiences.Count > 0 && !tokenAudiences.Intersect(expectedAudiences, StringComparer.Ordinal).Any())
         {
@@ -164,8 +168,10 @@ public static partial class SignInProblemDiagnosis
                 "An access token the identity provider issued was refused because it is not for JIM's API.",
                 JoinOrNone(expectedAudiences),
                 JoinOrNone(tokenAudiences),
-                $"JIM expects the audience {Constants.Config.SsoApiScope} names when it is an api:// URI, and otherwise the portal's " +
-                $"client ID, {Constants.Config.SsoClientId}. Change that setting, or have the identity provider issue the audience JIM expects."));
+                entraIdVersion1
+                    ? EntraIdVersion1Fix
+                    : $"JIM expects the audience {Constants.Config.SsoApiScope} names when it is an api:// URI, and otherwise the portal's " +
+                      $"client ID, {Constants.Config.SsoClientId}. Change that setting, or have the identity provider issue the audience JIM expects."));
         }
 
         if (acceptedIssuers.Count > 0 && !acceptedIssuers.Contains(token.Issuer, StringComparer.Ordinal))
@@ -176,7 +182,7 @@ public static partial class SignInProblemDiagnosis
                 "An access token came from an issuer JIM does not accept.",
                 JoinOrNone(acceptedIssuers),
                 ValueOrNone(token.Issuer),
-                IssuerFix));
+                entraIdVersion1 ? EntraIdVersion1Fix : IssuerFix));
         }
 
         return reports;
@@ -198,6 +204,13 @@ public static partial class SignInProblemDiagnosis
             JoinOrNone(claims.Select(c => c.Type).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList()),
             $"Set {Constants.Config.SsoClaimType} to a claim the identity provider issues for everyone, or have it issue '{claimType}'.");
     }
+
+    private const string EntraIdVersion1IssuerPrefix = "https://sts.windows.net/";
+
+    private const string EntraIdVersion1Fix =
+        "Microsoft Entra ID issued a version 1 access token. Set requestedAccessTokenVersion to 2 in the app registration's manifest " +
+        "(Register-JIMIdentityProvider -Provider EntraId does), so its tokens carry the client ID as their audience and come from the " +
+        "tenant's version 2 issuer, which is what JIM accepts.";
 
     private static string IssuerFix =>
         $"If that issuer is your identity provider's, add it to {Constants.Config.SsoValidIssuers} along with those listed; " +

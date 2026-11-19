@@ -56,8 +56,8 @@ Describe 'Get-ScenarioSupportedDirectoryTypes' {
         $result | Should -Not -Contain 'DirectoryServer389'
     }
 
-    It 'restricts Scenarios 003, 024, 025, 030, 031 and 034 (Active Directory lab only) to ActiveDirectory' {
-        foreach ($number in 3, 24, 25, 30, 31, 34) {
+    It 'restricts Scenarios 003, 024, 025, 030, 031, 034 and 035 (Active Directory lab only) to ActiveDirectory' {
+        foreach ($number in 3, 24, 25, 30, 31, 34, 35) {
             Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $number | Should -Be @('ActiveDirectory')
         }
     }
@@ -91,7 +91,7 @@ Describe 'Get-ScenarioSupportedDirectoryTypes' {
         # "judge an ActiveDirectory sweep by Samba AD" substitution.
         foreach ($number in 1..40) {
             $supported = @(Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $number)
-            if ($number -in 3, 24, 25, 30, 31, 34) {
+            if ($number -in 3, 24, 25, 30, 31, 34, 35) {
                 $supported | Should -Be @('ActiveDirectory') -Because "Scenario $number needs a real domain controller, or the lab's AD FS or Exchange server"
             }
             elseif ($number -in 14, 19, 22, 32) {
@@ -199,8 +199,12 @@ Describe 'Test-ScenarioRunsOnItsOwn' {
         Test-ScenarioRunsOnItsOwn -ScenarioNumber 31 | Should -BeTrue
     }
 
+    It 'keeps Scenario 035 (Entra ID sign-in) out of the sweep, for ad-lab.yml to run on its own and report as jim-sso-entra' {
+        Test-ScenarioRunsOnItsOwn -ScenarioNumber 35 | Should -BeTrue
+    }
+
     It 'leaves every other scenario in the sweep, Scenario 030 (AD FS trust) included' {
-        foreach ($number in (1..40 | Where-Object { $_ -ne 31 })) {
+        foreach ($number in (1..40 | Where-Object { $_ -notin 31, 35 })) {
             Test-ScenarioRunsOnItsOwn -ScenarioNumber $number | Should -BeFalse -Because "Scenario $number is part of -Scenario All"
         }
         Test-ScenarioRunsOnItsOwn -ScenarioNumber $null | Should -BeFalse

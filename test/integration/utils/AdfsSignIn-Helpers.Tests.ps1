@@ -59,3 +59,23 @@ Describe 'Invoke-AdfsSignInCheck' {
         $env:JIM_SIGN_IN_PASSWORD | Should -BeNullOrEmpty
     }
 }
+
+Describe 'Initialize-AdfsSignInToolbox' {
+    BeforeEach {
+        $script:Calls = [System.Collections.Generic.List[string]]::new()
+        Mock Invoke-AdfsSignInDocker { $script:Calls.Add(@($Arguments) -join ' '); $global:LASTEXITCODE = 0 }
+    }
+
+    It 'trusts AD FS''s certificate and jim.web''s when given AD FS''s' {
+        $null = Initialize-AdfsSignInToolbox -RepositoryRoot '/repo' -FederationCertificateName 'adfs-primary.pem' -JimCertificatePath '/repo/tls.crt'
+
+        @($script:Calls | Where-Object { $_ -like '*-CertificatePath*' }) | Should -HaveCount 1
+        ($script:Calls | Where-Object { $_ -like '*-CertificatePath*' }) | Should -BeLike '*-CertificatePath /certs/adfs-primary.pem,/tmp/jim-sign-in/jim-web.pem *'
+    }
+
+    It 'trusts jim.web''s alone for an identity provider whose certificate the toolbox already trusts, as Entra ID''s' {
+        $null = Initialize-AdfsSignInToolbox -RepositoryRoot '/repo' -JimCertificatePath '/repo/tls.crt'
+
+        ($script:Calls | Where-Object { $_ -like '*-CertificatePath*' }) | Should -BeLike '*-CertificatePath /tmp/jim-sign-in/jim-web.pem *'
+    }
+}

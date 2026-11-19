@@ -6,7 +6,7 @@ This document describes how to create releases of JIM, including support for air
 
 JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the GitHub Actions workflow automatically:
 
-1. Refuses to continue unless the tagged commit has a green `jim-ad-lab` commit status (the Active Directory lab gate, below), a green `jim-ad-lab-adfs` commit status (its AD FS gate, below), a green `jim-pre-release` commit status (the pre-release integration gate, below) and a green `jim-deploy-lab` commit status (the deployment lab gate, below)
+1. Refuses to continue unless the tagged commit has a green `jim-ad-lab` commit status (the Active Directory lab gate, below), a green `jim-ad-lab-adfs` commit status (its AD FS gate, below), a green `jim-sso-entra` commit status (its Entra ID gate, below), a green `jim-pre-release` commit status (the pre-release integration gate, below) and a green `jim-deploy-lab` commit status (the deployment lab gate, below)
 2. Validates the build and runs all tests
 3. Builds and pushes Docker images to GitHub Container Registry (ghcr.io), then checks each can be pulled without signing in (`scripts/Test-PublicImage.ps1`), as the installer pulls them: a new package on ghcr.io starts private, which fails every online install (v0.17.0 shipped that way). A private image holds back the GitHub Release; make the package public (organisation Settings, Packages, the package's settings, Change visibility) and re-run the job
 4. Publishes the PowerShell module to PSGallery
@@ -30,8 +30,15 @@ A release is refused unless the exact commit being tagged has a `success` commit
 
 The same `ad-lab.yml` run also signs people in to JIM through the lab's real AD FS server (portal sign-in, the initial administrator, `/api`, `Connect-JIM`, an account renamed in Active Directory, an employee with no JIM role refused every Administrator API, and the API reference's Try It; #2441, #2594) and posts the result as a commit status of its own, `jim-ad-lab-adfs`, so a sign-in failure never turns the LDAP result red or the reverse. A release is refused unless the commit being tagged has a `success` `jim-ad-lab-adfs` status as well. The checks are Scenario 031, which the run reports apart from the LDAP scenarios; the gate starts switched off until they have passed for the first time.
 
-- **One run answers both gates.** The dispatched lab run on the release commit posts both statuses; there is nothing more to dispatch.
+- **One run answers all three gates.** The dispatched lab run on the release commit posts `jim-ad-lab`, `jim-ad-lab-adfs` and `jim-sso-entra`; there is nothing more to dispatch.
 - **It is enforced twice, behind its own switch:** the `/release` skill runs `scripts/Test-ReleaseGate.ps1 -Context jim-ad-lab-adfs` before it tags, and the release-gates job in `release.yml` runs the same script, which `validate` needs. Both run only while the repository variable `JIM_AD_LAB_ADFS_GATE_ENFORCED` is `true`; set it after the checks' first green run (`gh variable set JIM_AD_LAB_ADFS_GATE_ENFORCED --body true`). Once set there is no override.
+
+## The Entra ID Sign-In Gate
+
+The same `ad-lab.yml` run also signs people in to JIM through Microsoft Entra ID, against the JIM test tenant (`tetronjim.onmicrosoft.com`; portal sign-in, the initial administrator from `oid`, `Connect-JIM` and its version 2 access token on `/api`, a person with no JIM identity, the API reference's Try It, and `Register-JIMIdentityProvider` finding its registration right; #2367), and posts the result as a commit status of its own, `jim-sso-entra`, so an Entra ID or tenant outage is visible as exactly that and never turns another result red. A release is refused unless the commit being tagged has a `success` `jim-sso-entra` status as well. The checks are Scenario 035.
+
+- **It is enforced twice, behind its own switch:** the `/release` skill runs `scripts/Test-ReleaseGate.ps1 -Context jim-sso-entra` before it tags, and the release-gates job in `release.yml` runs the same script, which `validate` needs. Both run only while the repository variable `JIM_SSO_ENTRA_GATE_ENFORCED` is `true`; set it after the checks' first green run (`gh variable set JIM_SSO_ENTRA_GATE_ENFORCED --body true`). Once set there is no override.
+- **What it needs:** the lab host reaching `login.microsoftonline.com` and `graph.microsoft.com`, and the `jim-ad-lab` environment's Entra ID settings (Scenario 035 in `INTEGRATION_TESTING.md`). No Graph secret is stored: the CI app's federated credential trusts GitHub's OIDC token for that environment.
 
 ## The Pre-Release Integration Gate
 

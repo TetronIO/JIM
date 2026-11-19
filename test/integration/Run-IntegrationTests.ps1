@@ -409,6 +409,7 @@ Assert-PrimaryCheckout -RepoRoot $repoRoot -Allow:$AllowWorktree -ScriptName "th
 . "$scriptRoot/utils/Directory-Helpers.ps1"
 . "$scriptRoot/utils/Invoke-LabControl.ps1"
 . "$scriptRoot/utils/ActiveDirectoryLab-Helpers.ps1"
+. "$scriptRoot/utils/EntraIdLab-Helpers.ps1"
 . "$scriptRoot/utils/Get-ScenarioDirectoryTypes.ps1"
 . "$scriptRoot/utils/Invoke-IntegrationLanes.ps1"
 
@@ -3737,6 +3738,51 @@ if ($isActiveDirectoryRun -and $script:AdLabContext.Configs.ContainsKey("AdfsPri
         exit 1
     }
     Write-Success "jim.web signs people in through AD FS: $($adfsRegistration.ClaimType) matched to '$($adfsRegistration.MvAttribute)', $($adfsAdministrator.UserPrincipalName) as initial administrator"
+}
+
+# Step 4f (Active Directory, Entra ID): set JIM up to sign people in through the JIM test tenant in Microsoft Entra ID
+# (#2367), for Scenario 035, as a customer does:
+#   1. get a Microsoft Graph token: in GitHub Actions from the CI app's federated credential (GitHub's OIDC token for the
+#      job, so nothing is stored), elsewhere from JIM_SSO_ENTRA_GRAPH_TOKEN (Get-EntraIdLabGraphToken);
+#   2. register JIM in the tenant, or repair its registration, with this checkout's Register-JIMIdentityProvider, and
+#      replace its client secret. The CI app owns the registration, so Application.ReadWrite.OwnedBy is all it needs;
+#      the consent the registration depends on was given once by an administrator;
+#   3. recreate jim.web with it, through this process's environment (never a file), with jim-test-admin's object ID
+#      (JIM_SSO_ENTRA_ADMIN_OBJECT_ID) as the initial administrator, and wait for it.
+# The client secret is masked in the log and removed from every artefact (Protect-ActiveDirectoryLabSecret).
+if ($isActiveDirectoryRun -and (Test-ActiveDirectoryLabEntraIdScenario -ScenarioNumber $scenarioNumber)) {
+    Write-Section "Step 4f: Setting JIM Up to Sign People In Through Entra ID"
+    try {
+        foreach ($name in 'JIM_SSO_ENTRA_TENANT_ID', 'JIM_SSO_ENTRA_CI_CLIENT_ID', 'JIM_SSO_ENTRA_ADMIN_OBJECT_ID') {
+            if (-not [Environment]::GetEnvironmentVariable($name)) { throw "$name is not set: it comes from the jim-ad-lab environment." }
+        }
+        Write-Step "Getting a Microsoft Graph token for the test tenant..."
+        $graphToken = Get-EntraIdLabGraphToken -TenantId $env:JIM_SSO_ENTRA_TENANT_ID -ClientId $env:JIM_SSO_ENTRA_CI_CLIENT_ID
+        Write-Step "Registering JIM in the test tenant..."
+        Import-Module (Join-Path $repoRoot 'src' 'JIM.PowerShell' 'JIM.psd1') -Force -ErrorAction Stop
+        $entraRegistration = Register-EntraIdLabIdentityProvider -TenantId $env:JIM_SSO_ENTRA_TENANT_ID -AccessToken $graphToken
+        Write-Success "JIM is registered in Entra ID (application $($entraRegistration.ClientId)): $(@($entraRegistration.Changes).Count) change(s)"
+        foreach ($change in @($entraRegistration.Changes)) { Write-Host "${GRAY}    $change${NC}" }
+    }
+    catch {
+        Write-Failure "Could not set JIM up to sign people in through Entra ID: $($_.Exception.Message)"
+        exit 1
+    }
+
+    Set-EntraIdLabSsoEnvironment -Registration $entraRegistration -InitialAdmin $env:JIM_SSO_ENTRA_ADMIN_OBJECT_ID
+    Write-Step "Restarting jim.web with Entra ID sign-in..."
+    $webResult = docker compose @script:JimComposeArgs --profile with-db up -d jim.web 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure "Failed to restart jim.web with Entra ID sign-in"
+        Write-Host "${GRAY}$webResult${NC}"
+        exit 1
+    }
+    if (-not (Wait-JimWebApiHealthy -Url $script:Lane.JimUrl -TimeoutSeconds $TimeoutSeconds)) {
+        Write-Failure "JIM Web API did not become ready within ${TimeoutSeconds}s after restarting with Entra ID sign-in"
+        Write-Host "${YELLOW}  Check logs: docker logs $($script:Lane.WebContainer)${NC}"
+        exit 1
+    }
+    Write-Success "jim.web signs people in through Entra ID: $($entraRegistration.ClaimType) matched to '$($entraRegistration.MvAttribute)', $($env:JIM_SSO_ENTRA_ADMIN_OBJECT_ID) as initial administrator"
 }
 
 # Step 4b: Prepare Samba AD for testing

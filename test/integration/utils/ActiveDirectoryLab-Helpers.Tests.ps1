@@ -119,6 +119,20 @@ Describe 'Get-JimComposeArgument' {
         }
     }
 
+    It 'adds the Entra ID overlay, and not AD FS''s, for the scenario that signs in through Entra ID' {
+        $composeArgs = Get-JimComposeArgument -DirectoryType 'ActiveDirectory' -ScenarioNumber 35
+
+        $composeArgs | Should -Be @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml',
+            '-f', 'test/integration/docker/docker-compose.ad-lab.yml', '-f', 'test/integration/docker/docker-compose.ad-lab-entra.yml')
+    }
+
+    It 'leaves the Entra ID overlay out of every other scenario' {
+        foreach ($number in 1, 30, 31, $null) {
+            Get-JimComposeArgument -DirectoryType 'ActiveDirectory' -ScenarioNumber $number |
+                Should -Not -Contain 'test/integration/docker/docker-compose.ad-lab-entra.yml'
+        }
+    }
+
     It 'never adds the AD FS overlay outside the Active Directory lab' {
         Get-JimComposeArgument -DirectoryType 'SambaAD' -ScenarioNumber 30 | Should -Be @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml')
     }

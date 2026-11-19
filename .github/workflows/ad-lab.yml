@@ -7,8 +7,9 @@
 # against the same domain controller, uploads the regression report and the domain controller OS build as artefacts,
 # submits results to the metrics API, and posts a commit status named `jim-ad-lab` on the SHA it tested: `success` only
 # when everything passed, with the scenario count and the OS build in its description. It also signs people in to JIM
-# through the lab's AD FS server (Scenario 031, #2441) and posts that as a status of its own, `jim-ad-lab-adfs`, so a
-# sign-in failure never turns `jim-ad-lab` red or the reverse. `/release` and release.yml
+# through the lab's AD FS server (Scenario 031, #2441) and through the JIM test tenant in Microsoft Entra ID (Scenario
+# 035, #2367), and posts each as a status of its own, `jim-ad-lab-adfs` and `jim-sso-entra`, so a sign-in failure never
+# turns `jim-ad-lab` red or the reverse. `/release` and release.yml
 # require `success` for the SHA being tagged (scripts/Test-ReleaseGate.ps1 -Context jim-ad-lab) once the repository variable
 # JIM_AD_LAB_GATE_ENFORCED is `true` (set after the lab's first green run); from then on there is no override, so the
 # remedy for a red night is a fix and a dispatched run.
@@ -79,6 +80,9 @@ on:
 permissions:
   contents: read
   statuses: write
+  # The Entra ID sign-in checks (Scenario 035, #2367) sign in to Microsoft Graph as the CI app, whose federated
+  # credential trusts GitHub's OIDC token for the jim-ad-lab environment, so no Graph secret is stored anywhere.
+  id-token: write
 
 jobs:
   jim-ad-lab:
@@ -223,11 +227,12 @@ jobs:
             }
           }
 
-      # What this run covers. The LDAP scenarios (the suite, reported as jim-ad-lab) and the AD FS sign-in checks
-      # (Scenario 031, reported as jim-ad-lab-adfs, #2441) run as separate steps, so a failure in one never colours
-      # the other's status: a night (or a dispatch of All) runs both, a dispatch of Scenario 031 runs the sign-in
-      # checks only, and a dispatch of any other scenario runs that scenario in the suite only. The decision is the
-      # runner's own (Test-ScenarioRunsOnItsOwn), which also keeps Scenario 031 out of the suite's sweep.
+      # What this run covers. The LDAP scenarios (the suite, reported as jim-ad-lab), the AD FS sign-in checks
+      # (Scenario 031, reported as jim-ad-lab-adfs, #2441) and the Entra ID sign-in checks (Scenario 035, reported as
+      # jim-sso-entra, #2367) run as separate steps, so a failure in one never colours another's status: a night (or a
+      # dispatch of All) runs all three, a dispatch of Scenario 031 or 035 runs those checks only, and a dispatch of any
+      # other scenario runs that scenario in the suite only. Test-ScenarioRunsOnItsOwn keeps 031 and 035 out of the
+      # suite's sweep.
       - name: Decide what this run covers
         id: plan
         env:
@@ -236,12 +241,14 @@ jobs:
           . ./test/integration/utils/Resolve-IntegrationScenarioName.ps1
           . ./test/integration/utils/Get-ScenarioDirectoryTypes.ps1
           $name = Resolve-IntegrationScenarioName -Scenario $env:SCENARIO -ScenariosPath ./test/integration/scenarios
-          $signInOnly = Test-ScenarioRunsOnItsOwn -ScenarioNumber (Get-IntegrationScenarioNumber -Scenario $name)
-          $suite = -not $signInOnly
-          $signIn = ($name -eq 'All') -or $signInOnly
+          $number = Get-IntegrationScenarioNumber -Scenario $name
+          $suite = -not (Test-ScenarioRunsOnItsOwn -ScenarioNumber $number)
+          $signIn = ($name -eq 'All') -or ($number -eq 31)
+          $entra = ($name -eq 'All') -or ($number -eq 35)
           "suite=$($suite.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "sign_in=$($signIn.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          Write-Host "Scenario '$env:SCENARIO' ($name): LDAP suite $suite, AD FS sign-in checks $signIn"
+          "entra=$($entra.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Scenario '$env:SCENARIO' ($name): LDAP suite $suite, AD FS sign-in checks $signIn, Entra ID sign-in checks $entra"
 
       # The suite. -ContinueOnFailure so one red scenario does not hide the others: the point of a night's run is
       # the full list. The runner reverts each domain controller to its checkpoint, populates and re-checkpoints
@@ -319,6 +326,29 @@ jobs:
           pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario 31 -Template Nano -DirectoryType ActiveDirectory
           exit $LASTEXITCODE
 
+      # The Entra ID sign-in checks (Scenario 035, #2367): people sign in to JIM through the JIM test tenant in Microsoft
+      # Entra ID, with JIM registered there by Register-JIMIdentityProvider as the CI app (its federated credential, so
+      # id-token: write above): the portal, the initial administrator from oid, Connect-JIM and its version 2 access
+      # token on /api, a person with no JIM identity, Try It, and the registration found right on a second run. Their own
+      # run of the harness, reported as jim-sso-entra below, so an Entra ID or tenant outage never colours anything else.
+      - name: Run the Entra ID sign-in checks
+        id: entra
+        if: ${{ !cancelled() && steps.plan.outputs.entra == 'true' }}
+        continue-on-error: true
+        env:
+          JIM_AD_LAB_ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD }}
+          JIM_AD_LAB_JIM_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD }}
+          JIM_SSO_ENTRA_TENANT_ID: ${{ vars.JIM_SSO_ENTRA_TENANT_ID }}
+          JIM_SSO_ENTRA_CI_CLIENT_ID: ${{ vars.JIM_SSO_ENTRA_CI_CLIENT_ID }}
+          JIM_SSO_ENTRA_ADMIN_OBJECT_ID: ${{ vars.JIM_SSO_ENTRA_ADMIN_OBJECT_ID }}
+          JIM_SSO_ENTRA_ADMIN_PASSWORD: ${{ secrets.JIM_SSO_ENTRA_ADMIN_PASSWORD }}
+          JIM_SSO_ENTRA_USER_PASSWORD: ${{ secrets.JIM_SSO_ENTRA_USER_PASSWORD }}
+          JIM_BENCH_API_URL: ${{ vars.JIM_BENCH_API_URL }}
+          JIM_BENCH_API_KEY: ${{ secrets.JIM_BENCH_API_KEY }}
+        run: |
+          pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario 35 -Template Nano -DirectoryType ActiveDirectory
+          exit $LASTEXITCODE
+
       # What the run left, condensed: scenario counts and the domain controller OS builds (recorded by the runner in
       # the regression report, or in the performance file for a single scenario) into dc-builds.json, the job
       # summary and the one-line description of the commit status. The logic is Get-LabRunSummary in the lab
@@ -330,6 +360,7 @@ jobs:
           SUITE_OUTCOME: ${{ steps.suite.outcome }}
           PROBES_OUTCOME: ${{ steps.probes.outcome }}
           SIGN_IN_OUTCOME: ${{ steps.sign_in.outcome }}
+          ENTRA_OUTCOME: ${{ steps.entra.outcome }}
         run: |
           Import-Module ./test/integration/ad-lab/guest/LabDomainController.psm1 -Force
           $results = Join-Path (Get-Location) 'test/integration/results'
@@ -351,7 +382,7 @@ jobs:
             $lines += 'Failed scenarios: ' + (($summary.FailedScenarios | ForEach-Object { "``$_``" }) -join ', ')
           }
           $lines += ''
-          $lines += "Suite: $env:SUITE_OUTCOME. Probes: $env:PROBES_OUTCOME. AD FS sign-in checks: $env:SIGN_IN_OUTCOME."
+          $lines += "Suite: $env:SUITE_OUTCOME. Probes: $env:PROBES_OUTCOME. AD FS sign-in checks: $env:SIGN_IN_OUTCOME. Entra ID sign-in checks: $env:ENTRA_OUTCOME."
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
       # Artefacts are readable by anyone who can read the repository, and GitHub only masks secrets in the log, not
@@ -361,11 +392,13 @@ jobs:
         env:
           ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD }}
           JIM_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD }}
+          ENTRA_ADMIN_PASSWORD: ${{ secrets.JIM_SSO_ENTRA_ADMIN_PASSWORD }}
+          ENTRA_USER_PASSWORD: ${{ secrets.JIM_SSO_ENTRA_USER_PASSWORD }}
         run: |
           # Plus each client secret the run's AD FS registrations made (#2441), which the runner hands over through
           # GITHUB_ENV as JIM_AD_LAB_SCRUB_<id> (Register-ActiveDirectoryLabIdentityProvider).
           $made = @(Get-ChildItem -Path Env: | Where-Object Name -like 'JIM_AD_LAB_SCRUB_*' | ForEach-Object Value)
-          $secrets = @($env:ADMIN_PASSWORD, $env:JIM_PASSWORD) + $made | Where-Object { $_ }
+          $secrets = @($env:ADMIN_PASSWORD, $env:JIM_PASSWORD, $env:ENTRA_ADMIN_PASSWORD, $env:ENTRA_USER_PASSWORD) + $made | Where-Object { $_ }
           $files = @(Get-ChildItem -LiteralPath 'test/integration/results', 'test/integration/ad-lab-certs' -Recurse -File -ErrorAction SilentlyContinue)
           foreach ($file in $files) {
             foreach ($secret in $secrets) {
@@ -445,6 +478,27 @@ jobs:
             default   { $state = 'error'; $description = 'the run stopped before the AD FS sign-in checks ran' }
           }
           gh api "repos/$env:REPOSITORY/statuses/$env:TESTED_SHA" -f state="$state" -f context='jim-ad-lab-adfs' -f description="$description" -f target_url="$env:RUN_URL"
+          exit $LASTEXITCODE
+
+      # The Entra ID sign-in checks' own status, which the release gate reads apart from the others
+      # (scripts/Test-ReleaseGate.ps1 -Context jim-sso-entra): success only when every check passed, failure when one
+      # failed, error when the step never ran to the end. Posted only by a run that set out to run the checks; a cancelled
+      # run posts nothing.
+      - name: Post the jim-sso-entra commit status
+        if: ${{ always() && job.status != 'cancelled' && steps.plan.outputs.entra == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TESTED_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ENTRA_OUTCOME: ${{ steps.entra.outcome }}
+        run: |
+          switch ($env:ENTRA_OUTCOME) {
+            'success' { $state = 'success'; $description = 'Entra ID sign-in checks passed (Scenario 035)' }
+            'failure' { $state = 'failure'; $description = 'Entra ID sign-in checks failed (Scenario 035); see the run' }
+            default   { $state = 'error'; $description = 'the run stopped before the Entra ID sign-in checks ran' }
+          }
+          gh api "repos/$env:REPOSITORY/statuses/$env:TESTED_SHA" -f state="$state" -f context='jim-sso-entra' -f description="$description" -f target_url="$env:RUN_URL"
           exit $LASTEXITCODE
 
       # The runner is not ephemeral: without teardown the stack and the key persist between jobs. Always run.
