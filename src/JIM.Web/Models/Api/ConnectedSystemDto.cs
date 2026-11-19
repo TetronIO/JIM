@@ -680,6 +680,14 @@ public class ConnectedSystemAttributeDto
     public bool IsConnectorDefined { get; set; }
 
     /// <summary>
+    /// For a Connector-defined attribute, the name of the Connected System's own attribute that the Connector writes when
+    /// it acts on this one, such as <c>mailNickname</c> for the LDAP Connector's Exchange Alias. Null when the Connector
+    /// declares none, and always null for an ordinary attribute.
+    /// </summary>
+    /// <remarks>Read-only: discovered from the Connected System's schema, never set through this API (#2756).</remarks>
+    public string? SourceAttributeName { get; set; }
+
+    /// <summary>
     /// For a Reference attribute, the id of the Object Type this reference points at, when the Connected
     /// System's schema declares one (the SQL Connector's <c>referencesObjectType</c>). Import reference
     /// resolution resolves the reference within that Object Type alone; null means the schema does not say
@@ -719,6 +727,7 @@ public class ConnectedSystemAttributeDto
             Writability = entity.Writability.ToString(),
             IsOperational = entity.IsOperational,
             IsConnectorDefined = entity.IsConnectorDefined,
+            SourceAttributeName = entity.SourceAttributeName,
             ReferencedObjectTypeId = entity.ReferencedObjectTypeId,
             ReferencedObjectTypeName = ResolveReferencedObjectTypeName(entity, objectTypeNamesById)
         };

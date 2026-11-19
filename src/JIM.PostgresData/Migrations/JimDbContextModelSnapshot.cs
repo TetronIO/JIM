@@ -4090,6 +4090,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("SelectionLocked")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("SourceAttributeName")
+                        .HasColumnType("text");
+
                     b.Property<int>("Type")
                         .HasColumnType("integer");
 

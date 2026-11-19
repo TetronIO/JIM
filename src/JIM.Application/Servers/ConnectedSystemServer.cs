@@ -3195,6 +3195,10 @@ public partial class ConnectedSystemServer
     /// </remarks>
     internal static SchemaRefreshResult MergeSchemaIntoConnectedSystem(ConnectedSystem connectedSystem, ConnectorSchema schema)
     {
+        // A Connector-defined Attribute that shares a name with one of the system's own could never be told apart from
+        // it (#2756); refuse the schema before anything is merged.
+        ThrowIfConnectorDefinedAttributeNamesCollide(connectedSystem, schema);
+
         // Discovery warnings travel on the result so the portal can show them beside what changed; the import's
         // Activity carries the same warnings for the other surfaces.
         var result = new SchemaRefreshResult { Success = true, DiscoveryWarnings = schema.Warnings.ToList() };
@@ -3387,6 +3391,7 @@ public partial class ConnectedSystemServer
                         // Connector-owned, so a refresh restates it.
                         existingAttribute.IsOperational = schemaAttribute.IsOperational;
                         existingAttribute.IsConnectorDefined = schemaAttribute.IsConnectorDefined;
+                        existingAttribute.SourceAttributeName = schemaAttribute.SourceAttributeName;
                         connectedSystemObjectType.Attributes.Add(existingAttribute);
                     }
                     else
@@ -3405,7 +3410,8 @@ public partial class ConnectedSystemServer
                             CaseExact = schemaAttribute.CaseExact,
                             DateTimeResolution = DiscoveredDateTimeResolution(schemaAttribute, schemaAttribute.Type),
                             IsOperational = schemaAttribute.IsOperational,
-                            IsConnectorDefined = schemaAttribute.IsConnectorDefined
+                            IsConnectorDefined = schemaAttribute.IsConnectorDefined,
+                            SourceAttributeName = schemaAttribute.SourceAttributeName
                         });
                     }
                 }
@@ -3460,7 +3466,8 @@ public partial class ConnectedSystemServer
                         CaseExact = a.CaseExact,
                         DateTimeResolution = DiscoveredDateTimeResolution(a, a.Type),
                         IsOperational = a.IsOperational,
-                        IsConnectorDefined = a.IsConnectorDefined
+                        IsConnectorDefined = a.IsConnectorDefined,
+                        SourceAttributeName = a.SourceAttributeName
                     }).ToList()
                 };
 
@@ -3790,6 +3797,38 @@ public partial class ConnectedSystemServer
     }
 
     private static string DescribeClassificationValues(List<string> values) => values.Count == 0 ? "none" : string.Join(", ", values);
+
+    /// <summary>
+    /// Refuses a schema in which a Connector-defined Attribute has the same name, ignoring case, as one of the Connected
+    /// System's own attributes on the same Object Type (#2756). The two could never be told apart: a Synchronisation Rule,
+    /// an import and the portal all find an attribute by its name. Connectors avoid this by naming theirs as the
+    /// capability followed by the property, in words the system's own naming grammar cannot produce; this is the guard
+    /// behind that rule, so a Connector that breaks it fails loudly rather than shadowing a real attribute.
+    /// </summary>
+    private static void ThrowIfConnectorDefinedAttributeNamesCollide(ConnectedSystem connectedSystem, ConnectorSchema schema)
+    {
+        var collision = schema.ObjectTypes
+            .Select(objectType => (ObjectType: objectType, Attribute: FindConnectorDefinedNameCollision(objectType)))
+            .FirstOrDefault(candidate => candidate.Attribute != null);
+        if (collision.Attribute == null)
+            return;
+
+        var connectorName = connectedSystem.ConnectorDefinition?.Name ?? "the Connector";
+        throw new InvalidOperationException(
+            $"{connectorName} defines an attribute named '{collision.Attribute.Name}' on the '{collision.ObjectType.Name}' Object " +
+            $"Type, but '{connectedSystem.Name}' already has an attribute of that name. A Connector-defined Attribute must have a " +
+            "name the Connected System's own attributes cannot have. The schema was not changed.");
+    }
+
+    private static ConnectorSchemaAttribute? FindConnectorDefinedNameCollision(ConnectorSchemaObjectType objectType)
+    {
+        var systemAttributeNames = objectType.Attributes
+            .Where(attribute => !attribute.IsConnectorDefined)
+            .Select(attribute => attribute.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return objectType.Attributes.FirstOrDefault(attribute => attribute.IsConnectorDefined && systemAttributeNames.Contains(attribute.Name));
+    }
 
     /// <summary>
     /// Strips credential attributes out of an incoming Connected System schema so they can never be added to JIM

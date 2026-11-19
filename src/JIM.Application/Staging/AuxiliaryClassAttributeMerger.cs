@@ -162,6 +162,7 @@ internal static class AuxiliaryClassAttributeMerger
 
                     // And whether the Connector made it up.
                     IsConnectorDefined = attribute.IsConnectorDefined,
+                    SourceAttributeName = attribute.SourceAttributeName,
 
                     // Provenance, and the marker this merger recognises its own work by.
                     ClassName = contributor.Name
