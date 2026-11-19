@@ -335,6 +335,66 @@ public class ImportObjectTypeChangeTests : WorkflowTestBase
         Assert.That(deleted!.ConnectedSystemObjectId, Is.EqualTo(held.Cso.Id));
     }
 
+    /// <summary>
+    /// #2911: the Connector reports the object changed and then deleted, the delete typed as another Object Type. Both
+    /// copies name the object JIM holds, which was queued for update twice; reference resolution then failed the whole
+    /// run on a duplicate External ID. The delete is the held object's, so the page returns that object twice, and
+    /// every copy is rejected exactly as two copies under the same Object Type are (#2063).
+    /// </summary>
+    [Test]
+    public async Task DeltaImport_UpdateThenDeleteUnderAnotherObjectTypeOnOnePage_RejectsBothCopiesAsTheSameObjectAsync()
+    {
+        var context = await ArrangeAsync();
+        var held = SeedCso(context, context.UserType, Guid.NewGuid());
+
+        await RunPagedImportAsync(context, [[
+            ImportObject(context.UserType, held.ExternalId, ObjectChangeType.Updated, displayName: "Changed"),
+            ImportObject(context.ComputerType, held.ExternalId, ObjectChangeType.Deleted)
+        ]]);
+
+        var stored = await SyncRepo.GetConnectedSystemObjectAsync(context.ConnectedSystem.Id, held.Cso.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(context.Activity.Status, Is.Not.EqualTo(ActivityStatus.FailedWithError), context.Activity.ErrorMessage);
+            Assert.That(ErroredRpeis(context).Select(r => r.ErrorType),
+                Is.EqualTo(new[] { ActivityRunProfileExecutionItemErrorType.DuplicateObject, ActivityRunProfileExecutionItemErrorType.DuplicateObject }));
+            Assert.That(stored!.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal), "Neither copy is applied");
+        }
+    }
+
+    /// <summary>
+    /// #2911 across a page boundary: the later copy, the delete, takes the earlier update's place, as a later change to
+    /// the same object does under one Object Type (#2074).
+    /// </summary>
+    [Test]
+    public async Task DeltaImport_UpdateThenDeleteUnderAnotherObjectTypeOnLaterPage_RetiresTheObjectOnceAsync()
+    {
+        var context = await ArrangeAsync();
+        var held = SeedCso(context, context.UserType, Guid.NewGuid());
+
+        await RunPagedImportAsync(context, [
+            [ImportObject(context.UserType, held.ExternalId, ObjectChangeType.Updated, displayName: "Changed")],
+            [ImportObject(context.ComputerType, held.ExternalId, ObjectChangeType.Deleted)]
+        ]);
+
+        AssertRetiredOnce(context, held);
+    }
+
+    private void AssertRetiredOnce(ImportContext context, HeldObject held)
+    {
+        var stored = SyncRepo.GetConnectedSystemObjectAsync(context.ConnectedSystem.Id, held.Cso.Id).GetAwaiter().GetResult();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(context.Activity.Status, Is.Not.EqualTo(ActivityStatus.FailedWithError), context.Activity.ErrorMessage);
+            Assert.That(ErroredRpeis(context), Is.Empty);
+            Assert.That(stored!.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete), "The later change, the delete, stands");
+            Assert.That(context.Activity.RunProfileExecutionItems.Count(r => r.ConnectedSystemObjectId == held.Cso.Id), Is.EqualTo(1),
+                "One object, one change: the update is superseded by the delete");
+            Assert.That(context.Activity.RunProfileExecutionItems.Single(r => r.ConnectedSystemObjectId == held.Cso.Id).ObjectChangeType,
+                Is.EqualTo(ObjectChangeType.Deleted));
+        }
+    }
+
     [Test]
     public async Task DeltaImport_DeleteForAnObjectHeldUnderAnotherObjectTypeWithoutGloballyUniqueExternalIds_IsIgnoredAsync()
     {
@@ -506,6 +566,23 @@ public class ImportObjectTypeChangeTests : WorkflowTestBase
         return processor;
     }
 
+    private async Task RunPagedImportAsync(ImportContext context, List<List<ConnectedSystemImportObject>> pages)
+    {
+        var runProfile = await CreateRunProfileAsync(context.ConnectedSystem.Id, "DeltaImport", ConnectedSystemRunType.DeltaImport);
+        context.Activity = await CreateActivityAsync(context.ConnectedSystem.Id, runProfile, ConnectedSystemRunType.DeltaImport);
+        var workerTask = new SynchronisationWorkerTask(context.ConnectedSystem.Id, runProfile.Id)
+        {
+            Id = Guid.NewGuid(),
+            Status = WorkerTaskStatus.Processing,
+            Activity = context.Activity
+        };
+
+        var processor = new SyncImportTaskProcessor(
+            Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(),
+            new PagedImportConnector(pages), context.ConnectedSystem, runProfile, workerTask, new CancellationTokenSource());
+        await processor.PerformImportAsync();
+    }
+
     private static List<ActivityRunProfileExecutionItem> ErroredRpeis(ImportContext context) =>
         context.Activity.RunProfileExecutionItems
             .Where(r => r.ErrorType != null && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
@@ -519,10 +596,10 @@ public class ImportObjectTypeChangeTests : WorkflowTestBase
     }
 
     private static ConnectedSystemImportObject ImportObject(ConnectedSystemObjectType type, Guid externalId,
-        ObjectChangeType changeType = ObjectChangeType.NotSet)
+        ObjectChangeType changeType = ObjectChangeType.NotSet, string? displayName = null)
     {
         var externalIdAttribute = type.Attributes.Single(a => a.IsExternalId);
-        return new ConnectedSystemImportObject
+        var importObject = new ConnectedSystemImportObject
         {
             ObjectType = type.Name,
             ChangeType = changeType,
@@ -536,6 +613,9 @@ public class ImportObjectTypeChangeTests : WorkflowTestBase
                 }
             ]
         };
+        if (displayName != null)
+            importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute { Name = "DisplayName", Type = AttributeDataType.Text, StringValues = [displayName] });
+        return importObject;
     }
 
     /// <summary>
