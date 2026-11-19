@@ -49,6 +49,17 @@ function Get-JIMConnectedSystemObjectType {
         pwdFailureTime. They are discovered unselected; select one with Set-JIMConnectedSystemAttribute -Selected $true.
 
     .EXAMPLE
+        Get-JIMConnectedSystemObjectType -ConnectedSystemId 1 |
+            Where-Object { $_.name -eq 'user' } |
+            ForEach-Object { $_.attributes } |
+            Where-Object { $_.isConnectorDefined } |
+            Select-Object name, sourceAttributeName
+
+        Lists the attributes the Connector defines on user rather than reading from the Connected System's own
+        schema, such as the LDAP Connector's Exchange Alias, with the attribute each is written through
+        (mailNickname for Exchange Alias).
+
+    .EXAMPLE
         Get-JIMConnectedSystemObjectType -ConnectedSystemId 1 -IncludeInternal
 
         Gets every object type for Connected System 1, including the directory's own

@@ -672,17 +672,15 @@ public class ConnectedSystemAttributeDto
     public bool IsOperational { get; set; }
 
     /// <summary>
-    /// Whether the Connector made this attribute up rather than read it from the Connected System's own schema, such as
-    /// the LDAP Connector's Exchange Recipient Type. The Connector derives its values on import and acts on them on
-    /// export in its own way; they are never written to the Connected System as they stand.
+    /// Whether the Connector made this attribute up rather than reading it from the Connected System's own schema, such
+    /// as the LDAP Connector's Exchange Alias: a Connector-defined Attribute.
     /// </summary>
     /// <remarks>Read-only: discovered from the Connected System's schema, never set through this API.</remarks>
     public bool IsConnectorDefined { get; set; }
 
     /// <summary>
-    /// For a Connector-defined attribute, the name of the Connected System's own attribute that the Connector writes when
-    /// it acts on this one, such as <c>mailNickname</c> for the LDAP Connector's Exchange Alias. Null when the Connector
-    /// declares none, and always null for an ordinary attribute.
+    /// For a Connector-defined attribute, the Connected System attribute it is written through, such as <c>mailNickname</c>
+    /// for Exchange Alias. Null when there is none.
     /// </summary>
     /// <remarks>Read-only: discovered from the Connected System's schema, never set through this API (#2756).</remarks>
     public string? SourceAttributeName { get; set; }
