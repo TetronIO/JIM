@@ -179,8 +179,11 @@ C:\jim-ad-lab\Register-LabScriptsUpdateTask.ps1
 It runs `Update-LabScripts.ps1` as SYSTEM every hour (`\JIM\Update AD lab scripts`): it brings its own clone of main,
 `C:\jim-ad-lab-source`, to `origin/main` (reset hard and cleaned, so it must never be a working checkout) and runs
 `Install-LabScripts.ps1` from it, logging to `C:\jim-ad-lab\logs\update-lab-scripts.log`. The repository is public, so
-it needs no credentials. A run dispatched within the hour of a module change can still find no copy of its module, and
-says so. A merge during a run does no harm: the run keeps using its own commit's copy.
+it needs no credentials. A run never waits for it: before registering JIM on AD FS, the runner calls
+`Sync-LabModule.ps1` as `jim-lab`, which starts this task when the host has no copy of the commit's module, waits for
+it, and checks the copy. `Install-LabScripts.ps1` lets `jim-lab` run the task (below). The task deploys only the head
+of main, so a run of any other commit still finds no copy, and says so. A merge during a run does no harm: the run
+keeps using its own commit's copy.
 
 **Host access.** The rebuild runs as `jim-lab`, which is a Hyper-V administrator and nothing more, and three things it
 needs are refused to such an account. So `Install-LabScripts.ps1` does them, once `settings.json` exists and only when
@@ -191,6 +194,7 @@ elevated (the hourly task, as SYSTEM, always is), and reports each as `Granted`,
 |------|----------------------|----------------------|
 | Read the image list of the Windows media | `Mount-DiskImage` and `Get-WindowsImage` need an administrator ("Access denied", "requires elevation") | Records the image to install in `media.json` beside `settings.json`, once per version of the file (its length and time). The builds read it from there; an elevated build without a record reads the media itself, and `jim-lab` without one is refused with a message saying so |
 | Let a VM read the media it is given | VMMS grants that on the ISO as its caller, who must be allowed to change the ISO's ACL (VMMS event 20790) | Grants read on `isoPath` and each `directoryExtensions` ISO to the capability SID Hyper-V uses for it (`vmWorkerProcess`, `Get-LabMediaCapabilitySid`) |
+| Run the hourly update on demand | A scheduled task registered as SYSTEM can be started only by its owner and administrators | Lets `jim-lab` read and run `\JIM\Update AD lab scripts` (`Grant-LabScheduledTaskRun`), so a run brings the host's module up to date itself (`Sync-LabModule.ps1`) |
 | Delete a removed VM's files | The VMs an administrator built are not its own, and VMMS creates each VM's `Snapshots` folder as SYSTEM | Lets `jim-lab` modify each lab VM's folder beneath `vhdDirectory` and each `rebuild-yyyyMMdd` folder (`Get-LabControlFolder`), never `vhdDirectory` itself, which may hold the runner's VM. The rebuild also gives itself the same on the folder it creates |
 
 So after building the domain controllers by hand (step 4), either run `Install-LabScripts.ps1` again or wait for the

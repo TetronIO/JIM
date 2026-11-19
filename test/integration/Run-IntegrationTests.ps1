@@ -3709,9 +3709,13 @@ elseif ($isActiveDirectoryRun) {
 if ($isActiveDirectoryRun -and $script:AdLabContext.Configs.ContainsKey("AdfsPrimary")) {
     Write-Section "Step 4e: Setting JIM Up to Sign People In Through AD FS"
     try {
+        $moduleDigest = Get-ActiveDirectoryLabModuleDigest -RepositoryRoot $repoRoot
+        Write-Step "Making sure the host holds this commit's JIM PowerShell module..."
+        $moduleOutcome = Sync-ActiveDirectoryLabModule -ModuleDigest $moduleDigest
+        Write-Success "The host's copy of the module is this commit's ($moduleOutcome)"
         Write-Step "Registering JIM on the AD FS server..."
         $adfsRegistration = Register-ActiveDirectoryLabIdentityProvider -FederationConfig $script:AdLabContext.Configs["AdfsPrimary"] `
-            -Url (Get-ActiveDirectoryLabJimUrl) -ModuleDigest (Get-ActiveDirectoryLabModuleDigest -RepositoryRoot $repoRoot)
+            -Url (Get-ActiveDirectoryLabJimUrl) -ModuleDigest $moduleDigest
         Write-Success "JIM is registered on AD FS (portal client $($adfsRegistration.ClientId))"
 
         Write-Step "Creating the sign-in administrator in $($script:AdLabContext.Configs["Primary"].VmName)..."

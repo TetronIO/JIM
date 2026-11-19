@@ -79,7 +79,7 @@ if (-not $labModule -or -not $federationModule) {
     exit 1
 }
 if (-not $jimModule) {
-    [Console]::Error.WriteLine("This host has no copy of the JIM PowerShell module of the commit under test (module\$ModuleDigest\JIM beside this script). The hourly update deploys main's within the hour; for another commit, run Install-LabScripts.ps1 from a checkout of it.")
+    [Console]::Error.WriteLine("This host has no copy of the JIM PowerShell module of the commit under test (module\$ModuleDigest\JIM beside this script). The runner brings it here first with Sync-LabModule.ps1, which runs the lab scripts update for the head of main; for another commit, run Install-LabScripts.ps1 from a checkout of it.")
     exit 1
 }
 Import-Module $labModule -Force

@@ -1018,6 +1018,31 @@ function Register-ActiveDirectoryLabIdentityProvider {
     return $registration
 }
 
+function Sync-ActiveDirectoryLabModule {
+    <#
+    .SYNOPSIS
+        Has the host hold this commit's JIM PowerShell module before the AD FS registration runs from it
+        (Sync-LabModule.ps1): it runs the hourly lab scripts update now when the copy is missing, so a run never waits
+        for the update. Returns AlreadyDeployed or Deployed; throws, with the host's reason, otherwise.
+
+    .PARAMETER ModuleDigest
+        Get-ActiveDirectoryLabModuleDigest for this checkout.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ModuleDigest
+    )
+
+    $output = @("$(Invoke-LabControl -Script 'Sync-LabModule.ps1' -Arguments @('-ModuleDigest', $ModuleDigest))" -split "`r?`n" | Where-Object { $_.Trim() })
+    $last = if ($output.Count -gt 0) { $output[-1].Trim() } else { '' }
+    if ($last -notin 'AlreadyDeployed', 'Deployed') {
+        throw "Sync-LabModule.ps1 answered '$last', not AlreadyDeployed or Deployed."
+    }
+    return $last
+}
+
 function Protect-ActiveDirectoryLabSecret {
     <#
     .SYNOPSIS
