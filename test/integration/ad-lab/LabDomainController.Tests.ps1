@@ -3438,3 +3438,29 @@ Describe 'ConvertFrom-LabRebuildSetting with a settings.json that has no dnsForw
         }
     }
 }
+
+Describe 'Add-LabTaskRunAccess' {
+    BeforeAll {
+        $script:ControlSid = 'S-1-5-21-1004336348-1177238915-682003330-1001'
+        # A scheduled task's security descriptor as Windows reports it: SYSTEM and the Administrators full control.
+        $script:TaskSddl = 'O:BAG:SYD:AI(A;;FA;;;SY)(A;;FA;;;BA)(A;ID;FA;;;SY)'
+    }
+
+    It 'lets the account read and run the task, adding one entry before the inherited ones' {
+        $result = Add-LabTaskRunAccess -Sddl $script:TaskSddl -Sid $script:ControlSid
+
+        $result | Should -Be "O:BAG:SYD:AI(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGX;;;$($script:ControlSid))(A;ID;FA;;;SY)"
+    }
+
+    It 'returns the descriptor unchanged when the account may already run the task' {
+        $granted = Add-LabTaskRunAccess -Sddl $script:TaskSddl -Sid $script:ControlSid
+
+        Add-LabTaskRunAccess -Sddl $granted -Sid $script:ControlSid | Should -BeExactly $granted
+    }
+
+    It 'counts full control as already able to run it' {
+        $full = "O:BAG:SYD:(A;;FA;;;$($script:ControlSid))"
+
+        Add-LabTaskRunAccess -Sddl $full -Sid $script:ControlSid | Should -BeExactly $full
+    }
+}

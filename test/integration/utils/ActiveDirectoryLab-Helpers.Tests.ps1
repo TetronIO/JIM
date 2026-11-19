@@ -1403,3 +1403,21 @@ Describe 'The Exchange servers (#2021)' {
         }
     }
 }
+
+Describe 'Sync-ActiveDirectoryLabModule' {
+    It 'has the host bring its copy of the module to the commit''s digest, and returns what it did' {
+        Mock Invoke-LabControl { "** WARNING: connection is not using a post-quantum key exchange algorithm.`nDeployed" }
+
+        Sync-ActiveDirectoryLabModule -ModuleDigest ('c' * 64) | Should -Be 'Deployed'
+
+        Should -Invoke Invoke-LabControl -Times 1 -ParameterFilter {
+            $Script -eq 'Sync-LabModule.ps1' -and (@($Arguments) -join ' ') -eq "-ModuleDigest $('c' * 64)"
+        }
+    }
+
+    It 'refuses an answer it does not recognise' {
+        Mock Invoke-LabControl { 'something else' }
+
+        { Sync-ActiveDirectoryLabModule -ModuleDigest ('c' * 64) } | Should -Throw '*Sync-LabModule.ps1*something else*'
+    }
+}

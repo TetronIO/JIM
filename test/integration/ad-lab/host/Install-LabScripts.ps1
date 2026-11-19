@@ -425,6 +425,21 @@ if ($null -ne $hostSettings) {
         }
     }
 
+    # The control account may run the hourly update, so a run brings this host's module up to date itself rather than
+    # waiting for the next hour (Sync-LabModule.ps1).
+    $updateTask = Get-ScheduledTask -TaskPath '\JIM\' -TaskName 'Update AD lab scripts' -ErrorAction SilentlyContinue
+    if ($null -eq $account) {
+        Write-Host "  skipped        update task: there is no local account '$ControlAccount'"
+    }
+    elseif ($null -eq $updateTask) {
+        Write-Host '  skipped        update task: \JIM\Update AD lab scripts is not registered (Register-LabScriptsUpdateTask.ps1)'
+    }
+    else {
+        Invoke-HostAccessStep -Name "$ControlAccount may run \JIM\Update AD lab scripts" -Action {
+            Grant-LabScheduledTaskRun -TaskPath '\JIM\' -TaskName 'Update AD lab scripts' -Sid $account.SID.Value
+        }
+    }
+
     # Hyper-V's worker processes may read the media. A directoryExtensions entry that fails validation fails only the
     # extension media, not the Windows media or its record.
     $media = @()

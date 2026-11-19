@@ -378,3 +378,72 @@ Describe 'Read-LabModuleFile' {
         { Read-LabModuleFile -Root (Join-Path $script:Root 'missing') } | Should -Throw '*does not exist*'
     }
 }
+
+Describe 'Sync-LabModuleCopy' {
+    BeforeAll {
+        $script:Digest = 'a' * 64
+        $script:Clock = [datetime]'2026-11-19T16:00:00Z'
+        $script:Now = { $script:Clock }
+        $script:Sleep = { param($Seconds) $script:Clock = $script:Clock.AddSeconds($Seconds) }
+    }
+
+    BeforeEach {
+        $script:Clock = [datetime]'2026-11-19T16:00:00Z'
+        $script:Started = 0
+    }
+
+    It 'changes nothing when the host already holds the commit''s module' {
+        $result = Sync-LabModuleCopy -Digest $script:Digest -GetDeployedDigest { $script:Digest } -StartUpdate { $script:Started++ } `
+            -GetUpdateState { throw 'not expected' } -Now $script:Now -Sleep $script:Sleep
+
+        $result | Should -Be 'AlreadyDeployed'
+        $script:Started | Should -Be 0
+    }
+
+    It 'runs the update task, waits for it, and confirms the commit''s module is there' {
+        $script:Polls = 0
+        $result = Sync-LabModuleCopy -Digest $script:Digest -StartUpdate { $script:Started++ } -Now $script:Now -Sleep $script:Sleep `
+            -GetDeployedDigest { if ($script:Polls -ge 3) { $script:Digest } else { $null } } `
+            -GetUpdateState {
+                $script:Polls++
+                if ($script:Polls -lt 3) { [pscustomobject]@{ Running = $true; LastRunTime = $script:Clock.AddHours(-1); LastResult = 0 } }
+                else { [pscustomobject]@{ Running = $false; LastRunTime = $script:Clock.AddSeconds(-10); LastResult = 0 } }
+            }
+
+        $result | Should -Be 'Deployed'
+        $script:Started | Should -Be 1
+    }
+
+    It 'does not mistake the previous run for this one' {
+        $script:Polls = 0
+        $result = Sync-LabModuleCopy -Digest $script:Digest -StartUpdate { $script:Started++ } -Now $script:Now -Sleep $script:Sleep `
+            -GetDeployedDigest { if ($script:Polls -ge 2) { $script:Digest } else { $null } } `
+            -GetUpdateState {
+                $script:Polls++
+                # Not running yet, and its last run is the one before this was started.
+                if ($script:Polls -lt 2) { [pscustomobject]@{ Running = $false; LastRunTime = [datetime]'2026-11-19T15:00:00Z'; LastResult = 0 } }
+                else { [pscustomobject]@{ Running = $false; LastRunTime = $script:Clock; LastResult = 0 } }
+            }
+
+        $result | Should -Be 'Deployed'
+        $script:Polls | Should -Be 2
+    }
+
+    It 'says the update failed, naming its log, when the task reports a failure' {
+        { Sync-LabModuleCopy -Digest $script:Digest -GetDeployedDigest { $null } -StartUpdate {} -Now $script:Now -Sleep $script:Sleep `
+            -GetUpdateState { [pscustomobject]@{ Running = $false; LastRunTime = $script:Clock; LastResult = 1 } } } |
+            Should -Throw '*update-lab-scripts.log*'
+    }
+
+    It 'says the commit is not the head of main when the update deploys another module' {
+        { Sync-LabModuleCopy -Digest $script:Digest -GetDeployedDigest { $null } -StartUpdate {} -Now $script:Now -Sleep $script:Sleep `
+            -GetUpdateState { [pscustomobject]@{ Running = $false; LastRunTime = $script:Clock; LastResult = 0 } } } |
+            Should -Throw '*head of main*Install-LabScripts.ps1*'
+    }
+
+    It 'gives up after the timeout' {
+        { Sync-LabModuleCopy -Digest $script:Digest -GetDeployedDigest { $null } -StartUpdate {} -Now $script:Now -Sleep $script:Sleep -TimeoutSeconds 60 `
+            -GetUpdateState { [pscustomobject]@{ Running = $true; LastRunTime = $script:Clock.AddHours(-1); LastResult = 0 } } } |
+            Should -Throw '*did not finish within 60 seconds*'
+    }
+}

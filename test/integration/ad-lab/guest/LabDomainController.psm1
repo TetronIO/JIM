@@ -3702,6 +3702,71 @@ function Test-LabElevated {
     return $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function Add-LabTaskRunAccess {
+    <#
+    .SYNOPSIS
+        Lets a SID read and run a scheduled task: adds (A;;GRGX;;;<sid>) to the task's security descriptor, unless an
+        Allow entry for the SID already carries read and execute. Returns the descriptor, unchanged when nothing was
+        needed, so callers can compare.
+
+    .DESCRIPTION
+        The lab's control account starts the hourly update task before a run that needs the commit's module on the host
+        (Sync-LabModule.ps1), rather than waiting up to an hour for it; Install-LabScripts.ps1 grants it this, elevated.
+        Pure: the caller reads and writes the task's descriptor. Generic read and execute are compared as their SDDL
+        bits, so full control (FA, GA) counts too.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Sddl,
+
+        [Parameter(Mandatory)]
+        [string]$Sid
+    )
+
+    # Generic read and execute (GR, GX) and generic all (GA), as unsigned SDDL bits: Get-LabDaclAce reports the mask as a
+    # signed 32-bit value, and does not translate a file right such as FA, so full control is read off the rights text.
+    $readExecute = [int64]2684354560
+    $genericAll = [int64]268435456
+    foreach ($ace in @(Get-LabDaclAce -Sddl $Sddl)) {
+        if ($ace.Sid -ne $Sid -or $ace.Type -ne 'A') { continue }
+        $mask = ([int64]$ace.Mask) -band [int64]4294967295
+        $rights = (([string]$ace.Text).Trim('(', ')') -split ';')[2]
+        if ((($mask -band $readExecute) -eq $readExecute) -or (($mask -band $genericAll) -ne 0) -or ($rights -in 'FA', 'GA')) {
+            return $Sddl
+        }
+    }
+    return Merge-LabDelegationSddl -ExistingSddl $Sddl -DelegationSddl "(A;;GRGX;;;$Sid)"
+}
+
+function Grant-LabScheduledTaskRun {
+    <#
+    .SYNOPSIS
+        Lets a SID read and run a scheduled task, through the Task Scheduler's own security descriptor (Add-LabTaskRunAccess).
+        Returns AlreadyGranted or Granted. Needs an elevated caller.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][string]$TaskPath,
+        [Parameter(Mandatory)][string]$TaskName,
+        [Parameter(Mandatory)][string]$Sid
+    )
+
+    Assert-LabWindows -Feature 'Granting access to a scheduled task'
+    $service = New-Object -ComObject 'Schedule.Service'
+    $service.Connect()
+    $task = $service.GetFolder($TaskPath.TrimEnd('\')).GetTask($TaskName)
+    # 4: the DACL alone, so the owner and SACL are neither read nor written back.
+    $existing = $task.GetSecurityDescriptor(4)
+    $wanted = Add-LabTaskRunAccess -Sddl $existing -Sid $Sid
+    if ($wanted -ceq $existing) { return 'AlreadyGranted' }
+    if (-not $PSCmdlet.ShouldProcess("$TaskPath$TaskName", "Allow $Sid to read and run it")) { return }
+    $task.SetSecurityDescriptor($wanted, 0)
+    return 'Granted'
+}
+
 function Grant-LabFileSystemAccess {
     <#
     .SYNOPSIS
@@ -5092,7 +5157,7 @@ function Get-LabOldPasswordAllowedPeriod {
 }
 
 Export-ModuleMember -Function @(
-    'Test-LabIsWindows', 'Assert-LabWindows',
+    'Test-LabIsWindows', 'Assert-LabWindows', 'Add-LabTaskRunAccess', 'Grant-LabScheduledTaskRun',
     'ConvertTo-LabDelegationSddl', 'Get-LabDaclAce', 'Test-LabSddlContainsSid', 'Test-LabAclGrant', 'Merge-LabDelegationSddl',
     'Get-LabCheckpointName', 'Test-LabCheckpointName', 'Test-LabVmName',
     'Get-LabDomainInfo', 'Get-LabCertificateName', 'Get-LabAdministratorUserName',

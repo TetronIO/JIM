@@ -383,6 +383,61 @@ function ConvertTo-LabIdentityProviderRegistration {
     }
 }
 
+function Sync-LabModuleCopy {
+    <#
+    .SYNOPSIS
+        Makes sure the host holds the JIM PowerShell module of the commit under test (module\<digest>\JIM): if it does not,
+        runs the hourly update task now, waits for it to finish, and checks again. Returns AlreadyDeployed or Deployed.
+
+    .DESCRIPTION
+        The AD FS registration runs from the host's copy of the module, which the update task (Update-LabScripts.ps1, as
+        SYSTEM) deploys at the head of main every hour, so a run within the hour of a change to the module found no copy
+        of it. Sync-LabModule.ps1 calls this before the registration instead of waiting. The update only ever deploys
+        main, so a commit that is not the head of main still has no copy afterwards, and says so.
+        The task's state and the clock are scriptblocks, so the waiting is tested without a host.
+
+    .PARAMETER GetDeployedDigest
+        Returns the digest of the host's copy of the module at -Digest, or $null when there is none.
+
+    .PARAMETER GetUpdateState
+        Returns the update task's Running (bool), LastRunTime (UTC) and LastResult (0 for success).
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][string]$Digest,
+        [Parameter(Mandatory)][scriptblock]$GetDeployedDigest,
+        [Parameter(Mandatory)][scriptblock]$StartUpdate,
+        [Parameter(Mandatory)][scriptblock]$GetUpdateState,
+        [int]$TimeoutSeconds = 900,
+        [int]$PollSeconds = 5,
+        [scriptblock]$Now = { [datetime]::UtcNow },
+        [scriptblock]$Sleep = { param($Seconds) Start-Sleep -Seconds $Seconds }
+    )
+
+    if ((& $GetDeployedDigest) -ceq $Digest) { return 'AlreadyDeployed' }
+
+    $started = & $Now
+    & $StartUpdate
+    $deadline = $started.AddSeconds($TimeoutSeconds)
+    while ($true) {
+        & $Sleep $PollSeconds
+        $state = & $GetUpdateState
+        # Finished, and this run rather than the one before it: the scheduler records whole seconds, so allow one.
+        if (-not $state.Running -and $state.LastRunTime -ge $started.AddSeconds(-1)) { break }
+        if ((& $Now) -ge $deadline) {
+            throw "The lab scripts update did not finish within $TimeoutSeconds seconds; see logs\update-lab-scripts.log on the host."
+        }
+    }
+    if ($state.LastResult -ne 0) {
+        throw "The lab scripts update failed (result $($state.LastResult)); see logs\update-lab-scripts.log on the host."
+    }
+    if ((& $GetDeployedDigest) -cne $Digest) {
+        throw "The lab scripts update deployed the head of main, which does not hold this commit's module ($Digest). Run the lab on the head of main, or run Install-LabScripts.ps1 on the host from a checkout of this commit."
+    }
+    return 'Deployed'
+}
+
 function Read-LabModuleFile {
     <#
     .SYNOPSIS
@@ -413,6 +468,7 @@ function Read-LabModuleFile {
 }
 
 Export-ModuleMember -Function @(
+    'Sync-LabModuleCopy',
     'Get-LabFederationInfo', 'Get-LabFederationCertificateName', 'ConvertFrom-LabFederationSetting',
     'Get-LabFederationPhaseArgument', 'Test-LabFederationDiscovery', 'Test-LabFederationKeySet',
     'Test-LabModuleFile', 'Get-LabModuleDigest', 'ConvertTo-LabIdentityProviderRegistration', 'Read-LabModuleFile'
