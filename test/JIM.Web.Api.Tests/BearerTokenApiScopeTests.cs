@@ -215,7 +215,7 @@ public class BearerTokenApiScopeTests
         services.AddLogging();
         services.AddSingleton<IFailedAuthenticationRecorder>(new RecordingFailedAuthenticationRecorder());
         services.AddSingleton(_problems);
-        var audience = ApiAudienceResolver.Resolve(apiScope, ClientId);
+        var audience = ApiAudienceResolver.Resolve(_identityProvider.Issuer, apiScope, ClientId);
         var requirement = BearerScopeRequirement.For(apiScope, ClientId, audience);
         services.AddAuthentication().AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
             JimJwtBearerOptions.Configure(options, _identityProvider.Issuer, audience, [_identityProvider.Issuer], requirement, _ => Task.CompletedTask));

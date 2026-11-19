@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System;
+using System.Linq;
 using System.Security.Claims;
 using JIM.Web.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
@@ -163,6 +164,25 @@ public class SignInProblemDiagnosisTests
             Assert.That(reports[0].Expected, Is.EqualTo("api://jim"));
             Assert.That(reports[0].Received, Is.EqualTo("account, jim-powershell"));
             Assert.That(reports[0].Fix, Does.Contain("JIM_SSO_CLIENT_ID"));
+        }
+    }
+
+    [Test]
+    public void DiagnoseAccessToken_EntraIdVersion1Token_SaysToAskForVersion2()
+    {
+        const string tenant = "34599ee0-829e-4dd4-8da2-4727a0664d51";
+        const string clientId = "193745d9-66c8-4937-81d0-2c50cad399d6";
+        var entraAuthority = $"https://login.microsoftonline.com/{tenant}/v2.0";
+
+        // What Entra ID issues while the app registration still asks for version 1 tokens: the App ID URI as the
+        // audience, from the version 1 issuer.
+        var reports = SignInProblemDiagnosis.DiagnoseAccessToken(Token($"https://sts.windows.net/{tenant}/", $"api://{clientId}"), [clientId],
+            [entraAuthority], entraAuthority);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(reports, Has.Count.EqualTo(2));
+            Assert.That(reports.Select(r => r.Fix), Has.All.Contains("requestedAccessTokenVersion"));
         }
     }
 

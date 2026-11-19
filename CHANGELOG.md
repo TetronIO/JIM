@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 With Microsoft Entra ID, JIM's API takes version 2 access tokens, as Microsoft recommends: their audience is the application's client ID and they must grant `access_as_user`. Version 1 tokens are no longer accepted, and JIM's sign-in diagnosis says how to switch. (#2367)
 - 🔄 The SCIM 2.0 Service Provider is out of Preview: identity providers can push Users and Groups to JIM with no Preview feature to turn on first. (#124)
 
 ### Security

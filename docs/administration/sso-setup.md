@@ -99,7 +99,8 @@ Backend token validation (the JWT bearer middleware that protects `/api/**` endp
 
 | `JIM_SSO_API_SCOPE` | Audience JIM requires | Scope the token must also grant |
 |---|---|---|
-| `api://` followed by an identifier and a permission, such as `api://{id}/access_as_user` (Microsoft Entra ID) | The value without the permission: `api://{id}` | None |
+| Microsoft Entra ID (`JIM_SSO_AUTHORITY` on `login.microsoftonline.com`), `api://{id}/access_as_user` | `JIM_SSO_CLIENT_ID`, as Entra ID's version 2 access tokens carry it | The permission, `access_as_user`, in the token's `scp` claim |
+| Any other `api://` followed by an identifier and a permission, such as `api://{id}/access_as_user` | The value without the permission: `api://{id}` | None |
 | A bare `api://{id}`, such as AD FS's identifier | The value as it stands | None |
 | Anything else, such as Keycloak's `jim-api` | `JIM_SSO_CLIENT_ID` | The value, in the token's `scope` or `scp` claim |
 | Unset | `JIM_SSO_CLIENT_ID` | One JIM cannot know, so JIM accepts no token |
