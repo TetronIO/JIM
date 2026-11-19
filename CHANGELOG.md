@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - ✨ Connector-defined Attributes, such as the LDAP Connector's Exchange Alias, now carry a chip wherever you read or pick one, and saving a Synchronisation Rule warns when it flows one alongside the directory attribute it is written through from a different source. (#2756)
+- ✨ `Register-JIMIdentityProvider` registers JIM with Microsoft Entra ID in one command: the portal, the PowerShell module, the API reference's Try It and JIM's API on one application, with consent given for everyone, and your object ID back, ready to make you JIM's first administrator. (#2367)
 - ✨ Saving an export Synchronisation Rule warns you when another enabled export rule provisions the same Metaverse Object Type as a different Object Type in the same Connected System, such as people as users and as contacts: only one can provision a person both cover. (#2824)
 
 ### Changed

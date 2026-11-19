@@ -12,7 +12,7 @@ Registering JIM with an identity provider by hand means following a guide click 
 ```jim-diagram
 archetype: anatomy
 title: What Register-JIMIdentityProvider hands back, value by value
-desc: "Register-JIMIdentityProvider returns the values JIM's single sign-on needs, each named for its environment variable: Authority for JIM_SSO_AUTHORITY, ClientId for JIM_SSO_CLIENT_ID, ClientSecret for JIM_SSO_SECRET, PublicClientId for JIM_SSO_PUBLIC_CLIENT_ID, ApiScope for JIM_SSO_API_SCOPE, ClaimType for JIM_SSO_CLAIM_TYPE and MvAttribute for JIM_SSO_MV_ATTRIBUTE. ClientSecret is a secure string, and is empty unless the run created or replaced the secret. Changes lists what the run changed, and is empty when the registration was already right; with -WhatIf nothing is returned."
+desc: "Register-JIMIdentityProvider returns the values JIM's single sign-on needs, each named for its environment variable: Authority for JIM_SSO_AUTHORITY, ClientId for JIM_SSO_CLIENT_ID, ClientSecret for JIM_SSO_SECRET, PublicClientId for JIM_SSO_PUBLIC_CLIENT_ID, ApiScope for JIM_SSO_API_SCOPE, ClaimType for JIM_SSO_CLAIM_TYPE and MvAttribute for JIM_SSO_MV_ATTRIBUTE; for Entra ID, InitialAdmin for JIM_SSO_INITIAL_ADMIN. ClientSecret is a secure string, and is empty unless the run created or replaced the secret. Changes lists what the run changed, and is empty when the registration was already right; with -WhatIf nothing is returned."
 subject:
   kind: object
   label: "What `Register-JIMIdentityProvider` returns"
@@ -24,12 +24,13 @@ subject:
     - { label: "`ApiScope`", detail: "`JIM_SSO_API_SCOPE`" }
     - { label: "`ClaimType`", detail: "`JIM_SSO_CLAIM_TYPE`" }
     - { label: "`MvAttribute`", detail: "`JIM_SSO_MV_ATTRIBUTE`" }
+    - { label: "`InitialAdmin`", detail: "`JIM_SSO_INITIAL_ADMIN`, Entra ID only" }
 properties:
   - { name: Each value, value: "for the variable beside it" }
   - { name: Changes, value: "empty when already right" }
 ```
 
-It configures the identity provider, not JIM, so it does not need `Connect-JIM`. AD FS and Keycloak are supported. When sign-in fails because a value does not match, `Get-JIMSignInDiagnostic` names the setting involved.
+It configures the identity provider, not JIM, so it does not need `Connect-JIM`. AD FS, Keycloak and Microsoft Entra ID are supported. When sign-in fails because a value does not match, `Get-JIMSignInDiagnostic` names the setting involved.
 
 ---
 
@@ -57,6 +58,18 @@ For Keycloak, it creates two clients and a client scope in the realm `-Authority
 
 Both clients also get Keycloak's `basic`, `profile` and `email` scopes as default scopes, so tokens carry `sub`, the person's name and email. It uses Keycloak's admin REST API, so it runs from any computer that can reach Keycloak. Sign in with `-Credential` as a Keycloak administrator, or with `-ClientCredential` as a client's service account, for running it unattended. The account needs the `realm-admin` role in JIM's realm, or the master realm's `admin` role.
 
+For Microsoft Entra ID, it creates one application in the tenant `-TenantId` names, which Entra ID lets serve every client type at once, so a person has one object ID whichever way they sign in:
+
+| Platform or setting | What it is for |
+|---------------------|----------------|
+| Web | The portal signs people in with it, using a client secret. Its redirect URIs are JIM's `/signin-oidc` and `/signout-callback-oidc`. |
+| Mobile and desktop | The PowerShell module signs people in with it, using PKCE and loopback redirect URIs for ports 8400 to 8409. |
+| Single-page application | The API reference's **Try It** signs in with it, redirected to JIM's `/api/reference/`; Entra ID lets a browser redeem its code only on this platform. |
+| Expose an API | JIM's API: `api://{client ID}`, offering the `access_as_user` scope, issuing version 2 access tokens, whose audience is the client ID. |
+| API permissions | `openid`, `profile`, `email` and `offline_access` from Microsoft Graph, with each person's email address in their tokens. |
+
+When you may, it also consents to those permissions for everyone, so nobody signing in is asked. It uses Microsoft Graph, so it runs from any computer that can reach it. Sign in with the device code it shows, as a person who administers the tenant's applications, and it returns your object ID as `InitialAdmin`, ready to make you JIM's first administrator. For running it unattended, pass `-AccessToken` with a Graph token; one holding only `Application.ReadWrite.OwnedBy` keeps a registration its application owns right, but cannot give consent, and the command warns that an administrator must.
+
 When people reach JIM at more than one address, give each to `-Url`, and the portal gets redirect URIs for each.
 
 The client secret is returned only when the run created, replaced or set it, as a secure string, so it never appears on screen. AD FS shows a secret once: keep it then, or run again with `-ResetClientSecret` for a new one. For a Keycloak test or development realm whose secret is known in advance, `-ClientSecret` gives the portal that secret instead of one Keycloak makes, and sets it again if it changes.
@@ -67,6 +80,12 @@ The client secret is returned only when the run created, replaced or set it, as 
 ```powershell
 # ADFS (default)
 Register-JIMIdentityProvider -Provider <string> -Url <string[]> [-Name <string>] [-Session <PSSession>] [-ResetClientSecret] [-WhatIf] [-Confirm]
+
+# EntraIdToken
+Register-JIMIdentityProvider -Provider <string> -Url <string[]> -TenantId <string> -AccessToken <SecureString> [-Name <string>] [-ResetClientSecret] [-WhatIf] [-Confirm]
+
+# EntraId
+Register-JIMIdentityProvider -Provider <string> -Url <string[]> -TenantId <string> [-Name <string>] [-ResetClientSecret] [-WhatIf] [-Confirm]
 
 # KeycloakServiceAccount
 Register-JIMIdentityProvider -Provider <string> -Url <string[]> -Authority <string> -ClientCredential <PSCredential> [-AdminRealm <string>] [-ClientId <string>] [-PublicClientId <string>] [-ResetClientSecret] [-ClientSecret <SecureString>] [-WhatIf] [-Confirm]
@@ -79,9 +98,9 @@ Register-JIMIdentityProvider -Provider <string> -Url <string[]> -Authority <stri
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Provider` | `string` | Yes |  | The identity provider to register JIM with. One of `ADFS` or `Keycloak`. |
+| `Provider` | `string` | Yes |  | The identity provider to register JIM with. One of `ADFS`, `Keycloak` or `EntraId`. |
 | `Url` | `string[]` | Yes |  | JIM's address as people reach it, such as https://jim.example.com, with the port if it is not 443. The portal's sign-in and sign-out redirect URIs are made from it. Give more than one when people reach JIM at more than one address. For Keycloak, an http address is accepted for JIM on this computer only, such as http://localhost:5200. |
-| `Name` | `string` | No (ADFS) | `'JIM Identity Management'` | The name of the AD FS Application Group, which is also its identifier. The applications in it are named after it, with " - Portal", " - PowerShell" and " - API". |
+| `Name` | `string` | No (ADFS, EntraIdToken, EntraId) | `'JIM Identity Management'` | For AD FS, the name of the Application Group, which is also its identifier; the applications in it are named after it, with " - Portal", " - PowerShell" and " - API". For Entra ID, the application's display name, by which it is found. |
 | `Session` | `PSSession` | No (ADFS) |  | A PowerShell session to the AD FS server, from New-PSSession. When omitted, the command runs on this computer, which must be an AD FS server. The session is left open. |
 | `Authority` | `string` | Yes (KeycloakServiceAccount, Keycloak) |  | The Keycloak realm JIM signs people in from, such as https://sso.example.com/realms/jim. It is also the value for JIM_SSO_AUTHORITY. The realm must exist. |
 | `Credential` | `PSCredential` | Yes (Keycloak) |  | The username and password of a Keycloak administrator, who signs in through Keycloak's admin-cli client in the realm `-AdminRealm` names. The account needs the realm-admin role in JIM's realm, or the master realm's admin role. |
@@ -89,6 +108,8 @@ Register-JIMIdentityProvider -Provider <string> -Url <string[]> -Authority <stri
 | `AdminRealm` | `string` | No (KeycloakServiceAccount, Keycloak) | `'master'` | The Keycloak realm `-Credential` or `-ClientCredential` signs in to. |
 | `ClientId` | `string` | No (KeycloakServiceAccount, Keycloak) | `'jim'` | The client ID of the portal's Keycloak client, the value for JIM_SSO_CLIENT_ID. |
 | `PublicClientId` | `string` | No (KeycloakServiceAccount, Keycloak) | `'jim-powershell'` | The client ID of the PowerShell module's Keycloak client, the value for JIM_SSO_PUBLIC_CLIENT_ID. |
+| `TenantId` | `string` | Yes (EntraIdToken, EntraId) |  | The Entra ID tenant to register JIM in, by its ID or a domain name, such as contoso.onmicrosoft.com. |
+| `AccessToken` | `SecureString` | Yes (EntraIdToken) |  | A Microsoft Graph access token for the tenant, for running this unattended, such as from a workload identity. It needs Application.ReadWrite.All, or Application.ReadWrite.OwnedBy once its application owns JIM's; giving consent also needs DelegatedPermissionGrant.ReadWrite.All. Without it, you are asked to sign in with a device code. |
 | `ResetClientSecret` | `switch` | No |  | Replaces the portal's client secret, and returns the new one. JIM cannot sign anyone in until JIM_SSO_SECRET is given the new secret. |
 | `ClientSecret` | `SecureString` | No (KeycloakServiceAccount, Keycloak) |  | For Keycloak, the portal's client secret, in place of one Keycloak makes: the client is created with it, or given it if its secret differs. Meant for test and development realms, whose secret is known in advance; elsewhere, let Keycloak make one. |
 
@@ -98,7 +119,7 @@ With `-WhatIf`, nothing is returned.
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Provider` | `string` | The identity provider, ADFS or Keycloak. |
+| `Provider` | `string` | The identity provider, ADFS, Keycloak or EntraId. |
 | `Authority` | `string` | The value for JIM_SSO_AUTHORITY. |
 | `ClientId` | `string` | The portal's client identifier, the value for JIM_SSO_CLIENT_ID. |
 | `ClientSecret` | `securestring` | The portal's client secret, the value for JIM_SSO_SECRET. Empty unless this run created, replaced or set it. |
@@ -106,6 +127,7 @@ With `-WhatIf`, nothing is returned.
 | `ApiScope` | `string` | The API's identifier, the value for JIM_SSO_API_SCOPE. |
 | `ClaimType` | `string` | The claim JIM identifies people by, the value for JIM_SSO_CLAIM_TYPE. |
 | `MvAttribute` | `string` | The Metaverse attribute that claim is matched with, the value for JIM_SSO_MV_ATTRIBUTE. |
+| `InitialAdmin` | `string` | For Entra ID, the object ID of the person who ran this, the value for JIM_SSO_INITIAL_ADMIN when they are to be JIM's first administrator. Empty for the other providers, and when run with a token that is not a person's. |
 | `Changes` | `string[]` | The changes this run made. Empty when the registration was already right. |
 <!-- END GENERATED: Register-JIMIdentityProvider -->
 
@@ -130,6 +152,11 @@ $registration | Select-Object Authority, ClientId, PublicClientId, ApiScope
 ```powershell title="Register JIM at two addresses in a Keycloak test realm, with a known secret"
 $secret = Read-Host -AsSecureString 'Client secret'
 Register-JIMIdentityProvider -Provider Keycloak -Url 'http://localhost:5200', 'https://localhost:7000' -Authority 'http://localhost:8181/realms/jim' -Credential (Get-Credential) -ClientId 'jim-web' -ClientSecret $secret
+```
+
+```powershell title="Register JIM in an Entra ID tenant"
+$registration = Register-JIMIdentityProvider -Provider EntraId -Url 'https://jim.example.com' -TenantId 'contoso.onmicrosoft.com'
+$registration.InitialAdmin   # your object ID, for JIM_SSO_INITIAL_ADMIN
 ```
 
 ```powershell title="Check a Keycloak realm for drift, as a service account"

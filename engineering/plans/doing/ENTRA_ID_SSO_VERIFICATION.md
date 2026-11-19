@@ -95,7 +95,7 @@ Found while planning D2, and proven on the development stack: when the audience 
 - The `scp` requirement then follows from Layer 0 with no further change: the audience is the client ID, so a token must grant `access_as_user`.
 - Unit tests first, in `JIM.Web.Api.Tests`, including an ID token refused as a bearer token.
 
-**Phase 2: `Register-JIMIdentityProvider -Provider EntraId`.**
+**Phase 2: `Register-JIMIdentityProvider -Provider EntraId`.** ✅ Proved against the test tenant on 2026-11-19: it created the registration (client ID `80185dc2-6a10-415e-974b-40ceea310430`, for `https://jim.web:8443` and `http://localhost:5200`) with consent, and a second run changed nothing. The CI app was then made its owner (D5), and `jim-test-admin`'s object ID set as the `jim-ad-lab` variable `JIM_SSO_ENTRA_ADMIN_OBJECT_ID`.
 - Parameters: `-TenantId`; `-AccessToken` (secure string, a Graph token, for unattended runs such as CI); without it, an interactive device-code sign-in, as used for the tenant setup.
 - Creates or repairs one app registration (decided in #2367): Web platform (`/signin-oidc`, `/signout-callback-oidc`) for the portal; Mobile and desktop (loopback `http://localhost`) for `Connect-JIM`; single-page application (`/api/reference/`) for Try It, which Entra ID requires for a browser's PKCE code redemption; App ID URI `api://{client ID}` with the `access_as_user` scope; `requestedAccessTokenVersion` 2; delegated `openid`, `profile`, `email`, `offline_access`; a client secret.
 - Grants tenant-wide consent when the caller may (D5), and otherwise lists the consent still needed in its output.
