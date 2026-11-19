@@ -276,7 +276,29 @@ public class SyncPreviewServer
 
         var context = await BuildCsoPreviewContextAsync(connectedSystemId, guardedRepository, previewServer,
             Proposal(proposedSyncRule, proposedRuleSet));
-        return await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: true, asTheRunWould: true);
+        var result = await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: true, asTheRunWould: true);
+        await AddImportIncompleteRefusalAsync(result, connectedSystemId);
+        return result;
+    }
+
+    /// <summary>
+    /// Reports the real synchronisation's refusal when the Connected System is marked import incomplete (#2521, #2951),
+    /// after the object has been evaluated, so the preview stays useful for diagnosis while nobody reads its outcome as
+    /// what the run will do. A blocking error, because the run would not go ahead.
+    /// </summary>
+    private async Task AddImportIncompleteRefusalAsync(SyncPreviewResult result, int connectedSystemId)
+    {
+        var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem?.ImportIncompleteSince is null)
+            return;
+
+        connectedSystem.Partitions = [.. await Application.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem)];
+        result.Errors.Insert(0, new SyncPreviewMessage
+        {
+            Code = SyncPreviewMessageCode.ImportIncomplete,
+            Detail = ImportCompleteness.DescribePreviewCaveat(connectedSystem),
+            ConnectedSystemId = connectedSystemId
+        });
     }
 
     /// <summary>

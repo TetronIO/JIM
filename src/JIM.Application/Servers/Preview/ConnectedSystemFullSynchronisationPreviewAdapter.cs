@@ -73,6 +73,16 @@ public class ConnectedSystemFullSynchronisationPreviewAdapter : IConfigurationCh
         }
 
         var findings = new List<PreviewValidationFinding>();
+
+        // An import stopped part-way (#2521): the real run is refused, and the preview reads the half-saved Connector Space.
+        // A Warning, not Blocking: the preview stays runnable for diagnosis, but says first that it is not what a run will do.
+        if (connectedSystem.ImportIncompleteSince is not null)
+        {
+            connectedSystem.Partitions = [.. await _application.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem)];
+            findings.Add(new PreviewValidationFinding(PreviewValidationSeverity.Warning,
+                ImportCompleteness.DescribePreviewCaveat(connectedSystem), nameof(connectedSystem.ImportIncompleteSince)));
+        }
+
         if (proposal.MaxObjects is { } cap)
         {
             var population = await _application.SyncPreview.GetFullSyncPopulationAsync(connectedSystem.Id);
