@@ -145,6 +145,8 @@ public static class ConfigurationChangeClassifier
         ["position"] = B,
         ["criteria"] = B,
         ["criterion"] = B,
+        // A connection criterion ("Has user in PANOPLY AD"): which Object Type the object must be connected to.
+        ["connectedObjectTypeId"] = B,
         ["comparisonType"] = B,
         ["stringValue"] = B,
         ["intValue"] = B,

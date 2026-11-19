@@ -201,8 +201,11 @@ Every scoping key is Class B: scoping determines which objects the rule applies 
 | `type`, `position` | B |
 | `childGroups` (nested groups) | B |
 | `metaverseAttributeId`, `connectedSystemAttributeId` | B |
+| `connectedObjectTypeId` (a connection criterion's Object Type) | B |
 | `comparisonType`, `caseSensitive` | B |
 | `stringValue`, `intValue`, `longValue`, `decimalValue`, `dateTimeValue`, `boolValue`, `guidValue` | B |
+| `expression`, `compareAs` | B |
+| `valueMode`, `relativeCount`, `relativeUnit`, `relativeDirection` | B |
 
 ### Configuration test cases (`testCases`, `testCase`)
 
