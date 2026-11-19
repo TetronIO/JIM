@@ -211,6 +211,7 @@
                                                Name="@connectedSystemTarget.Name"
                                                Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.ConnectedSystem, connectedSystemTarget.Type, connectedSystemTarget.AttributePlurality)" />
                             </span>
+                            <ConnectorDefinedChip Attribute="@connectedSystemTarget" ConnectorName="@ConnectorName" />
                             @if (!context.Item.Enabled)
                             {
                                 <MudTooltip Arrow="true" Placement="Placement.Top">
@@ -822,6 +823,7 @@
                                         <div class="jim-flow-option">
                                             <span>@connectedSystemAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemAttribute.Type :
                                                 @connectedSystemAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></span>
+                                            <ConnectorDefinedChip Attribute="@connectedSystemAttribute" ConnectorName="@ConnectorName" />
                                             @if (disabledReason != null)
                                             {
                                                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@disabledReason</MudText>
@@ -874,6 +876,7 @@
                                         <span>@connectedSystemAttribute.Name <span
                                             style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemAttribute.Type :
                                             @connectedSystemAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></span>
+                                        <ConnectorDefinedChip Attribute="@connectedSystemAttribute" ConnectorName="@ConnectorName" />
                                         @if (IsSuggested(targetSuggestions, connectedSystemAttribute))
                                         {
                                             <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary">Suggested</MudChip>
@@ -1047,7 +1050,16 @@
         _passwordSynchronisationReadForConnectedSystemId = SyncRule.ConnectedSystemId;
         using var jim = JimFactory.Create();
         _passwordSynchronisationConfigured = await jim.ConnectedSystems.GetPasswordSynchronisationAsync(SyncRule.ConnectedSystemId) != null;
+        // The Connector's name, for the Connector-defined chip's explanation (#2756). Read from the header here rather
+        // than by widening the rule's own query, which does not load the Connector.
+        ConnectorName = (await jim.ConnectedSystems.GetConnectedSystemHeaderAsync(SyncRule.ConnectedSystemId))?.ConnectorName;
     }
+
+    /// <summary>
+    /// The name of the Connector the rule's Connected System uses, read with the export facts above; null for an import
+    /// rule, which offers no Connected System attribute as a target.
+    /// </summary>
+    private string? ConnectorName { get; set; }
 
     protected override async Task OnInitializedAsync()
     {

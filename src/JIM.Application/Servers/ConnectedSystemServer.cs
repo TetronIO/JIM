@@ -8278,6 +8278,8 @@ public partial class ConnectedSystemServer
         // Its expressions (#2055 Phase 3): refused if new or changed, otherwise only warned about. After the derived flow
         // check, which clears the mapping's save warnings.
         await EnsureAttributeFlowExpressionsAreValidAsync(mapping);
+        // A Connector-defined Attribute flowed alongside the attribute it is realised through (#2756): warned about only.
+        await StampConnectorDefinedAttributeOverlapWarningsAsync(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId}", mapping.SyncRule?.Id);
 
@@ -8336,6 +8338,8 @@ public partial class ConnectedSystemServer
         // Its expressions (#2055 Phase 3): refused if new or changed, otherwise only warned about. After the derived flow
         // check, which clears the mapping's save warnings.
         await EnsureAttributeFlowExpressionsAreValidAsync(mapping);
+        // A Connector-defined Attribute flowed alongside the attribute it is realised through (#2756): warned about only.
+        await StampConnectorDefinedAttributeOverlapWarningsAsync(mapping);
 
         Log.Debug("CreateSyncRuleMappingAsync() called for Synchronisation Rule {SyncRuleId} (API key initiated)", mapping.SyncRule?.Id);
 
@@ -8393,6 +8397,8 @@ public partial class ConnectedSystemServer
         // Its expressions (#2055 Phase 3): refused if new or changed, otherwise only warned about. After the derived flow
         // check, which clears the mapping's save warnings.
         await EnsureAttributeFlowExpressionsAreValidAsync(mapping);
+        // A Connector-defined Attribute flowed alongside the attribute it is realised through (#2756): warned about only.
+        await StampConnectorDefinedAttributeOverlapWarningsAsync(mapping);
         // FR 3 (#1750): a full update can disable, retarget or rewrite the mapping, taking away the last contributor
         // of an attribute a derived flow reads. Reported on the mapping, never blocking; read before anything below
         // can flush the change.
@@ -8497,6 +8503,8 @@ public partial class ConnectedSystemServer
         // Its expressions (#2055 Phase 3): refused if new or changed, otherwise only warned about. After the derived flow
         // check, which clears the mapping's save warnings.
         await EnsureAttributeFlowExpressionsAreValidAsync(mapping);
+        // A Connector-defined Attribute flowed alongside the attribute it is realised through (#2756): warned about only.
+        await StampConnectorDefinedAttributeOverlapWarningsAsync(mapping);
         // FR 3 (#1750): disabling the mapping, or rewriting its Expression, can take away the last contributor of an
         // attribute a derived flow reads. Reported on the mapping, never blocking. Read before the Activity below is
         // created: its save would flush this tracked mapping's changes, and "before" must be the stored configuration.
@@ -10592,6 +10600,9 @@ public partial class ConnectedSystemServer
             await StampConflictingProjectionWarningsAsync(syncRule);
             return;
         }
+
+        // A Connector-defined Attribute flowed alongside the attribute it is realised through (#2756); disabled rules too.
+        await StampConnectorDefinedAttributeOverlapWarningsAsync(syncRule);
 
         if (syncRule.Direction != SyncRuleDirection.Export || !syncRule.Enabled)
             return;

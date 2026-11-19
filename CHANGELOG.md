@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- ✨ Connector-defined Attributes, such as the LDAP Connector's Exchange Alias, now carry a chip wherever you read or pick one, and saving a Synchronisation Rule warns when it flows one alongside the directory attribute it is written through from a different source. (#2756)
+
 ### Changed
 
 - 🔄 The SCIM 2.0 Service Provider is out of Preview: identity providers can push Users and Groups to JIM with no Preview feature to turn on first. (#124)

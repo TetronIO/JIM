@@ -56,6 +56,20 @@ Four rules matter:
 
 You may add keys of your own alongside JIM's. They are persisted and returned on the REST API's Object Type representation, so an automation author can act on them even where JIM's own surfaces do not.
 
+## Attributes your Connector defines
+
+Sometimes a Connector needs a value the Connected System does not hold as an attribute of its own: a capability the Connector carries out by other means. Declare it as a **Connector-defined Attribute** (#2756): a `ConnectorSchemaAttribute` with `IsConnectorDefined = true`, added to the Object Type it applies to during schema discovery. The LDAP Connector's Exchange attributes are the worked example (`LdapExchangeAttributes`): Exchange Alias, for instance, is derived on import from what Exchange stamped, and turned into an Exchange cmdlet on export, never written to the directory as it stands.
+
+JIM marks these attributes in the portal (a **Connector-defined** chip, with a tooltip naming your Connector and giving the attribute's `Description`) and returns `isConnectorDefined` on the REST API, so give every one a description an administrator can act on.
+
+Three rules apply:
+
+- **Name it as the capability followed by the property, in Title Case words:** "Exchange Alias", "Exchange Primary SMTP Address". Where the Connected System's own naming grammar allows, choose names it cannot produce: no LDAP attribute name can contain a space, so the LDAP Connector's names can never collide with a directory attribute. A CSV header or a quoted SQL column can contain spaces, so there the capability prefix is what keeps the names apart.
+- **A name collision is refused.** A schema refresh that reports a Connector-defined Attribute with the same name (ignoring case) as one of the system's own attributes on the same Object Type fails, naming your Connector, and changes nothing. Detect the clash in your own code and rename, rather than relying on the guard.
+- **Declare the attribute it is realised through, where there is one.** Set `SourceAttributeName` to the Connected System attribute, on the same Object Type, that your Connector writes when it acts on the Connector-defined one (Exchange Alias declares `mailNickname`). An export Synchronisation Rule that flows both, from different sources, then gets a warning on saving, because each export may overwrite the other's value. JIM's check reads only this declaration; it knows nothing about your Connector. Leave it null where the attribute has no single counterpart.
+
+Both flags are Connector-owned: a schema refresh restates them, so stop reporting one and it is cleared.
+
 ## Saying whether an External ID is unique across Object Types
 
 JIM recognises a Connected System Object by its External ID within one Object Type. Set `ExternalIdsUniqueAcrossObjectTypes` on your Connector (an `IConnectorCapabilities` member, `false` unless you override it) to `true` only when an External ID value names one object across **every** Object Type of the Connected System: the LDAP Connector does, because a directory never reuses an objectGUID, entryUUID or nsUniqueId, whatever class an entry carries.
