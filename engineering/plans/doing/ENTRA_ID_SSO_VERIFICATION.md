@@ -90,7 +90,7 @@ Found while planning D2, and proven on the development stack: when the audience 
 
 ### Layer 2: Entra ID verification
 
-**Phase 1: access tokens (D2), in JIM.Web.**
+**Phase 1: access tokens (D2), in JIM.Web.** ✅
 - For Entra ID (an authority on `login.microsoftonline.com`), the audience JIM accepts is the client ID only; the other providers keep today's resolution (`ApiAudienceResolver`).
 - The `scp` requirement then follows from Layer 0 with no further change: the audience is the client ID, so a token must grant `access_as_user`.
 - Unit tests first, in `JIM.Web.Api.Tests`, including an ID token refused as a bearer token.
