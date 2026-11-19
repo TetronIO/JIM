@@ -3,7 +3,7 @@ title: Connected Systems
 description: What a Connected System is and holds, and where to configure its Connector Space, scope, schema, passwords and removal.
 type: object
 audience: administrator
-validated: v0.18.0
+validated: v0.19.0
 ---
 
 # Connected Systems
@@ -65,7 +65,7 @@ Where the system accepts passwords, its **Passwords** tab shows the password pol
 
 At the top of the Details tab, above the form, a **Detected** strip lists read-only facts the Connector has detected about the target system, shown for reference. These are read from data JIM already captured during a previous connection, so viewing them never opens a new connection. Before the first successful connection, the strip says nothing has been detected yet.
 
-Of the built-in Connectors, only the [LDAP Connector](../connectors/jim-ldap-connector.md#detected-facts) detects and surfaces facts (directory type, vendor, DNS host name, paging support, and, where a domain controller has been pinned, the pinned server and its invocation ID); for Connectors that cannot detect facts, the strip is not shown at all.
+Of the built-in Connectors, only the [LDAP Connector](../connectors/jim-ldap-connector.md#detected-facts) detects and surfaces facts (directory type, vendor, DNS host name, paging support, where a domain controller has been pinned, the pinned server and its invocation ID, and, where it manages Exchange recipients, the Exchange version and sign-in its last save found); for Connectors that cannot detect facts, the strip is not shown at all.
 
 ## :material-tray-full: Pending Exports
 

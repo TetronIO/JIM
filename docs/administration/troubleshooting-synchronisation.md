@@ -3,7 +3,7 @@ title: Troubleshooting Synchronisation
 description: What each synchronisation error and Activity message means, how to fix and check it, and what JIM keeps safe in the meantime.
 type: troubleshooting
 audience: operator
-validated: v0.18.0
+validated: v0.19.0
 ---
 
 # Troubleshooting Synchronisation
@@ -35,17 +35,17 @@ answers:
 - {from: worker, to: message, label: 'no'}
 ```
 
-The Activity's [execution items](../configuration/activity-execution-items.md) name each object that hit a problem, with the error recorded against it (`Get-JIMActivityExecutionItem` returns the same). The entries below are titled by that error, or by the message on the Activity. The ones that protect your data come first.
+The Activity's [execution items](../configuration/activity-execution-items.md) (`Get-JIMActivityExecutionItem`) name each object that hit a problem, with its error. The entries below are titled by that error, or by the Activity's message; those that protect your data come first.
 
-A run that ended because the Worker restarted, or ran short of memory, is covered in [Troubleshooting Worker Restarts and Memory](troubleshooting-worker.md). An export the Connected System refused, or never confirmed, is covered in [Troubleshooting Exports](troubleshooting-exports.md).
+For a run that ended because the Worker restarted or ran short of memory, see [Troubleshooting Worker Restarts and Memory](troubleshooting-worker.md); for an export the Connected System refused or never confirmed, see [Troubleshooting Exports](troubleshooting-exports.md).
 
 ## :material-database-alert-outline: **Failed with error**: `Run Profile '...' cannot run: an import of Connected System '...' stopped part-way through saving what it read`
 
 An import of the same Connected System that completes without being able to repair it says `An earlier import stopped part-way through saving what it read` as a warning instead.
 
-**What it means.** An import of the Connected System began saving what it read and did not finish: it failed, was cancelled, or the Worker stopped or restarted part-way. A Full Import saves as it reads, in units of up to 2,000 objects, so some of what it read is saved and some is not, and an object it saved can refer to one it had not saved yet. A synchronisation would take each such reference as removed, take it off the Metaverse Object and export the removal, so JIM refuses Full and Delta Synchronisation of that Connected System until the import is whole again. The Connected System's page shows **An import stopped part-way**, and `Get-JIMConnectedSystem` returns when the stopped import began saving as `importIncompleteSince`. Nothing is lost while it waits: what the import saved stays saved, the Metaverse and every other Connected System are as they were, and exports still run, sending what earlier synchronisations decided. A Schedule records the refused step as failed and follows its failure rules.
+**What it means.** An import of the Connected System began saving what it read and did not finish: it failed, was cancelled, or the Worker stopped or restarted part-way. A Full Import saves as it reads, in units of up to 2,000 objects, so an object it saved can refer to one it had not saved yet. A synchronisation would take each such reference as removed, take it off the Metaverse Object and export the removal, so JIM refuses Full and Delta Synchronisation of that Connected System until the import is whole again. The Connected System's page shows **An import stopped part-way**, and `Get-JIMConnectedSystem` returns when the stopped import began saving as `importIncompleteSince`. Nothing is lost while it waits: what the import saved stays saved, the Metaverse and other Connected Systems are untouched, and exports still send what earlier synchronisations decided. A Schedule records the refused step as failed and follows its failure rules.
 
-**How to fix.** Find out from the import's Activity why it stopped, and fix that ([Troubleshooting Worker Restarts and Memory](troubleshooting-worker.md) covers a Worker that stopped). Then run a Full Import of the Connected System to completion, reading all selected partitions, and run the synchronisation again. It passes quickly over what the stopped import saved, which is unchanged, and records nothing for it a second time. A Delta Import that reads only what changed, or a Run Profile that targets one partition, cannot tell that what the stopped import left is whole, so it leaves the refusal in place; a Delta Import whose Connector reads every object counts as a Full Import. Detected deletions refused by the [Run Profile's limits](../configuration/run-profiles.md#full-import) do not stop a Full Import repairing it. There is no way to lift the refusal by hand; clearing the Connector Space lifts it too, along with every Connected System Object.
+**How to fix.** Find out from the import's Activity why it stopped, and fix that ([Troubleshooting Worker Restarts and Memory](troubleshooting-worker.md) covers a Worker that stopped). Then run a Full Import of the Connected System to completion, reading all selected partitions, and run the synchronisation again. It passes quickly over what the stopped import saved, recording nothing twice. A Delta Import that reads only what changed, or a Run Profile that targets one partition, cannot tell that what the stopped import left is whole, so it leaves the refusal in place; a Delta Import whose Connector reads every object counts as a Full Import. Detected deletions refused by the [Run Profile's limits](../configuration/run-profiles.md#full-import) do not stop a Full Import repairing it. There is no way to lift the refusal by hand; clearing the Connector Space lifts it too, along with every Connected System Object.
 
 **Check.** `Get-JIMConnectedSystem -Id <id>` returns an empty `importIncompleteSince`, the notice has gone from the Connected System's page, and the synchronisation's Activity ends **Complete**.
 
@@ -53,7 +53,7 @@ An import of the same Connected System that completes without being able to repa
 
 A Delta Import's message begins `The Connected System reported ... as deleted` instead, and every Delta Import after it reports the same deletions until you act.
 
-**What it means.** A Full Import, or a Delta Import that read everything, found more objects missing from the Connected System, or a Delta Import was told of more deletions, than the Run Profile's deletion detection limit allows, so JIM marked none of them as deleted and the run ended **Complete with warning**. The usual causes are a change of scope or filter, a connection that returned part of the data, or a file replaced by a smaller one; occasionally, a genuine mass deletion. Nothing has been deleted: the Connected System Objects and their Metaverse Objects are as they were before the run.
+**What it means.** A Full Import, or a Delta Import that read everything, found more objects missing from the Connected System, or a Delta Import was told of more deletions, than the Run Profile's deletion detection limit allows, so JIM marked none deleted and the run ended **Complete with warning**. The usual causes are a change of scope or filter, a connection that returned part of the data, or a file replaced by a smaller one; occasionally, a genuine mass deletion. Nothing has been deleted: the Connected System Objects and their Metaverse Objects are unchanged.
 
 **How to fix.** Find out why the objects are missing: check the Connected System's partitions and containers, the Connector's filters, and the source itself. If the absence is genuine, let one run through as [Letting a legitimate mass change through](../configuration/run-profiles.md#letting-a-legitimate-mass-change-through) describes, then run the import again.
 
@@ -63,9 +63,9 @@ A Delta Import's message begins `The Connected System reported ... as deleted` i
 
 The same message names creates or updates when those are what the limit holds back.
 
-**What it means.** More changes of one kind were waiting to be exported than the Export Run Profile's limit allows, so JIM attempted none of them, and the run ended **Complete with warning**. Every one of them is still waiting, as a Pending Export, and nothing has been written to the Connected System.
+**What it means.** More changes of one kind were waiting to be exported than the Export Run Profile's limit allows, so JIM attempted none, and the run ended **Complete with warning**. Each still waits as a Pending Export, and nothing was written to the Connected System.
 
-**How to fix.** Look at what staged them before letting them through: the Connected System's Pending Exports list shows each one and the changes it carries. If they are what you intended, run an Export Run Profile with no limit by hand, as [Letting a legitimate mass change through](../configuration/run-profiles.md#letting-a-legitimate-mass-change-through) describes. If they are not, correct whatever staged them (usually a Synchronisation Rule's scoping or an Attribute Flow), and synchronise again.
+**How to fix.** Before letting them through, look at what staged them: the Connected System's Pending Exports list shows each, with its changes. If they are what you intended, run an Export Run Profile with no limit by hand, as [Letting a legitimate mass change through](../configuration/run-profiles.md#letting-a-legitimate-mass-change-through) describes. If they are not, correct whatever staged them (usually a Synchronisation Rule's scoping or an Attribute Flow), and synchronise again.
 
 **Check.** The export run ends without the warning, and the Connected System's Pending Exports list shows none still **Pending**.
 
@@ -97,7 +97,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **What it means.** The Connected System returned two or more objects with the same External ID, so JIM imported none of them: it cannot tell which is the real one.
 
-**How to fix.** Make the External ID unique in the source, or choose an attribute that is unique as the External ID on the Connected System's schema. A variant of the message, `found across import pages`, means a Full Import was given the same object on two pages of results; check the directory's paging. A Delta Import does not report the `found across import pages` variant: it reads changes in order, so a later page's copy of an object, such as a row deleted and then added back, is a later change and replaces the earlier one. An object repeated within a single page is still rejected as a duplicate.
+**How to fix.** Make the External ID unique in the source, or choose a unique attribute as the External ID on the Connected System's schema. The variant `found across import pages` means a Full Import was given the same object on two pages of results; check the directory's paging. A Delta Import never reports it: it reads changes in order, so a later page's copy of an object (a row deleted and added back, say) replaces the earlier one. An object repeated within one page is still rejected as a duplicate.
 
 **Check.** The next import brings the object in, with no Duplicate Object execution items.
 
@@ -111,7 +111,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 ## :material-swap-horizontal: **Synchronisation Failed**: `Synchronisation Rule '...' targets Connected System Object Type '...' in '...', but this Metaverse Object is already represented there by a '...' object.`
 
-**What it means.** Two export Synchronisation Rules for the same Connected System, each for a different Object Type, both have this Metaverse Object in scope. A Metaverse Object has at most one Connected System Object per Connected System, and it already has one of the other Object Type there, so JIM staged nothing for the rule the message names. The object it already has is left as it is.
+**What it means.** Two export Synchronisation Rules for the same Connected System, each for a different Object Type, both have this Metaverse Object in scope. A Metaverse Object has at most one Connected System Object per Connected System, and it already has one of the other Object Type there, so JIM staged nothing for the rule the message names. The existing object is left alone.
 
 **How to fix.** Narrow the Scoping Criteria of one rule, so that no Metaverse Object is in scope of both. If the two Object Types genuinely belong to the same identities, give each its own Connected System over the same target. The object's **Connections** tab names the conflicting rule too (see [Metaverse Objects](../configuration/metaverse-objects.md#why-it-is-connected-and-why-it-is-not)). Saving either rule while both are enabled warns you about the other.
 
@@ -127,7 +127,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 ## :material-shape-plus-outline: **Projection Type Conflict**: `More than one import Synchronisation Rule would project this object, into different Metaverse Object Types: ...`
 
-**What it means.** Two or more enabled import Synchronisation Rules have this Connected System Object in scope, nothing matched it, and the rules would project it into different Metaverse Object Types. JIM does not choose what kind of object it is, so it projected nothing; the object stays unjoined. The message names each rule and the type it projects into.
+**What it means.** Two or more enabled import Synchronisation Rules have this Connected System Object in scope, nothing matched it, and the rules would project it into different Metaverse Object Types. JIM will not choose between them, so it projected nothing and the object stays unjoined. The message names each rule and the type it projects into.
 
 **How to fix.** Give the rules Scoping Criteria that never cover the same object, or have them project into one Metaverse Object Type; see [Several rules for the same objects](../configuration/scoping-criteria.md#several-rules-for-the-same-objects). Saving either rule while both are enabled warns you about the other.
 
@@ -139,10 +139,13 @@ The same message names creates or updates when those are what the limit holds ba
 
 - A *matches pattern* or *does not match pattern* criterion ran past its time limit on one of this object's values.
 - The object holds an attribute a criterion reads (directly or as an expression's input) only under its old data type: a schema refresh changed the type and no import has read it since.
+- An expression criterion reads an attribute its Object Type no longer has, fails to evaluate, or computes a value that cannot be compared as the criterion's data type.
 
 When an object stops contributing to a Metaverse Object and a surviving contributor's scope cannot be decided, the leaving object gets this error and the Metaverse Object is left unchanged. Deleting a Connected System or Synchronisation Rule then stops, keeping it; remove the cause and delete it again.
 
 **How to fix.** For a pattern, simplify it in the rule's [scoping criteria](../configuration/scoping-criteria.md#operators). Nested repetition such as `(a+)+` is the usual cause; anchoring the pattern and matching the exact shape you expect (`^[a-z.]+@example\.org$` rather than `.*@.*example.*`) keeps each match fast.
+
+For an expression, correct it, or the attribute it reads, in the rule's scoping criteria; see [Comparing a computed value](../configuration/scoping-criteria.md#comparing-a-computed-value).
 
 For a value held under its old data type, run a Full Import of the Connected System the rule imports from; see [Moving an attribute to its new type](../configuration/connected-system-schema.md#moving-an-attribute-to-its-new-type).
 
@@ -174,9 +177,9 @@ For a value held under its old data type, run a Full Import of the Connected Sys
 
 ## :material-play-circle-outline: A run ends **Failed with error** before processing anything
 
-**What it means.** JIM could not reach the Connected System, or the Connector could not start: the message is the reason the network, the server or the Connector gave, such as a refused connection, a name that does not resolve, or a certificate JIM does not trust. Nothing was imported or exported.
+**What it means.** JIM could not reach the Connected System, or the Connector could not start: the message gives the reason, such as a refused connection, a name that does not resolve, or a certificate JIM does not trust. Nothing was imported or exported.
 
-**How to fix.** Check the Connected System's connection settings and that its server is reachable from JIM; for a certificate JIM does not trust, see [Certificates](../configuration/certificates.md). Then run the Run Profile again.
+**How to fix.** Check the Connected System's connection settings and that its server is reachable from JIM; for an untrusted certificate, see [Certificates](../configuration/certificates.md). Then run the Run Profile again.
 
 **Check.** The run's Activity ends **Complete**.
 

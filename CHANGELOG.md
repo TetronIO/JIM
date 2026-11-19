@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-11-19
+
 ### Added
 
 - ✨ Connector-defined Attributes, such as the LDAP Connector's Exchange Alias, now carry a chip wherever you read or pick one, and saving a Synchronisation Rule warns when it flows one alongside the directory attribute it is written through from a different source. (#2756)
@@ -20,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- 🔒 JIM's API no longer accepts the portal's sign-in token in place of an access token where the identity provider gives both the same audience, as Keycloak does: a token must now grant JIM's API scope, so `JIM_SSO_API_SCOPE` must be set for single sign-on to the API.
+- 🔒 JIM's API no longer accepts the portal's sign-in token in place of an access token where the identity provider gives both the same audience, as Keycloak does: a token must now grant JIM's API scope, so `JIM_SSO_API_SCOPE` must be set for single sign-on to the API. (#2367)
 
 ### Fixed
 
@@ -1986,7 +1988,8 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/TetronIO/JIM/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/TetronIO/JIM/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/TetronIO/JIM/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/TetronIO/JIM/compare/v0.15.0...v0.16.0
