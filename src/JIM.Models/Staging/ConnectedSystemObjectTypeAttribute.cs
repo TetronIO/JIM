@@ -168,6 +168,18 @@ public class ConnectedSystemObjectTypeAttribute
     public bool IsConnectorDefined { get; set; }
 
     /// <summary>
+    /// For a Connector-defined Attribute, the name of the Connected System's own attribute, on the same Object Type, that the
+    /// Connector writes when it acts on this one: the LDAP Connector's Exchange Alias is realised through <c>mailNickname</c>.
+    /// Null when the Connector declares none, and always null for an ordinary attribute.
+    /// </summary>
+    /// <remarks>
+    /// Connector-owned: a schema refresh restates it, like <see cref="IsConnectorDefined"/>; administrators cannot set it.
+    /// Saving a Synchronisation Rule warns when the rule flows both this attribute and the one named here, from different
+    /// sources, because each export may then overwrite the other's value (#2756).
+    /// </remarks>
+    public string? SourceAttributeName { get; set; }
+
+    /// <summary>
     /// For a <see cref="AttributeDataType.Reference"/> attribute, the Object Type this reference points at,
     /// when the Connected System's schema declares one (the SQL Connector's <c>referencesObjectType</c>).
     /// Null when the schema does not say; import reference resolution then searches every Object Type and

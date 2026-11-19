@@ -158,4 +158,17 @@ public class ConnectedSystemAttributeDtoTests
 
         Assert.That(dto.IsConnectorDefined, Is.True);
     }
+
+    [Test]
+    public void FromEntity_ConnectorDefinedAttributeWithADeclaredSource_ReportsTheSource()
+    {
+        var entity = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 10, Name = "Exchange Alias", Type = AttributeDataType.Text, IsConnectorDefined = true, SourceAttributeName = "mailNickname"
+        };
+
+        var dto = ConnectedSystemAttributeDto.FromEntity(entity);
+
+        Assert.That(dto.SourceAttributeName, Is.EqualTo("mailNickname"));
+    }
 }

@@ -52,6 +52,24 @@ public class LdapExchangeAttributesTests
             && a.Writability == AttributeWritability.Writable && !string.IsNullOrWhiteSpace(a.Description)));
     }
 
+    /// <summary>
+    /// Each attribute declares the directory attribute it is realised through (#2756), so that saving a Synchronisation
+    /// Rule which also flows that directory attribute from a different source raises a warning.
+    /// </summary>
+    [TestCase("Exchange Recipient Type", "msExchRecipientTypeDetails")]
+    [TestCase("Exchange Alias", "mailNickname")]
+    [TestCase("Exchange Database", "homeMDB")]
+    [TestCase("Exchange Primary SMTP Address", "proxyAddresses")]
+    [TestCase("Exchange External Address", "targetAddress")]
+    public void AddTo_EveryAttribute_DeclaresTheDirectoryAttributeItIsRealisedThrough(string attributeName, string expectedSource)
+    {
+        var objectType = new ConnectorSchemaObjectType("user");
+
+        LdapExchangeAttributes.AddTo(objectType);
+
+        Assert.That(objectType.Attributes.Single(a => a.Name == attributeName).SourceAttributeName, Is.EqualTo(expectedSource));
+    }
+
     [Test]
     public void IsExchangeAttribute_TellsTheConnectorsOwnNamesFromDirectoryAttributes()
     {

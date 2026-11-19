@@ -19,12 +19,14 @@ JIM's product nouns are fixed, and the portal, REST API and PowerShell surfaces 
 | Pending Export | (the export queue itself) |
 | Projection | |
 | Join | |
+| Connector-defined Attribute | A Connected System Object Type's schema |
 
 Rules that follow from this:
 
 - **Write the type name where the schema knows it, the full product noun otherwise.** A grid whose rows are already scoped to one Metaverse Object Type shows that type's name (e.g. "Person"); a page, tooltip or message that is not scoped to a type says "Metaverse Object" or "Connected System Object" in full.
 - **Abbreviate only in a tight header or stat chip, and only with a tooltip.** "CSO"/"MVO" (and their plurals) may appear in a table column header or a stat chip that would otherwise wrap; everywhere else (prose, headings, tab labels, search placeholders, detail-row labels, tooltips, empty states, dialog text, aria-labels, snackbar messages) write "Connected System Object"/"Metaverse Object" in full. Wherever the abbreviation remains, the full name must be available as a tooltip.
 - **"Identity" is a documented concept, not a product noun.** JIM's glossary and conceptual docs use "identity" to describe what the system manages; the product surfaces never use it as a stand-in for "Metaverse Object", and "record" is not product vocabulary either. The one historical exception, the housekeeping Activity's stored name, was itself renamed from "Scheduled Identity Deletion" to **Scheduled Metaverse Object Deletion** (#1668) for exactly this reason.
+- **A Connector-defined Attribute is one the Connector made up, not one the Connected System has** (#2756). The LDAP Connector's Exchange Alias is the first: it is never written to the directory as it stands, and the Connector gives it meaning on import and export. Call it that in full; "virtual attribute" already means a computed attribute in directories, and "JIM-managed" fits every flowed attribute, so neither marks anything. In code it is `IsConnectorDefined`.
 - **One name per thing, one per place.** Do not let a second label for the same concept creep in (a page calling the Connector Space list "the connector's objects", a tooltip calling a Pending Export "not yet confirmed" instead of naming what it is). When auditing a page, check its `<PageTitle>`, breadcrumbs, tab labels, column headers, tooltips, empty states and dialog titles against this table.
 
 ## Architecture Principles
