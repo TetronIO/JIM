@@ -1819,7 +1819,7 @@ It starts by itself on every push to `main` that changes `VERSION` (that is, whe
 - Before creating a release, on the release commit
 - After major connector or sync engine changes, before they ship
 
-**The release gate:** `release.yml` and the `/release` skill refuse to release a commit whose `jim-pre-release` status is not `success` (`scripts/Test-PreReleaseGate.ps1`), once the repository variable `JIM_PRE_RELEASE_GATE_ENFORCED` is `true`. See `engineering/RELEASE_PROCESS.md`.
+**The release gate:** `release.yml` and the `/release` skill refuse to release a commit whose `jim-pre-release` status is not `success` (`scripts/Test-ReleaseGate.ps1 -Context jim-pre-release`), once the repository variable `JIM_PRE_RELEASE_GATE_ENFORCED` is `true`. See `engineering/RELEASE_PROCESS.md`.
 
 ---
 

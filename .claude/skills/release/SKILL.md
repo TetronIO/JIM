@@ -42,16 +42,16 @@ Before starting, verify:
 
 6. **Check the Active Directory lab gate.** First check whether it is enforced: `gh variable get JIM_AD_LAB_GATE_ENFORCED`. Unless that prints `true`, the gate is not enforced yet (the lab has not had its first green run), so skip this check and the gate in Step 8, and tell the user the release will carry a "gate not enforced" warning. While it is `true`, `release.yml` refuses to run for a commit whose `jim-ad-lab` commit status is not `success`, and there is no override, so find out now rather than at the tag push:
    ```
-   pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha "$(git rev-parse origin/main)"
+   pwsh -File ./scripts/Test-ReleaseGate.ps1 -Context jim-ad-lab -Sha "$(git rev-parse origin/main)"
    ```
    The status is posted on the exact SHA that `.github/workflows/ad-lab.yml` tested (the nightly run of `main`, or a dispatched run), so this is an early warning about the tip of `main` and nothing more: **the release commit, the merge commit of the release PR, does not exist yet and has no status of its own.** It needs its own dispatched `ad-lab.yml` run before it is tagged (Step 8), which takes hours at the Medium template; that is the expected cost of the gate, not a fault in it.
    - **Exit 0:** carry on. Step 8 still applies to the release commit.
    - **Exit 1 (`failure`, `error`, `pending` or not reported):** stop and tell the user what the script printed (the state, the run link, the remedy). A red night is a real result against a real Windows Server domain controller; the way forward is a fix and a dispatched re-run, never a way round the gate. If the tip of `main` simply has no status yet, dispatch one now (`gh workflow run ad-lab.yml --ref main`) so the answer is ready sooner.
-   - **Its AD FS gate.** The same run posts `jim-ad-lab-adfs` for its AD FS sign-in checks. Check `gh variable get JIM_AD_LAB_ADFS_GATE_ENFORCED`; unless it prints `true`, skip this and its part of Step 8 and tell the user the release will carry a "gate not enforced" warning. While it is `true`, also run `pwsh -File ./scripts/Test-AdLabFederationReleaseGate.ps1 -Sha "$(git rev-parse origin/main)"`, and treat its exit codes the same way.
+   - **Its AD FS gate.** The same run posts `jim-ad-lab-adfs` for its AD FS sign-in checks. Check `gh variable get JIM_AD_LAB_ADFS_GATE_ENFORCED`; unless it prints `true`, skip this and its part of Step 8 and tell the user the release will carry a "gate not enforced" warning. While it is `true`, also run `pwsh -File ./scripts/Test-ReleaseGate.ps1 -Context jim-ad-lab-adfs -Sha "$(git rev-parse origin/main)"`, and treat its exit codes the same way.
 
 7. **Check the pre-release integration gate.** First check whether it is enforced: `gh variable get JIM_PRE_RELEASE_GATE_ENFORCED`. Unless that prints `true`, skip this check and that gate in Step 8, and tell the user the release will carry a "gate not enforced" warning. While it is `true`, `release.yml` refuses to run for a commit whose `jim-pre-release` commit status (posted by `.github/workflows/pre-release.yml`, the full integration suite against Samba AD, OpenLDAP and 389 Directory Server) is not `success`, with no override. The release commit does not exist yet, and merging the release PR (it changes `VERSION`) starts the suite on it by itself, so there is nothing to check yet beyond whether the suite is healthy: look at the most recent run (`gh run list --workflow pre-release.yml --limit 3`) and tell the user if it failed, because the same failure would hold the release up for about two hours after the merge.
 
-8. **Check the deployment lab gate.** First check whether it is enforced: `gh variable get JIM_DEPLOY_LAB_GATE_ENFORCED`. Unless that prints `true`, skip this check and that gate in Step 8, and tell the user the release will carry a "gate not enforced" warning. While it is `true`, `release.yml` refuses to run for a commit whose `jim-deploy-lab` commit status (posted by `.github/workflows/deploy-lab.yml`, which installs and upgrades a bundle of the commit on fresh air-gapped VMs) is not `success`, with no override. It runs nightly on `main`, so check the tip of `main` now as an early warning: `pwsh -File ./scripts/Test-DeployLabReleaseGate.ps1 -Sha "$(git rev-parse origin/main)"`. On exit 1, tell the user what it printed; a red night is a real installation or upgrade failure, and the way forward is a fix. Merging the release PR starts the lab on the release commit by itself.
+8. **Check the deployment lab gate.** First check whether it is enforced: `gh variable get JIM_DEPLOY_LAB_GATE_ENFORCED`. Unless that prints `true`, skip this check and that gate in Step 8, and tell the user the release will carry a "gate not enforced" warning. While it is `true`, `release.yml` refuses to run for a commit whose `jim-deploy-lab` commit status (posted by `.github/workflows/deploy-lab.yml`, which installs and upgrades a bundle of the commit on fresh air-gapped VMs) is not `success`, with no override. It runs nightly on `main`, so check the tip of `main` now as an early warning: `pwsh -File ./scripts/Test-ReleaseGate.ps1 -Context jim-deploy-lab -Sha "$(git rev-parse origin/main)"`. On exit 1, tell the user what it printed; a red night is a real installation or upgrade failure, and the way forward is a fix. Merging the release PR starts the lab on the release commit by itself.
 
 ## Documentation Review and Update
 
@@ -360,31 +360,31 @@ The release workflow runs on tag push. It will build and publish artefacts from 
 git rev-parse HEAD                       # the merge commit; this is the SHA the tag will point at
 gh workflow run ad-lab.yml --ref main    # runs on the head of main, which must still be that commit
 gh run list --workflow ad-lab.yml --limit 1   # then: gh run watch <run-id>
-pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha "$(git rev-parse HEAD)"
-pwsh -File ./scripts/Test-AdLabFederationReleaseGate.ps1 -Sha "$(git rev-parse HEAD)"   # only while JIM_AD_LAB_ADFS_GATE_ENFORCED is true
+pwsh -File ./scripts/Test-ReleaseGate.ps1 -Context jim-ad-lab -Sha "$(git rev-parse HEAD)"
+pwsh -File ./scripts/Test-ReleaseGate.ps1 -Context jim-ad-lab-adfs -Sha "$(git rev-parse HEAD)"   # only while JIM_AD_LAB_ADFS_GATE_ENFORCED is true
 ```
 
-The dispatch tests whatever `main` points at when it starts, so nothing else may merge between the release PR and the tag; if `main` has moved, stop and ask the user (tagging a later commit would ship changes the changelog does not describe). Do NOT tag until the script exits 0. If it exits 1, tell the user the state and the run link it prints; the remedy is a fix and another dispatched run, and there is no override. Pushing the tag anyway achieves nothing: the `jim-ad-lab-gate` job at the head of `release.yml` runs the same script and stops the release before any image is built. The same dispatched run posts `jim-ad-lab-adfs`, which the `jim-ad-lab-adfs-gate` job checks the same way.
+The dispatch tests whatever `main` points at when it starts, so nothing else may merge between the release PR and the tag; if `main` has moved, stop and ask the user (tagging a later commit would ship changes the changelog does not describe). Do NOT tag until the script exits 0. If it exits 1, tell the user the state and the run link it prints; the remedy is a fix and another dispatched run, and there is no override. Pushing the tag anyway achieves nothing: the release-gates job at the head of `release.yml` runs the same script and stops the release before any image is built. The same dispatched run posts `jim-ad-lab-adfs`, which the release-gates job checks the same way.
 
 **Gate (only while `JIM_PRE_RELEASE_GATE_ENFORCED` is `true`; see Pre-Flight check 7): the pre-release integration suite must have passed on this exact commit, before you tag it.** Merging the release PR started `pre-release.yml` on the merge commit by itself (it runs on every push to `main` that changes `VERSION`), so do not dispatch it; find that run, wait for it (about 1h 45m; start the lab dispatch above first so the two overlap), then check:
 
 ```bash
 gh run list --workflow pre-release.yml --limit 1 --json databaseId,headSha,status   # headSha must be the merge commit
 gh run watch <run-id>
-pwsh -File ./scripts/Test-PreReleaseGate.ps1 -Sha "$(git rev-parse HEAD)"
+pwsh -File ./scripts/Test-ReleaseGate.ps1 -Context jim-pre-release -Sha "$(git rev-parse HEAD)"
 ```
 
-If no run started (`VERSION` unchanged, or the run was cancelled), dispatch one with `gh workflow run pre-release.yml --ref main -f screenshots=true` (a dispatch captures the release's screenshots only when asked to). Do NOT tag until the script exits 0; on exit 1, tell the user the state and run link it prints. The remedy is a fix and another run, never a way round the gate: the `jim-pre-release-gate` job in `release.yml` runs the same script.
+If no run started (`VERSION` unchanged, or the run was cancelled), dispatch one with `gh workflow run pre-release.yml --ref main -f screenshots=true` (a dispatch captures the release's screenshots only when asked to). Do NOT tag until the script exits 0; on exit 1, tell the user the state and run link it prints. The remedy is a fix and another run, never a way round the gate: the release-gates job in `release.yml` runs the same script.
 
 **Gate (only while `JIM_DEPLOY_LAB_GATE_ENFORCED` is `true`; see Pre-Flight check 8): the deployment lab must have passed on this exact commit, before you tag it.** Merging the release PR started `deploy-lab.yml` on the merge commit by itself (like `pre-release.yml`, it runs on every push to `main` that changes `VERSION`), so do not dispatch it; find that run, wait for it (about 65 minutes, inside the pre-release suite's time), then check:
 
 ```bash
 gh run list --workflow deploy-lab.yml --limit 1 --json databaseId,headSha,status   # headSha must be the merge commit
 gh run watch <run-id>
-pwsh -File ./scripts/Test-DeployLabReleaseGate.ps1 -Sha "$(git rev-parse HEAD)"
+pwsh -File ./scripts/Test-ReleaseGate.ps1 -Context jim-deploy-lab -Sha "$(git rev-parse HEAD)"
 ```
 
-If no run started, dispatch one with `gh workflow run deploy-lab.yml --ref main`. Do NOT tag until the script exits 0; on exit 1, tell the user the state and run link it prints. The remedy is a fix and another run: the `jim-deploy-lab-gate` job in `release.yml` runs the same script.
+If no run started, dispatch one with `gh workflow run deploy-lab.yml --ref main`. Do NOT tag until the script exits 0; on exit 1, tell the user the state and run link it prints. The remedy is a fix and another run: the release-gates job in `release.yml` runs the same script.
 
 JIM enforces signed tags (`tag.forceSignAnnotated=true`), so use `git tag -a -m`, not a lightweight tag:
 

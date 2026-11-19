@@ -43,8 +43,8 @@
 # follows a passing suite with the release's screenshots when a release is being prepared (see that job), uses the jim-automation app's JIM_AUTOMATION_*
 # secrets to open its pull requests on junctional.io and tetron.io.
 #
-# The release gate: release.yml's jim-pre-release-gate job and the /release skill require a `success` status from this
-# workflow on the SHA being tagged (scripts/Test-PreReleaseGate.ps1), with no override, once the repository variable
+# The release gate: release.yml's release-gates job and the /release skill require a `success` status from this
+# workflow on the SHA being tagged (scripts/Test-ReleaseGate.ps1 -Context jim-pre-release), with no override, once the repository variable
 # JIM_PRE_RELEASE_GATE_ENFORCED is `true`; until then a release carries a warning instead.
 
 name: jim-pre-release

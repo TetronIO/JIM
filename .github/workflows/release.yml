@@ -1,9 +1,10 @@
 # Release workflow for JIM
 # Triggered by pushing a tag like v0.2.0
 #
-# This workflow first refuses the release outright (once JIM_AD_LAB_GATE_ENFORCED is true) unless the tagged commit has a green `jim-ad-lab` commit
-# status (the Active Directory lab; see the jim-ad-lab-gate job), and likewise for `jim-pre-release` and `jim-deploy-lab` (the pre-release
-# integration suite and the deployment lab, each once its own *_GATE_ENFORCED variable is true), then:
+# This workflow first refuses the release outright unless the tagged commit has a green commit status for every
+# release gate in scripts/ReleaseGates.psd1 (the Active Directory lab, its AD FS sign-in checks, the pre-release
+# integration suite and the deployment lab), each once its own *_GATE_ENFORCED variable is true; see the release-gates
+# job. Then:
 # 1. Validates the build, tests, and version consistency
 # 2. Builds, scans, smoke-tests, and pushes Docker images to ghcr.io
 # 3. Publishes PowerShell module to PSGallery
@@ -33,176 +34,75 @@ permissions:
 # pull_request-triggered ever runs on that runner, which is what keeps building
 # release artefacts on it acceptable for a public repo.
 jobs:
-  # Job 0: The Active Directory lab gate. The commit being tagged must have a `success` commit status named
-  # `jim-ad-lab`, which .github/workflows/ad-lab.yml posts on the SHA it tested (nightly on main, and on dispatch).
-  # A release is refused otherwise, with a message naming the state, the run and the remedy. The remedy for a red or
-  # missing status is a fix and a dispatched ad-lab.yml run on this commit, made BEFORE the tag is pushed (the
-  # /release skill does this). `validate` needs this job, and every other job needs `validate`, so nothing is built,
-  # scanned, pushed or published for a commit the lab has not passed.
-  # scripts/Test-AdLabReleaseGate.ps1 holds the decision and is tested in scripts/Tests.
+  # Job 0: The release gates. The commit being tagged must have a `success` commit status for every gate in
+  # scripts/ReleaseGates.psd1, each posted by a test run on the SHA it tested:
+  #   jim-ad-lab        ad-lab.yml: the LDAP scenarios against the Active Directory lab's real domain controllers
+  #                     (nightly on main, and on dispatch);
+  #   jim-ad-lab-adfs   ad-lab.yml, the same run: people signing in to JIM through the lab's real AD FS (#2441), a
+  #                     status of its own so a sign-in failure never turns the LDAP result red or the reverse;
+  #   jim-pre-release   pre-release.yml: every scenario against Samba AD, OpenLDAP and 389 Directory Server (by itself
+  #                     when a change to VERSION reaches main, which is to say when the release pull request merges);
+  #   jim-deploy-lab    deploy-lab.yml: install, upgrade, roll back, re-run and soak a bundle of the commit on fresh
+  #                     air-gapped VMs (nightly on main, and when a change to VERSION reaches main).
+  # A release is refused otherwise, with a message naming the state, the run and the remedy: a fix, then a run on
+  # this commit BEFORE the tag is pushed (the /release skill does this). `validate` needs this job, and every other job
+  # needs `validate`, so nothing is built, scanned, pushed or published for a commit a gate has not passed.
+  # scripts/Test-ReleaseGate.ps1 holds the decision (over the shared core in scripts/ReleaseGate.ps1) and is tested
+  # in scripts/Tests, which also holds this matrix to exactly the table's rows.
   #
-  # Enforced only while the repository variable JIM_AD_LAB_GATE_ENFORCED is `true`. The lab's domain controllers
-  # are not built yet, so no commit can carry the status; until the lab's first green run, the job passes with a
-  # warning on the run summary instead of refusing every release. Set the variable once the lab has passed
-  # (gh variable set JIM_AD_LAB_GATE_ENFORCED --body true); from then on there is no override, since the variable
-  # is the single switch and changing it needs repository admin. PRD_ACTIVE_DIRECTORY_LAB.md tracks switching it on.
-  jim-ad-lab-gate:
-    name: Active Directory Lab Gate
+  # Each gate is enforced only while its repository variable is `true`, switched on once its run has passed for the
+  # first time (gh variable set <variable> --body true); until then its leg passes with a warning on the run summary.
+  # From then on there is no override, since the variable is the single switch and changing it needs repository
+  # admin. fail-fast is off so a release refused by one gate still reports every other.
+  release-gates:
+    name: Release Gate (${{ matrix.context }})
     runs-on: self-hosted
     # Reads commit statuses only. Job-level permissions replace the workflow's, which grant no statuses access.
     permissions:
       contents: read
       statuses: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - context: jim-ad-lab
+            variable: JIM_AD_LAB_GATE_ENFORCED
+          - context: jim-ad-lab-adfs
+            variable: JIM_AD_LAB_ADFS_GATE_ENFORCED
+          - context: jim-pre-release
+            variable: JIM_PRE_RELEASE_GATE_ENFORCED
+          - context: jim-deploy-lab
+            variable: JIM_DEPLOY_LAB_GATE_ENFORCED
 
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
-      # The SHA and repository reach the script through env, never interpolated into it.
-      - name: Require a green jim-ad-lab status on this commit
-        if: vars.JIM_AD_LAB_GATE_ENFORCED == 'true'
+      # The gate, SHA and repository reach the script through env, never interpolated into it.
+      - name: Require a green status on this commit
+        if: vars[matrix.variable] == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          GATE: ${{ matrix.context }}
           RELEASE_SHA: ${{ github.sha }}
           RELEASE_REPOSITORY: ${{ github.repository }}
-        run: pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha "$env:RELEASE_SHA" -Repository "$env:RELEASE_REPOSITORY"
+        run: pwsh -File ./scripts/Test-ReleaseGate.ps1 -Context "$env:GATE" -Sha "$env:RELEASE_SHA" -Repository "$env:RELEASE_REPOSITORY"
 
       - name: Report that the gate is not yet enforced
-        if: vars.JIM_AD_LAB_GATE_ENFORCED != 'true'
-        shell: pwsh
-        run: |
-          $message = 'The Active Directory lab gate is not enforced yet (JIM_AD_LAB_GATE_ENFORCED is not true), so this release has not been proven against a real domain controller.'
-          Write-Output "::warning title=Active Directory lab gate not enforced::$message"
-          "### Active Directory lab gate not enforced`n`n$message" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-
-  # Job 0a: The Active Directory lab's AD FS gate. The commit being tagged must have a `success` commit status named
-  # `jim-ad-lab-adfs`, which the same ad-lab.yml run that posts `jim-ad-lab` posts for its AD FS sign-in checks (portal
-  # sign-in, the initial administrator, /api, Connect-JIM, and a renamed account, against the lab's real AD FS; #2441).
-  # It has a status, and a gate, of its own, so a sign-in failure never turns the LDAP result red or the reverse. One
-  # dispatched lab run on the commit answers both gates. scripts/Test-AdLabFederationReleaseGate.ps1 holds the
-  # decision (sharing scripts/ReleaseGate.ps1) and is tested in scripts/Tests.
-  #
-  # Enforced only while the repository variable JIM_AD_LAB_ADFS_GATE_ENFORCED is `true`, switched on once the checks
-  # have had their first green run (gh variable set JIM_AD_LAB_ADFS_GATE_ENFORCED --body true); until then the job
-  # passes with a warning on the run summary. From then on there is no override, as for the other gates.
-  jim-ad-lab-adfs-gate:
-    name: Active Directory Lab AD FS Gate
-    runs-on: self-hosted
-    # Reads commit statuses only. Job-level permissions replace the workflow's, which grant no statuses access.
-    permissions:
-      contents: read
-      statuses: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
-
-      # The SHA and repository reach the script through env, never interpolated into it.
-      - name: Require a green jim-ad-lab-adfs status on this commit
-        if: vars.JIM_AD_LAB_ADFS_GATE_ENFORCED == 'true'
+        if: vars[matrix.variable] != 'true'
         shell: pwsh
         env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_SHA: ${{ github.sha }}
-          RELEASE_REPOSITORY: ${{ github.repository }}
-        run: pwsh -File ./scripts/Test-AdLabFederationReleaseGate.ps1 -Sha "$env:RELEASE_SHA" -Repository "$env:RELEASE_REPOSITORY"
-
-      - name: Report that the gate is not yet enforced
-        if: vars.JIM_AD_LAB_ADFS_GATE_ENFORCED != 'true'
-        shell: pwsh
+          GATE: ${{ matrix.context }}
         run: |
-          $message = 'The Active Directory lab AD FS gate is not enforced yet (JIM_AD_LAB_ADFS_GATE_ENFORCED is not true), so this release has not been proven to sign people in through a real AD FS.'
-          Write-Output "::warning title=Active Directory lab AD FS gate not enforced::$message"
-          "### Active Directory lab AD FS gate not enforced`n`n$message" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-
-  # Job 0b: The pre-release integration gate. The commit being tagged must have a `success` commit status named
-  # `jim-pre-release`, which .github/workflows/pre-release.yml posts on the SHA it tested: it runs the full
-  # pre-release integration suite (every scenario against Samba AD, OpenLDAP and 389 Directory Server) by itself when
-  # a change to VERSION reaches main, which is to say when the release pull request merges, and on dispatch. A
-  # release is refused otherwise, with a message naming the state, the run and the remedy: a fix, then a run on this
-  # commit BEFORE the tag is pushed. `validate` needs this job as well as the lab gate, so nothing is built, scanned,
-  # pushed or published for a commit the suite has not passed. scripts/Test-PreReleaseGate.ps1 holds the decision
-  # (sharing scripts/ReleaseGate.ps1 with the lab gate) and is tested in scripts/Tests.
-  #
-  # Enforced only while the repository variable JIM_PRE_RELEASE_GATE_ENFORCED is `true`, switched on once the suite
-  # has had its first green run (gh variable set JIM_PRE_RELEASE_GATE_ENFORCED --body true); until then the job
-  # passes with a warning on the run summary. From then on there is no override, as for the lab gate.
-  jim-pre-release-gate:
-    name: Pre-Release Integration Gate
-    runs-on: self-hosted
-    # Reads commit statuses only. Job-level permissions replace the workflow's, which grant no statuses access.
-    permissions:
-      contents: read
-      statuses: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
-
-      # The SHA and repository reach the script through env, never interpolated into it.
-      - name: Require a green jim-pre-release status on this commit
-        if: vars.JIM_PRE_RELEASE_GATE_ENFORCED == 'true'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_SHA: ${{ github.sha }}
-          RELEASE_REPOSITORY: ${{ github.repository }}
-        run: pwsh -File ./scripts/Test-PreReleaseGate.ps1 -Sha "$env:RELEASE_SHA" -Repository "$env:RELEASE_REPOSITORY"
-
-      - name: Report that the gate is not yet enforced
-        if: vars.JIM_PRE_RELEASE_GATE_ENFORCED != 'true'
-        shell: pwsh
-        run: |
-          $message = 'The pre-release integration gate is not enforced yet (JIM_PRE_RELEASE_GATE_ENFORCED is not true), so this release has not been proven by the full integration suite.'
-          Write-Output "::warning title=Pre-release integration gate not enforced::$message"
-          "### Pre-release integration gate not enforced`n`n$message" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-
-  # Job 0c: The deployment lab gate. The commit being tagged must have a `success` commit status named
-  # `jim-deploy-lab`, which .github/workflows/deploy-lab.yml posts on the SHA it tested: it builds a bundle from the
-  # commit and installs, upgrades, rolls back, re-runs and soaks it the way customers do, on fresh air-gapped VMs on
-  # the deployment lab host (Docker with both image stores, rootful and rootless Podman, Ubuntu and AlmaLinux with
-  # SELinux enforcing). It runs nightly on main, by itself when a change to VERSION reaches main (the release pull
-  # request's merge), and on dispatch. A release is refused otherwise, with a message naming the state, the run and
-  # the remedy: a fix, then a run on this commit BEFORE the tag is pushed. `validate` needs this job as well as the
-  # other two gates. scripts/Test-DeployLabReleaseGate.ps1 holds the decision (sharing scripts/ReleaseGate.ps1) and is
-  # tested in scripts/Tests.
-  #
-  # Enforced only while the repository variable JIM_DEPLOY_LAB_GATE_ENFORCED is `true`, switched on once the lab has
-  # had its first green run in Actions (gh variable set JIM_DEPLOY_LAB_GATE_ENFORCED --body true); until then the job
-  # passes with a warning on the run summary. From then on there is no override, as for the other gates.
-  jim-deploy-lab-gate:
-    name: Deployment Lab Gate
-    runs-on: self-hosted
-    # Reads commit statuses only. Job-level permissions replace the workflow's, which grant no statuses access.
-    permissions:
-      contents: read
-      statuses: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
-      # The SHA and repository reach the script through env, never interpolated into it.
-      - name: Require a green jim-deploy-lab status on this commit
-        if: vars.JIM_DEPLOY_LAB_GATE_ENFORCED == 'true'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_SHA: ${{ github.sha }}
-          RELEASE_REPOSITORY: ${{ github.repository }}
-        run: pwsh -File ./scripts/Test-DeployLabReleaseGate.ps1 -Sha "$env:RELEASE_SHA" -Repository "$env:RELEASE_REPOSITORY"
-      - name: Report that the gate is not yet enforced
-        if: vars.JIM_DEPLOY_LAB_GATE_ENFORCED != 'true'
-        shell: pwsh
-        run: |
-          $message = 'The deployment lab gate is not enforced yet (JIM_DEPLOY_LAB_GATE_ENFORCED is not true), so this release has not been proven by installing and upgrading it on fresh air-gapped hosts.'
-          Write-Output "::warning title=Deployment lab gate not enforced::$message"
-          "### Deployment lab gate not enforced`n`n$message" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          . ./scripts/ReleaseGate.ps1
+          Write-ReleaseGateNotEnforced -Context $env:GATE
 
   # Job 1: Validate build, tests, and version consistency
   validate:
     name: Validate Build & Tests
     runs-on: self-hosted
-    needs: [jim-ad-lab-gate, jim-ad-lab-adfs-gate, jim-pre-release-gate, jim-deploy-lab-gate]
+    needs: [release-gates]
 
     steps:
       - name: Checkout

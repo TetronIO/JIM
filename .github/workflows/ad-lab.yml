@@ -9,7 +9,7 @@
 # when everything passed, with the scenario count and the OS build in its description. It also signs people in to JIM
 # through the lab's AD FS server (Scenario 031, #2441) and posts that as a status of its own, `jim-ad-lab-adfs`, so a
 # sign-in failure never turns `jim-ad-lab` red or the reverse. `/release` and release.yml
-# require `success` for the SHA being tagged (scripts/Test-AdLabReleaseGate.ps1) once the repository variable
+# require `success` for the SHA being tagged (scripts/Test-ReleaseGate.ps1 -Context jim-ad-lab) once the repository variable
 # JIM_AD_LAB_GATE_ENFORCED is `true` (set after the lab's first green run); from then on there is no override, so the
 # remedy for a red night is a fix and a dispatched run.
 #
@@ -427,7 +427,7 @@ jobs:
           exit $LASTEXITCODE
 
       # The AD FS sign-in checks' own status, which the release gate reads apart from jim-ad-lab
-      # (scripts/Test-AdLabFederationReleaseGate.ps1). From the sign-in step's outcome: success only when every check
+      # (scripts/Test-ReleaseGate.ps1 -Context jim-ad-lab-adfs). From the sign-in step's outcome: success only when every check
       # passed, failure when one failed, error when the step never ran to the end. Posted only by a run that set out to
       # run the checks; a cancelled run posts nothing.
       - name: Post the jim-ad-lab-adfs commit status
