@@ -120,7 +120,10 @@ function Invoke-JIMEntraIdGraphApi {
         Invoke-RestMethod @request
     }
     catch {
-        throw "Microsoft Graph refused $($Method.ToUpperInvariant()) $Path`: $($_.ErrorDetails.Message ?? $_.Exception.Message)"
+        # Graph's error body can be empty, so the exception's own message, which carries the status, is always given.
+        $body = "$($_.ErrorDetails.Message)".Trim()
+        $reason = if ($body) { "$($_.Exception.Message) $body" } else { $_.Exception.Message }
+        throw "Microsoft Graph refused $($Method.ToUpperInvariant()) $Path`: $reason"
     }
 }
 
@@ -413,8 +416,21 @@ function Invoke-JIMEntraIdRegistrationChange {
         { $_ -in 'NewClientSecret', 'ResetClientSecret' } {
             $made = Invoke-JIMEntraIdGraphApi -Connection $Connection -Method Post -Path "/applications/$($Connection.ApplicationId)/addPassword" `
                 -Body @{ passwordCredential = @{ displayName = $script:JIMEntraIdSecretName } }
+            # Graph can refuse a change to the application's credentials until the one just made has replicated, so each
+            # replaced secret is retired with a few tries, a little longer apart each time.
             foreach ($keyId in @($arguments.RetireKeyIds | Where-Object { $_ })) {
-                $null = Invoke-JIMEntraIdGraphApi -Connection $Connection -Method Post -Path "/applications/$($Connection.ApplicationId)/removePassword" -Body @{ keyId = $keyId }
+                for ($attempt = 1; ; $attempt++) {
+                    try {
+                        $null = Invoke-JIMEntraIdGraphApi -Connection $Connection -Method Post -Path "/applications/$($Connection.ApplicationId)/removePassword" -Body @{ keyId = $keyId }
+                        break
+                    }
+                    catch {
+                        if ($attempt -ge 5) {
+                            throw "The new client secret was made, but the one it replaces ($keyId) could not be retired: $($_.Exception.Message)"
+                        }
+                        Start-Sleep -Seconds (5 * $attempt)
+                    }
+                }
             }
             return [string]$made.secretText
         }
