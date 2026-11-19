@@ -110,8 +110,8 @@ public class ConfigurationTestCase : IAuditable
 
     /// <summary>
     /// For a <see cref="ConfigurationTestCaseKind.Scope"/> case of an export rule, the Connected System Object Types the
-    /// sample Metaverse Object is joined to, which the rule's connection criteria test (#2787); empty for joined to none,
-    /// and for every other kind. A connection no criterion tests any more changes nothing when the case runs, and is
+    /// sample Metaverse Object is joined to, which the rule's connection criteria test (#2787). It is empty when the
+    /// object is joined to nothing, and for every other kind. A connection no criterion tests any more changes nothing when the case runs, and is
     /// dropped when the case is next saved.
     /// </summary>
     public List<int> ConnectedObjectTypeIds { get; set; } = [];

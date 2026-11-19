@@ -51,7 +51,7 @@ function New-JIMConfigurationTestCase {
     .PARAMETER ConnectedObjectTypeId
         For a Scope case of an export rule, the IDs of the Connected System Object Types the object is joined to, as
         Test-JIMScope takes them, for the rule's connection criteria. Each must be one the rule's Scope tests. Omit it
-        for joined to none.
+        when the object is joined to nothing.
 
     .PARAMETER RunAsOf
         The instant to run the case as of: what Now() and Today() read, and what relative date criteria resolve

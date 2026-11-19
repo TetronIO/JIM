@@ -111,7 +111,8 @@ public class ConfigurationTestCaseDto
 
     /// <summary>
     /// For a Scope case, the ids of the Connected System Object Types the sample object is joined to, which an export
-    /// rule's connection criteria test ("Has user in ..."); empty for joined to none. Null for every other kind.
+    /// rule's connection criteria test ("Has user in ..."). An empty list means the object is joined to nothing. Only a
+    /// Scope case has this.
     /// </summary>
     public List<int>? ConnectedObjectTypeIds { get; set; }
 
@@ -315,7 +316,7 @@ public abstract class ConfigurationTestCaseContentRequest
 
     /// <summary>
     /// For a Scope case of an export rule whose Scope tests connections ("Has user in ..."), the ids of the Connected
-    /// System Object Types the sample object is joined to. Omit it, or give an empty list, for joined to none. Each must
+    /// System Object Types the sample object is joined to. Omit it, or give an empty list, when the object is joined to nothing. Each must
     /// be one the rule's Scope tests.
     /// </summary>
     public List<int>? ConnectedObjectTypeIds { get; set; }

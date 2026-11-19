@@ -7,7 +7,8 @@ function Set-JIMConfigurationTestCase {
         Changes a saved configuration test case.
 
     .DESCRIPTION
-        Changes a test case's name, description, inputs, run-as-of time or expectation. Only what is given changes.
+        Changes a test case's name, description, inputs, connections, run-as-of time or expectation. Only what is
+        given changes.
         Each input hashtable given replaces the case's inputs on that side; the other side stays as it is. What the
         case covers and what it tests cannot change: save another case to test something else.
 

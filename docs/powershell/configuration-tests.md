@@ -80,7 +80,7 @@ Each test case, with its inputs (CsAttributes and MvAttributes for an Attribute 
 | `CsAttributes` | `hashtable` | For an Attribute Flow or Generated Value case, the Connected System Object's values by attribute name: a list of text values, empty for an attribute with no value. Left out of a list unless it asks for `include=inputs`. |
 | `MvAttributes` | `hashtable` | For an Attribute Flow or Generated Value case, the Metaverse Object's values by attribute name. Left out of a list unless it asks for `include=inputs`. |
 | `Attributes` | `hashtable` | For a Scope or Object Matching Rule case, the object's values by attribute name. Left out of a list unless it asks for `include=inputs`. |
-| `ConnectedObjectTypeIds` | `int[]` | For a Scope case, the ids of the Connected System Object Types the sample object is joined to, which an export rule's connection criteria test ("Has user in ..."); empty for joined to none. Empty for every other kind. |
+| `ConnectedObjectTypeIds` | `int[]` | For a Scope case, the ids of the Connected System Object Types the sample object is joined to, which an export rule's connection criteria test ("Has user in ..."). An empty list means the object is joined to nothing. Only a Scope case has this. |
 | `Expectation` | `object` | What the case expects. It has `Kind`, `Values` and `InOrder`. |
 | `Created` | `datetime` | When the case was saved, in UTC. |
 | `CreatedByName` | `string` | Who saved the case. |
@@ -131,7 +131,7 @@ New-JIMConfigurationTestCase -Name <string> -ObjectMatchingRuleId <int> -Expect 
 | `CsAttributes` | `hashtable` | No (AttributeFlow) |  | For an Attribute Flow or Generated Value case, the Connected System Object's values, keyed by attribute name. `$null` is no value, and an array gives several values. A [datetime] is sent as ISO 8601. |
 | `MvAttributes` | `hashtable` | No (AttributeFlow) |  | For an Attribute Flow or Generated Value case, the Metaverse Object's values, keyed by attribute name, as for CsAttributes. |
 | `Attributes` | `hashtable` | No (Scope, ObjectMatchingRule) |  | For a Scope or Object Matching Rule case, the object's values, keyed by attribute name, as for CsAttributes. |
-| `ConnectedObjectTypeId` | `int[]` | No (Scope) |  | For a Scope case of an export rule, the IDs of the Connected System Object Types the object is joined to, as `Test-JIMScope` takes them, for the rule's connection criteria. Each must be one the rule's Scope tests. Omit it for joined to none. |
+| `ConnectedObjectTypeId` | `int[]` | No (Scope) |  | For a Scope case of an export rule, the IDs of the Connected System Object Types the object is joined to, as `Test-JIMScope` takes them, for the rule's connection criteria. Each must be one the rule's Scope tests. Omit it when the object is joined to nothing. |
 | `RunAsOf` | `datetime` | No |  | The instant to run the case as of: what Now() and Today() read, and what relative date criteria resolve against. Omit it to run as of the time the case runs. A time without a time zone is read as UTC. |
 | `Expect` | `string` | Yes |  | The outcome expected. Values, NoValue, Error or AnyValue for an Attribute Flow, Generated Value or Object Matching Rule case; InScope or OutOfScope for a Scope case. One of `Values`, `NoValue`, `Error`, `AnyValue`, `InScope` or `OutOfScope`. |
 | `ExpectedValues` | `object[]` | No |  | With `-Expect` Values, the values expected. Each is compared with what the configuration gives as a value of its type, so a date can be written 2026-03-02. |
@@ -170,7 +170,7 @@ New-JIMConfigurationTestCase -Name 'Matches on employee number' -ObjectMatchingR
 
 ## :material-pencil-outline: Set-JIMConfigurationTestCase
 
-Changes a test case's name, description, inputs, run-as-of time or expectation; anything not given stays as it is. What the case covers and what it tests cannot change.
+Changes a test case's name, description, inputs, connections, run-as-of time or expectation; anything not given stays as it is. What the case covers and what it tests cannot change.
 
 <!-- BEGIN GENERATED: Set-JIMConfigurationTestCase -->
 ### Syntax
