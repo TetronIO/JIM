@@ -1,6 +1,6 @@
 # Microsoft Entra ID SSO Verification
 
-- **Status:** Doing (decisions agreed; Layer 1 under way)
+- **Status:** Doing (layers 0 and 1 done; Layer 2 Phase 1 next)
 - **Created:** 2026-11-19
 - **Issue:** [#2367](https://github.com/TetronIO/JIM/issues/2367)
 
@@ -75,7 +75,11 @@ The alternative is to give the CI app the consent permission, so the nightly run
 
 ## Implementation Phases
 
-### Layer 1 (bottom of the stack): one release gate script (D4)
+### Layer 0 (bottom of the stack): refuse an ID token on the API ✅
+
+Found while planning D2, and proven on the development stack: when the audience JIM requires is the portal's own client ID (Keycloak's `jim-api` today; Entra ID's version 2 tokens next), the portal's ID token carries that audience, and `/api` accepted it as an access token (`GET /api/v1/userinfo` answered 200). A bearer token must now also grant JIM's API scope (`scope` or `scp`) whenever the required audience is the client ID; with no API scope set, no token is accepted (`BearerScopeRequirement`). AD FS and Entra ID's version 1 tokens, whose audience is the API's own identifier, are unaffected. A security fix, so it sits at the bottom of the stack and can land on its own.
+
+### Layer 1: one release gate script (D4) ✅
 
 1. `scripts/ReleaseGates.psd1`: the table of statuses, each with its enforcement variable, the run that posts it, and the remedy text the current scripts hold as constants.
 2. `scripts/Test-ReleaseGate.ps1 -Context <status> [-Sha] [-Repository]`: the existing `Invoke-ReleaseGate` core, reading the row. No override, as now.
@@ -88,7 +92,7 @@ The alternative is to give the CI app the consent permission, so the nightly run
 
 **Phase 1: access tokens (D2), in JIM.Web.**
 - For Entra ID (an authority on `login.microsoftonline.com`), the audience JIM accepts is the client ID only; the other providers keep today's resolution (`ApiAudienceResolver`).
-- Every bearer token must carry an `scp` (or `scope`, for providers that name it so) granting JIM's API scope; otherwise it is refused with a reason `SignInProblemDiagnosis` can show. Check first that Keycloak's and AD FS's access tokens carry the scope, so the requirement can apply to every provider rather than Entra ID alone.
+- The `scp` requirement then follows from Layer 0 with no further change: the audience is the client ID, so a token must grant `access_as_user`.
 - Unit tests first, in `JIM.Web.Api.Tests`, including an ID token refused as a bearer token.
 
 **Phase 2: `Register-JIMIdentityProvider -Provider EntraId`.**
