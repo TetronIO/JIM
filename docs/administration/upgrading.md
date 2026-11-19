@@ -3,7 +3,7 @@ title: Upgrading
 description: Upgrade JIM to a newer release, connected, air-gapped or on Podman, verify it, and roll back if you must.
 type: how-to
 audience: operator
-validated: v0.18.0
+validated: v0.19.0
 ---
 
 # Upgrading
@@ -38,6 +38,9 @@ You can upgrade from v0.16.0 or any later release straight to the latest, withou
 - [ ] **Let in-flight work finish.** With Schedules disabled, let running Activities complete before stopping services ([why](#pausing-work)).
 - [ ] **Keep the outgoing images.** Do not run `docker image prune` until the new version is verified; they are your fastest rollback. Air-gapped, keep the old bundle.
 - [ ] **Compare `.env.example` with your `.env`.** New releases can add variables ([Configuration Reference](configuration.md)).
+- [ ] **Upgrading from v0.18.0 or earlier:**
+    - **With Microsoft Entra ID, set `"requestedAccessTokenVersion": 2` in the application's manifest.** JIM's API no longer accepts Entra ID's version 1 access tokens ([Microsoft Entra ID Troubleshooting](sso-setup/microsoft-entra-id.md#microsoft-entra-id-troubleshooting)).
+    - **Set `JIM_SSO_API_SCOPE` if people sign in to JIM's API through your identity provider**, with `Connect-JIM` or the API reference's Try It: where the audience JIM requires is `JIM_SSO_CLIENT_ID` (as with Keycloak and Entra ID), JIM now accepts an access token only when it grants that scope, and with none set it accepts none. API keys are unaffected ([what JIM requires of a token](sso-setup.md#confidential-vs-public-clients)).
 - [ ] **Upgrading from v0.17.0 or earlier:**
     - **With your own PostgreSQL server, run `ALTER DATABASE jim SET jit = off;`** ([why](configuration.md#jit)).
     - **Expect a longer first Delta Import per LDAP partition:** each reads every object once.

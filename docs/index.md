@@ -3,7 +3,7 @@ title: Junctional Identity Manager Docs
 description: A modern, self-hosted Identity Management system for organisations with complex identity synchronisation requirements.
 type: landing
 audience: evaluator
-validated: v0.18.0
+validated: v0.19.0
 template: home.html
 hide:
   - navigation

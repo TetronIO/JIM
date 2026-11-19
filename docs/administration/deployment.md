@@ -3,7 +3,7 @@ title: Deployment
 description: Install JIM in production with Docker or Podman, connected or air-gapped, and prepare it for use.
 type: how-to
 audience: implementer
-validated: v0.18.0
+validated: v0.19.0
 ---
 
 # Deployment
@@ -353,10 +353,12 @@ JIM serves HTTPS itself, with a certificate for its host name that the installer
 | Endpoint                  | Purpose                                         |
 |---------------------------|-------------------------------------------------|
 | `/api/v1/health`          | Basic liveness check                            |
+| `/api/v1/health/live`     | Liveness check for orchestrators; does not check the database |
 | `/api/v1/health/ready`    | Readiness check (includes database connectivity)|
+| `/api/v1/health/version`  | The JIM version running                         |
 | `/api/v1/system/health`   | Health of the Worker's synchronisation loop, its Password Delivery Service and the Scheduler, from their database heartbeats (requires the Administrator role) |
 
-The `jim.web` container includes a Docker healthcheck using the readiness endpoint. The two unauthenticated endpoints answer for the web tier only; `system/health` is how the three background services are observed from outside the portal, and the same report is shown on **Administration > Operations** and returned by `Get-JIMServiceHealth`. The `jim.worker` container hosts two of them, the synchronisation loop and the Password Delivery Service, and each reports on its own, so a Worker whose password delivery has stopped while imports still run is visible as exactly that. See [Operations > Service Health](../configuration/operations.md#service-health).
+The `jim.web` container includes a Docker healthcheck using the readiness endpoint. The unauthenticated `/api/v1/health` endpoints answer for the web tier only; `system/health` is how the three background services are observed from outside the portal, and the same report is shown on **Administration > Operations** and returned by `Get-JIMServiceHealth`. The `jim.worker` container hosts two of them, the synchronisation loop and the Password Delivery Service, and each reports on its own, so a Worker whose password delivery has stopped while imports still run is visible as exactly that. See [Operations > Service Health](../configuration/operations.md#service-health).
 
 The `jim.worker` and `jim.scheduler` containers use file-based healthcheck monitoring. Each service writes a heartbeat file periodically during normal operation, and the Docker healthcheck verifies the file is recent. This means `docker compose ps` and any monitoring that reads container health can detect when a worker or scheduler has stalled, even if the process itself has not exited.
 

@@ -3,7 +3,7 @@ title: Troubleshooting Synchronisation
 description: What each synchronisation error and Activity message means, how to fix and check it, and what JIM keeps safe in the meantime.
 type: troubleshooting
 audience: operator
-validated: v0.18.0
+validated: v0.19.0
 ---
 
 # Troubleshooting Synchronisation
@@ -139,10 +139,13 @@ The same message names creates or updates when those are what the limit holds ba
 
 - A *matches pattern* or *does not match pattern* criterion ran past its time limit on one of this object's values.
 - The object holds an attribute a criterion reads (directly or as an expression's input) only under its old data type: a schema refresh changed the type and no import has read it since.
+- An expression criterion reads an attribute its Object Type no longer has, fails to evaluate, or computes a value that cannot be compared as the criterion's data type.
 
 When an object stops contributing to a Metaverse Object and a surviving contributor's scope cannot be decided, the leaving object gets this error and the Metaverse Object is left unchanged. Deleting a Connected System or Synchronisation Rule then stops, keeping it; remove the cause and delete it again.
 
 **How to fix.** For a pattern, simplify it in the rule's [scoping criteria](../configuration/scoping-criteria.md#operators). Nested repetition such as `(a+)+` is the usual cause; anchoring the pattern and matching the exact shape you expect (`^[a-z.]+@example\.org$` rather than `.*@.*example.*`) keeps each match fast.
+
+For an expression, correct it, or the attribute it reads, in the rule's scoping criteria; see [Comparing a computed value](../configuration/scoping-criteria.md#comparing-a-computed-value).
 
 For a value held under its old data type, run a Full Import of the Connected System the rule imports from; see [Moving an attribute to its new type](../configuration/connected-system-schema.md#moving-an-attribute-to-its-new-type).
 

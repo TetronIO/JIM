@@ -3,7 +3,7 @@ title: JIM LDAP Connector
 description: Synchronise identities with Active Directory, OpenLDAP, 389 Directory Server and other LDAP directories, and the settings it takes.
 type: object
 audience: administrator
-validated: v0.18.0
+validated: v0.19.0
 ---
 
 # JIM LDAP Connector
@@ -128,6 +128,8 @@ The Connected System's **Details** tab shows a **Detected** strip above the form
 | Paging | Always, once detected (Supported / Not Supported; Samba AD reports Not Supported) |
 | Pinned Directory Server | A domain controller has been [pinned](jim-ldap-connector-topology.md#domain-controller-discovery-and-pinning) |
 | Invocation Id | JIM could read the pinned domain controller's invocationId |
+| Exchange | The last save with **Manage Exchange recipients** ticked signed in to Exchange and read its version ([Exchange Recipients](jim-ldap-connector-exchange.md#turn-on-exchange-recipient-management)) |
+| Exchange Sign-in | The last save with **Manage Exchange recipients** ticked signed in to Exchange: the account and the domain controller that issued its Kerberos ticket |
 
 The strip is read-only, and viewing it never opens a connection; [Detected facts](../configuration/connected-systems.md#detected-facts) says where it comes from.
 
