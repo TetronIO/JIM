@@ -119,6 +119,8 @@ public class SyncRuleMappingUpdateApiTests
 
         _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(ImportRuleId)).ReturnsAsync(importRule);
         _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(ExportRuleId)).ReturnsAsync(exportRule);
+        // An export flow's save reads the rule's other flows, for the Connector-defined Attribute overlap warning (#2756).
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingsAsync(ExportRuleId)).ReturnsAsync(() => exportRule.AttributeFlowRules.ToList());
         foreach (var mapping in new[] { _expressionMapping, _attributeMapping, _exportMapping })
         {
             _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingForUpdateAsync(mapping.Id)).ReturnsAsync(mapping);

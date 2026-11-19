@@ -86,6 +86,15 @@ public class ConnectorSchemaAttribute
     /// </summary>
     public bool IsConnectorDefined { get; set; }
 
+    /// <summary>
+    /// For a Connector-defined Attribute, the name of the Connected System's own attribute, on the same Object Type, that
+    /// the Connector writes when it acts on this one: the LDAP Connector's Exchange Alias is realised through
+    /// <c>mailNickname</c>. Null when the Connector declares none, and always null for an ordinary attribute. A save warns
+    /// when a Synchronisation Rule flows both from different sources (#2756). See
+    /// <see cref="ConnectedSystemObjectTypeAttribute.SourceAttributeName"/>.
+    /// </summary>
+    public string? SourceAttributeName { get; set; }
+
     public ConnectorSchemaAttribute(string name, AttributeDataType type, AttributePlurality attributePlurality, bool required = false, string? className = null, AttributeWritability writability = AttributeWritability.Writable)
     {
         Name = name;

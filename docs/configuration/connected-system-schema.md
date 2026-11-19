@@ -100,6 +100,16 @@ Some Connectors report attributes the Connected System maintains for its own ope
 
 Select one as you would any other attribute: tick it once it is listed, or name it in **Select attributes via CSV**, which selects it whether or not it is listed. The REST API and PowerShell return every attribute regardless, each carrying `isOperational`.
 
+## :material-puzzle-outline: Connector-defined attributes
+
+Some Connectors add attributes the Connected System itself does not have, standing for something the Connector carries out in its own way. The [LDAP Connector's Exchange attributes](../connectors/jim-ldap-connector-exchange.md) are an example: Exchange Alias is never written to the directory as it stands, but turned into an Exchange command on export. They behave like any other attribute in a Synchronisation Rule, and JIM tells them apart from the system's own:
+
+- **Marked wherever you read or pick one.** A **Connector-defined** chip sits beside the name on the Schema tab, in an export Attribute Flow's target list, in the Attribute Flow list and on a Connected System Object's page. Hover over it to see which Connector defined the attribute, what it is for and, where the Connector says, which of the Connected System's own attributes it is written through.
+- **Warned about when it overlaps.** Saving an export Synchronisation Rule that flows a Connector-defined attribute and the attribute it is written through (Exchange Alias and `mailNickname`, for instance) from different sources raises a warning, because each export may overwrite the other's value. The save still goes ahead: flowing the underlying attribute on its own is ordinary, and two different sources can agree. Flow only one of them, or give both the same source.
+- **Never confused with a real attribute.** A schema refresh in which a Connector-defined attribute has the same name as one of the Connected System's own attributes fails, naming the Connector, and changes nothing.
+
+The REST API and PowerShell return `isConnectorDefined` and `sourceAttributeName` on every attribute, and report the overlap warning in a save's `warnings`.
+
 ## :material-swap-horizontal: When an object changes Object Type
 
 A Connected System Object belongs to one Object Type, and JIM recognises it by that Object Type's External ID. An object that starts arriving under a different Object Type therefore does not look like an existing object changing: it looks like a new object of the new type, while the old one seems to have disappeared. Taken at face value, the next Full Import would retire the old one, which can delete its Metaverse Object and deprovision it from every other Connected System before anything joins the new one.

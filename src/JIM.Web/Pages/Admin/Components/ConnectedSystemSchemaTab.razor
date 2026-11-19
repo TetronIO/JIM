@@ -662,6 +662,7 @@
                     </HeaderTemplate>
                     <CellTemplate>
                         @context.Item.Name
+                        <ConnectorDefinedChip Attribute="@context.Item" ConnectorName="@ConnectedSystem.ConnectorDefinition.Name" Class="ml-2" />
                     </CellTemplate>
                 </TemplateColumn>
                 @* Hidden rather than omitted, here and on Writability and Description below: MudDataGrid orders its

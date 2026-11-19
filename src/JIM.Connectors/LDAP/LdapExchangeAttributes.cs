@@ -61,7 +61,8 @@ internal static class LdapExchangeAttributes
             objectType.Attributes.Add(new ConnectorSchemaAttribute(definition.Name, AttributeDataType.Text, AttributePlurality.SingleValued)
             {
                 Description = definition.Description,
-                IsConnectorDefined = true
+                IsConnectorDefined = true,
+                SourceAttributeName = Sources[definition.Name]
             });
         }
     }
@@ -73,7 +74,10 @@ internal static class LdapExchangeAttributes
 
     // ---- Import -------------------------------------------------------------------------------------------------
 
-    /// <summary>The directory attribute each one is derived from on import: what Exchange stamps when it acts.</summary>
+    /// <summary>
+    /// The directory attribute each one is derived from on import: what Exchange stamps when it acts. Each attribute also
+    /// declares it as its source (#2756), so a Synchronisation Rule that flows both is warned about on saving.
+    /// </summary>
     private static readonly Dictionary<string, string> Sources = new(StringComparer.Ordinal)
     {
         [RecipientType] = "msExchRecipientTypeDetails",

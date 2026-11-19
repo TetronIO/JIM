@@ -1,0 +1,69 @@
+@using JIM.Models.Staging
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The marker beside a Connector-defined Attribute (#2756): one the Connector made up rather than read from the
+   Connected System's own schema, such as the LDAP Connector's Exchange Alias. Without it the portal shows such an
+   attribute exactly like the system's own. It renders nothing for any other attribute, so a call site places it
+   unconditionally beside the name. Driven by IsConnectorDefined alone, never by parsing the name. *@
+
+@if (Attribute?.IsConnectorDefined == true)
+{
+    <MudTooltip Arrow="true" Placement="Placement.Top">
+        <ChildContent>
+            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text" Class="@Class">Connector-defined</MudChip>
+        </ChildContent>
+        <TooltipContent>
+            <TooltipText Text="@Explanation(Attribute, ConnectorName)" />
+        </TooltipContent>
+    </MudTooltip>
+}
+
+@code {
+    /// <summary>
+    /// The attribute to mark. Nothing renders unless it is Connector-defined.
+    /// </summary>
+    [Parameter]
+    public ConnectedSystemObjectTypeAttribute? Attribute { get; set; }
+
+    /// <summary>
+    /// The name of the Connector the attribute's Connected System uses, for the explanation. Null when the call site
+    /// does not have it.
+    /// </summary>
+    [Parameter]
+    public string? ConnectorName { get; set; }
+
+    /// <summary>
+    /// The surrounding geometry, for the call site to set (a margin beside the name).
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    /// <summary>
+    /// What the chip's tooltip says: who defined the attribute, what it is, and, where the Connector declares one, the
+    /// Connected System attribute it is written through. One sentence each, so the tooltip renders a line per fact.
+    /// </summary>
+    public static string Explanation(ConnectedSystemObjectTypeAttribute attribute, string? connectorName)
+    {
+        ArgumentNullException.ThrowIfNull(attribute);
+
+        var sentences = new List<string>
+        {
+            string.IsNullOrWhiteSpace(connectorName)
+                ? "Defined by the Connector, not by the Connected System's own schema."
+                : $"Defined by the {connectorName}, not by the Connected System's own schema."
+        };
+
+        if (!string.IsNullOrWhiteSpace(attribute.Description))
+        {
+            var description = attribute.Description.Trim();
+            sentences.Add(description.EndsWith('.') ? description : description + ".");
+        }
+
+        if (!string.IsNullOrWhiteSpace(attribute.SourceAttributeName))
+            sentences.Add($"Written to the Connected System through {attribute.SourceAttributeName}.");
+
+        return string.Join(" ", sentences);
+    }
+}

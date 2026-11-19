@@ -291,6 +291,7 @@
                 <RowTemplate>
                     <MudTd Class="jim-attr-name">
                         <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.AttributeName</MudText>
+                        <ConnectorDefinedChip Attribute="@context.Values.FirstOrDefault()?.Attribute" ConnectorName="@ConnectedSystemHeader?.ConnectorName" />
                         @if (IsUnmanagedAttribute(context))
                         {
                             <MudTooltip Text="Initial Export Only: JIM set this attribute at initial provisioning (if it provisioned the object) and no longer exports changes to it; the Connected System owns the value" Arrow="true" Placement="Placement.Top">

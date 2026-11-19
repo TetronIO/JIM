@@ -663,6 +663,20 @@ Describe 'Set-JIMSyncRule' {
                 $saveWarnings[0].Message | Should -Be $brokenFlow
             }
         }
+
+        It 'Writes the warning for a Connector-defined Attribute flowed alongside the attribute it is realised through (#2756)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $overlap = "'Exchange Alias' is defined by the JIM LDAP Connector and written to the Connected System through 'mailNickname', which this rule also flows, from a different source. Each export may overwrite the other's value. Flow one of them, or give both the same source."
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 5; name = 'AD Accounts'; Warnings = @($overlap) } }
+
+                $result = Set-JIMSyncRule -Id 5 -Description 'Directory accounts' -PassThru -Confirm:$false -WarningVariable saveWarnings -WarningAction SilentlyContinue
+
+                $result.id | Should -Be 5 -Because 'the save went ahead: a warning, never a refusal'
+                $saveWarnings | Should -HaveCount 1
+                $saveWarnings[0].Message | Should -Be $overlap
+            }
+        }
     }
 }
 
