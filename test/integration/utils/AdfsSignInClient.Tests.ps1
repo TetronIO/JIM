@@ -228,3 +228,117 @@ initialize('/api/openapi/v1.json', true, {"authentication":{"securitySchemes":{"
             Should -Throw '*offers 0 API scopes*'
     }
 }
+
+Describe 'ConvertFrom-EntraIdSignInPage' {
+    BeforeAll {
+        # The shape of Microsoft Entra ID's sign-in page: the page's state in a $Config object, in a CDATA script block.
+        $script:NewEntraPage = {
+            param([string]$Config)
+            "<!DOCTYPE html><html><head><script type=`"text/javascript`" nonce='abc'>//<![CDATA[`n`$Config=$Config;`n//]]></script> `r`n<script type=`"text/javascript`">var x = { a: 1 };</script></head><body></body></html>"
+        }
+    }
+
+    It 'reads the page''s id, where it posts, and the tokens a post must carry' {
+        $page = ConvertFrom-EntraIdSignInPage -Html (& $script:NewEntraPage '{"pgid":"ConvergedSignIn","urlPost":"/tenant/login","sFT":"flow-token","sCtx":"context","canary":"canary-value","sErrorCode":"","text":"a }; inside a string"}')
+
+        $page.PageId | Should -Be 'ConvergedSignIn'
+        $page.PostTo | Should -Be '/tenant/login'
+        $page.FlowToken | Should -Be 'flow-token'
+        $page.Context | Should -Be 'context'
+        $page.Canary | Should -Be 'canary-value'
+        $page.ErrorCode | Should -BeNullOrEmpty
+    }
+
+    It 'reads the error Entra ID gives for refusing a sign-in' {
+        $page = ConvertFrom-EntraIdSignInPage -Html (& $script:NewEntraPage '{"pgid":"ConvergedSignIn","urlPost":"/tenant/login","sFT":"f","sCtx":"c","canary":"k","sErrorCode":"50126","strServiceExceptionMessage":"Your account or password is incorrect."}')
+
+        $page.ErrorCode | Should -Be '50126'
+        $page.ErrorText | Should -Be 'Your account or password is incorrect.'
+    }
+
+    It 'finds nothing on a page that is not Entra ID''s' {
+        ConvertFrom-EntraIdSignInPage -Html '<html><body><form action="/signin-oidc" method="post"></form></body></html>' | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'New-EntraIdSignInFields' {
+    It 'posts the person''s name and password with the page''s tokens, declining to stay signed in' {
+        $page = [pscustomobject]@{ PageId = 'ConvergedSignIn'; PostTo = '/t/login'; FlowToken = 'f'; Context = 'c'; Canary = 'k' }
+
+        $fields = New-EntraIdSignInFields -Page $page -UserName 'jim-test-admin@contoso.onmicrosoft.com' -Password 'pw'
+
+        $fields.login | Should -Be 'jim-test-admin@contoso.onmicrosoft.com'
+        $fields.loginfmt | Should -Be 'jim-test-admin@contoso.onmicrosoft.com'
+        $fields.passwd | Should -Be 'pw'
+        $fields.flowToken | Should -Be 'f'
+        $fields.ctx | Should -Be 'c'
+        $fields.canary | Should -Be 'k'
+    }
+}
+
+Describe 'Complete-EntraIdSignIn' {
+    BeforeAll {
+        $script:EntraPage = {
+            param([string]$PageId, [string]$PostTo, [string]$ErrorCode = '', [string]$ErrorText = '')
+            "<script>//<![CDATA[`n`$Config={`"pgid`":`"$PageId`",`"urlPost`":`"$PostTo`",`"sFT`":`"f`",`"sCtx`":`"c`",`"canary`":`"k`",`"sErrorCode`":`"$ErrorCode`",`"strServiceExceptionMessage`":`"$ErrorText`"};`n//]]></script>"
+        }
+        $script:Session = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
+        $script:AtEntra = [pscustomobject]@{ Uri = [uri]'https://login.microsoftonline.com/t/oauth2/v2.0/authorize'; StatusCode = 200; Location = $null; Content = (& $script:EntraPage 'ConvergedSignIn' '/t/login') }
+    }
+
+    It 'signs in and returns where Entra ID sends the browser next' {
+        Mock -ModuleName AdfsSignInClient Invoke-SignInRequest {
+            [pscustomobject]@{ Uri = $Uri; StatusCode = 302; Location = [uri]'http://localhost:8400/callback/?code=x'; Content = '' }
+        }
+
+        $result = Complete-EntraIdSignIn -Session $script:Session -Response $script:AtEntra -UserName 'u@contoso.onmicrosoft.com' -Password 'pw'
+
+        $result.Location.AbsoluteUri | Should -BeLike 'http://localhost:8400/callback/*'
+        Should -Invoke -ModuleName AdfsSignInClient Invoke-SignInRequest -Times 1 -ParameterFilter { $Uri.AbsoluteUri -eq 'https://login.microsoftonline.com/t/login' -and $Method -eq 'POST' }
+    }
+
+    It 'answers "stay signed in?" when Entra ID asks it' {
+        Mock -ModuleName AdfsSignInClient Invoke-SignInRequest {
+            if ($Uri.AbsolutePath -eq '/t/login') {
+                return [pscustomobject]@{ Uri = $Uri; StatusCode = 200; Location = $null; Content = (& $script:EntraPage 'KmsiInterrupt' '/kmsi') }
+            }
+            [pscustomobject]@{ Uri = $Uri; StatusCode = 200; Location = $null; Content = '<form method="POST" action="https://jim.example.com/signin-oidc"><input type="hidden" name="code" value="x" /></form>' }
+        }
+
+        $result = Complete-EntraIdSignIn -Session $script:Session -Response $script:AtEntra -UserName 'u@contoso.onmicrosoft.com' -Password 'pw'
+
+        $result.Content | Should -BeLike '*signin-oidc*'
+        Should -Invoke -ModuleName AdfsSignInClient Invoke-SignInRequest -Times 1 -ParameterFilter { $Uri.AbsolutePath -eq '/kmsi' }
+    }
+
+    It 'throws with Entra ID''s own reason when it refuses the sign-in' {
+        Mock -ModuleName AdfsSignInClient Invoke-SignInRequest {
+            [pscustomobject]@{ Uri = $Uri; StatusCode = 200; Location = $null; Content = (& $script:EntraPage 'ConvergedSignIn' '/t/login' '50126' 'Your account or password is incorrect.') }
+        }
+
+        { Complete-EntraIdSignIn -Session $script:Session -Response $script:AtEntra -UserName 'u@contoso.onmicrosoft.com' -Password 'wrong' } |
+            Should -Throw '*refused the sign-in for u@contoso.onmicrosoft.com*50126*incorrect*'
+    }
+
+    It 'names a page it does not know as Entra ID''s, never as JIM''s fault' {
+        Mock -ModuleName AdfsSignInClient Invoke-SignInRequest {
+            [pscustomobject]@{ Uri = $Uri; StatusCode = 200; Location = $null; Content = (& $script:EntraPage 'ConvergedProofUpRedirect' '/t/proofup') }
+        }
+
+        { Complete-EntraIdSignIn -Session $script:Session -Response $script:AtEntra -UserName 'u@contoso.onmicrosoft.com' -Password 'pw' } |
+            Should -Throw "*Entra ID's sign-in did not go as expected*ConvergedProofUpRedirect*"
+    }
+}
+
+Describe 'Complete-IdentityProviderSignIn' {
+    It 'signs in on AD FS''s page and on Entra ID''s, and refuses any other' {
+        Mock -ModuleName AdfsSignInClient Complete-AdfsSignIn { 'adfs' }
+        Mock -ModuleName AdfsSignInClient Complete-EntraIdSignIn { 'entra' }
+        $session = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
+        $page = { param($content) [pscustomobject]@{ Uri = [uri]'https://idp.example.com/'; StatusCode = 200; Location = $null; Content = $content } }
+
+        Complete-IdentityProviderSignIn -Session $session -Response (& $page $script:AdfsLoginPage) -UserName 'u' -Password 'p' | Should -Be 'adfs'
+        Complete-IdentityProviderSignIn -Session $session -Response (& $page "<script>//<![CDATA[`n`$Config={`"pgid`":`"ConvergedSignIn`",`"urlPost`":`"/t/login`"};`n//]]></script>") -UserName 'u' -Password 'p' | Should -Be 'entra'
+        { Complete-IdentityProviderSignIn -Session $session -Response (& $page '<html></html>') -UserName 'u' -Password 'p' } | Should -Throw '*sign-in page*'
+    }
+}
