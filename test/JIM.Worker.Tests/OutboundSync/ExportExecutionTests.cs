@@ -4131,15 +4131,42 @@ public class ExportExecutionTests
     /// the load of exports still waiting on their references, since each chunk is resolved before any of its batches is
     /// handed out.
     /// </summary>
+    /// <remarks>
+    /// With <see cref="HoldChunk"/> set, that chunk (counted from one) is held, before it is recorded, until
+    /// <see cref="ProgressMoved"/> completes or five seconds pass. With several workers, batches finish and report through
+    /// the pass's gate on their own threads while later chunks are prepared ahead on the thread pool, so on a fast
+    /// machine every chunk could otherwise be loaded before the first report arrived, however the pass behaved. Holding
+    /// the last chunk until progress has moved asks whether the pass reports progress while it still has chunks to load,
+    /// rather than which thread the scheduler ran first; a pass that only reported once every chunk was loaded still
+    /// fails, once the hold runs out.
+    /// </remarks>
     private sealed class DeferredChunkRecordingSyncRepository(List<string> events) : SyncRepository
     {
         public List<int> ChunkSizes { get; } = [];
+
+        public int? HoldChunk { get; init; }
+
+        public TaskCompletionSource ProgressMoved { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private int _chunksSeen;
 
         public override async Task<List<PendingExport>> GetPendingExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
         {
             var loaded = await base.GetPendingExportsByIdsAsync(pendingExportIds);
             if (loaded.Any(pe => pe.HasUnresolvedReferences))
             {
+                if (Interlocked.Increment(ref _chunksSeen) == HoldChunk)
+                {
+                    try
+                    {
+                        await ProgressMoved.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                    }
+                    catch (TimeoutException)
+                    {
+                        // Progress never moved while the chunk was held: the test's assertions say so.
+                    }
+                }
+
                 lock (events)
                 {
                     ChunkSizes.Add(pendingExportIds.Count);
@@ -4164,7 +4191,8 @@ public class ExportExecutionTests
     {
         // Arrange
         var events = new List<string>();
-        var recordingRepo = new DeferredChunkRecordingSyncRepository(events);
+        // Nine exports in chunks of two: the fifth chunk is the last.
+        var recordingRepo = new DeferredChunkRecordingSyncRepository(events) { HoldChunk = 5 };
         var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: recordingRepo);
         using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
 
@@ -4232,6 +4260,8 @@ public class ExportExecutionTests
                     Assert.That(info.PassTotal, Is.EqualTo(deferredCount), "the pass counts its own work: every deferred export");
                     passProgress.Add(info.PassProcessed ?? 0);
                     events.Add($"progress:{info.PassProcessed}");
+                    if (info.PassProcessed > 0)
+                        recordingRepo.ProgressMoved.TrySetResult();
                 }
             }
             return Task.CompletedTask;
