@@ -10,10 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - ✨ Connector-defined Attributes, such as the LDAP Connector's Exchange Alias, now carry a chip wherever you read or pick one, and saving a Synchronisation Rule warns when it flows one alongside the directory attribute it is written through from a different source. (#2756)
+- ✨ Saving an export Synchronisation Rule warns you when another enabled export rule provisions the same Metaverse Object Type as a different Object Type in the same Connected System, such as people as users and as contacts: only one can provision a person both cover. (#2824)
 
 ### Changed
 
 - 🔄 The SCIM 2.0 Service Provider is out of Preview: identity providers can push Users and Groups to JIM with no Preview feature to turn on first. (#124)
+
+### Fixed
+
+- 🐛 A Scope test case remembers the connections it was tested with, such as "Has user in PANOPLY AD", so it gives the same result every time it runs; set them in the portal, the REST API or PowerShell. (#2787)
+- 🐛 Changing which Object Type a connection Scoping Criterion checks, such as "Has user in PANOPLY AD", is recorded in Configuration History as a change that affects synchronisation; it was saved with no change class and an error in the log. (#2994)
+
 ### Performance
 
 - ⚡ A Full Import that confirms an export no longer looks up every group member to compare a group whose membership is already current, saving about 20 seconds at 500,000 users. (#2986)

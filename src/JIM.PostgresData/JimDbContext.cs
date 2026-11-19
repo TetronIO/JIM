@@ -1963,6 +1963,11 @@ public class JimDbContext : DbContext
             .Property(c => c.Description)
             .HasMaxLength(ConfigurationTestCase.MaxDescriptionLength);
 
+        // A case saved before connections were recorded (#2787) records none.
+        modelBuilder.Entity<ConfigurationTestCase>()
+            .Property(c => c.ConnectedObjectTypeIds)
+            .HasDefaultValueSql("'{}'");
+
         modelBuilder.Entity<ConfigurationTestCase>()
             .ToTable(t => t.HasCheckConstraint(
                 "CK_ConfigurationTestCases_CoversWhatItsKindTests",

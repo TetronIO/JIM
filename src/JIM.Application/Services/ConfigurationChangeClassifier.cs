@@ -145,6 +145,8 @@ public static class ConfigurationChangeClassifier
         ["position"] = B,
         ["criteria"] = B,
         ["criterion"] = B,
+        // A connection criterion ("Has user in PANOPLY AD"): which Object Type the object must be connected to.
+        ["connectedObjectTypeId"] = B,
         ["comparisonType"] = B,
         ["stringValue"] = B,
         ["intValue"] = B,
@@ -170,7 +172,9 @@ public static class ConfigurationChangeClassifier
         ["testCaseExpectation"] = C,
         ["testCaseInOrder"] = C,
         ["testCaseExpectedValues"] = C,
-        ["testCaseInputs"] = C
+        ["testCaseInputs"] = C,
+        ["testCaseConnections"] = C,
+        ["testCaseConnectedObjectTypeId"] = C
     };
 
     private static readonly Dictionary<string, ConfigurationChangeClass> ConnectedSystemKeys = new(StringComparer.Ordinal)
@@ -301,7 +305,9 @@ public static class ConfigurationChangeClassifier
         ["testCaseExpectation"] = C,
         ["testCaseInOrder"] = C,
         ["testCaseExpectedValues"] = C,
-        ["testCaseInputs"] = C
+        ["testCaseInputs"] = C,
+        ["testCaseConnections"] = C,
+        ["testCaseConnectedObjectTypeId"] = C
     };
 
     /// <summary>

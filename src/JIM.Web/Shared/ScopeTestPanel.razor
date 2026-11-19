@@ -130,7 +130,7 @@
     private ConfigurationTestCase? Draft => _result == null
         ? null
         : ConfigurationTestCaseDrafts.FromScopeTest(SyncRule, _inputs.Select(input => (input.AttributeName, StateOf(input.AttributeName))).ToList(),
-            _result, _asOf, _ranAtUtc);
+            _result, _connected, _asOf, _ranAtUtc);
 
     private bool Exporting => SyncRule.Direction == SyncRuleDirection.Export;
 
@@ -231,7 +231,8 @@
 
     private async Task SaveAsTestCaseAsync(ConfigurationTestCase draft) =>
         await ConfigurationTestCaseDialog.ShowAsync(DialogService, draft, "Scope, run against the criteria as saved",
-            _inputs.Select(input => new ConfigurationTestCaseDisplay.InputSlot(null, input.AttributeName, input.Type, input.Plurality)).ToList());
+            _inputs.Select(input => new ConfigurationTestCaseDisplay.InputSlot(null, input.AttributeName, input.Type, input.Plurality)).ToList(),
+            _connections);
 
     private static string DescribeNextChange(ScopeTestResult tested, ScopingExplanation explanation)
     {

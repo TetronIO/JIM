@@ -113,7 +113,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **What it means.** Two export Synchronisation Rules for the same Connected System, each for a different Object Type, both have this Metaverse Object in scope. A Metaverse Object has at most one Connected System Object per Connected System, and it already has one of the other Object Type there, so JIM staged nothing for the rule the message names. The object it already has is left as it is.
 
-**How to fix.** Narrow the Scoping Criteria of one rule, so that no Metaverse Object is in scope of both. If the two Object Types genuinely belong to the same identities, give each its own Connected System over the same target. The object's **Connections** tab names the conflicting rule too (see [Metaverse Objects](../configuration/metaverse-objects.md#why-it-is-connected-and-why-it-is-not)).
+**How to fix.** Narrow the Scoping Criteria of one rule, so that no Metaverse Object is in scope of both. If the two Object Types genuinely belong to the same identities, give each its own Connected System over the same target. The object's **Connections** tab names the conflicting rule too (see [Metaverse Objects](../configuration/metaverse-objects.md#why-it-is-connected-and-why-it-is-not)). Saving either rule while both are enabled warns you about the other.
 
 **Check.** After the next synchronisation, the object's execution item stages the export it expects, or records nothing for the rule it no longer matches.
 

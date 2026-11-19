@@ -266,6 +266,132 @@ public class OverlappingExportRulesWorkflowTests : WorkflowTestBase
         Assert.That(baseRule.SaveWarnings.Where(w => w.Contains("AD Groups")), Is.Empty);
     }
 
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_AnotherEnabledExportRuleTargetsADifferentObjectTypeInTheSameSystem_WarnsNamingItAsync()
+    {
+        // A Metaverse Object holds one Connected System Object per Connected System (#2824): where both rules have an
+        // identity in scope, whichever provisions it first keeps it and the other fails for it on every synchronisation.
+        var arrangement = await ArrangeWithContactRuleAsync();
+
+        var baseRule = await SavedRuleAsync("AD Base Accounts");
+
+        var warnings = baseRule.SaveWarnings.Where(w => w.Contains("AD Contacts")).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(warnings, Has.Count.EqualTo(1), "saving one of the two rules warns once, naming the other");
+            Assert.That(warnings.Single(), Does.Contain("'contact'"), "it names the other rule's Object Type");
+            Assert.That(warnings.Single(), Does.Contain("'user'"), "and the saved rule's own Object Type");
+            Assert.That(warnings.Single(), Does.Contain($"'{arrangement.Ad.Name}'"), "and the Connected System they share");
+        }
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_SavingTheOtherOfTwoRulesTargetingDifferentObjectTypes_WarnsNamingTheFirstAsync()
+    {
+        await ArrangeWithContactRuleAsync();
+
+        var contactRule = await SavedRuleAsync("AD Contacts");
+
+        Assert.That(contactRule.SaveWarnings.Where(w => w.Contains("AD Base Accounts")).ToList(), Has.Count.EqualTo(1),
+            "the warning is symmetric: saving either rule names the other");
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_TheOtherRuleTargetingADifferentObjectTypeIsDisabled_DoesNotWarnAsync()
+    {
+        await ArrangeWithContactRuleAsync();
+        DbContext.SyncRules.Single(r => r.Name == "AD Contacts").Enabled = false;
+        await DbContext.SaveChangesAsync();
+
+        var baseRule = await SavedRuleAsync("AD Base Accounts");
+
+        Assert.That(baseRule.SaveWarnings.Where(w => w.Contains("AD Contacts")), Is.Empty);
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_TheSavedRuleIsDisabled_DoesNotWarnAboutADifferentObjectTypeAsync()
+    {
+        await ArrangeWithContactRuleAsync();
+        DbContext.SyncRules.Single(r => r.Name == "AD Base Accounts").Enabled = false;
+        await DbContext.SaveChangesAsync();
+
+        var baseRule = await SavedRuleAsync("AD Base Accounts");
+
+        Assert.That(baseRule.SaveWarnings.Where(w => w.Contains("AD Contacts")), Is.Empty,
+            "a disabled rule exports nothing, so it cannot conflict");
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_TheRuleTargetingADifferentObjectTypeIsInAnotherConnectedSystem_DoesNotWarnAsync()
+    {
+        // Each Connected System holds its own Connected System Object for the identity, so the rules never compete.
+        var arrangement = await ArrangeAsync(baseScope: Raj, managersScope: Jane);
+        DbContext.SyncRules.Remove(DbContext.SyncRules.Single(r => r.Name == "AD Manager Accounts"));
+        var mail = await CreateConnectedSystemAsync("Mail");
+        var mailContact = await CreateCsoTypeAsync(mail.Id, "contact");
+        await CreateExportSyncRuleAsync(mail.Id, mailContact, PersonType(), "Mail Contacts");
+        await DbContext.SaveChangesAsync();
+
+        var baseRule = await SavedRuleAsync("AD Base Accounts");
+
+        Assert.That(baseRule.SaveWarnings.Where(w => w.Contains("Mail Contacts")), Is.Empty);
+        Assert.That(arrangement.Ad.Id, Is.Not.EqualTo(mail.Id));
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_TheRuleTargetingADifferentObjectTypeIsForAnotherMetaverseObjectType_DoesNotWarnAsync()
+    {
+        // People as users and groups as contacts in one Connected System never compete: a Metaverse Object has one type.
+        var arrangement = await ArrangeAsync(baseScope: Raj, managersScope: Jane);
+        DbContext.SyncRules.Remove(DbContext.SyncRules.Single(r => r.Name == "AD Manager Accounts"));
+        var adContact = await CreateCsoTypeAsync(arrangement.Ad.Id, "contact");
+        var groupType = await CreateMvObjectTypeAsync("Group");
+        await CreateExportSyncRuleAsync(arrangement.Ad.Id, adContact, groupType, "AD Group Contacts");
+        await DbContext.SaveChangesAsync();
+
+        var baseRule = await SavedRuleAsync("AD Base Accounts");
+
+        Assert.That(baseRule.SaveWarnings.Where(w => w.Contains("AD Group Contacts")), Is.Empty);
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_RulesForTheSameAndForADifferentObjectType_WarnsAboutEachOnceAsync()
+    {
+        // The same-type overlap (#2820) and the different-type conflict (#2824) are separate warnings, one per other rule.
+        var arrangement = await ArrangeAsync(baseScope: Raj, managersScope: Jane);
+        var adContact = await CreateCsoTypeAsync(arrangement.Ad.Id, "contact");
+        await CreateExportSyncRuleAsync(arrangement.Ad.Id, adContact, PersonType(), "AD Contacts");
+        await DbContext.SaveChangesAsync();
+
+        var baseRule = await SavedRuleAsync("AD Base Accounts");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(baseRule.SaveWarnings.Where(w => w.Contains("AD Manager Accounts")).ToList(), Has.Count.EqualTo(1));
+            Assert.That(baseRule.SaveWarnings.Where(w => w.Contains("AD Contacts")).ToList(), Has.Count.EqualTo(1));
+            Assert.That(baseRule.SaveWarnings.Single(w => w.Contains("AD Manager Accounts")), Does.Contain("Export Rules Overlap"),
+                "the same-type warning is the overlap warning, unchanged");
+            Assert.That(baseRule.SaveWarnings.Single(w => w.Contains("AD Contacts")), Does.Not.Contain("Export Rules Overlap"),
+                "the different-type warning describes its own outcome");
+        }
+    }
+
+    /// <summary>
+    /// The base arrangement with "AD Manager Accounts" removed, and "AD Contacts" added: an enabled export rule from
+    /// Person into a second Object Type, 'contact', in the same AD Connected System as "AD Base Accounts" ('user').
+    /// </summary>
+    private async Task<Arrangement> ArrangeWithContactRuleAsync()
+    {
+        var arrangement = await ArrangeAsync(baseScope: Raj, managersScope: Jane);
+        DbContext.SyncRules.Remove(DbContext.SyncRules.Single(r => r.Name == "AD Manager Accounts"));
+        var adContact = await CreateCsoTypeAsync(arrangement.Ad.Id, "contact");
+        await CreateExportSyncRuleAsync(arrangement.Ad.Id, adContact, PersonType(), "AD Contacts");
+        await DbContext.SaveChangesAsync();
+        return arrangement;
+    }
+
+    private MetaverseObjectType PersonType() => DbContext.MetaverseObjectTypes.Single(t => t.Name == "Person");
+
     /// <summary>
     /// Saves the named rule through the one write path the portal, the REST API and PowerShell share, and returns the
     /// instance the save stamped its warnings on.

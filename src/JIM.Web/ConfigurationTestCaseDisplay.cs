@@ -138,6 +138,18 @@ public static class ConfigurationTestCaseDisplay
     public static List<ConfigurationTestInput> ToInputs(IEnumerable<InputRow> rows) =>
         rows.Select(row => new ConfigurationTestInput(row.Source, row.AttributeName, row.State.NoValue ? [] : row.State.Values.ToList())).ToList();
 
+    /// <summary>
+    /// The connections a Scope case records (#2787): those <paramref name="ticked"/> that the rule's Scope tests, in the
+    /// order its criteria name them. Any other cannot change the outcome, so it is not kept.
+    /// </summary>
+    public static List<int> RecordedConnections(IReadOnlyList<ConnectionSampleDescriptor> offered, IEnumerable<int> ticked)
+    {
+        ArgumentNullException.ThrowIfNull(offered);
+        ArgumentNullException.ThrowIfNull(ticked);
+        var tickedSet = ticked.ToHashSet();
+        return offered.Select(connection => connection.ConnectedObjectTypeId).Where(tickedSet.Contains).ToList();
+    }
+
     private static TestInputState StateOf(ConfigurationTestInput? input)
     {
         var state = new TestInputState();

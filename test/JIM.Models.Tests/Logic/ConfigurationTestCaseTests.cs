@@ -357,6 +357,42 @@ public class ConfigurationTestCaseTests
         }
     }
 
+    [Test]
+    public void DescribeInvalidity_ScopeCaseWithConnections_IsNull()
+    {
+        var testCase = ScopeCase();
+        testCase.ConnectedObjectTypeIds = [70, 71];
+
+        Assert.That(testCase.DescribeInvalidity(), Is.Null);
+    }
+
+    [Test]
+    public void DescribeInvalidity_AttributeFlowCaseWithConnections_SaysOnlyAScopeCaseRecordsThem()
+    {
+        var testCase = AttributeFlowCase();
+        testCase.ConnectedObjectTypeIds = [70];
+
+        Assert.That(testCase.DescribeInvalidity(), Does.Contain("Scope"));
+    }
+
+    [Test]
+    public void DescribeInvalidity_ConnectionGivenTwice_IsRefused()
+    {
+        var testCase = ScopeCase();
+        testCase.ConnectedObjectTypeIds = [70, 70];
+
+        Assert.That(testCase.DescribeInvalidity(), Does.Contain("more than once"));
+    }
+
+    [Test]
+    public void DescribeInvalidity_TooManyConnections_SaysHowManyACaseMayRecord()
+    {
+        var testCase = ScopeCase();
+        testCase.ConnectedObjectTypeIds = Enumerable.Range(1, ConfigurationTestCase.MaxConnections + 1).ToList();
+
+        Assert.That(testCase.DescribeInvalidity(), Does.Contain(ConfigurationTestCase.MaxConnections.ToString()));
+    }
+
     private static ConfigurationTestCase AttributeFlowCase() => new()
     {
         Name = "Hire date formats as ISO",

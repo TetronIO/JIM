@@ -201,8 +201,11 @@ Every scoping key is Class B: scoping determines which objects the rule applies 
 | `type`, `position` | B |
 | `childGroups` (nested groups) | B |
 | `metaverseAttributeId`, `connectedSystemAttributeId` | B |
+| `connectedObjectTypeId` (a connection criterion's Object Type) | B |
 | `comparisonType`, `caseSensitive` | B |
 | `stringValue`, `intValue`, `longValue`, `decimalValue`, `dateTimeValue`, `boolValue`, `guidValue` | B |
+| `expression`, `compareAs` | B |
+| `valueMode`, `relativeCount`, `relativeUnit`, `relativeDirection` | B |
 
 ### Configuration test cases (`testCases`, `testCase`)
 
@@ -219,6 +222,7 @@ They sit in a top-level `testCases` collection rather than beside the Attribute 
 | `testCaseRunAsOf` | C | The instant the case runs as of. |
 | `testCaseExpectation`, `testCaseInOrder` | C | What the case expects, and whether its values must come in order. |
 | `testCaseExpectedValues`, `testCaseInputs` | C | Recorded as keyed hashes, as a secret is. Inputs loaded from a real object can be personal data, so history records that they changed and never what they were. |
+| `testCaseConnections`, `testCaseConnectedObjectTypeId` | C | The connections a Scope case was tested with (#2787), each an Object Type named in clear: they hold no personal data. |
 
 ## Connected System
 
