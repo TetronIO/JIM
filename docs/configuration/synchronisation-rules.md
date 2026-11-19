@@ -28,7 +28,7 @@ detours:
   step: {id: project, label: Projection, sub: creates one, badge: 4}
 ```
 
-Synchronisation Rules are the central configuration mechanism for identity synchronisation in JIM. Every Connected System needs at least one Synchronisation Rule to participate in synchronisation.
+Every Connected System needs at least one Synchronisation Rule to take part in synchronisation.
 
 ## :material-link-variant: What a Synchronisation Rule ties together
 
@@ -38,7 +38,7 @@ Synchronisation Rules are the central configuration mechanism for identity synch
 4. **Projection or Provisioning**<br /> What to do when no match is found.
 5. **Attribute mappings**<br /> Which attributes to synchronise and how to transform them.
 
-Each rule also has a name and an optional **description**, a free-text note for recording what the rule is for and why it exists. The description is shown on the rule's Details tab and changes to it are tracked in the [Configuration Change History](activities.md#configuration-change-history).
+Each rule also has a name and an optional **description**, a free-text note of what the rule is for and why, shown on its Details tab; changes to it are tracked in the [Configuration Change History](activities.md#configuration-change-history).
 
 A rule's Connected System Object Type must be selected on the Connected System's Schema tab for the rule to be enabled; saving an enabled rule against a deselected Object Type is refused, as is deselecting an Object Type an enabled rule is still bound to. A deselected Object Type is out of management, and its objects are obsoleted by the next Full Import (see [What deselecting means](connected-system-schema.md#what-deselecting-means)). A disabled rule can be saved against one, which is how you keep a rule while taking its type out of management.
 
@@ -46,15 +46,13 @@ A saved rule's Object Types cannot be changed: its Scoping Criteria, Attribute F
 
 A saved rule's Connected System, direction and Object Types are stated in a strip beneath the page's breadcrumbs, visible on every tab. It reads left to right in the direction data flows: an import rule shows the Connected System Object Type, then the Metaverse Object Type; an export rule the reverse. The form that creates a rule orders its two Object Type pickers the same way. The Connected System's name links to it. An import rule whose Object Type has changes awaiting synchronisation shows an **Awaiting synchronisation** chip there, and an export rule with Metaverse Objects flagged for review shows **Export review pending: N**; see [When a change takes effect](configuration-changes.md#when-a-change-takes-effect).
 
-Where a tab introduces a term you might not already know (Projection, Scoping, Object Matching Rules, Attribute Flow and others across JIM's configuration pages), an info icon sits beside it. Selecting it shows a short definition and a link to the full entry in the [glossary](../reference/glossary.md).
+Beside a term a tab introduces (Projection, Scoping, Object Matching Rules, Attribute Flow and others, across JIM's configuration pages), an info icon shows a short definition and a link to its [glossary](../reference/glossary.md) entry.
 
 ## :material-swap-horizontal: Direction
 
-Each rule has a direction that determines the flow of data.
-
 ### Import (inbound)
 
-Import rules process data from a Connected System into the Metaverse. They are used with **source systems**: systems that provide authoritative identity data (HR databases, badge systems, etc.).
+Import rules process data from a Connected System into the Metaverse. They are used with **source systems**, which provide authoritative identity data (HR databases, badge systems).
 
 An import rule:
 
@@ -65,7 +63,7 @@ An import rule:
 
 ### Export (outbound)
 
-Export rules push data from the Metaverse to a Connected System. They are used with **target systems**: systems that receive provisioned identity data (LDAP directories, email systems, etc.).
+Export rules push data from the Metaverse to a Connected System. They are used with **target systems**, which receive provisioned identity data (LDAP directories, email systems).
 
 An export rule:
 
@@ -90,13 +88,11 @@ Object Matching Rules decide how a Connected System Object is matched to an exis
 
 ## :material-ray-start-arrow: Projection and provisioning
 
-These determine what happens when no match is found.
-
-**Projection** applies to import rules. If projection is enabled, JIM creates a new Metaverse Object of the specified object type and links the Connected System Object to it. This is how new identities enter the Metaverse for the first time. If projection is not enabled, the Connected System Object remains disconnected.
+**Projection** applies to import rules. When it is enabled and no match is found, JIM creates a Metaverse Object of the specified type and links the Connected System Object to it; this is how new identities enter the Metaverse. Otherwise the Connected System Object stays disconnected.
 
 Where the object type is deleted [When Authoritative Source Disconnected](metaverse.md#authoritative-source-trigger-modes), a projecting rule's Connected System should normally be one of the type's authoritative sources; otherwise the objects it creates are governed by no source. Saving a rule that newly projects from a system that is not one asks you to confirm first. A rule that only joins (projection off) never does: that is the normal way to add a system that contributes attributes without governing lifecycle.
 
-**Provisioning** applies to export rules. If provisioning is enabled, JIM creates a new Connected System Object in the target system's Connector Space (and ultimately the target system itself, when the export Run Profile flushes Pending Exports). If provisioning is not enabled, the rule only updates objects that already exist in the target.
+**Provisioning** applies to export rules. When it is enabled and no match is found, JIM creates a Connected System Object in the target system's Connector Space (and ultimately the target system itself, when the export Run Profile flushes Pending Exports). Otherwise the rule only updates objects that already exist in the target.
 
 A rule that provisions also puts back an account deleted directly in the target system. The next import from that system (Full or Delta) marks the account's Connected System Object obsolete; the next synchronisation of that system (Full or Delta) disconnects it and, where the Metaverse Object is still in the rule's scope, stages a provisioning Create in the same run, so the next export recreates the account. Nothing else about the person needs to change. The Create is recorded on that run's Activity as an **Export Review** item. It is not staged when the disconnection schedules or performs the Metaverse Object's deletion under its type's [Deletion Rules](metaverse.md#deletion-behaviour), or when the object was already due for deletion; and an export rule that does not provision leaves the person without an account in that system.
 
@@ -141,7 +137,7 @@ A saved rule's **Tests** tab holds its [configuration test cases](configuration-
 
 ## :material-file-document-outline: Example: a complete import rule
 
-A complete import rule for an HR system might look like:
+For an HR system:
 
 | Component | Configuration |
 |-----------|---------------|
@@ -157,11 +153,11 @@ A complete import rule for an HR system might look like:
 | | `cs["employeeId"]` to `mv["Employee ID"]` (direct) |
 | | `Capitalise(cs["givenName"]) + " " + Capitalise(cs["sn"])` to `mv["Display Name"]` (expression) |
 
-This rule imports full-time employees from the HR system, joins them to existing Metaverse Objects by employee ID, creates new Metaverse Objects for new starters, and flows their attributes into the Metaverse.
+It imports full-time employees, joins them to existing Metaverse Objects by employee ID, projects new starters, and flows their attributes into the Metaverse.
 
 ## :material-magnify: Finding a Synchronisation Rule
 
-Once a deployment has more than a handful of rules, the Synchronisation Rules list carries filters above the table so you can narrow it to the rules you care about:
+Filters above the Synchronisation Rules list narrow it to the rules you care about:
 
 | Filter | Narrows to |
 |--------|------------|
@@ -172,7 +168,7 @@ Once a deployment has more than a handful of rules, the Synchronisation Rules li
 
 Each filter accepts several values, and the filters combine: picking two Connected Systems and the Outbound direction shows the outbound rules of either system. Leaving a filter empty means "all".
 
-The search box in the table's toolbar narrows whatever the filters left, matching on the rule name. It filters as you type, so there is nothing to press. Clearing the search box returns the filtered list rather than the full one, so you can keep a filter in place while searching within it.
+The search box in the table's toolbar narrows whatever the filters left, matching on the rule name. It filters as you type. Clearing it returns the filtered list rather than the full one, so a filter stays in place while you search within it.
 
 The same filters are available to automation: see `Get-JIMSyncRule`'s `-Direction`, `-ActionType` and `-Status` parameters, and the matching query parameters on the Synchronisation Rules list endpoint in the REST API.
 

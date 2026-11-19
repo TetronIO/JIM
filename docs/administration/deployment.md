@@ -8,7 +8,7 @@ validated: v0.19.0
 
 # Deployment
 
-This guide installs JIM in production, on Docker or Podman, connected to the internet or air-gapped, and covers its architecture, monitoring and readiness checklists. [Prerequisites](../getting-started/prerequisites.md) lists what to have in place first, [TLS and Reverse Proxy](tls-and-reverse-proxy.md) covers its certificate, and [Running on Podman](podman.md) what is particular to Podman, including rootless installations.
+This guide installs JIM in production, on Docker or Podman, connected to the internet or air-gapped, and covers its architecture, monitoring and readiness checklists. [TLS and Reverse Proxy](tls-and-reverse-proxy.md) covers its certificate, and [Running on Podman](podman.md) what is particular to Podman, including rootless installations.
 
 !!! tip "Quick Start"
     The [Getting Started](../getting-started/index.md) guide gets you running in under five minutes, for evaluation.
@@ -310,7 +310,7 @@ JIM prepares its database on first start, with no manual step, and does not serv
 
 ### File Connector Storage (Optional)
 
-The File Connector ships pre-configured to read and write at `/connector-files` inside the container, backed by a Docker-managed volume named `jim-connector-files-volume`. **No setup is required for the default case**: start the stack and the volume is created automatically with correct ownership.
+The File Connector reads and writes at `/connector-files` inside the container, backed by a volume named `jim-connector-files-volume`, created with correct ownership when the stack starts. **The default case needs no setup.**
 
 To put files in or pull them out:
 
@@ -338,7 +338,7 @@ To put files in or pull them out:
 
 Then configure the File Connector's **File Path** setting as `/connector-files/Users.csv`.
 
-If you need to integrate with an external system that writes to a fixed network location (e.g. an SMB or NFS share), bind-mount that path over a subdirectory of `/connector-files`. See the [JIM File Connector documentation](../connectors/jim-file-connector.md#file-access) for the full pattern, including the UID 1654 ownership requirement for bind-mounted host paths, and what differs on Podman.
+For an external system that writes to a fixed network location (an SMB or NFS share, say), bind-mount that path over a subdirectory of `/connector-files`; the [JIM File Connector documentation](../connectors/jim-file-connector.md#file-access) gives the full pattern, including the UID 1654 ownership requirement for bind-mounted host paths, and what differs on Podman.
 
 ---
 
@@ -360,7 +360,7 @@ JIM serves HTTPS itself, with a certificate for its host name that the installer
 
 The `jim.web` container includes a Docker healthcheck using the readiness endpoint. The unauthenticated `/api/v1/health` endpoints answer for the web tier only; `system/health` is how the three background services are observed from outside the portal, and the same report is shown on **Administration > Operations** and returned by `Get-JIMServiceHealth`. The `jim.worker` container hosts two of them, the synchronisation loop and the Password Delivery Service, and each reports on its own, so a Worker whose password delivery has stopped while imports still run is visible as exactly that. See [Operations > Service Health](../configuration/operations.md#service-health).
 
-The `jim.worker` and `jim.scheduler` containers use file-based healthcheck monitoring. Each service writes a heartbeat file periodically during normal operation, and the Docker healthcheck verifies the file is recent. This means `docker compose ps` and any monitoring that reads container health can detect when a worker or scheduler has stalled, even if the process itself has not exited.
+The `jim.worker` and `jim.scheduler` containers use file-based healthcheck monitoring. Each writes a heartbeat file periodically and the healthcheck verifies it is recent, so `docker compose ps` and any monitoring that reads container health detect a stalled worker or scheduler even if its process has not exited.
 
 On Podman, the same checks show in `podman ps`, and Podman 5 restarts a service whose check keeps failing; see [Health checks and restarts](podman.md#health-checks-and-restarts).
 
@@ -405,7 +405,7 @@ JIM also includes a Logs page in the web UI for viewing application and database
 
 ## :material-console: PowerShell Module
 
-JIM includes a cross-platform PowerShell module for scripting, automation, and Identity as Code (IDaC). The module works on Windows, macOS, and Linux and requires PowerShell 7.0+.
+JIM's PowerShell module, for scripting, automation and Identity as Code (IDaC), works on Windows, macOS and Linux and requires PowerShell 7.0+.
 
 ### Connected Installation
 
@@ -423,11 +423,9 @@ Update-Module -Name JIM
 
 ### Air-Gapped Installation
 
-There are two options for installing the module in disconnected environments.
-
 #### Option 1: From the Release Bundle (Recommended)
 
-Each release bundle (`jim-release-X.Y.Z.tar.gz`) includes the module pre-packaged in `powershell/JIM/`. After extracting the bundle, copy the module to a PSModulePath directory:
+The release bundle includes the module in `powershell/JIM/`. Once the bundle is extracted, copy it to a PSModulePath directory:
 
 ```powershell
 # Windows
@@ -439,7 +437,7 @@ Copy-Item -Recurse ./powershell/JIM "~/.local/share/powershell/Modules/"
 
 #### Option 2: From the PowerShell Gallery via Save-Module
 
-On a connected machine, use `Save-Module` to download the module to a local directory without installing it:
+On a connected machine, download the module without installing it:
 
 ```powershell
 Save-Module -Name JIM -Path C:\Modules
@@ -479,7 +477,7 @@ Test-JIMConnection
 
 ## :material-clipboard-text-outline: Production Readiness Checklist
 
-Use this checklist before going live:
+Before going live:
 
 - [ ] HTTPS certificate issued for every name users reach JIM at, and trusted by their browsers (your organisation's certificate, or the installer's certificate authority distributed)
 - [ ] Certificate renewal scheduled before the expiry date (`openssl x509 -in tls/tls.crt -noout -enddate`)
