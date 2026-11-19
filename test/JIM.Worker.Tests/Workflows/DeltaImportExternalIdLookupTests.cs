@@ -374,6 +374,37 @@ public class DeltaImportExternalIdLookupTests : WorkflowTestBase
         }
     }
 
+    /// <summary>
+    /// #2911, looked up page by page: an update on one page and a delete typed as another Object Type on the next. The
+    /// delete takes the held object's type from the keys the cross-type pass looked up, so the later change takes the
+    /// earlier one's place rather than failing the run on a key that was never looked up.
+    /// </summary>
+    [Test]
+    public async Task DeltaImport_UpdateThenDeleteUnderAnotherObjectTypeOnLaterPage_RetiresTheObjectWithoutLoadingEveryExternalIdAsync()
+    {
+        var connectedSystem = await CreateConnectedSystemAsync("Directory");
+        connectedSystem.ConnectorDefinition.ExternalIdsUniqueAcrossObjectTypes = true;
+        var userType = await CreateCsoTypeAsync(connectedSystem.Id, "user");
+        var computerType = await CreateCsoTypeAsync(connectedSystem.Id, "computer");
+        SeedCsos(connectedSystem, computerType, 3);
+        var held = SeedCsos(connectedSystem, userType, 6)[0];
+
+        var activity = await RunImportAsync(connectedSystem,
+            [[ImportObject(userType, held.ExternalId, "Changed", ObjectChangeType.Updated)], [ImportObject(computerType, held.ExternalId, changeType: ObjectChangeType.Deleted)]],
+            ConnectedSystemRunType.DeltaImport);
+
+        var stored = await SyncRepo.GetConnectedSystemObjectAsync(connectedSystem.Id, held.Cso.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.Status, Is.Not.EqualTo(ActivityStatus.FailedWithError), activity.ErrorMessage);
+            Assert.That(Errors(activity), Is.Empty);
+            Assert.That(stored!.Status, Is.EqualTo(ConnectedSystemObjectStatus.Obsolete));
+            Assert.That(activity.RunProfileExecutionItems.Where(i => i.ConnectedSystemObjectId == held.Cso.Id).Select(i => i.ObjectChangeType),
+                Is.EqualTo(new[] { ObjectChangeType.Deleted }), "The delete takes the update's place");
+            Assert.That(_spy.WholeLookupLoads, Is.Zero);
+        }
+    }
+
     [Test]
     public async Task DeltaImport_DeleteWithoutAnObjectType_RetiresTheObjectHeldUnderItsExternalIdWithoutLoadingEveryExternalIdAsync()
     {

@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🐛 A Scope test case remembers the connections it was tested with, such as "Has user in PANOPLY AD", so it gives the same result every time it runs; set them in the portal, the REST API or PowerShell. (#2787)
 - 🐛 Changing which Object Type a connection Scoping Criterion checks, such as "Has user in PANOPLY AD", is recorded in Configuration History as a change that affects synchronisation; it was saved with no change class and an error in the log. (#2994)
+- 🐛 A Delta Import no longer fails when the Connector reports an object changed and then deleted under a different Object Type: the deletion now applies to the object JIM holds, as a later change to it. (#2911)
 
 ### Performance
 
