@@ -242,9 +242,9 @@ The **Test this scope** panel at the foot of the Scope tab answers whether one o
 - **Run as of**<br /> Relative dates resolve against the date and time you choose (UTC), or the current time when you leave it empty. Use it to check a leaver rule on the day it should let go.
 - **Result**<br /> Whether the object is in scope, each group and criterion with what the object held, and when the outcome next changes as time passes, the values staying the same. For example, a leave date of 1 November under *after* `30 days ago` reports that the object leaves scope at midnight UTC on 1 December.
 
-To keep a test and run it again after later changes, choose **Save as test case**; see [Configuration Tests](configuration-tests.md).
+To keep a test and run it again after later changes, choose **Save as test case**: the case keeps the values and the connections you tested. See [Configuration Tests](configuration-tests.md).
 
-Automation gets the same test through [`Test-JIMScope`](../powershell/scoping-criteria.md#test-jimscope) (`-ConnectedObjectTypeId` for the connections) and the REST API's `POST sync-rules/{id}/scoping-criteria/test` endpoint (`connectedObjectTypeIds`), which test the saved criteria. A saved test case does not record connections, so one for a rule with a connection criterion is tested as having none.
+Automation gets the same test through [`Test-JIMScope`](../powershell/scoping-criteria.md#test-jimscope) (`-ConnectedObjectTypeId` for the connections) and the REST API's `POST sync-rules/{id}/scoping-criteria/test` endpoint (`connectedObjectTypeIds`), which test the saved criteria.
 
 ## :material-eye-outline: Previewing a scope change
 

@@ -501,6 +501,33 @@ public class ConfigurationTestRunnerTests
         }
     }
 
+    [TestCase(true, ConfigurationTestStatus.Passed)]
+    [TestCase(false, ConfigurationTestStatus.Failed)]
+    public void RunScope_ConnectionCriterion_IsDecidedByTheConnectionsTheCaseRecords(bool recordsTheConnection, ConfigurationTestStatus expected)
+    {
+        // #2787: a case saved from a test that ticked "Has user in PANOPLY AD" runs joined to it, as the test was.
+        var rule = ExportRule(All(new SyncRuleScopingCriteria { ConnectedObjectTypeId = 70, ComparisonType = SearchComparisonType.HasValue }));
+        var testCase = ScopeCase([], ConfigurationTestExpectationKind.InScope);
+        testCase.ConnectedObjectTypeIds = recordsTheConnection ? [70] : [];
+
+        var result = _runner.RunScope(testCase, rule, Now);
+
+        Assert.That(result.Status, Is.EqualTo(expected), result.Summary);
+    }
+
+    [Test]
+    public void RunScope_RecordedConnectionNoCriterionTestsAnyMore_IsIgnored()
+    {
+        // The criterion naming Object Type 71 was removed (and the type perhaps deleted); its recorded tick changes nothing.
+        var rule = ExportRule(All(new SyncRuleScopingCriteria { ConnectedObjectTypeId = 70, ComparisonType = SearchComparisonType.HasNoValue }));
+        var testCase = ScopeCase([], ConfigurationTestExpectationKind.InScope);
+        testCase.ConnectedObjectTypeIds = [71];
+
+        var result = _runner.RunScope(testCase, rule, Now);
+
+        Assert.That(result.Status, Is.EqualTo(ConfigurationTestStatus.Passed), result.Summary);
+    }
+
     [Test]
     public void RunScope_RelativeDateCriterion_RunsAsOfTheCasesInstantOrSaysItRanAsOfNow()
     {
@@ -644,6 +671,17 @@ public class ConfigurationTestRunnerTests
         var rule = new SyncRule
         {
             Id = 7, Name = "HR Import", Direction = SyncRuleDirection.Import,
+            ConnectedSystemObjectType = _csoType, MetaverseObjectType = _mvType
+        };
+        rule.ObjectScopingCriteriaGroups.AddRange(groups);
+        return rule;
+    }
+
+    private SyncRule ExportRule(params SyncRuleScopingCriteriaGroup[] groups)
+    {
+        var rule = new SyncRule
+        {
+            Id = 7, Name = "Directory Export", Direction = SyncRuleDirection.Export,
             ConnectedSystemObjectType = _csoType, MetaverseObjectType = _mvType
         };
         rule.ObjectScopingCriteriaGroups.AddRange(groups);

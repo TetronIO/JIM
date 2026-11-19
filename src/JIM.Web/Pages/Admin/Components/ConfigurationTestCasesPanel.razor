@@ -286,10 +286,16 @@
         }
     }
 
+    /// <summary>
+    /// The connections a Scope case of the saved rule can record (#2787); none for any other kind.
+    /// </summary>
+    private IReadOnlyList<ConnectionSampleDescriptor> ConnectionsFor(ConfigurationTestCase testCase) =>
+        testCase.Kind == ConfigurationTestCaseKind.Scope && _savedRule != null ? ScopeTester.DescribeConnections(_savedRule) : [];
+
     private async Task NewAsync(CoverageOption option)
     {
         var testCase = Template(option.Template.Kind, option.Template.SyncRuleId, option.Template.SyncRuleMappingId, option.Template.ObjectMatchingRuleId);
-        if (await ConfigurationTestCaseDialog.ShowAsync(DialogService, testCase, option.Label, SlotsFor(testCase)) is { } saved)
+        if (await ConfigurationTestCaseDialog.ShowAsync(DialogService, testCase, option.Label, SlotsFor(testCase), ConnectionsFor(testCase)) is { } saved)
         {
             await LoadAsync();
             await RunAsync([_testCases.FirstOrDefault(c => c.Id == saved.Id) ?? saved]);
@@ -298,7 +304,7 @@
 
     private async Task EditAsync(ConfigurationTestCase testCase)
     {
-        if (await ConfigurationTestCaseDialog.ShowAsync(DialogService, testCase, Coverage(testCase), SlotsFor(testCase)) is { } saved)
+        if (await ConfigurationTestCaseDialog.ShowAsync(DialogService, testCase, Coverage(testCase), SlotsFor(testCase), ConnectionsFor(testCase)) is { } saved)
         {
             await LoadAsync();
             await RunAsync([_testCases.FirstOrDefault(c => c.Id == saved.Id) ?? saved]);

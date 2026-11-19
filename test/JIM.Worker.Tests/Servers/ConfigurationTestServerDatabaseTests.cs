@@ -7,6 +7,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
+using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.PostgresData;
 using JIM.TestSupport;
@@ -183,6 +184,66 @@ public class ConfigurationTestServerDatabaseTests
     }
 
     [Test]
+    public async Task CreateTestCaseAsync_ScopeCaseWithAConnection_StoresItAndRunsJoinedToItAsync()
+    {
+        // #2787: a case saved from a test that ticked "Has user in Directory" runs joined to it, so it passes.
+        var seed = await SeedAsync();
+        var (exportRuleId, directoryUserTypeId) = await SeedExportRuleWithConnectionCriterionAsync(seed);
+
+        var caseId = await CreateAsync(seed, ConnectionCase(exportRuleId, directoryUserTypeId));
+
+        await using var verify = NewContext();
+        var stored = await verify.ConfigurationTestCases.SingleAsync(c => c.Id == caseId);
+        var result = (await NewJimApplication(verify).ConfigurationTests.RunByIdsAsync([caseId])).Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.ConnectedObjectTypeIds, Is.EqualTo(new[] { directoryUserTypeId }));
+            Assert.That(result.Status, Is.EqualTo(ConfigurationTestStatus.Passed), result.Summary);
+        }
+    }
+
+    [Test]
+    public async Task CreateTestCaseAsync_ConnectionTheScopeDoesNotTest_IsRefusedNamingThoseItDoesAsync()
+    {
+        var seed = await SeedAsync();
+        var (exportRuleId, _) = await SeedExportRuleWithConnectionCriterionAsync(seed);
+
+        var refused = Assert.ThrowsAsync<ArgumentException>(() => CreateAsync(seed, ConnectionCase(exportRuleId, 999_999)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(refused!.Message, Does.Contain("999999").And.Contain("user in Directory"));
+            await using var verify = NewContext();
+            Assert.That(await verify.ConfigurationTestCases.CountAsync(), Is.Zero);
+        }
+    }
+
+    [Test]
+    public async Task UpdateTestCaseAsync_RecordedConnectionNoCriterionTestsAnyMore_IsDroppedAndTheCaseSavesAsync()
+    {
+        // The criterion that tested the connection is gone; the case's tick for it is ignored and not kept.
+        var seed = await SeedAsync();
+        var (exportRuleId, directoryUserTypeId) = await SeedExportRuleWithConnectionCriterionAsync(seed);
+        var caseId = await CreateAsync(seed, ConnectionCase(exportRuleId, directoryUserTypeId));
+        await using (var ctx = NewContext())
+        {
+            await ctx.SyncRuleScopingCriteria.ExecuteDeleteAsync();
+            await ctx.SyncRuleScopingCriteriaGroups.ExecuteDeleteAsync();
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var jim = NewJimApplication(ctx);
+            var testCase = (await jim.ConfigurationTests.GetTestCaseAsync(caseId))!;
+            testCase.Name = "Renamed";
+            await jim.ConfigurationTests.UpdateTestCaseAsync(testCase, await LoadInitiatorAsync(seed));
+        }
+
+        await using var verify = NewContext();
+        Assert.That((await verify.ConfigurationTestCases.SingleAsync(c => c.Id == caseId)).ConnectedObjectTypeIds, Is.Empty);
+    }
+
+    [Test]
     public async Task DeleteTestCaseAsync_RemovesItAndRecordsItAsync()
     {
         var seed = await SeedAsync();
@@ -345,6 +406,15 @@ public class ConfigurationTestServerDatabaseTests
         Expectation = new ConfigurationTestExpectation(ConfigurationTestExpectationKind.Values, ["Bloggs"])
     };
 
+    private static ConfigurationTestCase ConnectionCase(int exportRuleId, int connectedObjectTypeId) => new()
+    {
+        Name = "People with a directory account are in scope",
+        Kind = ConfigurationTestCaseKind.Scope,
+        SyncRuleId = exportRuleId,
+        ConnectedObjectTypeIds = [connectedObjectTypeId],
+        Expectation = new ConfigurationTestExpectation(ConfigurationTestExpectationKind.InScope)
+    };
+
     private async Task<int> CreateAsync(Seed seed, ConfigurationTestCase testCase)
     {
         await using var ctx = NewContext();
@@ -421,6 +491,46 @@ public class ConfigurationTestServerDatabaseTests
         }
 
         return new Seed(systemId, ruleId, mappingId, matchingRuleId, initiatorId);
+    }
+
+    /// <summary>
+    /// A second Connected System ("Directory") with a 'user' Object Type, and an export Synchronisation Rule into HR whose
+    /// only criterion is "Has user in Directory".
+    /// </summary>
+    private async Task<(int RuleId, int DirectoryUserTypeId)> SeedExportRuleWithConnectionCriterionAsync(Seed seed)
+    {
+        int directoryUserTypeId;
+        await using (var ctx = NewContext())
+        {
+            var connectorDefinition = await ctx.ConnectorDefinitions.AsTracking().FirstAsync();
+            var directory = new ConnectedSystem { Name = "Directory", ConnectorDefinition = connectorDefinition };
+            var user = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = directory, Selected = true };
+            ctx.ConnectedSystems.Add(directory);
+            ctx.ConnectedSystemObjectTypes.Add(user);
+            await ctx.SaveChangesAsync();
+            directoryUserTypeId = user.Id;
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var hrType = await ctx.ConnectedSystemObjectTypes.SingleAsync(x => x.ConnectedSystemId == seed.SystemId);
+            var rule = new SyncRule
+            {
+                Name = "Export People",
+                Direction = SyncRuleDirection.Export,
+                Enabled = true,
+                ConnectedSystem = await ctx.ConnectedSystems.SingleAsync(x => x.Id == seed.SystemId),
+                ConnectedSystemObjectType = hrType,
+                MetaverseObjectType = await ctx.MetaverseObjectTypes.SingleAsync(x => x.Name == "Person")
+            };
+            var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+            group.Criteria.Add(new SyncRuleScopingCriteria { ConnectedObjectTypeId = directoryUserTypeId, ComparisonType = SearchComparisonType.HasValue });
+            rule.ObjectScopingCriteriaGroups.Add(group);
+
+            var initiator = await ctx.MetaverseObjects.SingleAsync(x => x.Id == seed.InitiatorId);
+            Assert.That(await NewJimApplication(ctx).ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, initiator), Is.True);
+            return (rule.Id, directoryUserTypeId);
+        }
     }
 
     private async Task<MetaverseObject> LoadInitiatorAsync(Seed seed)

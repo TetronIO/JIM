@@ -3,6 +3,7 @@
 
 using JIM.Application.Expressions;
 using JIM.Application.Servers.ConfigurationTests;
+using JIM.Application.Servers.Scoping;
 using Stopwatch = System.Diagnostics.Stopwatch;
 using JIM.Application.Utilities;
 using JIM.Models.Activities;
@@ -96,7 +97,7 @@ public class ConfigurationTestServer
     private async Task CreateTestCaseAsync(ConfigurationTestCase testCase, Func<Activity, Task> createActivity, Action setAudit)
     {
         ArgumentNullException.ThrowIfNull(testCase);
-        var owner = await EnsureWorkableAsync(testCase);
+        var owner = await EnsureWorkableAsync(testCase, previouslyRecorded: []);
         await EnsureOwnerHasRoomAsync(owner);
 
         var activity = NewActivity(testCase, owner, ActivityTargetOperationType.Create);
@@ -116,7 +117,7 @@ public class ConfigurationTestServer
             stored.SyncRuleId != testCase.SyncRuleId || stored.ObjectMatchingRuleId != testCase.ObjectMatchingRuleId)
             throw new ArgumentException("A test case keeps what it covers and what it tests; to test something else, create another test case.");
 
-        var owner = await EnsureWorkableAsync(testCase);
+        var owner = await EnsureWorkableAsync(testCase, stored.ConnectedObjectTypeIds);
         testCase.Created = stored.Created;
         testCase.CreatedByType = stored.CreatedByType;
         testCase.CreatedById = stored.CreatedById;
@@ -147,7 +148,8 @@ public class ConfigurationTestServer
     /// Refuses a case that cannot be saved: one whose shape is wrong (<see cref="ConfigurationTestCase.DescribeInvalidity"/>),
     /// that covers something that does not exist, or whose kind does not fit what it covers. Returns what owns it.
     /// </summary>
-    private async Task<Owner> EnsureWorkableAsync(ConfigurationTestCase testCase)
+    /// <param name="previouslyRecorded">The connections the case recorded before this save; none for a new case.</param>
+    private async Task<Owner> EnsureWorkableAsync(ConfigurationTestCase testCase, IReadOnlyCollection<int> previouslyRecorded)
     {
         if (testCase.DescribeInvalidity() is { } invalid)
             throw new ArgumentException(invalid);
@@ -162,13 +164,42 @@ public class ConfigurationTestServer
                 throw new ArgumentException("This Attribute Flow generates a value, so its base is what to test; test it as a Generated Value.");
         }
 
-        return await ResolveOwnerAsync(testCase)
+        var owner = await ResolveOwnerAsync(testCase)
             ?? throw new ArgumentException(testCase.Kind switch
             {
                 ConfigurationTestCaseKind.Scope => $"There is no Synchronisation Rule {testCase.SyncRuleId} for the test case to cover.",
                 ConfigurationTestCaseKind.ObjectMatchingRule => $"There is no Object Matching Rule {testCase.ObjectMatchingRuleId} for the test case to cover.",
                 _ => $"There is no Attribute Flow {testCase.SyncRuleMappingId} for the test case to cover."
             });
+
+        await EnsureConnectionsTestedAsync(testCase, previouslyRecorded);
+        return owner;
+    }
+
+    /// <summary>
+    /// Checks the connections a Scope case records (#2787) against those its rule's criteria test. One given for the
+    /// first time that no criterion tests is refused, since it cannot change the outcome and is most likely a mistake.
+    /// One recorded before whose criterion has since gone (its Object Type perhaps deleted) is dropped instead, so the
+    /// case can still be saved.
+    /// </summary>
+    private async Task EnsureConnectionsTestedAsync(ConfigurationTestCase testCase, IReadOnlyCollection<int> previouslyRecorded)
+    {
+        if (testCase.ConnectedObjectTypeIds.Count == 0 || testCase.SyncRuleId is not { } ruleId)
+            return;
+
+        var rule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(ruleId);
+        var tested = rule == null ? [] : ScopeTester.DescribeConnections(rule);
+        var untested = testCase.ConnectedObjectTypeIds.Where(id => tested.All(c => c.ConnectedObjectTypeId != id)).ToList();
+        var newlyGiven = untested.Where(id => !previouslyRecorded.Contains(id)).ToList();
+        if (newlyGiven.Count > 0)
+            throw new ArgumentException(
+                $"The Synchronisation Rule's Scope does not test a connection to Object Type {string.Join(", ", newlyGiven)}, " +
+                (tested.Count == 0
+                    ? "and it tests none, so the test case cannot record one."
+                    : $"so the test case cannot record it. The connections it tests are: " +
+                      string.Join(", ", tested.Select(c => $"{c.Description} ({c.ConnectedObjectTypeId})")) + "."));
+
+        testCase.ConnectedObjectTypeIds = testCase.ConnectedObjectTypeIds.Except(untested).ToList();
     }
 
     /// <summary>

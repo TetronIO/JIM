@@ -107,6 +107,31 @@ public class ConfigurationTestCaseHistoryTests
     }
 
     [Test]
+    public void Diff_ChangingAScopeCasesConnections_IsDetectedAndNamesTheConnection()
+    {
+        // #2787: the connections a Scope case records are configuration, not personal data, so history names them.
+        var panoply = new ConnectedSystem { Id = 4, Name = "PANOPLY AD" };
+        var user = new ConnectedSystemObjectType { Id = 70, Name = "user", ConnectedSystemId = 4, ConnectedSystem = panoply };
+        var rule = new SyncRule { Id = 7, Name = "Directory Export", Direction = SyncRuleDirection.Export };
+        var group = new SyncRuleScopingCriteriaGroup();
+        group.Criteria.Add(new SyncRuleScopingCriteria { ConnectedObjectType = user, ConnectedObjectTypeId = 70, ComparisonType = JIM.Models.Search.SearchComparisonType.HasValue });
+        rule.ObjectScopingCriteriaGroups.Add(group);
+        var testCase = ScopeCase(2, "Directory users in scope");
+        var before = _snapshots.CreateSnapshot(rule, HashKey, [testCase]);
+        testCase.ConnectedObjectTypeIds = [70];
+        var after = _snapshots.CreateSnapshot(rule, HashKey, [testCase]);
+
+        var diff = _diffs.Diff(before, after);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(diff.HasChanges, Is.True);
+            Assert.That(ConfigurationChangeClassifier.Classify(diff), Is.EqualTo(ConfigurationChangeClass.Cosmetic));
+            Assert.That(ConfigurationSnapshotService.Serialise(after), Does.Contain("user in PANOPLY AD"));
+        }
+    }
+
+    [Test]
     public void Diff_RemovingAnAttributeFlowAndTheCasesItCascadedTo_ListsTheRemovedCases()
     {
         var withFlow = Rule();

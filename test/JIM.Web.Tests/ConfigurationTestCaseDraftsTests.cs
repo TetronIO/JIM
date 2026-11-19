@@ -178,7 +178,7 @@ public class ConfigurationTestCaseDraftsTests
         var inputs = new List<(string, TestInputState)> { ("department", State(["Sales"])) };
         var result = ScopeTester.Test(rule, inputs.Select(i => new AttributeSample(i.Item1, i.Item2.TestValues)).ToList(), RanAt);
 
-        var draft = ConfigurationTestCaseDrafts.FromScopeTest(rule, inputs, result, asOfUtc: null, RanAt)!;
+        var draft = ConfigurationTestCaseDrafts.FromScopeTest(rule, inputs, result, connectedObjectTypeIds: [], asOfUtc: null, RanAt)!;
 
         using (Assert.EnterMultipleScope())
         {
@@ -206,7 +206,28 @@ public class ConfigurationTestCaseDraftsTests
         var inputs = new List<(string, TestInputState)> { ("leaveDate", State(["2026-11-01"])) };
         var result = ScopeTester.Test(rule, inputs.Select(i => new AttributeSample(i.Item1, i.Item2.TestValues)).ToList(), RanAt);
 
-        Assert.That(ConfigurationTestCaseDrafts.FromScopeTest(rule, inputs, result, asOfUtc: null, RanAt)!.RunAsOfUtc, Is.EqualTo(RanAt));
+        Assert.That(ConfigurationTestCaseDrafts.FromScopeTest(rule, inputs, result, connectedObjectTypeIds: [], asOfUtc: null, RanAt)!.RunAsOfUtc, Is.EqualTo(RanAt));
+    }
+
+    [Test]
+    public void FromScopeTest_ExportRuleTestedWithAConnection_RecordsTheConnectionsItsCriteriaTest()
+    {
+        // #2787: the case remembers "Has user in PANOPLY AD" was ticked. A tick for a connection no criterion tests
+        // (Object Type 99) is not recorded, since it cannot change the outcome.
+        var rule = new SyncRule { Id = 7, Direction = SyncRuleDirection.Export, ConnectedSystemObjectType = _csoType, MetaverseObjectType = _mvType };
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria { ConnectedObjectTypeId = 70, ComparisonType = SearchComparisonType.HasValue });
+        rule.ObjectScopingCriteriaGroups.Add(group);
+        var result = ScopeTester.Test(rule, [], RanAt, [70, 99]);
+
+        var draft = ConfigurationTestCaseDrafts.FromScopeTest(rule, [], result, connectedObjectTypeIds: [99, 70], asOfUtc: null, RanAt)!;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(draft.Expectation.Kind, Is.EqualTo(ConfigurationTestExpectationKind.InScope));
+            Assert.That(draft.ConnectedObjectTypeIds, Is.EqualTo(new[] { 70 }));
+            Assert.That(draft.DescribeInvalidity(), Is.Null);
+        }
     }
 
     [Test]
@@ -216,7 +237,7 @@ public class ConfigurationTestCaseDraftsTests
         var inputs = new List<(string, TestInputState)> { ("department", State(["Sales"])) };
         var result = ScopeTester.Test(rule, inputs.Select(i => new AttributeSample(i.Item1, i.Item2.TestValues)).ToList(), RanAt);
 
-        Assert.That(ConfigurationTestCaseDrafts.FromScopeTest(rule, inputs, result, asOfUtc: null, RanAt), Is.Null);
+        Assert.That(ConfigurationTestCaseDrafts.FromScopeTest(rule, inputs, result, connectedObjectTypeIds: [], asOfUtc: null, RanAt), Is.Null);
     }
 
     #endregion

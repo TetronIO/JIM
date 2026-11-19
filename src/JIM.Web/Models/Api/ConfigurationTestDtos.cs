@@ -110,6 +110,13 @@ public class ConfigurationTestCaseDto
     public Dictionary<string, List<string>>? Attributes { get; set; }
 
     /// <summary>
+    /// For a Scope case, the ids of the Connected System Object Types the sample object is joined to, which an export
+    /// rule's connection criteria test ("Has user in ..."). An empty list means the object is joined to nothing. Only a
+    /// Scope case has this.
+    /// </summary>
+    public List<int>? ConnectedObjectTypeIds { get; set; }
+
+    /// <summary>
     /// What the case expects.
     /// </summary>
     public ConfigurationTestExpectationDto Expectation { get; set; } = new();
@@ -146,6 +153,7 @@ public class ConfigurationTestCaseDto
             SyncRuleId = testCase.SyncRuleId,
             ObjectMatchingRuleId = testCase.ObjectMatchingRuleId,
             RunAsOf = testCase.RunAsOfUtc,
+            ConnectedObjectTypeIds = testCase.Kind == ConfigurationTestCaseKind.Scope ? [.. testCase.ConnectedObjectTypeIds] : null,
             Expectation = ConfigurationTestExpectationDto.FromModel(testCase.Expectation),
             Created = testCase.Created,
             CreatedByName = testCase.CreatedByName,
@@ -252,6 +260,13 @@ public class UpdateConfigurationTestCaseRequest
     public bool ClearRunAsOf { get; set; }
 
     /// <summary>
+    /// For a Scope case, the connections to record, replacing those the case holds: the ids of the Connected System
+    /// Object Types the sample object is joined to. An empty list records none. Left out (or null), they stay as they
+    /// are.
+    /// </summary>
+    public List<int>? ConnectedObjectTypeIds { get; set; }
+
+    /// <summary>
     /// A new expectation, replacing the one the case holds. Left out (or null), it stays as it is.
     /// </summary>
     public ConfigurationTestExpectationDto? Expectation { get; set; }
@@ -298,6 +313,13 @@ public abstract class ConfigurationTestCaseContentRequest
     /// configuration that reads the clock, so the case gives the same result every time.
     /// </summary>
     public DateTime? RunAsOf { get; set; }
+
+    /// <summary>
+    /// For a Scope case of an export rule whose Scope tests connections ("Has user in ..."), the ids of the Connected
+    /// System Object Types the sample object is joined to. Omit it, or give an empty list, when the object is joined to nothing. Each must
+    /// be one the rule's Scope tests.
+    /// </summary>
+    public List<int>? ConnectedObjectTypeIds { get; set; }
 
     [Required]
     public ConfigurationTestExpectationDto? Expectation { get; set; }

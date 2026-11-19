@@ -119,6 +119,18 @@ Describe 'New-JIMConfigurationTestCase' {
         }
     }
 
+    It 'Records the connections a Scope case was tested with' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { $script:capturedBody = $Body; [PSCustomObject]@{ id = 5 } }
+
+            New-JIMConfigurationTestCase -Name 'Directory users in scope' -SyncRuleId 14 -ConnectedObjectTypeId 70, 71 `
+                -Expect InScope -Confirm:$false
+
+            $script:capturedBody.connectedObjectTypeIds | Should -Be @(70, 71)
+        }
+    }
+
     It 'Creates an Object Matching Rule case with values in order' {
         InModuleScope JIM {
             $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
@@ -159,6 +171,20 @@ Describe 'Set-JIMConfigurationTestCase' {
             $script:capturedMethod | Should -Be 'PUT'
             $script:capturedBody.name | Should -Be 'Renamed'
             $script:capturedBody.Keys | Should -Be @('name')
+        }
+    }
+
+    It 'Replaces the connections with -ConnectedObjectTypeId, and clears them with an empty list' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { $script:capturedBody = $Body; [PSCustomObject]@{ id = 5 } }
+
+            Set-JIMConfigurationTestCase -Id 5 -ConnectedObjectTypeId 70 -Confirm:$false
+            $script:capturedBody.connectedObjectTypeIds | Should -Be @(70)
+
+            Set-JIMConfigurationTestCase -Id 5 -ConnectedObjectTypeId @() -Confirm:$false
+            $script:capturedBody.Keys | Should -Contain 'connectedObjectTypeIds'
+            @($script:capturedBody.connectedObjectTypeIds).Count | Should -Be 0
         }
     }
 

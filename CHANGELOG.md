@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 🔄 The SCIM 2.0 Service Provider is out of Preview: identity providers can push Users and Groups to JIM with no Preview feature to turn on first. (#124)
+
+### Fixed
+
+- 🐛 A Scope test case remembers the connections it was tested with, such as "Has user in PANOPLY AD", so it gives the same result every time it runs; set them in the portal, the REST API or PowerShell. (#2787)
+
 ### Performance
 
 - ⚡ A Full Import that confirms an export no longer looks up every group member to compare a group whose membership is already current, saving about 20 seconds at 500,000 users. (#2986)

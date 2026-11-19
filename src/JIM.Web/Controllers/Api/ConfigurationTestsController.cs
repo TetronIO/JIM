@@ -133,7 +133,7 @@ public class ConfigurationTestsController(ILogger<ConfigurationTestsController> 
     /// Update a configuration test case
     /// </summary>
     /// <remarks>
-    /// Changes the case's name, description, inputs, run-as-of time or expectation; anything the request leaves out
+    /// Changes the case's name, description, inputs, connections, run-as-of time or expectation; anything the request leaves out
     /// stays as it is. What the case covers and what it tests cannot change; create another case to test something
     /// else.
     /// </remarks>
@@ -251,6 +251,7 @@ public class ConfigurationTestsController(ILogger<ConfigurationTestsController> 
         testCase.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
         testCase.RunAsOfUtc = AsUtc(request.RunAsOf);
         testCase.Inputs = request.ToInputs();
+        testCase.ConnectedObjectTypeIds = request.ConnectedObjectTypeIds ?? [];
         testCase.Expectation = request.Expectation!.ToModel();
     }
 
@@ -274,6 +275,9 @@ public class ConfigurationTestsController(ILogger<ConfigurationTestsController> 
         Replace(request.MvAttributes, ExpressionInputSource.Metaverse);
         Replace(request.Attributes, null);
         testCase.Inputs = inputs;
+
+        if (request.ConnectedObjectTypeIds != null)
+            testCase.ConnectedObjectTypeIds = request.ConnectedObjectTypeIds;
 
         if (request.Expectation != null)
             testCase.Expectation = request.Expectation.ToModel();
