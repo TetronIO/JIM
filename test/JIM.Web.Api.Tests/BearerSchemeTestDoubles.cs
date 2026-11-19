@@ -91,13 +91,14 @@ internal sealed class SigningKey : IDisposable
 
     public static SigningKey Create(string name) => new($"{name}-{Guid.NewGuid():N}", RSA.Create(2048));
 
-    public string IssueToken(string issuer, string audience, DateTime? expires = null)
+    public string IssueToken(string issuer, string audience, DateTime? expires = null, IDictionary<string, object>? claims = null)
     {
         var expiry = expires ?? DateTime.UtcNow.AddMinutes(5);
         return new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
         {
             Issuer = issuer,
             Audience = audience,
+            Claims = claims,
             Subject = new ClaimsIdentity([new Claim("sub", "rollover-test")]),
             IssuedAt = expiry.AddMinutes(-10),
             NotBefore = expiry.AddMinutes(-10),

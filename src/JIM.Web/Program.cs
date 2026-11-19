@@ -212,6 +212,9 @@ try
 
     // Extract the API identifier from the scope for JWT validation
     var apiAudience = ApiAudienceResolver.Resolve(apiScope, clientId);
+    // When that audience is the portal's own client ID, its ID token carries it too, so a bearer token must also grant
+    // JIM's API scope; see BearerScopeRequirement.
+    var apiScopeRequirement = BearerScopeRequirement.For(apiScope, clientId, apiAudience);
     var validIssuers = GetValidIssuers(authority);
 
     // Skip authentication setup in OpenAPI generation mode (no IdP needed for schema generation)
@@ -413,7 +416,7 @@ try
         // MetaverseObject id are attached to this request's principal. The scheme's settings live in
         // JimJwtBearerOptions so the tests drive the same ones.
         .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
-            JimJwtBearerOptions.Configure(options, authority, apiAudience, validIssuers, async ctx =>
+            JimJwtBearerOptions.Configure(options, authority, apiAudience, validIssuers, apiScopeRequirement, async ctx =>
             {
                 await ResolveAndAttachJimIdentityAsync(ctx.Principal, ctx.HttpContext, SignInProblemSource.Api);
             }));
