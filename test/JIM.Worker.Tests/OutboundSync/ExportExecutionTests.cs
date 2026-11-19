@@ -4710,14 +4710,25 @@ public class ExportExecutionTests
         repo.HoldLoadOf = exports[0].Id;
 
         var largestStartedWhileTheNextChunkWasHeld = false;
-        Task OnExport(IList<PendingExport> batch)
+        async Task OnExport(IList<PendingExport> batch)
         {
             if (batch.Any(pe => pe.Id == exports[3].Id))
             {
+                // The next chunk is prepared on the thread pool, so on a busy machine the first worker can reach here before
+                // that preparation has started its load. Wait for the load to begin rather than reading whether it already
+                // has: the claim is that the first worker was not waiting for it to finish. Had it waited, the held load
+                // would have run out its own timeout before this, and HeldLoadFinished would read true.
+                try
+                {
+                    await repo.HeldLoadEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                catch (TimeoutException)
+                {
+                    // Never prepared ahead: the assertion below says so.
+                }
                 largestStartedWhileTheNextChunkWasHeld = repo.HeldLoadEntered.Task.IsCompleted && !repo.HeldLoadFinished;
                 repo.ReleaseHeldLoad.TrySetResult();
             }
-            return Task.CompletedTask;
         }
 
         // A chunk per export: the largest first, then the small ones in queue order.
