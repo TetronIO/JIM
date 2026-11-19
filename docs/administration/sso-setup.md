@@ -79,7 +79,7 @@ JIM uses two kinds of OAuth 2.0 clients, and depending on your identity provider
 
 **When are these the same registration?**
 
-- **Microsoft Entra ID**: One app registration can have both a Web platform (for the confidential flow) and a Mobile/Desktop platform (for the public flow). In this case, leave `JIM_SSO_PUBLIC_CLIENT_ID` unset; the PowerShell module uses the same Application (client) ID as the web application.
+- **Microsoft Entra ID**: One application has both a Web platform (for the confidential flow) and a Mobile and desktop platform (for the public flow), which is how `Register-JIMIdentityProvider` registers JIM. Leave `JIM_SSO_PUBLIC_CLIENT_ID` unset; the PowerShell module uses the same client ID as the portal, so a person has one object ID whichever way they sign in.
 
 **When must they be different?**
 
@@ -163,7 +163,7 @@ Every JIM instance also serves the interactive API reference at `/api/reference`
 
 - **Keycloak**: `Register-JIMIdentityProvider` registers both.
 - **AD FS**: `Register-JIMIdentityProvider` registers the redirect URI. Turning on CORS for JIM's address is a farm-wide setting you make yourself; see [Let the API reference sign in](sso-setup/ad-fs.md#let-the-api-reference-sign-in-optional).
-- **Microsoft Entra ID**: register the address as a single-page-application redirect URI; see [Step 5a](sso-setup/microsoft-entra-id.md#step-5a-configure-scalar-api-reference-authentication-optional).
+- **Microsoft Entra ID**: `Register-JIMIdentityProvider` registers the address as a single-page application redirect URI, which is all Entra ID needs; see [Step 1](sso-setup/microsoft-entra-id.md#step-1-register-jim-with-entra-id).
 
 Without these, use an API key in **Try It** instead. To test it:
 
@@ -204,7 +204,7 @@ Sign-out uses OIDC [RP-initiated logout](https://openid.net/specs/openid-connect
 The most common failure modes and how to fix them:
 
 **"AADSTS50011: The reply URL specified in the request does not match..."** (Entra ID)
-: The post-logout URI (`https://your-jim-url/signout-callback-oidc`) is not registered against the app. Add it to **Authentication** > **Platform configurations** > **Web** > **Redirect URIs** and save. See [Entra ID Step 1](sso-setup/microsoft-entra-id.md#step-1-register-the-application).
+: The post-logout URI (`https://your-jim-url/signout-callback-oidc`) is not registered against the application. Run `Register-JIMIdentityProvider` again with JIM's address, which puts it back (see [Keep the registration right](sso-setup/microsoft-entra-id.md#keep-the-registration-right)).
 
 **"Invalid post_logout_redirect_uri"** or similar (AD FS, Keycloak)
 : Same root cause as above: the URI is not in the application's registered redirect URI list. Run `Register-JIMIdentityProvider` again with JIM's address: it puts back the portal's redirect URIs, `/signout-callback-oidc` among them (see Keep the registration right for [AD FS](sso-setup/ad-fs.md#keep-the-registration-right) and [Keycloak](sso-setup/keycloak.md#keep-the-registration-right)).

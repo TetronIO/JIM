@@ -63,7 +63,8 @@ function Initialize-AdfsSignInToolbox {
 
     .PARAMETER FederationCertificateName
         The AD FS server's certificate file in the toolbox's /certs (test/integration/ad-lab-certs), such as
-        adfs-primary.pem.
+        adfs-primary.pem. Omitted for an identity provider whose certificate a public authority issued, as Entra ID's,
+        which the toolbox already trusts.
 
     .PARAMETER JimCertificatePath
         jim.web's certificate on this machine (test/integration/results/jim-web-tls/tls.crt).
@@ -72,7 +73,7 @@ function Initialize-AdfsSignInToolbox {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$RepositoryRoot,
-        [Parameter(Mandatory)][string]$FederationCertificateName,
+        [string]$FederationCertificateName,
         [Parameter(Mandatory)][string]$JimCertificatePath
     )
 
@@ -96,7 +97,8 @@ function Initialize-AdfsSignInToolbox {
     $null = Invoke-Docker @('exec', '-u', 'root', $toolbox, 'chmod', '-R', 'a+rX', $client)
 
     $output = Invoke-Docker @('exec', $toolbox, 'pwsh', '-NoProfile', '-NonInteractive', '-File', "$client/Initialize-AdfsSignInClient.ps1",
-        '-ClientDirectory', $client, '-CertificatePath', "/certs/$FederationCertificateName,$client/jim-web.pem", '-BinDirectory', $script:AdfsSignInBinDirectory)
+        '-ClientDirectory', $client, '-CertificatePath', ((@(if ($FederationCertificateName) { "/certs/$FederationCertificateName" }) + "$client/jim-web.pem") -join ','),
+        '-BinDirectory', $script:AdfsSignInBinDirectory)
     return $output
 }
 

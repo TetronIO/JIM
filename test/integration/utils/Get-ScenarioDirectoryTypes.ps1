@@ -38,7 +38,8 @@ function Get-ScenarioSupportedDirectoryTypes {
 
     .DESCRIPTION
         The Active Directory lab runs whatever Samba AD runs, except the scenarios only a real domain
-        controller or its AD FS or Exchange servers can hold (003, 024, 025, 030, 031 and 034), which run on the lab only.
+        controller or its AD FS or Exchange servers can hold (003, 024, 025, 030, 031 and 034), which run on the lab only, and Scenario 035, whose Entra ID sign-in checks run
+        only from the lab's runner, which holds the test tenant's credentials.
         $null (the "All" scenario) has no restriction.
     #>
     [CmdletBinding()]
@@ -89,7 +90,9 @@ function Get-ScenarioSupportedDirectoryTypes {
         # Scenario 034 (Exchange Recipient Provisioning, #2021) provisions mailboxes and other recipients through the
         # lab's Exchange server, exchange-primary, and Scenario 003 (GAL synchronisation) keeps two forests' address
         # books in step through both, exchange-primary and exchange-source: only the Active Directory lab has them.
-        { $_ -in 3, 24, 25, 30, 31, 34 } { return @('ActiveDirectory') }
+        # Scenario 035 (Entra ID sign-in, #2367) needs no directory, but signs in through the JIM test tenant with
+        # credentials only the lab's runner holds (the jim-ad-lab environment), so it runs there and nowhere else.
+        { $_ -in 3, 24, 25, 30, 31, 34, 35 } { return @('ActiveDirectory') }
 
         # Every other scenario, including the directory-agnostic ones (see
         # Test-ScenarioIsDirectoryAgnostic below), is architecturally able to run against any of the
@@ -172,9 +175,10 @@ function Test-ScenarioRunsOnItsOwn {
         $true when Scenario $ScenarioNumber is left out of -Scenario All because the lab workflow runs it in a step of
         its own and reports it as a commit status of its own.
     .DESCRIPTION
-        Scenario 031 (AD FS sign-in, #2441) is reported as jim-ad-lab-adfs, apart from the LDAP scenarios'
-        jim-ad-lab, so that a sign-in failure never turns the LDAP result red or the reverse: ad-lab.yml runs it after
-        the sweep (-Scenario 31), and the sweep does not run it too. It still runs by itself on request.
+        Scenario 031 (AD FS sign-in, #2441) is reported as jim-ad-lab-adfs, and Scenario 035 (Entra ID sign-in, #2367)
+        as jim-sso-entra, apart from the LDAP scenarios' jim-ad-lab, so that a sign-in failure never turns the LDAP
+        result red or the reverse: ad-lab.yml runs each after the sweep (-Scenario 31, -Scenario 35), and the sweep does
+        not run them too. Each still runs by itself on request.
     #>
     [CmdletBinding()]
     [OutputType([bool])]
@@ -184,5 +188,5 @@ function Test-ScenarioRunsOnItsOwn {
         [Nullable[int]]$ScenarioNumber
     )
 
-    return $ScenarioNumber -eq 31
+    return $ScenarioNumber -in 31, 35
 }

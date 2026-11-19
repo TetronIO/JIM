@@ -427,6 +427,14 @@ to AD FS, fills in AD FS's forms sign-in page, posts the `form_post` reply back 
 employee's `User`-only access, and the API reference's Try It: the client, endpoints and scope its page and OpenAPI
 document give, PKCE back to `/api/reference/` (where Scalar redirects the page), the code exchanged with JIM's origin (which AD FS must allow), and its
 token on `/api`.
+**The Entra ID sign-in checks** are Scenario 035, which `ad-lab.yml` runs in a step of its own and reports as the
+commit status `jim-sso-entra`. They use no machine of the lab beyond `dc-primary`, but sign in through the JIM test
+tenant in Microsoft Entra ID, so the lab host must reach `login.microsoftonline.com` and `graph.microsoft.com`, and
+the job needs `id-token: write`: the CI app's federated credential trusts GitHub's OIDC token for the `jim-ad-lab`
+environment, so no Graph secret is stored. Before the scenario the runner repairs JIM's registration in the tenant
+with `Register-JIMIdentityProvider -Provider EntraId` (Step 4f), with a new client secret masked and scrubbed as AD
+FS's is. See Scenario 035 in `engineering/INTEGRATION_TESTING.md` for the tenant and its settings.
+
 The runner does not give JIM the certificate: the scenario trusts it the way an administrator would, with
 `Add-JIMCertificate -FromIdentityProvider`. It reads the certificate off the wire rather than copying
 `adfs-primary-ca.cer` from the guest, the same way it reads the domain controllers'.

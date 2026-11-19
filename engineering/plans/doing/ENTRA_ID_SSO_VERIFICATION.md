@@ -1,6 +1,6 @@
 # Microsoft Entra ID SSO Verification
 
-- **Status:** Doing (layers 0 and 1 in review; Layer 2 Phases 1 and 2 done, Phase 3 under way)
+- **Status:** Doing (all phases built; waiting on the first `jim-sso-entra` run from `main`, then the gate is switched on)
 - **Created:** 2026-11-19
 - **Issue:** [#2367](https://github.com/TetronIO/JIM/issues/2367)
 
@@ -61,9 +61,9 @@ The alternative is a real headless browser (Playwright and Chromium in the toolb
 
 **Agreed: replace the four per-status gate scripts with one, `scripts/Test-ReleaseGate.ps1 -Context <status>`, driven by a table of statuses (context, enforcement variable, remedy), with one matrix job in `release.yml` and one loop in `/release`.** It lands as the bottom layer of a stack, with the Entra ID work on top, since that work's gate is just one more row.
 
-The four existing scripts (`Test-AdLabReleaseGate`, `Test-AdLabFederationReleaseGate`, `Test-PreReleaseGate`, `Test-DeployLabReleaseGate`) already share `scripts/ReleaseGate.ps1` and differ only in their constants; a fifth copy, and a fifth job and skill step, is the drift the issue asked to stop.
+The four existing scripts (one each for `jim-ad-lab`, `jim-ad-lab-adfs`, `jim-pre-release` and `jim-deploy-lab`) already share `scripts/ReleaseGate.ps1` and differ only in their constants; a fifth copy, and a fifth job and skill step, is the drift the issue asked to stop.
 
-The alternative is a fifth sibling script, `Test-EntraSsoReleaseGate.ps1`: smaller now, more to keep in step later.
+The alternative is a fifth sibling script for `jim-sso-entra`: smaller now, more to keep in step later.
 
 ### D5. Who first creates JIM's registration in the tenant: the administrator, once (agreed)
 
@@ -104,19 +104,19 @@ Found while planning D2, and proven on the development stack: when the audience 
 - Pester tests first against a mocked Graph (plan, apply, idempotent re-run, `-WhatIf`), following `KeycloakRegistration.ps1`'s split into state, plan and change.
 - Docs: `docs/powershell/identity-providers.md` (generated reference regenerated).
 
-**Phase 3: the checks, Scenario 035** (032 to 034 were taken). The sign-in client signs in through Entra ID (done); the harness wiring, below, is next.
+**Phase 3: the checks, Scenario 035** (032 to 034 were taken). ✅
 
 Proved locally on 2026-11-19, before any harness wiring: JIM (this branch) with Entra ID's settings from `Register-JIMIdentityProvider`, and the checks' own script (`Invoke-AdfsSignInCheck.ps1`) run from the devcontainer against `http://localhost:5200`. `jim-test-admin` signed in to the portal, was provisioned as the initial administrator from `oid` matched to Object Identifier, got the Administrator API; Connect-JIM's bearer token was accepted and resolved to the same Metaverse Object; Try It signed in through the single-page application redirect and its token was accepted. `jim-test-user` signed in all three ways, was told they have no JIM identity, and was refused the Administrator API (403).
 - `Invoke-Scenario-035-EntraIdSignIn.ps1`, run on its own like Scenario 031 (`Test-ScenarioRunsOnItsOwn`), Active Directory lab only, plus a local mode for the devcontainer.
 - Runner Step 4f: gets a Graph token for the CI app from GitHub's OIDC token (a small PowerShell helper; no new Action), runs the cmdlet with `-ResetClientSecret` (the secret goes to the scrub list as AD FS's does), and restarts JIM with Entra ID's authority, `oid`/Object Identifier, and `jim-test-admin`'s `oid` as `JIM_SSO_INITIAL_ADMIN` (held as a `jim-ad-lab` variable, `JIM_SSO_ENTRA_ADMIN_OBJECT_ID`).
 - The sign-in client (D3) and the checks, from the toolbox: portal sign-in; initial administrator provisioned; bearer token accepted on `/api`; `Connect-JIM` interactively; the same Metaverse Object from the portal and from `Connect-JIM`; `jim-test-user` signs in, is told who they are, and is refused every Administrator API; Try It signs in through the single-page application redirect and its token is accepted. Scenario 031's rename check is left out: the CI app cannot rename users, and `oid` cannot change with a rename by definition.
 
-**Phase 4: `ad-lab.yml`.**
+**Phase 4: `ad-lab.yml`.** ✅
 - A step after the AD FS checks, with `continue-on-error`, running Scenario 35; `id-token: write` added to the job's permissions, for the federated credential.
 - Posts `jim-sso-entra` from that step's outcome; adds it to the summary; scrubs the new secrets.
 - The gate row from Layer 1, with `JIM_SSO_ENTRA_GATE_ENFORCED`, switched on after the first green run.
 
-**Phase 5: the guide.**
+**Phase 5: the guide.** ✅
 - Rewrite `docs/administration/sso-setup/microsoft-entra-id.md` to the outcome: `Register-JIMIdentityProvider` first, the portal steps as the manual alternative; version 2 tokens; `oid`; no Step 7; Step 5a (Scalar) dropped as a customer step, since Try It is now part of the registration.
 - State what was verified, and against what, as the AD FS guide does.
 - `test/integration/ad-lab/README.md`: the Entra ID checks and the host's outbound access.
@@ -132,7 +132,7 @@ Proved locally on 2026-11-19, before any harness wiring: JIM (this branch) with 
 ## Risks
 
 - **Microsoft's sign-in page changes** (D3): the checks fail with a message naming the page, not JIM.
-- **The AD lab host's outbound access** to `login.microsoftonline.com` and `graph.microsoft.com`: needs confirming before Phase 4; the scenario's first step checks it and says so.
+- **The AD lab host's outbound access** to `login.microsoftonline.com` and `graph.microsoft.com`: confirmed by the user on 2026-11-19.
 - **Tenant consent defaults**: if Microsoft changes what users may consent to, the administrator's one-off consent (D5) still covers JIM.
 - **Throttling or an Entra ID outage**: visible as `jim-sso-entra` alone, never as an LDAP or AD FS failure.
 

@@ -24,10 +24,10 @@ subject:
     - { label: "`ApiScope`", detail: "`JIM_SSO_API_SCOPE`" }
     - { label: "`ClaimType`", detail: "`JIM_SSO_CLAIM_TYPE`" }
     - { label: "`MvAttribute`", detail: "`JIM_SSO_MV_ATTRIBUTE`" }
-    - { label: "`InitialAdmin`", detail: "`JIM_SSO_INITIAL_ADMIN`, Entra ID only" }
 properties:
   - { name: Each value, value: "for the variable beside it" }
   - { name: Changes, value: "empty when already right" }
+  - { name: "`InitialAdmin`", value: "Entra ID: `JIM_SSO_INITIAL_ADMIN`" }
 ```
 
 It configures the identity provider, not JIM, so it does not need `Connect-JIM`. AD FS, Keycloak and Microsoft Entra ID are supported. When sign-in fails because a value does not match, `Get-JIMSignInDiagnostic` names the setting involved.

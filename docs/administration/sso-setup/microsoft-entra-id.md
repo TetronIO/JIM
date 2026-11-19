@@ -1,182 +1,134 @@
 ---
 title: "SSO Setup: Microsoft Entra ID"
-description: Register JIM with Microsoft Entra ID so administrators sign in to the portal, and the PowerShell module, with their Entra ID accounts.
+description: Register JIM with Microsoft Entra ID so people sign in to the portal, and the PowerShell module, with their Entra ID accounts.
 type: how-to
 audience: implementer
 ---
 
 # SSO Setup: Microsoft Entra ID
 
-Step-by-step instructions for configuring Single Sign-On with JIM using Microsoft Entra ID as the OIDC identity provider.
+Use this guide to let people sign in to JIM with their Microsoft Entra ID accounts, both in the portal and in the PowerShell module with `Connect-JIM`. One command registers JIM in your tenant, and you give JIM the values it returns. JIM identifies each person by their Entra ID object ID (the `oid` claim), which is the same whichever way they sign in and stays the same for the life of their account. This configuration is verified against Microsoft Entra ID before every JIM release.
 
 ```jim-diagram
 archetype: anatomy
-title: What JIM's app registration in Microsoft Entra ID holds
-desc: "One app registration serves both the portal and the PowerShell module. Its Web platform (Step 1) holds the redirect URIs /signin-oidc and /signout-callback-oidc. Its Overview (Step 2) shows the Application (client) ID and the Directory (tenant) ID, which become JIM_SSO_CLIENT_ID and part of JIM_SSO_AUTHORITY. Certificates & secrets (Step 3) holds the client secret, JIM_SSO_SECRET, shown only once. API permissions (Step 4) keeps User.Read, present by default. Expose an API (Step 5) adds the access_as_user scope, which becomes JIM_SSO_API_SCOPE. The Mobile and desktop platform (Step 5b, optional) adds the redirect URI http://localhost:8400/callback/ for the PowerShell module, with public client flows allowed."
+title: What JIM's one application in Microsoft Entra ID holds
+desc: "Register-JIMIdentityProvider creates one application in your tenant, which serves every way people sign in to JIM. Its Web platform holds the portal's redirect URIs, /signin-oidc and /signout-callback-oidc, and its client secret is JIM_SSO_SECRET. Its Mobile and desktop platform holds the PowerShell module's loopback redirect URIs, http://localhost:8400/callback/ to 8409. Its single-page application platform holds JIM's /api/reference/, for the API reference's Try It. Expose an API makes it JIM's API, api://{client ID} with the access_as_user scope, issuing version 2 access tokens; that scope is JIM_SSO_API_SCOPE. API permissions asks Microsoft Graph for openid, profile, email and offline_access, consented for everyone. The application's client ID is JIM_SSO_CLIENT_ID and JIM_SSO_PUBLIC_CLIENT_ID."
 subject:
   kind: object
-  label: JIM app registration
+  label: JIM's application
   parts:
-    - { label: Web platform, detail: "`/signin-oidc`, `/signout-callback-oidc`" }
-    - { label: Overview, detail: "client ID and tenant ID" }
-    - { label: "Certificates & secrets", detail: "client secret, for `JIM_SSO_SECRET`" }
-    - { label: API permissions, detail: "`User.Read`, there by default" }
-    - { label: Expose an API, detail: "`access_as_user`, for `JIM_SSO_API_SCOPE`" }
-    - { label: Mobile and desktop, detail: "`http://localhost:8400/callback/`" }
+    - { label: Web, detail: "the portal: `/signin-oidc`, a client secret" }
+    - { label: Mobile and desktop, detail: "`Connect-JIM`: ports 8400 to 8409" }
+    - { label: Single-page application, detail: "Try It: `/api/reference/`" }
+    - { label: Expose an API, detail: "`access_as_user`, version 2 tokens" }
 properties:
-  - { name: Serves, value: the portal and PowerShell }
-  - { name: Public client flows, value: "Yes, for PowerShell" }
+  - { name: Client ID, value: "`JIM_SSO_CLIENT_ID`" }
+  - { name: Identifies people by, value: "`oid`" }
+  - { name: Consent, value: given for everyone }
 ```
 
 !!! info "Read the overview first"
-    This page is one of the provider-specific guides linked from the [SSO Setup overview](../sso-setup.md). The overview covers the prerequisites, the [confidential vs public client](../sso-setup.md#confidential-vs-public-clients) model these steps rely on, and the [testing steps](../sso-setup.md#testing-your-configuration) you run once configuration is complete.
+    This page is one of the provider-specific guides linked from the [SSO Setup overview](../sso-setup.md). The overview covers the [confidential and public client](../sso-setup.md#confidential-vs-public-clients) model these steps rely on, [how JIM recognises people](../sso-setup.md#how-jim-recognises-people), and the [testing steps](../sso-setup.md#testing-your-configuration) you can run once configuration is complete.
 
-## :material-numeric-1-circle-outline: Step 1: Register the Application
+## :material-clipboard-list-outline: Before you begin
 
-1. Sign in to the [Azure Portal](https://portal.azure.com)
-2. Navigate to **Microsoft Entra ID** > **App registrations**
-3. Click **New registration**
-4. Configure the registration:
-    - **Name**: `JIM Identity Management`
-    - **Supported account types**: Select based on your requirements:
-        - *Single tenant*: Only users in your organisation
-        - *Multitenant*: Users from any Entra ID directory
-    - **Redirect URI**:
-        - Platform: **Web**
-        - URI: `https://your-jim-url/signin-oidc` (`your-jim-url` is JIM's address, such as `jim.example.com`, with `:port` added if JIM does not use 443)
-5. Click **Register**
-6. After registration, go to **Authentication** and add a second Web redirect URI for the sign-out callback: `https://your-jim-url/signout-callback-oidc`, then click **Save**. Entra ID validates the `post_logout_redirect_uri` parameter against the same Redirect URIs list as sign-in, so this entry is required for sign-out to work.
+You need:
 
-## :material-numeric-2-circle-outline: Step 2: Note the Application Details
+- **An account that registers applications and gives admin consent in your tenant,** such as an Application Administrator or Cloud Application Administrator.
+- **JIM's address**, such as `https://jim.example.com`, with the port if JIM does not use 443.
+- **PowerShell 7 with the JIM PowerShell module,** on any computer that can reach `login.microsoftonline.com` and `graph.microsoft.com`. See [Installation](../../powershell/index.md#installation).
+- **JIM able to reach `login.microsoftonline.com`.** Entra ID is a cloud service, so this is the one part of JIM's sign-in that needs the internet.
+- **The people who will sign in, in the Metaverse with their object ID.** JIM signs someone in only when it has a Metaverse Object whose `Object Identifier` holds their Entra ID object ID: map it from a Connected System that holds it (see [Attribute Mappings](../../configuration/attribute-mappings.md)). Your first administrator is the exception: JIM creates them at their first sign-in.
 
-After registration, note these values from the **Overview** page:
+## :material-numeric-1-circle-outline: Step 1: Register JIM with Entra ID
 
-- **Application (client) ID**: e.g. `12345678-1234-1234-1234-123456789abc`
-- **Directory (tenant) ID**: e.g. `87654321-4321-4321-4321-cba987654321`
+`Register-JIMIdentityProvider` creates JIM's application in your tenant and returns the values JIM needs, your own object ID among them. What the application contains is on the cmdlet's page: [Register-JIMIdentityProvider](../../powershell/identity-providers.md#register-jimidentityprovider).
 
-## :material-numeric-3-circle-outline: Step 3: Create a Client Secret
+1. In PowerShell 7, run the command with JIM's address and your tenant:
 
-1. Go to **Certificates & secrets**
-2. Click **New client secret**
-3. Add a description (e.g. `JIM Web Client`)
-4. Select an expiry period
-5. Click **Add**
-6. **Copy the secret value immediately**; it will not be shown again
+    ```powershell
+    $registration = Register-JIMIdentityProvider -Provider EntraId -Url 'https://jim.example.com' -TenantId 'contoso.onmicrosoft.com'
+    $registration | Select-Object Authority, ClientId, ApiScope, ClaimType, MvAttribute, InitialAdmin
+    ```
 
-## :material-numeric-4-circle-outline: Step 4: Configure API Permissions
+    It shows a code and a web address. Open the address, enter the code, and sign in with the account from **Before you begin**. Add `-WhatIf` first if you want to see each change the command would make; it makes none.
 
-1. Go to **API permissions**
-2. Verify `User.Read` (Delegated) is present; it is added by default and provides the OpenID Connect scopes needed for authentication
+2. Copy the portal's client secret. Entra ID shows it only once, so keep it safe until Step 2:
 
-!!! note
-    The standard OIDC scopes (`openid`, `profile`, `email`, `offline_access`) are requested at runtime and do not need to be added as Graph API permissions.
+    ```powershell
+    [System.Net.NetworkCredential]::new('', $registration.ClientSecret).Password | Set-Clipboard
+    ```
 
-## :material-numeric-5-circle-outline: Step 5: Expose an API
+    If the secret is lost, run the command again with `-ResetClientSecret` for a new one. The command removes the old secret, so JIM signs nobody in until `JIM_SSO_SECRET` holds the new one.
 
-This step creates the API scope that JIM uses for JWT Bearer token validation (for API access).
+`InitialAdmin` is the object ID of the account you signed in with. If someone else is to be JIM's first administrator, use their object ID instead: it is on their page in the Microsoft Entra admin centre, under **Users**.
 
-1. Go to **Expose an API**
-2. Click **Set** next to Application ID URI
-    - Accept the default (`api://{client-id}`) or set a custom URI
-    - Click **Save**
-3. Click **Add a scope**
-4. Configure the scope:
-    - **Scope name**: `access_as_user`
-    - **Who can consent**: Admins and users
-    - **Admin consent display name**: `Access JIM API`
-    - **Admin consent description**: `Allows the app to access JIM API on behalf of the signed-in user`
-    - **User consent display name**: `Access JIM API`
-    - **User consent description**: `Allows this app to access JIM API on your behalf`
-    - **State**: Enabled
-5. Click **Add scope**
+## :material-numeric-2-circle-outline: Step 2: Configure JIM
 
-## :material-api: Step 5a: Configure Scalar API Reference Authentication (Optional)
-
-Every JIM instance serves the interactive [Scalar](https://scalar.com/) API reference at `/api/reference`. This step lets its **Try It** sign in with OAuth. Skip it if you will use an API key in **Try It**, or the PowerShell module instead.
-
-**Try It** signs in with the same client as the PowerShell module (Step 5b): this app registration if you share the client ID, or the PowerShell module's own app registration if you set `JIM_SSO_PUBLIC_CLIENT_ID`. On that app registration:
-
-1. Go to **Authentication**
-2. Click **Add Redirect URI**
-3. Select **Single-page application**
-4. Add redirect URI: `https://your-jim-url/api/reference/`, with the trailing slash (Scalar uses the API reference page itself as the OAuth redirect target, and serves it at that address; there is no separate `oauth2-redirect.html` handler)
-5. Click **Configure**
-
-## :material-console: Step 5b: Configure PowerShell Module Authentication (Optional but recommended)
-
-Configuring the PowerShell module now means administrators can connect to JIM interactively with their SSO account. Unattended scripts cannot sign in interactively, so they use a JIM API key; see [API Authentication](../../api/authentication.md). You can skip this step if you don't plan to use the PowerShell module, but it only takes a moment and is worth doing up front.
-
-Entra ID allows a single app registration to serve both the JIM web application (confidential client with a secret) and the PowerShell module (public client using PKCE with a loopback redirect). You can reuse the same app registration from Step 1; just add a new platform for the PowerShell flow:
-
-1. Go to **Authentication**
-2. Click **Add a platform**
-3. Select **Mobile and desktop applications**
-4. Check the suggested redirect URI: `https://login.microsoftonline.com/common/oauth2/nativeclient`
-5. In **Custom redirect URIs**, add: `http://localhost:8400/callback/`
-6. Click **Configure**
-7. Scroll down to **Advanced settings**
-8. Set **Allow public client flows** to **Yes**
-9. Click **Save**
-
-Because the web and PowerShell platforms share the same **Application (client) ID**, you can either:
-
-- **Share the client ID** (simplest): leave `JIM_SSO_PUBLIC_CLIENT_ID` unset in Step 6 below. The PowerShell module will use `JIM_SSO_CLIENT_ID`, which now has both Web and Mobile/Desktop platforms configured.
-- **Use a separate app registration** for the PowerShell module (stricter isolation): create a second app registration with only the Mobile/Desktop platform, note its Application (client) ID, and set `JIM_SSO_PUBLIC_CLIENT_ID` to that value.
-
-!!! note
-    Entra ID requires exact redirect URI matching. If port 8400 is busy, the module will try ports 8401 to 8409. You may need to add additional redirect URIs if you encounter port conflicts.
-
-!!! note "Refresh tokens"
-    The refresh token is issued because JIM requests the `offline_access` scope at runtime; it is a standard OIDC scope and does not need to be added as an API permission. Setting **Allow public client flows** to **Yes** (step 8 above) is a separate requirement: it marks the registration as a public client so the module can redeem the authorization code via PKCE without a client secret. This matters when the module shares the web application's registration, which already has a secret and would otherwise be treated as confidential. The refresh token enables silent in-session renewal and optional cross-session token persistence.
-
-## :material-numeric-6-circle-outline: Step 6: Configure JIM Environment Variables
-
-Add these to your `.env` file:
+Set these environment variables to the values from Step 1, then restart JIM (see [Configuration Reference](../configuration.md)):
 
 ```bash
-# Microsoft Entra ID Configuration
-JIM_SSO_AUTHORITY=https://login.microsoftonline.com/{your-tenant-id}/v2.0
-JIM_SSO_CLIENT_ID={your-application-client-id}
-JIM_SSO_SECRET={your-client-secret}
-JIM_SSO_API_SCOPE=api://{your-application-client-id}/access_as_user
+JIM_SSO_AUTHORITY={Authority}
+JIM_SSO_CLIENT_ID={ClientId}
+JIM_SSO_SECRET={the client secret from Step 1}
+JIM_SSO_API_SCOPE={ApiScope}
 
-# Optional: only set if you created a separate app registration for the PowerShell
-# module in Step 5b. Leave unset to reuse JIM_SSO_CLIENT_ID.
-# JIM_SSO_PUBLIC_CLIENT_ID={your-powershell-app-client-id}
-
-# User identity mapping
-JIM_SSO_CLAIM_TYPE=sub
-JIM_SSO_MV_ATTRIBUTE=Subject Identifier
-JIM_SSO_INITIAL_ADMIN={your-admin-sub-value}
+# Identify people by their Entra ID object ID ({ClaimType} and {MvAttribute})
+JIM_SSO_CLAIM_TYPE=oid
+JIM_SSO_MV_ATTRIBUTE=Object Identifier
+JIM_SSO_INITIAL_ADMIN={InitialAdmin}
 ```
 
-**Example with real values (single app registration, web + PowerShell share client ID):**
+**Example:**
 
 ```bash
-JIM_SSO_AUTHORITY=https://login.microsoftonline.com/87654321-4321-4321-4321-cba987654321/v2.0
-JIM_SSO_CLIENT_ID=12345678-1234-1234-1234-123456789abc
-JIM_SSO_SECRET=abc123~secretvalue
-JIM_SSO_API_SCOPE=api://12345678-1234-1234-1234-123456789abc/access_as_user
+JIM_SSO_AUTHORITY=https://login.microsoftonline.com/72f988bf-86f1-41af-91ab-2d7cd011db47/v2.0
+JIM_SSO_CLIENT_ID=e1234567-89ab-cdef-0123-456789abcdef
+JIM_SSO_SECRET=generatedSecretValue123
+JIM_SSO_API_SCOPE=api://e1234567-89ab-cdef-0123-456789abcdef/access_as_user
+JIM_SSO_CLAIM_TYPE=oid
+JIM_SSO_MV_ATTRIBUTE=Object Identifier
+JIM_SSO_INITIAL_ADMIN=3f2504e0-4f89-11d3-9a0c-0305e82c3301
 ```
 
-## :material-numeric-7-circle-outline: Step 7: Find Your Admin User's Subject Identifier
-
-1. Start JIM with the configuration above
-2. Log in with your admin account
-3. Navigate to `/claims` in the web interface
-4. Find the `sub` claim value
-5. Update `JIM_SSO_INITIAL_ADMIN` with this value
+`JIM_SSO_PUBLIC_CLIENT_ID` stays unset: the PowerShell module signs in with the same application. Scripts that run unattended cannot sign in interactively, so they use a JIM API key instead; see [API Authentication](../../api/authentication.md).
 
 ## :material-check-decagram-outline: Check it worked
 
-1. Open JIM in a browser. JIM sends you to Microsoft Entra ID to sign in, then returns you to JIM, signed in.
-2. Open `/claims` and check that `sub`, `name` and `email` carry your values.
-3. If you set up PowerShell authentication, run `Connect-JIM -Url "https://your-jim-url"`, sign in in the browser it opens, then run `Test-JIMConnection`. It reports `Connected : True` and `AuthMethod : OAuth`.
+1. Open JIM in a browser as your first administrator. JIM sends you to Microsoft Entra ID to sign in, then returns you to JIM, signed in.
+2. Open `/claims` and check that `oid`, `name` and `email` carry your values.
+3. In PowerShell 7, run `Connect-JIM -Url 'https://jim.example.com'`, sign in in the browser it opens, then run `Get-JIMUserInfo`. It reports `IsAdministrator : True`, with the `Administrator` and `User` roles.
+4. Open the API reference at `https://jim.example.com/api/reference` and sign in from **Try It**. It needs nothing more: the command registered the page.
+5. Sign in as someone with no JIM role. JIM signs them in and refuses them administration.
 
-To check sign-out and API access too, see [Testing Your Configuration](../sso-setup.md#testing-your-configuration).
+To check sign-out too, see [Testing Your Configuration](../sso-setup.md#testing-your-configuration).
+
+## :material-autorenew: Keep the registration right
+
+Run the command again whenever you like, with the same `-Url` values. It changes nothing when the registration is right, and puts back anything that has drifted, such as a redirect URI someone removed. Give every address people reach JIM at to `-Url`; one left out has its redirect URIs removed.
+
+The command signs you in each time. To run it unattended, give it a Microsoft Graph token with `-AccessToken`, for example from a workload identity. A token holding only `Application.ReadWrite.OwnedBy` keeps a registration its application owns right, but cannot give consent, and the command warns that an administrator must.
+
+## :material-hand-pointing-right: Registering by hand
+
+If you cannot run the command, register the application in the Microsoft Entra admin centre under **App registrations**, so that it matches what the command makes:
+
+| Where | Setting |
+|-------|---------|
+| **Overview** | Supported account types: this organisational directory only |
+| **Authentication** | **Web** redirect URIs `https://jim.example.com/signin-oidc` and `https://jim.example.com/signout-callback-oidc`; **Mobile and desktop applications** redirect URIs `http://localhost:8400/callback/` to `http://localhost:8409/callback/`; **Single-page application** redirect URI `https://jim.example.com/api/reference/` |
+| **Certificates & secrets** | A client secret, for `JIM_SSO_SECRET` |
+| **Expose an API** | Application ID URI `api://{client ID}`, and a scope `access_as_user` that admins and users can consent to |
+| **Manifest** | `"requestedAccessTokenVersion": 2` |
+| **Token configuration** | The optional claim `email`, in ID and access tokens |
+| **API permissions** | Microsoft Graph delegated `openid`, `profile`, `email` and `offline_access`, then **Grant admin consent** |
+
+The values for Step 2 are then: `https://login.microsoftonline.com/{tenant ID}/v2.0` for `JIM_SSO_AUTHORITY`, the application's client ID for `JIM_SSO_CLIENT_ID`, and `api://{client ID}/access_as_user` for `JIM_SSO_API_SCOPE`. Your object ID is on your page under **Users**.
 
 ## :material-wrench-outline: Microsoft Entra ID Troubleshooting
 
+- **`Get-JIMSignInDiagnostic` names `requestedAccessTokenVersion`**: Entra ID is issuing version 1 access tokens, whose audience JIM does not accept. Set `requestedAccessTokenVersion` to `2` in the application's manifest, or run `Register-JIMIdentityProvider` again, which does.
+- **People are asked to consent, or refused with `AADSTS65001`**: nobody has consented to JIM's permissions for everyone. Run `Register-JIMIdentityProvider` again as an account that may give admin consent, or select **Grant admin consent** on the application's **API permissions** page.
 - **Sign-in is unavailable / JIM does not trust the certificate**: Microsoft Entra ID's certificates come from public certificate authorities the operating system trusts, so this usually means a proxy between JIM and Microsoft inspects TLS and presents your organisation's certificate instead. Trust the proxy's certificate authority for sign-in; see [Trust Your Identity Provider's Certificate](trusting-your-identity-provider.md).
 
 ## :material-arrow-right-circle-outline: Next steps
