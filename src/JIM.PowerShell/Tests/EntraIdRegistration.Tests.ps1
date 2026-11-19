@@ -314,3 +314,52 @@ Describe 'Register-JIMIdentityProvider -Provider EntraId' {
         }
     }
 }
+
+Describe 'Invoke-JIMEntraIdRegistrationChange' {
+
+    It 'retires the replaced client secrets, trying again while Graph has not caught up with the new one' {
+        InModuleScope JIM {
+            $script:RemoveCalls = 0
+            Mock Start-Sleep {}
+            Mock Invoke-JIMEntraIdGraphApi -ParameterFilter { $Path -like '*/addPassword' } { [pscustomobject]@{ secretText = 'new-secret' } }
+            Mock Invoke-JIMEntraIdGraphApi -ParameterFilter { $Path -like '*/removePassword' } {
+                $script:RemoveCalls++
+                if ($script:RemoveCalls -lt 3) { throw 'Microsoft Graph refused POST /applications/x/removePassword: 400' }
+            }
+            $connection = @{ ApplicationId = 'object-id' }
+            $change = [pscustomobject]@{ Action = 'ResetClientSecret'; Arguments = @{ RetireKeyIds = @('key-1') } }
+
+            Invoke-JIMEntraIdRegistrationChange -Connection $connection -Change $change | Should -Be 'new-secret'
+            $script:RemoveCalls | Should -Be 3
+        }
+    }
+
+    It 'gives up retiring a secret after a few tries, saying which' {
+        InModuleScope JIM {
+            Mock Start-Sleep {}
+            Mock Invoke-JIMEntraIdGraphApi -ParameterFilter { $Path -like '*/addPassword' } { [pscustomobject]@{ secretText = 'new-secret' } }
+            Mock Invoke-JIMEntraIdGraphApi -ParameterFilter { $Path -like '*/removePassword' } { throw 'Microsoft Graph refused POST /applications/x/removePassword: 400' }
+            $change = [pscustomobject]@{ Action = 'ResetClientSecret'; Arguments = @{ RetireKeyIds = @('key-1') } }
+
+            { Invoke-JIMEntraIdRegistrationChange -Connection @{ ApplicationId = 'object-id' } -Change $change } | Should -Throw '*key-1*'
+        }
+    }
+}
+
+Describe 'Invoke-JIMEntraIdGraphApi' {
+
+    It 'reports the status and the exception''s message when Graph''s error body is empty' {
+        InModuleScope JIM {
+            Mock Invoke-RestMethod {
+                $response = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::BadRequest)
+                $exception = [Microsoft.PowerShell.Commands.HttpResponseException]::new('Response status code does not indicate success: 400 (Bad Request).', $response)
+                $record = [System.Management.Automation.ErrorRecord]::new($exception, 'WebCmdletWebResponseException', 'InvalidOperation', $null)
+                $record.ErrorDetails = [System.Management.Automation.ErrorDetails]::new('')
+                throw $record
+            }
+
+            { Invoke-JIMEntraIdGraphApi -Connection @{ Token = (ConvertTo-SecureString 't' -AsPlainText -Force) } -Method Post -Path '/applications/x/removePassword' -Body @{} } |
+                Should -Throw '*removePassword*400*Bad Request*'
+        }
+    }
+}
