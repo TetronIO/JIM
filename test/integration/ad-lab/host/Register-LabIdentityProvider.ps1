@@ -65,8 +65,10 @@ $ErrorActionPreference = 'Stop'
 
 function Find-LabFile {
     # The deployed layout keeps guest files and the module beside the script; a checkout keeps them above it.
+    # In the deployed layout (C:\jim-ad-lab) a checkout's path climbs above the drive, where Test-Path throws rather than
+    # answering no; a candidate it cannot test is simply not there, so the message below is the one a run reports.
     param([string[]]$Candidate)
-    return ($Candidate | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1)
+    return ($Candidate | Where-Object { Test-Path -LiteralPath $_ -ErrorAction SilentlyContinue } | Select-Object -First 1)
 }
 
 $labModule = Find-LabFile @((Join-Path $PSScriptRoot 'guest/LabDomainController.psm1'), (Join-Path $PSScriptRoot '../guest/LabDomainController.psm1'))
