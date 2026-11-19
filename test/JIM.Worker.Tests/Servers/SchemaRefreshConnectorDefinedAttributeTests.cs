@@ -68,8 +68,8 @@ public class SchemaRefreshConnectorDefinedAttributeTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(exception!.Message, Does.Contain("Stub Schema Connector"));
-            Assert.That(exception.Message, Does.Contain("mailNickname"));
-            Assert.That(exception.Message, Does.Contain("user"));
+            Assert.That(exception!.Message, Does.Contain("mailNickname"));
+            Assert.That(exception!.Message, Does.Contain("user"));
         }
     }
 
