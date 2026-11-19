@@ -382,7 +382,8 @@ Describe 'the gates in the release workflow' {
             Test-Path -LiteralPath (Join-Path $script:RepositoryRoot 'scripts' "$name.ps1") | Should -BeFalse -Because "$name is a row of ReleaseGates.psd1 now"
         }
         $pattern = ($old | ForEach-Object { [regex]::Escape($_) }) -join '|'
-        $hits = @(git -C $script:RepositoryRoot grep -l -E $pattern -- . ':!engineering/plans/done' ':!engineering/prd/done' ':!CHANGELOG.md' 2>$null)
+        # This file names them to look for them, so it is left out.
+        $hits = @(git -C $script:RepositoryRoot grep -l -E $pattern -- . ':!engineering/plans/done' ':!engineering/prd/done' ':!CHANGELOG.md' ':!scripts/Tests/Test-ReleaseGate.Tests.ps1' 2>$null)
         $hits | Should -BeNullOrEmpty -Because 'nothing may still call a per-gate script'
     }
 }
