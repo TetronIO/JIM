@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261119085614_AddConnectorDefinedAttributeSource")]
+    [Migration("20261119102354_AddConnectorDefinedAttributeSource")]
     partial class AddConnectorDefinedAttributeSource
     {
         /// <inheritdoc />
@@ -1702,6 +1702,12 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.PrimitiveCollection<List<int>>("ConnectedObjectTypeIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer[]")
+                        .HasDefaultValueSql("'{}'");
 
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
