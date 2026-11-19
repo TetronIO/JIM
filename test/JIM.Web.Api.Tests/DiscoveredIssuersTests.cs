@@ -82,7 +82,7 @@ public class DiscoveredIssuersTests
     {
         var options = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions();
 
-        JimJwtBearerOptions.Configure(options, Authority, "api://jim", [Authority], _ => System.Threading.Tasks.Task.CompletedTask);
+        JimJwtBearerOptions.Configure(options, Authority, "api://jim", [Authority], BearerScopeRequirement.None, _ => System.Threading.Tasks.Task.CompletedTask);
 
         Assert.Multiple(() =>
         {

@@ -93,7 +93,7 @@ public class SigningKeyRolloverTests
     {
         var options = new JwtBearerOptions();
 
-        JimJwtBearerOptions.Configure(options, "https://idp.example.com/realms/jim", Audience, ["https://idp.example.com/realms/jim"], _ => Task.CompletedTask);
+        JimJwtBearerOptions.Configure(options, "https://idp.example.com/realms/jim", Audience, ["https://idp.example.com/realms/jim"], BearerScopeRequirement.None, _ => Task.CompletedTask);
 
         Assert.Multiple(() =>
         {
@@ -398,7 +398,7 @@ public class SigningKeyRolloverTests
         services.AddSingleton(new SignInProblemLog(TimeProvider.System));
         services.AddAuthentication().AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
         {
-            JimJwtBearerOptions.Configure(options, _identityProvider.Issuer, Audience, [_identityProvider.Issuer], ctx =>
+            JimJwtBearerOptions.Configure(options, _identityProvider.Issuer, Audience, [_identityProvider.Issuer], BearerScopeRequirement.None, ctx =>
             {
                 // Stands in for ResolveAndAttachJimIdentityAsync.
                 ((ClaimsIdentity)ctx.Principal!.Identity!).AddClaim(new Claim(JimIdentityClaim, "true"));

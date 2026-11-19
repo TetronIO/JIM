@@ -3,6 +3,7 @@
 
 using JIM.Models.Core;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 
 namespace JIM.Web.Authentication;
@@ -27,12 +28,16 @@ public static class JimJwtBearerOptions
     /// <param name="authority">The identity provider's authority (issuer) URL.</param>
     /// <param name="audience">The audience an access token must carry.</param>
     /// <param name="validIssuers">The issuers a token may name.</param>
+    /// <param name="scopeRequirement">The scope a token must grant beyond its audience: JIM's API scope, when the
+    /// audience is the portal's own client ID, which its ID token also carries.</param>
     /// <param name="onTokenValidated">Resolves and attaches the caller's JIM identity once the token has validated.</param>
     public static void Configure(JwtBearerOptions options, string? authority, string? audience, string[] validIssuers,
-        Func<TokenValidatedContext, Task> onTokenValidated)
+        BearerScopeRequirement scopeRequirement, Func<TokenValidatedContext, Task> onTokenValidated)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(validIssuers);
+        ArgumentNullException.ThrowIfNull(scopeRequirement);
+        ArgumentNullException.ThrowIfNull(onTokenValidated);
 
         options.Authority = authority;
         options.Audience = audience;
@@ -61,6 +66,25 @@ public static class JimJwtBearerOptions
         // A token signed by a key the identity provider introduced without notice is accepted once JIM has fetched it
         // (#2442), and a token that still fails validation is recorded in the security audit log (#2108); see
         // JimJwtBearerEvents.
-        options.Events = JimJwtBearerEvents.Create(onTokenValidated, new BearerSigningKeyRecovery(TimeProvider.System));
+        options.Events = JimJwtBearerEvents.Create(RequireScope(scopeRequirement, onTokenValidated), new BearerSigningKeyRecovery(TimeProvider.System));
     }
+
+    /// <summary>
+    /// Refuses a validated token that does not grant the scope the requirement names, recording why, before JIM
+    /// resolves who it is for. Applies to a token validated first time and to one recovered after a signing key
+    /// rollover alike, since both pass through OnTokenValidated.
+    /// </summary>
+    private static Func<TokenValidatedContext, Task> RequireScope(BearerScopeRequirement requirement,
+        Func<TokenValidatedContext, Task> onTokenValidated) => async context =>
+    {
+        if (!requirement.IsMetBy(context.Principal))
+        {
+            // Required, not optional: a missing registration must fail at once.
+            context.HttpContext.RequestServices.GetRequiredService<SignInProblemLog>().Record(requirement.DescribeRefusal(context.Principal));
+            context.Fail("The access token does not grant JIM's API scope.");
+            return;
+        }
+
+        await onTokenValidated(context);
+    };
 }

@@ -171,7 +171,7 @@ public class AccessTokenSignInProblemTests
         services.AddSingleton<IFailedAuthenticationRecorder>(new RecordingFailedAuthenticationRecorder());
         services.AddSingleton(_problems);
         services.AddAuthentication().AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
-            JimJwtBearerOptions.Configure(options, _identityProvider.Issuer, Audience, [_identityProvider.Issuer], _ => Task.CompletedTask));
+            JimJwtBearerOptions.Configure(options, _identityProvider.Issuer, Audience, [_identityProvider.Issuer], BearerScopeRequirement.None, _ => Task.CompletedTask));
         services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
             .Configure(options => options.BackchannelHttpHandler = backchannel.CreateHandler());
         services.AddIdentityProviderSigningKeyPolicy();

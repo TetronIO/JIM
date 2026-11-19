@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🔄 The SCIM 2.0 Service Provider is out of Preview: identity providers can push Users and Groups to JIM with no Preview feature to turn on first. (#124)
 
+### Security
+
+- 🔒 JIM's API no longer accepts the portal's sign-in token in place of an access token where the identity provider gives both the same audience, as Keycloak does: a token must now grant JIM's API scope, so `JIM_SSO_API_SCOPE` must be set for single sign-on to the API.
+
 ### Fixed
 
 - 🐛 A Scope test case remembers the connections it was tested with, such as "Has user in PANOPLY AD", so it gives the same result every time it runs; set them in the portal, the REST API or PowerShell. (#2787)

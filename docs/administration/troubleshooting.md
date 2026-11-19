@@ -171,7 +171,7 @@ You sign in at your identity provider and land on a page titled **A setting stop
 |---------|--------------------|
 | `JIM_SSO_CLIENT_ID` | The ID token is for another client, or the identity provider does not let the portal's client sign people in with an authorisation code (`unauthorized_client`). |
 | `JIM_SSO_SECRET` | The identity provider refused the portal's client ID or secret (`invalid_client`). |
-| `JIM_SSO_API_SCOPE` | The identity provider refused the scopes JIM asked for (`invalid_scope`, or `invalid_resource` from AD FS), or an access token is not for JIM's API: its audience is not the one JIM expects. |
+| `JIM_SSO_API_SCOPE` | The identity provider refused the scopes JIM asked for (`invalid_scope`, or `invalid_resource` from AD FS), or an access token is not for JIM's API: its audience is not the one JIM expects, or it does not grant the API scope, as an ID token never does. |
 | `JIM_SSO_VALID_ISSUERS` | The token came from an issuer JIM does not accept. |
 | `JIM_SSO_CLAIM_TYPE` | The sign-in carried no claim of the type JIM identifies people by. JIM lists the claim types it did carry, never their values. |
 

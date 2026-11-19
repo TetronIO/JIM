@@ -97,11 +97,14 @@ The JIM server exposes `/api/v1/auth/config`, an unauthenticated discovery endpo
 
 Backend token validation (the JWT bearer middleware that protects `/api/**` endpoints) always uses `JIM_SSO_AUTHORITY` for issuer and JWKS, regardless of which client the token was issued to. The audience (`aud`) it requires comes from `JIM_SSO_API_SCOPE`:
 
-| `JIM_SSO_API_SCOPE` | Audience JIM requires |
-|---|---|
-| `api://` followed by an identifier and a permission, such as `api://{id}/access_as_user` (Microsoft Entra ID) | The value without the permission: `api://{id}` |
-| A bare `api://{id}`, such as AD FS's identifier | The value as it stands |
-| Anything else (Keycloak's `jim-api`, say), or unset | `JIM_SSO_CLIENT_ID` |
+| `JIM_SSO_API_SCOPE` | Audience JIM requires | Scope the token must also grant |
+|---|---|---|
+| `api://` followed by an identifier and a permission, such as `api://{id}/access_as_user` (Microsoft Entra ID) | The value without the permission: `api://{id}` | None |
+| A bare `api://{id}`, such as AD FS's identifier | The value as it stands | None |
+| Anything else, such as Keycloak's `jim-api` | `JIM_SSO_CLIENT_ID` | The value, in the token's `scope` or `scp` claim |
+| Unset | `JIM_SSO_CLIENT_ID` | One JIM cannot know, so JIM accepts no token |
+
+When the audience is `JIM_SSO_CLIENT_ID`, the portal's ID token carries it too, so the audience alone cannot tell an access token from an ID token. JIM therefore also requires the access token to grant the API scope, which an ID token never does, and with no API scope set it accepts no token at all. API keys are unaffected.
 
 As long as the public and confidential clients belong to the same realm or tenant and both request the same API scope, tokens from either are valid. JIM does not check which client a token was issued to, so give the audience only to the clients meant to call JIM's API. For AD FS and Keycloak, `Register-JIMIdentityProvider` gives it only to JIM's two clients, and takes it from any other; with Entra ID, review which applications your identity provider permits to request JIM's API scope.
 
