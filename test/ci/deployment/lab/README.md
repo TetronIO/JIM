@@ -343,7 +343,7 @@ cell's helper 2 GiB), and the runner starts cells, largest first, while they fit
 `.github/workflows/deploy-lab.yml` runs the whole matrix on the lab host's own runner (label `jim-deploy-lab`, alone in
 a runner group of that name): nightly on `main`, by itself when a change to `VERSION` reaches `main` (the release pull
 request's merge), and on dispatch, with optional cells and tags. It posts a `jim-deploy-lab` commit status on the
-commit it tested, which the release gate (`scripts/Test-DeployLabReleaseGate.ps1`, a job of `release.yml`) requires
+commit it tested, which the release gate (`scripts/Test-ReleaseGate.ps1 -Context jim-deploy-lab`, a job of `release.yml`) requires
 once `JIM_DEPLOY_LAB_GATE_ENFORCED` is `true`. Only a run of every cell posts it; a run of some cells posts no status.
 The online cells' run, which `release.yml` dispatches once a stable release is published (`-f tags=online`), posts
 `jim-deploy-lab-online` instead, which no gate reads. The report is the job's summary, and every cell's folder is an

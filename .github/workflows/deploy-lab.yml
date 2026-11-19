@@ -11,7 +11,7 @@
 # and CentOS Stream 10; and a soak of restarts and reboots. The lab's README says what each cell checks. The job writes
 # the report to its summary, uploads the report and every cell's logs, and posts a commit status named `jim-deploy-lab`
 # on the SHA it tested: `success` only when every cell passed, with the count in its description. release.yml and
-# /release require `success` for the SHA being tagged (scripts/Test-DeployLabReleaseGate.ps1) once the repository
+# /release require `success` for the SHA being tagged (scripts/Test-ReleaseGate.ps1 -Context jim-deploy-lab) once the repository
 # variable JIM_DEPLOY_LAB_GATE_ENFORCED is `true` (set after the lab's first green run here); from then on there is no
 # override, so the remedy for a red run is a fix and a dispatched run.
 #

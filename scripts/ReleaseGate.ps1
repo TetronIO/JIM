@@ -8,24 +8,66 @@
 
 .DESCRIPTION
     A release gate refuses a release commit unless a test run posted a `success` commit status of one fixed name on
-    that exact SHA. Each gate is its own script with its own constant context and its own remedy, and calls these
-    functions with them:
+    that exact SHA. Every gate is a row of scripts/ReleaseGates.psd1 (its context, the workflow that posts it, the
+    repository variable that switches it on, and the words of its refusal), and scripts/Test-ReleaseGate.ps1 checks one
+    row; release.yml runs it for every row.
 
-      scripts/Test-AdLabReleaseGate.ps1      context jim-ad-lab        (.github/workflows/ad-lab.yml)
-      scripts/Test-AdLabFederationReleaseGate.ps1  context jim-ad-lab-adfs  (.github/workflows/ad-lab.yml)
-      scripts/Test-PreReleaseGate.ps1        context jim-pre-release   (.github/workflows/pre-release.yml)
-      scripts/Test-DeployLabReleaseGate.ps1  context jim-deploy-lab    (.github/workflows/deploy-lab.yml)
-
-    The context is a parameter here, never on a gate script: a gate that could be pointed at another context would be
-    a gate with an override. Nothing in this file skips, softens or accepts a stale result either; failing to read the
-    statuses throws, and the gate scripts turn that into exit 1, because a gate that opens when it cannot see is not a
-    gate.
+    The context reaches the gate script as a parameter, but only a context in the table is accepted
+    (Get-ReleaseGateDefinition throws for any other), and release.yml's gate job runs every row, which
+    scripts/Tests/Test-ReleaseGate.Tests.ps1 holds it to. So pointing the script at another context checks another
+    gate a release already needs; it never skips one. Nothing in this file skips, softens or accepts a stale result
+    either; failing to read the statuses throws, and the gate script turns that into exit 1, because a gate that opens
+    when it cannot see is not a gate.
 
     The decision (Test-ReleaseGateStatus) is separate from the gh call (Get-ReleaseGateStatus) so it is tested without
-    either; see scripts/Tests/Test-AdLabReleaseGate.Tests.ps1 and Test-PreReleaseGate.Tests.ps1.
+    either; see scripts/Tests/Test-ReleaseGate.Tests.ps1.
 #>
 
 Set-StrictMode -Version Latest
+
+$script:ReleaseGateTablePath = Join-Path $PSScriptRoot 'ReleaseGates.psd1'
+
+function Get-ReleaseGateDefinition {
+    <#
+    .SYNOPSIS
+        The row of scripts/ReleaseGates.psd1 for one gate, as a hashtable. Throws, naming every gate, for a context
+        that is not one.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$Context
+    )
+
+    $gates = @((Import-PowerShellDataFile -LiteralPath $script:ReleaseGateTablePath).Gates)
+    $gate = $gates | Where-Object { $_.Context -ceq $Context } | Select-Object -First 1
+    if (-not $gate) {
+        throw "'$Context' is not a release gate. The gates are: $(($gates.Context) -join ', ') (scripts/ReleaseGates.psd1)."
+    }
+    return $gate
+}
+
+function Write-ReleaseGateNotEnforced {
+    <#
+    .SYNOPSIS
+        The warning release.yml gives, on the run and in its summary, for a gate whose repository variable is not yet
+        `true`. It only words the warning: whether the gate is enforced is the workflow's decision, never this file's.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'A workflow annotation, read from the log.')]
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Context
+    )
+
+    $gate = Get-ReleaseGateDefinition -Context $Context
+    Write-Host "::warning title=$($gate.Name) not enforced::$($gate.NotEnforcedMessage)"
+    if ($env:GITHUB_STEP_SUMMARY) {
+        "### $($gate.Name) not enforced`n`n$($gate.NotEnforcedMessage)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+    }
+}
 
 function Get-ReleaseGateField {
     # One field of a status, from a parsed JSON object or a hashtable, or $null when it is not there.
