@@ -1,6 +1,7 @@
 # Microsoft Entra ID SSO Verification
 
-- **Status:** Doing (all phases built; waiting on the first `jim-sso-entra` run from `main`, then the gate is switched on)
+- **Status:** Done
+- **Note:** `JIM_SSO_ENTRA_GATE_ENFORCED` is switched on after the first green `jim-sso-entra` run from `main`, as for the other gates.
 - **Created:** 2026-11-19
 - **Issue:** [#2367](https://github.com/TetronIO/JIM/issues/2367)
 
