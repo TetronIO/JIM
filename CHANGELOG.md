@@ -7,31 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- ✨ An object an import rejects before it reaches the Connector Space, such as one of two sharing an External ID, now shows what the Connector returned for it, in the portal, the REST API and PowerShell; credential values are never kept. (#874)
-
-### Changed
-
-- 🔄 While an import of a Connected System has stopped part-way, its Sync Previews and Full Synchronisation previews still run but open with a warning that the real synchronisation is refused, and why, in the portal, the REST API and PowerShell. (#2951)
-- 🔄 Previews of an import Synchronisation Rule's changes and of Object Matching Rules now open with the same warning while an import of their Connected System has stopped part-way, because the synchronisation that would apply the change is refused. (#3014)
-
-### Fixed
-
-- 🐛 An imported object with no External ID value is rejected with a Missing External ID error instead of being imported as a Connected System Object JIM could never match again, and its Object Type is not checked for deleted objects that run. (#3013)
-
-## [0.19.0] - 2026-11-19
+## [1.0.0] - 2026-11-20
 
 ### Added
 
 - ✨ Connector-defined Attributes, such as the LDAP Connector's Exchange Alias, now carry a chip wherever you read or pick one, and saving a Synchronisation Rule warns when it flows one alongside the directory attribute it is written through from a different source. (#2756)
 - ✨ `Register-JIMIdentityProvider` registers JIM with Microsoft Entra ID in one command: one application for the portal, the PowerShell module, Try It and JIM's API, with consent given for everyone and your object ID returned to make you JIM's first administrator. (#2367)
 - ✨ Saving an export Synchronisation Rule warns you when another enabled export rule provisions the same Metaverse Object Type as a different Object Type in the same Connected System, such as people as users and as contacts: only one can provision a person both cover. (#2824)
+- ✨ An object an import rejects, such as one of two sharing an External ID, shows what the Connector returned for it, in the portal, the REST API and PowerShell; credential values are never kept. (#874)
 
 ### Changed
 
+- 🔄 JIM follows semantic versioning from v1.0.0: breaking changes to the REST API, the PowerShell module and configuration come only in a major version, after a deprecation in an earlier minor release.
 - 🔄 With Microsoft Entra ID, JIM's API takes version 2 access tokens, as Microsoft recommends: their audience is the application's client ID and they must grant `access_as_user`. Version 1 tokens are no longer accepted, and JIM's sign-in diagnosis says how to switch. (#2367)
 - 🔄 The SCIM 2.0 Service Provider is out of Preview: identity providers can push Users and Groups to JIM with no Preview feature to turn on first. (#124)
+- 🔄 While an import of a Connected System has stopped part-way, every preview that evaluates its objects opens with a warning that the real synchronisation is refused, and why, in the portal, the REST API and PowerShell. (#2951, #3014)
 
 ### Security
 
@@ -42,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 A Scope test case remembers the connections it was tested with, such as "Has user in PANOPLY AD", so it gives the same result every time it runs; set them in the portal, the REST API or PowerShell. (#2787)
 - 🐛 Changing which Object Type a connection Scoping Criterion checks, such as "Has user in PANOPLY AD", is recorded in Configuration History as a change that affects synchronisation; it was saved with no change class and an error in the log. (#2994)
 - 🐛 A Delta Import no longer fails when the Connector reports an object changed and then deleted under a different Object Type: the deletion now applies to the object JIM holds, as a later change to it. (#2911)
+- 🐛 An imported object with no External ID is rejected with a Missing External ID error, rather than imported as a Connected System Object JIM could never match again. (#3013)
 
 ### Performance
 
@@ -2003,7 +1994,8 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/TetronIO/JIM/compare/v0.18.0...v1.0.0
 [0.18.0]: https://github.com/TetronIO/JIM/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/TetronIO/JIM/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/TetronIO/JIM/compare/v0.15.0...v0.16.0
