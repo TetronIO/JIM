@@ -1,0 +1,61 @@
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The values recorded of one attribute of a rejected imported object (#874), when there are too many to stack in the
+   Imported Object table's value cell (see AttributeValuesCell). The values are already in memory, at most fifty of them,
+   so the window is cut from the list rather than read from the server. Embedded, as every nested value table is: it
+   sits in a cell and must not claim the address bar. *@
+
+<div class="jim-mva-table">
+    <VirtualisedDataGrid T="string"
+                         ContainerId="@($"imported-object-values-{_slug}")"
+                         StateKey="@AttributeName"
+                         Embedded="true"
+                         MaxHeight="@NestedValueTable.MaxHeight"
+                         ExpectedItemCount="@Values.Count"
+                         DefaultSortBy="received"
+                         LoadWindow="LoadWindowAsync"
+                         SearchPlaceholder="@($"Search {AttributeName.ToLowerInvariant()}...")"
+                         SingularName="Value"
+                         PluralName="Values">
+        <Columns>
+            <TemplateColumn T="string" Title="Value" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+                <HeaderTemplate>
+                    <MudText Typo="Typo.button">Value</MudText>
+                </HeaderTemplate>
+                <CellTemplate>
+                    <OneLineText Text="@context.Item" />
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <EmptyContent Context="grid">
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No values match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
+        </EmptyContent>
+    </VirtualisedDataGrid>
+</div>
+
+@code {
+    /// <summary>The attribute the values belong to.</summary>
+    [Parameter, EditorRequired]
+    public string AttributeName { get; set; } = null!;
+
+    /// <summary>The values recorded, in the order the Connector returned them.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<string> Values { get; set; } = [];
+
+    private string _slug => new(AttributeName.Where(char.IsLetterOrDigit).ToArray());
+
+    private Task<VirtualisedWindow<string>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken cancellationToken)
+    {
+        var matching = string.IsNullOrWhiteSpace(request.SearchText)
+            ? Values
+            : Values.Where(v => v.Contains(request.SearchText, StringComparison.OrdinalIgnoreCase)).ToList();
+        return Task.FromResult(matching.ToWindow(request));
+    }
+}

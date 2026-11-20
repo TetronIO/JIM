@@ -110,7 +110,13 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
                 Total = 2,
                 Values = [new ImportedAttributeValueError { AttributeName = "startDate", AttributeType = AttributeDataType.DateTime, Value = "31/02/2026", Reason = "Not a valid date and time." }]
             }.ToJson(),
-            SourceLocation = "hr-users.csv, row 4,182"
+            SourceLocation = "hr-users.csv, row 4,182",
+            ImportedObjectSnapshotJson = ImportedObjectSnapshot.Record(new ConnectedSystemImportObject
+            {
+                ObjectType = "person",
+                ChangeType = ObjectChangeType.Added,
+                Attributes = [new ConnectedSystemImportObjectAttribute { Name = "employeeId", Type = AttributeDataType.Text, StringValues = ["100482"] }]
+            }).ToJson()
         };
         var rootOutcome = new ActivityRunProfileExecutionItemSyncOutcome
         {
@@ -180,6 +186,10 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedErrors?.Total, Is.EqualTo(2));
             Assert.That(storedErrors?.Values.Select(v => (v.AttributeName, v.AttributeType, v.Value, v.Reason)),
                 Is.EqualTo(new[] { ("startDate", (AttributeDataType?)AttributeDataType.DateTime, (string?)"31/02/2026", "Not a valid date and time.") }));
+
+            var storedSnapshot = ImportedObjectSnapshot.FromJson(storedRpei.ImportedObjectSnapshotJson);
+            Assert.That(storedSnapshot?.ObjectType, Is.EqualTo("person"));
+            Assert.That(storedSnapshot?.Attributes.Select(a => (a.Name, a.Values.Single())), Is.EqualTo(new[] { ("employeeId", "100482") }));
         }
 
         var storedOutcomes = await readContext.ActivityRunProfileExecutionItemSyncOutcomes

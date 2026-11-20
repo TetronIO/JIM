@@ -369,6 +369,16 @@
                                                Class="mb-5" />
         }
 
+        @* What the Connector returned for an object the import rejected before a Connected System Object existed for it
+           (#874): the item has no change record, so this is the only evidence of what came in. After the error, so the
+           error is read first. *@
+        @if (_importedObjectSnapshot is { } importedObjectSnapshot)
+        {
+            <ImportedObjectSection Snapshot="@importedObjectSnapshot"
+                                   SourceLocation="@_activityRunProfileExecutionItem.SourceLocation"
+                                   Class="mt-6 mb-5" />
+        }
+
         @* References the import left unresolved (#959), listed with the likely cause of each. Red where the run
            counted them as the item's error, in place of the Error Details above; amber where it left them unresolved
            without doing so. Export items keep their Error Details: what an export could not resolve is a Metaverse
@@ -533,6 +543,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
 
     // The values the Connector could not read (#2066), or null where the item recorded none.
     private ImportedAttributeValueErrors? _attributeValueErrors;
+    private ImportedObjectSnapshot? _importedObjectSnapshot;
 
     // The Identity this item acted on, looked up once by id (#1495); see CausalityItemLoader.
     private MetaverseObjectHeader? _identityHeader;
@@ -644,6 +655,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             : UnresolvedReferenceTone.None;
 
         _attributeValueErrors = AttributeValueErrorDisplay.ForItem(_activityRunProfileExecutionItem.AttributeValueErrorsJson);
+        _importedObjectSnapshot = ImportedObjectSnapshot.FromJson(_activityRunProfileExecutionItem.ImportedObjectSnapshotJson);
 
         if (_activity is { InitiatedByType: ActivityInitiatorType.User, InitiatedById: { } initiatedById })
             _initiatorMetaverseObjectHeader = await jim.Metaverse.GetMetaverseObjectHeaderAsync(initiatedById);

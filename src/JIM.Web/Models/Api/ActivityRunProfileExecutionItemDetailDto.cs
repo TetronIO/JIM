@@ -83,6 +83,13 @@ public class ActivityRunProfileExecutionItemDetailDto
     /// <summary>Where in the Connected System the object was read from, such as a file and row, where the Connector says.</summary>
     public string? SourceLocation { get; set; }
 
+    /// <summary>
+    /// What the Connector returned for the object, where the import rejected it before creating a Connected System
+    /// Object for it; null for every other item. Values of attributes that hold or may hold credentials are never
+    /// recorded.
+    /// </summary>
+    public ImportedObjectDto? ImportedObject { get; set; }
+
     /// <summary>Outcome types with counts, for example <c>Projected:1,AttributeFlow:12</c>.</summary>
     public string? OutcomeSummary { get; set; }
 
@@ -163,6 +170,7 @@ public class ActivityRunProfileExecutionItemDetailDto
             AttributeValueErrors = attributeValueErrors?.Values.Select(AttributeValueErrorDto.FromModel).ToList() ?? [],
             AttributeValueErrorTotal = attributeValueErrors?.Total,
             SourceLocation = entity.SourceLocation,
+            ImportedObject = ImportedObjectDto.FromModel(ImportedObjectSnapshot.FromJson(entity.ImportedObjectSnapshotJson)),
             OutcomeSummary = entity.OutcomeSummary
         };
     }

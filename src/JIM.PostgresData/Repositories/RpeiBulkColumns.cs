@@ -24,7 +24,7 @@ internal static class RpeiBulkColumns
         "ObjectTypeSnapshot", "ErrorType", "ErrorMessage", "ErrorStackTrace",
         "AttributeFlowCount", "OutcomeSummary", "PendingExportId",
         "DeletionPolicySnapshotJson", "MetaverseObjectId", "UnresolvedReferenceCount",
-        "AttributeValueErrorsJson", "SourceLocation"
+        "AttributeValueErrorsJson", "SourceLocation", "ImportedObjectSnapshotJson"
     ];
 
     /// <summary>
@@ -49,13 +49,14 @@ internal static class RpeiBulkColumns
     /// <c>SyncRepository.UpdateUnresolvedReferenceReportsAsync</c>). Leaving it out also means an update
     /// built from a read that does not select it (the cross-page merge read) cannot null it. The same
     /// holds for AttributeValueErrorsJson and SourceLocation (#2066), which an import records from what the
-    /// Connector reported, before the item is first inserted.
+    /// Connector reported, before the item is first inserted, and for ImportedObjectSnapshotJson (#874), which an import
+    /// records for an object it rejected, also before the item is first inserted.
     /// </summary>
     internal static readonly string[] ActivityRunProfileExecutionItemsUpdateExclusions =
     [
         "Id", "ActivityId", "ObjectChangeType", "NoChangeReason", "ConnectedSystemObjectId",
         "ExternalIdSnapshot", "DisplayNameSnapshot", "ObjectTypeSnapshot", "PendingExportId", "MetaverseObjectId",
-        "UnresolvedReferenceCount", "AttributeValueErrorsJson", "SourceLocation"
+        "UnresolvedReferenceCount", "AttributeValueErrorsJson", "SourceLocation", "ImportedObjectSnapshotJson"
     ];
 
     /// <summary>

@@ -1505,6 +1505,83 @@ public class ActivitiesControllerTests
     }
 
     [Test]
+    public async Task GetActivityExecutionItemAsync_RejectedImportedObject_ReturnsWhatTheConnectorReturnedAsync()
+    {
+        // #874: what the portal shows under Imported Object, so a script can see it too.
+        var values = Enumerable.Range(1, ImportedObjectSnapshot.MaxValuesPerAttribute + 3).Select(i => $"smtp:alias{i}@example.org").ToList();
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.NotSet,
+            ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes,
+            ImportedObjectSnapshotJson = ImportedObjectSnapshot.Record(new ConnectedSystemImportObject
+            {
+                ObjectType = "person",
+                ChangeType = ObjectChangeType.Added,
+                Attributes =
+                [
+                    new ConnectedSystemImportObjectAttribute { Name = "employeeId", Type = AttributeDataType.Text, StringValues = ["100482"] },
+                    new ConnectedSystemImportObjectAttribute { Name = "initialPassword", Type = AttributeDataType.Text, StringValues = ["Hunter2!"] },
+                    new ConnectedSystemImportObjectAttribute { Name = "proxyAddresses", Type = AttributeDataType.Text, StringValues = values }
+                ]
+            }).ToJson()
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        var imported = dto!.ImportedObject;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(imported, Is.Not.Null);
+            Assert.That(imported!.ObjectType, Is.EqualTo("person"));
+            Assert.That(imported!.ChangeType, Is.EqualTo(ObjectChangeType.Added));
+            Assert.That(imported!.RunLimitReached, Is.False);
+            Assert.That(imported!.Attributes.Select(a => (a.Name, a.Type, a.Values.Count, a.OmittedValueCount, a.Withheld)), Is.EqualTo(new[]
+            {
+                ("employeeId", AttributeDataType.Text, 1, (int?)null, false),
+                ("initialPassword", AttributeDataType.Text, 0, (int?)null, true),
+                ("proxyAddresses", AttributeDataType.Text, ImportedObjectSnapshot.MaxValuesPerAttribute, (int?)3, false)
+            }));
+            Assert.That(imported!.OmittedAttributeCount, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_RejectedImportedObjectPastTheRunLimit_SaysSoAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.NotSet,
+            ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType,
+            ImportedObjectSnapshotJson = ImportedObjectSnapshot.CreateRunLimitReached().ToJson()
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.ImportedObject?.RunLimitReached, Is.True);
+            Assert.That(dto!.ImportedObject?.Attributes, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_ItemWithoutAnImportedObject_ReturnsNoneAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid(), ObjectChangeType = ObjectChangeType.Added };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto!.ImportedObject, Is.Null);
+    }
+
+    [Test]
     public async Task GetActivityExecutionItemAsync_ItemWithNoUnreadableValues_ReturnsAnEmptyListAsync()
     {
         var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid(), ObjectChangeType = ObjectChangeType.Added };

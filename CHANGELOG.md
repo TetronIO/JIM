@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- ✨ An object an import rejects before it reaches the Connector Space, such as one of two sharing an External ID, now shows what the Connector returned for it, in the portal, the REST API and PowerShell; credential values are never kept. (#874)
+
 ## [0.19.0] - 2026-11-19
 
 ### Added

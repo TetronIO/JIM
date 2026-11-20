@@ -1,0 +1,221 @@
+@using JIM.Models.Activities
+@using JIM.Models.Enums
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* What the Connector returned for an imported object the import rejected before a Connected System Object existed for
+   it (#874). Such an item has no change record, so this is the only place the administrator can see what came in. It
+   sits below the item's Error Details: the error is read first, the evidence second. Not an error itself, so neutral,
+   with the attributes the error is about picked out in the error colour. *@
+
+<MudPaper Outlined="true" Class="@PaperClass" data-testid="jim-imported-object">
+    <div class="jim-imported-object-head">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Outlined.Inventory2" Class="mud-text-secondary" />
+            <MudText Typo="Typo.h6">Imported Object</MudText>
+        </MudStack>
+        @if (Snapshot.RunLimitReached != true)
+        {
+            <SegmentedToggle TValue="ImportedObjectView" Options="@ViewOptions" Value="@_view" ValueChanged="@(v => _view = v)"
+                             AriaLabel="Imported Object view" TestId="jim-imported-object-view" />
+        }
+    </div>
+
+    <div class="pa-4">
+        @if (Snapshot.RunLimitReached == true)
+        {
+            <MudText Typo="Typo.body1" data-testid="jim-imported-object-run-limit">
+                Not recorded: this run had already recorded the first @ImportedObjectSnapshot.MaxSnapshotsPerRun.ToString("N0")
+                rejected objects, which is where it stops. Open one of the run's earlier rejected items to see what the Connector returned.
+            </MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.body1" Class="mb-3">
+                What the Connector returned for this object, as recorded when it was rejected.
+                @if (Snapshot.Attributes.Any(a => a.NamedInError == true))
+                {
+                    @:The attributes the error is about are marked.
+                }
+            </MudText>
+
+            <div class="jim-imported-object-facts mb-3">
+                <span><span class="mud-text-secondary">Object Type</span> @(Snapshot.ObjectType ?? "None")</span>
+                @* A Connector that does not say what kind of change it read reports NotSet, which says nothing worth a label. *@
+                @if (Snapshot.ChangeType is { } changeType and not ObjectChangeType.NotSet)
+                {
+                    <span><span class="mud-text-secondary">Change Type</span> @changeType</span>
+                }
+                <span><span class="mud-text-secondary">Attributes</span> @AttributeTotal.ToString("N0")</span>
+                @if (!string.IsNullOrEmpty(SourceLocation))
+                {
+                    <span><span class="mud-text-secondary">Source</span> <span class="jim-text-code">@SourceLocation</span></span>
+                }
+            </div>
+
+            @if (_view == ImportedObjectView.Attributes)
+            {
+                <AttributeTable TItem="ImportedObjectSnapshotAttribute"
+                                Items="@Snapshot.Attributes"
+                                Matches="Matches"
+                                Sort="Sort"
+                                DefaultSortBy="received"
+                                UrlParameterPrefix="io-"
+                                SingularName="Attribute"
+                                PluralName="Attributes"
+                                RowClassFunc="@RowClass">
+                    <HeaderContent>
+                        <MudTh Class="jim-attr-header-name"><VirtualisedSortHeader Title="Attribute" Name="attribute" /></MudTh>
+                        <MudTh Class="jim-attr-header-value">Value</MudTh>
+                        <MudTh Class="jim-attr-header-type"><VirtualisedSortHeader Title="Type" Name="type" /></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd Class="jim-attr-name">
+                            <div class="d-flex align-center flex-wrap gap-2">
+                                <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.Name</MudText>
+                                @if (context.NamedInError == true)
+                                {
+                                    <MudTooltip Text="The item's error is about this attribute." Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="ma-0" data-testid="jim-imported-object-named-in-error">Named in error</MudChip>
+                                    </MudTooltip>
+                                }
+                            </div>
+                        </MudTd>
+                        <MudTd Class="jim-attr-value">
+                            @if (context.Withheld == true)
+                            {
+                                <MudTooltip Text="This attribute holds, or may hold, a credential, so JIM did not record its values." Arrow="true" Placement="Placement.Top">
+                                    <span class="mud-text-secondary jim-imported-object-withheld" data-testid="jim-imported-object-withheld">Not recorded (credential)</span>
+                                </MudTooltip>
+                            }
+                            else if (context.Values.Count == 0)
+                            {
+                                <EmptyValue />
+                            }
+                            else
+                            {
+                                var recorded = context;
+                                <AttributeValuesCell TValue="string" Values="@recorded.Values">
+                                    <ValueTemplate Context="value">
+                                        <TextValueDisplay Value="@value" />
+                                    </ValueTemplate>
+                                    <OverflowContent>
+                                        <ImportedObjectValuesTable @key="recorded.Name" AttributeName="@recorded.Name" Values="@recorded.Values" />
+                                    </OverflowContent>
+                                </AttributeValuesCell>
+                            }
+                            @if (context.OmittedValueCount is { } omitted)
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1" data-testid="jim-imported-object-omitted-values">
+                                    + @omitted.ToString("N0") more @(omitted == 1 ? "value" : "values") not recorded
+                                </MudText>
+                            }
+                        </MudTd>
+                        <MudTd Class="jim-attr-type">
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.Type</MudText>
+                        </MudTd>
+                    </RowTemplate>
+                    <EmptyContent>
+                        <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
+                                         PrimaryText="The Connector returned no attributes for this object" />
+                    </EmptyContent>
+                </AttributeTable>
+            }
+            else
+            {
+                <div class="d-flex justify-end mb-2">
+                    <MudButton StartIcon="@Icons.Material.Filled.ContentCopy" Variant="Variant.Text" OnClick="CopyJsonAsync">Copy JSON</MudButton>
+                </div>
+                <div class="jim-json-syntax" data-testid="jim-imported-object-json">@((MarkupString)Helpers.HighlightJson(_json ??= Helpers.FormatJson(Snapshot.ToJson())))</div>
+            }
+
+            @if (Snapshot.OmittedAttributeCount is { } omittedAttributes)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3" data-testid="jim-imported-object-omitted-attributes">
+                    @omittedAttributes.ToString("N0") @(omittedAttributes == 1 ? "attribute was" : "attributes were") left out to keep the record
+                    within its size limit@(OmittedNames is { } names ? $": {names}" : ".")
+                </MudText>
+            }
+
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
+                Values of attributes that hold, or may hold, credentials are never recorded. The record is kept for as long as this Activity.
+            </MudText>
+        }
+    </div>
+</MudPaper>
+
+@code {
+    /// <summary>What the item recorded of the object the Connector returned.</summary>
+    [Parameter, EditorRequired]
+    public ImportedObjectSnapshot Snapshot { get; set; } = null!;
+
+    /// <summary>Where in the Connected System the object was read from, where the Connector said.</summary>
+    [Parameter]
+    public string? SourceLocation { get; set; }
+
+    /// <summary>The call site's spacing classes.</summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    private enum ImportedObjectView { Attributes, Json }
+
+    private static readonly IReadOnlyList<SegmentedToggleOption<ImportedObjectView>> ViewOptions =
+    [
+        new(ImportedObjectView.Attributes, "Attributes", TestId: "jim-imported-object-view-attributes"),
+        new(ImportedObjectView.Json, "JSON", TestId: "jim-imported-object-view-json")
+    ];
+
+    private ImportedObjectView _view = ImportedObjectView.Attributes;
+    private string? _json;
+
+    private int AttributeTotal => Snapshot.Attributes.Count + (Snapshot.OmittedAttributeCount ?? 0);
+
+    private string? OmittedNames => Snapshot.OmittedAttributeNames is { Count: > 0 } names
+        ? string.Join(", ", names) + (names.Count < Snapshot.OmittedAttributeCount ? ", and others" : string.Empty)
+        : null;
+
+    private string PaperClass => string.IsNullOrEmpty(Class) ? "jim-imported-object" : $"jim-imported-object {Class}";
+
+    private static string RowClass(ImportedObjectSnapshotAttribute attribute, int _)
+    {
+        var classes = new List<string>();
+        if (attribute.Values.Count > 1)
+            classes.Add("jim-attr-row-mva");
+        if (attribute.NamedInError == true)
+            classes.Add("jim-imported-object-row-named");
+        return string.Join(' ', classes);
+    }
+
+    private static bool Matches(ImportedObjectSnapshotAttribute attribute, string search) =>
+        attribute.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+        || attribute.Values.Any(v => v.Contains(search, StringComparison.OrdinalIgnoreCase));
+
+    // "received" keeps the Connector's order, which is how the object arrived; the duplicate attributes of a duplicate
+    // attribute error sit wherever the Connector put them.
+    private IEnumerable<ImportedObjectSnapshotAttribute> Sort(IEnumerable<ImportedObjectSnapshotAttribute> attributes, string sortBy, bool descending)
+    {
+        var ordered = sortBy switch
+        {
+            "attribute" => attributes.OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase),
+            "type" => attributes.OrderBy(a => a.Type.ToString(), StringComparer.Ordinal),
+            _ => attributes.OrderBy(a => Snapshot.Attributes.IndexOf(a))
+        };
+        return descending ? ordered.Reverse() : ordered;
+    }
+
+    private async Task CopyJsonAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _json ??= Helpers.FormatJson(Snapshot.ToJson()));
+            Snackbar.Add("Copied to clipboard", Severity.Success);
+        }
+        catch (JSException)
+        {
+            Snackbar.Add("The browser would not let JIM copy the JSON. Select it and copy it instead.", Severity.Warning);
+        }
+    }
+}

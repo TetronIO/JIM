@@ -371,6 +371,13 @@ public partial class SyncImportTaskProcessor
     private int _valuelessRowsSweptCount;
 
     /// <summary>
+    /// #874: snapshots of rejected imported objects recorded so far in this run, capped at
+    /// <see cref="ImportedObjectSnapshot.MaxSnapshotsPerRun"/>; and how many items past the cap were marked instead.
+    /// </summary>
+    private int _importedObjectSnapshotCount;
+    private int _importedObjectSnapshotsOverRunLimitCount;
+
+    /// <summary>
     /// #2049: Connected System Objects this run saw arriving under another Object Type and refused to re-type. The
     /// directory object is still there, so deletion detection must not retire it just because the import did not
     /// return it under the type JIM holds it as.
@@ -1281,6 +1288,8 @@ public partial class SyncImportTaskProcessor
         Log.Information("PerformImportAsync: Value normalisation summary: Dates canonicalised: {DatesCanonicalised}, Exact duplicates collapsed: {DuplicatesCollapsed}, Sub-microsecond collisions reported: {CollisionsReported}, True or false surpluses reported: {BooleanSurplusesReported}, Value-less rows swept: {ValuelessRowsSwept}",
             _normalisationSummary.DatesCanonicalised, _normalisationSummary.DuplicatesCollapsed, _normalisationSummary.CollisionsReported,
             _normalisationSummary.BooleanSurplusesReported, _valuelessRowsSweptCount);
+        Log.Information("PerformImportAsync: Rejected object snapshot summary: Recorded: {Recorded}, Not recorded (run limit of {RunLimit} reached): {OverRunLimit}",
+            _importedObjectSnapshotCount, ImportedObjectSnapshot.MaxSnapshotsPerRun, _importedObjectSnapshotsOverRunLimitCount);
         if (_connectedSystemRunProfile.VerifyImportContentHashes)
         {
             Log.Information("PerformImportAsync: Verification Mode summary: Dangerous disagreements: {DangerousDisagreements}, Benign mismatches: {BenignMismatches}",
@@ -2624,6 +2633,57 @@ public partial class SyncImportTaskProcessor
     }
 
     /// <summary>
+    /// #874: records what the Connector returned for an object the import rejected before a Connected System Object
+    /// existed for it, so its item shows the evidence beside the error. An item with a Connected System Object has its
+    /// change record for that, and gets nothing here. Recorded centrally, from the one place every rejected object passes
+    /// through, so a rejection added later is covered without anyone remembering to. Past
+    /// <see cref="ImportedObjectSnapshot.MaxSnapshotsPerRun"/> in a run, the item records only that the limit was reached.
+    /// </summary>
+    /// <returns>True when a snapshot of the object was recorded.</returns>
+    /// <remarks>
+    /// The object is as the import left it: null attributes and unreadable values (#2066) have been removed by then. The
+    /// unreadable values are on the item's own record of them, so nothing is lost from the administrator's view.
+    /// </remarks>
+    private bool RecordRejectedObjectSnapshot(ConnectedSystemImportObject importObject, ActivityRunProfileExecutionItem item)
+    {
+        if (item.ConnectedSystemObjectId.HasValue || item.ConnectedSystemObject != null)
+            return false;
+
+        if (_importedObjectSnapshotCount >= ImportedObjectSnapshot.MaxSnapshotsPerRun)
+        {
+            if (_importedObjectSnapshotsOverRunLimitCount++ == 0)
+                Log.Information("RecordRejectedObjectSnapshot: {RunLimit} rejected objects recorded in this run. Later rejected objects record only that the limit was reached.",
+                    ImportedObjectSnapshot.MaxSnapshotsPerRun);
+            item.ImportedObjectSnapshotJson = ImportedObjectSnapshot.CreateRunLimitReached().ToJson();
+            return false;
+        }
+
+        item.ImportedObjectSnapshotJson = ImportedObjectSnapshot.Record(importObject, AttributesNamedInError(importObject, item.ErrorType)).ToJson();
+        _importedObjectSnapshotCount++;
+        return true;
+    }
+
+    /// <summary>
+    /// The attributes an import error is about, which a snapshot keeps in preference to the rest when it has to drop
+    /// some for size: the repeated attributes of a duplicate attribute error, the attributes the schema does not hold
+    /// for an unexpected attribute error, and the External ID for an error about it.
+    /// </summary>
+    private List<string> AttributesNamedInError(ConnectedSystemImportObject importObject, ActivityRunProfileExecutionItemErrorType? errorType)
+    {
+        var objectType = _connectedSystem.ObjectTypes?.SingleOrDefault(ot => ot.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
+        return errorType switch
+        {
+            ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes => importObject.Attributes
+                .GroupBy(a => a.Name, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1).SelectMany(g => g.Select(a => a.Name)).ToList(),
+            ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute when objectType != null => importObject.Attributes
+                .Where(a => !objectType.Attributes.Any(sa => sa.Name.Equals(a.Name, StringComparison.OrdinalIgnoreCase))).Select(a => a.Name).ToList(),
+            ActivityRunProfileExecutionItemErrorType.MissingExternalIdAttributeValue or ActivityRunProfileExecutionItemErrorType.DuplicateObject
+                when objectType != null => objectType.Attributes.Where(a => a.IsExternalId).Select(a => a.Name).ToList(),
+            _ => []
+        };
+    }
+
+    /// <summary>
     /// Translates a Connector's classification of an import problem into JIM's Run Profile Execution Item
     /// vocabulary, so administrators filter Connector-reported problems the same way as JIM's own.
     /// </summary>
@@ -3551,6 +3611,7 @@ public partial class SyncImportTaskProcessor
         var pageSuccessCount = 0;
         var pageErrorCount = 0;
         var pageDuplicateCount = 0;
+        var pageSnapshotCount = 0;
 
         // #2153: every imported date takes the form JIM holds it in (UTC, to the microsecond) before anything reads it,
         // so the content hash, duplicate detection, the diff and the database write all see one form. Without this a
@@ -3701,7 +3762,8 @@ public partial class SyncImportTaskProcessor
                     activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes;
                     activityRunProfileExecutionItem.ErrorMessage = $"The imported object has one or more duplicate attributes: {string.Join(", ", duplicateAttributeNames)}. Please de-duplicate and try again.";
 
-                    // todo (#874): include a serialised snapshot of the imported object that is also presented to sync admin when viewing sync errors
+                    // The item records the object as returned, both copies of the attribute included (#874); see
+                    // RecordRejectedObjectSnapshot, in the finally below.
                     continue;
                 }
 
@@ -4232,6 +4294,9 @@ public partial class SyncImportTaskProcessor
                         pageErrorCount++;
                         if (activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.DuplicateObject)
                             pageDuplicateCount++;
+
+                        if (RecordRejectedObjectSnapshot(importObject, activityRunProfileExecutionItem))
+                            pageSnapshotCount++;
                     }
                 }
 
@@ -4269,8 +4334,8 @@ public partial class SyncImportTaskProcessor
 
         // Summary statistics for this page (#2521): counting every item held so far, on every page, made each page's
         // summary cost as much as the whole run so far. The run's totals are the Activity's.
-        Log.Information("ProcessImportObjectsAsync: SUMMARY - Total objects: {Total}, Processed successfully: {Success}, Errors: {Errors}, Duplicates detected: {Duplicates}. External IDs repeated on this page: {RepeatedCount}",
-            connectedSystemImportResult.ImportObjects.Count, pageSuccessCount, pageErrorCount, pageDuplicateCount, repeatedOnThisPage.Count);
+        Log.Information("ProcessImportObjectsAsync: SUMMARY - Total objects: {Total}, Processed successfully: {Success}, Errors: {Errors}, Duplicates detected: {Duplicates}, Rejected object snapshots recorded: {Snapshots}. External IDs repeated on this page: {RepeatedCount}",
+            connectedSystemImportResult.ImportObjects.Count, pageSuccessCount, pageErrorCount, pageDuplicateCount, pageSnapshotCount, repeatedOnThisPage.Count);
     }
 
     /// <summary>
