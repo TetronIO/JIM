@@ -35,7 +35,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 - PowerShell automation for Identity as Code (IDaC) - deploy JIM instances in minutes, not months
 - Real-time activity monitoring, pushed from the database rather than polled
 - [Configuration Change History](https://docs.junctional.io/configuration/activities/#configuration-change-history): versioned who/what/when audit across all configuration types
-- [Single Sign-On (SSO)](https://docs.junctional.io/administration/sso-setup/) using OpenID Connect, with one-command registration for AD FS and Keycloak, and identity providers whose certificates come from your own certificate authority
+- [Single Sign-On (SSO)](https://docs.junctional.io/administration/sso-setup/) using OpenID Connect, with one-command registration for AD FS, Keycloak and Entra ID, and identity providers whose certificates come from your own certificate authority
 - Dark/Light mode
 
 <picture>
