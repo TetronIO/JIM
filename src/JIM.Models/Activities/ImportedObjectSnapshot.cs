@@ -118,10 +118,9 @@ public class ImportedObjectSnapshot
 
         // Work on estimates first, which cost nothing per step, then confirm against the real document and keep trimming
         // in the rare case the estimate fell short. Every step makes the snapshot smaller, so both loops end.
-        while (baseBytes + working.Sum(w => w.EstimatedBytes) + EstimateOmittedBytes(omitted) > MaxSnapshotBytes
-               && TrimOneStep(working, omitted, snapshot, baseBytes))
-        {
-        }
+        var trimming = true;
+        while (trimming && baseBytes + working.Sum(w => w.EstimatedBytes) + EstimateOmittedBytes(omitted) > MaxSnapshotBytes)
+            trimming = TrimOneStep(working, omitted, snapshot, baseBytes);
 
         snapshot.Apply(working, omitted);
         while (Encoding.UTF8.GetByteCount(snapshot.ToJson()) > MaxSnapshotBytes && TrimOneStep(working, omitted, snapshot, baseBytes))

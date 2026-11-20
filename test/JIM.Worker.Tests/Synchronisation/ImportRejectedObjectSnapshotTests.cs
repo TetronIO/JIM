@@ -81,9 +81,9 @@ public class ImportRejectedObjectSnapshotTests
             Assert.That(item.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes));
             Assert.That(snapshot, Is.Not.Null);
             Assert.That(snapshot!.ObjectType, Is.EqualTo("SOURCE_USER"));
-            Assert.That(snapshot.Attributes.Where(a => a.Name.Equals(DisplayName, StringComparison.OrdinalIgnoreCase)).SelectMany(a => a.Values),
+            Assert.That(snapshot!.Attributes.Where(a => a.Name.Equals(DisplayName, StringComparison.OrdinalIgnoreCase)).SelectMany(a => a.Values),
                 Is.EqualTo(new[] { "Priya Shah", "Priya S." }));
-            Assert.That(snapshot.Attributes.Where(a => a.NamedInError == true).Select(a => a.Name),
+            Assert.That(snapshot!.Attributes.Where(a => a.NamedInError == true).Select(a => a.Name),
                 Is.EqualTo(new[] { DisplayName, DisplayName.ToLowerInvariant() }), "Both copies are what the error is about.");
         }
     }
