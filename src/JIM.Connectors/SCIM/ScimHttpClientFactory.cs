@@ -3,6 +3,7 @@
 
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
+using JIM.Connectors.Http;
 using JIM.Connectors.SCIM.Authentication;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -74,7 +75,7 @@ public static class ScimHttpClientFactory
     /// <summary>
     /// Builds the retry policy from the connector's retry settings.
     /// </summary>
-    public static ScimRetryPolicy CreateRetryPolicy(List<ConnectedSystemSettingValue> settingValues)
+    public static HttpRetryPolicy CreateRetryPolicy(List<ConnectedSystemSettingValue> settingValues)
     {
         ArgumentNullException.ThrowIfNull(settingValues);
 
@@ -83,7 +84,7 @@ public static class ScimHttpClientFactory
         var retryDelayMs = ReadInt(settingValues, ScimConnectorConstants.SettingRetryDelay)
                            ?? ScimConnectorConstants.DefaultRetryDelayMs;
 
-        return new ScimRetryPolicy(
+        return new HttpRetryPolicy(
             maxRetries,
             TimeSpan.FromMilliseconds(retryDelayMs),
             TimeSpan.FromSeconds(ScimConnectorConstants.MaximumRetryDelaySeconds));
@@ -95,7 +96,7 @@ public static class ScimHttpClientFactory
     /// <param name="settingValues">The Connected System's setting values.</param>
     /// <param name="trustedCertificates">Enabled certificates from the JIM store; may be empty.</param>
     /// <param name="credentialProtection">Decrypts stored secrets; null falls back to the stored value.</param>
-    /// <exception cref="ScimAuthenticationException">Authentication settings are missing or malformed.</exception>
+    /// <exception cref="HttpAuthenticationException">Authentication settings are missing or malformed.</exception>
     public static ScimHttpClient Create(
         List<ConnectedSystemSettingValue> settingValues,
         IReadOnlyList<X509Certificate2> trustedCertificates,
@@ -106,12 +107,12 @@ public static class ScimHttpClientFactory
 
         var baseUrl = settingValues.SingleOrDefault(s => s.Setting.Name == ScimConnectorConstants.SettingBaseUrl)?.StringValue;
         if (string.IsNullOrWhiteSpace(baseUrl))
-            throw new ScimAuthenticationException($"The '{ScimConnectorConstants.SettingBaseUrl}' setting is not a valid absolute URL.");
+            throw new HttpAuthenticationException($"The '{ScimConnectorConstants.SettingBaseUrl}' setting is not a valid absolute URL.");
 
         // The runtime backstop to configuration validation, for a Connected System saved before it refused
         // cleartext addresses; nothing is sent until both the Base URL and any token endpoint pass.
         if (!ScimTransportSecurity.TryValidate(baseUrl, ScimConnectorConstants.SettingBaseUrl, ScimTransportSecurity.BaseUrlPayload, out var baseUri, out var error, ScimTransportSecurity.BaseUrlExample))
-            throw new ScimAuthenticationException(error);
+            throw new HttpAuthenticationException(error);
 
         var handler = CreateHandler(settingValues, trustedCertificates, logger);
         var httpClient = CreateHttpClient(handler, settingValues);

@@ -3,19 +3,19 @@
 
 using System.Globalization;
 
-namespace JIM.Connectors.SCIM;
+namespace JIM.Connectors.Http;
 
 /// <summary>
 /// Rate-limit hints read from a service provider's response headers, letting the connector slow down
 /// before the provider starts rejecting calls rather than discovering the limit through 429s.
 /// <para>
-/// SCIM itself does not standardise rate-limit advertising, so three conventions are supported: the
+/// HTTP APIs do not agree on how to advertise rate limits, so three conventions are supported: the
 /// IETF <c>RateLimit-*</c> fields, the widespread <c>X-RateLimit-*</c> variants, and the single
 /// structured <c>RateLimit</c> field. Unparseable or absent values simply yield no hint; the retry
 /// policy remains the backstop for an actual 429.
 /// </para>
 /// </summary>
-public readonly record struct ScimThrottleHints(int? Limit, int? Remaining, TimeSpan? ResetAfter)
+public readonly record struct RateLimitHints(int? Limit, int? Remaining, TimeSpan? ResetAfter)
 {
     /// <summary>
     /// Values above this are read as absolute Unix epoch seconds rather than a delta, since no provider
@@ -33,7 +33,7 @@ public readonly record struct ScimThrottleHints(int? Limit, int? Remaining, Time
     /// </summary>
     /// <param name="response">The provider's response.</param>
     /// <param name="utcNow">Current time, used to convert an absolute reset timestamp into a duration.</param>
-    public static ScimThrottleHints Read(HttpResponseMessage response, DateTimeOffset utcNow)
+    public static RateLimitHints Read(HttpResponseMessage response, DateTimeOffset utcNow)
     {
         ArgumentNullException.ThrowIfNull(response);
 
@@ -43,7 +43,7 @@ public readonly record struct ScimThrottleHints(int? Limit, int? Remaining, Time
         var remaining = ReadInt(response, "RateLimit-Remaining") ?? ReadInt(response, "X-RateLimit-Remaining") ?? structured.Remaining;
         var resetRaw = ReadLong(response, "RateLimit-Reset") ?? ReadLong(response, "X-RateLimit-Reset") ?? structured.ResetSeconds;
 
-        return new ScimThrottleHints(limit, remaining, ToResetDuration(resetRaw, utcNow));
+        return new RateLimitHints(limit, remaining, ToResetDuration(resetRaw, utcNow));
     }
 
     /// <summary>

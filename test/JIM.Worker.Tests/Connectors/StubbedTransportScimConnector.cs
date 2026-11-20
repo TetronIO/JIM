@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Connectors.Http;
 using JIM.Connectors.SCIM;
 using JIM.Connectors.SCIM.Authentication;
 using JIM.Models.Staging;
@@ -36,7 +37,7 @@ internal sealed class StubbedTransportScimConnector : ScimConnector
             new ScimStaticBearerTokenAuthentication("token"),
             // The delay seam below makes every wait instant, so a realistic ceiling costs nothing and
             // keeps a provider's Retry-After from being rejected for exceeding it.
-            new ScimRetryPolicy(_maximumRetries, baseDelay: TimeSpan.Zero, maxDelay: TimeSpan.FromMinutes(5)),
+            new HttpRetryPolicy(_maximumRetries, baseDelay: TimeSpan.Zero, maxDelay: TimeSpan.FromMinutes(5)),
             logger,
             delay: (_, _) => Task.CompletedTask);
 

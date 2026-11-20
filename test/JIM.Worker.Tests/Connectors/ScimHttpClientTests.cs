@@ -4,6 +4,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json.Serialization;
+using JIM.Connectors.Http;
 using JIM.Connectors.SCIM;
 using JIM.Connectors.SCIM.Authentication;
 using JIM.Scim.Messages;
@@ -60,7 +61,7 @@ public class ScimHttpClientTests
 
     private ScimHttpClient CreateClient(
         StubHttpMessageHandler handler,
-        IScimAuthenticationStrategy? authentication = null,
+        IHttpAuthenticationStrategy? authentication = null,
         string baseUrl = BaseUrl,
         int maxRetries = 3)
     {
@@ -69,7 +70,7 @@ public class ScimHttpClientTests
             httpClient,
             new Uri(baseUrl),
             authentication ?? new ScimStaticBearerTokenAuthentication("test-token"),
-            new ScimRetryPolicy(maxRetries, TimeSpan.FromMilliseconds(10), TimeSpan.FromSeconds(300), jitterFactor: 0),
+            new HttpRetryPolicy(maxRetries, TimeSpan.FromMilliseconds(10), TimeSpan.FromSeconds(300), jitterFactor: 0),
             _logger,
             delay: (duration, _) =>
             {
@@ -410,7 +411,7 @@ public class ScimHttpClientTests
     /// <summary>
     /// Records how often the client discarded its cached credential.
     /// </summary>
-    private sealed class CountingAuthenticationStrategy : IScimAuthenticationStrategy
+    private sealed class CountingAuthenticationStrategy : IHttpAuthenticationStrategy
     {
         public int InvalidationCount { get; private set; }
 

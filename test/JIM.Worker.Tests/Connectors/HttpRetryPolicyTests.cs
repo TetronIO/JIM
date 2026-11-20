@@ -2,26 +2,27 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Net;
+using JIM.Connectors.Http;
 using JIM.Connectors.SCIM;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Connectors;
 
 /// <summary>
-/// The retry policy decides whether a failed SCIM call is worth repeating and how long to wait.
+/// The retry policy decides whether a failed HTTP call is worth repeating and how long to wait.
 /// It returns decisions rather than sleeping, so every case here runs without real delay.
 /// </summary>
 [TestFixture]
-public class ScimRetryPolicyTests
+public class HttpRetryPolicyTests
 {
     private static readonly DateTimeOffset Now = new(2026, 7, 25, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>
     /// Zero jitter keeps the delay arithmetic deterministic; jitter has its own test below.
     /// </summary>
-    private static ScimRetryPolicy CreatePolicy(int maxRetries = 3, int baseDelayMs = 1000, int maxDelaySeconds = 300)
+    private static HttpRetryPolicy CreatePolicy(int maxRetries = 3, int baseDelayMs = 1000, int maxDelaySeconds = 300)
     {
-        return new ScimRetryPolicy(maxRetries, TimeSpan.FromMilliseconds(baseDelayMs), TimeSpan.FromSeconds(maxDelaySeconds), jitterFactor: 0);
+        return new HttpRetryPolicy(maxRetries, TimeSpan.FromMilliseconds(baseDelayMs), TimeSpan.FromSeconds(maxDelaySeconds), jitterFactor: 0);
     }
 
     private static HttpResponseMessage CreateResponse(HttpStatusCode statusCode, string? retryAfter = null)
@@ -203,7 +204,7 @@ public class ScimRetryPolicyTests
     [Test]
     public void EvaluateResponse_WithJitter_DelayStaysWithinConfiguredBounds()
     {
-        var policy = new ScimRetryPolicy(3, TimeSpan.FromMilliseconds(1000), TimeSpan.FromSeconds(300), jitterFactor: 0.25);
+        var policy = new HttpRetryPolicy(3, TimeSpan.FromMilliseconds(1000), TimeSpan.FromSeconds(300), jitterFactor: 0.25);
 
         // Sampling repeatedly guards against a jitter implementation that drifts outside its band.
         for (var i = 0; i < 50; i++)

@@ -5,13 +5,13 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace JIM.Connectors.SCIM.Authentication;
+namespace JIM.Connectors.Http;
 
 /// <summary>
 /// OAuth 2.0 Client Credentials grant (RFC 6749 section 4.4), the usual machine-to-machine method for
-/// SCIM provisioning. Tokens are cached and refreshed shortly before they lapse.
+/// provisioning APIs. Tokens are cached and refreshed shortly before they lapse.
 /// </summary>
-public class ScimOAuthClientCredentialsAuthentication : IScimAuthenticationStrategy
+public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
 {
     /// <summary>
     /// How far ahead of stated expiry a token is refreshed. Without a margin, a token acquired with one
@@ -35,7 +35,7 @@ public class ScimOAuthClientCredentialsAuthentication : IScimAuthenticationStrat
     /// <param name="tokenClient">Client used solely for token acquisition; carries the connector's TLS configuration.</param>
     /// <param name="tokenEndpoint">The authorisation server's token endpoint.</param>
     /// <param name="utcNow">Clock seam, so expiry behaviour is testable without waiting.</param>
-    public ScimOAuthClientCredentialsAuthentication(
+    public OAuthClientCredentialsAuthentication(
         HttpClient tokenClient,
         Uri tokenEndpoint,
         string clientId,
@@ -47,7 +47,7 @@ public class ScimOAuthClientCredentialsAuthentication : IScimAuthenticationStrat
         ArgumentNullException.ThrowIfNull(tokenEndpoint);
         // The secret travels in the request body (client_secret_post), so this class refuses a cleartext
         // endpoint whatever constructs it. The URI is not echoed: it may carry credentials of its own.
-        if (!ScimTransportSecurity.IsPermitted(tokenEndpoint))
+        if (!HttpTransportSecurity.IsPermitted(tokenEndpoint))
             throw new ArgumentException("The token endpoint must use HTTPS, or HTTP to a loopback address only.", nameof(tokenEndpoint));
         if (string.IsNullOrWhiteSpace(clientId))
             throw new ArgumentException("A client ID is required.", nameof(clientId));
@@ -125,7 +125,7 @@ public class ScimOAuthClientCredentialsAuthentication : IScimAuthenticationStrat
     private async Task<OAuthTokenResponse> RequestTokenAsync(CancellationToken cancellationToken)
     {
         // client_secret_post (RFC 6749 section 2.3.1): credentials in the form body. This is the most
-        // widely accepted form across SCIM providers; if a provider mandates HTTP Basic client
+        // widely accepted form across authorisation servers; if a provider mandates HTTP Basic client
         // authentication instead, that becomes an additional setting rather than a change here.
         var form = new List<KeyValuePair<string, string>>
         {
@@ -146,7 +146,7 @@ public class ScimOAuthClientCredentialsAuthentication : IScimAuthenticationStrat
         }
         catch (HttpRequestException ex)
         {
-            throw new ScimAuthenticationException(
+            throw new HttpAuthenticationException(
                 $"Could not reach the OAuth 2.0 token endpoint at {_tokenEndpoint.GetLeftPart(UriPartial.Path)}.", ex);
         }
 
@@ -156,7 +156,7 @@ public class ScimOAuthClientCredentialsAuthentication : IScimAuthenticationStrat
             {
                 // The body is deliberately not included: authorisation servers echo request parameters
                 // in error responses, and this text reaches Activity errors and logs.
-                throw new ScimAuthenticationException(
+                throw new HttpAuthenticationException(
                     $"The OAuth 2.0 token endpoint returned HTTP {(int)response.StatusCode} ({response.ReasonPhrase}). " +
                     "Check the Client ID, Client Secret, OAuth Scope and Token Endpoint URL settings.");
             }
@@ -169,11 +169,11 @@ public class ScimOAuthClientCredentialsAuthentication : IScimAuthenticationStrat
             }
             catch (JsonException ex)
             {
-                throw new ScimAuthenticationException("The OAuth 2.0 token endpoint returned a response that is not valid JSON.", ex);
+                throw new HttpAuthenticationException("The OAuth 2.0 token endpoint returned a response that is not valid JSON.", ex);
             }
 
             if (token == null || string.IsNullOrWhiteSpace(token.AccessToken))
-                throw new ScimAuthenticationException("The OAuth 2.0 token endpoint response did not contain an access_token.");
+                throw new HttpAuthenticationException("The OAuth 2.0 token endpoint response did not contain an access_token.");
 
             return token;
         }

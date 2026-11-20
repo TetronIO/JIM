@@ -5,19 +5,19 @@ using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 
-namespace JIM.Connectors.SCIM;
+namespace JIM.Connectors.Http;
 
 /// <summary>
-/// Decides whether a failed SCIM call is worth repeating and how long to wait first.
+/// Decides whether a failed HTTP call to a connected service is worth repeating and how long to wait first.
 /// <para>
-/// The policy returns a <see cref="ScimRetryDecision"/> rather than sleeping, which keeps the waiting
+/// The policy returns a <see cref="HttpRetryDecision"/> rather than sleeping, which keeps the waiting
 /// (and its cancellation) with the caller and makes every rule here unit-testable without real delays.
 /// It mirrors the intent of <c>LdapConnector.ExecuteWithRetry</c>/<c>IsTransientError</c>, adapted to
 /// HTTP semantics: a service provider's <c>Retry-After</c> is authoritative when present, and
 /// exponential backoff with jitter applies otherwise.
 /// </para>
 /// </summary>
-public class ScimRetryPolicy
+public class HttpRetryPolicy
 {
     private readonly int _maxRetries;
     private readonly TimeSpan _baseDelay;
@@ -35,7 +35,7 @@ public class ScimRetryPolicy
     /// Fraction of the computed backoff added as random jitter (0.2 means up to 20% extra), spreading
     /// retries so parallel exports do not resynchronise into a thundering herd. Zero disables jitter.
     /// </param>
-    public ScimRetryPolicy(int maxRetries, TimeSpan baseDelay, TimeSpan maxDelay, double jitterFactor = 0.2)
+    public HttpRetryPolicy(int maxRetries, TimeSpan baseDelay, TimeSpan maxDelay, double jitterFactor = 0.2)
     {
         if (maxRetries < 0)
             throw new ArgumentOutOfRangeException(nameof(maxRetries), "Maximum retries cannot be negative.");
@@ -58,33 +58,33 @@ public class ScimRetryPolicy
     /// <param name="response">The provider's response.</param>
     /// <param name="attempt">The 1-based number of attempts already made.</param>
     /// <param name="utcNow">Current time, used to resolve an HTTP-date <c>Retry-After</c>.</param>
-    public ScimRetryDecision EvaluateResponse(HttpResponseMessage response, int attempt, DateTimeOffset utcNow)
+    public HttpRetryDecision EvaluateResponse(HttpResponseMessage response, int attempt, DateTimeOffset utcNow)
     {
         ArgumentNullException.ThrowIfNull(response);
 
         if (response.IsSuccessStatusCode)
-            return ScimRetryDecision.DoNotRetry("The response was successful.");
+            return HttpRetryDecision.DoNotRetry("The response was successful.");
 
         if (!IsTransientStatusCode(response.StatusCode))
-            return ScimRetryDecision.DoNotRetry($"HTTP {(int)response.StatusCode} is not a transient failure.");
+            return HttpRetryDecision.DoNotRetry($"HTTP {(int)response.StatusCode} is not a transient failure.");
 
         if (attempt >= _maxRetries)
-            return ScimRetryDecision.DoNotRetry($"All {_maxRetries} retry attempts have been used.");
+            return HttpRetryDecision.DoNotRetry($"All {_maxRetries} retry attempts have been used.");
 
         var retryAfter = ReadRetryAfter(response, utcNow);
         if (retryAfter.HasValue)
         {
             if (retryAfter.Value > _maxDelay)
-                return ScimRetryDecision.DoNotRetry(
+                return HttpRetryDecision.DoNotRetry(
                     $"The provider's Retry-After of {retryAfter.Value.TotalSeconds:F0}s exceeds the maximum delay of {_maxDelay.TotalSeconds:F0}s.");
 
             // A provider-supplied delay is honoured exactly; adding jitter to it would undercut the
             // very window the provider asked us to wait for.
-            return ScimRetryDecision.RetryAfter(retryAfter.Value,
+            return HttpRetryDecision.RetryAfter(retryAfter.Value,
                 $"HTTP {(int)response.StatusCode}; honouring the provider's Retry-After.");
         }
 
-        return ScimRetryDecision.RetryAfter(CalculateBackoff(attempt),
+        return HttpRetryDecision.RetryAfter(CalculateBackoff(attempt),
             $"HTTP {(int)response.StatusCode} is transient; backing off.");
     }
 
@@ -93,24 +93,24 @@ public class ScimRetryPolicy
     /// </summary>
     /// <param name="exception">The exception thrown by the HTTP stack.</param>
     /// <param name="attempt">The 1-based number of attempts already made.</param>
-    public ScimRetryDecision EvaluateException(Exception exception, int attempt)
+    public HttpRetryDecision EvaluateException(Exception exception, int attempt)
     {
         ArgumentNullException.ThrowIfNull(exception);
 
         if (!IsTransientException(exception))
-            return ScimRetryDecision.DoNotRetry($"{exception.GetType().Name} is not a transient failure.");
+            return HttpRetryDecision.DoNotRetry($"{exception.GetType().Name} is not a transient failure.");
 
         if (attempt >= _maxRetries)
-            return ScimRetryDecision.DoNotRetry($"All {_maxRetries} retry attempts have been used.");
+            return HttpRetryDecision.DoNotRetry($"All {_maxRetries} retry attempts have been used.");
 
-        return ScimRetryDecision.RetryAfter(CalculateBackoff(attempt), $"{exception.GetType().Name} is transient; backing off.");
+        return HttpRetryDecision.RetryAfter(CalculateBackoff(attempt), $"{exception.GetType().Name} is transient; backing off.");
     }
 
     /// <summary>
     /// Status codes worth repeating. Note the deliberate omissions: 500 and 501 are not retried,
     /// because a genuine server-side fault or an unimplemented operation will not resolve itself
     /// within a run, and repeating it only delays the error reaching the administrator. 502 is
-    /// included because reverse proxies in front of SCIM providers emit it for transient upstream
+    /// included because reverse proxies in front of HTTP services emit it for transient upstream
     /// blips rather than for a settled failure.
     /// </summary>
     private static bool IsTransientStatusCode(HttpStatusCode statusCode)

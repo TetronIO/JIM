@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Net;
+using JIM.Connectors.Http;
 using JIM.Connectors.SCIM;
 using NUnit.Framework;
 
@@ -13,7 +14,7 @@ namespace JIM.Worker.Tests.Connectors;
 /// three are parsed.
 /// </summary>
 [TestFixture]
-public class ScimThrottleHintsTests
+public class RateLimitHintsTests
 {
     private static readonly DateTimeOffset Now = new(2026, 7, 25, 12, 0, 0, TimeSpan.Zero);
 
@@ -33,7 +34,7 @@ public class ScimThrottleHintsTests
             ("RateLimit-Remaining", "7"),
             ("RateLimit-Reset", "30"));
 
-        var hints = ScimThrottleHints.Read(response, Now);
+        var hints = RateLimitHints.Read(response, Now);
 
         using (Assert.EnterMultipleScope())
         {
@@ -51,7 +52,7 @@ public class ScimThrottleHintsTests
             ("X-RateLimit-Remaining", "0"),
             ("X-RateLimit-Reset", "15"));
 
-        var hints = ScimThrottleHints.Read(response, Now);
+        var hints = RateLimitHints.Read(response, Now);
 
         using (Assert.EnterMultipleScope())
         {
@@ -70,7 +71,7 @@ public class ScimThrottleHintsTests
             ("X-RateLimit-Remaining", "2"),
             ("X-RateLimit-Reset", resetAt.ToString()));
 
-        var hints = ScimThrottleHints.Read(response, Now);
+        var hints = RateLimitHints.Read(response, Now);
 
         Assert.That(hints.ResetAfter, Is.EqualTo(TimeSpan.FromSeconds(45)));
     }
@@ -80,7 +81,7 @@ public class ScimThrottleHintsTests
     {
         using var response = CreateResponse(("RateLimit", "limit=100, remaining=4, reset=20"));
 
-        var hints = ScimThrottleHints.Read(response, Now);
+        var hints = RateLimitHints.Read(response, Now);
 
         using (Assert.EnterMultipleScope())
         {
@@ -95,7 +96,7 @@ public class ScimThrottleHintsTests
     {
         using var response = CreateResponse();
 
-        var hints = ScimThrottleHints.Read(response, Now);
+        var hints = RateLimitHints.Read(response, Now);
 
         using (Assert.EnterMultipleScope())
         {
@@ -113,7 +114,7 @@ public class ScimThrottleHintsTests
             ("RateLimit-Remaining", "plenty"),
             ("RateLimit-Reset", "later"));
 
-        var hints = ScimThrottleHints.Read(response, Now);
+        var hints = RateLimitHints.Read(response, Now);
 
         using (Assert.EnterMultipleScope())
         {
@@ -126,7 +127,7 @@ public class ScimThrottleHintsTests
     public void GetPauseBeforeNextRequest_RemainingAtOrBelowThreshold_PausesUntilReset()
     {
         using var response = CreateResponse(("RateLimit-Remaining", "1"), ("RateLimit-Reset", "12"));
-        var hints = ScimThrottleHints.Read(response, Now);
+        var hints = RateLimitHints.Read(response, Now);
 
         var pause = hints.GetPauseBeforeNextRequest(remainingThreshold: 1);
 
@@ -137,7 +138,7 @@ public class ScimThrottleHintsTests
     public void GetPauseBeforeNextRequest_PlentyRemaining_DoesNotPause()
     {
         using var response = CreateResponse(("RateLimit-Remaining", "80"), ("RateLimit-Reset", "12"));
-        var hints = ScimThrottleHints.Read(response, Now);
+        var hints = RateLimitHints.Read(response, Now);
 
         var pause = hints.GetPauseBeforeNextRequest(remainingThreshold: 1);
 
@@ -149,7 +150,7 @@ public class ScimThrottleHintsTests
     {
         // Without a reset hint there is nothing to wait for; the retry policy handles the 429 that follows.
         using var response = CreateResponse(("RateLimit-Remaining", "0"));
-        var hints = ScimThrottleHints.Read(response, Now);
+        var hints = RateLimitHints.Read(response, Now);
 
         var pause = hints.GetPauseBeforeNextRequest(remainingThreshold: 1);
 

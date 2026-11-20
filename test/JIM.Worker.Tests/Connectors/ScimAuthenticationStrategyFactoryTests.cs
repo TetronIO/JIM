@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Connectors.Http;
 using JIM.Connectors.SCIM;
 using JIM.Connectors.SCIM.Authentication;
 using JIM.Models.Interfaces;
@@ -62,7 +63,7 @@ public class ScimAuthenticationStrategyFactoryTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(strategy, Is.InstanceOf<ScimOAuthClientCredentialsAuthentication>());
+            Assert.That(strategy, Is.InstanceOf<OAuthClientCredentialsAuthentication>());
             _credentialProtection.Verify(c => c.Unprotect("encrypted:top-secret"), Times.Once);
         }
     }
@@ -139,7 +140,7 @@ public class ScimAuthenticationStrategyFactoryTests
             Setting(ScimConnectorConstants.SettingAuthenticationMethod, "Mutual TLS")
         };
 
-        var exception = Assert.Throws<ScimAuthenticationException>(
+        var exception = Assert.Throws<HttpAuthenticationException>(
             () => ScimAuthenticationStrategyFactory.Create(settings, _credentialProtection.Object, _tokenClient));
 
         Assert.That(exception!.Message, Does.Contain("Mutual TLS"));
@@ -150,7 +151,7 @@ public class ScimAuthenticationStrategyFactoryTests
     {
         var settings = new List<ConnectedSystemSettingValue>();
 
-        Assert.Throws<ScimAuthenticationException>(
+        Assert.Throws<HttpAuthenticationException>(
             () => ScimAuthenticationStrategyFactory.Create(settings, _credentialProtection.Object, _tokenClient));
     }
 
@@ -164,7 +165,7 @@ public class ScimAuthenticationStrategyFactoryTests
             Setting(ScimConnectorConstants.SettingClientSecret, encryptedValue: "encrypted:top-secret")
         };
 
-        var exception = Assert.Throws<ScimAuthenticationException>(
+        var exception = Assert.Throws<HttpAuthenticationException>(
             () => ScimAuthenticationStrategyFactory.Create(settings, _credentialProtection.Object, _tokenClient));
 
         Assert.That(exception!.Message, Does.Contain(ScimConnectorConstants.SettingTokenEndpointUrl));
@@ -181,7 +182,7 @@ public class ScimAuthenticationStrategyFactoryTests
             Setting(ScimConnectorConstants.SettingClientSecret, encryptedValue: "encrypted:top-secret")
         };
 
-        var exception = Assert.Throws<ScimAuthenticationException>(
+        var exception = Assert.Throws<HttpAuthenticationException>(
             () => ScimAuthenticationStrategyFactory.Create(settings, _credentialProtection.Object, _tokenClient));
 
         Assert.That(exception!.Message, Does.Contain(ScimConnectorConstants.SettingTokenEndpointUrl));
@@ -192,7 +193,7 @@ public class ScimAuthenticationStrategyFactoryTests
     [TestCase("ftp://provider.example.com/oauth2/token")]
     public void Create_OAuthTokenEndpointNotHttpsOrLoopbackHttp_ThrowsNamingTheSetting(string tokenEndpoint)
     {
-        var exception = Assert.Throws<ScimAuthenticationException>(
+        var exception = Assert.Throws<HttpAuthenticationException>(
             () => ScimAuthenticationStrategyFactory.Create(OAuthSettings(tokenEndpoint), _credentialProtection.Object, _tokenClient));
 
         Assert.That(exception!.Message, Does.Contain(ScimConnectorConstants.SettingTokenEndpointUrl));
@@ -205,7 +206,7 @@ public class ScimAuthenticationStrategyFactoryTests
     {
         var strategy = ScimAuthenticationStrategyFactory.Create(OAuthSettings(tokenEndpoint), _credentialProtection.Object, _tokenClient);
 
-        Assert.That(strategy, Is.InstanceOf<ScimOAuthClientCredentialsAuthentication>());
+        Assert.That(strategy, Is.InstanceOf<OAuthClientCredentialsAuthentication>());
     }
 
     private static List<ConnectedSystemSettingValue> OAuthSettings(string tokenEndpoint)
@@ -228,7 +229,7 @@ public class ScimAuthenticationStrategyFactoryTests
             Setting(ScimConnectorConstants.SettingPassword, encryptedValue: "encrypted:s3cr3t")
         };
 
-        var exception = Assert.Throws<ScimAuthenticationException>(
+        var exception = Assert.Throws<HttpAuthenticationException>(
             () => ScimAuthenticationStrategyFactory.Create(settings, _credentialProtection.Object, _tokenClient));
 
         Assert.That(exception!.Message, Does.Contain(ScimConnectorConstants.SettingUsername));
@@ -243,12 +244,12 @@ public class ScimAuthenticationStrategyFactoryTests
             Setting(ScimConnectorConstants.SettingPassword, encryptedValue: "encrypted:s3cr3t")
         };
 
-        var exception = Assert.Throws<ScimAuthenticationException>(
+        var exception = Assert.Throws<HttpAuthenticationException>(
             () => ScimAuthenticationStrategyFactory.Create(settings, _credentialProtection.Object, _tokenClient));
 
         // A refused Token Endpoint URL is reported before the secret is touched, and must not carry it
         // (or credentials embedded in the URL itself) either.
-        var transportException = Assert.Throws<ScimAuthenticationException>(
+        var transportException = Assert.Throws<HttpAuthenticationException>(
             () => ScimAuthenticationStrategyFactory.Create(
                 OAuthSettings("http://client:p4ssw0rd@keycloak.example.com/token"), _credentialProtection.Object, _tokenClient));
 

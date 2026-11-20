@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
+using JIM.Connectors.Http;
 using JIM.Connectors.SCIM;
 using JIM.Models.Connectors;
 using JIM.Models.Exceptions;
@@ -67,7 +68,7 @@ public class ScimCertificateDiagnosisTests
                 new HttpClient(handler),
                 new Uri("https://provider.example.com/scim/v2"),
                 new JIM.Connectors.SCIM.Authentication.ScimStaticBearerTokenAuthentication("token"),
-                new ScimRetryPolicy(maxRetries: 0, baseDelay: TimeSpan.Zero, maxDelay: TimeSpan.Zero),
+                new HttpRetryPolicy(maxRetries: 0, baseDelay: TimeSpan.Zero, maxDelay: TimeSpan.Zero),
                 logger,
                 delay: (_, _) => Task.CompletedTask));
         }

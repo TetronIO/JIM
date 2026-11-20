@@ -3,6 +3,7 @@
 
 using System.Net;
 using System.Text;
+using JIM.Connectors.Http;
 using JIM.Connectors.SCIM.Authentication;
 using NUnit.Framework;
 
@@ -102,7 +103,7 @@ public class ScimAuthenticationTests
         // whatever constructs it.
         using var tokenClient = new HttpClient(new StubHttpMessageHandler(_ => TokenResponse("issued-token")));
 
-        Assert.Throws<ArgumentException>(() => new ScimOAuthClientCredentialsAuthentication(
+        Assert.Throws<ArgumentException>(() => new OAuthClientCredentialsAuthentication(
             tokenClient,
             new Uri("http://keycloak.example.com/realms/jim/protocol/openid-connect/token"),
             clientId: "scim-client",
@@ -114,7 +115,7 @@ public class ScimAuthenticationTests
     {
         using var tokenClient = new HttpClient(new StubHttpMessageHandler(_ => TokenResponse("issued-token")));
 
-        Assert.That(() => _ = new ScimOAuthClientCredentialsAuthentication(
+        Assert.That(() => _ = new OAuthClientCredentialsAuthentication(
             tokenClient,
             new Uri("http://localhost:8080/realms/jim/protocol/openid-connect/token"),
             clientId: "scim-client",
@@ -275,7 +276,7 @@ public class ScimAuthenticationTests
         var strategy = CreateOAuthStrategy(tokenClient);
         using var request = CreateRequest();
 
-        var exception = Assert.ThrowsAsync<ScimAuthenticationException>(
+        var exception = Assert.ThrowsAsync<HttpAuthenticationException>(
             async () => await strategy.ApplyAsync(request, CancellationToken.None));
 
         using (Assert.EnterMultipleScope())
@@ -297,17 +298,17 @@ public class ScimAuthenticationTests
         var strategy = CreateOAuthStrategy(tokenClient);
         using var request = CreateRequest();
 
-        Assert.ThrowsAsync<ScimAuthenticationException>(async () => await strategy.ApplyAsync(request, CancellationToken.None));
+        Assert.ThrowsAsync<HttpAuthenticationException>(async () => await strategy.ApplyAsync(request, CancellationToken.None));
     }
 
     #endregion
 
-    private static ScimOAuthClientCredentialsAuthentication CreateOAuthStrategy(
+    private static OAuthClientCredentialsAuthentication CreateOAuthStrategy(
         HttpClient tokenClient,
         string? scope = null,
         Func<DateTimeOffset>? utcNow = null)
     {
-        return new ScimOAuthClientCredentialsAuthentication(
+        return new OAuthClientCredentialsAuthentication(
             tokenClient,
             new Uri(TokenEndpoint),
             clientId: "scim-client",

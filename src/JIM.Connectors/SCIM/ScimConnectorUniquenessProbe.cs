@@ -3,7 +3,7 @@
 
 using System.Net;
 using System.Text.Json;
-using JIM.Connectors.SCIM.Authentication;
+using JIM.Connectors.Http;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Scim.Filtering;
@@ -145,7 +145,7 @@ internal sealed class ScimConnectorUniquenessProbe
                     LogSanitiser.Sanitise(resourceType.Endpoint), LogSanitiser.Sanitise(request.AttributeName), (int)ex.StatusCode);
                 return UniquenessProbeResult.Failed(request.Candidates.Count, DescribeFailure(ex));
             }
-            catch (ScimAuthenticationException ex)
+            catch (HttpAuthenticationException ex)
             {
                 _logger.Warning(ex, "ScimConnectorUniquenessProbe: Could not authenticate with the service provider to probe {Attribute}.",
                     LogSanitiser.Sanitise(request.AttributeName));

@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Diagnostics.CodeAnalysis;
+using JIM.Connectors.Http;
 
 namespace JIM.Connectors.SCIM;
 
@@ -28,16 +29,7 @@ internal static class ScimTransportSecurity
     /// <summary>
     /// True when the address is absolute and either HTTPS, or HTTP to a loopback host.
     /// </summary>
-    public static bool IsPermitted(Uri uri)
-    {
-        ArgumentNullException.ThrowIfNull(uri);
-
-        if (!uri.IsAbsoluteUri)
-            return false;
-
-        return uri.Scheme == Uri.UriSchemeHttps
-               || (uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback);
-    }
+    public static bool IsPermitted(Uri uri) => HttpTransportSecurity.IsPermitted(uri);
 
     /// <summary>
     /// Checks a configured address against the rule.
