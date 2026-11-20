@@ -3,7 +3,7 @@ title: Prerequisites
 description: "What you need before deploying JIM: container runtime, identity provider, and hardware requirements."
 type: reference
 audience: implementer
-validated: v0.18.0
+validated: v1.0.0
 ---
 
 # Prerequisites
@@ -44,7 +44,7 @@ JIM uses OpenID Connect (OIDC) for Single Sign-On authentication. You will need 
 - AD FS
 - Any other OIDC-compliant provider
 
-Before deploying, configure your identity provider with a client registration for JIM. See the [SSO Setup Guide](../administration/sso-setup.md) for detailed instructions.
+Before deploying, register JIM with your identity provider: a client for the portal, and an API scope, which JIM's API requires on every access token. For Microsoft Entra ID, AD FS and Keycloak, `Register-JIMIdentityProvider` in the JIM PowerShell module creates the whole registration in one command. See the [SSO Setup Guide](../administration/sso-setup.md) for detailed instructions.
 
 ## :material-certificate-outline: TLS Certificate
 

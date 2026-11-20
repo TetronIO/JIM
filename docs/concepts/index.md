@@ -3,7 +3,7 @@ title: Core Concepts
 description: The ideas JIM is built on, from the Metaverse and the synchronisation pipeline to Attribute Priority and expressions.
 type: landing
 audience: implementer
-validated: v0.18.0
+validated: v1.0.0
 ---
 
 # Core Concepts

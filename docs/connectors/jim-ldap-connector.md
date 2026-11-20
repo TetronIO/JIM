@@ -3,7 +3,7 @@ title: JIM LDAP Connector
 description: Synchronise identities with Active Directory, OpenLDAP, 389 Directory Server and other LDAP directories, and the settings it takes.
 type: object
 audience: administrator
-validated: v0.18.0
+validated: v1.0.0
 ---
 
 # JIM LDAP Connector

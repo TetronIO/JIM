@@ -3,7 +3,7 @@ title: Upgrading
 description: Upgrade JIM to a newer release, connected, air-gapped or on Podman, verify it, and roll back if you must.
 type: how-to
 audience: operator
-validated: v0.18.0
+validated: v1.0.0
 ---
 
 # Upgrading

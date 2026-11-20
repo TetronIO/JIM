@@ -1,21 +1,21 @@
 ---
 title: Product Roadmap
-description: "The milestones ahead for JIM, from v1.0, Identity Lifecycle Complete, onwards, and where to follow their progress."
+description: "What JIM v1.0, Identity Lifecycle Complete, delivers, the milestones after it, and where to follow their progress."
 type: reference
 audience: evaluator
 ---
 
 # Product Roadmap
 
-JIM has completed **pre-release stabilisation**. The core identity lifecycle (Import, Sync, Export and Schedule) is fully functional, and the platform has been hardened for production with bounded-memory pipelines validated at 1,000,000-user scale (1,000,000 users and 60,000 groups synchronised cross-domain across two directories, with groups of up to 1,000,000 members), an OWASP Top 10:2025 assessment, supply chain hardening, and integration test coverage across its synchronisation scenarios. The roadmap below outlines the milestones ahead as JIM progresses towards its first stable release and beyond.
+JIM **v1.0, Identity Lifecycle Complete**, is JIM's first stable release. The core identity lifecycle (Import, Sync, Export and Schedule) is fully functional, and the platform is hardened for production with bounded-memory pipelines validated at 1,000,000-user scale (1,000,000 users and 60,000 groups synchronised cross-domain across two directories, with groups of up to 1,000,000 members), an OWASP Top 10:2025 assessment, supply chain hardening, and integration test coverage across its synchronisation scenarios. The roadmap below outlines what v1.0 delivers and the milestones after it.
 
 ```jim-diagram
 archetype: flow
 title: Where JIM is, and the milestones ahead
-desc: "Pre-release stabilisation is complete: the core identity lifecycle of Import, Sync, Export and Schedule works, and the platform is hardened for production. The milestones ahead, in order, are v1.0, Identity Lifecycle Complete, the first stable release; v1.x, Connector Ecosystem, which expands the systems JIM connects to out of the box; and v2.0, IGA Foundation, so identities can be managed directly in JIM. The roadmap gives no dates."
+desc: "Pre-release stabilisation is complete, and v1.0, Identity Lifecycle Complete, the first stable release, has shipped: the core identity lifecycle of Import, Sync, Export and Schedule works, and the platform is hardened for production. The milestones ahead, in order, are v1.x, Connector Ecosystem, which expands the systems JIM connects to out of the box; and v2.0, IGA Foundation, so identities can be managed directly in JIM. The roadmap gives no dates."
 steps:
 - {id: pre, label: Pre-release stabilisation, sub: complete}
-- {id: v1, label: v1.0, sub: Identity Lifecycle Complete, note: first stable release}
+- {id: v1, label: v1.0, sub: Identity Lifecycle Complete, note: released}
 - {id: v1x, label: v1.x, sub: Connector Ecosystem, note: more systems out of the box}
 - {id: v2, label: v2.0, sub: IGA Foundation, note: manage identities in JIM}
 ```
@@ -26,11 +26,11 @@ For the latest status and issue tracking, see the public [JIM Roadmap project bo
 
 ## :material-flag-checkered: v1.0: Identity Lifecycle Complete
 
-The first stable release, delivering a production-ready identity lifecycle platform. The expression engine enhancements (a wider function library, an editor that suggests functions and attributes as you type, checks when you save, and testers for every expression, Scoping Criterion and Object Matching Rule) have already shipped.
+Released. The first stable release: a production-ready identity lifecycle platform.
 
-- Advanced scheduling capabilities (dependencies, conditional execution)
-- Comprehensive REST API coverage for all administrative operations
-- Full PowerShell module coverage with parity across all API endpoints
+- Import, synchronisation, export and scheduling, with Schedule steps that run in sequence or in parallel and a per-step choice of what happens when one fails
+- Expression engine enhancements: a wider function library, an editor that suggests functions and attributes as you type, checks when you save, and testers for every expression, Scoping Criterion and Object Matching Rule
+- REST API coverage for administrative operations, with PowerShell module parity
 
 ---
 

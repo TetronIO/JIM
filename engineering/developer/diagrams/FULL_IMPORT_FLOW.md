@@ -1,6 +1,6 @@
 # Full Import Flow
 
-> Last updated: 2026-11-17, JIM v0.18.0
+> Last updated: 2026-11-20, JIM v1.0.0
 
 This diagram shows how objects are imported from a Connected System into JIM's connector space. Both Full Import and Delta Import use the same processor (`SyncImportTaskProcessor`); the connector handles delta filtering internally via watermark/persisted data.
 
@@ -35,6 +35,8 @@ Since v0.17.0:
 - **Unresolved references, every one (#959)**: reference resolution gathers every reference value each object is left with, unresolved or ambiguous across Object Types, before reporting: the count always goes on the object's item, and under Error handling the item carries a **Reference Unresolved** error naming them, unless another error already holds it.
 - **Deletions without an Object Type (#1066)**: a deletion the Connector reports without its Object Type (an OpenLDAP accesslog entry recorded without `logold`) takes the type of the object its External ID names, before anything files objects by type; where the Connector's External IDs can name different objects in different types, it is refused as `CouldNotMatchObjectType` and nothing is deleted.
 - **Dates and Booleans in one form (#2153)**: every imported date is normalised to UTC and to the microsecond before the content hash, duplicate detection and the diff read it; dates JIM cannot keep apart, and a true or false attribute holding both values, are reported rather than one being chosen.
+- **An object with no External ID is rejected (#3013)**: it gets a **Missing External ID** error and no Connected System Object, since nothing could match it again; its Object Type is held back from deletion detection that run, as for an unreadable External ID, and the item keeps what the Connector returned (**Imported Object**, #874).
+- **A deletion typed as another Object Type (#2911)**: in a Delta Import, a deletion reported under a different Object Type from the object JIM holds for that External ID applies to the held object, as a later change to it, rather than failing the run.
 
 ## Overall Import Flow
 
