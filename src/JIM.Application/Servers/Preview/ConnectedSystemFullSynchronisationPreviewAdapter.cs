@@ -37,6 +37,10 @@ public class ConnectedSystemFullSynchronisationPreviewAdapter : IConfigurationCh
 
     public Type ProposalType => typeof(ConnectedSystemFullSynchronisationProposal);
 
+    /// <inheritdoc />
+    public Task<IReadOnlyCollection<int>> GetEvaluatedConnectorSpacesAsync(PreviewContext context) =>
+        Task.FromResult(PreviewConnectorSpaces.Of(ConnectedSystemId(context)));
+
     public async Task<List<PreviewValidationFinding>> ValidateAsync(PreviewContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -72,17 +76,8 @@ public class ConnectedSystemFullSynchronisationPreviewAdapter : IConfigurationCh
                 $"dependency cycle: {cycle}")];
         }
 
+        // A stopped import (#2521) is warned of by the framework, from GetEvaluatedConnectorSpacesAsync (#3014).
         var findings = new List<PreviewValidationFinding>();
-
-        // An import stopped part-way (#2521): the real run is refused, and the preview reads the half-saved Connector Space.
-        // A Warning, not Blocking: the preview stays runnable for diagnosis, but says first that it is not what a run will do.
-        if (connectedSystem.ImportIncompleteSince is not null)
-        {
-            connectedSystem.Partitions = [.. await _application.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem)];
-            findings.Add(new PreviewValidationFinding(PreviewValidationSeverity.Warning,
-                ImportCompleteness.DescribePreviewCaveat(connectedSystem), nameof(connectedSystem.ImportIncompleteSince)));
-        }
-
         if (proposal.MaxObjects is { } cap)
         {
             var population = await _application.SyncPreview.GetFullSyncPopulationAsync(connectedSystem.Id);

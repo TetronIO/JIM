@@ -10,6 +10,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Preview;
+using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using Moq;
 using NUnit.Framework;
@@ -339,6 +340,81 @@ public class ConfigurationChangePreviewServerTests
             Assert.That(stored![0].Message, Is.EqualTo("No trigger systems are selected."));
             Assert.That(stored![0].Severity, Is.EqualTo(PreviewValidationSeverity.Warning));
         }
+    }
+
+    /// <summary>
+    /// #3014: a preview that evaluates a Connector Space as its synchronisation would says so first when an import of
+    /// that Connected System has stopped part-way (#2521): the synchronisation that would apply the change is refused,
+    /// and what the preview reads is half an import.
+    /// </summary>
+    [Test]
+    public async Task StartPreviewAsync_EvaluatedConnectorSpaceMarkedImportIncomplete_WarnsThatSynchronisationIsRefusedAsync()
+    {
+        _adapter.EvaluatedConnectorSpaces.Add(4);
+        var connectedSystems = SetUpConnectedSystems(new ConnectedSystem
+        {
+            Id = 4, Name = "HR System", ImportIncompleteSince = new DateTime(2026, 11, 16, 10, 3, 12, DateTimeKind.Utc)
+        });
+        connectedSystems.Setup(r => r.GetConnectedSystemPartitionsAsync(It.Is<ConnectedSystem>(cs => cs.Id == 4)))
+            .ReturnsAsync([new ConnectedSystemPartition { Name = "DC=corp", ExternalId = "DC=corp", Selected = true }]);
+
+        var result = await NewServer().StartPreviewAsync(NewRequest());
+
+        var stored = JsonSerializer.Deserialize<List<PreviewValidationFinding>>(_preview!.ValidationFindings!)!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Select(f => f.Severity), Is.EqualTo(new[] { PreviewValidationSeverity.Warning }));
+            Assert.That(stored[0].Message, Does.Contain("'HR System'").And.Contain("stopped part-way").And.Contain("refused")
+                .And.Contain("16 Nov 2026 10:03:12 UTC").And.Contain("reading all selected partitions"));
+            Assert.That(result.Findings.Select(f => f.Message), Is.EqualTo(stored.Select(f => f.Message)),
+                "the caller is told at once, as it is of every other finding");
+            Assert.That(_adapter.EstimateCalls, Is.EqualTo(1), "a warning, not a refusal: the preview still runs");
+        }
+    }
+
+    [Test]
+    public async Task StartPreviewAsync_EvaluatedConnectorSpaceNotMarked_AddsNothingAsync()
+    {
+        _adapter.EvaluatedConnectorSpaces.Add(4);
+        SetUpConnectedSystems(new ConnectedSystem { Id = 4, Name = "HR System" });
+
+        await NewServer().StartPreviewAsync(NewRequest());
+
+        Assert.That(JsonSerializer.Deserialize<List<PreviewValidationFinding>>(_preview!.ValidationFindings!), Is.Empty);
+    }
+
+    [Test]
+    public async Task StartPreviewAsync_NoConnectorSpaceEvaluated_DoesNotLookUpAnyConnectedSystemAsync()
+    {
+        var connectedSystems = SetUpConnectedSystems();
+
+        await NewServer().StartPreviewAsync(NewRequest());
+
+        connectedSystems.Verify(r => r.GetConnectedSystemCoreAsync(It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    [Test]
+    public async Task StartPreviewAsync_BlockedProposalOverAMarkedConnectorSpace_ReportsOnlyTheBlockAsync()
+    {
+        // Nothing is evaluated, so there is no half-saved Connector Space to warn about reading.
+        _adapter.Findings.Add(new PreviewValidationFinding(PreviewValidationSeverity.Blocking, "Cannot apply."));
+        _adapter.EvaluatedConnectorSpaces.Add(4);
+        SetUpConnectedSystems(new ConnectedSystem { Id = 4, Name = "HR System", ImportIncompleteSince = DateTime.UtcNow });
+
+        await NewServer().StartPreviewAsync(NewRequest());
+
+        var stored = JsonSerializer.Deserialize<List<PreviewValidationFinding>>(_preview!.ValidationFindings!)!;
+        Assert.That(stored.Select(f => f.Message), Is.EqualTo(new[] { "Cannot apply." }));
+    }
+
+    private Mock<IConnectedSystemRepository> SetUpConnectedSystems(params ConnectedSystem[] systems)
+    {
+        var connectedSystems = new Mock<IConnectedSystemRepository>();
+        foreach (var system in systems)
+            connectedSystems.Setup(r => r.GetConnectedSystemCoreAsync(system.Id, It.IsAny<bool>())).ReturnsAsync(system);
+        connectedSystems.Setup(r => r.GetConnectedSystemPartitionsAsync(It.IsAny<ConnectedSystem>())).ReturnsAsync([]);
+        _repo.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
+        return connectedSystems;
     }
 
     [Test]
@@ -968,6 +1044,7 @@ public class ConfigurationChangePreviewServerTests
         public Type ProposalType => typeof(FakeProposal);
 
         public List<PreviewValidationFinding> Findings { get; } = [];
+        public List<int> EvaluatedConnectorSpaces { get; } = [];
         public PreviewCostEstimate Estimate { get; set; } = new(0);
         public List<PreviewImpactCount> Counts { get; } = [];
         public List<PreviewDelta> Deltas { get; } = [];
@@ -993,6 +1070,9 @@ public class ConfigurationChangePreviewServerTests
                 throw ValidateThrows;
             return Task.FromResult(new List<PreviewValidationFinding>(Findings));
         }
+
+        public Task<IReadOnlyCollection<int>> GetEvaluatedConnectorSpacesAsync(PreviewContext context) =>
+            Task.FromResult<IReadOnlyCollection<int>>(EvaluatedConnectorSpaces);
 
         public Task<PreviewCostEstimate> EstimateCostAsync(PreviewContext context)
         {

@@ -50,6 +50,10 @@ public class ConnectedSystemDeletionPreviewAdapter : IConfigurationChangePreview
 
     public Type ProposalType => typeof(ConnectedSystemDeletionProposal);
 
+    /// <inheritdoc />
+    /// <remarks>Deleting the system removes every one of its objects whatever the Connector Space holds, and its deletion is not refused by a stopped import.</remarks>
+    public Task<IReadOnlyCollection<int>> GetEvaluatedConnectorSpacesAsync(PreviewContext context) => PreviewConnectorSpaces.None;
+
     public async Task<List<PreviewValidationFinding>> ValidateAsync(PreviewContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

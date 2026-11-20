@@ -69,6 +69,10 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
 
     public Type ProposalType => typeof(ConnectedSystemSchemaProposal);
 
+    /// <inheritdoc />
+    /// <remarks>A schema selection takes effect at the next import, which is what repairs a stopped one.</remarks>
+    public Task<IReadOnlyCollection<int>> GetEvaluatedConnectorSpacesAsync(PreviewContext context) => PreviewConnectorSpaces.None;
+
     public async Task<List<PreviewValidationFinding>> ValidateAsync(PreviewContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

@@ -100,6 +100,9 @@ public class ConfigurationChangePreviewAdapterRegistryTests
 
         public Task<List<PreviewValidationFinding>> ValidateAsync(PreviewContext context) => Task.FromResult(new List<PreviewValidationFinding>());
 
+        public Task<IReadOnlyCollection<int>> GetEvaluatedConnectorSpacesAsync(PreviewContext context) =>
+            Task.FromResult<IReadOnlyCollection<int>>([]);
+
         public Task<PreviewCostEstimate> EstimateCostAsync(PreviewContext context) => Task.FromResult(new PreviewCostEstimate(0));
 
         public Task<List<PreviewImpactCount>> CountImpactAsync(PreviewContext context) => Task.FromResult(new List<PreviewImpactCount>());

@@ -56,6 +56,19 @@ public interface IConfigurationChangePreviewAdapter
     Task<List<PreviewValidationFinding>> ValidateAsync(PreviewContext context);
 
     /// <summary>
+    /// The Connected Systems whose Connector Space this preview evaluates as that system's own synchronisation would,
+    /// to say what the change does when the synchronisation applies it (#3014). The framework warns, before anything
+    /// is evaluated, when an import of one of them stopped part-way (#2521): that synchronisation is refused until a
+    /// Full Import completes, and the preview reads half an import, so a Metaverse reference it shows being removed
+    /// may point at an object the import had not yet saved.
+    ///
+    /// Empty for a surface that evaluates Metaverse Objects (whose synchronisations are not refused), reads no
+    /// Connector Space, or takes effect at the next import, which is the remedy. Deliberately not defaulted: every
+    /// adapter states its answer, so a new surface cannot leave it out by omission.
+    /// </summary>
+    Task<IReadOnlyCollection<int>> GetEvaluatedConnectorSpacesAsync(PreviewContext context);
+
+    /// <summary>
     /// A cheap, set-based estimate of the affected population, used to decide where the preview runs and whether to
     /// offer the administrator a capped result. Approximate is fine; expensive is not.
     /// </summary>
