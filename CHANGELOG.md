@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Performance
 
 - ⚡ A Full Import that confirms an export no longer looks up every group member to compare a group whose membership is already current, saving about 20 seconds at 500,000 users. (#2986)
+- ⚡ An export's pass for references that resolve later starts its second set of exports alongside the first, so fewer workers sit idle at its start. (#2912)
 
 ## [0.18.0] - 2026-11-17
 
