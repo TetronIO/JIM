@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- 🔄 While an import of a Connected System has stopped part-way, its Sync Previews and Full Synchronisation previews still run but open with a warning that the real synchronisation is refused, and why, in the portal, the REST API and PowerShell. (#2951)
+
+## [0.19.0] - 2026-11-19
+
 ### Added
 
 - ✨ Connector-defined Attributes, such as the LDAP Connector's Exchange Alias, now carry a chip wherever you read or pick one, and saving a Synchronisation Rule warns when it flows one alongside the directory attribute it is written through from a different source. (#2756)

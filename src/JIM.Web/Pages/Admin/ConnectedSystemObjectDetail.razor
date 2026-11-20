@@ -959,7 +959,7 @@
             using var jim = JimFactory.Create();
             _previewResult = await jim.SyncPreview.PreviewSyncForCsoAsync(CsId, ConnectedSystemObject.Id);
             if (_previewResult.HasBlockingErrors)
-                Snackbar.Add("The Sync Preview could not complete; see the details below.", Severity.Warning);
+                Snackbar.Add("The Sync Preview found something that would stop the synchronisation; see the details below.", Severity.Warning);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

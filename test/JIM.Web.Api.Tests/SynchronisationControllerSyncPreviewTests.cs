@@ -50,7 +50,9 @@ public class SynchronisationControllerSyncPreviewTests
             .ReturnsAsync((IAsyncDisposable?)null);
 
         _application = new JimApplication(
-            Mock.Of<JIM.Data.IRepository>(r => r.ServiceSettings == new InMemoryServiceSettingsRepository()),
+            // The preview reads the Connected System for its import-incomplete marker (#2951); an unmarked one here.
+            Mock.Of<JIM.Data.IRepository>(r => r.ServiceSettings == new InMemoryServiceSettingsRepository()
+                && r.ConnectedSystems == Mock.Of<IConnectedSystemRepository>()),
             syncRepository: _mockSyncRepository.Object);
         _controller = new SynchronisationController(
             Mock.Of<ILogger<SynchronisationController>>(),

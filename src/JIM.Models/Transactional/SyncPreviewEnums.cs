@@ -80,7 +80,12 @@ public enum SyncPreviewMessageCode
     /// <summary>Two or more in-scope import Synchronisation Rules would project the object into different Metaverse Object
     /// Types (#2823); the real sync would project nothing and record a ProjectionTypeConflict item naming the rules. The
     /// detail names each rule and its type.</summary>
-    ProjectionTypeConflict
+    ProjectionTypeConflict,
+    /// <summary>An import of the object's Connected System stopped part-way through saving what it read (#2521), so the
+    /// Connector Space holds only part of it and the real Full or Delta Synchronisation is refused until a Full Import
+    /// completes (#2951). The preview still evaluates the object, against the same half-saved Connector Space. The detail
+    /// says when the import began writing and what clears it.</summary>
+    ImportIncomplete
 }
 
 /// <summary>
