@@ -1,6 +1,6 @@
 # Microsoft Graph Connector (Entra ID) Design Document
 
-- **Status:** Doing (design; awaiting the maintainer's decisions on the questions at the end)
+- **Status:** Doing (design agreed; Phase 1 under way)
 - **Issue:** [#361](https://github.com/TetronIO/JIM/issues/361) (the issue is the requirements source, in effect the PRD; this document is the implementation plan)
 - **Related Issues:** #545 (SCIM 2.0 Client Connector, whose HTTP stack this reuses), #1145 (Source of Authority conversion as an export operation), #360 (pronouns), #192 (generic REST connector), #2367 (Entra ID sign-in, which gave JIM its Entra ID test tenant)
 - **Related Plans:** [`SCIM_CLIENT_CONNECTOR_DESIGN.md`](../done/SCIM_CLIENT_CONNECTOR_DESIGN.md), the closest precedent: an HTTP connector built in phases with seeding held back until the last one
@@ -153,8 +153,8 @@ None proposed. `System.Net.Http`, `System.Text.Json` and `System.Security.Crypto
 | Delta link expiry | Full import fallback with a warning. |
 | Real-tenant integration tests leaving debris | Prefixed test objects; cleanup at start and end of the scenario. |
 
-## Decisions Needed
+## Decisions (2026-11-20)
 
-1. **No new dependencies** (hand-written HTTP, as for SCIM) rather than MSAL or the Graph SDK. Recommended.
-2. **The shared HTTP refactor as a stack layer under the connector.** Recommended.
-3. **Integration tests against the Entra ID test tenant**, which needs a second app registration there with `User.ReadWrite.All` and `Group.ReadWrite.All`.
+1. **No new dependencies.** HTTP, JSON and the certificate client assertion are written against the BCL, as for the SCIM connector; neither MSAL nor the Graph SDK.
+2. **The shared HTTP layer lands first**, as the bottom layer of the stack, with the SCIM connector switched over and its tests unchanged.
+3. **Integration tests run against the Entra ID test tenant** that serves the `jim-sso-entra` gate, through a second app registration holding `User.ReadWrite.All` and `Group.ReadWrite.All`; the scenario creates and removes only prefixed test objects.
