@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ An object an import rejects before it reaches the Connector Space, such as one of two sharing an External ID, now shows what the Connector returned for it, in the portal, the REST API and PowerShell; credential values are never kept. (#874)
 
+### Fixed
+
+- 🐛 An imported object with no External ID value is rejected with a Missing External ID error instead of being imported as a Connected System Object JIM could never match again, and its Object Type is not checked for deleted objects that run. (#3013)
+
 ## [0.19.0] - 2026-11-19
 
 ### Added

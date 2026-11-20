@@ -347,6 +347,13 @@ public partial class SyncImportTaskProcessor
     private readonly Dictionary<int, int> _unreadableExternalIdCounts = new();
 
     /// <summary>
+    /// #3013: per Object Type, how many objects this run returned with no External ID value at all. Like an unreadable
+    /// External ID, each is an object the source holds that JIM cannot tell apart from the others, so deletion detection
+    /// holds the type back.
+    /// </summary>
+    private readonly Dictionary<int, int> _missingExternalIdCounts = new();
+
+    /// <summary>
     /// SPEC-1082 D10: Verification Mode counters. Populated only when
     /// <see cref="ConnectedSystemRunProfile.VerifyImportContentHashes"/> is true.
     /// </summary>
@@ -2107,26 +2114,33 @@ public partial class SyncImportTaskProcessor
     /// </summary>
     private List<ConnectedSystemObjectType> HoldBackObjectTypesWithUnreadableExternalIds(List<ConnectedSystemObjectType> objectTypes)
     {
-        if (_unreadableExternalIdCounts.Count == 0)
+        if (_unreadableExternalIdCounts.Count == 0 && _missingExternalIdCounts.Count == 0)
             return objectTypes;
 
-        var heldBack = objectTypes
-            .Where(ot => _unreadableExternalIdCounts.ContainsKey(ot.Id))
-            .Select(ot => (ObjectTypeName: ot.Name, Count: _unreadableExternalIdCounts[ot.Id]))
-            .ToList();
-        if (heldBack.Count == 0)
+        var unreadable = HeldBack(objectTypes, _unreadableExternalIdCounts);
+        var missing = HeldBack(objectTypes, _missingExternalIdCounts);
+        if (unreadable.Count == 0 && missing.Count == 0)
             return objectTypes;
 
-        var warning = ImportOutcomeMessage.ForUnreadableExternalIds(heldBack, _connectedSystemRunProfile.RunType);
+        if (unreadable.Count > 0)
+            AddActivityWarning(ImportOutcomeMessage.ForUnreadableExternalIds(unreadable, _connectedSystemRunProfile.RunType));
+        if (missing.Count > 0)
+            AddActivityWarning(ImportOutcomeMessage.ForMissingExternalIds(missing, _connectedSystemRunProfile.RunType));
+
+        Log.Warning("ProcessConnectedSystemObjectDeletionsAsync: deletion detection held back for Object Type(s) with objects JIM cannot identify. Unreadable External IDs: {Unreadable}. No External ID: {Missing}",
+            string.Join(", ", unreadable.Select(item => $"{item.ObjectTypeName} ({item.Count})")),
+            string.Join(", ", missing.Select(item => $"{item.ObjectTypeName} ({item.Count})")));
+
+        return objectTypes.Where(ot => !_unreadableExternalIdCounts.ContainsKey(ot.Id) && !_missingExternalIdCounts.ContainsKey(ot.Id)).ToList();
+
+        static List<(string ObjectTypeName, int Count)> HeldBack(List<ConnectedSystemObjectType> types, Dictionary<int, int> counts) =>
+            types.Where(ot => counts.ContainsKey(ot.Id)).Select(ot => (ot.Name, counts[ot.Id])).ToList();
+    }
+
+    private void AddActivityWarning(string warning) =>
         _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
             ? warning
             : $"{_activity.WarningMessage}\n{warning}";
-
-        Log.Warning("ProcessConnectedSystemObjectDeletionsAsync: deletion detection held back for {ObjectTypeCount} Object Type(s) with unreadable External IDs: {ObjectTypes}",
-            heldBack.Count, string.Join(", ", heldBack.Select(item => $"{item.ObjectTypeName} ({item.Count})")));
-
-        return objectTypes.Where(ot => !_unreadableExternalIdCounts.ContainsKey(ot.Id)).ToList();
-    }
 
     /// <summary>
     /// Which Object Types deletion detection walks (#1474): every selected one, and every deselected one that can
@@ -2621,7 +2635,17 @@ public partial class SyncImportTaskProcessor
                 // object JIM holds for it missing.
                 if (UnreadableAttributeNames(importedObject).Contains(externalIdAttributeName))
                     _unreadableExternalIdCounts[connectedSystemObjectType.Id] = _unreadableExternalIdCounts.GetValueOrDefault(connectedSystemObjectType.Id) + 1;
+                // #3013: the source holds the object with no External ID at all. The per-object loop rejects it; deletion
+                // detection holds its Object Type back for the same reason as above.
+                else
+                    _missingExternalIdCounts[connectedSystemObjectType.Id] = _missingExternalIdCounts.GetValueOrDefault(connectedSystemObjectType.Id) + 1;
 
+                continue;
+            }
+
+            if (!HasExternalIdValue(externalIdAttribute))
+            {
+                _missingExternalIdCounts[connectedSystemObjectType.Id] = _missingExternalIdCounts.GetValueOrDefault(connectedSystemObjectType.Id) + 1;
                 continue;
             }
 
@@ -3796,16 +3820,17 @@ public partial class SyncImportTaskProcessor
 
                 var externalIdImportAttr = importObject.Attributes.SingleOrDefault(a => a.Name.Equals(externalIdAttribute.Name, StringComparison.OrdinalIgnoreCase));
 
-                // DEBUG: Log whether external ID attribute was found
-                if (externalIdImportAttr == null)
+                // #3013: an object with no External ID value cannot be told apart from any other, so nothing could ever match
+                // it again: rejected here, before anything is created or updated from it. On an empty Connected System
+                // nothing below looks the External ID up, which is how such an object used to be created unanchored. A
+                // deletion is identified differently, and goes on to the deletion handling below.
+                if (importObject.ChangeType != ObjectChangeType.Deleted && (externalIdImportAttr == null || !HasExternalIdValue(externalIdImportAttr)))
                 {
-                    Log.Warning("ProcessImportObjectsAsync: External ID attribute '{ExternalIdName}' NOT FOUND in import object at index {Index}. Available attributes: {Attributes}. SKIPPING DUPLICATE DETECTION.",
-                        externalIdAttribute.Name, importIndex, string.Join(", ", importObject.Attributes.Select(a => a.Name)));
-                }
-                else
-                {
-                    Log.Debug("ProcessImportObjectsAsync: External ID attribute '{ExternalIdName}' FOUND in import object at index {Index}.",
-                        externalIdAttribute.Name, importIndex);
+                    activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.MissingExternalIdAttributeValue;
+                    activityRunProfileExecutionItem.ErrorMessage = ImportOutcomeMessage.ForMissingExternalId(externalIdAttribute.Name);
+                    Log.Warning("ProcessImportObjectsAsync: Import object at index {Index} has no value for External ID attribute '{ExternalIdName}'. Rejecting it.",
+                        importIndex, externalIdAttribute.Name);
+                    continue;
                 }
 
                 if (externalIdImportAttr != null)
@@ -4434,6 +4459,17 @@ public partial class SyncImportTaskProcessor
 
         return externalIdAttribute != null && UnreadableAttributeNames(importObject).Contains(externalIdAttribute.Name);
     }
+
+    /// <summary>
+    /// #3013: whether an imported External ID attribute holds a value JIM can identify the object by. Read through the
+    /// Has properties, so it allocates no list the attribute does not hold (#2521).
+    /// </summary>
+    private static bool HasExternalIdValue(ConnectedSystemImportObjectAttribute externalIdAttribute) =>
+        (externalIdAttribute.HasStringValues && externalIdAttribute.StringValues.Any(v => !string.IsNullOrEmpty(v)))
+        || externalIdAttribute.HasIntValues
+        || externalIdAttribute.HasLongValues
+        || externalIdAttribute.HasDecimalValues
+        || (externalIdAttribute.HasGuidValues && externalIdAttribute.GuidValues.Any(g => g != Guid.Empty));
 
     /// <summary>
     /// It's possible the Connector has supplied some attributes with null values. These shouldn't be passed to JIM,
