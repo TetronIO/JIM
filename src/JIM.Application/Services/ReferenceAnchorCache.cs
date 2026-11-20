@@ -24,7 +24,8 @@ namespace JIM.Application.Services;
 /// Bounded at <see cref="DefaultCapacity"/> entries, roughly 200 MB with directory-style anchors (the id, the summary
 /// record, and its anchor string), which is the order of what one chunk of the largest groups already loads. Once full it
 /// keeps what it holds and remembers nothing more: the objects named most are named from the first chunks on, and an
-/// unremembered object is simply read, as before. Not thread-safe: the pass prepares one chunk at a time.
+/// unremembered object is simply read, as before. Not thread-safe: the pass can prepare two chunks at once (#2912), and
+/// calls it under a lock.
 /// </para>
 /// </remarks>
 public sealed class ReferenceAnchorCache
