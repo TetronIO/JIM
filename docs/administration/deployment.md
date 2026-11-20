@@ -3,7 +3,7 @@ title: Deployment
 description: Install JIM in production with Docker or Podman, connected or air-gapped, and prepare it for use.
 type: how-to
 audience: implementer
-validated: v0.19.0
+validated: v0.18.0
 ---
 
 # Deployment
