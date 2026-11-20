@@ -101,7 +101,10 @@ public static class CredentialAttributes
     /// This is a substring heuristic and it produces false positives by design. Ordinary, entirely safe directory
     /// attributes such as <c>pwdLastSet</c>, <c>badPwdCount</c>, <c>pwdProperties</c> and
     /// <c>passwordHistoryLength</c> all match it, and administrators routinely and legitimately import them. It
-    /// must therefore only ever drive a warning; anything that blocks belongs on the denylist instead. Names that
+    /// must therefore never block an import or an Attribute Flow; anything that blocks belongs on the denylist instead.
+    /// It does decide what JIM declines to keep a copy of: an error's snapshot of a rejected imported object withholds
+    /// the values of any attribute it matches (<c>ImportedObjectSnapshot</c>), where a false positive costs only a
+    /// little diagnostic detail. Names that
     /// are already on the denylist return false here, because they are blocked rather than warned about.
     /// </remarks>
     /// <param name="attributeName">The Connected System attribute name to test. Null, empty and whitespace-only names never match.</param>

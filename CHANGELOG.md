@@ -7,10 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- ✨ An object an import rejects before it reaches the Connector Space, such as one of two sharing an External ID, now shows what the Connector returned for it, in the portal, the REST API and PowerShell; credential values are never kept. (#874)
+
 ### Changed
 
 - 🔄 While an import of a Connected System has stopped part-way, its Sync Previews and Full Synchronisation previews still run but open with a warning that the real synchronisation is refused, and why, in the portal, the REST API and PowerShell. (#2951)
 - 🔄 Previews of an import Synchronisation Rule's changes and of Object Matching Rules now open with the same warning while an import of their Connected System has stopped part-way, because the synchronisation that would apply the change is refused. (#3014)
+
+### Fixed
+
+- 🐛 An imported object with no External ID value is rejected with a Missing External ID error instead of being imported as a Connected System Object JIM could never match again, and its Object Type is not checked for deleted objects that run. (#3013)
 
 ## [0.19.0] - 2026-11-19
 

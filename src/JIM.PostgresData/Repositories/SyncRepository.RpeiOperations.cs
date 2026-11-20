@@ -1485,6 +1485,10 @@ public partial class SyncRepository
                 await writer.WriteAsync(rpei.SourceLocation, NpgsqlTypes.NpgsqlDbType.Text);
             else
                 await writer.WriteNullAsync();
+            if (rpei.ImportedObjectSnapshotJson is not null)
+                await writer.WriteAsync(rpei.ImportedObjectSnapshotJson, NpgsqlTypes.NpgsqlDbType.Jsonb);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();

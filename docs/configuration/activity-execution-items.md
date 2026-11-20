@@ -91,6 +91,23 @@ JIM leaves the attribute exactly as it already held it. Nothing is removed from 
 
 When the value is an object's External ID, JIM cannot tell which object it is, so that Full Import does not check the Object Type for deleted objects, and the Activity says so: marking objects deleted on that basis could remove one the Connected System still holds. Checking resumes on the next Full Import that reads every External ID.
 
+## :material-package-variant-closed: Objects an import rejected
+
+Some objects an import rejects before it creates a Connected System Object for them: the Connector names an Object Type the schema does not hold, the object has no External ID value, two objects on one page share an External ID, the object returns an attribute twice or one the Object Type's schema does not hold, or the Connector itself reports the object as unreadable. An object with no External ID value is rejected because JIM could never tell it apart from any other, so nothing could match it again; give it a value in the Connected System and run the import again. Because that object may be one JIM already holds, the import does not check its Object Type for deleted objects that run, and the Activity says so, as it does for an External ID the Connector could not read.
+
+Such an item has no Connected System Object and no change to show, so beneath its **Error Details** it shows **Imported Object**: what the Connector returned for the object, as JIM recorded it when it rejected it.
+
+**Imported Object** lists each attribute with its values and type, in the order the Connector returned them, and marks the attributes the error is about as **Named in error**: both copies of a repeated attribute, an attribute the schema does not hold, or the External ID two objects share. **JSON** shows the same record as JSON, with **Copy JSON** to take it elsewhere. The REST API returns it as the item's `importedObject`, and `Get-JIMActivityExecutionItem` as its `ImportedObject`.
+
+What JIM keeps is limited, so a large or malformed source cannot swell the Activity:
+
+- **Credentials:** JIM never keeps the values of an attribute that holds, or may hold, a credential. It judges by the name, so an attribute such as `initialPassword`, `apiSecret` or `pwdLastSet` shows as **Not recorded (credential)**, with its name kept so you can see the Connector returned it.
+- **Values:** an attribute keeps its first 50 values, each up to 1,000 characters, and says how many more it had. A binary value, such as a photo, is described by its size rather than kept.
+- **Size:** one object's record is kept within 32 KB. Past that, JIM leaves out the largest attributes first and names them; the attributes named in the error are the last to go.
+- **Per run:** one run keeps the first 1,000 objects it rejects. Later rejected objects in the same run say the limit was reached instead. When that many objects fail, they almost always fail for one cause, which the first ones show.
+
+The record is kept for as long as the Activity it belongs to.
+
 ## :material-subdirectory-arrow-right: Follow-up
 
 Some work an item sets in motion finishes after its run. When an export provisions an account with an [Initial Password](initial-password.md), the [Password Delivery Service](../concepts/password-synchronisation.md#the-password-delivery-service) sets the password moments later, and the export's item for that account lists it under **Follow-up**: where it stands now (Queued, Delivering, Retrying, Held, Delivered, Parked, Expired or Cancelled), why, or what happens next, and a link to its own Activity, which holds each delivery attempt. An Initial Password reads **Carried** when a password change already waiting for the person became the account's first password instead; that change's own Activity reports the delivery.

@@ -7590,6 +7590,40 @@ td.jim-connection-detail-cell {
     background: color-mix(in srgb, var(--mud-palette-error) 6%, transparent);
 }
 
+/* A rejected imported object's record (#874): neutral, since it is evidence rather than the error, with the
+   attributes the error is about picked out in the error colour so they are found at a glance. */
+.jim-imported-object.mud-paper {
+    overflow: hidden;
+}
+
+.jim-imported-object-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-imported-object-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 24px;
+}
+
+.jim-attribute-table tbody tr.jim-imported-object-row-named td {
+    background: color-mix(in srgb, var(--mud-palette-error) 7%, transparent);
+}
+
+.jim-attribute-table tbody tr.jim-imported-object-row-named td:first-child {
+    box-shadow: inset 3px 0 0 var(--mud-palette-error);
+}
+
+.jim-imported-object-withheld {
+    font-style: italic;
+}
+
 .jim-attribute-value-unreadable {
     background: color-mix(in srgb, var(--mud-palette-error) 8%, transparent);
     border: 1px solid color-mix(in srgb, var(--mud-palette-error) 30%, transparent);

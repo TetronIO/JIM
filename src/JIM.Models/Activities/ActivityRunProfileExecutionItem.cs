@@ -105,7 +105,8 @@ public class ActivityRunProfileExecutionItem
     // errors:
     // two-tiers of error logging, depending on system settings:
     // - individual error items with detailed error info
-    // - individual error items with detailed error info and json snapshot of exported/imported object (not yet implemented, but planned for future)
+    // - an item rejected on import before a Connected System Object existed also carries a snapshot of the imported
+    //   object (ImportedObjectSnapshotJson, #874)
 
     public ActivityRunProfileExecutionItemErrorType? ErrorType { get; set; } = ActivityRunProfileExecutionItemErrorType.NotSet;
 
@@ -152,6 +153,14 @@ public class ActivityRunProfileExecutionItem
     /// it, such as a file and row (#2066). Recorded where the Connector gives one; null otherwise.
     /// </summary>
     public string? SourceLocation { get; set; }
+
+    /// <summary>
+    /// What the Connector returned for an imported object that was rejected before a Connected System Object existed for
+    /// it (#874), as an <see cref="ImportedObjectSnapshot"/> JSON document: its attributes and values, with credential
+    /// values withheld and within size limits. Null for every other item.
+    /// </summary>
+    [Column(TypeName = "jsonb")]
+    public string? ImportedObjectSnapshotJson { get; set; }
 
     /// <summary>
     /// Denormalised summary of sync outcome types for fast list-view rendering.

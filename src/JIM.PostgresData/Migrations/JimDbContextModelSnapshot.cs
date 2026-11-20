@@ -468,6 +468,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("ExternalIdSnapshot")
                         .HasColumnType("text");
 
+                    b.Property<string>("ImportedObjectSnapshotJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<Guid?>("MetaverseObjectId")
                         .HasColumnType("uuid");
 

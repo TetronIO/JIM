@@ -279,6 +279,30 @@ internal static class ImportOutcomeMessage
         }));
     }
 
+    /// <summary>
+    /// #3013: the Activity's warning when deletion detection was held back because objects arrived with no External ID.
+    /// </summary>
+    internal static string ForMissingExternalIds(IReadOnlyList<(string ObjectTypeName, int Count)> heldBack, ConnectedSystemRunType runType = ConnectedSystemRunType.FullImport)
+    {
+        return string.Join(" ", heldBack.Select(item =>
+        {
+            var one = item.Count == 1;
+            var objects = one ? "1 object" : $"{item.Count:N0} objects";
+            var which = one ? "which object it was" : "which objects they were";
+            var give = one ? "Give it an External ID" : "Give them External IDs";
+            var whatNext = runType == ConnectedSystemRunType.DeltaImport
+                ? $"{give} in the Connected System. Each Delta Import will read every object and check again until every object has one."
+                : $"{give} in the Connected System, then run the Full Import again.";
+            return $"Object Type '{item.ObjectTypeName}' was not checked for deleted objects, because {objects} arrived with no External ID " +
+                   $"and JIM could not tell {which}. None of its objects were marked as deleted. {whatNext}";
+        }));
+    }
+
+    /// <summary>#3013: the item's error for an imported object with no External ID value.</summary>
+    internal static string ForMissingExternalId(string externalIdAttributeName) =>
+        $"The object has no value for its External ID attribute '{externalIdAttributeName}', so JIM cannot tell which object it is, " +
+        "and it was not imported. Give it a value in the Connected System, then run the import again.";
+
     /// <summary>How many unreadable values the message lists one by one before it counts the rest.</summary>
     private const int ListedUnreadableValues = 5;
 

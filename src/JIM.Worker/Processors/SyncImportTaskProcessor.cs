@@ -347,6 +347,13 @@ public partial class SyncImportTaskProcessor
     private readonly Dictionary<int, int> _unreadableExternalIdCounts = new();
 
     /// <summary>
+    /// #3013: per Object Type, how many objects this run returned with no External ID value at all. Like an unreadable
+    /// External ID, each is an object the source holds that JIM cannot tell apart from the others, so deletion detection
+    /// holds the type back.
+    /// </summary>
+    private readonly Dictionary<int, int> _missingExternalIdCounts = new();
+
+    /// <summary>
     /// SPEC-1082 D10: Verification Mode counters. Populated only when
     /// <see cref="ConnectedSystemRunProfile.VerifyImportContentHashes"/> is true.
     /// </summary>
@@ -369,6 +376,13 @@ public partial class SyncImportTaskProcessor
     /// #2153: value-less rows swept from attributes an import carried, for the end-of-import summary.
     /// </summary>
     private int _valuelessRowsSweptCount;
+
+    /// <summary>
+    /// #874: snapshots of rejected imported objects recorded so far in this run, capped at
+    /// <see cref="ImportedObjectSnapshot.MaxSnapshotsPerRun"/>; and how many items past the cap were marked instead.
+    /// </summary>
+    private int _importedObjectSnapshotCount;
+    private int _importedObjectSnapshotsOverRunLimitCount;
 
     /// <summary>
     /// #2049: Connected System Objects this run saw arriving under another Object Type and refused to re-type. The
@@ -1281,6 +1295,8 @@ public partial class SyncImportTaskProcessor
         Log.Information("PerformImportAsync: Value normalisation summary: Dates canonicalised: {DatesCanonicalised}, Exact duplicates collapsed: {DuplicatesCollapsed}, Sub-microsecond collisions reported: {CollisionsReported}, True or false surpluses reported: {BooleanSurplusesReported}, Value-less rows swept: {ValuelessRowsSwept}",
             _normalisationSummary.DatesCanonicalised, _normalisationSummary.DuplicatesCollapsed, _normalisationSummary.CollisionsReported,
             _normalisationSummary.BooleanSurplusesReported, _valuelessRowsSweptCount);
+        Log.Information("PerformImportAsync: Rejected object snapshot summary: Recorded: {Recorded}, Not recorded (run limit of {RunLimit} reached): {OverRunLimit}",
+            _importedObjectSnapshotCount, ImportedObjectSnapshot.MaxSnapshotsPerRun, _importedObjectSnapshotsOverRunLimitCount);
         if (_connectedSystemRunProfile.VerifyImportContentHashes)
         {
             Log.Information("PerformImportAsync: Verification Mode summary: Dangerous disagreements: {DangerousDisagreements}, Benign mismatches: {BenignMismatches}",
@@ -2098,26 +2114,33 @@ public partial class SyncImportTaskProcessor
     /// </summary>
     private List<ConnectedSystemObjectType> HoldBackObjectTypesWithUnreadableExternalIds(List<ConnectedSystemObjectType> objectTypes)
     {
-        if (_unreadableExternalIdCounts.Count == 0)
+        if (_unreadableExternalIdCounts.Count == 0 && _missingExternalIdCounts.Count == 0)
             return objectTypes;
 
-        var heldBack = objectTypes
-            .Where(ot => _unreadableExternalIdCounts.ContainsKey(ot.Id))
-            .Select(ot => (ObjectTypeName: ot.Name, Count: _unreadableExternalIdCounts[ot.Id]))
-            .ToList();
-        if (heldBack.Count == 0)
+        var unreadable = HeldBack(objectTypes, _unreadableExternalIdCounts);
+        var missing = HeldBack(objectTypes, _missingExternalIdCounts);
+        if (unreadable.Count == 0 && missing.Count == 0)
             return objectTypes;
 
-        var warning = ImportOutcomeMessage.ForUnreadableExternalIds(heldBack, _connectedSystemRunProfile.RunType);
+        if (unreadable.Count > 0)
+            AddActivityWarning(ImportOutcomeMessage.ForUnreadableExternalIds(unreadable, _connectedSystemRunProfile.RunType));
+        if (missing.Count > 0)
+            AddActivityWarning(ImportOutcomeMessage.ForMissingExternalIds(missing, _connectedSystemRunProfile.RunType));
+
+        Log.Warning("ProcessConnectedSystemObjectDeletionsAsync: deletion detection held back for Object Type(s) with objects JIM cannot identify. Unreadable External IDs: {Unreadable}. No External ID: {Missing}",
+            string.Join(", ", unreadable.Select(item => $"{item.ObjectTypeName} ({item.Count})")),
+            string.Join(", ", missing.Select(item => $"{item.ObjectTypeName} ({item.Count})")));
+
+        return objectTypes.Where(ot => !_unreadableExternalIdCounts.ContainsKey(ot.Id) && !_missingExternalIdCounts.ContainsKey(ot.Id)).ToList();
+
+        static List<(string ObjectTypeName, int Count)> HeldBack(List<ConnectedSystemObjectType> types, Dictionary<int, int> counts) =>
+            types.Where(ot => counts.ContainsKey(ot.Id)).Select(ot => (ot.Name, counts[ot.Id])).ToList();
+    }
+
+    private void AddActivityWarning(string warning) =>
         _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
             ? warning
             : $"{_activity.WarningMessage}\n{warning}";
-
-        Log.Warning("ProcessConnectedSystemObjectDeletionsAsync: deletion detection held back for {ObjectTypeCount} Object Type(s) with unreadable External IDs: {ObjectTypes}",
-            heldBack.Count, string.Join(", ", heldBack.Select(item => $"{item.ObjectTypeName} ({item.Count})")));
-
-        return objectTypes.Where(ot => !_unreadableExternalIdCounts.ContainsKey(ot.Id)).ToList();
-    }
 
     /// <summary>
     /// Which Object Types deletion detection walks (#1474): every selected one, and every deselected one that can
@@ -2612,7 +2635,17 @@ public partial class SyncImportTaskProcessor
                 // object JIM holds for it missing.
                 if (UnreadableAttributeNames(importedObject).Contains(externalIdAttributeName))
                     _unreadableExternalIdCounts[connectedSystemObjectType.Id] = _unreadableExternalIdCounts.GetValueOrDefault(connectedSystemObjectType.Id) + 1;
+                // #3013: the source holds the object with no External ID at all. The per-object loop rejects it; deletion
+                // detection holds its Object Type back for the same reason as above.
+                else
+                    _missingExternalIdCounts[connectedSystemObjectType.Id] = _missingExternalIdCounts.GetValueOrDefault(connectedSystemObjectType.Id) + 1;
 
+                continue;
+            }
+
+            if (!HasExternalIdValue(externalIdAttribute))
+            {
+                _missingExternalIdCounts[connectedSystemObjectType.Id] = _missingExternalIdCounts.GetValueOrDefault(connectedSystemObjectType.Id) + 1;
                 continue;
             }
 
@@ -2621,6 +2654,57 @@ public partial class SyncImportTaskProcessor
             // attribute failed to parse would be data loss.
             externalIdsImported.Add(connectedSystemObjectType.Id, externalIdAttribute);
         }
+    }
+
+    /// <summary>
+    /// #874: records what the Connector returned for an object the import rejected before a Connected System Object
+    /// existed for it, so its item shows the evidence beside the error. An item with a Connected System Object has its
+    /// change record for that, and gets nothing here. Recorded centrally, from the one place every rejected object passes
+    /// through, so a rejection added later is covered without anyone remembering to. Past
+    /// <see cref="ImportedObjectSnapshot.MaxSnapshotsPerRun"/> in a run, the item records only that the limit was reached.
+    /// </summary>
+    /// <returns>True when a snapshot of the object was recorded.</returns>
+    /// <remarks>
+    /// The object is as the import left it: null attributes and unreadable values (#2066) have been removed by then. The
+    /// unreadable values are on the item's own record of them, so nothing is lost from the administrator's view.
+    /// </remarks>
+    private bool RecordRejectedObjectSnapshot(ConnectedSystemImportObject importObject, ActivityRunProfileExecutionItem item)
+    {
+        if (item.ConnectedSystemObjectId.HasValue || item.ConnectedSystemObject != null)
+            return false;
+
+        if (_importedObjectSnapshotCount >= ImportedObjectSnapshot.MaxSnapshotsPerRun)
+        {
+            if (_importedObjectSnapshotsOverRunLimitCount++ == 0)
+                Log.Information("RecordRejectedObjectSnapshot: {RunLimit} rejected objects recorded in this run. Later rejected objects record only that the limit was reached.",
+                    ImportedObjectSnapshot.MaxSnapshotsPerRun);
+            item.ImportedObjectSnapshotJson = ImportedObjectSnapshot.CreateRunLimitReached().ToJson();
+            return false;
+        }
+
+        item.ImportedObjectSnapshotJson = ImportedObjectSnapshot.Record(importObject, AttributesNamedInError(importObject, item.ErrorType)).ToJson();
+        _importedObjectSnapshotCount++;
+        return true;
+    }
+
+    /// <summary>
+    /// The attributes an import error is about, which a snapshot keeps in preference to the rest when it has to drop
+    /// some for size: the repeated attributes of a duplicate attribute error, the attributes the schema does not hold
+    /// for an unexpected attribute error, and the External ID for an error about it.
+    /// </summary>
+    private List<string> AttributesNamedInError(ConnectedSystemImportObject importObject, ActivityRunProfileExecutionItemErrorType? errorType)
+    {
+        var objectType = _connectedSystem.ObjectTypes?.SingleOrDefault(ot => ot.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
+        return errorType switch
+        {
+            ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes => importObject.Attributes
+                .GroupBy(a => a.Name, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1).SelectMany(g => g.Select(a => a.Name)).ToList(),
+            ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute when objectType != null => importObject.Attributes
+                .Where(a => !objectType.Attributes.Any(sa => sa.Name.Equals(a.Name, StringComparison.OrdinalIgnoreCase))).Select(a => a.Name).ToList(),
+            ActivityRunProfileExecutionItemErrorType.MissingExternalIdAttributeValue or ActivityRunProfileExecutionItemErrorType.DuplicateObject
+                when objectType != null => objectType.Attributes.Where(a => a.IsExternalId).Select(a => a.Name).ToList(),
+            _ => []
+        };
     }
 
     /// <summary>
@@ -3551,6 +3635,7 @@ public partial class SyncImportTaskProcessor
         var pageSuccessCount = 0;
         var pageErrorCount = 0;
         var pageDuplicateCount = 0;
+        var pageSnapshotCount = 0;
 
         // #2153: every imported date takes the form JIM holds it in (UTC, to the microsecond) before anything reads it,
         // so the content hash, duplicate detection, the diff and the database write all see one form. Without this a
@@ -3701,7 +3786,8 @@ public partial class SyncImportTaskProcessor
                     activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes;
                     activityRunProfileExecutionItem.ErrorMessage = $"The imported object has one or more duplicate attributes: {string.Join(", ", duplicateAttributeNames)}. Please de-duplicate and try again.";
 
-                    // todo (#874): include a serialised snapshot of the imported object that is also presented to sync admin when viewing sync errors
+                    // The item records the object as returned, both copies of the attribute included (#874); see
+                    // RecordRejectedObjectSnapshot, in the finally below.
                     continue;
                 }
 
@@ -3734,16 +3820,17 @@ public partial class SyncImportTaskProcessor
 
                 var externalIdImportAttr = importObject.Attributes.SingleOrDefault(a => a.Name.Equals(externalIdAttribute.Name, StringComparison.OrdinalIgnoreCase));
 
-                // DEBUG: Log whether external ID attribute was found
-                if (externalIdImportAttr == null)
+                // #3013: an object with no External ID value cannot be told apart from any other, so nothing could ever match
+                // it again: rejected here, before anything is created or updated from it. On an empty Connected System
+                // nothing below looks the External ID up, which is how such an object used to be created unanchored. A
+                // deletion is identified differently, and goes on to the deletion handling below.
+                if (importObject.ChangeType != ObjectChangeType.Deleted && (externalIdImportAttr == null || !HasExternalIdValue(externalIdImportAttr)))
                 {
-                    Log.Warning("ProcessImportObjectsAsync: External ID attribute '{ExternalIdName}' NOT FOUND in import object at index {Index}. Available attributes: {Attributes}. SKIPPING DUPLICATE DETECTION.",
-                        externalIdAttribute.Name, importIndex, string.Join(", ", importObject.Attributes.Select(a => a.Name)));
-                }
-                else
-                {
-                    Log.Debug("ProcessImportObjectsAsync: External ID attribute '{ExternalIdName}' FOUND in import object at index {Index}.",
-                        externalIdAttribute.Name, importIndex);
+                    activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.MissingExternalIdAttributeValue;
+                    activityRunProfileExecutionItem.ErrorMessage = ImportOutcomeMessage.ForMissingExternalId(externalIdAttribute.Name);
+                    Log.Warning("ProcessImportObjectsAsync: Import object at index {Index} has no value for External ID attribute '{ExternalIdName}'. Rejecting it.",
+                        importIndex, externalIdAttribute.Name);
+                    continue;
                 }
 
                 if (externalIdImportAttr != null)
@@ -4234,6 +4321,9 @@ public partial class SyncImportTaskProcessor
                         pageErrorCount++;
                         if (activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.DuplicateObject)
                             pageDuplicateCount++;
+
+                        if (RecordRejectedObjectSnapshot(importObject, activityRunProfileExecutionItem))
+                            pageSnapshotCount++;
                     }
                 }
 
@@ -4271,8 +4361,8 @@ public partial class SyncImportTaskProcessor
 
         // Summary statistics for this page (#2521): counting every item held so far, on every page, made each page's
         // summary cost as much as the whole run so far. The run's totals are the Activity's.
-        Log.Information("ProcessImportObjectsAsync: SUMMARY - Total objects: {Total}, Processed successfully: {Success}, Errors: {Errors}, Duplicates detected: {Duplicates}. External IDs repeated on this page: {RepeatedCount}",
-            connectedSystemImportResult.ImportObjects.Count, pageSuccessCount, pageErrorCount, pageDuplicateCount, repeatedOnThisPage.Count);
+        Log.Information("ProcessImportObjectsAsync: SUMMARY - Total objects: {Total}, Processed successfully: {Success}, Errors: {Errors}, Duplicates detected: {Duplicates}, Rejected object snapshots recorded: {Snapshots}. External IDs repeated on this page: {RepeatedCount}",
+            connectedSystemImportResult.ImportObjects.Count, pageSuccessCount, pageErrorCount, pageDuplicateCount, pageSnapshotCount, repeatedOnThisPage.Count);
     }
 
     /// <summary>
@@ -4371,6 +4461,17 @@ public partial class SyncImportTaskProcessor
 
         return externalIdAttribute != null && UnreadableAttributeNames(importObject).Contains(externalIdAttribute.Name);
     }
+
+    /// <summary>
+    /// #3013: whether an imported External ID attribute holds a value JIM can identify the object by. Read through the
+    /// Has properties, so it allocates no list the attribute does not hold (#2521).
+    /// </summary>
+    private static bool HasExternalIdValue(ConnectedSystemImportObjectAttribute externalIdAttribute) =>
+        (externalIdAttribute.HasStringValues && externalIdAttribute.StringValues.Any(v => !string.IsNullOrEmpty(v)))
+        || externalIdAttribute.HasIntValues
+        || externalIdAttribute.HasLongValues
+        || externalIdAttribute.HasDecimalValues
+        || (externalIdAttribute.HasGuidValues && externalIdAttribute.GuidValues.Any(g => g != Guid.Empty));
 
     /// <summary>
     /// It's possible the Connector has supplied some attributes with null values. These shouldn't be passed to JIM,

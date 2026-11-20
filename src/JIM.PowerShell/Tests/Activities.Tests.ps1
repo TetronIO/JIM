@@ -816,6 +816,36 @@ Describe 'Get-JIMActivityExecutionItem' {
                 @($candidate.JoinedObjects)[0].ExternalId | Should -Be 'abloggs'
             }
         }
+
+        It 'Returns a rejected imported object with its attributes as the Connector returned them' {
+            # Guard: the cmdlet passes the API's object through, so this pins the shape a script reads (#874).
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $itemId = [guid]::NewGuid()
+                $wire = @{
+                    id = $itemId
+                    errorType = 'DuplicateImportedAttributes'
+                    importedObject = @{
+                        objectType = 'person'; changeType = 'Added'; runLimitReached = $false
+                        attributes = @(
+                            @{ name = 'Department'; type = 'Text'; values = @('Finance'); withheld = $false }
+                            @{ name = 'department'; type = 'Text'; values = @('Finance Operations'); withheld = $false }
+                            @{ name = 'initialPassword'; type = 'Text'; values = @(); withheld = $true }
+                            @{ name = 'proxyAddresses'; type = 'Text'; values = @('smtp:priya.shah@example.org'); omittedValueCount = 214; withheld = $false }
+                        )
+                    }
+                } | ConvertTo-Json -Depth 6
+                Mock Invoke-RestMethod { $wire | ConvertFrom-Json }
+
+                $result = Get-JIMActivityExecutionItem -Id $itemId
+
+                $result.ImportedObject.ObjectType | Should -Be 'person'
+                $attributes = @($result.ImportedObject.Attributes)
+                $attributes.Name | Should -Be @('Department', 'department', 'initialPassword', 'proxyAddresses')
+                ($attributes | Where-Object Name -eq 'initialPassword').Withheld | Should -BeTrue
+                ($attributes | Where-Object Name -eq 'proxyAddresses').OmittedValueCount | Should -Be 214
+            }
+        }
     }
 
     Context 'Outcomes and changes' {
