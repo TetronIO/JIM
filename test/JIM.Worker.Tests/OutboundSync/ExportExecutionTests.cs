@@ -4780,6 +4780,60 @@ public class ExportExecutionTests
     }
 
     /// <summary>
+    /// #2912: a stage's second chunk is prepared alongside its first, not once the first has been prepared. At 500,000
+    /// objects the first chunk took 12.8 seconds to prepare and left only two batches, so two of four workers waited 23.5
+    /// seconds for the second. Here the first chunk's load is held, under the gate, until the second chunk's load has begun.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredPass_PreparesTheSecondChunkWhileTheFirstIsPreparedAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+
+        var repo = new ChunkLoadSyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: repo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+        var managerMvoId = SeedAnchoredUser(repo, targetSystem, targetUserType, objectGuidAttr);
+
+        // Equal weights, so the plan keeps queue order: chunks [0, 1] and [2, 3], one stage.
+        var exports = SeedDeferredExportsReferringTo(repo, targetSystem, targetUserType, managerAttr, managerMvoId, count: 4);
+        repo.HoldLoadOf = exports[0].Id;
+        repo.WatchLoadOf = exports[2].Id;
+
+        var options = new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 2, DeferredChunkSize = 2 };
+
+        // Act
+        var run = jim.ExportExecution.ExecuteExportsAsync(targetSystem, CreateSucceedingConnector().Object,
+            SyncRunMode.PreviewAndSync, options, CancellationToken.None, progressCallback: null,
+            connectorFactory: () => CreateSucceedingConnector().Object,
+            repositoryFactory: () => new JIM.Data.Repositories.SyncRepositoryScope(repo));
+
+        await repo.HeldLoadEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        try
+        {
+            await repo.WatchedLoadEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        catch (TimeoutException)
+        {
+            // Not prepared alongside: the assertion below says so.
+        }
+        var secondChunkStartedWhileTheFirstWasHeld = repo.WatchedLoadEntered.Task.IsCompleted && !repo.HeldLoadFinished;
+        repo.ReleaseHeldLoad.TrySetResult();
+        var result = await run;
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(secondChunkStartedWhileTheFirstWasHeld, Is.True, "the second chunk's preparation began while the first chunk was being prepared");
+            Assert.That(result.SuccessCount, Is.EqualTo(4));
+            Assert.That(result.FailedCount, Is.Zero);
+        }
+    }
+
+    /// <summary>
     /// Records every Metaverse Object id whose reference anchor is asked for.
     /// </summary>
     private sealed class AnchorRequestRecordingSyncRepository : SyncRepository
@@ -4813,8 +4867,15 @@ public class ExportExecutionTests
 
         public volatile bool HeldLoadFinished;
 
+        public Guid? WatchLoadOf { get; set; }
+
+        public TaskCompletionSource WatchedLoadEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public override async Task<List<PendingExport>> GetPendingExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
         {
+            if (WatchLoadOf is { } watchFor && pendingExportIds.Contains(watchFor))
+                WatchedLoadEntered.TrySetResult();
+
             if (FailLoadOf is { } failOn && pendingExportIds.Contains(failOn))
                 throw new InvalidOperationException(FailureMessage);
 
