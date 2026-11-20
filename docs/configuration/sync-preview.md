@@ -34,7 +34,7 @@ Each panel names the Connected System whose Full Synchronisation is being previe
 
 ## :material-eye-outline: How to read it
 
-Every statement in the preview is conditional: "would project", "would join", "would be deprovisioned from Target". Nothing has happened. If the preview surfaces a blocking error, for example an Attribute Flow that could not be evaluated, the panel says so plainly: the synchronisation it describes would fail, not succeed as shown.
+Every statement in the preview is conditional: "would project", "would join", "would be deprovisioned from Target". Nothing has happened. If the preview surfaces a blocking error, for example an Attribute Flow that could not be evaluated, the panel says so plainly: the synchronisation it describes would fail, not succeed as shown. The same goes for an object whose Connected System had an import stop part-way through saving what it read: synchronisation of that system is refused until a Full Import completes, and the panel says so above the outcome it still shows.
 
 A predicted join through an [Object Matching Rule](object-matching-rules.md) also says what it would rest on: the value it would match on and what the rule compares, for example `Would match on "E1007", where Employee ID equals "E" + Trim(cs["employeeId"])`.
 

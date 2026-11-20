@@ -43,6 +43,25 @@ public static class ImportCompleteness
     }
 
     /// <summary>
+    /// What a synchronisation preview of a Connected System marked import incomplete says before its result (#2951): the
+    /// real run is refused, and the preview reads the same half-saved Connector Space, so the Metaverse reference removals
+    /// it predicts may be no more than objects the stopped import had not yet saved.
+    /// </summary>
+    public static string DescribePreviewCaveat(ConnectedSystem connectedSystem)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+
+        var since = connectedSystem.ImportIncompleteSince is { } startedWritingAt
+            ? $" (it began writing on {FormatUtc(startedWritingAt)})"
+            : string.Empty;
+
+        return $"An import of Connected System '{connectedSystem.Name}' stopped part-way through saving what it read{since}, so the " +
+               "Connector Space holds only part of that import, and a Full or Delta Synchronisation of it is refused until it is whole " +
+               "again. This preview reads the same half-saved Connector Space: a Metaverse reference it shows being removed may point at " +
+               $"an object the import had not yet saved, not one that has gone. {DescribeRemedy(connectedSystem)}";
+    }
+
+    /// <summary>
     /// What clears the marker, as an instruction: a Full Import that reads the whole Connected System, run to completion.
     /// </summary>
     public static string DescribeRemedy(ConnectedSystem connectedSystem)

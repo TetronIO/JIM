@@ -26,8 +26,9 @@ function Get-JIMConnectedSystemObjectSyncPreview {
         warning.
 
         Read HasBlockingErrors before anything else: a preview that surfaced a blocking error
-        (for example an Attribute Flow that could not be evaluated) describes a synchronisation
-        that would fail, not one that would succeed as shown.
+        (for example an Attribute Flow that could not be evaluated, or ImportIncomplete: an import
+        of the Connected System stopped part-way, so synchronisation is refused until a Full Import
+        completes) describes a synchronisation that would fail, not one that would succeed as shown.
 
     .PARAMETER ConnectedSystemId
         The Connected System that owns the object.

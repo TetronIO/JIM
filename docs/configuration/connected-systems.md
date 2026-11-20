@@ -3,7 +3,7 @@ title: Connected Systems
 description: What a Connected System is and holds, and where to configure its Connector Space, scope, schema, passwords and removal.
 type: object
 audience: administrator
-validated: v0.19.0
+validated: v0.18.0
 ---
 
 # Connected Systems
@@ -107,6 +107,12 @@ says nothing true about a run that processes something else. The preview opens o
 background like any other [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it):
 you can cancel it, or leave the page and come back, and the tab picks up the latest preview until a Full
 Synchronisation of the system has run since it.
+
+**After an import stopped part-way.** While an import of the Connected System has stopped part-way through saving what it
+read, a Full Synchronisation is refused (see [Troubleshooting Synchronisation](../administration/troubleshooting-synchronisation.md)),
+but the preview still runs, so you can see what the system holds. It opens with a warning saying the real run is refused and
+how to clear it: the preview reads the same half-saved Connector Space, so a reference it shows being removed may point at an
+object the import had not yet saved.
 
 **Large systems.** Above the size at which JIM asks how much detail a preview should keep, the same question also says
 roughly how long the preview will take, so you decide before it starts. The estimate is never faster than a

@@ -119,6 +119,50 @@ public partial class SyncPreviewFidelityTests : WorkflowTestBase
     }
 
     /// <summary>
+    /// #2951: an import of the object's Connected System stopped part-way (#2521), so the real synchronisation is refused.
+    /// The preview still evaluates the object, for diagnosis, but reports the refusal as a blocking error so nobody reads
+    /// the outcome as what the run will do.
+    /// </summary>
+    [Test]
+    public async Task PreviewSyncForCsoAsync_SystemMarkedImportIncomplete_ReportsTheRefusalAndStillEvaluatesAsync()
+    {
+        var sourceSystem = await CreateConnectedSystemAsync("HR Source");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
+        var cso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", "EMP001");
+        DbContext.ChangeTracker.Clear();
+        var persisted = await DbContext.ConnectedSystems.FindAsync(sourceSystem.Id);
+        persisted!.ImportIncompleteSince = new DateTime(2026, 11, 16, 10, 3, 12, DateTimeKind.Utc);
+        await DbContext.SaveChangesAsync();
+
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(sourceSystem.Id, cso.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            var refusal = preview.Errors.SingleOrDefault(e => e.Code == SyncPreviewMessageCode.ImportIncomplete);
+            Assert.That(refusal, Is.Not.Null, "the real synchronisation is refused, so the preview says so");
+            Assert.That(refusal!.ConnectedSystemId, Is.EqualTo(sourceSystem.Id));
+            Assert.That(refusal.Detail, Does.Contain("stopped part-way").And.Contain("refused").And.Contain("Run a Full Import"));
+            Assert.That(preview.OutcomeTree, Is.Not.Empty, "the preview still evaluates the object, for diagnosis");
+        }
+    }
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_SystemNotMarkedImportIncomplete_ReportsNoRefusalAsync()
+    {
+        var sourceSystem = await CreateConnectedSystemAsync("HR Source");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
+        var cso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", "EMP001");
+
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(sourceSystem.Id, cso.Id);
+
+        Assert.That(preview.Errors.Select(e => e.Code), Does.Not.Contain(SyncPreviewMessageCode.ImportIncomplete));
+    }
+
+    /// <summary>
     /// The steady-state chain: a joined CSO whose source value changed, with no export rules. Preview tree
     /// and real tree must both be a single Attribute Flow root.
     /// </summary>

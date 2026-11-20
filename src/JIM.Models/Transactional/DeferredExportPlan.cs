@@ -40,8 +40,9 @@ public sealed class DeferredExportPlan
     public IReadOnlyList<bool> PreparableAhead { get; init; } = [];
 
     /// <summary>
-    /// Whether the chunk at <paramref name="chunkIndex"/> (in the order of <see cref="Chunks"/>) may be prepared while the
-    /// batches of the chunks before it in its stage are still being written (#2605). A stage's first chunk never is: it
+    /// Whether the chunk at <paramref name="chunkIndex"/> (in the order of <see cref="Chunks"/>) may be prepared before the
+    /// chunks before it in its stage have been written (#2605): while their batches are written, or while the chunk before
+    /// it is itself prepared (#2912). A stage's first chunk never is: it
     /// waits on the stages before it. Nor is a chunk holding a reference to an object whose anchor an export in an earlier
     /// chunk of its stage supplies: the pass has always resolved it against what that export had written by the time the
     /// chunk was loaded, so it is still loaded then. Any other chunk resolves the same whenever it is prepared.

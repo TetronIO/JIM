@@ -3,7 +3,7 @@ title: Troubleshooting
 description: Fix a JIM installation that will not start, serve HTTPS or let you sign in, by the message it shows.
 type: troubleshooting
 audience: operator
-validated: v0.19.0
+validated: v0.18.0
 ---
 
 # Troubleshooting

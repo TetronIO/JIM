@@ -3963,8 +3963,10 @@ public partial class SyncImportTaskProcessor
                             connectedSystemObject.Status, connectedSystemObject.LastUpdated));
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Obsolete;
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
-                        _csoIdsQueuedForUpdate.Add(connectedSystemObject.Id);
-                        connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
+
+                        // Queued once: listed twice, reference resolution fails the run on a duplicate External ID (#2911).
+                        if (_csoIdsQueuedForUpdate.Add(connectedSystemObject.Id))
+                            connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
 
                         // Record a DeletionDetected outcome so the outcome tree shows what happened during import.
                         // The actual deletion and CsoDeleted outcome happen during the subsequent sync run.
@@ -4626,6 +4628,7 @@ public partial class SyncImportTaskProcessor
         if (_csIsEmpty || _connectedSystem.ObjectTypes == null || _csoExternalIdLookup is { HoldsEveryObject: true })
         {
             TypeUntypedDeletions(page, earlierPageKeys);
+            RetypeDeletionsOfObjectsHeldUnderAnotherObjectType(page, earlierPageKeys);
             return;
         }
 
@@ -4633,6 +4636,7 @@ public partial class SyncImportTaskProcessor
         {
             await LoadEveryCsoExternalIdAsync("the Connector read every object in scope, so every object is looked up");
             TypeUntypedDeletions(page, earlierPageKeys);
+            RetypeDeletionsOfObjectsHeldUnderAnotherObjectType(page, earlierPageKeys);
             return;
         }
 
@@ -4648,6 +4652,9 @@ public partial class SyncImportTaskProcessor
 
             if (pageLookupInUse && _connectedSystem.ConnectorDefinition.ExternalIdsUniqueAcrossObjectTypes)
                 await LookUpCsoExternalIdsAsync(lookup, CollectCrossTypeExternalIdProbes(page, lookup), span);
+
+            // #2911: after the cross-type pass, which looked up the keys this asks about.
+            RetypeDeletionsOfObjectsHeldUnderAnotherObjectType(page, earlierPageKeys);
         }
         finally
         {
@@ -5139,6 +5146,109 @@ public partial class SyncImportTaskProcessor
                 Log.Debug("TypeUntypedDeletions: The Connector reported a deletion without its Object Type, and JIM knows no object with its External ID. Ignoring.");
             }
         }
+    }
+
+    /// <summary>
+    /// #2911: gives each deletion on the page whose Object Type names no object JIM knows, but whose External ID names one
+    /// it knows under exactly one other Object Type, that other type. A Connector types a deletion from what it last knew
+    /// of the object and the current Object Type selection, which can differ from the type JIM holds it under (#2049).
+    /// Typed as JIM knows the object, the deletion is that object's under every rule below: a page that also returns the
+    /// object under its own type returns it twice, and every copy is rejected (#2063); a later page's deletion takes the
+    /// place of an earlier page's change to it (#2074). Kept apart, the two were matched to the one object separately and
+    /// queued it for update twice, which failed the run. Only where External IDs name one object across every Object
+    /// Type, as for <see cref="TypeUntypedDeletions"/>; the object is found among those JIM holds, those an earlier page of
+    /// this run returned, and the page's own objects.
+    /// </summary>
+    /// <remarks>
+    /// Runs once the page's External IDs have been looked up under the other Object Types
+    /// (<see cref="CollectCrossTypeExternalIdProbes"/>), which asks for exactly the keys this reads.
+    /// </remarks>
+    private void RetypeDeletionsOfObjectsHeldUnderAnotherObjectType(ConnectedSystemImportResult page, HashSet<string>? earlierPageKeys)
+    {
+        if (!_connectedSystem.ConnectorDefinition.ExternalIdsUniqueAcrossObjectTypes || _connectedSystem.ObjectTypes == null)
+            return;
+
+        var deletions = page.ImportObjects
+            .Where(o => o.ChangeType == ObjectChangeType.Deleted && !string.IsNullOrEmpty(o.ObjectType))
+            .ToList();
+        if (deletions.Count == 0)
+            return;
+
+        var pageKeyCounts = page.ImportObjects
+            .Select(GetDuplicateDetectionKey)
+            .OfType<string>()
+            .GroupBy(key => key, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+
+        var retypes = deletions
+            .Select(deletion => FindObjectTypeDeletionIsKnownUnder(deletion, earlierPageKeys, pageKeyCounts))
+            .OfType<DeletionRetype>()
+            .ToList();
+        foreach (var retype in retypes)
+        {
+            Log.Information("RetypeDeletionsOfObjectsHeldUnderAnotherObjectType: The Connector reported a deletion of type '{ObjectType}' for an object JIM knows as type '{HeldObjectType}'. The deletion is applied to it.",
+                LogSanitiser.Sanitise(retype.Deletion.ObjectType), LogSanitiser.Sanitise(retype.ObjectType.Name));
+            retype.Deletion.ObjectType = retype.ObjectType.Name;
+            retype.ExternalIdImportAttribute.Name = retype.ExternalIdAttribute.Name;
+        }
+    }
+
+    /// <summary>#2911: a deletion to give another Object Type, and the External ID attribute it is read by there.</summary>
+    private sealed record DeletionRetype(
+        ConnectedSystemImportObject Deletion,
+        ConnectedSystemImportObjectAttribute ExternalIdImportAttribute,
+        ConnectedSystemObjectType ObjectType,
+        ConnectedSystemObjectTypeAttribute ExternalIdAttribute);
+
+    /// <summary>
+    /// #2911: the one other Object Type a deletion's External ID names a known object under, where its own names none;
+    /// null where its own names one, or none or more than one other does.
+    /// </summary>
+    private DeletionRetype? FindObjectTypeDeletionIsKnownUnder(ConnectedSystemImportObject deletion, HashSet<string>? earlierPageKeys,
+        Dictionary<string, int> pageKeyCounts)
+    {
+        if (ObjectTypesArrivedAs(deletion).FirstOrDefault() is not { } declaredType)
+            return null;
+
+        var declaredExternalIdAttribute = declaredType.Attributes.First(a => a.IsExternalId);
+        var externalIdImportAttribute = deletion.Attributes.SingleOrDefault(a => a.Name.Equals(declaredExternalIdAttribute.Name, StringComparison.OrdinalIgnoreCase));
+        if (externalIdImportAttribute == null)
+            return null;
+
+        // Itself counts once among the page's keys under its own type; another object there is a second.
+        if (NamesKnownObjectUnder(deletion, declaredType, declaredExternalIdAttribute, declaredExternalIdAttribute, externalIdImportAttribute,
+                earlierPageKeys, key => pageKeyCounts.GetValueOrDefault(key) > 1))
+            return null;
+
+        var namedTargets = GetCrossTypeProbeTargets(declaredType, declaredExternalIdAttribute)
+            .Where(target => NamesKnownObjectUnder(deletion, target.ObjectType, declaredExternalIdAttribute, target.ExternalIdAttribute,
+                externalIdImportAttribute, earlierPageKeys, pageKeyCounts.ContainsKey))
+            .ToList();
+        return namedTargets.Count == 1
+            ? new DeletionRetype(deletion, externalIdImportAttribute, namedTargets[0].ObjectType, namedTargets[0].ExternalIdAttribute)
+            : null;
+    }
+
+    /// <summary>
+    /// #2911: whether a deletion's External ID, read through <paramref name="sourceExternalIdAttribute"/> and folded by
+    /// <paramref name="targetExternalIdAttribute"/> as the lookup keys it, names an object of <paramref name="objectType"/>
+    /// that JIM holds, that an earlier page returned, or that <paramref name="namedOnThisPage"/> says this page returns.
+    /// </summary>
+    private bool NamesKnownObjectUnder(ConnectedSystemImportObject deletion, ConnectedSystemObjectType objectType,
+        ConnectedSystemObjectTypeAttribute sourceExternalIdAttribute, ConnectedSystemObjectTypeAttribute targetExternalIdAttribute,
+        ConnectedSystemImportObjectAttribute externalIdImportAttribute, HashSet<string>? earlierPageKeys, Func<string, bool> namedOnThisPage)
+    {
+        if (!_csIsEmpty && _csoExternalIdLookup != null && HeldObjectsAtStart(objectType) &&
+            TryExternalIdProbe(deletion, sourceExternalIdAttribute, targetExternalIdAttribute) is { } probe &&
+            _csoExternalIdLookup.ContainsKey(LookupKey(probe)))
+            return true;
+
+        var value = GetDuplicateDetectionExternalIdValue(externalIdImportAttribute, targetExternalIdAttribute.Type);
+        if (string.IsNullOrEmpty(value))
+            return false;
+
+        var key = GetDuplicateDetectionKey(objectType, targetExternalIdAttribute, value);
+        return namedOnThisPage(key) || earlierPageKeys?.Contains(key) == true;
     }
 
     /// <summary>

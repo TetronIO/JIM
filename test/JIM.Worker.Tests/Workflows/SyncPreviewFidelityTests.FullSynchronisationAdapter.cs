@@ -341,6 +341,48 @@ public partial class SyncPreviewFidelityTests
     }
 
     [Test]
+    public async Task FullSynchronisationAdapter_ValidateAsync_SystemMarkedImportIncomplete_WarnsTheRealRunIsRefusedAndStillPreviewsAsync()
+    {
+        // #2951: an import stopped part-way, so the real run is refused (#2521) and the preview reads a half-saved Connector
+        // Space. It stays runnable for diagnosis, but says so first: a Warning, never Blocking, which would stop it.
+        var ctx = await SetUpNewSourceObjectAsync();
+        await CreateRunProfileAsync(ctx.Source.Id, "Full Synchronisation", ConnectedSystemRunType.FullSynchronisation);
+        DbContext.ChangeTracker.Clear();
+        var persisted = await DbContext.ConnectedSystems.FindAsync(ctx.Source.Id);
+        persisted!.ImportIncompleteSince = new DateTime(2026, 11, 16, 10, 3, 12, DateTimeKind.Utc);
+        await DbContext.SaveChangesAsync();
+
+        var findings = await FullSynchronisationAdapter.ValidateAsync(FullSynchronisationContext(ctx.Source.Id));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(findings.Select(f => f.Severity), Is.EqualTo(new[] { PreviewValidationSeverity.Warning }));
+            Assert.That(findings.Single().Message, Does.Contain("stopped part-way").And.Contain("refused")
+                .And.Contain("16 Nov 2026 10:03:12 UTC").And.Contain("Run a Full Import"));
+        }
+    }
+
+    [Test]
+    public async Task FullSynchronisationAdapter_ValidateAsync_SystemMarkedImportIncompleteWithSelectedPartitions_NamesThemInTheRemedyAsync()
+    {
+        var ctx = await SetUpNewSourceObjectAsync();
+        await CreateRunProfileAsync(ctx.Source.Id, "Full Synchronisation", ConnectedSystemRunType.FullSynchronisation);
+        DbContext.ChangeTracker.Clear();
+        var persisted = await DbContext.ConnectedSystems.FindAsync(ctx.Source.Id);
+        persisted!.ImportIncompleteSince = DateTime.UtcNow;
+        DbContext.ConnectedSystemPartitions.Add(new ConnectedSystemPartition
+        {
+            ConnectedSystem = persisted, Name = "DC=corp,DC=local", ExternalId = "DC=corp,DC=local", Selected = true
+        });
+        await DbContext.SaveChangesAsync();
+
+        var findings = await FullSynchronisationAdapter.ValidateAsync(FullSynchronisationContext(ctx.Source.Id));
+
+        Assert.That(findings.Single().Message, Does.Contain("reading all selected partitions"),
+            "the remedy is the same one the Connected System page gives, partitions included");
+    }
+
+    [Test]
     public async Task FullSynchronisationAdapter_ValidateAsync_CapThatEvaluatesNothing_BlocksAsync()
     {
         var ctx = await SetUpNewSourceObjectAsync();

@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ An object an import rejects before it reaches the Connector Space, such as one of two sharing an External ID, now shows what the Connector returned for it, in the portal, the REST API and PowerShell; credential values are never kept. (#874)
 
+### Changed
+
+- 🔄 While an import of a Connected System has stopped part-way, its Sync Previews and Full Synchronisation previews still run but open with a warning that the real synchronisation is refused, and why, in the portal, the REST API and PowerShell. (#2951)
+
 ### Fixed
 
 - 🐛 An imported object with no External ID value is rejected with a Missing External ID error instead of being imported as a Connected System Object JIM could never match again, and its Object Type is not checked for deleted objects that run. (#3013)
@@ -36,10 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🐛 A Scope test case remembers the connections it was tested with, such as "Has user in PANOPLY AD", so it gives the same result every time it runs; set them in the portal, the REST API or PowerShell. (#2787)
 - 🐛 Changing which Object Type a connection Scoping Criterion checks, such as "Has user in PANOPLY AD", is recorded in Configuration History as a change that affects synchronisation; it was saved with no change class and an error in the log. (#2994)
+- 🐛 A Delta Import no longer fails when the Connector reports an object changed and then deleted under a different Object Type: the deletion now applies to the object JIM holds, as a later change to it. (#2911)
 
 ### Performance
 
 - ⚡ A Full Import that confirms an export no longer looks up every group member to compare a group whose membership is already current, saving about 20 seconds at 500,000 users. (#2986)
+- ⚡ An export's pass for references that resolve later starts its second set of exports alongside the first, so fewer workers sit idle at its start. (#2912)
 
 ## [0.18.0] - 2026-11-17
 
@@ -1996,8 +2002,7 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.19.0...HEAD
-[0.19.0]: https://github.com/TetronIO/JIM/compare/v0.18.0...v0.19.0
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.18.0...HEAD
 [0.18.0]: https://github.com/TetronIO/JIM/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/TetronIO/JIM/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/TetronIO/JIM/compare/v0.15.0...v0.16.0
