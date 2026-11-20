@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 🔄 While an import of a Connected System has stopped part-way, its Sync Previews and Full Synchronisation previews still run but open with a warning that the real synchronisation is refused, and why, in the portal, the REST API and PowerShell. (#2951)
+- 🔄 Previews of an import Synchronisation Rule's changes and of Object Matching Rules now open with the same warning while an import of their Connected System has stopped part-way, because the synchronisation that would apply the change is refused. (#3014)
 
 ## [0.19.0] - 2026-11-19
 

@@ -57,6 +57,10 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
 
     public Type ProposalType => typeof(SyncRuleBehaviourToggleProposal);
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyCollection<int>> GetEvaluatedConnectorSpacesAsync(PreviewContext context) =>
+        PreviewConnectorSpaces.ForSyncRule(await GetRuleAsync(context));
+
     public async Task<List<PreviewValidationFinding>> ValidateAsync(PreviewContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

@@ -5,6 +5,7 @@ using JIM.Application.Interfaces;
 using JIM.Application.Servers.Preview;
 using JIM.Models.Activities;
 using JIM.Models.Preview;
+using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Utility;
 using Serilog;
@@ -328,6 +329,8 @@ public class ConfigurationChangePreviewServer
         try
         {
             findings = await adapter.ValidateAsync(context) ?? [];
+            if (findings.All(f => f.Severity != PreviewValidationSeverity.Blocking))
+                findings.AddRange(await DescribeImportIncompleteConnectorSpacesAsync(adapter, context));
             preview.ValidationFindings = Serialise(findings);
             preview.ValidationStatus = ConfigurationChangePreviewStageStatus.Complete;
             preview.ValidationCompleted = DateTime.UtcNow;
@@ -369,6 +372,32 @@ public class ConfigurationChangePreviewServer
         }
 
         return new ConfigurationChangePreviewStartResult(activity.Id, findings, estimate);
+    }
+
+    /// <summary>
+    /// A warning for each Connector Space the preview evaluates as its synchronisation would whose Connected System is
+    /// marked import incomplete (#2521, #3014): that synchronisation is refused, and the preview reads half an import.
+    /// A warning rather than a block, because the preview is still worth reading for diagnosis.
+    /// </summary>
+    private async Task<List<PreviewValidationFinding>> DescribeImportIncompleteConnectorSpacesAsync(
+        IConfigurationChangePreviewAdapter adapter, PreviewContext context)
+    {
+        var warnings = new List<PreviewValidationFinding>();
+        foreach (var connectedSystemId in (await adapter.GetEvaluatedConnectorSpacesAsync(context)).Distinct())
+        {
+            var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+            if (connectedSystem?.ImportIncompleteSince is null)
+                continue;
+
+            // The remedy names the selected partitions where there are any, as the Connected System page does.
+            connectedSystem.Partitions = [.. await _application.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem)];
+            warnings.Add(new PreviewValidationFinding(PreviewValidationSeverity.Warning,
+                ImportCompleteness.DescribePreviewCaveat(connectedSystem), nameof(ConnectedSystem.ImportIncompleteSince)));
+            Log.Information("DescribeImportIncompleteConnectorSpacesAsync: Preview {ActivityId} ({Surface}) evaluates Connected System {ConnectedSystemId}, marked import incomplete since {Since:o}; warned.",
+                context.ActivityId, context.Surface, connectedSystemId, connectedSystem.ImportIncompleteSince);
+        }
+
+        return warnings;
     }
 
     /// <summary>

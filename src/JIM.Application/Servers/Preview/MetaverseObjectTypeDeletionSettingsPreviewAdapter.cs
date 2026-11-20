@@ -47,6 +47,10 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapter : IConfigurationC
 
     public Type ProposalType => typeof(MetaverseObjectTypeDeletionSettingsProposal);
 
+    /// <inheritdoc />
+    /// <remarks>It evaluates Metaverse Objects, not a Connector Space.</remarks>
+    public Task<IReadOnlyCollection<int>> GetEvaluatedConnectorSpacesAsync(PreviewContext context) => PreviewConnectorSpaces.None;
+
     public async Task<List<PreviewValidationFinding>> ValidateAsync(PreviewContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

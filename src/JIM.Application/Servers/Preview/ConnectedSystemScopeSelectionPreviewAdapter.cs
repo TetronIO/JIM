@@ -62,6 +62,10 @@ public class ConnectedSystemScopeSelectionPreviewAdapter : IConfigurationChangeP
 
     public Type ProposalType => typeof(ConnectedSystemScopeSelectionProposal);
 
+    /// <inheritdoc />
+    /// <remarks>A partition and container selection takes effect at the next import, which is what repairs a stopped one.</remarks>
+    public Task<IReadOnlyCollection<int>> GetEvaluatedConnectorSpacesAsync(PreviewContext context) => PreviewConnectorSpaces.None;
+
     public async Task<List<PreviewValidationFinding>> ValidateAsync(PreviewContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

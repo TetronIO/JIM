@@ -65,6 +65,11 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
 
     public Type ProposalType => typeof(ObjectMatchingProposal);
 
+    /// <inheritdoc />
+    /// <remarks>The Connected System whose unjoined objects are matched, as its synchronisation would match them.</remarks>
+    public Task<IReadOnlyCollection<int>> GetEvaluatedConnectorSpacesAsync(PreviewContext context) =>
+        context.TargetId is { } connectedSystemId ? Task.FromResult(PreviewConnectorSpaces.Of(connectedSystemId)) : PreviewConnectorSpaces.None;
+
     public async Task<List<PreviewValidationFinding>> ValidateAsync(PreviewContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
