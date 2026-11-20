@@ -1,6 +1,6 @@
 # Microsoft Graph Connector (Entra ID) Design Document
 
-- **Status:** Doing (design agreed; Phase 1 under way)
+- **Status:** Doing (design agreed; Phase 1 complete, Phase 2 next)
 - **Issue:** [#361](https://github.com/TetronIO/JIM/issues/361) (the issue is the requirements source, in effect the PRD; this document is the implementation plan)
 - **Related Issues:** #545 (SCIM 2.0 Client Connector, whose HTTP stack this reuses), #1145 (Source of Authority conversion as an export operation), #360 (pronouns), #192 (generic REST connector), #2367 (Entra ID sign-in, which gave JIM its Entra ID test tenant)
 - **Related Plans:** [`SCIM_CLIENT_CONNECTOR_DESIGN.md`](../done/SCIM_CLIENT_CONNECTOR_DESIGN.md), the closest precedent: an HTTP connector built in phases with seeding held back until the last one
@@ -115,7 +115,7 @@ Microsoft publishes the identity and access limits: per app and tenant, 3,500 to
 
 Like the SCIM connector, the connector is registered in `ConnectorFactory` from Phase 1 but **not seeded** until the last phase, so partly built work can merge to `main` without administrators ever seeing it.
 
-1. **Shared HTTP layer (stack layer).** Move retry, throttle hints and client credentials into `JIM.Connectors/Http/`; SCIM switched over, its tests unchanged.
+1. **Shared HTTP layer (stack layer).** ✅ Move retry, throttle hints and client credentials into `JIM.Connectors/Http/`; SCIM switched over, its tests unchanged.
 2. **Skeleton.** `GraphConnector`, constants, settings (Tenant ID, Client ID, authentication method, secret or certificate, Cloud), capabilities, factory registration. Unit tests for settings shape and validation.
 3. **HTTP client and authentication.** Token acquisition (secret and certificate assertion), national clouds, pacing, priority header, adaptive slowing, 429 handling. Connectivity test that reads the token's roles and names missing permissions. Mock Graph service with throttling, partial-batch and eventual-consistency switches.
 4. **Schema.** Curated user and group schema; directory extension discovery; `onPremisesExtensionAttributes`; `sourceOfAuthority` and its supporting attributes always present.
