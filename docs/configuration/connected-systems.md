@@ -3,7 +3,7 @@ title: Connected Systems
 description: What a Connected System is and holds, and where to configure its Connector Space, scope, schema, passwords and removal.
 type: object
 audience: administrator
-validated: v0.18.0
+validated: v1.0.0
 ---
 
 # Connected Systems

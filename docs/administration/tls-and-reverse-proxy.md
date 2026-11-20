@@ -3,7 +3,7 @@ title: TLS and Reverse Proxy
 description: Give JIM its HTTPS certificate, renew or replace it, and run JIM behind a reverse proxy.
 type: reference
 audience: operator
-validated: v0.18.0
+validated: v1.0.0
 ---
 
 # TLS and Reverse Proxy

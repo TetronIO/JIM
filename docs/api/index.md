@@ -81,7 +81,12 @@ The API uses URL path-based versioning. The current version is `v1`; all endpoin
 
 ## :material-alert-decagram-outline: Breaking changes
 
-JIM is pre-v1.0, so breaking changes to the API can still occur between releases. Changes that affect existing integrations are called out here.
+JIM follows semantic versioning from v1.0.0: a breaking change to the API comes only in a new major version, and anything it removes is first marked deprecated in an earlier minor release. Changes that affect existing integrations are called out here.
+
+**v1.0.0**
+
+- **Signing in to the API through Microsoft Entra ID needs version 2 access tokens.** Version 1 tokens are refused; set `"requestedAccessTokenVersion": 2` in the application's manifest ([Upgrading](../administration/upgrading.md)).
+- **An access token must grant JIM's API scope.** Where the identity provider gives the portal's sign-in token and the API's access token the same audience, as Keycloak and Microsoft Entra ID do, JIM accepts only a token that grants `JIM_SSO_API_SCOPE`, so that setting must be set for single sign-on to the API. API keys are unaffected.
 
 **v0.17.0**
 

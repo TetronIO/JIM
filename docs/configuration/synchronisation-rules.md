@@ -3,7 +3,7 @@ title: Synchronisation Rules
 description: What a Synchronisation Rule ties together, its direction, and where to configure its scope, matching, mappings and deprovisioning.
 type: object
 audience: administrator
-validated: v0.18.0
+validated: v1.0.0
 ---
 
 # Synchronisation Rules

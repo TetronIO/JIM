@@ -3,7 +3,7 @@ title: Activities
 description: What an Activity records about each operation JIM performs, from a Run Profile execution to a configuration change, and how to find one.
 type: object
 audience: administrator
-validated: v0.18.0
+validated: v1.0.0
 ---
 
 # Activities

@@ -3,7 +3,7 @@ title: Junctional Identity Manager Docs
 description: A modern, self-hosted Identity Management system for organisations with complex identity synchronisation requirements.
 type: landing
 audience: evaluator
-validated: v0.18.0
+validated: v1.0.0
 template: home.html
 hide:
   - navigation
@@ -173,7 +173,7 @@ JIM covers the whole identity lifecycle:
 - **Export** changes to target systems, each one held as a Pending Export until it is confirmed.
 - **Schedule** all of it, by cron expression or interval.
 
-Its pipelines run in bounded memory, and are validated at 1,000,000 users and 60,000 groups synchronised across two directories. Very large groups are part of that: two of the groups hold all 1,000,000 users, one holds 800,000, and 19 hold more than 100,000. Its security is assessed against the OWASP Top 10:2025, and its supply chain is hardened. The [Product Roadmap](reference/roadmap.md) sets out the milestones to v1.0, Identity Lifecycle Complete, and after it.
+Its pipelines run in bounded memory, and are validated at 1,000,000 users and 60,000 groups synchronised across two directories. Very large groups are part of that: two of the groups hold all 1,000,000 users, one holds 800,000, and 19 hold more than 100,000. Its security is assessed against the OWASP Top 10:2025, and its supply chain is hardened. v1.0, Identity Lifecycle Complete, is JIM's first stable release; the [Product Roadmap](reference/roadmap.md) sets out the milestones after it.
 
 ## :material-forum-outline: Community & Support
 

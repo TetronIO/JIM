@@ -139,14 +139,14 @@ Connect-JIM -Url "https://jim.example.com"
 JIM includes a cross-platform [PowerShell module](https://docs.junctional.io/powershell/) for scripting, automation, and Identity as Code (IDaC).
 
 ## State of Development
-JIM is working towards its v1.0 milestone: Identity Lifecycle Complete. The core identity lifecycle is fully functional today:
+JIM v1.0, Identity Lifecycle Complete, is JIM's first stable release. The core identity lifecycle is fully functional:
 
 - **Import** identities from source systems (LDAP directories, SQL databases, SCIM 2.0 services, CSV files), or receive them from identity providers over SCIM 2.0
 - **Sync** to reconcile identities in the central metaverse
 - **Export** changes to target systems with Pending Export management
 - **Schedule** automated synchronisation using cron or interval-based triggers
 
-For what is coming in v1.0 and beyond, see the [Roadmap](https://docs.junctional.io/reference/roadmap/).
+For what comes after v1.0, see the [Roadmap](https://docs.junctional.io/reference/roadmap/).
 
 ## Community & Support
 

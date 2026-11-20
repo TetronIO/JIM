@@ -3,7 +3,7 @@ title: Run Profiles
 description: What each run type does, and the settings that scope a run, verify an import and stop a run becoming a mass change.
 type: object
 audience: administrator
-validated: v0.18.0
+validated: v1.0.0
 ---
 
 # Run Profiles
@@ -105,7 +105,7 @@ Raising or clearing the limited Run Profile's own limit works too, but is the we
 
 ### Full Import
 
-A **Full Import** Run Profile can carry a limit on how many Connected System Objects a single run's deletion detection may newly mark as deleted: **Max detected deletions** (a count) and **Max detected deletions percent** (a share, 0 to 100, of the Connected System Objects in the run's scope when it starts, not counting those already marked as deleted). Each is optional and independent; leave either blank for no limit, or set one to `0` to refuse to mark anything as deleted. Both are valid on a Full Import Run Profile and on a [Delta Import](#delta-import) Run Profile; setting either on any other run type is rejected.
+A **Full Import** Run Profile can carry a limit on how many Connected System Objects a single run's deletion detection may newly mark as deleted: **Max detected deletions** (a count) and **Max detected deletions percent** (labelled **Max detected deletions (% of Connector Space)** in the portal; a share, 0 to 100, of the Connected System Objects in the run's scope when it starts, not counting those already marked as deleted). Each is optional and independent; leave either blank for no limit, or set one to `0` to refuse to mark anything as deleted. Both are valid on a Full Import Run Profile and on a [Delta Import](#delta-import) Run Profile; setting either on any other run type is rejected.
 
 **A run that would exceed either limit marks nothing as deleted.** JIM works out which Connected System Objects would newly be marked as deleted (excluding objects this run already saw, including those it saw under another Object Type and [refused to change](#allow-object-type-changes-full-import), objects retired by an Object Type change the Run Profile allows, and objects already marked from an earlier run); if that count is more than Max detected deletions, or more than Max detected deletions percent of the Connected System Objects in scope that are not already marked as deleted, JIM marks none of them: every one stays exactly as it was. Objects the import did see are still created and updated as normal. There is no partial marking. The Activity for a refused detection completes as **Complete with warning**, naming the limit, how many objects were found missing and what share that is, and what to do next, and the Activity's `detectedDeletionsWithheld` counter records exactly how many were withheld (see [Activities](activities.md)). Resuming needs no action beyond raising or clearing the limit, or fixing the Connected System's scope or the connector's filters, then running the Full Import again.
 

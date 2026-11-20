@@ -3,7 +3,7 @@ title: JML Lifecycle
 description: How JIM provisions, updates and deprovisions accounts as people join, move within and leave an organisation.
 type: concept
 audience: implementer
-validated: v0.18.0
+validated: v1.0.0
 ---
 
 # JML Lifecycle

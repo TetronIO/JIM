@@ -3,7 +3,7 @@ title: Synchronisation Pipeline
 description: How JIM moves identity data through three phases, Import, Synchronisation and Export, and what each one does and protects.
 type: concept
 audience: implementer
-validated: v0.18.0
+validated: v1.0.0
 ---
 
 # Synchronisation Pipeline
@@ -45,7 +45,7 @@ A **Delta Import** reads only the objects changed since the last import. It is m
    - **Updates**<br /> The existing Connected System Object, if at least one of its attribute values has changed, or if JIM provisioned the object and the import confirms it exists in the Connected System.
    - **Leaves it unchanged**<br /> The existing Connected System Object, if the object matches what JIM holds. JIM finds this from the object's [content hash](#how-full-import-detects-unchanged-objects), or by comparing it attribute by attribute.
    - **Obsoletes**<br /> The existing Connected System Object, if the Connector reports the object deleted. The Activity message counts an obsoleted object as **deleted**.
-4. A run that read all of them also obsoletes each Connected System Object it no longer found.
+4. A run that read all of them also obsoletes each Connected System Object it no longer found. An Object Type with an object whose External ID was missing or unreadable is not checked that run, and the Activity says so.
 5. The run's Activity message counts what happened, for example:
 
     > Import complete: 1,000 objects (3 created, 12 updated, 983 unchanged, 2 errors) in 42 sec (avg 24 obj/s); 5 no longer found and marked as deleted
@@ -130,7 +130,7 @@ Export sends Pending Exports from the Connector Space to the target Connected Sy
 1. JIM reads the Pending Exports for the Connected System.
 2. For each one, the Connector sends the change to the external system.
 3. A successful export is confirmed, usually by the next import, and its Pending Export is cleared.
-4. A failed export stays a Pending Export, with its error recorded on the run's Activity, and is attempted again at every export run until the cause is fixed; [Troubleshooting Synchronisation](../administration/troubleshooting-exports.md#operation-failed-export-failed) explains each error.
+4. A failed export stays a Pending Export, with its error recorded on the run's Activity, and is attempted again at every export run until the cause is fixed; [Troubleshooting Exports](../administration/troubleshooting-exports.md#operation-failed-export-failed) explains each error.
 5. The run's Activity records how many changes were exported.
 
 ### Batching and Parallelism
