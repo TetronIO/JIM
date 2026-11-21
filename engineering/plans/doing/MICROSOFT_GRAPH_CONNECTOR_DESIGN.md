@@ -1,10 +1,10 @@
 # Microsoft Graph Connector (Entra ID) Design Document
 
-- **Status:** Doing (design agreed; Phase 1 complete, Phase 2 next)
+- **Status:** Doing (design agreed; Phases 1 and 2 complete, Phase 3 next)
 - **Issue:** [#361](https://github.com/TetronIO/JIM/issues/361) (the issue is the requirements source, in effect the PRD; this document is the implementation plan)
 - **Related Issues:** #545 (SCIM 2.0 Client Connector, whose HTTP stack this reuses), #1145 (Source of Authority conversion as an export operation), #360 (pronouns), #192 (generic REST connector), #2367 (Entra ID sign-in, which gave JIM its Entra ID test tenant)
 - **Related Plans:** [`SCIM_CLIENT_CONNECTOR_DESIGN.md`](../done/SCIM_CLIENT_CONNECTOR_DESIGN.md), the closest precedent: an HTTP connector built in phases with seeding held back until the last one
-- **Last Updated:** 2026-11-20
+- **Last Updated:** 2026-11-21
 
 ## Overview
 
@@ -54,7 +54,7 @@ Under `src/JIM.Connectors/Graph/`, mirroring the SCIM decomposition:
 App-only (client credentials), against the customer's own app registration:
 
 - **Client secret:** simplest; stored as `StringEncrypted`.
-- **Certificate:** recommended for production. A PFX uploaded through the existing `File` setting type and held encrypted, used to sign a client assertion. JIM has no private-key certificate store today (its certificate store holds trusted public certificates only), so the PFX lives on the Connected System's settings.
+- **Certificate:** recommended for production. The PFX, Base64-encoded, in a `StringEncrypted` setting, with an optional encrypted Certificate Password; used to sign a client assertion. JIM has no private-key certificate store today (its certificate store holds trusted public certificates only), and the `File` setting type holds a path rather than content, so the PFX lives on the Connected System's settings, encrypted at rest with every other credential. Saving the settings refuses a PFX that will not open, has no private key, is not RSA of at least 2,048 bits, or is outside its validity period, and warns within 30 days of expiry.
 - **Delegated (authorisation code) flow: dropped.** The issue lists it, but the connector runs unattended in the Worker; there is no user present to sign in, and a refresh token stored for a person is a worse credential than an app's.
 - **National clouds:** a Cloud drop-down (Global, US Government L4, US Government L5 (DoD), China) sets the authority and Graph host. The audiences JIM serves include government.
 
@@ -116,7 +116,7 @@ Microsoft publishes the identity and access limits: per app and tenant, 3,500 to
 Like the SCIM connector, the connector is registered in `ConnectorFactory` from Phase 1 but **not seeded** until the last phase, so partly built work can merge to `main` without administrators ever seeing it.
 
 1. **Shared HTTP layer (stack layer).** ✅ Move retry, throttle hints and client credentials into `JIM.Connectors/Http/`; SCIM switched over, its tests unchanged.
-2. **Skeleton.** `GraphConnector`, constants, settings (Tenant ID, Client ID, authentication method, secret or certificate, Cloud), capabilities, factory registration. Unit tests for settings shape and validation.
+2. **Skeleton.** ✅ `GraphConnector`, constants, settings (Tenant ID, Client ID, authentication method, secret or certificate, Cloud), capabilities, factory registration. Unit tests for settings shape and validation.
 3. **HTTP client and authentication.** Token acquisition (secret and certificate assertion), national clouds, pacing, priority header, adaptive slowing, 429 handling. Connectivity test that reads the token's roles and names missing permissions. Mock Graph service with throttling, partial-batch and eventual-consistency switches.
 4. **Schema.** Curated user and group schema; directory extension discovery; `onPremisesExtensionAttributes`; `sourceOfAuthority` and its supporting attributes always present.
 5. **Full import.** Users and groups, paging, membership as references, Source of Authority synthesis including the cloud-managed query.
@@ -158,3 +158,5 @@ None proposed. `System.Net.Http`, `System.Text.Json` and `System.Security.Crypto
 1. **No new dependencies.** HTTP, JSON and the certificate client assertion are written against the BCL, as for the SCIM connector; neither MSAL nor the Graph SDK.
 2. **The shared HTTP layer lands first**, as the bottom layer of the stack, with the SCIM connector switched over and its tests unchanged.
 3. **Integration tests run against the Entra ID test tenant** that serves the `jim-sso-entra` gate, through a second app registration holding `User.ReadWrite.All` and `Group.ReadWrite.All`; the scenario creates and removes only prefixed test objects.
+4. **The certificate is a Base64 PFX in an encrypted setting** (2026-11-21), not a `File` setting as first written: a `File` setting holds a path, so the private key would sit unencrypted on a volume mounted into both the web and worker containers. Pasting Base64 keeps it encrypted at rest and works identically through the portal, the REST API and PowerShell.
+5. **The Connector is named "JIM Microsoft Entra ID Connector"** (2026-11-21), after the system administrators connect to rather than the API it speaks. Free to change until Phase 8 seeds it; after that the name is part of the Connector's identity.
