@@ -19,7 +19,7 @@ namespace JIM.Connectors.Graph;
 /// Registered with the Connector factory but not seeded until the plan's final phase, so it is not offered to
 /// administrators while it is being built. The capability flags declare what the finished Connector does.
 /// </remarks>
-public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSchema, IConnectorImportUsingCalls, IConnectorImportWatermark, IConnectorExportUsingCalls, IConnectorPhases
+public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSchema, IConnectorImportUsingCalls, IConnectorImportWatermark, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorPhases
 {
     private static readonly string[] MultiTenantAliases = ["common", "organizations", "consumers"];
 
@@ -29,6 +29,10 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
     // Held for the length of an import run: JIM opens the connection once and then asks for pages.
     private GraphHttpClient? _importClient;
     private GraphConnectorImport? _import;
+
+    // Held while the Password Delivery Service delivers to this Connected System.
+    private GraphHttpClient? _passwordClient;
+    private GraphConnectorPasswords? _passwords;
 
     // Held for the length of an export run.
     private GraphHttpClient? _exportClient;
@@ -70,8 +74,11 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
 
     public bool SupportsPaging => true;
     public bool SupportsFilePaths => false;
-    public bool SupportsPasswordSet => false;
-    public bool SupportsPasswordPolicyDiscovery => false;
+    /// <summary>JIM's Initial Password, Set Password and Password Synchronisation reach Entra ID through the password channel.</summary>
+    public bool SupportsPasswordSet => true;
+
+    /// <summary>Entra ID's password rules, which are the same in every tenant.</summary>
+    public bool SupportsPasswordPolicyDiscovery => true;
     public bool SupportsUniquenessProbe => false;
     public bool SupportsUniquenessRejectionClassification => false;
 
@@ -119,6 +126,47 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
     /// so nothing remains once it is removed.
     /// </summary>
     public string? RemoveImportWatermark(string persistedConnectorData, ILogger logger) => null;
+    #endregion
+
+    #region IConnectorPasswordManagement members
+    /// <summary>Entra ID honours a forced change and "never expires" alike, and both together.</summary>
+    public IReadOnlyCollection<PasswordExpiryBehaviour> SupportedExpiryBehaviours { get; } =
+        [PasswordExpiryBehaviour.RequireChangeAtNextSignIn, PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy, PasswordExpiryBehaviour.NeverExpires];
+
+    /// <summary>Microsoft Graph is HTTPS with TLS 1.2 or later; the client refuses anything else.</summary>
+    public bool IsPasswordChannelSecure => true;
+
+    public void OpenPasswordConnection(IList<ConnectedSystemSettingValue> settings)
+    {
+        var logger = Log.ForContext<GraphConnector>();
+        var settingValues = settings.ToList();
+        _passwordClient = Task.Run(async () => await CreateClientAsync(settingValues, logger)).GetAwaiter().GetResult();
+        _passwords = new GraphConnectorPasswords(_passwordClient, logger);
+    }
+
+    public Task<PasswordSetResult> SetPasswordAsync(ConnectedSystemObject target, string password, PasswordSetOptions options, CancellationToken cancellationToken)
+    {
+        if (_passwords == null)
+            throw new InvalidOperationException("OpenPasswordConnection must be called before SetPasswordAsync.");
+
+        return _passwords.SetPasswordAsync(target, password, options, cancellationToken);
+    }
+
+    public void ClosePasswordConnection()
+    {
+        _passwordClient?.Dispose();
+        _passwordClient = null;
+        _passwords = null;
+    }
+
+    public Task<PasswordPreflightResult> RunPasswordPreflightAsync(List<ConnectedSystemSettingValue> settings, IReadOnlyList<string> containerExternalIds, ILogger logger, CancellationToken cancellationToken) =>
+        GraphConnectorPasswords.PreflightAsync(() => CreateClientAsync(settings, logger), cancellationToken);
+    #endregion
+
+    #region IConnectorPasswordPolicyDiscovery members
+    /// <summary>Entra ID's rules for a cloud user's password, which every tenant applies alike, so nothing is read.</summary>
+    public Task<ConnectedSystemPasswordPolicy?> GetPasswordPolicyAsync(List<ConnectedSystemSettingValue> settings, ILogger logger) =>
+        Task.FromResult<ConnectedSystemPasswordPolicy?>(GraphConnectorPasswords.Policy());
     #endregion
 
     #region IConnectorExportUsingCalls members

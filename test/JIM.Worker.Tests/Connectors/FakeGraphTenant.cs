@@ -47,6 +47,9 @@ internal sealed partial class FakeGraphTenant
 
     public string[] Roles { get; set; } = GraphTestTokens.AllPermissions;
 
+    /// <summary>Directory roles assigned to the app tenant-wide, as template ids; the token carries them as <c>wids</c>.</summary>
+    public string[] DirectoryRoles { get; set; } = [];
+
     /// <summary>How many entries a delta page holds.</summary>
     public int DeltaPageSize { get; set; } = 100;
 
@@ -110,7 +113,7 @@ internal sealed partial class FakeGraphTenant
     private HttpResponseMessage Respond(HttpRequestMessage request)
     {
         if (GraphTestTokens.IsTokenRequest(request))
-            return GraphTestTokens.TokenResponse(Roles);
+            return GraphTestTokens.TokenResponse(Roles, DirectoryRoles);
 
         var path = request.RequestUri!.AbsolutePath["/v1.0/".Length..];
         var query = HttpUtility.ParseQueryString(request.RequestUri.Query);

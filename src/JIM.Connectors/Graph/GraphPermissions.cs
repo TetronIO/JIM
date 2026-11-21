@@ -33,6 +33,29 @@ internal static class GraphPermissions
     public const string MemberReadHidden = "Member.Read.Hidden";
 
     /// <summary>
+    /// Sets passwords, with <see cref="PasswordAdministratorRoles"/>: Graph's app-only password reset needs both. Only for
+    /// a Connected System that delivers passwords.
+    /// </summary>
+    public const string UserPasswordProfileReadWrite = "User-PasswordProfile.ReadWrite.All";
+
+    /// <summary>
+    /// Directory roles, by template id, that let an app reset passwords, the least privileged first: User Administrator,
+    /// Privileged Authentication Administrator and Global Administrator.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> PasswordAdministratorRoles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["fe930be7-5e62-47db-91af-98c3a49a38b1"] = "User Administrator",
+        ["7be44c8a-adaf-4e2a-84d6-ab2649e08a13"] = "Privileged Authentication Administrator",
+        ["62e90394-69f5-4237-9190-012177145e10"] = "Global Administrator"
+    };
+
+    /// <summary>Whether the token carries a permission that lets it write a user's password profile.</summary>
+    public static bool CanWritePasswordProfiles(IReadOnlyCollection<string> roles) =>
+        roles.Any(r => r.Equals(UserPasswordProfileReadWrite, StringComparison.OrdinalIgnoreCase)
+                       || r.Equals(UserReadWrite, StringComparison.OrdinalIgnoreCase)
+                       || r.Equals(DirectoryReadWrite, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
     /// Whether the token may read the members of a group whose membership is hidden. Graph's documentation does not say
     /// what it answers without the permission; an empty list would read as a group with no members, so the Connector
     /// does not ask unless this holds.
