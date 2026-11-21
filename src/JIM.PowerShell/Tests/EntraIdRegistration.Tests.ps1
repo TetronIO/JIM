@@ -237,6 +237,7 @@ Describe 'Register-JIMIdentityProvider -Provider EntraId' {
                 if ($Change.Action -in 'NewClientSecret', 'ResetClientSecret') { 'generated-secret' }
             }
             Mock Get-JIMEntraIdDeviceCodeToken { ConvertTo-SecureString 'device-token' -AsPlainText -Force }
+            Mock Invoke-OAuthBrowserFlow { @{ AccessToken = 'browser-token'; RefreshToken = 'refresh'; ExpiresAt = (Get-Date).AddHours(1); TokenType = 'Bearer' } }
             Mock Get-JIMEntraIdTokenTenantId { '34599ee0-829e-4dd4-8da2-4727a0664d51' }
         }
     }
@@ -272,11 +273,42 @@ Describe 'Register-JIMIdentityProvider -Provider EntraId' {
         }
     }
 
-    It 'Signs in with a device code when given no token' {
+    It 'Signs in through the browser when given no token, with Microsoft''s Graph command-line client and no device code' {
         InModuleScope JIM {
             $null = Register-JIMIdentityProvider -Provider EntraId -Url 'https://jim.example.com' -TenantId 'tetronjim.onmicrosoft.com' -Confirm:$false
 
+            Should -Invoke Invoke-OAuthBrowserFlow -Times 1 -ParameterFilter {
+                $AuthorizeEndpoint -eq 'https://login.microsoftonline.com/tetronjim.onmicrosoft.com/oauth2/v2.0/authorize' -and
+                $TokenEndpoint -eq 'https://login.microsoftonline.com/tetronjim.onmicrosoft.com/oauth2/v2.0/token' -and
+                $ClientId -eq '14d82eec-204b-4c2f-b7e8-296a70dab67e' -and
+                $RedirectPath -eq '/' -and
+                $Scopes -contains 'https://graph.microsoft.com/Application.ReadWrite.All'
+            }
+            Should -Invoke Get-JIMEntraIdDeviceCodeToken -Times 0
+        }
+    }
+
+    It 'Uses the browser sign-in''s token for Microsoft Graph' {
+        InModuleScope JIM {
+            $null = Register-JIMIdentityProvider -Provider EntraId -Url 'https://jim.example.com' -TenantId 'tetronjim.onmicrosoft.com' -Confirm:$false
+
+            Should -Invoke Get-JIMEntraIdTokenTenantId -Times 1 -ParameterFilter { [System.Net.NetworkCredential]::new('', $AccessToken).Password -eq 'browser-token' }
+        }
+    }
+
+    It 'Signs in with a device code only when asked to' {
+        InModuleScope JIM {
+            $null = Register-JIMIdentityProvider -Provider EntraId -Url 'https://jim.example.com' -TenantId 'tetronjim.onmicrosoft.com' -UseDeviceCode -Confirm:$false
+
             Should -Invoke Get-JIMEntraIdDeviceCodeToken -Times 1 -ParameterFilter { $TenantId -eq 'tetronjim.onmicrosoft.com' }
+            Should -Invoke Invoke-OAuthBrowserFlow -Times 0
+        }
+    }
+
+    It 'Refuses a device code alongside a token' {
+        InModuleScope JIM {
+            { Register-JIMIdentityProvider -Provider EntraId -Url 'https://jim.example.com' -TenantId 'tetronjim.onmicrosoft.com' -AccessToken $script:Token -UseDeviceCode -ErrorAction Stop } |
+                Should -Throw
         }
     }
 
@@ -311,6 +343,24 @@ Describe 'Register-JIMIdentityProvider -Provider EntraId' {
 
             $result | Should -BeNullOrEmpty
             Should -Invoke Invoke-JIMEntraIdRegistrationChange -Times 0
+        }
+    }
+}
+
+Describe 'Get-JIMEntraIdDeviceCodeToken' {
+
+    It 'Says how else to sign in when Entra ID refuses the device code, as Conditional Access often does' {
+        InModuleScope JIM {
+            Mock Write-Host {}
+            Mock Start-Sleep {}
+            Mock Invoke-RestMethod -ParameterFilter { $Uri -like '*/devicecode' } {
+                [PSCustomObject]@{ device_code = 'code'; message = 'Sign in'; expires_in = 900; interval = 1 }
+            }
+            Mock Invoke-RestMethod -ParameterFilter { $Uri -like '*/token' } {
+                throw [Microsoft.PowerShell.Commands.HttpResponseException]::new('Bad Request', [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::BadRequest))
+            }
+
+            { Get-JIMEntraIdDeviceCodeToken -TenantId 'tetronjim.onmicrosoft.com' } | Should -Throw '*without -UseDeviceCode*-AccessToken*'
         }
     }
 }

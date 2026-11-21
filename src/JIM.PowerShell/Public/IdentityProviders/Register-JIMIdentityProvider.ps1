@@ -35,9 +35,9 @@ function Register-JIMIdentityProvider {
         /api/reference/), which is JIM's API too: api://{client ID}, offering the access_as_user scope, issuing version 2
         access tokens. It asks Microsoft Graph for openid, profile, email and offline_access, puts each person's email
         address in their tokens, and, when you may, consents to all of that for everyone, so nobody signing in is asked.
-        Entra ID is configured through Microsoft Graph, from any computer that can reach it: sign in when asked, as a
-        person who administers the tenant's applications, or pass -AccessToken with a Graph token for running this
-        unattended. A token holding only Application.ReadWrite.OwnedBy maintains a registration its application owns,
+        Entra ID is configured through Microsoft Graph, from any computer that can reach it: sign in through the browser
+        it opens, as a person who administers the tenant's applications, or pass -AccessToken with a Graph token for
+        running this unattended or on a computer with no browser. A token holding only Application.ReadWrite.OwnedBy maintains a registration its application owns,
         but cannot give consent, which this command then says an administrator must give.
 
         This command does not connect to JIM, so Connect-JIM is not needed. The client secret is returned, as a secure
@@ -90,8 +90,11 @@ function Register-JIMIdentityProvider {
     .PARAMETER AccessToken
         A Microsoft Graph access token for the tenant, for running this unattended, such as from a workload identity.
         It needs Application.ReadWrite.All, or Application.ReadWrite.OwnedBy once its application owns JIM's; giving
-        consent also needs DelegatedPermissionGrant.ReadWrite.All. Without it, you are asked to sign in with a device
-        code.
+        consent also needs DelegatedPermissionGrant.ReadWrite.All. Without it, you sign in through a browser.
+
+    .PARAMETER UseDeviceCode
+        Signs in with a device code instead of a browser, for a console with no browser. Microsoft recommends that
+        Conditional Access blocks device code sign-in, so many tenants refuse it; pass -AccessToken there instead.
 
     .PARAMETER ResetClientSecret
         Replaces the portal's client secret, and returns the new one. JIM cannot sign anyone in until JIM_SSO_SECRET
@@ -135,7 +138,7 @@ function Register-JIMIdentityProvider {
 
     .EXAMPLE
         $registration = Register-JIMIdentityProvider -Provider EntraId -Url 'https://jim.example.com' -TenantId 'contoso.onmicrosoft.com'
-        Registers JIM in the contoso tenant, or repairs its registration, after you sign in with the device code it shows.
+        Registers JIM in the contoso tenant, or repairs its registration, after you sign in through the browser it opens.
 
     .EXAMPLE
         $registration = Register-JIMIdentityProvider -Provider ADFS -Url 'https://jim.example.com' -ResetClientSecret
@@ -200,6 +203,9 @@ function Register-JIMIdentityProvider {
         [Parameter(Mandatory, ParameterSetName = 'EntraIdToken')]
         [securestring]$AccessToken,
 
+        [Parameter(ParameterSetName = 'EntraId')]
+        [switch]$UseDeviceCode,
+
         [switch]$ResetClientSecret,
 
         [Parameter(ParameterSetName = 'Keycloak')]
@@ -240,7 +246,7 @@ function Register-JIMIdentityProvider {
     }
 
     if ($Provider -eq 'EntraId') {
-        $token = if ($AccessToken) { $AccessToken } else { Get-JIMEntraIdDeviceCodeToken -TenantId $TenantId }
+        $token = if ($AccessToken) { $AccessToken } else { Get-JIMEntraIdAdminToken -TenantId $TenantId -UseDeviceCode:$UseDeviceCode }
         $connection = @{ Token = $token; TenantId = Get-JIMEntraIdTokenTenantId -AccessToken $token }
         $current = Get-JIMEntraIdRegistrationState -Connection $connection -Name $Name
         $plan = Get-JIMEntraIdRegistrationPlan -Url $Url -Name $Name -Current $current -ResetClientSecret:$ResetClientSecret

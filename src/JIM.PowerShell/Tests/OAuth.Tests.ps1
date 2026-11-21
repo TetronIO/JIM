@@ -232,3 +232,38 @@ Describe 'Invoke-OAuthBrowserFlow' {
         }
     }
 }
+
+Describe 'Invoke-OAuthBrowserFlow redirect' {
+
+    BeforeEach {
+        # Plays the browser: reads the redirect address and state from the sign-in address it is handed, and calls back
+        # with a code, as the identity provider would once the person had signed in.
+        Mock Open-Browser {
+            $query = [System.Web.HttpUtility]::ParseQueryString(([uri]$Url).Query)
+            $script:SignInRedirectUri = $query['redirect_uri']
+            $callback = '{0}{1}code=the-code&state={2}' -f $query['redirect_uri'], $(if ($query['redirect_uri'].Contains('?')) { '&' } else { '?' }), [uri]::EscapeDataString($query['state'])
+            $script:Callback = [System.Net.Http.HttpClient]::new().GetAsync($callback)
+        }
+        Mock Write-Host {}
+        Mock Invoke-RestMethod {
+            $script:TokenRequestBody = $Body
+            [PSCustomObject]@{ access_token = 'access'; refresh_token = 'refresh'; expires_in = 3600; token_type = 'Bearer' }
+        }
+    }
+
+    It 'Redirects to the /callback/ path by default' {
+        $tokens = Invoke-OAuthBrowserFlow -AuthorizeEndpoint 'https://idp.example.com/authorize' -TokenEndpoint 'https://idp.example.com/token' -ClientId 'client' -Scopes 'openid' -RedirectPort 8450 -TimeoutSeconds 20
+
+        $tokens.AccessToken | Should -Be 'access'
+        $script:SignInRedirectUri | Should -Match '^http://localhost:\d+/callback/$'
+    }
+
+    It 'Redirects to the bare loopback address when the path is the root, as Microsoft''s public clients require' {
+        $tokens = Invoke-OAuthBrowserFlow -AuthorizeEndpoint 'https://login.example.com/authorize' -TokenEndpoint 'https://login.example.com/token' -ClientId 'client' -Scopes 'openid' -RedirectPort 8460 -RedirectPath '/' -TimeoutSeconds 20
+
+        $tokens.AccessToken | Should -Be 'access'
+        $script:SignInRedirectUri | Should -Match '^http://localhost:\d+$'
+        $script:TokenRequestBody | Should -BeLike "*redirect_uri=$([uri]::EscapeDataString($script:SignInRedirectUri))*"
+    }
+}
+
