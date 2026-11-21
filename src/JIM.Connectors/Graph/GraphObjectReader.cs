@@ -22,11 +22,12 @@ internal static class GraphObjectReader
             Id = graphObject.TryGetProperty(GraphSchemaCatalogue.Id, out var id) && id.ValueKind == JsonValueKind.String ? id.GetString() : null
         };
 
-        foreach (var attribute in attributes)
+        var present = attributes
+            .Select(a => TryGetValue(graphObject, a, out var found) ? (Attribute: a, Value: (JsonElement?)found) : (Attribute: a, Value: null))
+            .Where(a => a.Value.HasValue);
+        foreach (var (attribute, found) in present)
         {
-            if (!TryGetValue(graphObject, attribute, out var value))
-                continue;
-
+            var value = found!.Value;
             var values = value.ValueKind == JsonValueKind.Array
                 ? value.EnumerateArray().Where(v => !IsEmpty(v)).ToList()
                 : [value];

@@ -246,14 +246,11 @@ internal sealed class GraphConnectorImport
                 var page = await _client.SendJsonAsync<GraphCollectionPage<JsonElement>>(HttpMethod.Get, url, null, null, cancellationToken)
                            ?? throw new GraphRequestException($"Microsoft Graph returned nothing for a page of changes to {target.Collection}.", HttpStatusCode.BadGateway);
 
-                foreach (var entry in page.Value)
+                foreach (var (entry, id) in page.Value.Select(e => (Entry: e, Id: ReadId(e))).Where(e => e.Id != null))
                 {
-                    if (ReadId(entry) is not { } id)
-                        continue;
-
                     // Removed then re-added, so the dictionary's order is each object's last appearance.
-                    removedById.Remove(id);
-                    removedById[id] = entry.ValueKind == JsonValueKind.Object && entry.TryGetProperty("@removed", out _);
+                    removedById.Remove(id!);
+                    removedById[id!] = entry.ValueKind == JsonValueKind.Object && entry.TryGetProperty("@removed", out _);
                 }
 
                 if (page.NextLink != null)

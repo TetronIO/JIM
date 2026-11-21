@@ -114,14 +114,14 @@ internal sealed class GraphConnectorExport
             return body;
         }
 
-        foreach (var relationship in new[] { GraphSchemaCatalogue.Members, GraphSchemaCatalogue.Owners })
+        foreach (var (relationship, additions) in new[] { GraphSchemaCatalogue.Members, GraphSchemaCatalogue.Owners }
+                     .Select(r => (Relationship: r, Additions: state.Additions.GetValueOrDefault(r)))
+                     .Where(r => r.Additions is { Count: > 0 }))
         {
-            if (!state.Additions.TryGetValue(relationship, out var additions) || additions.Count == 0)
-                continue;
-
-            var bound = additions.Take(GraphHttpClient.MaximumBatchSize).ToList();
+            var pending = additions!;
+            var bound = pending.Take(GraphHttpClient.MaximumBatchSize).ToList();
             body[$"{relationship}@odata.bind"] = new JsonArray(bound.Select(id => (JsonNode)JsonValue.Create(ReferenceUrl(id))).ToArray());
-            additions.RemoveRange(0, bound.Count);
+            pending.RemoveRange(0, bound.Count);
         }
 
         return body;

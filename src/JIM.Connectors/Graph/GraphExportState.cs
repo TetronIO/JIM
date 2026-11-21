@@ -179,8 +179,8 @@ internal sealed class GraphExportState
             values = [];
             if (PendingExport.ChangeType != PendingExportChangeType.Create && PendingExport.ConnectedSystemObject is { } held)
             {
-                foreach (var heldValue in held.HeldValuesOf(attributeName))
-                    values.Add(ToJson(ValueOf(heldValue)));
+                foreach (var heldJson in held.HeldValuesOf(attributeName).Select(v => ToJson(ValueOf(v))))
+                    values.Add(heldJson);
             }
         }
 
