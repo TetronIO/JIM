@@ -30,7 +30,7 @@ subject:
 
 ## :material-table-search: Get-JIMConnectedSystemCatalogue
 
-Lists what a Connected System's source contains, read from the source's own catalogue: every table and view the configured account can see, or, for one of them, its columns, primary key and foreign keys. It also describes the columns a SELECT statement would return, without reading any rows. Use it to find the names to put in the SQL Connector's Object Types setting before importing the schema. Purely informational: it never writes anything. Connectors that cannot describe their source return an error naming why.
+Lists what a Connected System's source holds, from its own catalogue: the tables and views the configured account can see, one table's columns, primary key and foreign keys, or the columns a SELECT statement would return, reading no rows. Use it to find the names for the SQL Connector's Object Types setting before importing the schema. It writes nothing; a Connector that cannot describe its source returns an error saying why.
 
 <!-- BEGIN GENERATED: Get-JIMConnectedSystemCatalogue -->
 ### Syntax
@@ -233,7 +233,7 @@ New-JIMConnectedSystem "LDAP Directory" -ConnectorDefinitionId 1 -PassThru |
 ### Notes
 
 - Nothing is deleted unless you give `-RemoveDependents`, and then only what the preview listed. See [Refreshing the schema](../configuration/connected-system-schema.md#refreshing-the-schema).
-- Check the preview's `DiscoveryWarnings` before applying: a partial schema read (for example, missing permissions) can make entries appear removed when they are not.
+- Check the preview's `DiscoveryWarnings` before applying: a partial schema read, such as one missing permissions, can make entries look removed when they are not.
 - Supports `ShouldProcess` (Medium impact). `-Preview` bypasses it; a preview changes nothing, so there is nothing to confirm.
 
 ---
@@ -242,7 +242,7 @@ New-JIMConnectedSystem "LDAP Directory" -ConnectorDefinitionId 1 -PassThru |
 
 Gets the Object Types in a Connected System's schema, with their attributes.
 
-Object Types the Connected System classified as internal (a directory's own configuration and operational classes) are omitted by default, matching what the portal's Schema tab shows. Pass `-IncludeInternal` to return them as well. An Object Type that is already selected is always returned, whatever its classification.
+Object Types the Connected System classes as internal (a directory's own configuration and operational classes) are left out, as on the portal's Schema tab, unless you pass `-IncludeInternal`. A selected Object Type is always returned.
 
 <!-- BEGIN GENERATED: Get-JIMConnectedSystemObjectType -->
 ### Syntax
@@ -349,19 +349,19 @@ Get-JIMSyncRule -ConnectedSystemId 3 | Where-Object { $_.connectedSystemObjectTy
 Set-JIMConnectedSystemObjectType -ConnectedSystemId 3 -ObjectTypeId 2 -Selected $false
 ```
 
-Deselecting an Object Type takes it out of management: the next Full Import marks every Connected System Object of that type obsolete, and the following synchronisation disconnects them from their Metaverse Objects, which may leave those eligible for deletion. Preview it first with `New-JIMConfigurationChangePreview -ConnectedSystemId 3 -SchemaObjectType @(@{ objectTypeId = 2; selected = $false }) -Wait`, and see [What deselecting means](../configuration/connected-system-schema.md#what-deselecting-means).
+Deselecting an Object Type takes it out of management: the next Full Import marks its Connected System Objects obsolete, and the next synchronisation disconnects them from their Metaverse Objects, which may then become eligible for deletion. Preview it first with `New-JIMConfigurationChangePreview -ConnectedSystemId 3 -SchemaObjectType @(@{ objectTypeId = 2; selected = $false }) -Wait`, and see [What deselecting means](../configuration/connected-system-schema.md#what-deselecting-means).
 
 ### Notes
 
 - Supports `ShouldProcess` (Medium impact).
-- Selecting an Object Type is refused, with the Connector's own message, when the Connected System's settings cannot serve it: for the JIM SQL Connector, selecting an Object Type that lacks a `watermarkColumn` or a `changeLog` while the matching Delta Import Mode is set.
+- Selecting an Object Type is refused, with the Connector's own message, when the Connected System's settings cannot serve it: for the JIM SQL Connector, an Object Type with no `watermarkColumn` or `changeLog` while the matching Delta Import Mode is set.
 - Deselecting an Object Type is refused while an enabled Synchronisation Rule is bound to it; the error names the rules to disable. The same check refuses any change to a deselected Object Type that an enabled rule is still bound to.
 
 ---
 
 ## :material-tag-outline: Set-JIMConnectedSystemAttribute
 
-Updates the selection, external ID configuration, data type and case-exact declaration of attributes on a Connected System Object Type. Supports updating a single attribute or multiple attributes in bulk.
+Updates attributes of a Connected System Object Type: their selection, external ID, data type and case-exact declaration, one attribute at a time or many at once.
 
 <!-- BEGIN GENERATED: Set-JIMConnectedSystemAttribute -->
 ### Syntax
