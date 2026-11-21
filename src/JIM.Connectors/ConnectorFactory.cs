@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Connectors.File;
+using JIM.Connectors.Graph;
 using JIM.Connectors.LDAP;
 using JIM.Connectors.SCIM;
 using JIM.Connectors.SCIM.ServiceProvider;
@@ -11,7 +12,7 @@ using JIM.Models.Interfaces;
 namespace JIM.Connectors;
 
 /// <summary>
-/// Creates connector instances by name. Handles built-in connectors (LDAP, File, SCIM, SQL) and is the single dispatch
+/// Creates connector instances by name. Handles built-in connectors (LDAP, File, SCIM, SQL, Microsoft Graph) and is the single dispatch
 /// point used by both the application layer and the Worker; it also configures credential protection and
 /// certificate validation on the created connector when it supports them.
 /// Future user-supplied connectors will extend this factory.
@@ -46,6 +47,8 @@ public class ConnectorFactory : IConnectorFactory
             return new ScimServiceProviderConnector();
         if (connectorName == ConnectorConstants.SqlConnectorName)
             return new SqlConnector();
+        if (connectorName == ConnectorConstants.GraphConnectorName)
+            return new GraphConnector();
 
         throw new NotSupportedException(
             $"Connector definition '{connectorName}' is not supported. No built-in connector with that name is registered.");

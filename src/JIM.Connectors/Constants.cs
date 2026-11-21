@@ -16,4 +16,7 @@ public static class ConnectorConstants
     public static string ScimClientConnectorName => "JIM SCIM 2.0 Client Connector";
     public static string ScimServiceProviderConnectorName => "JIM SCIM 2.0 Service Provider Connector";
     public static string SqlConnectorName => "JIM SQL Connector";
+    // synchronises Microsoft Entra ID through the Microsoft Graph API (#361). Named for the system administrators connect
+    // to rather than the API it speaks, which is how they look for it.
+    public static string GraphConnectorName => "JIM Microsoft Entra ID Connector";
 }

@@ -4,6 +4,7 @@
 using JIM.Application.Servers;
 using JIM.Connectors;
 using JIM.Connectors.File;
+using JIM.Connectors.Graph;
 using JIM.Connectors.LDAP;
 using JIM.Connectors.SCIM;
 using JIM.Connectors.SCIM.ServiceProvider;
@@ -74,6 +75,16 @@ public class ConnectorFactoryTests
 
         // Assert
         Assert.That(connector, Is.InstanceOf<ScimServiceProviderConnector>());
+    }
+
+    [Test]
+    public void Create_GraphConnectorName_ReturnsGraphConnector()
+    {
+        // Act
+        var connector = _connectorFactory.Create(ConnectorConstants.GraphConnectorName);
+
+        // Assert
+        Assert.That(connector, Is.InstanceOf<GraphConnector>());
     }
 
     [Test]

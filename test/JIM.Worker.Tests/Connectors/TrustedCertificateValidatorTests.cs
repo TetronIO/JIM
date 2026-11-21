@@ -4,7 +4,7 @@
 using System.Net.Security;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using JIM.Connectors.SCIM;
+using JIM.Connectors.Http;
 using NUnit.Framework;
 using Serilog;
 using ILogger = Serilog.ILogger;
@@ -12,7 +12,7 @@ using ILogger = Serilog.ILogger;
 namespace JIM.Worker.Tests.Connectors;
 
 /// <summary>
-/// TLS trust for SCIM endpoints: the system CA store is consulted first, then JIM's own trusted
+/// TLS trust for connected services: the system CA store is consulted first, then JIM's own trusted
 /// certificate store, which lets a deployment trust an internal CA without installing it on the host.
 /// <para>
 /// This validator is deliberately stricter than the LDAP connector's equivalent. JIM's store answers
@@ -22,7 +22,7 @@ namespace JIM.Worker.Tests.Connectors;
 /// </para>
 /// </summary>
 [TestFixture]
-public class ScimCertificateValidatorTests
+public class TrustedCertificateValidatorTests
 {
     private ILogger _logger = null!;
     private readonly List<X509Certificate2> _disposables = [];
@@ -89,7 +89,7 @@ public class ScimCertificateValidatorTests
     [Test]
     public void Validate_SystemStoreAlreadyTrustsTheCertificate_AcceptsWithoutConsultingJimStore()
     {
-        var validator = new ScimCertificateValidator([], _logger);
+        var validator = new TrustedCertificateValidator([], _logger);
         var certificate = CreateSelfSignedCertificate();
 
         var result = validator.Validate(certificate, chain: null, SslPolicyErrors.None);
@@ -103,7 +103,7 @@ public class ScimCertificateValidatorTests
         // The realistic internal-PKI case: JIM holds the private CA, the provider presents a leaf.
         var authority = CreateCertificateAuthority();
         var leaf = CreateSignedCertificate(authority);
-        var validator = new ScimCertificateValidator([authority], _logger);
+        var validator = new TrustedCertificateValidator([authority], _logger);
 
         var result = validator.Validate(leaf, chain: null, SslPolicyErrors.RemoteCertificateChainErrors);
 
@@ -115,7 +115,7 @@ public class ScimCertificateValidatorTests
     {
         // Equally common: no CA at all, and the administrator uploads the endpoint's own certificate.
         var certificate = CreateSelfSignedCertificate();
-        var validator = new ScimCertificateValidator([certificate], _logger);
+        var validator = new TrustedCertificateValidator([certificate], _logger);
 
         var result = validator.Validate(certificate, chain: null, SslPolicyErrors.RemoteCertificateChainErrors);
 
@@ -128,7 +128,7 @@ public class ScimCertificateValidatorTests
         var untrustedAuthority = CreateCertificateAuthority("CN=Somebody Else CA");
         var leaf = CreateSignedCertificate(untrustedAuthority);
         var unrelatedAuthority = CreateCertificateAuthority("CN=JIM Test Internal CA");
-        var validator = new ScimCertificateValidator([unrelatedAuthority], _logger);
+        var validator = new TrustedCertificateValidator([unrelatedAuthority], _logger);
 
         var result = validator.Validate(leaf, chain: null, SslPolicyErrors.RemoteCertificateChainErrors);
 
@@ -139,7 +139,7 @@ public class ScimCertificateValidatorTests
     public void Validate_EmptyJimStore_RejectsChainError()
     {
         var certificate = CreateSelfSignedCertificate();
-        var validator = new ScimCertificateValidator([], _logger);
+        var validator = new TrustedCertificateValidator([], _logger);
 
         var result = validator.Validate(certificate, chain: null, SslPolicyErrors.RemoteCertificateChainErrors);
 
@@ -153,7 +153,7 @@ public class ScimCertificateValidatorTests
         // would accept any host holding a certificate from the same internal CA.
         var authority = CreateCertificateAuthority();
         var leaf = CreateSignedCertificate(authority);
-        var validator = new ScimCertificateValidator([authority], _logger);
+        var validator = new TrustedCertificateValidator([authority], _logger);
 
         var result = validator.Validate(leaf, chain: null, SslPolicyErrors.RemoteCertificateNameMismatch);
 
@@ -165,7 +165,7 @@ public class ScimCertificateValidatorTests
     {
         var authority = CreateCertificateAuthority();
         var expiredLeaf = CreateSignedCertificate(authority, notBeforeDays: -60, notAfterDays: -30);
-        var validator = new ScimCertificateValidator([authority], _logger);
+        var validator = new TrustedCertificateValidator([authority], _logger);
 
         var result = validator.Validate(expiredLeaf, chain: null, SslPolicyErrors.RemoteCertificateChainErrors);
 
@@ -176,7 +176,7 @@ public class ScimCertificateValidatorTests
     public void Validate_NoCertificatePresented_Rejects()
     {
         var authority = CreateCertificateAuthority();
-        var validator = new ScimCertificateValidator([authority], _logger);
+        var validator = new TrustedCertificateValidator([authority], _logger);
 
         var result = validator.Validate(certificate: null, chain: null, SslPolicyErrors.RemoteCertificateNotAvailable);
 
@@ -188,7 +188,7 @@ public class ScimCertificateValidatorTests
     {
         var authority = CreateCertificateAuthority();
         var leaf = CreateSignedCertificate(authority);
-        var validator = new ScimCertificateValidator([authority], _logger);
+        var validator = new TrustedCertificateValidator([authority], _logger);
 
         var result = validator.Validate(leaf, chain: null,
             SslPolicyErrors.RemoteCertificateChainErrors | SslPolicyErrors.RemoteCertificateNameMismatch);
