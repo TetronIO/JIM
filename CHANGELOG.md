@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ The JIM Microsoft Entra ID Connector synchronises users and groups with Microsoft Entra ID through Microsoft Graph, passwords included; `Register-JIMEntraIdConnector` sets up its app registration, permissions and certificate in one command. (#361)
 - ✨ The REST API and `Get-JIMConnectedSystem -Id` now return a Connected System's setting values, so a script can check a configuration before changing it; an encrypted setting reports only whether a value is held.
 
 ### Changed

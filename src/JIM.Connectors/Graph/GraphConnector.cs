@@ -16,8 +16,7 @@ namespace JIM.Connectors.Graph;
 /// Implementation plan: engineering/plans/doing/MICROSOFT_GRAPH_CONNECTOR_DESIGN.md (issue #361).
 /// </summary>
 /// <remarks>
-/// Registered with the Connector factory but not seeded until the plan's final phase, so it is not offered to
-/// administrators while it is being built. The capability flags declare what the finished Connector does.
+/// Seeded as a built-in Connector. Register-JIMEntraIdConnector sets up the app registration it authenticates as.
 /// </remarks>
 public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSchema, IConnectorImportUsingCalls, IConnectorImportWatermark, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorPhases
 {

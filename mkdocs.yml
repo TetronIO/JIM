@@ -220,6 +220,7 @@ nav:
           - Synchronise Global Address Lists Between Forests: connectors/jim-ldap-connector-gal-sync.md
           - Service Account Permissions: connectors/jim-ldap-connector-permissions.md
           - Troubleshooting the LDAP Connector: connectors/jim-ldap-connector-troubleshooting.md
+      - JIM Microsoft Entra ID Connector: connectors/jim-graph-connector.md
       - JIM SCIM 2.0 Client Connector:
           - connectors/jim-scim-connector.md
           - Keycloak: connectors/jim-scim-connector-keycloak.md

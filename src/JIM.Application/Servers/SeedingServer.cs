@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Connectors.File;
+using JIM.Connectors.Graph;
 using JIM.Connectors.LDAP;
 using JIM.Connectors.SCIM;
 using JIM.Connectors.SCIM.ServiceProvider;
@@ -903,7 +904,7 @@ internal class SeedingServer
     /// </summary>
     internal static List<IConnector> BuiltInConnectors()
     {
-        return [new LdapConnector(), new FileConnector(), new ScimConnector(), new ScimServiceProviderConnector(), new SqlConnector()];
+        return [new LdapConnector(), new FileConnector(), new ScimConnector(), new ScimServiceProviderConnector(), new SqlConnector(), new GraphConnector()];
     }
 
     /// <summary>

@@ -36,13 +36,14 @@ Released. The first stable release: a production-ready identity lifecycle platfo
 
 ## :material-puzzle-outline: v1.x: Connector Ecosystem
 
-Expanding the range of systems JIM can connect to out of the box. The JIM SCIM 2.0 Client Connector, the JIM SQL Connector (Microsoft SQL Server and Oracle Database) and the JIM SCIM 2.0 Service Provider Connector have already shipped; they are listed here for continuity.
+Expanding the range of systems JIM can connect to out of the box. The JIM SCIM 2.0 Client Connector, the JIM SQL Connector (Microsoft SQL Server and Oracle Database), the JIM SCIM 2.0 Service Provider Connector and the JIM Microsoft Entra ID Connector have already shipped; they are listed here for continuity.
 
 | Connector | Description | Status |
 |---|---|---|
 | [JIM SCIM 2.0 Client Connector](../connectors/jim-scim-connector.md) | Any SCIM 2.0 service provider (RFC 7643/7644) | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } Available |
 | [JIM SQL Connector](../connectors/jim-sql-connector.md) | Microsoft SQL Server and Oracle Database | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } Available |
 | [JIM SCIM 2.0 Service Provider Connector](../connectors/jim-scim-service-provider-connector.md) | Identity providers and other SCIM 2.0 clients push Users and Groups to JIM | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } Available |
+| [JIM Microsoft Entra ID Connector](../connectors/jim-graph-connector.md) | Microsoft Entra ID users and groups, through Microsoft Graph | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } Available |
 | JIM SQL Connector: PostgreSQL and MySQL | The same connector, extended to two further engines | Planned |
 | JIM PowerShell Connector | PowerShell Core scripts | Planned |
 | JIM REST Connector | REST API web services | Planned |

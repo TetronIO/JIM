@@ -12,7 +12,7 @@ A newly provisioned Connected System Object is not much use until somebody gives
 It can also set a password on demand: on the Connected System Objects you name, or on every system configured to receive a Metaverse Object's password changes.
 
 !!! info "Nothing happens until you ask for it"
-    A Connected System is only a candidate if its Connector supports setting passwords. Even then, JIM sets nothing until you configure it: initial passwords are off on every Synchronisation Rule until you switch them on, and every other route here is a deliberate action on a named Connected System Object. Today the [LDAP Connector](../connectors/jim-ldap-connector-passwords.md#setting-passwords) is the Connector that supports it, covering Active Directory, Samba AD, OpenLDAP, 389 Directory Server and generic LDAP directories.
+    A Connected System is only a candidate if its Connector supports setting passwords. Even then, JIM sets nothing until you configure it: initial passwords are off on every Synchronisation Rule until you switch them on, and every other route here is a deliberate action on a named Connected System Object. Two Connectors support it: the [LDAP Connector](../connectors/jim-ldap-connector-passwords.md#setting-passwords), covering Active Directory, Samba AD, OpenLDAP, 389 Directory Server and generic LDAP directories, and the [Microsoft Entra ID Connector](../connectors/jim-graph-connector.md#passwords).
 
 This page covers what JIM does with passwords and why. To actually configure it, follow the links in [Where to go next](#where-to-go-next).
 
