@@ -2,40 +2,21 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Net;
-using System.Web;
 using JIM.Connectors.Graph;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 using NUnit.Framework;
-using Serilog;
-using ILogger = Serilog.ILogger;
 
 namespace JIM.Worker.Tests.Connectors;
 
 [TestFixture]
-public class GraphConnectorImportTests
+public class GraphConnectorImportTests : GraphImportTestBase
 {
-    private ILogger _logger = null!;
-    private FakeGraphTenant _tenant = null!;
-
-    [SetUp]
-    public void SetUp()
-    {
-        _logger = new LoggerConfiguration().CreateLogger();
-        _tenant = new FakeGraphTenant();
-    }
-
-    [TearDown]
-    public void TearDown()
-    {
-        (_logger as IDisposable)?.Dispose();
-    }
-
     [Test]
     public async Task FullImport_Users_AreStagedAsAddedWithTheirSelectedAttributesAsync()
     {
-        _tenant.AddUser("u1", "Ada Lovelace", u => { u["jobTitle"] = "Analyst"; u["accountEnabled"] = true; u["department"] = "Unselected"; });
+        Tenant.AddUser("u1", "Ada Lovelace", u => { u["jobTitle"] = "Analyst"; u["accountEnabled"] = true; u["department"] = "Unselected"; });
 
         var objects = await ImportAsync(Users("displayName", "jobTitle", "accountEnabled"));
 
@@ -55,7 +36,7 @@ public class GraphConnectorImportTests
     [Test]
     public async Task FullImport_SelectsOnlyWhatItNeedsAsync()
     {
-        _tenant.AddUser("u1", "Ada");
+        Tenant.AddUser("u1", "Ada");
 
         await ImportAsync(Users("displayName", "extensionAttribute3"));
 
@@ -74,7 +55,7 @@ public class GraphConnectorImportTests
     public async Task FullImport_PagesThroughEveryUserAtTheRunProfilesPageSizeAsync()
     {
         for (var i = 1; i <= 5; i++)
-            _tenant.AddUser($"u{i}", $"User {i}");
+            Tenant.AddUser($"u{i}", $"User {i}");
 
         var results = await RunAsync(ConnectedSystem(Users("displayName")), pageSize: 2);
 
@@ -89,7 +70,7 @@ public class GraphConnectorImportTests
     [Test]
     public async Task FullImport_PageSizeAboveGraphsLimit_IsCappedAt999Async()
     {
-        _tenant.AddUser("u1", "Ada");
+        Tenant.AddUser("u1", "Ada");
 
         await RunAsync(ConnectedSystem(Users("displayName")), pageSize: 5000);
 
@@ -99,8 +80,8 @@ public class GraphConnectorImportTests
     [Test]
     public async Task FullImport_Manager_IsExpandedAndStagedAsAReferenceAsync()
     {
-        _tenant.AddUser("boss", "Grace");
-        _tenant.AddUser("u1", "Ada", u => u["managerId"] = "boss");
+        Tenant.AddUser("boss", "Grace");
+        Tenant.AddUser("u1", "Ada", u => u["managerId"] = "boss");
 
         var objects = await ImportAsync(Users("displayName", "manager"));
 
@@ -116,9 +97,9 @@ public class GraphConnectorImportTests
     [Test]
     public async Task FullImport_GroupMembers_AreReadInFullAsReferencesToUsersAndGroupsOnlyAsync()
     {
-        _tenant.MembersPageSize = 2;
-        _tenant.AddGroup("g1", "Finance");
-        _tenant.Members["g1"] = [("user", "u1"), ("user", "u2"), ("group", "g2"), ("device", "d1"), ("servicePrincipal", "sp1"), ("user", "u3")];
+        Tenant.MembersPageSize = 2;
+        Tenant.AddGroup("g1", "Finance");
+        Tenant.Members["g1"] = [("user", "u1"), ("user", "u2"), ("group", "g2"), ("device", "d1"), ("servicePrincipal", "sp1"), ("user", "u3")];
 
         var objects = await ImportAsync(Groups("displayName", "members"));
 
@@ -131,19 +112,19 @@ public class GraphConnectorImportTests
     {
         for (var i = 1; i <= 25; i++)
         {
-            _tenant.AddGroup($"g{i}", $"Group {i}");
-            _tenant.Members[$"g{i}"] = [("user", $"u{i}")];
+            Tenant.AddGroup($"g{i}", $"Group {i}");
+            Tenant.Members[$"g{i}"] = [("user", $"u{i}")];
         }
 
         var objects = await ImportAsync(Groups("displayName", "members"));
 
-        var batches = _tenant.GraphRequests.Where(r => r.RequestUri!.AbsolutePath == "/v1.0/$batch").ToList();
+        var batches = Tenant.GraphRequests.Where(r => r.RequestUri!.AbsolutePath == "/v1.0/$batch").ToList();
         using (Assert.EnterMultipleScope())
         {
             Assert.That(objects.Select(o => o.Attributes.Single(a => a.Name == "members").ReferenceValues.Single()),
                 Is.EqualTo(Enumerable.Range(1, 25).Select(i => $"u{i}")));
             Assert.That(batches, Has.Count.EqualTo(2));
-            Assert.That(_tenant.GraphRequests.Count(r => r.RequestUri!.AbsolutePath.EndsWith("/members", StringComparison.Ordinal)), Is.Zero,
+            Assert.That(Tenant.GraphRequests.Count(r => r.RequestUri!.AbsolutePath.EndsWith("/members", StringComparison.Ordinal)), Is.Zero,
                 "No group's members fitted in more than one page, so nothing was read outside a batch.");
         }
     }
@@ -151,7 +132,7 @@ public class GraphConnectorImportTests
     [Test]
     public async Task FullImport_GroupWithNoMembers_HasNoMembersAttributeAsync()
     {
-        _tenant.AddGroup("g1", "Empty");
+        Tenant.AddGroup("g1", "Empty");
 
         var objects = await ImportAsync(Groups("displayName", "members"));
 
@@ -163,10 +144,10 @@ public class GraphConnectorImportTests
     {
         // A group staged with some or none of its members would have JIM remove the rest. Reported as an unreadable
         // value instead, the attribute keeps what JIM already holds, and the group's other attributes still update.
-        _tenant.AddGroup("g1", "Readable");
-        _tenant.AddGroup("g2", "Unreadable");
-        _tenant.Members["g1"] = [("user", "u1")];
-        _tenant.MembersFailures["g2"] = HttpStatusCode.Forbidden;
+        Tenant.AddGroup("g1", "Readable");
+        Tenant.AddGroup("g2", "Unreadable");
+        Tenant.Members["g1"] = [("user", "u1")];
+        Tenant.MembersFailures["g2"] = HttpStatusCode.Forbidden;
 
         var objects = await ImportAsync(Groups("displayName", "members"));
 
@@ -184,10 +165,63 @@ public class GraphConnectorImportTests
     }
 
     [Test]
+    public async Task FullImport_HiddenMembershipWithoutPermission_ReportsMembersUnreadableWithoutAskingGraphAsync()
+    {
+        // Microsoft's documentation does not say what Graph answers for a hidden membership without Member.Read.Hidden. An
+        // empty list would read as a group with no members, and JIM would remove every member it holds, so the Connector
+        // does not ask.
+        Tenant.Roles = ["User.Read.All", "Group.Read.All"];
+        Tenant.AddGroup("g1", "Board", g => g["visibility"] = "HiddenMembership");
+        Tenant.AddGroup("g2", "Finance", g => g["visibility"] = "Public");
+        Tenant.Members["g1"] = [("user", "u1")];
+        Tenant.Members["g2"] = [("user", "u1")];
+
+        var objects = await ImportAsync(Groups("displayName", "members"));
+
+        var board = objects.Single(o => Values(o, "id").Single() == "g1");
+        var finance = objects.Single(o => Values(o, "id").Single() == "g2");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Tenant.MembersRequested, Is.EqualTo(new[] { "g2" }));
+            Assert.That(board.Attributes.Select(a => a.Name), Does.Not.Contain("members"));
+            Assert.That(board.AttributeValueErrors!.Single().AttributeName, Is.EqualTo("members"));
+            Assert.That(board.AttributeValueErrors!.Single().Reason, Does.Contain("Member.Read.Hidden"));
+            Assert.That(Values(board, "displayName"), Is.EqualTo(new[] { "Board" }));
+            Assert.That(finance.Attributes.Single(a => a.Name == "members").ReferenceValues, Is.EqualTo(new[] { "u1" }));
+        }
+    }
+
+    [Test]
+    public async Task FullImport_HiddenMembershipWithPermission_ReadsTheMembersAsync()
+    {
+        Tenant.AddGroup("g1", "Board", g => g["visibility"] = "HiddenMembership");
+        Tenant.Members["g1"] = [("user", "u1")];
+
+        var objects = await ImportAsync(Groups("displayName", "members"));
+
+        Assert.That(objects.Single().Attributes.Single(a => a.Name == "members").ReferenceValues, Is.EqualTo(new[] { "u1" }));
+    }
+
+    [Test]
+    public async Task FullImport_ReadingMembers_SelectsVisibilityWithoutStagingItAsync()
+    {
+        Tenant.AddGroup("g1", "Finance", g => g["visibility"] = "Public");
+
+        var objects = await ImportAsync(Groups("displayName", "members"));
+
+        var groupList = Tenant.GraphRequests.First(r => r.RequestUri!.AbsolutePath == "/v1.0/groups" && Query(r, "$filter") == null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Query(groupList, "$select")!.Split(','), Does.Contain("visibility"));
+            Assert.That(objects.Single().Attributes.Select(a => a.Name), Does.Not.Contain("visibility"));
+        }
+    }
+
+    [Test]
     public async Task FullImport_Owners_AreStagedAsReferencesAsync()
     {
-        _tenant.AddGroup("g1", "Finance");
-        _tenant.Owners["g1"] = ["u1", "u2"];
+        Tenant.AddGroup("g1", "Finance");
+        Tenant.Owners["g1"] = ["u1", "u2"];
 
         var objects = await ImportAsync(Groups("displayName", "owners"));
 
@@ -197,11 +231,11 @@ public class GraphConnectorImportTests
     [Test]
     public async Task FullImport_SourceOfAuthority_IsDerivedForEveryObjectAsync()
     {
-        _tenant.AddUser("cloud", "Cloud");
-        _tenant.AddUser("synced", "Synced", u => u["onPremisesSyncEnabled"] = true);
-        _tenant.AddUser("converted", "Converted", u => u["onPremisesSyncEnabled"] = true);
-        _tenant.AddUser("guest", "Guest", u => u["userType"] = "Guest");
-        _tenant.CloudManaged.Add("converted");
+        Tenant.AddUser("cloud", "Cloud");
+        Tenant.AddUser("synced", "Synced", u => u["onPremisesSyncEnabled"] = true);
+        Tenant.AddUser("converted", "Converted", u => u["onPremisesSyncEnabled"] = true);
+        Tenant.AddUser("guest", "Guest", u => u["userType"] = "Guest");
+        Tenant.CloudManaged.Add("converted");
 
         var objects = await ImportAsync(Users("displayName"));
 
@@ -217,11 +251,11 @@ public class GraphConnectorImportTests
     [Test]
     public async Task FullImport_CloudManagedQuery_UsesEventualConsistencyAndAsksOnlyForIdsAsync()
     {
-        _tenant.AddUser("u1", "Ada");
+        Tenant.AddUser("u1", "Ada");
 
         await ImportAsync(Users("displayName"));
 
-        var request = _tenant.GraphRequests.Single(r => Query(r, "$filter")?.Contains("isCloudManaged", StringComparison.Ordinal) == true);
+        var request = Tenant.GraphRequests.Single(r => Query(r, "$filter")?.Contains("isCloudManaged", StringComparison.Ordinal) == true);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(request.Headers.GetValues("ConsistencyLevel").Single(), Is.EqualTo("eventual"));
@@ -234,8 +268,8 @@ public class GraphConnectorImportTests
     [TestCase(HttpStatusCode.Forbidden)]
     public async Task FullImport_CloudManagedQueryRefused_WarnsAndDerivesFromSynchronisationAloneAsync(HttpStatusCode refusal)
     {
-        _tenant.CloudManagedQueryStatus = refusal;
-        _tenant.AddUser("synced", "Synced", u => u["onPremisesSyncEnabled"] = true);
+        Tenant.CloudManagedQueryStatus = refusal;
+        Tenant.AddUser("synced", "Synced", u => u["onPremisesSyncEnabled"] = true);
 
         var results = await RunAsync(ConnectedSystem(Users("displayName")));
 
@@ -249,20 +283,21 @@ public class GraphConnectorImportTests
     [Test]
     public async Task FullImport_TakesADeltaBaselineBeforeReadingEachObjectTypeAsync()
     {
-        _tenant.AddUser("u1", "Ada");
-        _tenant.AddGroup("g1", "Finance");
+        Tenant.AddUser("u1", "Ada");
+        Tenant.AddGroup("g1", "Finance");
 
         await RunAsync(ConnectedSystem(Users("displayName"), Groups("displayName", "members")));
 
-        var paths = _tenant.GraphRequests.Select(r => r.RequestUri!.AbsolutePath).ToList();
-        var userBaseline = _tenant.GraphRequests.Single(r => r.RequestUri!.AbsolutePath == "/v1.0/users/delta");
+        // The cloud-managed query shares the list's path, so it is told apart by its filter.
+        var paths = Tenant.GraphRequests.Where(r => Query(r, "$filter") == null).Select(r => r.RequestUri!.AbsolutePath).ToList();
+        var userBaseline = Tenant.GraphRequests.Single(r => r.RequestUri!.AbsolutePath == "/v1.0/users/delta");
         using (Assert.EnterMultipleScope())
         {
             Assert.That(paths.IndexOf("/v1.0/users/delta"), Is.LessThan(paths.IndexOf("/v1.0/users")));
             Assert.That(paths.IndexOf("/v1.0/groups/delta"), Is.LessThan(paths.IndexOf("/v1.0/groups")));
             Assert.That(Query(userBaseline, "$deltatoken"), Is.EqualTo("latest"));
             Assert.That(Query(userBaseline, "$select"), Does.Contain("displayName"));
-            Assert.That(Query(_tenant.GraphRequests.Single(r => r.RequestUri!.AbsolutePath == "/v1.0/groups/delta"), "$select"), Does.Contain("members"));
+            Assert.That(Query(Tenant.GraphRequests.Single(r => r.RequestUri!.AbsolutePath == "/v1.0/groups/delta"), "$select"), Does.Contain("members"));
         }
     }
 
@@ -270,12 +305,12 @@ public class GraphConnectorImportTests
     public async Task FullImport_LastPage_PersistsBothDeltaLinksAndEarlierPagesPersistNothingAsync()
     {
         for (var i = 1; i <= 3; i++)
-            _tenant.AddUser($"u{i}", $"User {i}");
-        _tenant.AddGroup("g1", "Finance");
+            Tenant.AddUser($"u{i}", $"User {i}");
+        Tenant.AddGroup("g1", "Finance");
 
         var results = await RunAsync(ConnectedSystem(Users("displayName"), Groups("displayName")), pageSize: 2);
 
-        var state = GraphImportState.Read(results.Last().PersistedConnectorData, _logger);
+        var state = GraphImportState.Read(results.Last().PersistedConnectorData, Logger);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(results.Take(results.Count - 1).Select(r => r.PersistedConnectorData), Is.All.Null);
@@ -288,8 +323,8 @@ public class GraphConnectorImportTests
     [Test]
     public async Task FullImport_EveryPage_ReadsEveryObjectAsync()
     {
-        _tenant.AddUser("u1", "Ada");
-        _tenant.AddUser("u2", "Grace");
+        Tenant.AddUser("u1", "Ada");
+        Tenant.AddUser("u2", "Grace");
 
         var results = await RunAsync(ConnectedSystem(Users("displayName")), pageSize: 1);
 
@@ -299,22 +334,22 @@ public class GraphConnectorImportTests
     [Test]
     public async Task FullImport_UnselectedObjectType_IsNotReadAsync()
     {
-        _tenant.AddUser("u1", "Ada");
-        _tenant.AddGroup("g1", "Finance");
+        Tenant.AddUser("u1", "Ada");
+        Tenant.AddGroup("g1", "Finance");
 
         var objects = await ImportAsync(Users("displayName"));
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(objects.Select(o => o.ObjectType), Is.All.EqualTo("user"));
-            Assert.That(_tenant.GraphRequests.Select(r => r.RequestUri!.AbsolutePath), Has.None.StartsWith("/v1.0/groups"));
+            Assert.That(Tenant.GraphRequests.Select(r => r.RequestUri!.AbsolutePath), Has.None.StartsWith("/v1.0/groups"));
         }
     }
 
     [Test]
     public async Task FullImport_DirectoryExtension_IsReadByItsOwnNameAsync()
     {
-        _tenant.AddUser("u1", "Ada", u => u["extension_0c1d_employeeNumber"] = "E123");
+        Tenant.AddUser("u1", "Ada", u => u["extension_0c1d_employeeNumber"] = "E123");
         var users = Users("displayName");
         users.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Name = "extension_0c1d_employeeNumber", Type = AttributeDataType.Text, Selected = true });
 
@@ -330,75 +365,4 @@ public class GraphConnectorImportTests
 
         Assert.That(phases.Select(p => p.Key), Is.EqualTo(new[] { GraphConnectorPhases.Prepare, GraphConnectorPhases.Fetch }));
     }
-
-    private async Task<List<ConnectedSystemImportObject>> ImportAsync(params ConnectedSystemObjectType[] objectTypes) =>
-        (await RunAsync(ConnectedSystem(objectTypes))).SelectMany(r => r.ImportObjects).ToList();
-
-    private async Task<List<ConnectedSystemImportResult>> RunAsync(ConnectedSystem connectedSystem, int pageSize = 100)
-    {
-        var connector = new StubbedTransportGraphConnector(_tenant.Handler);
-        var runProfile = new ConnectedSystemRunProfile { Name = "Full Import", RunType = ConnectedSystemRunType.FullImport, PageSize = pageSize };
-        connector.OpenImportConnection(connectedSystem.SettingValues, persistedConnectorData: null, _logger);
-        var results = new List<ConnectedSystemImportResult>();
-        var tokens = new List<ConnectedSystemPaginationToken>();
-        try
-        {
-            for (var page = 0; page < 50; page++)
-            {
-                var result = await connector.ImportAsync(connectedSystem, runProfile, tokens, null, _logger, CancellationToken.None, new RecordingConnectorProgress());
-                results.Add(result);
-                if (result.PaginationTokens.Count == 0)
-                    return results;
-                tokens = result.PaginationTokens;
-            }
-        }
-        finally
-        {
-            connector.CloseImportConnection();
-        }
-
-        Assert.Fail("The import did not finish within 50 pages.");
-        return results;
-    }
-
-    private static ConnectedSystem ConnectedSystem(params ConnectedSystemObjectType[] objectTypes) => new()
-    {
-        Name = "Entra ID",
-        ObjectTypes = objectTypes.ToList(),
-        SettingValues =
-        [
-            new() { Setting = new ConnectorDefinitionSetting { Name = GraphConnectorConstants.SettingTenantId }, StringValue = "7a1f0c2e-3b4d-4e5f-8a9b-0c1d2e3f4a5b" },
-            new() { Setting = new ConnectorDefinitionSetting { Name = GraphConnectorConstants.SettingClientId }, StringValue = "1c2d3e4f-5a6b-4c7d-8e9f-a0b1c2d3e4f5" },
-            new() { Setting = new ConnectorDefinitionSetting { Name = GraphConnectorConstants.SettingAuthenticationMethod }, StringValue = GraphConnectorConstants.AuthMethodClientSecret },
-            new() { Setting = new ConnectorDefinitionSetting { Name = GraphConnectorConstants.SettingClientSecret }, StringEncryptedValue = "client-secret-value" }
-        ]
-    };
-
-    private static ConnectedSystemObjectType Users(params string[] selected) => ObjectType("user", GraphSchemaCatalogue.UserAttributes, selected);
-
-    private static ConnectedSystemObjectType Groups(params string[] selected) => ObjectType("group", GraphSchemaCatalogue.GroupAttributes, selected);
-
-    /// <summary>An Object Type as schema import leaves it: every catalogue attribute, with id, sourceOfAuthority and those named selected.</summary>
-    private static ConnectedSystemObjectType ObjectType(string name, IReadOnlyList<GraphSchemaAttribute> catalogue, string[] selected) => new()
-    {
-        Name = name,
-        Selected = true,
-        Attributes = catalogue.Select(a => new ConnectedSystemObjectTypeAttribute
-        {
-            Name = a.Name,
-            Type = a.Type,
-            AttributePlurality = a.Plurality,
-            Selected = a.Name is "id" or "sourceOfAuthority" || selected.Contains(a.Name),
-            IsExternalId = a.Name == "id"
-        }).ToList()
-    };
-
-    private StubHttpMessageHandler.RecordedRequest UserListRequest() =>
-        _tenant.GraphRequests.First(r => r.RequestUri!.AbsolutePath == "/v1.0/users" && Query(r, "$filter") == null);
-
-    private static string? Query(StubHttpMessageHandler.RecordedRequest request, string name) =>
-        HttpUtility.ParseQueryString(request.RequestUri!.Query)[name];
-
-    private static List<string> Values(ConnectedSystemImportObject importObject, string name) =>
-        importObject.Attributes.SingleOrDefault(a => a.Name == name)?.StringValues ?? [];
 }

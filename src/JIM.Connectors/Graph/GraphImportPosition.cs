@@ -7,10 +7,11 @@ using JIM.Models.Staging;
 namespace JIM.Connectors.Graph;
 
 /// <summary>
-/// Where an import has got to, carried between pages as JIM's pagination token: which Object Type, and the link to
-/// that type's next page. No link means the type has not been started.
+/// Where an import has got to, carried between pages as JIM's pagination token: which Object Type, and either the link
+/// to that type's next page (a full read; no link means the type has not been started) or how many of its changes have
+/// been staged (a Delta Import).
 /// </summary>
-internal sealed record GraphImportPosition(int TargetIndex, string? NextLink)
+internal sealed record GraphImportPosition(int TargetIndex, string? NextLink, int ChangesStaged = 0)
 {
     private const string TokenName = "GraphImportPosition";
 

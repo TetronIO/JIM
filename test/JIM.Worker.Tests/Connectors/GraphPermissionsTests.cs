@@ -73,7 +73,7 @@ public class GraphPermissionsTests
     [Test]
     public void Check_DirectoryReadWriteAndSourceOfAuthorityRead_CoverEverything()
     {
-        var result = GraphPermissions.Check(["Directory.ReadWrite.All", "User-OnPremisesSyncBehavior.Read.All", "Group-OnPremisesSyncBehavior.Read.All"]);
+        var result = GraphPermissions.Check(["Directory.ReadWrite.All", "User-OnPremisesSyncBehavior.Read.All", "Group-OnPremisesSyncBehavior.Read.All", "Member.Read.Hidden"]);
 
         using (Assert.EnterMultipleScope())
         {
@@ -115,8 +115,39 @@ public class GraphPermissionsTests
     [Test]
     public void Check_RoleNames_AreMatchedWhateverTheirCase()
     {
-        var result = GraphPermissions.Check(["user.readwrite.all", "GROUP.READWRITE.ALL", "user-onpremisessyncbehavior.read.all", "group-onpremisessyncbehavior.read.all"]);
+        var result = GraphPermissions.Check(["user.readwrite.all", "GROUP.READWRITE.ALL", "user-onpremisessyncbehavior.read.all", "group-onpremisessyncbehavior.read.all", "member.read.hidden"]);
 
         Assert.That(result.Warning, Is.Null);
+    }
+
+    [Test]
+    public void Check_GroupsWithoutMemberReadHidden_WarnsThatHiddenMembershipCannotBeRead()
+    {
+        var result = GraphPermissions.Check(["User.ReadWrite.All", "Group.ReadWrite.All", "User-OnPremisesSyncBehavior.Read.All", "Group-OnPremisesSyncBehavior.Read.All"]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Error, Is.Null);
+            Assert.That(result.Warning, Does.Contain("Member.Read.Hidden"));
+        }
+    }
+
+    [Test]
+    public void Check_UsersOnlyWithoutMemberReadHidden_DoesNotAskForIt()
+    {
+        var result = GraphPermissions.Check(["User.ReadWrite.All", "User-OnPremisesSyncBehavior.Read.All"]);
+
+        Assert.That(result.Warning, Does.Not.Contain("Member.Read.Hidden"));
+    }
+
+    [Test]
+    public void CanReadHiddenMembership_OnlyWithMemberReadHidden()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(GraphPermissions.CanReadHiddenMembership(["Member.Read.Hidden"]), Is.True);
+            Assert.That(GraphPermissions.CanReadHiddenMembership(["member.read.hidden", "Group.Read.All"]), Is.True);
+            Assert.That(GraphPermissions.CanReadHiddenMembership(["Directory.ReadWrite.All", "Group.ReadWrite.All"]), Is.False);
+        }
     }
 }

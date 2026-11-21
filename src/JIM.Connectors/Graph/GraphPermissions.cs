@@ -9,8 +9,9 @@ namespace JIM.Connectors.Graph;
 /// </summary>
 /// <remarks>
 /// A broader permission satisfies a narrower one: ReadWrite covers Read, and Directory.ReadWrite.All covers users and
-/// groups alike. Reading is required; writing and Source of Authority are needed only by the features that use them,
-/// which a Connected System may not, so their absence is a warning rather than an error.
+/// groups alike, but nothing covers Member.Read.Hidden. Reading is required; writing, Source of Authority and hidden
+/// membership are needed only by the features that use them, which a Connected System may not, so their absence is a
+/// warning rather than an error.
 /// </remarks>
 internal static class GraphPermissions
 {
@@ -24,6 +25,20 @@ internal static class GraphPermissions
     public const string UserSyncBehaviourReadWrite = "User-OnPremisesSyncBehavior.ReadWrite.All";
     public const string GroupSyncBehaviourRead = "Group-OnPremisesSyncBehavior.Read.All";
     public const string GroupSyncBehaviourReadWrite = "Group-OnPremisesSyncBehavior.ReadWrite.All";
+
+    /// <summary>
+    /// Reads the members of a group whose membership is hidden. No other permission does, Directory.ReadWrite.All
+    /// included.
+    /// </summary>
+    public const string MemberReadHidden = "Member.Read.Hidden";
+
+    /// <summary>
+    /// Whether the token may read the members of a group whose membership is hidden. Graph's documentation does not say
+    /// what it answers without the permission; an empty list would read as a group with no members, so the Connector
+    /// does not ask unless this holds.
+    /// </summary>
+    public static bool CanReadHiddenMembership(IReadOnlyCollection<string> roles) =>
+        roles.Contains(MemberReadHidden, StringComparer.OrdinalIgnoreCase);
 
     public static GraphPermissionCheckResult Check(IReadOnlyCollection<string> roles)
     {
@@ -61,6 +76,8 @@ internal static class GraphPermissions
             missing.Add($"{UserSyncBehaviourRead} (to tell which synchronised users have moved to cloud management)");
         if (canReadGroups && !Any(GroupSyncBehaviourRead, GroupSyncBehaviourReadWrite))
             missing.Add($"{GroupSyncBehaviourRead} (to tell which synchronised groups have moved to cloud management)");
+        if (canReadGroups && !Any(MemberReadHidden))
+            missing.Add($"{MemberReadHidden} (to import the members of groups whose membership is hidden)");
 
         var warning = missing.Count == 0
             ? null

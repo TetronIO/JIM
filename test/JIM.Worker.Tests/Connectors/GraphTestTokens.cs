@@ -16,7 +16,8 @@ internal static class GraphTestTokens
     public static readonly string[] AllPermissions =
     [
         "User.ReadWrite.All", "Group.ReadWrite.All",
-        "User-OnPremisesSyncBehavior.ReadWrite.All", "Group-OnPremisesSyncBehavior.ReadWrite.All"
+        "User-OnPremisesSyncBehavior.ReadWrite.All", "Group-OnPremisesSyncBehavior.ReadWrite.All",
+        "Member.Read.Hidden"
     ];
 
     public static string AccessToken(params string[] roles)

@@ -11,9 +11,15 @@ namespace JIM.Worker.Tests.Connectors;
 
 /// <summary>
 /// An in-memory Microsoft Entra ID tenant answering the Microsoft Graph requests the Connector makes: the token
-/// endpoint, paged user and group lists, group members (directly and through <c>$batch</c>), the cloud-managed query and
-/// delta baselines. Pages honour <c>$top</c> and continue through <c>$skiptoken</c>, as Graph's do.
+/// endpoint, paged user and group lists, single objects, group members (directly and through <c>$batch</c>), the
+/// cloud-managed query, delta baselines and delta rounds. Pages honour <c>$top</c> and continue through
+/// <c>$skiptoken</c>, as Graph's do.
 /// </summary>
+/// <remarks>
+/// A delta round returns what was recorded through <see cref="RecordChange"/> and <see cref="RecordRemoval"/> since the
+/// round's link was issued, in the order recorded, and issues a new link at its end, as Graph does. Each recorded entry
+/// is reported separately, so an object recorded twice appears twice, as a group whose member changes span pages does.
+/// </remarks>
 internal sealed class FakeGraphTenant
 {
     private const string Graph = "https://graph.microsoft.com/v1.0/";
@@ -41,6 +47,25 @@ internal sealed class FakeGraphTenant
 
     public string[] Roles { get; set; } = GraphTestTokens.AllPermissions;
 
+    /// <summary>How many entries a delta page holds.</summary>
+    public int DeltaPageSize { get; set; } = 100;
+
+    /// <summary>Delta tokens Graph no longer honours, and the status and error code it answers them with.</summary>
+    public Dictionary<string, (HttpStatusCode Status, string Code)> ExpiredDeltaTokens { get; } = [];
+
+    /// <summary>
+    /// Ids a single-object read cannot find yet, and how many more reads will not find it, as replication delay leaves
+    /// an object just created or changed.
+    /// </summary>
+    public Dictionary<string, int> NotYetReadable { get; } = [];
+
+    /// <summary>Group ids whose members were requested, in order: hidden membership must never be asked for without the permission.</summary>
+    public List<string> MembersRequested { get; } = [];
+
+    private readonly Dictionary<string, List<JsonObject>> _deltaEntries = new() { ["users"] = [], ["groups"] = [] };
+    private readonly Dictionary<string, int> _deltaTokenPositions = [];
+    private int _deltaTokenCount;
+
     public StubHttpMessageHandler Handler { get; }
 
     public FakeGraphTenant()
@@ -67,6 +92,21 @@ internal sealed class FakeGraphTenant
         return group;
     }
 
+    /// <summary>Records that an object changed, so the next delta round reports it.</summary>
+    public void RecordChange(string collection, string id) =>
+        _deltaEntries[collection].Add(new JsonObject { ["id"] = id });
+
+    /// <summary>Records that an object was removed, so the next delta round reports it with an <c>@removed</c> annotation.</summary>
+    public void RecordRemoval(string collection, string id, string reason = "deleted")
+    {
+        _deltaEntries[collection].Add(new JsonObject { ["id"] = id, ["@removed"] = new JsonObject { ["reason"] = reason } });
+        var source = collection == "users" ? Users : Groups;
+        source.RemoveAll(o => (string)o["id"]! == id);
+    }
+
+    /// <summary>The delta token of the link a round would issue now, so a test can expire it.</summary>
+    public static string BaselineToken(string collection) => $"baseline-{collection}";
+
     private HttpResponseMessage Respond(HttpRequestMessage request)
     {
         if (GraphTestTokens.IsTokenRequest(request))
@@ -84,7 +124,7 @@ internal sealed class FakeGraphTenant
     private (int Status, JsonNode? Body) Get(string path, System.Collections.Specialized.NameValueCollection query)
     {
         if (path is "users/delta" or "groups/delta")
-            return (200, new JsonObject { ["value"] = new JsonArray(), ["@odata.deltaLink"] = $"{Graph}{path}?$deltatoken=baseline-{path.Split('/')[0]}" });
+            return Delta(path.Split('/')[0], query);
 
         if ((path is "users" or "groups") && query["$filter"]?.Contains("onPremisesSyncBehavior/isCloudManaged", StringComparison.Ordinal) == true)
         {
@@ -100,8 +140,12 @@ internal sealed class FakeGraphTenant
             return (200, Page(path, path == "users" ? Users : Groups, query, o => Project(o, query, path)));
 
         var parts = path.Split('/');
+        if (parts is ["users" or "groups", var objectId])
+            return ReadOne(parts[0], objectId, query);
+
         if (parts is ["groups", var groupId, "members"])
         {
+            MembersRequested.Add(groupId);
             if (MembersFailures.TryGetValue(groupId, out var failure))
                 return ((int)failure, new JsonObject { ["error"] = new JsonObject { ["code"] = "Request_ResourceNotFound", ["message"] = "Not found." } });
 
@@ -117,6 +161,65 @@ internal sealed class FakeGraphTenant
         }
 
         return (404, new JsonObject { ["error"] = new JsonObject { ["code"] = "Request_ResourceNotFound", ["message"] = $"No route for {path}." } });
+    }
+
+    /// <summary>
+    /// A delta round. <c>$deltatoken=latest</c> issues a link at the tenant's present without returning anything; any
+    /// other token returns what was recorded after its link was issued.
+    /// </summary>
+    private (int Status, JsonNode? Body) Delta(string collection, System.Collections.Specialized.NameValueCollection query)
+    {
+        var entries = _deltaEntries[collection];
+        var deltaToken = query["$deltatoken"];
+        int start;
+        if (deltaToken == "latest")
+        {
+            start = entries.Count;
+        }
+        else if (deltaToken != null)
+        {
+            if (ExpiredDeltaTokens.TryGetValue(deltaToken, out var expired))
+                return ((int)expired.Status, new JsonObject { ["error"] = new JsonObject { ["code"] = expired.Code, ["message"] = "The delta token is no longer valid." } });
+            if (!_deltaTokenPositions.TryGetValue(deltaToken, out start))
+                return (400, new JsonObject { ["error"] = new JsonObject { ["code"] = "badRequest", ["message"] = $"Unknown delta token {deltaToken}." } });
+        }
+        else if (query["$skiptoken"] is { } skipToken)
+        {
+            start = int.Parse(skipToken["d".Length..]);
+        }
+        else
+        {
+            return (400, new JsonObject { ["error"] = new JsonObject { ["code"] = "badRequest", ["message"] = "This fake only starts rounds from a token." } });
+        }
+
+        var page = entries.Skip(start).Take(deltaToken == "latest" ? 0 : DeltaPageSize).Select(e => (JsonNode)e.DeepClone()).ToArray();
+        var result = new JsonObject { ["value"] = new JsonArray(page) };
+        var next = start + page.Length;
+        if (deltaToken != "latest" && next < entries.Count)
+        {
+            result["@odata.nextLink"] = $"{Graph}{collection}/delta?$skiptoken=d{next}";
+            return (200, result);
+        }
+
+        // The first link a tenant issues for a collection is the baseline token, so a test can name it.
+        var issued = _deltaTokenPositions.ContainsKey(BaselineToken(collection)) ? $"{collection}-{++_deltaTokenCount}" : BaselineToken(collection);
+        _deltaTokenPositions[issued] = next;
+        result["@odata.deltaLink"] = $"{Graph}{collection}/delta?$deltatoken={issued}";
+        return (200, result);
+    }
+
+    private (int Status, JsonNode? Body) ReadOne(string collection, string id, System.Collections.Specialized.NameValueCollection query)
+    {
+        var graphObject = (collection == "users" ? Users : Groups).FirstOrDefault(o => (string)o["id"]! == id);
+        if (NotYetReadable.TryGetValue(id, out var misses) && misses > 0)
+        {
+            NotYetReadable[id] = misses - 1;
+            graphObject = null;
+        }
+
+        return graphObject == null
+            ? (404, new JsonObject { ["error"] = new JsonObject { ["code"] = "Request_ResourceNotFound", ["message"] = $"Resource '{id}' does not exist." } })
+            : (200, Project(graphObject, query, collection));
     }
 
     private HttpResponseMessage Batch(HttpRequestMessage request)

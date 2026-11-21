@@ -27,6 +27,10 @@ internal static class GraphSchemaCatalogue
     public const string Manager = "manager";
     public const string SourceOfAuthority = "sourceOfAuthority";
     public const string OnPremisesExtensionAttributes = "onPremisesExtensionAttributes";
+    public const string Visibility = "visibility";
+
+    /// <summary>The <c>visibility</c> of a group whose members only its members, owners and administrators can see.</summary>
+    public const string HiddenMembership = "HiddenMembership";
 
     /// <summary>How many <c>extensionAttribute</c> values <c>onPremisesExtensionAttributes</c> carries.</summary>
     public const int ExtensionAttributeCount = 15;

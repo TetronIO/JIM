@@ -18,7 +18,7 @@ namespace JIM.Connectors.Graph;
 /// Registered with the Connector factory but not seeded until the plan's final phase, so it is not offered to
 /// administrators while it is being built. The capability flags declare what the finished Connector does.
 /// </remarks>
-public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSchema, IConnectorImportUsingCalls, IConnectorPhases
+public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSchema, IConnectorImportUsingCalls, IConnectorImportWatermark, IConnectorPhases
 {
     private static readonly string[] MultiTenantAliases = ["common", "organizations", "consumers"];
 
@@ -90,6 +90,32 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
     }
     #endregion
 
+    #region IConnectorImportWatermark members
+    /// <summary>
+    /// The watermark is each Object Type's delta link, which Graph keeps opaque, so it is described by when it was taken:
+    /// the start of the import that took it.
+    /// </summary>
+    public ImportWatermarkDescription? DescribeImportWatermark(string? persistedConnectorData, ILogger logger)
+    {
+        var state = GraphImportState.Read(persistedConnectorData, logger);
+        return state is not { DeltaLinks.Count: > 0 }
+            ? null
+            : new ImportWatermarkDescription
+            {
+                Kind = "delta link",
+                Points = state.DeltaLinks.Keys.Order(StringComparer.OrdinalIgnoreCase)
+                    .Select(objectType => new ImportWatermarkPoint { Scope = objectType, Time = state.CapturedAt.UtcDateTime })
+                    .ToList()
+            };
+    }
+
+    /// <summary>
+    /// Everything this Connector persists (<see cref="GraphImportState"/>) is the watermark or what it was taken to track,
+    /// so nothing remains once it is removed.
+    /// </summary>
+    public string? RemoveImportWatermark(string persistedConnectorData, ILogger logger) => null;
+    #endregion
+
     #region IConnectorImportUsingCalls members
     /// <summary>
     /// Opens the connection every page of this run is read through. Nothing is sent until the first page.
@@ -116,7 +142,7 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
         if (_import == null)
             throw new InvalidOperationException("OpenImportConnection must be called before ImportAsync.");
 
-        return _import.ImportPageAsync(connectedSystem, runProfile, GraphImportPosition.FromTokens(paginationTokens), progress, cancellationToken);
+        return _import.ImportPageAsync(connectedSystem, runProfile, persistedConnectorData, GraphImportPosition.FromTokens(paginationTokens), progress, cancellationToken);
     }
 
     /// <returns>Always null: the delta links travel on the last page's result, and nothing else is kept at close.</returns>

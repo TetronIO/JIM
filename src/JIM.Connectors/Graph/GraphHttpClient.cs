@@ -76,6 +76,9 @@ internal sealed class GraphHttpClient : IDisposable
     /// <summary>How many 429 responses this client has received, so a run can report sustained throttling.</summary>
     public int ThrottledResponseCount => Volatile.Read(ref _throttledResponseCount);
 
+    /// <summary>Waits as the client waits between retries, so a caller's own waiting is replaced in tests along with it.</summary>
+    public Task DelayAsync(TimeSpan duration, CancellationToken cancellationToken) => _delay(duration, cancellationToken);
+
     /// <summary>
     /// Sends a request, retrying transient failures and throttling per the policy. The returned response is successful;
     /// anything else has already become a <see cref="GraphRequestException"/>.
