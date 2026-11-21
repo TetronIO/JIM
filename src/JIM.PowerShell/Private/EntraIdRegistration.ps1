@@ -26,15 +26,45 @@ $script:JIMEntraIdGraphScopes = [ordered]@{
 }
 
 # Microsoft's own public client for signing in to Graph from a command line (the Microsoft Graph Command Line Tools
-# application), used for the device-code sign-in when no token is given, so nothing has to be registered first.
-$script:JIMEntraIdDeviceCodeClientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e'
-$script:JIMEntraIdDeviceCodeScopes = @(
+# application), used to sign an administrator in when no token is given, so nothing has to be registered first. It
+# accepts a browser sign-in redirected to http://localhost on any port, and a device code.
+$script:JIMEntraIdSignInClientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e'
+$script:JIMEntraIdSignInScopes = @(
     'https://graph.microsoft.com/Application.ReadWrite.All'
     'https://graph.microsoft.com/DelegatedPermissionGrant.ReadWrite.All'
     'https://graph.microsoft.com/User.Read'
 )
 
 $script:JIMEntraIdSecretName = 'JIM portal'
+
+function Get-JIMEntraIdAdminToken {
+    <#
+    .SYNOPSIS
+        Signs a person who administers the tenant's applications in to Microsoft Graph, and returns the access token as a
+        secure string.
+
+    .DESCRIPTION
+        Through the browser by default: authorisation code with PKCE, redirected to this computer's loopback address,
+        so Conditional Access, multifactor authentication and device compliance apply as they do to any sign-in.
+        Microsoft recommends blocking the device code flow, so it is used only when asked for, for a console with no
+        browser in a tenant that still allows it.
+    #>
+    [CmdletBinding()]
+    [OutputType([securestring])]
+    param(
+        [Parameter(Mandatory)][string]$TenantId,
+        [switch]$UseDeviceCode
+    )
+
+    if ($UseDeviceCode) {
+        return Get-JIMEntraIdDeviceCodeToken -TenantId $TenantId
+    }
+
+    $base = "https://login.microsoftonline.com/$([uri]::EscapeDataString($TenantId))/oauth2/v2.0"
+    $tokens = Invoke-OAuthBrowserFlow -AuthorizeEndpoint "$base/authorize" -TokenEndpoint "$base/token" `
+        -ClientId $script:JIMEntraIdSignInClientId -Scopes $script:JIMEntraIdSignInScopes -RedirectPath '/'
+    return ConvertTo-SecureString -String $tokens.AccessToken -AsPlainText -Force
+}
 
 function Get-JIMEntraIdDeviceCodeToken {
     <#
@@ -49,7 +79,7 @@ function Get-JIMEntraIdDeviceCodeToken {
 
     $base = "https://login.microsoftonline.com/$([uri]::EscapeDataString($TenantId))/oauth2/v2.0"
     $code = Invoke-RestMethod -Method Post -Uri "$base/devicecode" -ErrorAction Stop -Body @{
-        client_id = $script:JIMEntraIdDeviceCodeClientId; scope = $script:JIMEntraIdDeviceCodeScopes -join ' '
+        client_id = $script:JIMEntraIdSignInClientId; scope = $script:JIMEntraIdSignInScopes -join ' '
     }
     Write-Host $code.message -ForegroundColor Yellow
 
@@ -60,7 +90,7 @@ function Get-JIMEntraIdDeviceCodeToken {
         try {
             $token = Invoke-RestMethod -Method Post -Uri "$base/token" -ErrorAction Stop -Body @{
                 grant_type = 'urn:ietf:params:oauth:grant-type:device_code'
-                client_id = $script:JIMEntraIdDeviceCodeClientId; device_code = $code.device_code
+                client_id = $script:JIMEntraIdSignInClientId; device_code = $code.device_code
             }
             return ConvertTo-SecureString -String $token.access_token -AsPlainText -Force
         }
@@ -68,7 +98,9 @@ function Get-JIMEntraIdDeviceCodeToken {
             $reason = ($_.ErrorDetails.Message | ConvertFrom-Json -ErrorAction SilentlyContinue).error
             if ($reason -eq 'slow_down') { $interval += 5; continue }
             if ($reason -ne 'authorization_pending') {
-                throw "Entra ID did not sign you in to Microsoft Graph: $($_.ErrorDetails.Message)"
+                # Conditional Access commonly blocks the device code flow, as Microsoft recommends, so say how else.
+                throw ("Entra ID did not sign you in to Microsoft Graph with a device code: $($_.ErrorDetails.Message) " +
+                    'Where Conditional Access blocks device code sign-in, run this again without -UseDeviceCode to sign in through a browser, or pass -AccessToken with a Microsoft Graph token.')
             }
         }
     }

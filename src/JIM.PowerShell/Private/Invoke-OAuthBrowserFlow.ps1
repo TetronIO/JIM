@@ -40,6 +40,11 @@ function Invoke-OAuthBrowserFlow {
     .PARAMETER TimeoutSeconds
         How long to wait for the user to complete authentication. Defaults to 300 (5 minutes).
 
+    .PARAMETER RedirectPath
+        The path the identity provider redirects back to on the loopback address. Defaults to /callback/, which JIM's
+        own registrations use. A path of / redirects to the bare address (http://localhost:{port}), which is what
+        Microsoft's public clients, such as the Microsoft Graph Command Line Tools, accept on any port.
+
     .OUTPUTS
         Returns a hashtable with AccessToken, RefreshToken, ExpiresAt, and TokenType.
 
@@ -65,7 +70,10 @@ function Invoke-OAuthBrowserFlow {
 
         [int]$RedirectPort = 8400,
 
-        [int]$TimeoutSeconds = 300
+        [int]$TimeoutSeconds = 300,
+
+        [ValidatePattern('^/([^?#]*/)?$')]
+        [string]$RedirectPath = '/callback/'
     )
 
     # Generate PKCE code verifier (43-128 characters, unreserved URI characters)
@@ -74,10 +82,11 @@ function Invoke-OAuthBrowserFlow {
 
     Write-Verbose "Generated PKCE code verifier and challenge"
 
-    # Use a fixed callback path for IDP compatibility
-    # Security is provided by PKCE + state parameter, not by path obscurity
-    # Entra ID and other IDPs require exact redirect URI matching
-    $callbackPath = "/callback/"
+    # A fixed callback path for IDP compatibility: security comes from PKCE and the state parameter, not from path
+    # obscurity, and identity providers match the redirect URI exactly. The root path is sent without its slash,
+    # because that is the form Microsoft's public clients register (http://localhost, any port).
+    $callbackPath = $RedirectPath
+    $redirectSuffix = if ($callbackPath -eq '/') { '' } else { $callbackPath }
 
     # Find an available port on 127.0.0.1 loopback only (RFC 8252 Section 7.3)
     $listener = $null
@@ -89,8 +98,7 @@ function Invoke-OAuthBrowserFlow {
             $listener = [System.Net.HttpListener]::new()
             # Use localhost for IDP compatibility (Entra ID prefers http://localhost)
             # HttpListener on localhost still only accepts local connections
-            $redirectUri = "http://localhost:$actualPort$callbackPath"
-            $listener.Prefixes.Add($redirectUri)
+            $listener.Prefixes.Add("http://localhost:$actualPort$callbackPath")
             $listener.Start()
             Write-Verbose "Started HTTP listener on localhost:$actualPort with callback path $callbackPath"
             break
@@ -108,7 +116,7 @@ function Invoke-OAuthBrowserFlow {
     }
 
     try {
-        $redirectUri = "http://localhost:$actualPort$callbackPath"
+        $redirectUri = "http://localhost:$actualPort$redirectSuffix"
 
         # Generate cryptographically random state for CSRF protection
         $stateBytes = [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
