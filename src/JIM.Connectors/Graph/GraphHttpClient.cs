@@ -163,6 +163,43 @@ internal sealed class GraphHttpClient : IDisposable
         }
     }
 
+    /// <summary>
+    /// Sends a request and reads the JSON body Graph answers with. A response with no body reads as the type's default.
+    /// </summary>
+    /// <exception cref="GraphRequestException">The request failed, or the body is not the JSON expected.</exception>
+    public async Task<T?> SendJsonAsync<T>(HttpMethod method, string pathOrUrl, object? body, GraphRequestOptions? options, CancellationToken cancellationToken)
+    {
+        using var response = await SendAsync(method, pathOrUrl, body, options, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NoContent)
+            return default;
+
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(json))
+            return default;
+
+        try
+        {
+            return JsonSerializer.Deserialize<T>(json, JsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            throw new GraphRequestException("Microsoft Graph returned a successful response whose body could not be read as the JSON expected.", response.StatusCode, innerException: ex);
+        }
+    }
+
+    /// <summary>
+    /// The access token requests are sent with, acquiring one if none is cached. For reading the token's own claims
+    /// (which permissions it grants); it is never logged.
+    /// </summary>
+    /// <exception cref="HttpAuthenticationException">No access token could be acquired.</exception>
+    public async Task<string> GetAccessTokenAsync(CancellationToken cancellationToken)
+    {
+        using var probe = new HttpRequestMessage(HttpMethod.Get, _cloud.ApiBaseUrl);
+        await _authentication.ApplyAsync(probe, cancellationToken);
+        return probe.Headers.Authorization?.Parameter
+               ?? throw new HttpAuthenticationException("No access token was issued.");
+    }
+
     public void Dispose()
     {
         _httpClient.Dispose();

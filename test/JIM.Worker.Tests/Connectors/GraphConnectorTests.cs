@@ -24,7 +24,8 @@ public class GraphConnectorTests
     [SetUp]
     public void SetUp()
     {
-        _connector = new GraphConnector();
+        // Every validation that passes the shape checks goes on to a connectivity test, so the transport is stubbed.
+        _connector = new StubbedTransportGraphConnector(StubbedTransportGraphConnector.HealthyTransport());
         _logger = new LoggerConfiguration().CreateLogger();
     }
 
@@ -149,6 +150,20 @@ public class GraphConnectorTests
         }
     }
 
+    [TestCase(GraphConnectorConstants.SettingConnectionTimeout, GraphConnectorConstants.DefaultConnectionTimeoutSeconds)]
+    [TestCase(GraphConnectorConstants.SettingMaximumWritesPerSecond, GraphConnectorConstants.DefaultMaximumWritesPerSecond)]
+    [TestCase(GraphConnectorConstants.SettingMaxRetries, GraphConnectorConstants.DefaultMaxRetries)]
+    public void GetSettings_NumericSetting_IsAnIntegerWithItsDefault(string name, int expectedDefault)
+    {
+        var setting = GetSetting(name);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.Integer));
+            Assert.That(setting.DefaultIntValue, Is.EqualTo(expectedDefault));
+        }
+    }
+
     [Test]
     public void GetSettings_CertificatePassword_IsOptional()
     {
@@ -222,6 +237,22 @@ public class GraphConnectorTests
         var results = _connector.ValidateSettingValues(CreateSettingValues(tenantId: null, clientId: null, clientSecret: null), _logger);
 
         Assert.That(results, Is.Empty);
+    }
+
+    [TestCase(GraphConnectorConstants.SettingConnectionTimeout, 0)]
+    [TestCase(GraphConnectorConstants.SettingConnectionTimeout, GraphConnectorConstants.MaximumConnectionTimeoutSeconds + 1)]
+    [TestCase(GraphConnectorConstants.SettingMaximumWritesPerSecond, 0)]
+    [TestCase(GraphConnectorConstants.SettingMaximumWritesPerSecond, 21)]
+    [TestCase(GraphConnectorConstants.SettingMaxRetries, -1)]
+    [TestCase(GraphConnectorConstants.SettingMaxRetries, GraphConnectorConstants.MaximumMaxRetries + 1)]
+    public void ValidateSettingValues_NumberOutOfRange_IsRefused(string name, int value)
+    {
+        var settings = CreateSettingValues();
+        settings.Add(new ConnectedSystemSettingValue { Setting = new ConnectorDefinitionSetting { Name = name }, IntValue = value });
+
+        var results = _connector.ValidateSettingValues(settings, _logger);
+
+        AssertSingleError(results, name, name);
     }
 
     [Test]
