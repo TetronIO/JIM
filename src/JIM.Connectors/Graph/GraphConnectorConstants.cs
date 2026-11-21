@@ -28,15 +28,7 @@ public static class GraphConnectorConstants
     public const string AuthMethodCertificate = "Certificate";
     public const string AuthMethodFederatedCredential = "Federated Credential";
 
-    public const string SettingFederatedCredentialSource = "Federated Credential Source";
     public const string SettingManagedIdentityClientId = "Managed Identity Client ID";
-    public const string SettingTokenFilePath = "Token File Path";
-
-    /// <summary>Federated Credential Source: a user-assigned managed identity of the Azure resource JIM runs on.</summary>
-    public const string FederatedSourceManagedIdentity = "Azure Managed Identity";
-
-    /// <summary>Federated Credential Source: a token file a workload identity platform, such as Kubernetes, keeps current.</summary>
-    public const string FederatedSourceTokenFile = "Token File";
 
     // Cloud drop-down values, named as Microsoft names the national cloud deployments
     public const string CloudGlobal = "Global";

@@ -5,7 +5,8 @@ namespace JIM.Connectors.Graph;
 
 /// <summary>
 /// Where a federated credential's token comes from: a workload identity the app registration trusts, whose token Entra
-/// ID accepts in place of a secret or a certificate.
+/// ID accepts in place of a secret or a certificate. An Azure managed identity is the one source today; another would
+/// be added as a source, leaving the credential as it is.
 /// </summary>
 internal interface IGraphFederatedTokenSource
 {

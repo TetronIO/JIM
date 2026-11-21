@@ -19,8 +19,8 @@ namespace JIM.Connectors.Graph;
 internal static partial class EntraTokenFailure
 {
     private const string FederatedMismatch =
-        "The workload identity's token matches no federated credential on the app registration. Under Certificates & secrets > Federated credentials, " +
-        "add one whose issuer, subject and audience are the managed identity's or the Kubernetes service account's, for this cloud.";
+        $"The workload identity's token matches no federated credential on the app registration. Under Certificates & secrets > Federated credentials, " +
+        $"add one for the managed identity named in {GraphConnectorConstants.SettingManagedIdentityClientId}, for this cloud.";
 
     private static readonly Dictionary<int, string> KnownCodes = new()
     {
