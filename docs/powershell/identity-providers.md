@@ -68,7 +68,7 @@ For Microsoft Entra ID, it creates one application in the tenant `-TenantId` nam
 | Expose an API | JIM's API: `api://{client ID}`, offering the `access_as_user` scope, issuing version 2 access tokens, whose audience is the client ID. |
 | API permissions | `openid`, `profile`, `email` and `offline_access` from Microsoft Graph, with each person's email address in their tokens. |
 
-When you may, it also consents to those permissions for everyone, so nobody signing in is asked. It uses Microsoft Graph, so it runs from any computer that can reach it. Sign in with the device code it shows, as a person who administers the tenant's applications, and it returns your object ID as `InitialAdmin`, ready to make you JIM's first administrator. For running it unattended, pass `-AccessToken` with a Graph token; one holding only `Application.ReadWrite.OwnedBy` keeps a registration its application owns right, but cannot give consent, and the command warns that an administrator must.
+When you may, it also consents to those permissions for everyone, so nobody signing in is asked. It uses Microsoft Graph, so it runs from any computer that can reach it. Sign in through the browser it opens, as a person who administers the tenant's applications, and it returns your object ID as `InitialAdmin`, ready to make you JIM's first administrator. The sign-in is an ordinary one, so your tenant's Conditional Access, multifactor authentication and device compliance policies apply as usual. On a computer with no browser, add `-UseDeviceCode` to sign in with a code on another device instead, where your tenant allows it; Microsoft recommends blocking device code sign-in, and many tenants do. For running it unattended, pass `-AccessToken` with a Graph token; one holding only `Application.ReadWrite.OwnedBy` keeps a registration its application owns right, but cannot give consent, and the command warns that an administrator must.
 
 When people reach JIM at more than one address, give each to `-Url`, and the portal gets redirect URIs for each.
 
@@ -85,7 +85,7 @@ Register-JIMIdentityProvider -Provider <string> -Url <string[]> [-Name <string>]
 Register-JIMIdentityProvider -Provider <string> -Url <string[]> -TenantId <string> -AccessToken <SecureString> [-Name <string>] [-ResetClientSecret] [-WhatIf] [-Confirm]
 
 # EntraId
-Register-JIMIdentityProvider -Provider <string> -Url <string[]> -TenantId <string> [-Name <string>] [-ResetClientSecret] [-WhatIf] [-Confirm]
+Register-JIMIdentityProvider -Provider <string> -Url <string[]> -TenantId <string> [-Name <string>] [-UseDeviceCode] [-ResetClientSecret] [-WhatIf] [-Confirm]
 
 # KeycloakServiceAccount
 Register-JIMIdentityProvider -Provider <string> -Url <string[]> -Authority <string> -ClientCredential <PSCredential> [-AdminRealm <string>] [-ClientId <string>] [-PublicClientId <string>] [-ResetClientSecret] [-ClientSecret <SecureString>] [-WhatIf] [-Confirm]
@@ -109,7 +109,8 @@ Register-JIMIdentityProvider -Provider <string> -Url <string[]> -Authority <stri
 | `ClientId` | `string` | No (KeycloakServiceAccount, Keycloak) | `'jim'` | The client ID of the portal's Keycloak client, the value for JIM_SSO_CLIENT_ID. |
 | `PublicClientId` | `string` | No (KeycloakServiceAccount, Keycloak) | `'jim-powershell'` | The client ID of the PowerShell module's Keycloak client, the value for JIM_SSO_PUBLIC_CLIENT_ID. |
 | `TenantId` | `string` | Yes (EntraIdToken, EntraId) |  | The Entra ID tenant to register JIM in, by its ID or a domain name, such as contoso.onmicrosoft.com. |
-| `AccessToken` | `SecureString` | Yes (EntraIdToken) |  | A Microsoft Graph access token for the tenant, for running this unattended, such as from a workload identity. It needs Application.ReadWrite.All, or Application.ReadWrite.OwnedBy once its application owns JIM's; giving consent also needs DelegatedPermissionGrant.ReadWrite.All. Without it, you are asked to sign in with a device code. |
+| `AccessToken` | `SecureString` | Yes (EntraIdToken) |  | A Microsoft Graph access token for the tenant, for running this unattended, such as from a workload identity. It needs Application.ReadWrite.All, or Application.ReadWrite.OwnedBy once its application owns JIM's; giving consent also needs DelegatedPermissionGrant.ReadWrite.All. Without it, you sign in through a browser. |
+| `UseDeviceCode` | `switch` | No (EntraId) |  | Signs in with a device code instead of a browser, for a console with no browser. Microsoft recommends that Conditional Access blocks device code sign-in, so many tenants refuse it; pass `-AccessToken` there instead. |
 | `ResetClientSecret` | `switch` | No |  | Replaces the portal's client secret, and returns the new one. JIM cannot sign anyone in until JIM_SSO_SECRET is given the new secret. |
 | `ClientSecret` | `SecureString` | No (KeycloakServiceAccount, Keycloak) |  | For Keycloak, the portal's client secret, in place of one Keycloak makes: the client is created with it, or given it if its secret differs. Meant for test and development realms, whose secret is known in advance; elsewhere, let Keycloak make one. |
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- 🔄 `Register-JIMIdentityProvider -Provider EntraId` signs you in through your browser, so it works in tenants whose Conditional Access blocks device code sign-in, as Microsoft recommends; add `-UseDeviceCode` on a computer with no browser. (#3021)
+
 ## [1.0.0] - 2026-11-20
 
 ### Added
