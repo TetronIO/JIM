@@ -67,4 +67,12 @@ public static class GraphConnectorConstants
     /// that expires mid-schedule stops every import and export, so the warning gives an administrator time to act.
     /// </summary>
     public const int CertificateExpiryWarningDays = 30;
+
+    public const string SettingDeleteBehaviour = "Delete Behaviour";
+
+    /// <summary>Delete Behaviour: delete the object. Entra ID keeps a deleted user or Microsoft 365 group for 30 days.</summary>
+    public const string DeleteBehaviourDelete = "Delete";
+
+    /// <summary>Delete Behaviour: disable a user (<c>accountEnabled</c> false) rather than delete it. A group is deleted either way.</summary>
+    public const string DeleteBehaviourDisable = "Disable";
 }

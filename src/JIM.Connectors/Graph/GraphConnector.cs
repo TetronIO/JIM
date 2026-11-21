@@ -4,6 +4,7 @@
 using JIM.Connectors.Http;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.Utilities;
 using Serilog;
 
@@ -18,7 +19,7 @@ namespace JIM.Connectors.Graph;
 /// Registered with the Connector factory but not seeded until the plan's final phase, so it is not offered to
 /// administrators while it is being built. The capability flags declare what the finished Connector does.
 /// </remarks>
-public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSchema, IConnectorImportUsingCalls, IConnectorImportWatermark, IConnectorPhases
+public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSchema, IConnectorImportUsingCalls, IConnectorImportWatermark, IConnectorExportUsingCalls, IConnectorPhases
 {
     private static readonly string[] MultiTenantAliases = ["common", "organizations", "consumers"];
 
@@ -28,6 +29,10 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
     // Held for the length of an import run: JIM opens the connection once and then asks for pages.
     private GraphHttpClient? _importClient;
     private GraphConnectorImport? _import;
+
+    // Held for the length of an export run.
+    private GraphHttpClient? _exportClient;
+    private GraphConnectorExport? _export;
 
     #region IConnector members
     public string Name => ConnectorConstants.GraphConnectorName;
@@ -114,6 +119,36 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
     /// so nothing remains once it is removed.
     /// </summary>
     public string? RemoveImportWatermark(string persistedConnectorData, ILogger logger) => null;
+    #endregion
+
+    #region IConnectorExportUsingCalls members
+    /// <summary>Opens the connection every batch of this export run is written through. Nothing is sent until the first batch.</summary>
+    public void OpenExportConnection(IList<ConnectedSystemSettingValue> settings, string? persistedConnectorData)
+    {
+        var logger = Log.ForContext<GraphConnector>();
+        var settingValues = settings.ToList();
+        _exportClient = Task.Run(async () => await CreateClientAsync(settingValues, logger)).GetAwaiter().GetResult();
+        var deleteBehaviour = settingValues.FirstOrDefault(s => s.Setting.Name == GraphConnectorConstants.SettingDeleteBehaviour)?.StringValue;
+        _export = new GraphConnectorExport(_exportClient, deleteBehaviour == GraphConnectorConstants.DeleteBehaviourDisable, logger);
+    }
+
+    /// <summary>Writes a batch of Pending Exports, returning one result for each, in the same order.</summary>
+    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken, IConnectorProgress progress)
+    {
+        if (_export == null)
+            throw new InvalidOperationException("OpenExportConnection must be called before ExportAsync.");
+
+        return _export.ExportAsync(pendingExports, cancellationToken);
+    }
+
+    /// <returns>Always null: an export changes nothing the Connector persists.</returns>
+    public string? CloseExportConnection()
+    {
+        _exportClient?.Dispose();
+        _exportClient = null;
+        _export = null;
+        return null;
+    }
     #endregion
 
     #region IConnectorImportUsingCalls members
@@ -222,7 +257,10 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
 
             new() { Name = "Rate Limiting", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
             new() { Name = GraphConnectorConstants.SettingMaximumWritesPerSecond, Required = false, DefaultIntValue = GraphConnectorConstants.DefaultMaximumWritesPerSecond, Description = $"The most writes JIM sends to the tenant each second, from 1 to {(int)GraphRequestPacer.WriteQuotaPerSecond}. Microsoft Graph allows each application {(int)GraphRequestPacer.WriteQuotaPerSecond} writes a second in a tenant, and every application in the tenant shares a wider limit, so the default of {GraphConnectorConstants.DefaultMaximumWritesPerSecond} leaves room for the tenant's other applications. JIM slows down further by itself while Graph reports the tenant is near its limit. Reads are not limited here; JIM waits whenever Graph asks it to.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
-            new() { Name = GraphConnectorConstants.SettingMaxRetries, Required = false, DefaultIntValue = GraphConnectorConstants.DefaultMaxRetries, Description = $"How many times to retry a request that failed for a temporary reason, such as throttling (HTTP 429) or Graph being briefly unavailable, from 0 to {GraphConnectorConstants.MaximumMaxRetries}. JIM waits as long as Graph asks before each retry.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer }
+            new() { Name = GraphConnectorConstants.SettingMaxRetries, Required = false, DefaultIntValue = GraphConnectorConstants.DefaultMaxRetries, Description = $"How many times to retry a request that failed for a temporary reason, such as throttling (HTTP 429) or Graph being briefly unavailable, from 0 to {GraphConnectorConstants.MaximumMaxRetries}. JIM waits as long as Graph asks before each retry.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
+
+            new() { Name = "Export", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading },
+            new() { Name = GraphConnectorConstants.SettingDeleteBehaviour, Required = false, Description = "What JIM does when it deletes a user: Delete removes it (Entra ID keeps a deleted user for 30 days, in case it needs restoring); Disable keeps it and sets accountEnabled to false. Groups cannot be disabled, so they are deleted either way.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = [GraphConnectorConstants.DeleteBehaviourDelete, GraphConnectorConstants.DeleteBehaviourDisable], DefaultStringValue = GraphConnectorConstants.DeleteBehaviourDelete, Category = ConnectedSystemSettingCategory.Export }
         ];
     }
 

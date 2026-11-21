@@ -20,7 +20,7 @@ namespace JIM.Worker.Tests.Connectors;
 /// round's link was issued, in the order recorded, and issues a new link at its end, as Graph does. Each recorded entry
 /// is reported separately, so an object recorded twice appears twice, as a group whose member changes span pages does.
 /// </remarks>
-internal sealed class FakeGraphTenant
+internal sealed partial class FakeGraphTenant
 {
     private const string Graph = "https://graph.microsoft.com/v1.0/";
 
@@ -118,8 +118,12 @@ internal sealed class FakeGraphTenant
         if (request.Method == HttpMethod.Post && path == "$batch")
             return Batch(request);
 
-        return Json(Get(path, query));
+        var body = request.Content == null ? null : JsonNode.Parse(request.Content.ReadAsStringAsync().GetAwaiter().GetResult());
+        return Json(Dispatch(request.Method, path, query, body));
     }
+
+    private (int Status, JsonNode? Body) Dispatch(HttpMethod method, string path, System.Collections.Specialized.NameValueCollection query, JsonNode? body) =>
+        method == HttpMethod.Get ? Get(path, query) : Write(method, path, body);
 
     private (int Status, JsonNode? Body) Get(string path, System.Collections.Specialized.NameValueCollection query)
     {
@@ -229,7 +233,8 @@ internal sealed class FakeGraphTenant
         foreach (var item in body["requests"]!.AsArray())
         {
             var url = new Uri(new Uri(Graph), item!["url"]!.GetValue<string>().TrimStart('/'));
-            var (status, answer) = Get(url.AbsolutePath["/v1.0/".Length..], HttpUtility.ParseQueryString(url.Query));
+            var method = new HttpMethod(item["method"]!.GetValue<string>());
+            var (status, answer) = Dispatch(method, Uri.UnescapeDataString(url.AbsolutePath["/v1.0/".Length..]), HttpUtility.ParseQueryString(url.Query), item["body"]?.DeepClone());
             responses.Add(new JsonObject { ["id"] = item["id"]!.GetValue<string>(), ["status"] = status, ["body"] = answer });
         }
 

@@ -38,7 +38,7 @@ public class CallConnectorAttributeValueReadConventionTests
         return root!.FullName;
     }
 
-    private static readonly string[] SweptDirectories = ["LDAP", "Sql", "SCIM", "Mock"];
+    private static readonly string[] SweptDirectories = ["LDAP", "Sql", "SCIM", "Graph", "Mock"];
 
     [Test]
     public void CallConnectors_ReadAttributeValuesOnlyThroughTheHeldValueHelpersOrWithAReason()
