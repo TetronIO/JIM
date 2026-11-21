@@ -498,6 +498,37 @@ Describe 'Invoke-JIMEntraIdConnectorChange' {
         }
     }
 
+    It 'tries the Connected System again while Entra ID is still applying a credential and permissions just granted' {
+        InModuleScope JIM {
+            Mock Start-Sleep {}
+            $script:Puts = 0
+            Mock Invoke-JIMApi {
+                if ($Method -eq 'PUT') {
+                    $script:Puts++
+                    if ($script:Puts -le 2) { throw 'One or more Connected System settings are invalid: The access token carries no Microsoft Graph application permissions.' }
+                }
+            }
+            Invoke-JIMEntraIdConnectorChange -Connection $script:Connection -Change ([PSCustomObject]@{
+                Action = 'SetConnectedSystem'; Target = 'Microsoft Entra ID'
+                Arguments = @{ ConnectedSystemId = 42; Settings = @{ 'Tenant ID' = 'tenant' }; SetsClientId = $false; SetsCertificate = $false } })
+
+            $script:Puts | Should -Be 3
+            Should -Invoke Start-Sleep -Times 2
+        }
+    }
+
+    It 'does not try the Connected System again for a refusal that waiting will not cure' {
+        InModuleScope JIM {
+            Mock Start-Sleep {}
+            Mock Invoke-JIMApi { if ($Method -eq 'PUT') { throw 'One or more Connected System settings are invalid: The Tenant ID must be a GUID.' } }
+
+            { Invoke-JIMEntraIdConnectorChange -Connection $script:Connection -Change ([PSCustomObject]@{
+                Action = 'SetConnectedSystem'; Target = 'Microsoft Entra ID'
+                Arguments = @{ ConnectedSystemId = 42; Settings = @{ 'Tenant ID' = 'x' }; SetsClientId = $false; SetsCertificate = $false } }) } | Should -Throw '*GUID*'
+            Should -Invoke Start-Sleep -Times 0
+        }
+    }
+
     It 'retires only the certificates named, keeping the rest' {
         InModuleScope JIM {
             Invoke-JIMEntraIdConnectorChange -Connection $script:Connection -Change ([PSCustomObject]@{ Action = 'RetireCertificates'; Target = 'x'; Arguments = @{ KeyIds = @('cert-1') } })

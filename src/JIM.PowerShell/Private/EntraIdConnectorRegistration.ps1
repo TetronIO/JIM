@@ -450,8 +450,20 @@ function Invoke-JIMEntraIdConnectorChange {
             if ($arguments.SetsCertificate) {
                 $values[[string]$settingIds['Certificate']] = @{ stringValue = [System.Net.NetworkCredential]::new('', $Connection.Certificate.Pfx).Password }
             }
-            $null = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$($Connection.ConnectedSystemId)" -Method 'PUT' -Body @{
-                settingValues = $values; changeReason = 'Set up by Register-JIMEntraIdConnector' }
+            # JIM tests the connection as it saves the credential, and Entra ID can take a minute or two to honour a
+            # credential and permissions granted moments ago, so a refusal that only says so is tried again.
+            $body = @{ settingValues = $values; changeReason = 'Set up by Register-JIMEntraIdConnector' }
+            for ($attempt = 1; ; $attempt++) {
+                try {
+                    $null = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$($Connection.ConnectedSystemId)" -Method 'PUT' -Body $body
+                    break
+                }
+                catch {
+                    if ($attempt -ge 9 -or -not (Test-JIMEntraIdPropagationRefusal -Message "$($_.Exception.Message) $($_.ErrorDetails.Message)")) { throw }
+                    if ($attempt -eq 1) { Write-Warning 'Microsoft Entra ID is still applying the new credential and permissions; JIM will try the connection again for up to two minutes.' }
+                    Start-Sleep -Seconds 15
+                }
+            }
             if ($arguments.SetsCertificate) {
                 $Connection.Certificate.Pfx = $null
                 $Connection.CertificateStored = $true
@@ -465,6 +477,20 @@ function Invoke-JIMEntraIdConnectorChange {
         }
         default { throw "Unknown change: $($Change.Action)" }
     }
+}
+
+function Test-JIMEntraIdPropagationRefusal {
+    <#
+    .SYNOPSIS
+        Whether JIM refused the Connected System's settings only because Entra ID has not yet applied a credential or
+        permissions granted moments ago: a token with no permissions yet, or a certificate or federated credential the
+        token service does not know yet.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Message)
+
+    return $Message -match 'carries no Microsoft Graph application permissions|cannot read users or groups|AADSTS700027|AADSTS700213|AADSTS70021\b|AADSTS7000215|AADSTS700016'
 }
 
 function Invoke-JIMEntraIdWithRetry {
