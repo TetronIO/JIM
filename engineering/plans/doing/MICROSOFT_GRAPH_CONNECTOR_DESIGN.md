@@ -42,7 +42,7 @@ Under `src/JIM.Connectors/Graph/`, mirroring the SCIM decomposition:
 | `GraphConnector` | Entry point: `IConnector`, `IConnectorCapabilities`, `IConnectorSettings`, `IConnectorSchema`, `IConnectorImportUsingCalls`, `IConnectorExportUsingCalls`, `IConnectorCredentialAware`, `IConnectorCertificateAware`, `IConnectorImportWatermark` (the delta link is the watermark). |
 | `GraphConnectorConstants` | Setting names, defaults, endpoint paths, the `$select` lists. |
 | `GraphHttpClient` | Base URL per national cloud, authentication, retry and pacing, `x-ms-throttle-priority: low` on every request, JSON via `System.Text.Json`. |
-| `GraphClientAssertion` | Builds the RS256-signed JWT client assertion for certificate authentication with `System.Security.Cryptography`; no MSAL. |
+| `GraphClientAssertion` | Builds the PS256-signed JWT client assertion (with the certificate's SHA-256 thumbprint in `x5t#S256`, per Microsoft's certificate credential format) with `System.Security.Cryptography`; no MSAL. |
 | `GraphRequestPacer` | Token-bucket pacing of writes against Microsoft's published write quota, slowed further when `x-ms-throttle-limit-percentage` reports pressure. |
 | `GraphConnectorSchema` | A curated schema for `user` and `group` (Graph's `$metadata` is several megabytes and describes thousands of types JIM will never touch), extended with discovered directory extension properties and the fifteen `onPremisesExtensionAttributes`. |
 | `GraphConnectorImport` | Full import (`/users`, `/groups` with `$select`, paging on `@odata.nextLink`), delta import (`/users/delta`, `/groups/delta`, `members@delta`), Source of Authority synthesis. |

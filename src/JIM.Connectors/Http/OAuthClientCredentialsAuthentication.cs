@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -22,9 +23,10 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
     private readonly HttpClient _tokenClient;
     private readonly Uri _tokenEndpoint;
     private readonly string _clientId;
-    private readonly string _clientSecret;
+    private readonly IOAuthClientCredential _clientCredential;
     private readonly string? _scope;
     private readonly Func<DateTimeOffset> _utcNow;
+    private readonly Func<HttpStatusCode, string?, string>? _describeFailure;
 
     // One acquisition at a time: parallel export means many callers arrive together, and without this
     // they would each fire an identical token request at the authorisation server.
@@ -32,6 +34,7 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
     private string? _cachedToken;
     private DateTimeOffset? _cachedTokenExpiresAt;
 
+    /// <summary>Authenticates the client with a client secret sent in the request body (client_secret_post).</summary>
     /// <param name="tokenClient">Client used solely for token acquisition; carries the connector's TLS configuration.</param>
     /// <param name="tokenEndpoint">The authorisation server's token endpoint.</param>
     /// <param name="utcNow">Clock seam, so expiry behaviour is testable without waiting.</param>
@@ -42,23 +45,46 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
         string clientSecret,
         string? scope = null,
         Func<DateTimeOffset>? utcNow = null)
+        : this(tokenClient, tokenEndpoint, clientId, new OAuthClientSecretCredential(clientSecret ?? throw new ArgumentNullException(nameof(clientSecret))), scope, utcNow)
+    {
+    }
+
+    /// <summary>Authenticates the client with any <see cref="IOAuthClientCredential"/>, such as a signed assertion.</summary>
+    /// <param name="tokenClient">Client used solely for token acquisition; carries the connector's TLS configuration.</param>
+    /// <param name="tokenEndpoint">The authorisation server's token endpoint.</param>
+    /// <param name="utcNow">Clock seam, so expiry behaviour is testable without waiting.</param>
+    /// <param name="describeFailure">
+    /// Turns a refused token request (its status and body) into the message an administrator reads, for an authorisation
+    /// server whose error responses say more than the status does. It must not echo the body: authorisation servers
+    /// repeat request parameters in error responses, and the message reaches Activity errors and logs. When null, a
+    /// generic message naming the status is used.
+    /// </param>
+    public OAuthClientCredentialsAuthentication(
+        HttpClient tokenClient,
+        Uri tokenEndpoint,
+        string clientId,
+        IOAuthClientCredential clientCredential,
+        string? scope = null,
+        Func<DateTimeOffset>? utcNow = null,
+        Func<HttpStatusCode, string?, string>? describeFailure = null)
     {
         ArgumentNullException.ThrowIfNull(tokenClient);
         ArgumentNullException.ThrowIfNull(tokenEndpoint);
-        // The secret travels in the request body (client_secret_post), so this class refuses a cleartext
-        // endpoint whatever constructs it. The URI is not echoed: it may carry credentials of its own.
+        // The credential travels in the request body, so this class refuses a cleartext endpoint whatever
+        // constructs it. The URI is not echoed: it may carry credentials of its own.
         if (!HttpTransportSecurity.IsPermitted(tokenEndpoint))
             throw new ArgumentException("The token endpoint must use HTTPS, or HTTP to a loopback address only.", nameof(tokenEndpoint));
         if (string.IsNullOrWhiteSpace(clientId))
             throw new ArgumentException("A client ID is required.", nameof(clientId));
-        ArgumentNullException.ThrowIfNull(clientSecret);
+        ArgumentNullException.ThrowIfNull(clientCredential);
 
         _tokenClient = tokenClient;
         _tokenEndpoint = tokenEndpoint;
         _clientId = clientId;
-        _clientSecret = clientSecret;
+        _clientCredential = clientCredential;
         _scope = string.IsNullOrWhiteSpace(scope) ? null : scope;
         _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
+        _describeFailure = describeFailure;
     }
 
     public async Task ApplyAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -124,15 +150,14 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
 
     private async Task<OAuthTokenResponse> RequestTokenAsync(CancellationToken cancellationToken)
     {
-        // client_secret_post (RFC 6749 section 2.3.1): credentials in the form body. This is the most
-        // widely accepted form across authorisation servers; if a provider mandates HTTP Basic client
-        // authentication instead, that becomes an additional setting rather than a change here.
+        // Client authentication travels in the form body. If a provider mandates HTTP Basic client
+        // authentication instead, that becomes another IOAuthClientCredential rather than a change here.
         var form = new List<KeyValuePair<string, string>>
         {
             new("grant_type", "client_credentials"),
-            new("client_id", _clientId),
-            new("client_secret", _clientSecret)
+            new("client_id", _clientId)
         };
+        form.AddRange(_clientCredential.GetTokenRequestParameters(_tokenEndpoint, _utcNow()));
 
         if (_scope != null)
             form.Add(new KeyValuePair<string, string>("scope", _scope));
@@ -154,6 +179,12 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
         {
             if (!response.IsSuccessStatusCode)
             {
+                if (_describeFailure != null)
+                {
+                    var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                    throw new HttpAuthenticationException(_describeFailure(response.StatusCode, errorBody));
+                }
+
                 // The body is deliberately not included: authorisation servers echo request parameters
                 // in error responses, and this text reaches Activity errors and logs.
                 throw new HttpAuthenticationException(
