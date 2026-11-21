@@ -17,6 +17,6 @@ public sealed class OAuthClientSecretCredential : IOAuthClientCredential
         _clientSecret = clientSecret;
     }
 
-    public IEnumerable<KeyValuePair<string, string>> GetTokenRequestParameters(Uri tokenEndpoint, DateTimeOffset utcNow) =>
-        [new("client_secret", _clientSecret)];
+    public Task<IEnumerable<KeyValuePair<string, string>>> GetTokenRequestParametersAsync(Uri tokenEndpoint, DateTimeOffset utcNow, CancellationToken cancellationToken) =>
+        Task.FromResult<IEnumerable<KeyValuePair<string, string>>>([new("client_secret", _clientSecret)]);
 }

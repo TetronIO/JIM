@@ -116,14 +116,14 @@ public class OAuthClientCredentialTests
     {
         public List<(Uri TokenEndpoint, DateTimeOffset UtcNow)> Calls { get; } = [];
 
-        public IEnumerable<KeyValuePair<string, string>> GetTokenRequestParameters(Uri tokenEndpoint, DateTimeOffset utcNow)
+        public Task<IEnumerable<KeyValuePair<string, string>>> GetTokenRequestParametersAsync(Uri tokenEndpoint, DateTimeOffset utcNow, CancellationToken cancellationToken)
         {
             Calls.Add((tokenEndpoint, utcNow));
-            return
+            return Task.FromResult<IEnumerable<KeyValuePair<string, string>>>(
             [
                 new("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"),
                 new("client_assertion", "signed-assertion")
-            ];
+            ]);
         }
     }
 }

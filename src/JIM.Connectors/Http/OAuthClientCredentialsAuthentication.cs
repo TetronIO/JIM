@@ -157,7 +157,7 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
             new("grant_type", "client_credentials"),
             new("client_id", _clientId)
         };
-        form.AddRange(_clientCredential.GetTokenRequestParameters(_tokenEndpoint, _utcNow()));
+        form.AddRange(await _clientCredential.GetTokenRequestParametersAsync(_tokenEndpoint, _utcNow(), cancellationToken));
 
         if (_scope != null)
             form.Add(new KeyValuePair<string, string>("scope", _scope));

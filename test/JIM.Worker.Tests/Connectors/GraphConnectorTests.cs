@@ -124,7 +124,7 @@ public class GraphConnectorTests
         {
             Assert.That(setting.Required, Is.True);
             Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.DropDown));
-            Assert.That(setting.DropDownValues, Is.EqualTo(new[] { GraphConnectorConstants.AuthMethodCertificate, GraphConnectorConstants.AuthMethodClientSecret }));
+            Assert.That(setting.DropDownValues, Is.EqualTo(new[] { GraphConnectorConstants.AuthMethodCertificate, GraphConnectorConstants.AuthMethodFederatedCredential, GraphConnectorConstants.AuthMethodClientSecret }));
             Assert.That(setting.DefaultStringValue, Is.EqualTo(GraphConnectorConstants.AuthMethodCertificate), "A certificate, as Entra Connect now uses, is the default.");
         }
     }

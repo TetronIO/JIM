@@ -11,7 +11,8 @@ public interface IOAuthClientCredential
 {
     /// <summary>
     /// The parameters that authenticate the client in a token request to <paramref name="tokenEndpoint"/>. Called
-    /// once per token request, so a credential that must be fresh each time (a signed assertion) is built here.
+    /// once per token request, so a credential that must be fresh each time (a signed assertion, or one fetched from a
+    /// workload identity's token source) is built here.
     /// </summary>
-    IEnumerable<KeyValuePair<string, string>> GetTokenRequestParameters(Uri tokenEndpoint, DateTimeOffset utcNow);
+    Task<IEnumerable<KeyValuePair<string, string>>> GetTokenRequestParametersAsync(Uri tokenEndpoint, DateTimeOffset utcNow, CancellationToken cancellationToken);
 }

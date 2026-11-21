@@ -10,29 +10,35 @@ namespace JIM.Connectors.Graph;
 /// <remarks>
 /// Endpoints from Microsoft's national cloud deployments reference (learn.microsoft.com/graph/deployments). Microsoft 365
 /// GCC (Moderate) runs on the global endpoints, so it has no entry of its own. US Government L4 and L5 share a token
-/// service but not a Graph host, which is the pairing most easily got wrong.
+/// service but not a Graph host, which is the pairing most easily got wrong. <paramref name="FederatedTokenAudience"/> is
+/// the audience a workload identity's token must carry for this cloud's token service to accept it as a federated
+/// credential; a token cannot cross clouds.
 /// </remarks>
-internal sealed record GraphCloud(string Name, Uri AuthorityHost, Uri GraphHost)
+internal sealed record GraphCloud(string Name, Uri AuthorityHost, Uri GraphHost, string FederatedTokenAudience)
 {
     public static readonly GraphCloud Global = new(
         GraphConnectorConstants.CloudGlobal,
         new Uri("https://login.microsoftonline.com/"),
-        new Uri("https://graph.microsoft.com/"));
+        new Uri("https://graph.microsoft.com/"),
+        "api://AzureADTokenExchange");
 
     public static readonly GraphCloud UsGovernmentL4 = new(
         GraphConnectorConstants.CloudUsGovernmentL4,
         new Uri("https://login.microsoftonline.us/"),
-        new Uri("https://graph.microsoft.us/"));
+        new Uri("https://graph.microsoft.us/"),
+        "api://AzureADTokenExchangeUSGov");
 
     public static readonly GraphCloud UsGovernmentL5 = new(
         GraphConnectorConstants.CloudUsGovernmentL5,
         new Uri("https://login.microsoftonline.us/"),
-        new Uri("https://dod-graph.microsoft.us/"));
+        new Uri("https://dod-graph.microsoft.us/"),
+        "api://AzureADTokenExchangeUSGov");
 
     public static readonly GraphCloud China = new(
         GraphConnectorConstants.CloudChina,
         new Uri("https://login.chinacloudapi.cn/"),
-        new Uri("https://microsoftgraph.chinacloudapi.cn/"));
+        new Uri("https://microsoftgraph.chinacloudapi.cn/"),
+        "api://AzureADTokenExchangeChina");
 
     /// <summary>Every cloud, in the order the Cloud drop-down offers them.</summary>
     public static IReadOnlyList<GraphCloud> All { get; } = [Global, UsGovernmentL4, UsGovernmentL5, China];

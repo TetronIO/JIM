@@ -18,6 +18,10 @@ namespace JIM.Connectors.Graph;
 /// </remarks>
 internal static partial class EntraTokenFailure
 {
+    private const string FederatedMismatch =
+        "The workload identity's token matches no federated credential on the app registration. Under Certificates & secrets > Federated credentials, " +
+        "add one whose issuer, subject and audience are the managed identity's or the Kubernetes service account's, for this cloud.";
+
     private static readonly Dictionary<int, string> KnownCodes = new()
     {
         [7000215] = $"The {GraphConnectorConstants.SettingClientSecret} is not valid. Supply the secret's Value from Certificates & secrets on the app registration, not its Secret ID.",
@@ -28,6 +32,10 @@ internal static partial class EntraTokenFailure
         [700027] = $"Microsoft Entra ID could not verify the assertion signed with the {GraphConnectorConstants.SettingCertificate}. Check that the same certificate is uploaded under Certificates & secrets on the app registration.",
         [700024] = "The client assertion was outside its valid time range. Check that the clock on the JIM server is correct.",
         [7000112] = "The application is disabled in the tenant. Enable its enterprise application (service principal) and try again.",
+        [70021] = FederatedMismatch,
+        [700211] = FederatedMismatch,
+        [700212] = FederatedMismatch,
+        [700213] = FederatedMismatch,
         [500011] = $"Microsoft Graph was not found in the tenant. Check that the {GraphConnectorConstants.SettingCloud} setting matches the cloud the tenant is in."
     };
 

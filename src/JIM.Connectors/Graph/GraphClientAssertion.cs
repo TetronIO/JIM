@@ -47,7 +47,10 @@ internal sealed class GraphClientAssertion : IOAuthClientCredential
         }));
     }
 
-    public IEnumerable<KeyValuePair<string, string>> GetTokenRequestParameters(Uri tokenEndpoint, DateTimeOffset utcNow)
+    public Task<IEnumerable<KeyValuePair<string, string>>> GetTokenRequestParametersAsync(Uri tokenEndpoint, DateTimeOffset utcNow, CancellationToken cancellationToken) =>
+        Task.FromResult(GetTokenRequestParameters(tokenEndpoint, utcNow));
+
+    internal IEnumerable<KeyValuePair<string, string>> GetTokenRequestParameters(Uri tokenEndpoint, DateTimeOffset utcNow)
     {
         ArgumentNullException.ThrowIfNull(tokenEndpoint);
 

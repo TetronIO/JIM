@@ -62,13 +62,20 @@ internal static class GraphHttpClientFactory
         return new GraphHttpClient(httpClient, cloud, authentication, CreateRetryPolicy(settingValues), CreatePacer(settingValues), logger, ownedCredential);
     }
 
-    /// <param name="ownedCredential">The loaded certificate where one authenticates, for the caller to dispose with the client; otherwise null.</param>
+    /// <param name="ownedCredential">
+    /// What the credential holds open, for the caller to dispose with the client: the loaded certificate, or the client a
+    /// managed identity's token is fetched with; otherwise null.
+    /// </param>
+    /// <param name="identityHandler">Reaches the managed identity endpoint; replaced in tests. By default a direct connection.</param>
+    /// <param name="environment">Reads an environment variable; replaced in tests. By default the process environment.</param>
     /// <exception cref="HttpAuthenticationException">A value is missing, the Cloud is unknown, or the certificate is unusable.</exception>
     public static IHttpAuthenticationStrategy CreateAuthentication(
         List<ConnectedSystemSettingValue> settingValues,
         ICredentialProtection? credentialProtection,
         HttpClient tokenClient,
-        out IDisposable? ownedCredential)
+        out IDisposable? ownedCredential,
+        HttpMessageHandler? identityHandler = null,
+        Func<string, string?>? environment = null)
     {
         ArgumentNullException.ThrowIfNull(settingValues);
         ArgumentNullException.ThrowIfNull(tokenClient);
@@ -79,8 +86,14 @@ internal static class GraphHttpClientFactory
         var tokenEndpoint = cloud.TokenEndpoint(tenantId);
 
         IOAuthClientCredential credential;
+        var method = ReadString(settingValues, GraphConnectorConstants.SettingAuthenticationMethod);
+        environment ??= Environment.GetEnvironmentVariable;
+        if (method == GraphConnectorConstants.AuthMethodFederatedCredential)
+        {
+            credential = new GraphFederatedCredential(CreateFederatedTokenSource(settingValues, cloud, identityHandler, environment, out ownedCredential));
+        }
         // Unset means the setting's default, a certificate.
-        if (ReadString(settingValues, GraphConnectorConstants.SettingAuthenticationMethod) != GraphConnectorConstants.AuthMethodClientSecret)
+        else if (method != GraphConnectorConstants.AuthMethodClientSecret)
         {
             var pfx = RequireSecret(settingValues, GraphConnectorConstants.SettingCertificate, credentialProtection);
             var password = ReadSecret(settingValues, GraphConnectorConstants.SettingCertificatePassword, credentialProtection);
@@ -101,6 +114,26 @@ internal static class GraphHttpClientFactory
         }
 
         return new OAuthClientCredentialsAuthentication(tokenClient, tokenEndpoint, clientId, credential, cloud.Scope, describeFailure: EntraTokenFailure.Describe);
+    }
+
+    private static IGraphFederatedTokenSource CreateFederatedTokenSource(List<ConnectedSystemSettingValue> settingValues, GraphCloud cloud,
+        HttpMessageHandler? identityHandler, Func<string, string?> environment, out IDisposable? ownedCredential)
+    {
+        if (ReadString(settingValues, GraphConnectorConstants.SettingFederatedCredentialSource) == GraphConnectorConstants.FederatedSourceTokenFile)
+        {
+            ownedCredential = null;
+            return new GraphTokenFileSource(ReadString(settingValues, GraphConnectorConstants.SettingTokenFilePath), environment);
+        }
+
+        var clientId = RequireString(settingValues, GraphConnectorConstants.SettingManagedIdentityClientId);
+
+        // Straight to the identity endpoint: it is on this host or link-local, and a proxy must never see its token.
+        var identityClient = identityHandler != null
+            ? new HttpClient(identityHandler, disposeHandler: false)
+            : new HttpClient(new SocketsHttpHandler { UseProxy = false });
+        identityClient.Timeout = TimeSpan.FromSeconds(30);
+        ownedCredential = identityClient;
+        return new GraphManagedIdentityTokenSource(identityClient, clientId, cloud.FederatedTokenAudience, environment);
     }
 
     public static HttpRetryPolicy CreateRetryPolicy(List<ConnectedSystemSettingValue> settingValues)
