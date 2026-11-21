@@ -95,7 +95,7 @@ public class GraphConnectorConnectivityTests
     [Test]
     public void ValidateSettingValues_GroupsOnly_ReadsAGroupToProveAccess()
     {
-        var handler = StubbedTransportGraphConnector.HealthyTransport("Group.ReadWrite.All", "Group-OnPremisesSyncBehavior.Read.All");
+        var handler = StubbedTransportGraphConnector.HealthyTransport("Group.ReadWrite.All");
 
         new StubbedTransportGraphConnector(handler).ValidateSettingValues(Settings(), _logger);
 

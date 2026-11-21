@@ -45,10 +45,12 @@ In JIM, it creates the Connected System (*ConnectedSystemName*) with the tenant,
 |------------|----------------------------|---------------|
 | `User.ReadWrite.All` | To read and write users. `User.Read.All` with `-ReadOnly`. | |
 | `Group.ReadWrite.All` | To read and write groups and their members. `Group.Read.All` with `-ReadOnly`. | |
-| `User-OnPremisesSyncBehavior.Read.All`, `Group-OnPremisesSyncBehavior.Read.All` | To tell which objects synchronised from Active Directory have moved to cloud management, for `sourceOfAuthority`. | |
 | `Member.Read.Hidden` | To read the members of groups whose membership is hidden. Anyone who can view those groups in JIM then sees their members. | `-SkipHiddenMembership` |
 | `Directory.Read.All` | To offer the tenant's directory extensions in the schema. Only with `-DirectoryExtensions`. | |
 | `User-PasswordProfile.ReadWrite.All` | To set passwords, for Initial Password, Set Password and Password Synchronisation. Only with `-PasswordManagement`. | |
+| `User-OnPremisesSyncBehavior.ReadWrite.All`, `Group-OnPremisesSyncBehavior.ReadWrite.All` | To tell which objects have had their [Source of Authority](../connectors/jim-graph-connector.md#source-of-authority) switched between Active Directory and Entra ID. Only with `-TrackSourceOfAuthority`, which also ticks the Connected System's **Track Source of Authority Changes**. Microsoft offers no read-only form; JIM never switches an object. | |
+
+**Running it again.** A capability switch you leave out keeps what the setup already does: a later run with only `-TrackSourceOfAuthority` adds that and takes nothing away, and a run with no switches repairs drift without changing what the Connector can do. A Connected System with **Track Source of Authority Changes** ticked in the portal counts as asking for it, so a re-run grants its permissions. To turn a capability off, give its switch as false, such as `-TrackSourceOfAuthority:$false`; the permissions it needed are revoked.
 
 **The credential.** By default it is a certificate this command makes in memory. Its private key goes only to JIM, which stores it encrypted; the application holds only the public part, and nothing is written to disk. A certificate is renewed when it has less than 30 days to run, and the old one is removed once JIM holds the new. Where JIM runs on an Azure virtual machine with a user-assigned managed identity attached, give `-ManagedIdentityClientId` instead: the application trusts that identity with a federated credential, and no secret or key exists anywhere.
 
@@ -59,10 +61,10 @@ In JIM, it creates the Connected System (*ConnectedSystemName*) with the tenant,
 
 ```powershell
 # SignIn (default)
-Register-JIMEntraIdConnector -TenantId <string> [-UseDeviceCode] [-Name <string>] [-ConnectedSystemName <string>] [-ReadOnly] [-SkipHiddenMembership] [-DirectoryExtensions] [-PasswordManagement] [-AdministrativeUnitId <string>] [-ManagedIdentityClientId <string>] [-CertificateValidityDays <int>] [-ResetCertificate] [-WhatIf] [-Confirm]
+Register-JIMEntraIdConnector -TenantId <string> [-UseDeviceCode] [-Name <string>] [-ConnectedSystemName <string>] [-ReadOnly] [-SkipHiddenMembership] [-DirectoryExtensions] [-PasswordManagement] [-TrackSourceOfAuthority] [-AdministrativeUnitId <string>] [-ManagedIdentityClientId <string>] [-CertificateValidityDays <int>] [-ResetCertificate] [-WhatIf] [-Confirm]
 
 # Token
-Register-JIMEntraIdConnector -AccessToken <SecureString> [-Name <string>] [-ConnectedSystemName <string>] [-ReadOnly] [-SkipHiddenMembership] [-DirectoryExtensions] [-PasswordManagement] [-AdministrativeUnitId <string>] [-ManagedIdentityClientId <string>] [-CertificateValidityDays <int>] [-ResetCertificate] [-WhatIf] [-Confirm]
+Register-JIMEntraIdConnector -AccessToken <SecureString> [-Name <string>] [-ConnectedSystemName <string>] [-ReadOnly] [-SkipHiddenMembership] [-DirectoryExtensions] [-PasswordManagement] [-TrackSourceOfAuthority] [-AdministrativeUnitId <string>] [-ManagedIdentityClientId <string>] [-CertificateValidityDays <int>] [-ResetCertificate] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -78,10 +80,11 @@ Register-JIMEntraIdConnector -AccessToken <SecureString> [-Name <string>] [-Conn
 | `SkipHiddenMembership` | `switch` | No |  | Leaves out Member.Read.Hidden. Without it, the members of groups whose membership is hidden are never read, and JIM leaves them as it holds them; with it, anyone who can view those groups in JIM sees their members. |
 | `DirectoryExtensions` | `switch` | No |  | Adds Directory.Read.All, so a schema refresh can offer the tenant's directory extensions. |
 | `PasswordManagement` | `switch` | No |  | Lets JIM set passwords in Entra ID: its Initial Password, Set Password and Password Synchronisation. Adds User-PasswordProfile.ReadWrite.All and assigns the application the User Administrator role over the Administrative Unit `-AdministrativeUnitId` names, which Microsoft Graph also requires. |
-| `AdministrativeUnitId` | `string` | No |  | With `-PasswordManagement`, the object ID of the Administrative Unit holding the users JIM manages. The User Administrator role is assigned over it only, never across the tenant. |
-| `ManagedIdentityClientId` | `string` | No |  | The client ID of the user-assigned managed identity attached to the Azure virtual machine JIM runs on. The application trusts it with a federated credential, and no certificate is made. |
+| `TrackSourceOfAuthority` | `switch` | No |  | Turns on the Connected System's Track Source of Authority Changes, and adds the User-OnPremisesSyncBehavior.ReadWrite.All and Group-OnPremisesSyncBehavior.ReadWrite.All permissions it needs, so an object whose Source of Authority was switched between Active Directory and Entra ID reads as managed where it now is. Microsoft offers no read-only form of these permissions: they also allow switching an object's Source of Authority, which JIM never does. |
+| `AdministrativeUnitId` | `string` | No |  | With `-PasswordManagement`, the object ID of the Administrative Unit holding the users JIM manages. The User Administrator role is assigned over it only, never across the tenant. A later run that leaves `-PasswordManagement` out keeps the permission and leaves the role assignment as it is. |
+| `ManagedIdentityClientId` | `string` | No |  | The client ID of the user-assigned managed identity attached to the Azure virtual machine JIM runs on. The application trusts it with a federated credential, and no certificate is made. A later run that leaves it out keeps the managed identity the Connected System already uses. |
 | `CertificateValidityDays` | `int` | No | `365` | How long a certificate this command makes is valid, in days. From 30 to 730. |
-| `ResetCertificate` | `switch` | No |  | Makes a new certificate even though the current one is still valid, and removes the old one once JIM holds the new. |
+| `ResetCertificate` | `switch` | No |  | Makes a new certificate even though the current one is still valid, and removes the old one once JIM holds the new. On a Connected System that authenticates with a managed identity, it moves it back to a certificate. |
 
 ### Output
 
@@ -113,6 +116,10 @@ Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -WhatIf
 
 ```powershell title="Let JIM set passwords, over one Administrative Unit"
 Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -PasswordManagement -AdministrativeUnitId '9d6f4c2e-1b3a-4e5f-8a7b-6c5d4e3f2a1b'
+```
+
+```powershell title="Track objects whose Source of Authority is switched, keeping the rest of the setup"
+Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -TrackSourceOfAuthority
 ```
 
 ```powershell title="Authenticate with the virtual machine's managed identity"

@@ -307,6 +307,9 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
             new() { Name = GraphConnectorConstants.SettingMaximumWritesPerSecond, Required = false, DefaultIntValue = GraphConnectorConstants.DefaultMaximumWritesPerSecond, Description = $"The most writes JIM sends to the tenant each second, from 1 to {(int)GraphRequestPacer.WriteQuotaPerSecond}. Microsoft Graph allows each application {(int)GraphRequestPacer.WriteQuotaPerSecond} writes a second in a tenant, and every application in the tenant shares a wider limit, so the default of {GraphConnectorConstants.DefaultMaximumWritesPerSecond} leaves room for the tenant's other applications. JIM slows down further by itself while Graph reports the tenant is near its limit. Reads are not limited here; JIM waits whenever Graph asks it to.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
             new() { Name = GraphConnectorConstants.SettingMaxRetries, Required = false, DefaultIntValue = GraphConnectorConstants.DefaultMaxRetries, Description = $"How many times to retry a request that failed for a temporary reason, such as throttling (HTTP 429) or Graph being briefly unavailable, from 0 to {GraphConnectorConstants.MaximumMaxRetries}. JIM waits as long as Graph asks before each retry.", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
 
+            new() { Name = "Source of Authority", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.Heading },
+            new() { Name = GraphConnectorConstants.SettingTrackSourceOfAuthority, Required = false, DefaultCheckboxValue = false, Description = "Whether to read, for each object synchronised from Active Directory, whether its Source of Authority has been switched to Entra ID, or switched back, so sourceOfAuthority shows where it is managed now. Turn it on in a hybrid tenant whose objects have their Source of Authority switched. It needs the User-OnPremisesSyncBehavior.ReadWrite.All and Group-OnPremisesSyncBehavior.ReadWrite.All permissions, the only ones Microsoft offers for reading it, which also allow changing it. Off, an object synchronised from Active Directory always reads as onPremisesDirectory.", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.CheckBox },
+
             new() { Name = "Export", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading },
             new() { Name = GraphConnectorConstants.SettingDeleteBehaviour, Required = false, Description = "What JIM does when it deletes a user: Delete removes it (Entra ID keeps a deleted user for 30 days, in case it needs restoring); Disable keeps it and sets accountEnabled to false. Groups cannot be disabled, so they are deleted either way.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = [GraphConnectorConstants.DeleteBehaviourDelete, GraphConnectorConstants.DeleteBehaviourDisable], DefaultStringValue = GraphConnectorConstants.DeleteBehaviourDelete, Category = ConnectedSystemSettingCategory.Export }
         ];
@@ -447,7 +450,7 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
             {
                 using var client = await CreateClientAsync(settingValues, logger);
                 var token = await client.GetAccessTokenAsync(CancellationToken.None);
-                var permissions = GraphPermissions.Check(GraphAccessToken.ReadRoles(token));
+                var permissions = GraphPermissions.Check(GraphAccessToken.ReadRoles(token), TracksSourceOfAuthority(settingValues));
                 if (permissions.Error != null)
                     return [Error(tenantId, permissions.Error)];
 
@@ -499,6 +502,10 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
 
         return identified && !string.IsNullOrWhiteSpace(Find(settingValues, credential)?.StringEncryptedValue);
     }
+
+    /// <summary>Whether Track Source of Authority Changes is on.</summary>
+    internal static bool TracksSourceOfAuthority(IEnumerable<ConnectedSystemSettingValue>? settingValues) =>
+        settingValues?.FirstOrDefault(s => s.Setting?.Name == GraphConnectorConstants.SettingTrackSourceOfAuthority)?.CheckboxValue == true;
 
     private static void CheckRange(List<ConnectedSystemSettingValue> settingValues, string name, int minimum, int maximum, List<ConnectorSettingValueValidationResult> response)
     {

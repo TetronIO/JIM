@@ -29,6 +29,59 @@ $script:JIMEntraIdTokenExchangeAudience = 'api://AzureADTokenExchange'
 # A certificate is renewed when it has less than this long to run, which is also when the Connector starts warning.
 $script:JIMEntraIdCertificateRenewalDays = 30
 
+$script:JIMEntraIdTrackSourceOfAuthoritySetting = 'Track Source of Authority Changes'
+
+function Resolve-JIMEntraIdConnectorOption {
+    <#
+    .SYNOPSIS
+        Works out what the Connector is to be able to do: what the switches given ask for, and for each switch not
+        given, what the existing setup already does, so running the command again without a switch never takes away
+        what an earlier run, or an administrator in the portal, turned on.
+
+    .PARAMETER Current
+        What the tenant and JIM hold, as Get-JIMEntraIdConnectorState reads it.
+
+    .PARAMETER Bound
+        The capability switches and values the command was given, as $PSBoundParameters holds them.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)][object]$Current,
+        [Parameter(Mandatory)][hashtable]$Bound
+    )
+
+    $roles = $Current.GraphServicePrincipal.Roles
+    $existing = @($Current.Applications).Count -eq 1 -and $Current.ServicePrincipal
+    $granted = @(if ($existing) { @($Current.GrantedRoles) | ForEach-Object AppRoleId })
+    $holds = { param($permission) $roles.ContainsKey($permission) -and $roles[$permission] -in $granted }
+    $settings = if ($Current.ConnectedSystem) { $Current.ConnectedSystem.Settings } else { @{} }
+
+    $kept = @{
+        ReadOnly               = [bool]($existing -and -not (& $holds 'User.ReadWrite.All') -and (& $holds 'User.Read.All'))
+        SkipHiddenMembership   = [bool]($existing -and -not (& $holds 'Member.Read.Hidden'))
+        DirectoryExtensions    = [bool](& $holds 'Directory.Read.All')
+        PasswordManagement     = [bool](& $holds 'User-PasswordProfile.ReadWrite.All')
+        TrackSourceOfAuthority = [bool]((& $holds 'User-OnPremisesSyncBehavior.ReadWrite.All') -or $settings[$script:JIMEntraIdTrackSourceOfAuthoritySetting] -eq $true)
+    }
+    $options = @{}
+    foreach ($name in $kept.Keys) {
+        $options[$name] = if ($Bound.ContainsKey($name)) { [bool]$Bound[$name] } else { $kept[$name] }
+    }
+    $options.ResetCertificate = [bool]$Bound['ResetCertificate']
+    if ($Bound['AdministrativeUnitId']) { $options.AdministrativeUnitId = [string]$Bound['AdministrativeUnitId'] }
+
+    # A managed identity given is used; otherwise the one the Connected System already authenticates with, unless a
+    # certificate was asked for.
+    if ($Bound['ManagedIdentityClientId']) {
+        $options.ManagedIdentityClientId = [string]$Bound['ManagedIdentityClientId']
+    }
+    elseif (-not $options.ResetCertificate -and $settings['Authentication Method'] -eq 'Federated Credential' -and $settings['Managed Identity Client ID']) {
+        $options.ManagedIdentityClientId = [string]$settings['Managed Identity Client ID']
+    }
+    return $options
+}
+
 function Get-JIMEntraIdConnectorPermission {
     <#
     .SYNOPSIS
@@ -40,14 +93,19 @@ function Get-JIMEntraIdConnectorPermission {
         [switch]$ReadOnly,
         [switch]$SkipHiddenMembership,
         [switch]$DirectoryExtensions,
-        [switch]$PasswordManagement
+        [switch]$PasswordManagement,
+        [switch]$TrackSourceOfAuthority
     )
 
     $permissions = [System.Collections.Generic.List[string]]::new()
     $permissions.Add($(if ($ReadOnly) { 'User.Read.All' } else { 'User.ReadWrite.All' }))
     $permissions.Add($(if ($ReadOnly) { 'Group.Read.All' } else { 'Group.ReadWrite.All' }))
-    $permissions.Add('User-OnPremisesSyncBehavior.Read.All')
-    $permissions.Add('Group-OnPremisesSyncBehavior.Read.All')
+    # Microsoft offers no read-only form of these, and they also allow switching an object's Source of Authority, so
+    # they are asked for only where tracking it is wanted.
+    if ($TrackSourceOfAuthority) {
+        $permissions.Add('User-OnPremisesSyncBehavior.ReadWrite.All')
+        $permissions.Add('Group-OnPremisesSyncBehavior.ReadWrite.All')
+    }
     if (-not $SkipHiddenMembership) { $permissions.Add('Member.Read.Hidden') }
     if ($DirectoryExtensions) { $permissions.Add('Directory.Read.All') }
     if ($PasswordManagement) { $permissions.Add('User-PasswordProfile.ReadWrite.All') }
@@ -79,20 +137,17 @@ function Get-JIMEntraIdConnectorPlan {
         [switch]$SkipHiddenMembership,
         [switch]$DirectoryExtensions,
         [switch]$PasswordManagement,
+        [switch]$TrackSourceOfAuthority,
         [string]$AdministrativeUnitId,
         [string]$ManagedIdentityClientId,
         [switch]$ResetCertificate
     )
 
-    if ($PasswordManagement -and -not $AdministrativeUnitId) {
-        throw ('-PasswordManagement needs -AdministrativeUnitId: Microsoft Graph lets an application set passwords only while it holds the User Administrator role, ' +
-            'which this command assigns over an Administrative Unit of the users JIM manages rather than across the tenant.')
-    }
     if (-not $Current.ConnectorDefinition) {
         throw "JIM does not offer the $script:JIMEntraIdConnectorDefinitionName. Upgrade JIM to a version that includes it, then run this again."
     }
     $useManagedIdentity = [bool]$ManagedIdentityClientId
-    if ($useManagedIdentity -and -not $Current.ManagedIdentity) {
+    if ($useManagedIdentity -and (-not $Current.ManagedIdentity -or $Current.ManagedIdentity.ClientId -ne $ManagedIdentityClientId)) {
         throw "The tenant holds no managed identity with the client ID $ManagedIdentityClientId. Check the -ManagedIdentityClientId is that of a user-assigned managed identity in this tenant."
     }
 
@@ -107,7 +162,7 @@ function Get-JIMEntraIdConnectorPlan {
     }
 
     $permissions = Get-JIMEntraIdConnectorPermission -ReadOnly:$ReadOnly -SkipHiddenMembership:$SkipHiddenMembership `
-        -DirectoryExtensions:$DirectoryExtensions -PasswordManagement:$PasswordManagement
+        -DirectoryExtensions:$DirectoryExtensions -PasswordManagement:$PasswordManagement -TrackSourceOfAuthority:$TrackSourceOfAuthority
     $roles = $Current.GraphServicePrincipal.Roles
     $roleIds = @($permissions | ForEach-Object {
         if (-not $roles.ContainsKey($_)) { throw "Microsoft Graph in this tenant offers no application permission called $_." }
@@ -182,7 +237,9 @@ function Get-JIMEntraIdConnectorPlan {
         }
     }
 
-    if ($PasswordManagement) {
+    # The role is checked, and assigned, only when an Administrative Unit is named: reading role assignments needs a
+    # sign-in that may manage them, which a re-run that only keeps password management does not ask for.
+    if ($PasswordManagement -and $AdministrativeUnitId) {
         $scope = "/administrativeUnits/$AdministrativeUnitId"
         if (-not (@($Current.UserAdministratorAssignments) | Where-Object { $_.DirectoryScopeId -in '/', $scope })) {
             $changes.Add((New-JIMEntraIdChange -Action 'AssignUserAdministrator' -Target $Name `
@@ -195,6 +252,7 @@ function Get-JIMEntraIdConnectorPlan {
     $method = if ($useManagedIdentity) { 'Federated Credential' } else { 'Certificate' }
     $wanted = [ordered]@{ 'Tenant ID' = $Current.TenantId; 'Authentication Method' = $method }
     if ($useManagedIdentity) { $wanted['Managed Identity Client ID'] = $ManagedIdentityClientId }
+    $wanted[$script:JIMEntraIdTrackSourceOfAuthoritySetting] = [bool]$TrackSourceOfAuthority
     if (-not $system) {
         $changes.Add((New-JIMEntraIdChange -Action 'NewConnectedSystem' -Target $ConnectedSystemName `
             -Description "Create the Connected System, authenticating with a $($method.ToLowerInvariant())" `
@@ -202,7 +260,9 @@ function Get-JIMEntraIdConnectorPlan {
     }
     else {
         $settings = @{}
-        foreach ($entry in $wanted.GetEnumerator() | Where-Object { [string]$system.Settings[$_.Key] -ne [string]$_.Value }) {
+        # A tick box left unset reads as unticked.
+        $differs = { param($entry) if ($entry.Value -is [bool]) { [bool]$system.Settings[$entry.Key] -ne $entry.Value } else { [string]$system.Settings[$entry.Key] -ne [string]$entry.Value } }
+        foreach ($entry in $wanted.GetEnumerator() | Where-Object { & $differs $_ }) {
             $settings[$entry.Key] = $entry.Value
         }
         $setsClientId = -not $app -or [string]$system.Settings['Client ID'] -ne [string]$app.AppId
@@ -289,8 +349,39 @@ function Get-JIMEntraIdConnectorState {
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][string]$ConnectedSystemName,
         [string]$ManagedIdentityClientId,
+        [switch]$ResetCertificate,
         [switch]$PasswordManagement
     )
+
+    # JIM first: the Connected System says which managed identity it already authenticates with, if any.
+    $definition = @(Invoke-JIMApi -Endpoint '/api/v1/synchronisation/connector-definitions') | Where-Object name -eq $script:JIMEntraIdConnectorDefinitionName | Select-Object -First 1
+    $connectorDefinition = $null
+    if ($definition) {
+        $detail = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connector-definitions/$($definition.id)"
+        $settingIds = @{}
+        foreach ($setting in @($detail.settings)) { $settingIds[[string]$setting.name] = [int]$setting.id }
+        $connectorDefinition = [PSCustomObject]@{ Id = [int]$definition.id; SettingIds = $settingIds }
+    }
+
+    $system = $null
+    $found = @(Invoke-JIMApi -Endpoint '/api/v1/synchronisation/connected-systems') | ForEach-Object { if ($_.PSObject.Properties['items']) { $_.items } else { $_ } } |
+        Where-Object name -eq $ConnectedSystemName | Select-Object -First 1
+    if ($found) {
+        $detail = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$($found.id)"
+        # A tick box comes back as checkboxValue; an encrypted setting only as whether a value is held.
+        $settings = @{}
+        $held = @{}
+        foreach ($value in @($detail.settingValues)) {
+            $settings[[string]$value.name] = if ($null -ne $value.checkboxValue) { [bool]$value.checkboxValue } else { [string]$value.stringValue }
+            $held[[string]$value.name] = [bool]$value.hasValue
+        }
+        $system = [PSCustomObject]@{
+            Id = [int]$found.id; ConnectorDefinitionId = [int]$detail.connector.id; Settings = $settings
+            HasCertificate = [bool]$held['Certificate'] }
+    }
+    if (-not $ManagedIdentityClientId -and -not $ResetCertificate -and $system -and $system.Settings['Authentication Method'] -eq 'Federated Credential') {
+        $ManagedIdentityClientId = [string]$system.Settings['Managed Identity Client ID']
+    }
 
     $graph = @((Invoke-JIMEntraIdGraphApi -Connection $Connection -Path "/servicePrincipals?`$filter=appId eq '$script:JIMEntraIdGraphAppId'&`$select=id,appRoles").value) | Select-Object -First 1
     if (-not $graph) { throw 'The tenant has no service principal for Microsoft Graph, which every tenant has; check the token is for the right tenant.' }
@@ -337,32 +428,6 @@ function Get-JIMEntraIdConnectorState {
         if ($mi) { $managedIdentity = [PSCustomObject]@{ ClientId = $ManagedIdentityClientId; PrincipalId = [string]$mi.id } }
     }
 
-    # JIM: the Connector, and a Connected System of the name given.
-    $definition = @(Invoke-JIMApi -Endpoint '/api/v1/synchronisation/connector-definitions') | Where-Object name -eq $script:JIMEntraIdConnectorDefinitionName | Select-Object -First 1
-    $connectorDefinition = $null
-    if ($definition) {
-        $detail = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connector-definitions/$($definition.id)"
-        $settingIds = @{}
-        foreach ($setting in @($detail.settings)) { $settingIds[[string]$setting.name] = [int]$setting.id }
-        $connectorDefinition = [PSCustomObject]@{ Id = [int]$definition.id; SettingIds = $settingIds }
-    }
-
-    $system = $null
-    $found = @(Invoke-JIMApi -Endpoint '/api/v1/synchronisation/connected-systems') | ForEach-Object { if ($_.PSObject.Properties['items']) { $_.items } else { $_ } } |
-        Where-Object name -eq $ConnectedSystemName | Select-Object -First 1
-    if ($found) {
-        $detail = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$($found.id)"
-        # Encrypted settings come back only as whether a value is held.
-        $settings = @{}
-        $held = @{}
-        foreach ($value in @($detail.settingValues)) {
-            $settings[[string]$value.name] = [string]$value.stringValue
-            $held[[string]$value.name] = [bool]$value.hasValue
-        }
-        $system = [PSCustomObject]@{
-            Id = [int]$found.id; ConnectorDefinitionId = [int]$detail.connector.id; Settings = $settings
-            HasCertificate = [bool]$held['Certificate'] }
-    }
 
     [PSCustomObject]@{
         TenantId                     = $Connection.TenantId
@@ -445,7 +510,9 @@ function Invoke-JIMEntraIdConnectorChange {
                 $Connection.ConnectedSystemId = [int]$created.id
             }
             $values = @{}
-            foreach ($entry in $arguments.Settings.GetEnumerator()) { $values[[string]$settingIds[$entry.Key]] = @{ stringValue = [string]$entry.Value } }
+            foreach ($entry in $arguments.Settings.GetEnumerator()) {
+                $values[[string]$settingIds[$entry.Key]] = if ($entry.Value -is [bool]) { @{ checkboxValue = $entry.Value } } else { @{ stringValue = [string]$entry.Value } }
+            }
             if ($arguments.SetsClientId) { $values[[string]$settingIds['Client ID']] = @{ stringValue = $Connection.AppId } }
             if ($arguments.SetsCertificate) {
                 $values[[string]$settingIds['Certificate']] = @{ stringValue = [System.Net.NetworkCredential]::new('', $Connection.Certificate.Pfx).Password }

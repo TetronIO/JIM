@@ -70,6 +70,7 @@
         @{ Anchor = 'scoping'; Home = 'configuration/scoping-criteria.md'; TitleCase = $false }
         @{ Anchor = 'scim-endpoint'; Home = 'connectors/jim-scim-service-provider-connector.md'; TitleCase = $false }
         @{ Anchor = 'service-health'; Home = 'configuration/operations.md'; TitleCase = $true }
+        @{ Anchor = 'source-of-authority'; Home = 'connectors/jim-graph-connector.md'; TitleCase = $true }
         @{ Anchor = 'standard-mappings'; Home = 'configuration/metaverse.md'; TitleCase = $true }
         @{ Anchor = 'sync-preview'; Home = 'configuration/sync-preview.md'; TitleCase = $true }
         @{ Anchor = 'synchronisation-rule'; Home = 'configuration/synchronisation-rules.md'; TitleCase = $true; Rejected = @('Sync Rule') }

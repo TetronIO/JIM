@@ -9,9 +9,8 @@ function Register-JIMEntraIdConnector {
 
     .DESCRIPTION
         Creates, in the tenant -TenantId names, a single-tenant application for JIM's Microsoft Entra ID Connector. It
-        asks Microsoft Graph for least-privilege application permissions: to read and write users and groups, to tell
-        which synchronised objects have moved to cloud management, and to read hidden group membership. It grants them
-        with admin consent. It then gives the application a credential and creates the Connected System in JIM with the
+        asks Microsoft Graph for least-privilege application permissions: to read and write users and groups, and to
+        read hidden group membership. It grants them with admin consent. It then gives the application a credential and creates the Connected System in JIM with the
         tenant, the application and the credential already set.
 
         The credential is a certificate this command makes in memory: its private key goes only to JIM, which stores it
@@ -20,8 +19,10 @@ function Register-JIMEntraIdConnector {
         no secret or key exists anywhere. A certificate is renewed when it has less than 30 days to run.
 
         Running it again changes nothing when everything is already right, so it is also the way to check and repair
-        the setup: -WhatIf lists each change it would make, and makes none. Asking for less than before (with
-        -ReadOnly, say) revokes the Microsoft Graph permissions no longer needed.
+        the setup: -WhatIf lists each change it would make, and makes none. A capability switch left out of a later
+        run keeps what the setup already does, so a run with only -TrackSourceOfAuthority adds that and takes nothing
+        away. To turn a capability off, give its switch as false, such as -TrackSourceOfAuthority:$false; the
+        Microsoft Graph permissions no longer needed are then revoked.
 
         Microsoft Graph is reached from any computer that can reach it: sign in through the browser this command opens,
         as a person who may grant admin consent for application permissions (Privileged Role Administrator or Global
@@ -61,20 +62,29 @@ function Register-JIMEntraIdConnector {
         User-PasswordProfile.ReadWrite.All and assigns the application the User Administrator role over the
         Administrative Unit -AdministrativeUnitId names, which Microsoft Graph also requires.
 
+    .PARAMETER TrackSourceOfAuthority
+        Turns on the Connected System's Track Source of Authority Changes, and adds the
+        User-OnPremisesSyncBehavior.ReadWrite.All and Group-OnPremisesSyncBehavior.ReadWrite.All permissions it needs,
+        so an object whose Source of Authority was switched between Active Directory and Entra ID reads as managed where
+        it now is. Microsoft offers no read-only form of these permissions: they also allow switching an object's
+        Source of Authority, which JIM never does.
+
     .PARAMETER AdministrativeUnitId
         With -PasswordManagement, the object ID of the Administrative Unit holding the users JIM manages. The User
-        Administrator role is assigned over it only, never across the tenant.
+        Administrator role is assigned over it only, never across the tenant. A later run that leaves -PasswordManagement
+        out keeps the permission and leaves the role assignment as it is.
 
     .PARAMETER ManagedIdentityClientId
         The client ID of the user-assigned managed identity attached to the Azure virtual machine JIM runs on. The
-        application trusts it with a federated credential, and no certificate is made.
+        application trusts it with a federated credential, and no certificate is made. A later run that leaves it out
+        keeps the managed identity the Connected System already uses.
 
     .PARAMETER CertificateValidityDays
         How long a certificate this command makes is valid, in days.
 
     .PARAMETER ResetCertificate
         Makes a new certificate even though the current one is still valid, and removes the old one once JIM holds
-        the new.
+        the new. On a Connected System that authenticates with a managed identity, it moves it back to a certificate.
 
     .OUTPUTS
         JIM.EntraIdConnectorRegistration
@@ -104,6 +114,11 @@ function Register-JIMEntraIdConnector {
         Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -PasswordManagement -AdministrativeUnitId '9d6f4c2e-1b3a-4e5f-8a7b-6c5d4e3f2a1b'
 
         Also lets JIM set passwords, assigning User Administrator over that Administrative Unit only.
+
+    .EXAMPLE
+        Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -TrackSourceOfAuthority
+
+        Turns on tracking of objects whose Source of Authority is switched, keeping everything else the setup does.
 
     .EXAMPLE
         Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -ManagedIdentityClientId '3b9f6a1e-2c4d-4e8f-9a0b-1c2d3e4f5a6b'
@@ -142,6 +157,8 @@ function Register-JIMEntraIdConnector {
 
         [switch]$PasswordManagement,
 
+        [switch]$TrackSourceOfAuthority,
+
         [ValidatePattern('^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$')]
         [string]$AdministrativeUnitId,
 
@@ -157,24 +174,27 @@ function Register-JIMEntraIdConnector {
     if (-not $script:JIMConnection) {
         throw 'You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again.'
     }
-    # Refused before anyone is asked to sign in.
+    # Refused before anyone is asked to sign in. Assigning the role needs the Administrative Unit; keeping password
+    # management from an earlier run, with the switch left out, does not.
     if ($PasswordManagement -and -not $AdministrativeUnitId) {
         throw ('-PasswordManagement needs -AdministrativeUnitId: Microsoft Graph lets an application set passwords only while it holds the User Administrator role, ' +
             'which this command assigns over an Administrative Unit of the users JIM manages rather than across the tenant.')
     }
 
-    $scopes = @($script:JIMEntraIdConnectorSignInScopes) + @(if ($PasswordManagement) { $script:JIMEntraIdConnectorRoleScope })
+    $assignsRole = $PasswordManagement -and $AdministrativeUnitId
+    $scopes = @($script:JIMEntraIdConnectorSignInScopes) + @(if ($assignsRole) { $script:JIMEntraIdConnectorRoleScope })
     $token = if ($AccessToken) { $AccessToken } else { Get-JIMEntraIdAdminToken -TenantId $TenantId -UseDeviceCode:$UseDeviceCode -Scopes $scopes }
     $connection = @{ Token = $token; TenantId = Get-JIMEntraIdTokenTenantId -AccessToken $token; CertificateValidityDays = $CertificateValidityDays }
 
     $current = Get-JIMEntraIdConnectorState -Connection $connection -Name $Name -ConnectedSystemName $ConnectedSystemName `
-        -ManagedIdentityClientId $ManagedIdentityClientId -PasswordManagement:$PasswordManagement
-    $options = @{
-        ReadOnly = $ReadOnly; SkipHiddenMembership = $SkipHiddenMembership; DirectoryExtensions = $DirectoryExtensions
-        PasswordManagement = $PasswordManagement; ResetCertificate = $ResetCertificate
+        -ManagedIdentityClientId $ManagedIdentityClientId -ResetCertificate:$ResetCertificate -PasswordManagement:$assignsRole
+    # Each capability switch left out keeps what the setup already does.
+    $bound = @{}
+    foreach ($key in 'ReadOnly', 'SkipHiddenMembership', 'DirectoryExtensions', 'PasswordManagement', 'TrackSourceOfAuthority',
+        'AdministrativeUnitId', 'ManagedIdentityClientId', 'ResetCertificate') {
+        if ($PSBoundParameters.ContainsKey($key)) { $bound[$key] = $PSBoundParameters[$key] }
     }
-    if ($AdministrativeUnitId) { $options.AdministrativeUnitId = $AdministrativeUnitId }
-    if ($ManagedIdentityClientId) { $options.ManagedIdentityClientId = $ManagedIdentityClientId }
+    $options = Resolve-JIMEntraIdConnectorOption -Current $current -Bound $bound
     $plan = Get-JIMEntraIdConnectorPlan -Name $Name -ConnectedSystemName $ConnectedSystemName -Current $current -Now ([datetime]::UtcNow) @options
 
     $existing = @($current.Applications) | Select-Object -First 1
@@ -200,7 +220,7 @@ function Register-JIMEntraIdConnector {
         TenantId              = $connection.TenantId
         ClientId              = $connection.AppId
         ConnectedSystemId     = $connection.ConnectedSystemId
-        AuthenticationMethod  = if ($ManagedIdentityClientId) { 'Federated Credential' } else { 'Certificate' }
+        AuthenticationMethod  = if ($options.ManagedIdentityClientId) { 'Federated Credential' } else { 'Certificate' }
         CertificateThumbprint = if ($connection.Certificate) { $connection.Certificate.Thumbprint }
         CertificateExpires    = if ($connection.Certificate) { $connection.Certificate.NotAfter }
         Permissions           = $plan.Permissions

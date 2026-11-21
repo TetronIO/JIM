@@ -71,9 +71,10 @@ public class GraphPermissionsTests
     }
 
     [Test]
-    public void Check_DirectoryReadWriteAndSourceOfAuthorityRead_CoverEverything()
+    public void Check_DirectoryReadWriteWithSourceOfAuthorityTracked_CoversEverything()
     {
-        var result = GraphPermissions.Check(["Directory.ReadWrite.All", "User-OnPremisesSyncBehavior.Read.All", "Group-OnPremisesSyncBehavior.Read.All", "Member.Read.Hidden"]);
+        var result = GraphPermissions.Check(["Directory.ReadWrite.All", "User-OnPremisesSyncBehavior.ReadWrite.All", "Group-OnPremisesSyncBehavior.ReadWrite.All", "Member.Read.Hidden"],
+            tracksSourceOfAuthority: true);
 
         using (Assert.EnterMultipleScope())
         {
@@ -83,24 +84,46 @@ public class GraphPermissionsTests
     }
 
     [Test]
-    public void Check_ReadOnly_WarnsNamingWhatExportAndSourceOfAuthorityNeed()
+    public void Check_ReadOnly_WarnsNamingWhatExportNeeds()
     {
-        var result = GraphPermissions.Check(["User.Read.All", "Group.Read.All"]);
+        var result = GraphPermissions.Check(["User.Read.All", "Group.Read.All", "Member.Read.Hidden"]);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.Error, Is.Null);
             Assert.That(result.Warning, Does.Contain("User.ReadWrite.All"));
             Assert.That(result.Warning, Does.Contain("Group.ReadWrite.All"));
-            Assert.That(result.Warning, Does.Contain("User-OnPremisesSyncBehavior.Read.All"));
-            Assert.That(result.Warning, Does.Contain("Group-OnPremisesSyncBehavior.Read.All"));
+        }
+    }
+
+    [Test]
+    public void Check_SourceOfAuthorityNotTracked_NeverAsksForItsPermissions()
+    {
+        // Tracking is off by default: its permission also allows changing an object's Source of Authority, so it is
+        // never asked for unless tracking is turned on.
+        var result = GraphPermissions.Check(["User.ReadWrite.All", "Group.ReadWrite.All", "Member.Read.Hidden"]);
+
+        Assert.That(result.Warning, Is.Null);
+    }
+
+    [Test]
+    public void Check_SourceOfAuthorityTrackedWithoutItsPermissions_WarnsNamingTheReadWritePermissions()
+    {
+        // Microsoft offers no read-only permission for it.
+        var result = GraphPermissions.Check(["User.ReadWrite.All", "Group.ReadWrite.All", "Member.Read.Hidden"], tracksSourceOfAuthority: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Warning, Does.Contain("User-OnPremisesSyncBehavior.ReadWrite.All"));
+            Assert.That(result.Warning, Does.Contain("Group-OnPremisesSyncBehavior.ReadWrite.All"));
+            Assert.That(result.Warning, Does.Contain("Track Source of Authority Changes"));
         }
     }
 
     [Test]
     public void Check_UsersOnly_CanReadUsersButNotGroupsAndWarnsAboutGroups()
     {
-        var result = GraphPermissions.Check(["User.ReadWrite.All", "User-OnPremisesSyncBehavior.Read.All"]);
+        var result = GraphPermissions.Check(["User.ReadWrite.All"]);
 
         using (Assert.EnterMultipleScope())
         {
@@ -115,7 +138,8 @@ public class GraphPermissionsTests
     [Test]
     public void Check_RoleNames_AreMatchedWhateverTheirCase()
     {
-        var result = GraphPermissions.Check(["user.readwrite.all", "GROUP.READWRITE.ALL", "user-onpremisessyncbehavior.read.all", "group-onpremisessyncbehavior.read.all", "member.read.hidden"]);
+        var result = GraphPermissions.Check(["user.readwrite.all", "GROUP.READWRITE.ALL", "user-onpremisessyncbehavior.readwrite.all", "group-onpremisessyncbehavior.readwrite.all", "member.read.hidden"],
+            tracksSourceOfAuthority: true);
 
         Assert.That(result.Warning, Is.Null);
     }
@@ -123,7 +147,7 @@ public class GraphPermissionsTests
     [Test]
     public void Check_GroupsWithoutMemberReadHidden_WarnsThatHiddenMembershipCannotBeRead()
     {
-        var result = GraphPermissions.Check(["User.ReadWrite.All", "Group.ReadWrite.All", "User-OnPremisesSyncBehavior.Read.All", "Group-OnPremisesSyncBehavior.Read.All"]);
+        var result = GraphPermissions.Check(["User.ReadWrite.All", "Group.ReadWrite.All"]);
 
         using (Assert.EnterMultipleScope())
         {
@@ -135,7 +159,7 @@ public class GraphPermissionsTests
     [Test]
     public void Check_UsersOnlyWithoutMemberReadHidden_DoesNotAskForIt()
     {
-        var result = GraphPermissions.Check(["User.ReadWrite.All", "User-OnPremisesSyncBehavior.Read.All"]);
+        var result = GraphPermissions.Check(["User.ReadWrite.All"]);
 
         Assert.That(result.Warning, Does.Not.Contain("Member.Read.Hidden"));
     }

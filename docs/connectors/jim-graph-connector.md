@@ -9,7 +9,7 @@ audience: administrator
 
 The JIM Microsoft Entra ID Connector synchronises users and groups with a Microsoft Entra ID tenant. It reaches the tenant through Microsoft Graph, signing in as an app registration in that tenant, with no agent or other software to install.
 
-It imports users and groups, with their managers, members and owners, and exports changes to them. It works out where each object is managed, so export Synchronisation Rules can leave objects that Active Directory owns alone. With the right permission, it also takes JIM's passwords: Initial Password, Set Password and Password Synchronisation.
+It imports users and groups, with their managers, members and owners, and exports changes to them. It works out where each object is managed, its Source of Authority, so export Synchronisation Rules can leave objects that Active Directory owns alone. With the right permission, it also takes JIM's passwords: Initial Password, Set Password and Password Synchronisation.
 
 ```jim-diagram
 archetype: flow
@@ -46,10 +46,10 @@ Then, in JIM, create a Connected System with this Connector, and give it the ten
 |------------|--------------------------------|
 | `User.ReadWrite.All` | Reading and writing users. `User.Read.All` is enough to import only. |
 | `Group.ReadWrite.All` | Reading and writing groups and their members and owners. `Group.Read.All` is enough to import only. |
-| `User-OnPremisesSyncBehavior.Read.All`, `Group-OnPremisesSyncBehavior.Read.All` | Telling which objects synchronised from Active Directory have moved to cloud management, for `sourceOfAuthority`. |
 | `Member.Read.Hidden` | Reading the members of groups whose membership is hidden. See [Hidden membership](#hidden-membership). |
 | `Directory.Read.All` | Optional: offering the tenant's directory extensions in the schema. |
 | `User-PasswordProfile.ReadWrite.All` | Optional: setting passwords. See [Passwords](#passwords). |
+| `User-OnPremisesSyncBehavior.ReadWrite.All`, `Group-OnPremisesSyncBehavior.ReadWrite.All` | Optional: **Track Source of Authority Changes**. See [Source of Authority](#source-of-authority). |
 
 Only import and export need the first two; the Connector warns about the others when it tests the connection, and carries on without them. Without `Directory.Read.All` the schema is the Connector's own list of user and group attributes, without the tenant's directory extensions.
 
@@ -63,15 +63,28 @@ A user's `manager`, and a group's `members` and `owners`, are references. Member
 
 ### Source of Authority
 
+An object's Source of Authority is the directory it is managed in. In a tenant that synchronises from Active Directory, Microsoft's directory synchronisation copies objects into Entra ID, and those objects are managed in Active Directory: Entra ID refuses changes to most of their attributes. Every other object is managed in Entra ID itself.
+
+JIM writing to an object does not change its Source of Authority. Everything this Connector creates or changes, it writes through Microsoft Graph, so the objects it manages are Entra ID objects. Nor is Source of Authority JIM's [Attribute Priority](../concepts/attribute-priority.md): that decides which Connected System's value the Metaverse keeps, while Source of Authority decides which directory will accept a change.
+
 Every object carries `sourceOfAuthority`, which the Connector works out:
 
 | Value | Where the object is managed |
 |-------|-----------------------------|
-| `cloud` | In Entra ID itself, so JIM can write to it. Includes an object synchronised from Active Directory that has since moved to cloud management. |
-| `onPremisesDirectory` | In Active Directory, synchronised to Entra ID. Entra ID refuses changes to most of its attributes; write them in Active Directory instead. |
+| `cloud` | In Entra ID, so JIM can write to it through this Connector. |
+| `onPremisesDirectory` | In Active Directory, synchronised to Entra ID. Write its attributes in Active Directory instead. |
 | `externalEntraDirectory` | A guest from another tenant. |
 
-Scope export Synchronisation Rules on `sourceOfAuthority` so they write only to the objects JIM may change. An export refused because Active Directory owns the attribute says so, and names `sourceOfAuthority`.
+So there are two routes for JIM to manage an object in Entra ID:
+
+| The object is managed in | JIM writes it through | And Entra ID gets the change |
+|--------------------------|-----------------------|------------------------------|
+| Entra ID | This Connector | Straight away |
+| Active Directory | The [JIM LDAP Connector](jim-ldap-connector.md), to Active Directory | From Microsoft's directory synchronisation, on its next cycle |
+
+**Scoping on it.** Export Synchronisation Rules scope on Metaverse Attributes, so flow `sourceOfAuthority` into one with an import Attribute Flow from this Connected System, then scope this Connected System's export rule on that attribute equalling `cloud`. Keep its [Deprovisioning Action](../configuration/deprovisioning.md) as **Disconnect**, the default, so an object that leaves scope because it moved back to Active Directory is left in place rather than deleted. An export refused because Active Directory owns the attribute says so, and names `sourceOfAuthority`.
+
+**Objects whose Source of Authority is switched.** Entra ID lets an administrator switch a synchronised object's Source of Authority to Entra ID, and back again. Microsoft Graph does not show the switch on the object itself, so without help a switched object still reads as `onPremisesDirectory`. Turn on **Track Source of Authority Changes** and the Connector asks Microsoft Graph which objects are switched, in either direction, so `sourceOfAuthority` shows where each is managed now, and the object moves into or out of an export rule's scope on the next import. It needs `User-OnPremisesSyncBehavior.ReadWrite.All` and `Group-OnPremisesSyncBehavior.ReadWrite.All`. Microsoft offers no read-only form of them, and they also allow switching an object's Source of Authority, which JIM never does, so they are not granted by default. `Register-JIMEntraIdConnector -TrackSourceOfAuthority` turns on the setting and grants both. If you tick the setting on the Connected System instead, run `Register-JIMEntraIdConnector` again to grant them.
 
 ### Full and Delta Import
 
@@ -82,7 +95,7 @@ A Delta Import reads every object instead, and says why on its Activity, when:
 - there is nothing to start from, as before the first Full Import, or for an Object Type selected since;
 - Microsoft Graph no longer accepts where it was to start from. That happens after **seven days** without a Delta Import, so run one at least weekly;
 - the selected attributes have changed since the last import, since Microsoft Graph reports changes only to what was read then;
-- objects have moved to or from cloud management, which Microsoft Graph's changes do not report.
+- with **Track Source of Authority Changes** on, the Source of Authority of some objects has been switched, which Microsoft Graph's changes do not report; or the setting has been turned on or off.
 
 ### Hidden membership
 
@@ -140,6 +153,12 @@ The **Cloud** setting reaches a tenant in the US Government L4 (GCC High), US Go
 | Maximum Writes Per Second | No | The most writes JIM sends each second, from 1 to 20. Default 10, which leaves room for the tenant's other applications. |
 | Maximum Retries | No | How many times a request that failed for a temporary reason, such as throttling, is retried, from 0 to 10. Default 5. |
 
+### Source of Authority
+
+| Setting | Required | Description |
+|---------|----------|-------------|
+| Track Source of Authority Changes | No | Whether to read which synchronised objects have had their Source of Authority switched between Active Directory and Entra ID, so `sourceOfAuthority` shows where each is managed now. Needs the two Source of Authority permissions. Default off. |
+
 ### Export
 
 | Setting | Required | Description |
@@ -150,7 +169,7 @@ The **Cloud** setting reaches a tenant in the US Government L4 (GCC High), US Go
 
 - **The Connector needs internet access.** JIM must reach `login.microsoftonline.com` and `graph.microsoft.com` on HTTPS (port 443), or the hosts of the tenant's national cloud. Every other part of JIM works without internet access; this Connector cannot, since the tenant is a Microsoft cloud service.
 - **Prefer a certificate or a federated credential to a client secret.** A certificate's private key never leaves JIM; a federated credential needs no secret at all.
-- **Grant the least the Connected System needs.** Read permissions are enough for import only, and the password permission and role only where JIM sets passwords.
+- **Grant the least the Connected System needs.** Read permissions are enough for import only, the password permission and role only where JIM sets passwords, and the Source of Authority permissions only where you track switched objects.
 - **Traffic is encrypted.** Microsoft Graph is reached over TLS 1.2 or later. Where a proxy inspects TLS traffic, add its CA certificate to JIM's certificate store under **Admin > Certificates**.
 
 ## :material-wrench-outline: Troubleshooting
@@ -162,7 +181,9 @@ The **Cloud** setting reaches a tenant in the US Government L4 (GCC High), US Go
 | `AADSTS700027` | The certificate is not on the app registration: upload its public part under **Certificates & secrets**. |
 | `AADSTS700213`, `AADSTS70021` | No federated credential matches the managed identity: add one for the identity in **Managed Identity Client ID**. |
 | A Delta Import read every object | Its Activity says why; see [Full and Delta Import](#full-and-delta-import). |
-| An export refused because the object is synchronised from Active Directory | Scope the export Synchronisation Rule on `sourceOfAuthority`, or write the attribute in Active Directory. |
+| An export refused because the object is synchronised from Active Directory | Scope the export Synchronisation Rule on the Metaverse Attribute that holds `sourceOfAuthority`, or write the attribute in Active Directory. See [Source of Authority](#source-of-authority). |
+| An object switched to Entra ID still reads as `onPremisesDirectory` | Turn on **Track Source of Authority Changes**, with its permissions. |
+| Testing the connection warns that a Source of Authority permission is missing | Run `Register-JIMEntraIdConnector -TrackSourceOfAuthority`, or turn the setting off. |
 
 ## :material-book-open-variant-outline: Related
 
