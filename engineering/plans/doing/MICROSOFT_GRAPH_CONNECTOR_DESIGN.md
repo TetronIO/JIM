@@ -1,6 +1,6 @@
 # Microsoft Graph Connector (Entra ID) Design Document
 
-- **Status:** Doing (design agreed; Phases 1 to 4 complete, Phase 5 next)
+- **Status:** Doing (design agreed; Phases 1 to 5 complete, Phase 6 next)
 - **Issue:** [#361](https://github.com/TetronIO/JIM/issues/361) (the issue is the requirements source, in effect the PRD; this document is the implementation plan)
 - **Related Issues:** #545 (SCIM 2.0 Client Connector, whose HTTP stack this reuses), #1145 (Source of Authority conversion as an export operation), #360 (pronouns), #192 (generic REST connector), #2367 (Entra ID sign-in, which gave JIM its Entra ID test tenant)
 - **Related Plans:** [`SCIM_CLIENT_CONNECTOR_DESIGN.md`](../done/SCIM_CLIENT_CONNECTOR_DESIGN.md), the closest precedent: an HTTP connector built in phases with seeding held back until the last one
@@ -123,7 +123,7 @@ Like the SCIM connector, the connector is registered in `ConnectorFactory` from 
 2. **Skeleton.** ✅ `GraphConnector`, constants, settings (Tenant ID, Client ID, authentication method, secret or certificate, Cloud), capabilities, factory registration. Unit tests for settings shape and validation.
 3. **HTTP client and authentication.** ✅ Token acquisition (secret and certificate assertion), national clouds, pacing, priority header, adaptive slowing, 429 handling. Connectivity test that reads the token's roles and names missing permissions. Mock Graph service with throttling, partial-batch and eventual-consistency switches.
 4. **Schema.** ✅ Curated user and group schema; directory extension discovery; `onPremisesExtensionAttributes`; `sourceOfAuthority` and its supporting attributes always present.
-5. **Full import.** Users and groups, paging, membership as references, Source of Authority synthesis including the cloud-managed query.
+5. **Full import.** ✅ Users and groups, paging, membership as references, Source of Authority synthesis including the cloud-managed query.
 6. **Delta import.** Delta links as watermark, `members@delta`, removed objects, expired-link fallback, conversion detection.
 7. **Export.** `$batch`, create, update, delete or disable, membership, Source of Authority handling and export-time verification, dependency retries.
 8. **Federated credentials.** A third Authentication Method, Federated Credential, with an Azure managed identity or a token file as its source (above). The instance metadata service is reached over link-local HTTP, the one cleartext address the Connector permits, hard-coded rather than configurable. Unit tests against a stub metadata service and a temporary token file; a manual run on an Azure VM before enablement.
@@ -172,3 +172,4 @@ None proposed. `System.Net.Http`, `System.Text.Json` and `System.Security.Crypto
 10. **Federated credentials ship in the first release** (2026-11-21), as Phase 8, rather than as a follow-up.
 11. **Setup is one command, with no multi-tenant app** (2026-11-21). A Tetron-owned multi-tenant app was considered and rejected: app-only access would need one credential shared by every customer, and it would not exist in the national clouds. The setup command creates a single-tenant app in the customer's own tenant instead, signing the administrator in through the browser rather than with a device code, which Microsoft recommends Conditional Access blocks (#3021).
 12. **Full import reads list endpoints, not a delta round** (2026-11-21). Users and groups delta support neither `$top` nor `$expand`, and spread a large group's `members@delta` over several pages, so a delta full import would have to hold every group until the round ended. Full import reads `/users` (with `$expand=manager($select=id)`) and `/groups` with `$select` and `$top=999`, and each page's group members through `$batch`, 20 groups a call, so every group is emitted complete within its page. The delta baseline is taken at the start of each object type with `$deltatoken=latest`, so changes made during the import are read by the next delta.
+13. **An unreadable relationship is an attribute value error, not a failed object** (2026-11-21). When a group's members or owners cannot be read in full, the group is still imported with that attribute reported unreadable, so JIM keeps the membership it holds (#2066) and the group stays protected from deletion; a partial membership would have been read as removals.

@@ -18,12 +18,16 @@ namespace JIM.Connectors.Graph;
 /// Registered with the Connector factory but not seeded until the plan's final phase, so it is not offered to
 /// administrators while it is being built. The capability flags declare what the finished Connector does.
 /// </remarks>
-public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSchema
+public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSchema, IConnectorImportUsingCalls, IConnectorPhases
 {
     private static readonly string[] MultiTenantAliases = ["common", "organizations", "consumers"];
 
     private ICredentialProtection? _credentialProtection;
     private ICertificateProvider? _certificateProvider;
+
+    // Held for the length of an import run: JIM opens the connection once and then asks for pages.
+    private GraphHttpClient? _importClient;
+    private GraphConnectorImport? _import;
 
     #region IConnector members
     public string Name => ConnectorConstants.GraphConnectorName;
@@ -84,6 +88,62 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
 
         return schema;
     }
+    #endregion
+
+    #region IConnectorImportUsingCalls members
+    /// <summary>
+    /// Opens the connection every page of this run is read through. Nothing is sent until the first page.
+    /// </summary>
+    /// <param name="persistedConnectorData">Unused here: <see cref="ImportAsync"/> receives it directly.</param>
+    public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger)
+    {
+        // Task.Run keeps the blocking wait off any caller's synchronisation context; the interface is synchronous but
+        // building the client loads JIM's trusted certificates asynchronously.
+        _importClient = Task.Run(async () => await CreateClientAsync(settingValues, logger)).GetAwaiter().GetResult();
+        _import = new GraphConnectorImport(_importClient, logger);
+    }
+
+    /// <summary>Reads one page. JIM calls this repeatedly until no pagination tokens come back.</summary>
+    public Task<ConnectedSystemImportResult> ImportAsync(
+        ConnectedSystem connectedSystem,
+        ConnectedSystemRunProfile runProfile,
+        List<ConnectedSystemPaginationToken> paginationTokens,
+        string? persistedConnectorData,
+        ILogger logger,
+        CancellationToken cancellationToken,
+        IConnectorProgress progress)
+    {
+        if (_import == null)
+            throw new InvalidOperationException("OpenImportConnection must be called before ImportAsync.");
+
+        return _import.ImportPageAsync(connectedSystem, runProfile, GraphImportPosition.FromTokens(paginationTokens), progress, cancellationToken);
+    }
+
+    /// <returns>Always null: the delta links travel on the last page's result, and nothing else is kept at close.</returns>
+    public string? CloseImportConnection()
+    {
+        _importClient?.Dispose();
+        _importClient = null;
+        _import = null;
+        return null;
+    }
+    #endregion
+
+    #region IConnectorPhases members
+    /// <summary>
+    /// An import prepares each Object Type (the delta baseline, and which synchronised objects are cloud-managed) and then
+    /// fetches it, both round trips to a service that may be slow or throttling. Export declares nothing: JIM already
+    /// reports accurate per-batch counts around the call.
+    /// </summary>
+    public IReadOnlyList<ConnectorPhase> GetPhases(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile) => runProfile.RunType switch
+    {
+        ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport =>
+        [
+            new ConnectorPhase(GraphConnectorPhases.Prepare, GraphConnectorPhases.PrepareName),
+            new ConnectorPhase(GraphConnectorPhases.Fetch, GraphConnectorPhases.FetchName)
+        ],
+        _ => []
+    };
     #endregion
 
     #region IConnectorCredentialAware members
