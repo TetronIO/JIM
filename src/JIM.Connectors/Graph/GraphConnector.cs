@@ -18,7 +18,7 @@ namespace JIM.Connectors.Graph;
 /// Registered with the Connector factory but not seeded until the plan's final phase, so it is not offered to
 /// administrators while it is being built. The capability flags declare what the finished Connector does.
 /// </remarks>
-public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorCredentialAware, IConnectorCertificateAware
+public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSchema
 {
     private static readonly string[] MultiTenantAliases = ["common", "organizations", "consumers"];
 
@@ -68,6 +68,22 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
 
     /// <summary>A directory object's <c>id</c> is unique across the tenant, whether the object is a user or a group.</summary>
     public bool ExternalIdsUniqueAcrossObjectTypes => true;
+    #endregion
+
+    #region IConnectorSchema members
+    /// <summary>
+    /// The curated user and group schema, with the tenant's directory extensions added. Discovery shortfalls travel on
+    /// the schema's warnings so the refresh can show them, and are logged for the operator too.
+    /// </summary>
+    public async Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settings, ILogger logger)
+    {
+        using var client = await CreateClientAsync(settings, logger);
+        var schema = await new GraphConnectorSchema(client, logger).GetSchemaAsync(CancellationToken.None);
+        foreach (var warning in schema.Warnings)
+            logger.Warning("Microsoft Graph schema: {Warning}", warning);
+
+        return schema;
+    }
     #endregion
 
     #region IConnectorCredentialAware members

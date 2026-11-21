@@ -1,6 +1,6 @@
 # Microsoft Graph Connector (Entra ID) Design Document
 
-- **Status:** Doing (design agreed; Phases 1 to 3 complete, Phase 4 next)
+- **Status:** Doing (design agreed; Phases 1 to 4 complete, Phase 5 next)
 - **Issue:** [#361](https://github.com/TetronIO/JIM/issues/361) (the issue is the requirements source, in effect the PRD; this document is the implementation plan)
 - **Related Issues:** #545 (SCIM 2.0 Client Connector, whose HTTP stack this reuses), #1145 (Source of Authority conversion as an export operation), #360 (pronouns), #192 (generic REST connector), #2367 (Entra ID sign-in, which gave JIM its Entra ID test tenant)
 - **Related Plans:** [`SCIM_CLIENT_CONNECTOR_DESIGN.md`](../done/SCIM_CLIENT_CONNECTOR_DESIGN.md), the closest precedent: an HTTP connector built in phases with seeding held back until the last one
@@ -118,7 +118,7 @@ Like the SCIM connector, the connector is registered in `ConnectorFactory` from 
 1. **Shared HTTP layer (stack layer).** ✅ Move retry, throttle hints and client credentials into `JIM.Connectors/Http/`; SCIM switched over, its tests unchanged.
 2. **Skeleton.** ✅ `GraphConnector`, constants, settings (Tenant ID, Client ID, authentication method, secret or certificate, Cloud), capabilities, factory registration. Unit tests for settings shape and validation.
 3. **HTTP client and authentication.** ✅ Token acquisition (secret and certificate assertion), national clouds, pacing, priority header, adaptive slowing, 429 handling. Connectivity test that reads the token's roles and names missing permissions. Mock Graph service with throttling, partial-batch and eventual-consistency switches.
-4. **Schema.** Curated user and group schema; directory extension discovery; `onPremisesExtensionAttributes`; `sourceOfAuthority` and its supporting attributes always present.
+4. **Schema.** ✅ Curated user and group schema; directory extension discovery; `onPremisesExtensionAttributes`; `sourceOfAuthority` and its supporting attributes always present.
 5. **Full import.** Users and groups, paging, membership as references, Source of Authority synthesis including the cloud-managed query.
 6. **Delta import.** Delta links as watermark, `members@delta`, removed objects, expired-link fallback, conversion detection.
 7. **Export.** `$batch`, create, update, delete or disable, membership, Source of Authority handling and export-time verification, dependency retries.
@@ -162,3 +162,4 @@ None proposed. `System.Net.Http`, `System.Text.Json` and `System.Security.Crypto
 5. **The Connector is named "JIM Microsoft Entra ID Connector"** (2026-11-21), after the system administrators connect to rather than the API it speaks. Free to change until Phase 8 seeds it; after that the name is part of the Connector's identity.
 6. **The mock Graph service grows with the phases** (2026-11-21). Phase 3's tests drive the client through a stub transport with throttling, token refusal, Graph error and permission switches; the partial-batch and eventual-consistency switches arrive with export (Phase 7), where they have something to exercise.
 7. **TLS certificate diagnosis is deferred to Phase 8** (2026-11-21). Graph's certificates chain to a public CA, so only a TLS-inspecting proxy causes a trust failure; Phase 3 reports that case with a message pointing at Admin > Certificates. Phase 8 wires in the shared `ServerCertificateDiagnosis`, which shows the presented certificate as the SCIM and LDAP Connectors do.
+8. **Directory extension discovery is optional** (2026-11-21). `getAvailableExtensionProperties` needs `Directory.Read.All`, which the least-privilege set leaves out. Without it the curated schema stands and the schema carries a warning naming the permission; any other discovery failure fails the refresh.
