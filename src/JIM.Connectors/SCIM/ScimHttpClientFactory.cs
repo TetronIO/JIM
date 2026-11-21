@@ -50,7 +50,7 @@ public static class ScimHttpClientFactory
         }
         else
         {
-            var validator = new ScimCertificateValidator(trustedCertificates, logger);
+            var validator = new TrustedCertificateValidator(trustedCertificates, logger);
             handler.SslOptions.RemoteCertificateValidationCallback =
                 (_, certificate, chain, errors) => validator.Validate(certificate as X509Certificate2, chain, errors);
         }

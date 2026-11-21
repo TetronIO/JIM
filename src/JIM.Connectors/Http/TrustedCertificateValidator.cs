@@ -5,10 +5,10 @@ using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using Serilog;
 
-namespace JIM.Connectors.SCIM;
+namespace JIM.Connectors.Http;
 
 /// <summary>
-/// Decides whether to trust a SCIM endpoint's TLS certificate: the platform's own validation first,
+/// Decides whether to trust a connected service's TLS certificate: the platform's own validation first,
 /// then JIM's trusted certificate store, which lets a deployment trust an internal CA without
 /// installing it on the host.
 /// <para>
@@ -22,7 +22,7 @@ namespace JIM.Connectors.SCIM;
 /// checking whether the chain otherwise built, and so would accept both.
 /// </para>
 /// </summary>
-public class ScimCertificateValidator
+public class TrustedCertificateValidator
 {
     /// <summary>
     /// The only SSL policy error JIM's trusted certificates can answer for.
@@ -33,7 +33,7 @@ public class ScimCertificateValidator
     private readonly ILogger _logger;
 
     /// <param name="trustedCertificates">Enabled certificates from the JIM store; may be empty.</param>
-    public ScimCertificateValidator(IReadOnlyList<X509Certificate2> trustedCertificates, ILogger logger)
+    public TrustedCertificateValidator(IReadOnlyList<X509Certificate2> trustedCertificates, ILogger logger)
     {
         ArgumentNullException.ThrowIfNull(trustedCertificates);
         ArgumentNullException.ThrowIfNull(logger);
@@ -56,7 +56,7 @@ public class ScimCertificateValidator
 
         if (certificate == null)
         {
-            _logger.Warning("The SCIM endpoint presented no TLS certificate.");
+            _logger.Warning("The connected service presented no TLS certificate.");
             return false;
         }
 
@@ -65,7 +65,7 @@ public class ScimCertificateValidator
         if ((sslPolicyErrors & ~WaivableErrors) != 0)
         {
             _logger.Warning(
-                "The SCIM endpoint's TLS certificate failed validation with {SslPolicyErrors}, which JIM's trusted certificates cannot waive. Thumbprint: {Thumbprint}",
+                "The connected service's TLS certificate failed validation with {SslPolicyErrors}, which JIM's trusted certificates cannot waive. Thumbprint: {Thumbprint}",
                 sslPolicyErrors, certificate.Thumbprint);
             return false;
         }
@@ -73,7 +73,7 @@ public class ScimCertificateValidator
         if (_trustedCertificates.Count == 0)
         {
             _logger.Warning(
-                "The SCIM endpoint's TLS certificate is not trusted by the system CA store, and no trusted certificates are configured in JIM. Thumbprint: {Thumbprint}",
+                "The connected service's TLS certificate is not trusted by the system CA store, and no trusted certificates are configured in JIM. Thumbprint: {Thumbprint}",
                 certificate.Thumbprint);
             return false;
         }
@@ -104,7 +104,7 @@ public class ScimCertificateValidator
         {
             var statuses = string.Join(", ", jimChain.ChainStatus.Select(s => s.Status));
             _logger.Warning(
-                "The SCIM endpoint's TLS certificate failed chain validation against JIM's trusted certificates ({ChainStatus}). Thumbprint: {Thumbprint}",
+                "The connected service's TLS certificate failed chain validation against JIM's trusted certificates ({ChainStatus}). Thumbprint: {Thumbprint}",
                 statuses, certificate.Thumbprint);
             return false;
         }
@@ -114,12 +114,12 @@ public class ScimCertificateValidator
         var trustedThumbprints = _trustedCertificates.Select(c => c.Thumbprint).ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (jimChain.ChainElements.Any(element => trustedThumbprints.Contains(element.Certificate.Thumbprint)))
         {
-            _logger.Debug("The SCIM endpoint's TLS certificate was validated via JIM's trusted certificate store.");
+            _logger.Debug("The connected service's TLS certificate was validated via JIM's trusted certificate store.");
             return true;
         }
 
         _logger.Warning(
-            "The SCIM endpoint's TLS certificate chain does not include any certificate trusted by JIM. Thumbprint: {Thumbprint}",
+            "The connected service's TLS certificate chain does not include any certificate trusted by JIM. Thumbprint: {Thumbprint}",
             certificate.Thumbprint);
         return false;
     }

@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.TestSupport;
+using JIM.Connectors.Http;
 using JIM.Connectors.SCIM;
 using JIM.Models.Connectors;
 using JIM.Models.Exceptions;
@@ -18,7 +19,7 @@ namespace JIM.Worker.Tests.Connectors;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <see cref="ScimCertificateValidatorTests"/> and <see cref="ScimCertificateDiagnosisTests"/> exercise the trust
+/// <see cref="TrustedCertificateValidatorTests"/> and <see cref="ScimCertificateDiagnosisTests"/> exercise the trust
 /// decision against in-memory certificates, and every other SCIM test stubs the transport, so neither the validation
 /// callback's wiring onto the HTTP client nor the handshake itself runs there. That is #1132's failure class: wire the
 /// validation up wrongly and it never runs, every test passes, and a customer meets a misleading connection error.
