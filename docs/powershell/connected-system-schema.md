@@ -191,6 +191,7 @@ With `-Preview`, what the refresh would change; with `-PassThru`, the Connected 
 | `LastSuccessfulFullImportCompletedAt` | `datetime` | When the most recent Full Import of this Connected System completed successfully, or empty if none ever has. An import that completed with object-level errors does not count. |
 | `ImportIncompleteSince` | `datetime` | When an import that stopped part-way began saving what it read, or empty. While set, Full and Delta Synchronisation of this Connected System are refused until a Full Import of it completes. |
 | `DependentDerivedFlows` | `object[]` | On the response to an import-schema call that disabled or removed its dependents only: the Metaverse-Derived Attribute Flows, on any Connected System, that disabling or removing those Synchronisation Rules and mappings left with a missing input (an attribute they read lost its last enabled contributor). The refresh went ahead regardless; each flow's Missing Input Behaviour now decides what it contributes. Always present; empty on every other response. Each has `MappingId`, `TargetMetaverseAttributeName`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName` and `MissingInputs`. |
+| `SettingValues` | `object[]` | The Connector settings and the values they hold, in the order the Connected System's settings show them. An encrypted setting reports only whether a value is held. Each has `SettingId`, `Name`, `Type`, `StringValue`, `IntValue`, `CheckboxValue` and `HasValue`. |
 <!-- END GENERATED: Import-JIMConnectedSystemSchema -->
 
 ### Examples

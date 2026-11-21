@@ -140,6 +140,12 @@ public class ConnectedSystemDetailDto
     public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
 
     /// <summary>
+    /// The Connector settings and the values they hold, in the order the Connected System's settings show them. An
+    /// encrypted setting reports only whether a value is held.
+    /// </summary>
+    public List<ConnectedSystemSettingValueDto> SettingValues { get; set; } = new();
+
+    /// <summary>
     /// Creates a detailed DTO from a ConnectedSystem entity.
     /// </summary>
     /// <param name="entity">The Connected System entity.</param>
@@ -181,7 +187,13 @@ public class ConnectedSystemDetailDto
             },
             ObjectTypes = MapObjectTypes(entity.ObjectTypes),
             ObjectCount = objectCount,
-            PendingExportCount = pendingExportCount
+            PendingExportCount = pendingExportCount,
+            SettingValues = (entity.SettingValues ?? [])
+                .Where(v => v.Setting != null)
+                .OrderBy(v => v.Setting.DisplayOrder).ThenBy(v => v.Setting.Id)
+                .Select(ConnectedSystemSettingValueDto.FromEntity)
+                .OfType<ConnectedSystemSettingValueDto>()
+                .ToList()
         };
     }
 
