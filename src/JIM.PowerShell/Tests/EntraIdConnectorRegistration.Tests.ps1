@@ -57,7 +57,7 @@ BeforeAll {
         $state.ServicePrincipal = [PSCustomObject]@{ Id = 'app-sp' }
         $state.GrantedRoles = @('role-user-readwrite', 'role-group-readwrite', 'role-user-sob', 'role-group-sob', 'role-hidden') |
             ForEach-Object { [PSCustomObject]@{ Id = "grant-$_"; AppRoleId = $_ } }
-        $state.ConnectedSystem = [PSCustomObject]@{ Id = 42; ConnectorDefinitionId = 7; Settings = @{
+        $state.ConnectedSystem = [PSCustomObject]@{ Id = 42; ConnectorDefinitionId = 7; HasCertificate = $true; Settings = @{
             'Tenant ID' = $script:TenantId; 'Client ID' = $script:AppId; 'Authentication Method' = 'Certificate' } }
         $state
     }
@@ -239,6 +239,15 @@ Describe 'Get-JIMEntraIdConnectorPlan' {
             & $script:Actions $plan | Should -Be @('NewCertificate', 'NewConnectedSystem', 'RetireCertificates')
         }
 
+        It 'makes a certificate when the Connected System holds none, though the application has one' {
+            $state = & $script:NewRegisteredState
+            $state.ConnectedSystem.HasCertificate = $false
+
+            $plan = & $script:Plan $state
+
+            & $script:Actions $plan | Should -Be @('NewCertificate', 'SetConnectedSystem', 'RetireCertificates')
+        }
+
         It 'corrects a Connected System setting that differs, and only that one' {
             $state = & $script:NewRegisteredState
             $state.ConnectedSystem.Settings.'Client ID' = 'someone-elses-app'
@@ -324,6 +333,177 @@ Describe 'New-JIMEntraIdConnectorCertificate' {
             $made = New-JIMEntraIdConnectorCertificate -Name 'JIM Entra ID Connector' -ValidityDays 365
             $made.Pfx | Should -BeOfType [securestring]
             ($made.KeyCredential | ConvertTo-Json) | Should -Not -Match 'PRIVATE'
+        }
+    }
+}
+
+Describe 'Register-JIMEntraIdConnector' {
+
+    BeforeEach {
+        InModuleScope JIM -Parameters @{ NewEmptyState = $script:NewEmptyState } {
+            $script:Token = ConvertTo-SecureString 'graph-token' -AsPlainText -Force
+            $script:JIMConnection = @{ Url = 'https://jim.example.com' }
+            $script:EmptyState = & $NewEmptyState
+            Mock Get-JIMEntraIdConnectorState { $script:EmptyState }
+            Mock Get-JIMEntraIdTokenTenantId { '34599ee0-829e-4dd4-8da2-4727a0664d51' }
+            Mock Get-JIMEntraIdAdminToken { ConvertTo-SecureString 'browser-token' -AsPlainText -Force }
+            $script:Applied = [System.Collections.Generic.List[string]]::new()
+            Mock Invoke-JIMEntraIdConnectorChange {
+                $script:Applied.Add($Change.Action)
+                switch ($Change.Action) {
+                    'NewApplication' { $Connection.AppId = '11111111-2222-3333-4444-555555555555' }
+                    'NewCertificate' { $Connection.Certificate = [PSCustomObject]@{ Thumbprint = 'ABC123'; NotAfter = [datetime]'2027-11-21' } }
+                    'NewConnectedSystem' { $Connection.ConnectedSystemId = 42; $Connection.CertificateStored = $true }
+                }
+            }
+        }
+    }
+
+    AfterEach {
+        InModuleScope JIM { $script:JIMConnection = $null }
+    }
+
+    It 'needs a connection to JIM' {
+        InModuleScope JIM {
+            $script:JIMConnection = $null
+            { Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -Confirm:$false } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    It 'refuses -PasswordManagement without an Administrative Unit before anyone signs in' {
+        InModuleScope JIM {
+            { Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -PasswordManagement -Confirm:$false } | Should -Throw '*AdministrativeUnitId*'
+            Should -Invoke Get-JIMEntraIdAdminToken -Times 0
+        }
+    }
+
+    It 'signs in through the browser for what it needs, and asks to manage directory roles only with -PasswordManagement' {
+        InModuleScope JIM {
+            $null = Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -Confirm:$false
+            Should -Invoke Get-JIMEntraIdAdminToken -Times 1 -ParameterFilter {
+                -not $UseDeviceCode -and $Scopes -contains 'https://graph.microsoft.com/AppRoleAssignment.ReadWrite.All' -and
+                $Scopes -notcontains 'https://graph.microsoft.com/RoleManagement.ReadWrite.Directory' }
+
+            $null = Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -PasswordManagement -AdministrativeUnitId '9d6f4c2e-1b3a-4e5f-8a7b-6c5d4e3f2a1b' -Confirm:$false
+            Should -Invoke Get-JIMEntraIdAdminToken -Times 1 -ParameterFilter { $Scopes -contains 'https://graph.microsoft.com/RoleManagement.ReadWrite.Directory' }
+        }
+    }
+
+    It 'makes each change in order and returns what it set up' {
+        InModuleScope JIM {
+            $result = Register-JIMEntraIdConnector -AccessToken $script:Token -Confirm:$false
+
+            $script:Applied[0] | Should -Be 'NewApplication'
+            $script:Applied[-1] | Should -Be 'NewConnectedSystem'
+            $result.PSObject.TypeNames | Should -Contain 'JIM.EntraIdConnectorRegistration'
+            $result.TenantId | Should -Be '34599ee0-829e-4dd4-8da2-4727a0664d51'
+            $result.ClientId | Should -Be '11111111-2222-3333-4444-555555555555'
+            $result.ConnectedSystemId | Should -Be 42
+            $result.AuthenticationMethod | Should -Be 'Certificate'
+            $result.CertificateThumbprint | Should -Be 'ABC123'
+            $result.Permissions | Should -Contain 'User.ReadWrite.All'
+            $result.Changes | Should -Not -BeNullOrEmpty
+            Should -Invoke Get-JIMEntraIdAdminToken -Times 0
+        }
+    }
+
+    It 'with -WhatIf, changes nothing and returns nothing' {
+        InModuleScope JIM {
+            $result = Register-JIMEntraIdConnector -AccessToken $script:Token -WhatIf
+
+            $result | Should -BeNullOrEmpty
+            Should -Invoke Invoke-JIMEntraIdConnectorChange -Times 0
+        }
+    }
+
+    It 'warns when a certificate was made but JIM never received it' {
+        InModuleScope JIM {
+            Mock Invoke-JIMEntraIdConnectorChange {
+                if ($Change.Action -eq 'NewCertificate') { $Connection.Certificate = [PSCustomObject]@{ Thumbprint = 'ABC123' } }
+                if ($Change.Action -eq 'NewConnectedSystem') { throw 'JIM refused the settings' }
+            }
+            Mock Write-Warning {}
+
+            { Register-JIMEntraIdConnector -AccessToken $script:Token -Confirm:$false } | Should -Throw '*JIM refused*'
+            Should -Invoke Write-Warning -Times 1 -ParameterFilter { $Message -like '*-ResetCertificate*' }
+        }
+    }
+}
+
+Describe 'Invoke-JIMEntraIdConnectorChange' {
+
+    BeforeEach {
+        InModuleScope JIM {
+            $script:GraphCalls = [System.Collections.Generic.List[object]]::new()
+            $script:JimCalls = [System.Collections.Generic.List[object]]::new()
+            Mock Invoke-JIMEntraIdGraphApi {
+                $script:GraphCalls.Add([PSCustomObject]@{ Method = $Method; Path = $Path; Body = $Body })
+                if ($Path -like '*select=keyCredentials') {
+                    [PSCustomObject]@{ keyCredentials = @([PSCustomObject]@{
+                        keyId = 'other-key'; type = 'AsymmetricX509Cert'; usage = 'Verify'; key = 'b3RoZXI='; displayName = 'Someone else'
+                        startDateTime = '2026-01-01T00:00:00Z'; endDateTime = '2027-01-01T00:00:00Z' }) }
+                }
+            }
+            Mock Invoke-JIMApi {
+                $script:JimCalls.Add([PSCustomObject]@{ Method = $Method; Endpoint = $Endpoint; Body = $Body })
+                if ($Method -eq 'POST') { [PSCustomObject]@{ id = 42 } }
+            }
+            $script:Connection = @{
+                ApplicationId = 'app-object'; AppId = 'client-id'; ServicePrincipalId = 'app-sp'; GraphServicePrincipalId = 'graph-sp'
+                CertificateValidityDays = 365; SettingIds = @{ 'Tenant ID' = 1; 'Client ID' = 2; 'Authentication Method' = 3; 'Certificate' = 4 }
+            }
+        }
+    }
+
+    It 'adds a new certificate alongside those the application already has' {
+        InModuleScope JIM {
+            Invoke-JIMEntraIdConnectorChange -Connection $script:Connection -Change ([PSCustomObject]@{ Action = 'NewCertificate'; Target = 'JIM Entra ID Connector'; Arguments = @{} })
+
+            $patch = $script:GraphCalls | Where-Object Method -eq 'Patch' | Select-Object -First 1
+            @($patch.Body.keyCredentials).Count | Should -Be 2
+            @($patch.Body.keyCredentials | ForEach-Object { $_.keyId }) | Should -Contain 'other-key'
+            ($patch.Body.keyCredentials | Where-Object { $_.displayName -eq 'JIM Entra ID Connector' }).usage | Should -Be 'Verify'
+            $script:Connection.Certificate.Pfx | Should -BeOfType [securestring]
+        }
+    }
+
+    It 'grants a permission to the application''s service principal from Microsoft Graph' {
+        InModuleScope JIM {
+            Invoke-JIMEntraIdConnectorChange -Connection $script:Connection -Change ([PSCustomObject]@{ Action = 'GrantPermission'; Target = 'x'; Arguments = @{ AppRoleId = 'role-hidden' } })
+
+            $grant = $script:GraphCalls | Select-Object -First 1
+            $grant.Path | Should -Be '/servicePrincipals/app-sp/appRoleAssignments'
+            $grant.Body.principalId | Should -Be 'app-sp'
+            $grant.Body.resourceId | Should -Be 'graph-sp'
+            $grant.Body.appRoleId | Should -Be 'role-hidden'
+        }
+    }
+
+    It 'creates the Connected System, then sets its values by setting ID, the certificate included, and forgets the certificate' {
+        InModuleScope JIM {
+            $script:Connection.Certificate = [PSCustomObject]@{ Pfx = (ConvertTo-SecureString 'UEZY' -AsPlainText -Force); Thumbprint = 'ABC' }
+            Invoke-JIMEntraIdConnectorChange -Connection $script:Connection -Change ([PSCustomObject]@{
+                Action = 'NewConnectedSystem'; Target = 'Microsoft Entra ID'
+                Arguments = @{ ConnectorDefinitionId = 7; Settings = @{ 'Tenant ID' = 'tenant'; 'Authentication Method' = 'Certificate' }; SetsClientId = $true; SetsCertificate = $true } })
+
+            $script:JimCalls[0].Method | Should -Be 'POST'
+            $script:JimCalls[0].Body.connectorDefinitionId | Should -Be 7
+            $put = $script:JimCalls[1]
+            $put.Endpoint | Should -Be '/api/v1/synchronisation/connected-systems/42'
+            $put.Body.settingValues['1'].stringValue | Should -Be 'tenant'
+            $put.Body.settingValues['2'].stringValue | Should -Be 'client-id'
+            $put.Body.settingValues['4'].stringValue | Should -Be 'UEZY'
+            $script:Connection.Certificate.Pfx | Should -BeNullOrEmpty
+            $script:Connection.CertificateStored | Should -BeTrue
+        }
+    }
+
+    It 'retires only the certificates named, keeping the rest' {
+        InModuleScope JIM {
+            Invoke-JIMEntraIdConnectorChange -Connection $script:Connection -Change ([PSCustomObject]@{ Action = 'RetireCertificates'; Target = 'x'; Arguments = @{ KeyIds = @('cert-1') } })
+
+            $patch = $script:GraphCalls | Where-Object Method -eq 'Patch' | Select-Object -First 1
+            @($patch.Body.keyCredentials | ForEach-Object { $_.keyId }) | Should -Be @('other-key')
         }
     }
 }

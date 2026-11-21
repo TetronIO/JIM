@@ -232,6 +232,7 @@
         'Test-JIMCertificate',
         'Export-JIMCertificate',
         'Get-JIMIdentityProviderTrust',
+        'Register-JIMEntraIdConnector',
         'Register-JIMIdentityProvider',
         'Get-JIMSignInDiagnostic',
 

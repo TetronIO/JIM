@@ -170,8 +170,10 @@ function Get-JIMEntraIdConnectorPlan {
         $lasting = @($ours | Where-Object { $_.EndDateTime -gt $Now.AddDays($script:JIMEntraIdCertificateRenewalDays) })
         # The private key of a certificate the application already has cannot be read back, so a new Connected System
         # needs a new certificate.
-        if ($ResetCertificate -or -not $system -or $lasting.Count -eq 0) {
+        $systemHasCertificate = $system -and $(if ($system.PSObject.Properties['HasCertificate']) { $system.HasCertificate } else { $true })
+        if ($ResetCertificate -or -not $system -or -not $systemHasCertificate -or $lasting.Count -eq 0) {
             $why = if ($ResetCertificate) { 'as asked' } elseif (-not $system) { 'for the new Connected System' }
+                elseif (-not $systemHasCertificate) { 'since the Connected System holds none' }
                 elseif ($ours.Count -eq 0) { 'since the application has none' } else { 'since the current one expires within 30 days' }
             $changes.Add((New-JIMEntraIdChange -Action 'NewCertificate' -Target $Name `
                 -Description "Make a certificate and add it to the application, $why"))
@@ -350,9 +352,16 @@ function Get-JIMEntraIdConnectorState {
         Where-Object name -eq $ConnectedSystemName | Select-Object -First 1
     if ($found) {
         $detail = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$($found.id)"
+        # Encrypted settings come back only as whether a value is held.
         $settings = @{}
-        foreach ($value in @($detail.settingValues)) { $settings[[string]$value.settingName] = [string]$value.stringValue }
-        $system = [PSCustomObject]@{ Id = [int]$found.id; ConnectorDefinitionId = [int]$detail.connectorDefinitionId; Settings = $settings }
+        $held = @{}
+        foreach ($value in @($detail.settingValues)) {
+            $settings[[string]$value.name] = [string]$value.stringValue
+            $held[[string]$value.name] = [bool]$value.hasValue
+        }
+        $system = [PSCustomObject]@{
+            Id = [int]$found.id; ConnectorDefinitionId = [int]$detail.connector.id; Settings = $settings
+            HasCertificate = [bool]$held['Certificate'] }
     }
 
     [PSCustomObject]@{
