@@ -187,6 +187,108 @@ internal sealed class GraphHttpClient : IDisposable
         }
     }
 
+    /// <summary>The most requests one <c>$batch</c> may carry.</summary>
+    public const int MaximumBatchSize = 20;
+
+    /// <summary>
+    /// Sends up to <see cref="MaximumBatchSize"/> requests in one <c>$batch</c> call and returns each one's answer, in
+    /// the order the requests were given. Graph answers each request separately: one that is throttled or briefly
+    /// unavailable is retried on its own, per the retry policy, and one Graph gave no answer for is a failure, never
+    /// assumed applied. A failed answer is returned rather than thrown, so the caller can attribute it to its object.
+    /// </summary>
+    /// <exception cref="GraphRequestException">The batch call itself failed.</exception>
+    public async Task<IReadOnlyList<GraphBatchResponse>> SendBatchAsync(IReadOnlyList<GraphBatchRequest> requests, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(requests);
+        if (requests.Count > MaximumBatchSize)
+            throw new ArgumentException($"A $batch carries at most {MaximumBatchSize} requests; {requests.Count} were given.", nameof(requests));
+
+        var results = new GraphBatchResponse[requests.Count];
+        var pending = Enumerable.Range(0, requests.Count).ToList();
+        var attempt = 0;
+
+        while (pending.Count > 0)
+        {
+            attempt++;
+            var body = new { requests = pending.Select(i => BatchItem(i, requests[i])).ToList() };
+            var writes = pending.Count(i => requests[i].Method != HttpMethod.Get);
+            var envelope = await SendJsonAsync<GraphBatchEnvelope>(HttpMethod.Post, "$batch", body, new GraphRequestOptions { Writes = writes }, cancellationToken);
+            var answers = (envelope?.Responses ?? [])
+                .Where(a => a.Id != null)
+                .GroupBy(a => a.Id!)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var retry = new List<int>();
+            var wait = TimeSpan.Zero;
+            foreach (var index in pending)
+            {
+                if (!answers.TryGetValue(BatchId(index), out var answer))
+                {
+                    results[index] = new GraphBatchResponse(0, null, "Microsoft Graph returned no answer for this request in the batch, so it is treated as failed.");
+                    continue;
+                }
+
+                if (answer.Status == (int)HttpStatusCode.TooManyRequests)
+                    Interlocked.Increment(ref _throttledResponseCount);
+
+                var response = new GraphBatchResponse(answer.Status, answer.Body);
+                if (!response.IsSuccess && ShouldRetry(answer, attempt, out var delay))
+                {
+                    retry.Add(index);
+                    wait = delay > wait ? delay : wait;
+                    continue;
+                }
+
+                results[index] = response;
+            }
+
+            pending = retry;
+            if (pending.Count == 0)
+                break;
+
+            _logger.Warning("Microsoft Graph batch attempt {Attempt}: {Count} request(s) throttled or unavailable. Retrying them in {DelayMs}ms",
+                attempt, pending.Count, wait.TotalMilliseconds);
+            await _delay(wait, cancellationToken);
+        }
+
+        return results;
+    }
+
+    private bool ShouldRetry(GraphBatchAnswer answer, int attempt, out TimeSpan delay)
+    {
+        // The policy reads status and Retry-After from a response, so the answer is presented as one.
+        using var response = new HttpResponseMessage((HttpStatusCode)answer.Status);
+        var retryAfter = answer.Headers?.FirstOrDefault(h => string.Equals(h.Key, "Retry-After", StringComparison.OrdinalIgnoreCase)).Value;
+        if (!string.IsNullOrEmpty(retryAfter))
+            response.Headers.TryAddWithoutValidation("Retry-After", retryAfter);
+
+        var decision = _retryPolicy.EvaluateResponse(response, attempt, _utcNow());
+        delay = decision.Delay;
+        return decision.ShouldRetry;
+    }
+
+    private static string BatchId(int index) => (index + 1).ToString(CultureInfo.InvariantCulture);
+
+    private static Dictionary<string, object> BatchItem(int index, GraphBatchRequest request)
+    {
+        var headers = new Dictionary<string, string> { ["x-ms-throttle-priority"] = "Low" };
+        var item = new Dictionary<string, object>
+        {
+            ["id"] = BatchId(index),
+            ["method"] = request.Method.Method,
+            ["url"] = request.Url,
+            ["headers"] = headers
+        };
+
+        if (request.Body != null)
+        {
+            headers["Content-Type"] = JsonMediaType;
+            item["body"] = request.Body;
+        }
+
+        return item;
+    }
+
     /// <summary>
     /// The access token requests are sent with, acquiring one if none is cached. For reading the token's own claims
     /// (which permissions it grants); it is never logged.
