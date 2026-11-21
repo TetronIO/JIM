@@ -3,13 +3,14 @@
 
 using System.Net.Http.Headers;
 using System.Text;
+using JIM.Connectors.Http;
 
 namespace JIM.Connectors.SCIM.Authentication;
 
 /// <summary>
 /// HTTP Basic authentication (RFC 7617). The credentials are static, so nothing is cached or refreshed.
 /// </summary>
-public class ScimBasicAuthentication : IScimAuthenticationStrategy
+public class ScimBasicAuthentication : IHttpAuthenticationStrategy
 {
     private readonly string _encodedCredentials;
 

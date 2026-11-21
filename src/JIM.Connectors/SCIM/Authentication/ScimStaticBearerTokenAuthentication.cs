@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Net.Http.Headers;
+using JIM.Connectors.Http;
 
 namespace JIM.Connectors.SCIM.Authentication;
 
@@ -9,7 +10,7 @@ namespace JIM.Connectors.SCIM.Authentication;
 /// A long-lived bearer token supplied by the administrator, for providers that issue API tokens rather
 /// than running an OAuth 2.0 authorisation server. The token is static, so nothing is refreshed.
 /// </summary>
-public class ScimStaticBearerTokenAuthentication : IScimAuthenticationStrategy
+public class ScimStaticBearerTokenAuthentication : IHttpAuthenticationStrategy
 {
     private readonly AuthenticationHeaderValue _header;
 

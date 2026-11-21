@@ -1,7 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-namespace JIM.Connectors.SCIM.Authentication;
+namespace JIM.Connectors.Http;
 
 /// <summary>
 /// Thrown when the connector cannot obtain the credential it needs to call a service provider.
@@ -11,13 +11,13 @@ namespace JIM.Connectors.SCIM.Authentication;
 /// propagate into Activity errors, RPEIs and logs.
 /// </para>
 /// </summary>
-public class ScimAuthenticationException : Exception
+public class HttpAuthenticationException : Exception
 {
-    public ScimAuthenticationException(string message) : base(message)
+    public HttpAuthenticationException(string message) : base(message)
     {
     }
 
-    public ScimAuthenticationException(string message, Exception innerException) : base(message, innerException)
+    public HttpAuthenticationException(string message, Exception innerException) : base(message, innerException)
     {
     }
 }

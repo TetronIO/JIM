@@ -5,7 +5,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using JIM.Connectors.SCIM.Authentication;
+using JIM.Connectors.Http;
 using JIM.Scim.Messages;
 using JIM.Scim.Serialisation;
 using JIM.Utilities;
@@ -35,8 +35,8 @@ public class ScimHttpClient : IDisposable
 
     private readonly HttpClient _httpClient;
     private readonly Uri _baseUrl;
-    private readonly IScimAuthenticationStrategy _authentication;
-    private readonly ScimRetryPolicy _retryPolicy;
+    private readonly IHttpAuthenticationStrategy _authentication;
+    private readonly HttpRetryPolicy _retryPolicy;
     private readonly ILogger _logger;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly Func<DateTimeOffset> _utcNow;
@@ -51,8 +51,8 @@ public class ScimHttpClient : IDisposable
     public ScimHttpClient(
         HttpClient httpClient,
         Uri baseUrl,
-        IScimAuthenticationStrategy authentication,
-        ScimRetryPolicy retryPolicy,
+        IHttpAuthenticationStrategy authentication,
+        HttpRetryPolicy retryPolicy,
         ILogger logger,
         Func<TimeSpan, CancellationToken, Task>? delay = null,
         Func<DateTimeOffset>? utcNow = null)
@@ -243,7 +243,7 @@ public class ScimHttpClient : IDisposable
 
     private void RecordThrottleHints(HttpResponseMessage response)
     {
-        var hints = ScimThrottleHints.Read(response, _utcNow());
+        var hints = RateLimitHints.Read(response, _utcNow());
         if (hints.HasHints)
             _pendingThrottlePause = hints.GetPauseBeforeNextRequest(ThrottleRemainingThreshold);
     }

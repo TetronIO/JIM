@@ -1,13 +1,15 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Connectors.Http;
+
 namespace JIM.Connectors.SCIM.Authentication;
 
 /// <summary>
 /// An arbitrary header carrying an API key, for providers that authenticate outside the
 /// <c>Authorization</c> header (for example <c>X-Api-Key</c>). The value is static.
 /// </summary>
-public class ScimCustomHeaderAuthentication : IScimAuthenticationStrategy
+public class ScimCustomHeaderAuthentication : IHttpAuthenticationStrategy
 {
     private readonly string _headerName;
     private readonly string _headerValue;

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Connectors.Http;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 
@@ -22,8 +23,8 @@ public static class ScimAuthenticationStrategyFactory
     /// that a value saved before credential protection existed still works.
     /// </param>
     /// <param name="tokenClient">Client used for OAuth token acquisition, carrying the connector's TLS configuration.</param>
-    /// <exception cref="ScimAuthenticationException">A required setting is missing, malformed, or names an unknown method.</exception>
-    public static IScimAuthenticationStrategy Create(
+    /// <exception cref="HttpAuthenticationException">A required setting is missing, malformed, or names an unknown method.</exception>
+    public static IHttpAuthenticationStrategy Create(
         List<ConnectedSystemSettingValue> settingValues,
         ICredentialProtection? credentialProtection,
         HttpClient tokenClient)
@@ -33,7 +34,7 @@ public static class ScimAuthenticationStrategyFactory
 
         var method = ReadString(settingValues, ScimConnectorConstants.SettingAuthenticationMethod);
         if (string.IsNullOrWhiteSpace(method))
-            throw new ScimAuthenticationException($"The '{ScimConnectorConstants.SettingAuthenticationMethod}' setting has no value.");
+            throw new HttpAuthenticationException($"The '{ScimConnectorConstants.SettingAuthenticationMethod}' setting has no value.");
 
         return method switch
         {
@@ -41,12 +42,12 @@ public static class ScimAuthenticationStrategyFactory
             ScimConnectorConstants.AuthMethodHttpBasic => CreateBasic(settingValues, credentialProtection),
             ScimConnectorConstants.AuthMethodStaticBearerToken => CreateStaticBearer(settingValues, credentialProtection),
             ScimConnectorConstants.AuthMethodCustomHeader => CreateCustomHeader(settingValues, credentialProtection),
-            _ => throw new ScimAuthenticationException(
+            _ => throw new HttpAuthenticationException(
                 $"'{method}' is not a supported value for the '{ScimConnectorConstants.SettingAuthenticationMethod}' setting.")
         };
     }
 
-    private static IScimAuthenticationStrategy CreateOAuth(
+    private static IHttpAuthenticationStrategy CreateOAuth(
         List<ConnectedSystemSettingValue> settingValues,
         ICredentialProtection? credentialProtection,
         HttpClient tokenClient)
@@ -55,9 +56,9 @@ public static class ScimAuthenticationStrategyFactory
         // a Connected System saved before configuration validation refused cleartext token endpoints.
         var tokenEndpoint = RequireString(settingValues, ScimConnectorConstants.SettingTokenEndpointUrl);
         if (!ScimTransportSecurity.TryValidate(tokenEndpoint, ScimConnectorConstants.SettingTokenEndpointUrl, ScimTransportSecurity.TokenEndpointPayload, out var tokenEndpointUri, out var error))
-            throw new ScimAuthenticationException(error);
+            throw new HttpAuthenticationException(error);
 
-        return new ScimOAuthClientCredentialsAuthentication(
+        return new OAuthClientCredentialsAuthentication(
             tokenClient,
             tokenEndpointUri,
             RequireString(settingValues, ScimConnectorConstants.SettingClientId),
@@ -65,7 +66,7 @@ public static class ScimAuthenticationStrategyFactory
             ReadString(settingValues, ScimConnectorConstants.SettingOAuthScope));
     }
 
-    private static IScimAuthenticationStrategy CreateBasic(
+    private static IHttpAuthenticationStrategy CreateBasic(
         List<ConnectedSystemSettingValue> settingValues,
         ICredentialProtection? credentialProtection)
     {
@@ -74,7 +75,7 @@ public static class ScimAuthenticationStrategyFactory
             RequireSecret(settingValues, ScimConnectorConstants.SettingPassword, credentialProtection));
     }
 
-    private static IScimAuthenticationStrategy CreateStaticBearer(
+    private static IHttpAuthenticationStrategy CreateStaticBearer(
         List<ConnectedSystemSettingValue> settingValues,
         ICredentialProtection? credentialProtection)
     {
@@ -82,7 +83,7 @@ public static class ScimAuthenticationStrategyFactory
             RequireSecret(settingValues, ScimConnectorConstants.SettingBearerToken, credentialProtection));
     }
 
-    private static IScimAuthenticationStrategy CreateCustomHeader(
+    private static IHttpAuthenticationStrategy CreateCustomHeader(
         List<ConnectedSystemSettingValue> settingValues,
         ICredentialProtection? credentialProtection)
     {
@@ -100,7 +101,7 @@ public static class ScimAuthenticationStrategyFactory
     {
         var value = ReadString(settingValues, settingName);
         if (string.IsNullOrWhiteSpace(value))
-            throw new ScimAuthenticationException($"The '{settingName}' setting is required for the chosen Authentication Method, but has no value.");
+            throw new HttpAuthenticationException($"The '{settingName}' setting is required for the chosen Authentication Method, but has no value.");
 
         return value;
     }
@@ -112,11 +113,11 @@ public static class ScimAuthenticationStrategyFactory
     {
         var stored = settingValues.SingleOrDefault(s => s.Setting.Name == settingName)?.StringEncryptedValue;
         if (string.IsNullOrWhiteSpace(stored))
-            throw new ScimAuthenticationException($"The '{settingName}' setting is required for the chosen Authentication Method, but has no value.");
+            throw new HttpAuthenticationException($"The '{settingName}' setting is required for the chosen Authentication Method, but has no value.");
 
         var decrypted = credentialProtection?.Unprotect(stored) ?? stored;
         if (string.IsNullOrWhiteSpace(decrypted))
-            throw new ScimAuthenticationException($"The '{settingName}' setting could not be decrypted.");
+            throw new HttpAuthenticationException($"The '{settingName}' setting could not be decrypted.");
 
         return decrypted;
     }

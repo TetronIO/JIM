@@ -5,6 +5,7 @@ using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using JIM.Connectors.Http;
 using JIM.Connectors.SCIM;
 using JIM.Models.Staging;
 using NUnit.Framework;
@@ -205,7 +206,7 @@ public class ScimHttpClientFactoryTests
             Setting(ScimConnectorConstants.SettingAuthenticationMethod, ScimConnectorConstants.AuthMethodStaticBearerToken)
         };
 
-        var exception = Assert.Throws<JIM.Connectors.SCIM.Authentication.ScimAuthenticationException>(
+        var exception = Assert.Throws<HttpAuthenticationException>(
             () => ScimHttpClientFactory.Create(settings, [], credentialProtection: null, _logger));
 
         Assert.That(exception!.Message, Does.Contain(ScimConnectorConstants.SettingBaseUrl));

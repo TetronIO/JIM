@@ -3,7 +3,7 @@
 
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
-using JIM.Connectors.SCIM.Authentication;
+using JIM.Connectors.Http;
 using JIM.Models.Core;
 using JIM.Models.Connectors;
 using JIM.Models.Exceptions;
@@ -633,7 +633,7 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorImpor
                 $"({ScimEndpoints.ServiceProviderConfig}, {ScimEndpoints.ResourceTypes} or {ScimEndpoints.Schemas}). " +
                 "Check the Base URL points at the root of the SCIM service, not at a resource endpoint such as /Users.");
         }
-        catch (ScimAuthenticationException ex)
+        catch (HttpAuthenticationException ex)
         {
             logger.Warning(ex, "The SCIM connectivity test could not authenticate with the service provider.");
             return Failure(baseUrlSetting, $"Could not authenticate with the SCIM service provider: {LogSanitiser.Sanitise(ex.Message)}");

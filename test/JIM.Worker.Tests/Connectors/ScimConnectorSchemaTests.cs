@@ -3,6 +3,7 @@
 
 using System.Net;
 using System.Text;
+using JIM.Connectors.Http;
 using JIM.Connectors.SCIM;
 using JIM.Connectors.SCIM.Authentication;
 using JIM.Models.Core;
@@ -137,7 +138,7 @@ public class ScimConnectorSchemaTests
             new HttpClient(handler),
             new Uri(BaseUrl),
             new ScimStaticBearerTokenAuthentication("token"),
-            new ScimRetryPolicy(maxRetries: 0, baseDelay: TimeSpan.Zero, maxDelay: TimeSpan.Zero),
+            new HttpRetryPolicy(maxRetries: 0, baseDelay: TimeSpan.Zero, maxDelay: TimeSpan.Zero),
             _logger,
             delay: (_, _) => Task.CompletedTask);
 
