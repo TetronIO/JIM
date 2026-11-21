@@ -53,8 +53,8 @@ Under `src/JIM.Connectors/Graph/`, mirroring the SCIM decomposition:
 
 App-only (client credentials), against the customer's own app registration:
 
-- **Client secret:** simplest; stored as `StringEncrypted`.
-- **Certificate:** recommended for production. The PFX, Base64-encoded, in a `StringEncrypted` setting, with an optional encrypted Certificate Password; used to sign a client assertion. JIM has no private-key certificate store today (its certificate store holds trusted public certificates only), and the `File` setting type holds a path rather than content, so the PFX lives on the Connected System's settings, encrypted at rest with every other credential. Saving the settings refuses a PFX that will not open, has no private key, is not RSA of at least 2,048 bits, or is outside its validity period, and warns within 30 days of expiry.
+- **Client secret:** simplest, for a quick trial; stored as `StringEncrypted`.
+- **Certificate:** the default, as Microsoft Entra Connect now uses (2026-11-21). The PFX, Base64-encoded, in a `StringEncrypted` setting, with an optional encrypted Certificate Password; used to sign a client assertion. JIM has no private-key certificate store today (its certificate store holds trusted public certificates only), and the `File` setting type holds a path rather than content, so the PFX lives on the Connected System's settings, encrypted at rest with every other credential. Saving the settings refuses a PFX that will not open, has no private key, is not RSA of at least 2,048 bits, or is outside its validity period, and warns within 30 days of expiry.
 - **Delegated (authorisation code) flow: dropped.** The issue lists it, but the connector runs unattended in the Worker; there is no user present to sign in, and a refresh token stored for a person is a worse credential than an app's.
 - **National clouds:** a Cloud drop-down (Global, US Government L4, US Government L5 (DoD), China) sets the authority and Graph host. The audiences JIM serves include government.
 

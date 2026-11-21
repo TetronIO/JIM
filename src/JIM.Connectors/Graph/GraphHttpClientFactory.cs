@@ -79,7 +79,8 @@ internal static class GraphHttpClientFactory
         var tokenEndpoint = cloud.TokenEndpoint(tenantId);
 
         IOAuthClientCredential credential;
-        if (ReadString(settingValues, GraphConnectorConstants.SettingAuthenticationMethod) == GraphConnectorConstants.AuthMethodCertificate)
+        // Unset means the setting's default, a certificate.
+        if (ReadString(settingValues, GraphConnectorConstants.SettingAuthenticationMethod) != GraphConnectorConstants.AuthMethodClientSecret)
         {
             var pfx = RequireSecret(settingValues, GraphConnectorConstants.SettingCertificate, credentialProtection);
             var password = ReadSecret(settingValues, GraphConnectorConstants.SettingCertificatePassword, credentialProtection);

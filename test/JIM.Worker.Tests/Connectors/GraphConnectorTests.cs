@@ -116,7 +116,7 @@ public class GraphConnectorTests
     }
 
     [Test]
-    public void GetSettings_AuthenticationMethod_IsRequiredDropDownOfSecretAndCertificate()
+    public void GetSettings_AuthenticationMethod_IsRequiredDropDownDefaultingToCertificate()
     {
         var setting = GetSetting(GraphConnectorConstants.SettingAuthenticationMethod);
 
@@ -124,8 +124,8 @@ public class GraphConnectorTests
         {
             Assert.That(setting.Required, Is.True);
             Assert.That(setting.Type, Is.EqualTo(ConnectedSystemSettingType.DropDown));
-            Assert.That(setting.DropDownValues, Is.EqualTo(new[] { GraphConnectorConstants.AuthMethodClientSecret, GraphConnectorConstants.AuthMethodCertificate }));
-            Assert.That(setting.DefaultStringValue, Is.EqualTo(GraphConnectorConstants.AuthMethodClientSecret));
+            Assert.That(setting.DropDownValues, Is.EqualTo(new[] { GraphConnectorConstants.AuthMethodCertificate, GraphConnectorConstants.AuthMethodClientSecret }));
+            Assert.That(setting.DefaultStringValue, Is.EqualTo(GraphConnectorConstants.AuthMethodCertificate), "A certificate, as Entra Connect now uses, is the default.");
         }
     }
 

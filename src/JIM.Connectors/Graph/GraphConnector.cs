@@ -123,11 +123,11 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
             {
                 Name = GraphConnectorConstants.SettingAuthenticationMethod,
                 Required = true,
-                Description = "How JIM proves it is the app registration. A certificate is recommended for production: its private key never leaves JIM, whereas a client secret is sent with every token request.",
+                Description = "How JIM proves it is the app registration. A certificate, as Microsoft Entra Connect now uses, is recommended: its private key never leaves JIM, whereas a client secret is sent with every token request. Use a client secret for a quick trial.",
                 Category = ConnectedSystemSettingCategory.Connectivity,
                 Type = ConnectedSystemSettingType.DropDown,
-                DropDownValues = [GraphConnectorConstants.AuthMethodClientSecret, GraphConnectorConstants.AuthMethodCertificate],
-                DefaultStringValue = GraphConnectorConstants.AuthMethodClientSecret
+                DropDownValues = [GraphConnectorConstants.AuthMethodCertificate, GraphConnectorConstants.AuthMethodClientSecret],
+                DefaultStringValue = GraphConnectorConstants.AuthMethodCertificate
             },
             new() { Name = GraphConnectorConstants.SettingClientSecret, RequiredWhenSetting = GraphConnectorConstants.SettingAuthenticationMethod, RequiredWhenValue = GraphConnectorConstants.AuthMethodClientSecret, Description = "A client secret created under Certificates & secrets on the app registration. Supply the secret's Value, not its Secret ID.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.StringEncrypted },
             new() { Name = GraphConnectorConstants.SettingCertificate, RequiredWhenSetting = GraphConnectorConstants.SettingAuthenticationMethod, RequiredWhenValue = GraphConnectorConstants.AuthMethodCertificate, Description = $"The certificate and its private key, as a PFX file's contents Base64-encoded, i.e. the output of [Convert]::ToBase64String([IO.File]::ReadAllBytes('app.pfx')) in PowerShell. Upload the same certificate (without its private key) under Certificates & secrets on the app registration. It needs an RSA key of at least {GraphConnectorConstants.MinimumRsaKeySizeBits} bits.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.StringEncrypted },
@@ -176,7 +176,7 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
         CheckRange(settingValues, GraphConnectorConstants.SettingMaximumWritesPerSecond, 1, (int)GraphRequestPacer.WriteQuotaPerSecond, response);
         CheckRange(settingValues, GraphConnectorConstants.SettingMaxRetries, 0, GraphConnectorConstants.MaximumMaxRetries, response);
 
-        var authenticationMethod = Find(settingValues, GraphConnectorConstants.SettingAuthenticationMethod)?.StringValue;
+        var authenticationMethod = Find(settingValues, GraphConnectorConstants.SettingAuthenticationMethod)?.StringValue ?? GraphConnectorConstants.AuthMethodCertificate;
         var certificate = Find(settingValues, GraphConnectorConstants.SettingCertificate);
         if (authenticationMethod == GraphConnectorConstants.AuthMethodCertificate && !string.IsNullOrWhiteSpace(certificate?.StringEncryptedValue))
         {
@@ -305,11 +305,11 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
     /// Whether every value the connectivity test needs is present. Missing ones are reported by the generic validator,
     /// so the test simply does not run.
     /// </summary>
-    private static bool HasEverythingToConnect(List<ConnectedSystemSettingValue> settingValues, string? authenticationMethod)
+    private static bool HasEverythingToConnect(List<ConnectedSystemSettingValue> settingValues, string authenticationMethod)
     {
-        var credential = authenticationMethod == GraphConnectorConstants.AuthMethodCertificate
-            ? GraphConnectorConstants.SettingCertificate
-            : GraphConnectorConstants.SettingClientSecret;
+        var credential = authenticationMethod == GraphConnectorConstants.AuthMethodClientSecret
+            ? GraphConnectorConstants.SettingClientSecret
+            : GraphConnectorConstants.SettingCertificate;
 
         return !string.IsNullOrWhiteSpace(Find(settingValues, GraphConnectorConstants.SettingTenantId)?.StringValue)
                && !string.IsNullOrWhiteSpace(Find(settingValues, GraphConnectorConstants.SettingClientId)?.StringValue)
