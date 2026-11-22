@@ -4,7 +4,7 @@
 - **Issue:** [#361](https://github.com/TetronIO/JIM/issues/361) (the issue is the requirements source, in effect the PRD; this document is the implementation plan)
 - **Related Issues:** #545 (SCIM 2.0 Client Connector, whose HTTP stack this reuses), #1145 (Source of Authority conversion as an export operation), #360 (pronouns), #192 (generic REST connector), #2367 (Entra ID sign-in, which gave JIM its Entra ID test tenant)
 - **Related Plans:** [`SCIM_CLIENT_CONNECTOR_DESIGN.md`](../done/SCIM_CLIENT_CONNECTOR_DESIGN.md), the closest precedent: an HTTP connector built in phases with seeding held back until the last one
-- **Last Updated:** 2026-11-21
+- **Last Updated:** 2026-11-22
 
 ## Overview
 
@@ -136,7 +136,7 @@ Like the SCIM connector, the connector is registered in `ConnectorFactory` from 
 ## Testing Strategy
 
 - TDD throughout. All HTTP behaviour against a stateful mock Graph service in unit tests; no network.
-- **Integration against a real tenant.** The Entra ID test tenant that serves the `jim-sso-entra` release gate can host a scenario: import, join to HR-projected Metaverse Objects, export changes, confirming import, delta import, and a hybrid object refused under Skip and Warn. It runs where Scenario 035 runs (the AD lab), not on pull requests. It needs an app registration in that tenant with the export permissions, and the scenario must create and clean up only objects under a recognisable prefix.
+- **Integration against a real tenant.** Planned in detail in [`ENTRA_ID_CONNECTOR_INTEGRATION_SCENARIOS.md`](../ENTRA_ID_CONNECTOR_INTEGRATION_SCENARIOS.md): Entra ID as a target (Scenario 036) and as a source (Scenario 037) in the JIM test tenant, run in the AD lab, and hybrid Source of Authority (Scenario 038, #3029) in a dedicated tenant.
 - Scale: an import and a paced export of a few thousand users in the test tenant, to measure real throughput against the write pacing.
 
 ## Dependencies
