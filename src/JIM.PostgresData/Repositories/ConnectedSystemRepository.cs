@@ -7663,6 +7663,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)
     {
         return await Repository.Database.ConnectedSystemObjects
+            // The password channel hands each account to its Connector, which may decide by its Object Type (the Entra
+            // ID Connector sets a password only on a user).
+            .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)
             .Where(cso => cso.MetaverseObjectId == metaverseObjectId)
