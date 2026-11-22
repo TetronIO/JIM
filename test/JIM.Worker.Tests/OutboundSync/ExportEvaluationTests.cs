@@ -4539,7 +4539,7 @@ public class ExportEvaluationTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(entry.Kind, Is.EqualTo(OutboundPreviewEntryKind.Deprovisioning));
-            Assert.That(entry.DeprovisioningDecision!.Value.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.StageDeleteExport));
+            Assert.That(entry.DeprovisioningDecision!.Value.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.StageDeprovisioningExport));
             Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "A preview must not disconnect the CSO");
             Assert.That(PendingExportsData, Is.Empty, "A preview must persist nothing");
         }

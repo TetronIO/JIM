@@ -127,11 +127,11 @@ public class LdapConnectorExportAccountEnabledStateTests
     [TestCase(nameof(LdapDirectoryType.SambaAD), 4)]
     [TestCase(nameof(LdapDirectoryType.ActiveDirectory), 1)]
     [TestCase(nameof(LdapDirectoryType.ActiveDirectory), 4)]
-    public async Task ExecuteAsync_DeleteDoneAsADisableThroughUserAccountControl_ReportsItSetTheEnabledStateAsync(string directoryType, int concurrency)
+    public async Task ExecuteAsync_DisableThroughUserAccountControl_ReportsItSetTheEnabledStateAsync(string directoryType, int concurrency)
     {
         // An account deprovisioned while its first password is still owed must not be re-enabled by the delivery.
-        var results = await Export(Enum.Parse<LdapDirectoryType>(directoryType), concurrency, deleteBehaviour: LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE)
-            .ExecuteAsync([UserDelete()], CancellationToken.None);
+        var results = await Export(Enum.Parse<LdapDirectoryType>(directoryType), concurrency)
+            .ExecuteAsync([UserDisable()], CancellationToken.None);
 
         using (Assert.EnterMultipleScope())
         {
@@ -140,14 +140,41 @@ public class LdapConnectorExportAccountEnabledStateTests
         }
     }
 
+    [TestCase(nameof(LdapDirectoryType.DirectoryServer389), "nsAccountLock", "TRUE", 1)]
+    [TestCase(nameof(LdapDirectoryType.DirectoryServer389), "nsAccountLock", "TRUE", 4)]
+    [TestCase(nameof(LdapDirectoryType.OpenLDAP), "pwdAccountLockedTime", "000001010000Z", 1)]
+    [TestCase(nameof(LdapDirectoryType.OpenLDAP), "pwdAccountLockedTime", "000001010000Z", 4)]
+    public async Task ExecuteAsync_DisableOnAnRfcDirectory_LocksTheAccountTheWayThatDirectoryDoesAsync(string directoryType, string attribute, string value, int concurrency)
+    {
+        // #2085: no setting decides how; the directory type does.
+        var modifies = new List<ModifyRequest>();
+        var results = await Export(Enum.Parse<LdapDirectoryType>(directoryType), concurrency, modifies)
+            .ExecuteAsync([UserDisable()], CancellationToken.None);
+
+        var modify = modifies.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True, results[0].ErrorMessage);
+            Assert.That(results[0].SetsAccountEnabledState, Is.False, "only userAccountControl carries the enabled state JIM tracks");
+            Assert.That(modify.Modifications[0].Name, Is.EqualTo(attribute));
+            Assert.That(modify.Modifications[0][0], Is.EqualTo(value));
+        }
+    }
+
     [TestCase(1)]
     [TestCase(4)]
-    public async Task ExecuteAsync_DeleteDoneAsADisableThroughAnotherAttribute_ReportsNothingAsync(int concurrency)
+    public async Task ExecuteAsync_DisableOnAGenericDirectory_IsRefusedWithoutWritingAsync(int concurrency)
     {
-        var results = await Export(LdapDirectoryType.ActiveDirectory, concurrency, deleteBehaviour: LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE, disableAttribute: "msDS-UserAccountDisabled")
-            .ExecuteAsync([UserDelete()], CancellationToken.None);
+        var modifies = new List<ModifyRequest>();
+        var results = await Export(LdapDirectoryType.Generic, concurrency, modifies)
+            .ExecuteAsync([UserDisable()], CancellationToken.None);
 
-        Assert.That(results[0].SetsAccountEnabledState, Is.False);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.False);
+            Assert.That(results[0].ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.RejectedByConnectedSystem));
+            Assert.That(modifies, Is.Empty);
+        }
     }
 
     [TestCase(1)]
@@ -175,25 +202,19 @@ public class LdapConnectorExportAccountEnabledStateTests
     private static LdapConnectorExport Export(
         LdapDirectoryType directoryType,
         int concurrency = 1,
-        string deleteBehaviour = "Delete",
-        string? disableAttribute = null)
+        List<ModifyRequest>? modifies = null)
     {
         var executor = new Mock<ILdapOperationExecutor>();
         executor.Setup(e => e.SendRequest(It.IsAny<AddRequest>())).Returns(LdapTestResponses.Create<AddResponse>(ResultCode.Success));
-        executor.Setup(e => e.SendRequest(It.IsAny<ModifyRequest>())).Returns(LdapTestResponses.Create<ModifyResponse>(ResultCode.Success));
+        executor.Setup(e => e.SendRequest(It.IsAny<ModifyRequest>())).Callback<DirectoryRequest>(r => modifies?.Add((ModifyRequest)r)).Returns(LdapTestResponses.Create<ModifyResponse>(ResultCode.Success));
         executor.Setup(e => e.SendRequest(It.IsAny<DeleteRequest>())).Returns(LdapTestResponses.Create<DeleteResponse>(ResultCode.Success));
         executor.Setup(e => e.SendRequest(It.IsAny<SearchRequest>())).Returns(() => LdapTestResponses.SearchResponseWith(UserDn, (UserAccountControl, "512")));
         executor.Setup(e => e.SendRequestAsync(It.IsAny<AddRequest>())).ReturnsAsync(LdapTestResponses.Create<AddResponse>(ResultCode.Success));
-        executor.Setup(e => e.SendRequestAsync(It.IsAny<ModifyRequest>())).ReturnsAsync(LdapTestResponses.Create<ModifyResponse>(ResultCode.Success));
+        executor.Setup(e => e.SendRequestAsync(It.IsAny<ModifyRequest>())).Callback<DirectoryRequest>(r => { lock (executor) modifies?.Add((ModifyRequest)r); }).ReturnsAsync(LdapTestResponses.Create<ModifyResponse>(ResultCode.Success));
         executor.Setup(e => e.SendRequestAsync(It.IsAny<DeleteRequest>())).ReturnsAsync(LdapTestResponses.Create<DeleteResponse>(ResultCode.Success));
         executor.Setup(e => e.SendRequestAsync(It.IsAny<SearchRequest>())).ReturnsAsync(() => LdapTestResponses.SearchResponseWith(UserDn, (UserAccountControl, "512")));
 
-        List<ConnectedSystemSettingValue> settings =
-        [
-            new ConnectedSystemSettingValue { Setting = new ConnectorDefinitionSetting { Name = "Delete Behaviour" }, StringValue = deleteBehaviour }
-        ];
-        if (disableAttribute != null)
-            settings.Add(new ConnectedSystemSettingValue { Setting = new ConnectorDefinitionSetting { Name = "Disable Attribute" }, StringValue = disableAttribute });
+        List<ConnectedSystemSettingValue> settings = [];
 
         return new LdapConnectorExport(executor.Object, settings, Log.Logger, concurrency,
             LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE, directoryType, placeholderMemberDn: null);
@@ -249,6 +270,14 @@ public class LdapConnectorExportAccountEnabledStateTests
     {
         Id = Guid.NewGuid(),
         ChangeType = PendingExportChangeType.Delete,
+        ConnectedSystemObject = ExistingUser(),
+        AttributeValueChanges = []
+    };
+
+    private static PendingExport UserDisable() => new()
+    {
+        Id = Guid.NewGuid(),
+        ChangeType = PendingExportChangeType.Disable,
         ConnectedSystemObject = ExistingUser(),
         AttributeValueChanges = []
     };

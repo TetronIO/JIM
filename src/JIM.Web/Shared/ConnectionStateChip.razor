@@ -39,7 +39,8 @@
             ConnectedSystemObjectConnectionState.UpdatePending => MudBlazor.Color.Info,
             ConnectedSystemObjectConnectionState.ProvisioningExportPending
                 or ConnectedSystemObjectConnectionState.ProvisioningAwaitingConfirmation
-                or ConnectedSystemObjectConnectionState.ExportNotConfirmed => MudBlazor.Color.Warning,
+                or ConnectedSystemObjectConnectionState.ExportNotConfirmed
+                or ConnectedSystemObjectConnectionState.DisablePending => MudBlazor.Color.Warning,
             ConnectedSystemObjectConnectionState.ExportFailed
                 or ConnectedSystemObjectConnectionState.DeletePending => MudBlazor.Color.Error,
             _ => MudBlazor.Color.Default
@@ -57,6 +58,7 @@
             ConnectedSystemObjectConnectionState.ExportNotConfirmed => "Export not confirmed",
             ConnectedSystemObjectConnectionState.ExportFailed => "Export failed",
             ConnectedSystemObjectConnectionState.DeletePending => "Delete pending",
+            ConnectedSystemObjectConnectionState.DisablePending => "Disable pending",
             ConnectedSystemObjectConnectionState.Obsolete => "Obsolete",
             _ => state.ToString()
         };

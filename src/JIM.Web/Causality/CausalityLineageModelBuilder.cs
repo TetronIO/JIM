@@ -159,7 +159,7 @@ public static partial class CausalityLineageModelBuilder
                 // An update was staged because the Identity changed, and a delete because the Identity
                 // was deleted: both are Metaverse-side causes, so they render on the Identity.
                 case CausalEdgeType.PendingExportQueueingCausedExportExecution
-                    when cohort.ReasonCode is CausalReasonCode.ExportUpdateStaged or CausalReasonCode.ExportDeleteStaged:
+                    when cohort.ReasonCode is CausalReasonCode.ExportUpdateStaged or CausalReasonCode.ExportDeleteStaged or CausalReasonCode.ExportDisableStaged:
                     return GetIdentityColumn();
 
                 // A provisioning decision (and a legacy edge with no reason) acted on the target

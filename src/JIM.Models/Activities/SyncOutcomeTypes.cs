@@ -26,7 +26,7 @@ public static class SyncOutcomeTypes
     /// </summary>
     public static ActivityRunProfileExecutionItemSyncOutcomeType ForPendingExport(PendingExport pendingExport)
     {
-        return pendingExport.ChangeType == PendingExportChangeType.Delete
+        return pendingExport.ChangeType.IsDeprovisioning()
             ? ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued
             : ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated;
     }

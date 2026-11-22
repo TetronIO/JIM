@@ -123,17 +123,6 @@ public class LdapConnectorTests
     }
 
     [Test]
-    public void GetSettings_DisableAttribute_IsRequiredWhenDeleteBehaviourIsDisable()
-    {
-        // Disable Attribute is only relevant when Delete Behaviour is 'Disable' (#828)
-        var settings = _connector.GetSettings();
-        var disableAttribute = settings.Single(s => s.Name == "Disable Attribute");
-
-        Assert.That(disableAttribute.RequiredWhenSetting, Is.EqualTo("Delete Behaviour"));
-        Assert.That(disableAttribute.RequiredWhenValue, Is.EqualTo("Disable"));
-    }
-
-    [Test]
     public void GetSettings_ContainsHostSetting()
     {
         var settings = _connector.GetSettings();
@@ -327,39 +316,19 @@ public class LdapConnectorTests
     #region Export settings tests
 
     [Test]
-    public void GetSettings_ContainsDeleteBehaviourSetting()
+    public void GetSettings_HasNoDeleteBehaviourOrDisableAttribute()
     {
-        var settings = _connector.GetSettings();
-        var deleteBehaviourSetting = settings.FirstOrDefault(s => s.Name == "Delete Behaviour");
+        // Whether to disable instead of delete is the export Synchronisation Rule's Deprovisioning Action, and how is
+        // decided by the directory type (#2085).
+        var names = _connector.GetSettings().Select(s => s.Name).ToList();
 
-        Assert.That(deleteBehaviourSetting, Is.Not.Null);
-        Assert.That(deleteBehaviourSetting!.Type, Is.EqualTo(ConnectedSystemSettingType.DropDown));
-        Assert.That(deleteBehaviourSetting.DropDownValues, Does.Contain("Delete"));
-        Assert.That(deleteBehaviourSetting.DropDownValues, Does.Contain("Disable"));
-        Assert.That(deleteBehaviourSetting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Export));
+        Assert.That(names, Has.None.EqualTo("Delete Behaviour").And.None.EqualTo("Disable Attribute"));
     }
 
     [Test]
-    public void GetSettings_DeleteBehaviour_DefaultsToDelete()
+    public void Capabilities_CanDisable()
     {
-        // Export treats an unset Delete Behaviour as Delete, so the setting declares that default and a new Connected
-        // System shows the behaviour it will actually get rather than an empty dropdown.
-        var settings = _connector.GetSettings();
-        var deleteBehaviourSetting = settings.Single(s => s.Name == "Delete Behaviour");
-
-        Assert.That(deleteBehaviourSetting.DefaultStringValue, Is.EqualTo(LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE));
-    }
-
-    [Test]
-    public void GetSettings_ContainsDisableAttributeSetting()
-    {
-        var settings = _connector.GetSettings();
-        var disableAttributeSetting = settings.FirstOrDefault(s => s.Name == "Disable Attribute");
-
-        Assert.That(disableAttributeSetting, Is.Not.Null);
-        Assert.That(disableAttributeSetting!.Type, Is.EqualTo(ConnectedSystemSettingType.String));
-        Assert.That(disableAttributeSetting.DefaultStringValue, Is.EqualTo("userAccountControl"));
-        Assert.That(disableAttributeSetting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Export));
+        Assert.That(((IConnectorCapabilities)_connector).SupportsDisable, Is.True);
     }
 
     [Test]
@@ -369,7 +338,7 @@ public class LdapConnectorTests
         var exportSettings = settings.Where(s => s.Category == ConnectedSystemSettingCategory.Export).ToList();
 
         Assert.That(exportSettings, Is.Not.Empty);
-        Assert.That(exportSettings.Count, Is.GreaterThanOrEqualTo(3)); // Heading + Delete Behaviour + Disable Attribute
+        Assert.That(exportSettings.Count, Is.GreaterThanOrEqualTo(3)); // Heading + Export Concurrency + Modify Batch Size
     }
 
     #endregion

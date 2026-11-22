@@ -109,7 +109,7 @@ A new user is created with a long random password, which Microsoft Graph require
 
 Entra ID takes a few seconds to make a new object visible everywhere, so a write that refers to one created moments before (a nested group, a new user's manager) can be refused as not found. The Connector sends such a write again after 2, 5 and 10 seconds before reporting it as a Missing Dependency, which JIM retries on the next export. If an import runs before Entra ID lists a new object and JIM sends its create again, the Connector finds the object it already made and updates it, so a group is never created twice.
 
-A deletion deletes the object, which Entra ID keeps for 30 days in case it needs restoring. With **Delete Behaviour** set to **Disable**, a user is disabled instead. A group cannot be disabled, so it is deleted either way.
+A deletion deletes the object, which Entra ID keeps for 30 days in case it needs restoring. To keep a leaver's account instead, set the export Synchronisation Rule's [Deprovisioning Action](../configuration/deprovisioning.md) to **Disable**: the Connector sets `accountEnabled` to false, and JIM then disconnects the user. A group cannot be disabled, so a rule for groups deprovisions with **Delete** or **Disconnect**.
 
 ### Passwords
 
@@ -160,12 +160,6 @@ The **Cloud** setting reaches a tenant in the US Government L4 (GCC High), US Go
 | Setting | Required | Description |
 |---------|----------|-------------|
 | Track Source of Authority Changes | No | Whether to read which synchronised objects have had their Source of Authority switched between Active Directory and Entra ID, so `sourceOfAuthority` shows where each is managed now. Needs the two Source of Authority permissions. Default off. |
-
-### Export
-
-| Setting | Required | Description |
-|---------|----------|-------------|
-| Delete Behaviour | No | `Delete` (the default) deletes the object; `Disable` disables a user instead. A group is deleted either way. |
 
 ## :material-shield-lock-outline: Security Considerations
 

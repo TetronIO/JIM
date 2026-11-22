@@ -55,7 +55,7 @@ public class ExportOutcomeMessageTests
         var message = ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Delete, limit: 100, pending: 342);
 
         Assert.That(message, Is.EqualTo(
-            "Max deletes is 100, but 342 deletes were pending, so none were attempted and all 342 remain pending. " +
+            "Max deletes is 100, but 342 deletes and disables were pending, so none were attempted and all 342 remain pending. " +
             "Check what staged them, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit."));
     }
 
@@ -85,7 +85,7 @@ public class ExportOutcomeMessageTests
         var message = ExportOutcomeMessage.ForWithheld(PendingExportChangeType.Delete, limit: 0, pending: 1);
 
         Assert.That(message, Is.EqualTo(
-            "Max deletes is 0, but 1 delete was pending, so it was not attempted and remains pending. " +
+            "Max deletes is 0, but 1 delete or disable was pending, so it was not attempted and remains pending. " +
             "Check what staged it, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit."));
     }
 

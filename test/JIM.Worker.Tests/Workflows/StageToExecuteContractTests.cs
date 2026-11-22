@@ -326,6 +326,86 @@ public class StageToExecuteContractTests : WorkflowTestBase
     }
 
     /// <summary>
+    /// #2085: a rule that deprovisions with Disable stages a Disable when the person leaves its scope, the Connector is
+    /// handed the Disable, and once it succeeds the account is complete: its Pending Export goes and it is disconnected,
+    /// but kept, since a disabled account is never going to be found gone by a confirming import.
+    /// </summary>
+    [Test]
+    public async Task Disable_PersonLeavesScope_DisablesThenDisconnectsAndKeepsTheAccountAsync()
+    {
+        var topology = await BuildTopologyAsync(OutboundDeprovisionAction.Disable);
+        await DeclareTargetCanDisableAsync(topology, true);
+        var (sourceCso, _) = await CreateSourceCsoAsync(topology, "Leaving User", "EMP0099");
+        await RunFullSyncAsync(topology.Source, "Provisioning Full Sync");
+        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == topology.Target.Id);
+
+        var connector = new MockCallConnector();
+        AssertExportExecutedCleanly("Disable (provisioning)", await RunExportAsync(topology.Target, connector));
+        var importConnector = new MockCallConnector();
+        importConnector.QueueImportObjects(BuildConfirmingImportObjectFromActualExport(topology, targetCso, GetExportedItems(connector)));
+        await RunConfirmingImportAsync(topology.Target, importConnector);
+
+        ReplaceStringAttributeValue(sourceCso, topology.SourceStatusAttr, "Inactive");
+        await RunDeltaSyncAsync(topology.Source, "Leaver Delta Sync");
+        var staged = PendingExportsFor(targetCso.Id).Single();
+        Assert.That(staged.ChangeType, Is.EqualTo(PendingExportChangeType.Disable), "the rule says Disable, so a Disable is staged");
+
+        var disableActivity = await RunExportAsync(topology.Target, connector);
+        AssertExportExecutedCleanly("Disable (deprovisioning)", disableActivity);
+
+        var account = SyncRepo.ConnectedSystemObjects[targetCso.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(GetExportedItems(connector).Last().ChangeType, Is.EqualTo(PendingExportChangeType.Disable), "the Connector is told to disable");
+            Assert.That(PendingExportsFor(targetCso.Id), Is.Empty, "a Disable that succeeded is complete: nothing waits for a confirming import");
+            Assert.That(account.MetaverseObjectId, Is.Null, "the account is disconnected once disabled");
+            Assert.That(account.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined));
+            Assert.That(account.Status, Is.Not.EqualTo(ConnectedSystemObjectStatus.Obsolete), "the account is kept, not deleted");
+        }
+    }
+
+    /// <summary>
+    /// #2085: a Disable is never sent to a Connector that cannot disable an account. One written before Disable existed
+    /// could take it for an empty update and report success, and JIM would then disconnect an account left enabled.
+    /// </summary>
+    [Test]
+    public async Task Disable_ConnectorCannotDisable_RefusedBeforeSendingAndKeptPendingAsync()
+    {
+        var topology = await BuildTopologyAsync(OutboundDeprovisionAction.Disable);
+        await DeclareTargetCanDisableAsync(topology, false);
+        var (sourceCso, _) = await CreateSourceCsoAsync(topology, "Leaving User", "EMP0098");
+        await RunFullSyncAsync(topology.Source, "Provisioning Full Sync");
+        var targetCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == topology.Target.Id);
+
+        var connector = new MockCallConnector();
+        AssertExportExecutedCleanly("Refused disable (provisioning)", await RunExportAsync(topology.Target, connector));
+        var importConnector = new MockCallConnector();
+        importConnector.QueueImportObjects(BuildConfirmingImportObjectFromActualExport(topology, targetCso, GetExportedItems(connector)));
+        await RunConfirmingImportAsync(topology.Target, importConnector);
+
+        ReplaceStringAttributeValue(sourceCso, topology.SourceStatusAttr, "Inactive");
+        await RunDeltaSyncAsync(topology.Source, "Leaver Delta Sync");
+        var sentBefore = GetExportedItems(connector).Count;
+
+        await RunExportAsync(topology.Target, connector);
+
+        var held = PendingExportsFor(targetCso.Id).Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(GetExportedItems(connector), Has.Count.EqualTo(sentBefore), "nothing is sent to a Connector that cannot disable");
+            Assert.That(held.ChangeType, Is.EqualTo(PendingExportChangeType.Disable));
+            Assert.That(held.LastErrorMessage, Does.Contain("cannot disable"));
+            Assert.That(SyncRepo.ConnectedSystemObjects[targetCso.Id].MetaverseObjectId, Is.Not.Null, "the account stays joined while nothing was done to it");
+        }
+    }
+
+    private async Task DeclareTargetCanDisableAsync(Topology topology, bool supportsDisable)
+    {
+        topology.Target.ConnectorDefinition.SupportsDisable = supportsDisable;
+        await DbContext.SaveChangesAsync();
+    }
+
+    /// <summary>
     /// Defect 4 (#1936): a target only ever written by auto-confirmed file exports (the File Connector's Export Only
     /// mode) is never imported from, so the values its exports wrote must be recorded on its Connected System Object
     /// at export. Without that the object held only its External ID, a value later cleared at the source matched the

@@ -178,8 +178,7 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
         var logger = Log.ForContext<GraphConnector>();
         var settingValues = settings.ToList();
         _exportClient = Task.Run(async () => await CreateClientAsync(settingValues, logger)).GetAwaiter().GetResult();
-        var deleteBehaviour = settingValues.FirstOrDefault(s => s.Setting.Name == GraphConnectorConstants.SettingDeleteBehaviour)?.StringValue;
-        _export = new GraphConnectorExport(_exportClient, deleteBehaviour == GraphConnectorConstants.DeleteBehaviourDisable, logger);
+        _export = new GraphConnectorExport(_exportClient, logger);
     }
 
     /// <summary>Writes a batch of Pending Exports, returning one result for each, in the same order.</summary>
@@ -312,9 +311,6 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
 
             new() { Name = "Source of Authority", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.Heading },
             new() { Name = GraphConnectorConstants.SettingTrackSourceOfAuthority, Required = false, DefaultCheckboxValue = false, Description = "Whether to read, for each object synchronised from Active Directory, whether its Source of Authority has been switched to Entra ID, or switched back, so sourceOfAuthority shows where it is managed now. Turn it on in a hybrid tenant whose objects have their Source of Authority switched. It needs the User-OnPremisesSyncBehavior.ReadWrite.All and Group-OnPremisesSyncBehavior.ReadWrite.All permissions, the only ones Microsoft offers for reading it, which also allow changing it. Off, an object synchronised from Active Directory always reads as onPremisesDirectory.", Category = ConnectedSystemSettingCategory.Import, Type = ConnectedSystemSettingType.CheckBox },
-
-            new() { Name = "Export", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading },
-            new() { Name = GraphConnectorConstants.SettingDeleteBehaviour, Required = false, Description = "What JIM does when it deletes a user: Delete removes it (Entra ID keeps a deleted user for 30 days, in case it needs restoring); Disable keeps it and sets accountEnabled to false. Groups cannot be disabled, so they are deleted either way.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = [GraphConnectorConstants.DeleteBehaviourDelete, GraphConnectorConstants.DeleteBehaviourDisable], DefaultStringValue = GraphConnectorConstants.DeleteBehaviourDelete, Category = ConnectedSystemSettingCategory.Export }
         ];
     }
 

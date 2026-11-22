@@ -46,11 +46,13 @@ internal static class ExportOutcomeMessage
     /// never a partial figure.</param>
     internal static string ForWithheld(PendingExportChangeType type, int limit, int pending)
     {
-        var (singular, plural) = type switch
+        // The limit keeps its own name (Max Deletes); what it held back is named apart, since the delete limit also covers
+        // disables (#2085) and the count reported here includes them.
+        var (limitName, singular, plural) = type switch
         {
-            PendingExportChangeType.Create => ("create", "creates"),
-            PendingExportChangeType.Update => ("update", "updates"),
-            PendingExportChangeType.Delete => ("delete", "deletes"),
+            PendingExportChangeType.Create => ("creates", "create", "creates"),
+            PendingExportChangeType.Update => ("updates", "update", "updates"),
+            PendingExportChangeType.Delete => ("deletes", "delete or disable", "deletes and disables"),
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unsupported change type for a withheld-export warning.")
         };
 
@@ -58,11 +60,11 @@ internal static class ExportOutcomeMessage
 
         if (pending == 1)
         {
-            return $"Max {plural} is {limit:N0}, but 1 {singular} was pending, so it was not attempted and remains pending. " +
+            return $"Max {limitName} is {limit:N0}, but 1 {singular} was pending, so it was not attempted and remains pending. " +
                    string.Format(remedy, "it");
         }
 
-        return $"Max {plural} is {limit:N0}, but {pending:N0} {plural} were pending, so none were attempted and all {pending:N0} remain pending. " +
+        return $"Max {limitName} is {limit:N0}, but {pending:N0} {plural} were pending, so none were attempted and all {pending:N0} remain pending. " +
                string.Format(remedy, "them");
     }
 

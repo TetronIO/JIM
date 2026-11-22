@@ -348,10 +348,10 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
                 var fate = _syncEngine.DecideOutOfScopeDeprovisioning(proposedRule, queuedByCsoId.GetValueOrDefault(cso.Id)).Action;
 
                 // A Delete already sent goes ahead whichever action the rule carries, so the proposal changes nothing.
-                if (fate == OutOfScopeDeprovisioningAction.DeleteAlreadySent)
+                if (fate == OutOfScopeDeprovisioningAction.DeprovisioningAlreadySent)
                     continue;
 
-                transition = fate == OutOfScopeDeprovisioningAction.StageDeleteExport
+                transition = fate == OutOfScopeDeprovisioningAction.StageDeprovisioningExport
                     ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport
                     : ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject;
             }

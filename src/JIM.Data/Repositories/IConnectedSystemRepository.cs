@@ -655,7 +655,7 @@ public interface IConnectedSystemRepository
     /// <summary>
     /// Lightweight fetch for export evaluation hot paths: the merge-and-replace path
     /// (<c>ExportEvaluationServer.CreateOrUpdatePendingExportWithNoNetChangeAsync</c>) and the
-    /// deprovisioning delete path (<c>ExportEvaluationServer.EnsureDeletePendingExportAsync</c>). Only
+    /// deprovisioning delete path (<c>ExportEvaluationServer.EnsureDeprovisioningPendingExportAsync</c>). Only
     /// AttributeValueChanges (with Attribute) are loaded; ConnectedSystemObject, ConnectedSystem
     /// and SourceMetaverseObject and their attribute value graphs are skipped because neither
     /// caller reads them. <see cref="GetPendingExportByConnectedSystemObjectIdAsync"/>'s full

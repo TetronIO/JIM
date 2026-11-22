@@ -143,7 +143,7 @@ public class PendingExportDeletionCascadeDatabaseTests
         var childIds = pe.AttributeValueChanges.Select(avc => avc.Id).ToList();
 
         // Production loads the Pending Export tracked, with AttributeValueChanges included, before deleting
-        // it (ExportEvaluationServer.EnsureDeletePendingExportAsync via
+        // it (ExportEvaluationServer.EnsureDeprovisioningPendingExportAsync via
         // GetPendingExportLightweightByConnectedSystemObjectIdAsync).
         await using var ctx = NewContext();
         var tracked = await ctx.PendingExports

@@ -97,7 +97,7 @@ internal sealed class GraphExportState
             }
         }
 
-        if (pendingExport.ChangeType == PendingExportChangeType.Delete)
+        if (pendingExport.ChangeType is PendingExportChangeType.Delete or PendingExportChangeType.Disable)
             return state;
 
         try

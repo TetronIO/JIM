@@ -499,35 +499,63 @@ public class GraphConnectorExportTests
     }
 
     [Test]
-    public async Task Delete_WithDisableBehaviour_DisablesAUserAndDeletesAGroupAsync()
+    public async Task Disable_AUser_SetsAccountEnabledFalseAndKeepsTheUserAsync()
     {
+        // An export Synchronisation Rule deprovisioning with Disable (#2085).
         _tenant.AddUser("u1", "Ada", u => u["accountEnabled"] = true);
-        _tenant.AddGroup("g1", "Finance");
 
-        var results = await ExportAsync(GraphConnectorConstants.DeleteBehaviourDisable,
-            Against("u1", UserType, PendingExportChangeType.Delete),
-            Against("g1", GroupType, PendingExportChangeType.Delete));
+        var result = (await ExportAsync(Against("u1", UserType, PendingExportChangeType.Disable))).Single();
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(results.Select(r => r.Success), Is.All.True);
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
             Assert.That(_tenant.User("u1")!["accountEnabled"]!.GetValue<bool>(), Is.False);
-            Assert.That(results[0].SetsAccountEnabledState, Is.True);
-            Assert.That(_tenant.Group("g1"), Is.Null);
+            Assert.That(result.SetsAccountEnabledState, Is.True);
         }
     }
 
     [Test]
-    public void Settings_DeleteBehaviour_DefaultsToDeleteInTheExportCategory()
+    public async Task Disable_AGroup_IsRefusedAndTheGroupLeftAsItIsAsync()
     {
-        var setting = new GraphConnector().GetSettings().Single(s => s.Name == GraphConnectorConstants.SettingDeleteBehaviour);
+        _tenant.AddGroup("g1", "Finance");
+
+        var result = (await ExportAsync(Against("g1", GroupType, PendingExportChangeType.Disable))).Single();
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(setting.DropDownValues, Is.EqualTo(new[] { GraphConnectorConstants.DeleteBehaviourDelete, GraphConnectorConstants.DeleteBehaviourDisable }));
-            Assert.That(setting.DefaultStringValue, Is.EqualTo(GraphConnectorConstants.DeleteBehaviourDelete));
-            Assert.That(setting.Category, Is.EqualTo(ConnectedSystemSettingCategory.Export));
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.RejectedByConnectedSystem));
+            Assert.That(result.ErrorMessage, Does.Contain("cannot be disabled"));
+            Assert.That(_tenant.Group("g1"), Is.Not.Null);
+            Assert.That(WriteRequests(), Is.Empty, "nothing is sent for a group");
         }
+    }
+
+    [Test]
+    public async Task Delete_AUser_DeletesItAsync()
+    {
+        // A Delete always deletes: whether to disable instead is the export Synchronisation Rule's choice (#2085).
+        _tenant.AddUser("u1", "Ada");
+
+        var result = (await ExportAsync(Against("u1", UserType, PendingExportChangeType.Delete))).Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(_tenant.User("u1"), Is.Null);
+        }
+    }
+
+    [Test]
+    public void Settings_HaveNoDeleteBehaviour()
+    {
+        Assert.That(new GraphConnector().GetSettings().Select(s => s.Name), Has.None.EqualTo("Delete Behaviour"));
+    }
+
+    [Test]
+    public void Capabilities_CanDisable()
+    {
+        Assert.That(((JIM.Models.Interfaces.IConnectorCapabilities)new GraphConnector()).SupportsDisable, Is.True);
     }
 
     #endregion
@@ -587,8 +615,6 @@ public class GraphConnectorExportTests
             new() { Setting = new ConnectorDefinitionSetting { Name = GraphConnectorConstants.SettingAuthenticationMethod }, StringValue = GraphConnectorConstants.AuthMethodClientSecret },
             new() { Setting = new ConnectorDefinitionSetting { Name = GraphConnectorConstants.SettingClientSecret }, StringEncryptedValue = "client-secret-value" }
         };
-        if (deleteBehaviour != null)
-            settings.Add(new() { Setting = new ConnectorDefinitionSetting { Name = GraphConnectorConstants.SettingDeleteBehaviour }, StringValue = deleteBehaviour });
         return settings;
     }
 

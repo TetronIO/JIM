@@ -70,7 +70,7 @@ JIM detects the directory type from the Root DSE during schema discovery and adj
 ### Export
 
 - **Create, update, and delete**<br /> Operations on directory objects.
-- **Configurable delete behaviour**<br /> Delete objects outright or disable them (via userAccountControl on Active Directory, say).
+- **Disabling leavers**<br /> An export Synchronisation Rule whose [Deprovisioning Action](../configuration/deprovisioning.md) is **Disable** disables the account the way its directory does: the `userAccountControl` disable flag on Active Directory and Samba AD, `nsAccountLock` on 389 Directory Server, and a permanent `pwdAccountLockedTime` lock on OpenLDAP, which needs the password policy overlay. Other LDAP directories cannot disable an account, so their rules deprovision with **Delete** or **Disconnect**.
 - **New Active Directory accounts enabled by their Initial Password**<br /> Active Directory refuses to create an enabled user account that has no password. When the provisioning Synchronisation Rule has an [Initial Password](../configuration/initial-password.md), JIM creates the account disabled and the password's delivery enables it, so a `userAccountControl` Attribute Flow that enables accounts keeps working. See [Enabling new Active Directory accounts](jim-ldap-connector-passwords.md#enabling-new-active-directory-accounts).
 - **Configurable concurrency**<br /> Parallel batch export support with 1-64 concurrent LDAP operations; a cancelled export run finishes its current batch.
 - **Batched multi-valued modifications**<br /> Large attribute changes (e.g. group membership) are automatically split into configurable batches, within directory server limits.
@@ -203,8 +203,6 @@ A naming context or crossRef partition the service account cannot read (a least-
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| Delete Behaviour | How to handle object deletions: Delete (remove the object) or Disable (set the disable attribute). | `Delete` |
-| Disable Attribute | Attribute to set when disabling objects. Only shown, and required, when Delete Behaviour is Disable. | `userAccountControl` |
 | Export Concurrency | Concurrent LDAP operations per export batch (1 to 64); schema import sets 16 (Active Directory, 389 Directory Server) or 8 (OpenLDAP) ([Export Performance](../configuration/export-performance.md)). | `4` |
 | Modify Batch Size | Maximum number of values per multi-valued attribute modification in a single LDAP request. Lower values improve compatibility; higher values improve throughput, especially for very large groups. Recommended range: 100 to 2000. | `1000` |
 | Group Placeholder Member DN | Placeholder DN for group classes that require at least one member (groupOfNames, say); filtered out during import. Not used for Active Directory. | `cn=placeholder` |

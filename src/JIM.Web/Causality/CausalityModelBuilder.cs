@@ -566,7 +566,8 @@ public static class CausalityModelBuilder
                 && c.EdgeType == CausalEdgeType.PendingExportQueueingCausedExportExecution
                 && c.ReasonCode is CausalReasonCode.ExportCreateStaged
                     or CausalReasonCode.ExportUpdateStaged
-                    or CausalReasonCode.ExportDeleteStaged)
+                    or CausalReasonCode.ExportDeleteStaged
+                    or CausalReasonCode.ExportDisableStaged)
             .ToList();
 
         var match = queueingCohorts.FirstOrDefault(c => c.EffectSyncOutcomeId == outcomeId)

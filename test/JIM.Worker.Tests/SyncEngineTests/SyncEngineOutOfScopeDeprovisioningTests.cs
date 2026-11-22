@@ -50,9 +50,63 @@ public class SyncEngineOutOfScopeDeprovisioningTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(decision.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.StageDeleteExport));
+            Assert.That(decision.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.StageDeprovisioningExport));
             Assert.That(decision.ExistingPendingExportToReuse, Is.Null);
             Assert.That(decision.MustReplaceExistingPendingExport, Is.False);
+        }
+    }
+
+    [Test]
+    public void DecideOutOfScopeDeprovisioning_RuleSaysDisable_StagesADisableExport()
+    {
+        var decision = _engine.DecideOutOfScopeDeprovisioning(ExportRule(OutboundDeprovisionAction.Disable), existingPendingExport: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.StageDeprovisioningExport));
+            Assert.That(decision.ExportChangeType, Is.EqualTo(PendingExportChangeType.Disable));
+            Assert.That(decision.MustReplaceExistingPendingExport, Is.False);
+        }
+    }
+
+    [Test]
+    public void DecideOutOfScopeDeprovisioning_AnExistingDisableWhenTheRuleSaysDisable_IsReused()
+    {
+        var existing = new PendingExport { Id = Guid.NewGuid(), ChangeType = PendingExportChangeType.Disable };
+
+        var decision = _engine.DecideOutOfScopeDeprovisioning(ExportRule(OutboundDeprovisionAction.Disable), existing);
+
+        Assert.That(decision.ExistingPendingExportToReuse, Is.SameAs(existing));
+    }
+
+    [Test]
+    public void DecideOutOfScopeDeprovisioning_AQueuedDisableWhenTheRuleNowSaysDelete_IsReplaced()
+    {
+        var existing = new PendingExport { Id = Guid.NewGuid(), ChangeType = PendingExportChangeType.Disable };
+
+        var decision = _engine.DecideOutOfScopeDeprovisioning(ExportRule(OutboundDeprovisionAction.Delete), existing);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.ExportChangeType, Is.EqualTo(PendingExportChangeType.Delete));
+            Assert.That(decision.ExistingPendingExportToReuse, Is.Null);
+            Assert.That(decision.MustReplaceExistingPendingExport, Is.True);
+        }
+    }
+
+    [Test]
+    public void DecideOutOfScopeDeprovisioning_AnUnsentDisableWhenTheRuleNowSaysDisconnect_IsWithdrawn()
+    {
+        // As for a Delete (#1970): the account is to be left as it is, so a Disable still waiting to be sent must not
+        // disable it at the next export.
+        var existing = new PendingExport { Id = Guid.NewGuid(), ChangeType = PendingExportChangeType.Disable, Status = PendingExportStatus.Pending };
+
+        var decision = _engine.DecideOutOfScopeDeprovisioning(ExportRule(OutboundDeprovisionAction.Disconnect), existing);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.Disconnect));
+            Assert.That(decision.ExistingDeprovisioningToWithdraw, Is.SameAs(existing));
         }
     }
 
@@ -60,7 +114,7 @@ public class SyncEngineOutOfScopeDeprovisioningTests
     public void DecideOutOfScopeDeprovisioning_AnExistingDeletePendingExport_IsReusedNotDuplicated()
     {
         // PendingExports carries a unique index on ConnectedSystemObjectId, so a second Delete for the same CSO
-        // is an INSERT that fails; the braided EnsureDeletePendingExportAsync reused it, and so must this.
+        // is an INSERT that fails; the braided EnsureDeprovisioningPendingExportAsync reused it, and so must this.
         var existing = new PendingExport { Id = Guid.NewGuid(), ChangeType = PendingExportChangeType.Delete };
 
         var decision = _engine.DecideOutOfScopeDeprovisioning(
@@ -68,7 +122,7 @@ public class SyncEngineOutOfScopeDeprovisioningTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(decision.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.StageDeleteExport));
+            Assert.That(decision.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.StageDeprovisioningExport));
             Assert.That(decision.ExistingPendingExportToReuse, Is.SameAs(existing));
             Assert.That(decision.MustReplaceExistingPendingExport, Is.False);
         }
@@ -84,7 +138,7 @@ public class SyncEngineOutOfScopeDeprovisioningTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(decision.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.StageDeleteExport));
+            Assert.That(decision.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.StageDeprovisioningExport));
             Assert.That(decision.ExistingPendingExportToReuse, Is.Null);
             Assert.That(decision.MustReplaceExistingPendingExport, Is.True);
         }
@@ -105,7 +159,7 @@ public class SyncEngineOutOfScopeDeprovisioningTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(decision.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.Disconnect));
-            Assert.That(decision.ExistingDeleteToWithdraw, Is.SameAs(existing));
+            Assert.That(decision.ExistingDeprovisioningToWithdraw, Is.SameAs(existing));
         }
     }
 
@@ -122,8 +176,8 @@ public class SyncEngineOutOfScopeDeprovisioningTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(decision.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.DeleteAlreadySent));
-            Assert.That(decision.ExistingDeleteToWithdraw, Is.Null);
+            Assert.That(decision.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.DeprovisioningAlreadySent));
+            Assert.That(decision.ExistingDeprovisioningToWithdraw, Is.Null);
         }
     }
 
@@ -139,7 +193,7 @@ public class SyncEngineOutOfScopeDeprovisioningTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(decision.Action, Is.EqualTo(OutOfScopeDeprovisioningAction.Disconnect));
-            Assert.That(decision.ExistingDeleteToWithdraw, Is.Null);
+            Assert.That(decision.ExistingDeprovisioningToWithdraw, Is.Null);
         }
     }
 
@@ -208,7 +262,7 @@ public class SyncEngineOutOfScopeDeprovisioningTests
     public void WorkingSet_AStagedDeleteExportRecordedForACso_IsReturnedOnTheSecondAsk()
     {
         // What completes Phase 1a: a Delete Pending Export this run has already staged is found in the working
-        // set, so EnsureDeletePendingExportAsync answers "what is attached to this CSO?" without reading this
+        // set, so EnsureDeprovisioningPendingExportAsync answers "what is attached to this CSO?" without reading this
         // run's own write back from the database.
         var workingSet = new ExportEvaluationWorkingSet();
         var csoId = Guid.NewGuid();

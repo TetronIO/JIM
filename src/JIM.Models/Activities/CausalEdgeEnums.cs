@@ -180,5 +180,12 @@ public enum CausalReasonCode
     /// administrator had authorised the rename on a NeedsDecision assignment, so the next rejection
     /// remediated it instead of stopping.
     /// </summary>
-    GeneratedValueRenameAuthorised = 11
+    GeneratedValueRenameAuthorised = 11,
+
+    /// <summary>
+    /// On a queueing edge: the staged change was a disable, an export Synchronisation Rule deprovisioning the object by
+    /// disabling it (#2085). Distinguished from <see cref="ExportDeleteStaged"/> so the chain never says the object
+    /// was deleted when it was kept, disabled.
+    /// </summary>
+    ExportDisableStaged = 12
 }

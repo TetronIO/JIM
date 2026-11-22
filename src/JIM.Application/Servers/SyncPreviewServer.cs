@@ -2577,7 +2577,7 @@ public class SyncPreviewServer
                 downstreamCso, mvoTypeId, exportRulesByMvoTypeId, existingPendingExport: null);
             context.SystemNames.TryGetValue(downstreamCso.ConnectedSystemId, out var targetSystemName);
 
-            if (!exportDecision.ShouldStageDeleteExport)
+            if (!exportDecision.ShouldStageDeprovisioningExport)
             {
                 // Where a matching rule's Disconnect action decided it, the real run records the account left in
                 // place as a Target Disconnected outcome under the deletion, naming that rule (#1811), so the preview
@@ -2943,7 +2943,7 @@ public class SyncPreviewServer
                     break;
 
                 case OutboundPreviewEntryKind.Deprovisioning
-                    when entry.DeprovisioningDecision?.Action == OutOfScopeDeprovisioningAction.StageDeleteExport:
+                    when entry.DeprovisioningDecision?.Action == OutOfScopeDeprovisioningAction.StageDeprovisioningExport:
                     result.Outbound.ProposedExports.Add(new PendingExport
                     {
                         ChangeType = PendingExportChangeType.Delete,
@@ -3030,7 +3030,7 @@ public class SyncPreviewServer
                     break;
 
                 case OutboundPreviewEntryKind.Deprovisioning
-                    when entry.DeprovisioningDecision?.Action == OutOfScopeDeprovisioningAction.StageDeleteExport:
+                    when entry.DeprovisioningDecision?.Action == OutOfScopeDeprovisioningAction.StageDeprovisioningExport:
                     siblings.Add(new SyncOutcomeNode
                     {
                         OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued,

@@ -31,8 +31,6 @@ internal class LdapConnectorExport
     private int _valuesAlreadyInDesiredState;
 
     // Setting names
-    private const string SettingDeleteBehaviour = "Delete Behaviour";
-    private const string SettingDisableAttribute = "Disable Attribute";
     private const string SettingCreateContainersAsNeeded = "Create containers as needed?";
 
     /// <summary>
@@ -306,6 +304,9 @@ internal class LdapConnectorExport
             case PendingExportChangeType.Delete:
                 result = ProcessDelete(pendingExport);
                 break;
+            case PendingExportChangeType.Disable:
+                result = ProcessDisable(pendingExport);
+                break;
             default:
                 throw new InvalidOperationException($"Unknown change type: {pendingExport.ChangeType}");
         }
@@ -520,16 +521,8 @@ internal class LdapConnectorExport
                 $"Cannot delete object: Distinguished Name '{dn}' contains empty RDN components.",
                 ConnectedSystemExportErrorType.InvalidGeneratedExternalId);
 
-        var deleteBehaviour = GetSettingValue(SettingDeleteBehaviour) ?? LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE;
-
-        if (deleteBehaviour != LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE)
-        {
-            ProcessHardDelete(dn);
-            return ConnectedSystemExportResult.Succeeded();
-        }
-
-        var disabledThrough = ProcessDisable(pendingExport, dn);
-        return DisableSucceeded(disabledThrough);
+        ProcessHardDelete(dn);
+        return ConnectedSystemExportResult.Succeeded();
     }
 
     private void ProcessHardDelete(string dn)
@@ -563,37 +556,68 @@ internal class LdapConnectorExport
     }
 
     /// <summary>
-    /// Disables the account in place of deleting it, and returns the attribute the disable was written through.
+    /// Disables the account an export Synchronisation Rule is deprovisioning with Disable (#2085), the way its directory
+    /// disables one (<see cref="DisableMechanism"/>), keeping the entry.
     /// </summary>
-    private string ProcessDisable(PendingExport pendingExport, string dn)
+    private ConnectedSystemExportResult ProcessDisable(PendingExport pendingExport)
     {
-        _logger.Debug("LdapConnectorExport.ProcessDisable: Disabling object at DN '{Dn}'", LogSanitiser.Sanitise(dn));
+        var (dn, refusal) = ResolveDisableTarget(pendingExport);
+        if (refusal != null)
+            return refusal;
 
-        var disableAttribute = GetSettingValue(SettingDisableAttribute) ?? "userAccountControl";
-
-        // For Active Directory userAccountControl, we need to read the current value and set the disable bit
-        if (disableAttribute.Equals("userAccountControl", StringComparison.OrdinalIgnoreCase))
+        var mechanism = DisableMechanism()!.Value;
+        _logger.Debug("LdapConnectorExport.ProcessDisable: Disabling object at DN '{Dn}' through {Attribute}", LogSanitiser.Sanitise(dn), mechanism.Attribute);
+        if (mechanism.Value == null)
         {
-            DisableUsingUserAccountControl(dn);
+            DisableUsingUserAccountControl(dn!);
         }
         else
         {
-            // For other directories/attributes, just set a value indicating disabled
-            // This is a simplified approach - real-world implementations may need more complex logic
-            var modifyRequest = new ModifyRequest(dn,
-                DirectoryAttributeOperation.Replace,
-                disableAttribute,
-                "TRUE");
-
-            var response = (ModifyResponse)_executor.SendRequest(modifyRequest);
+            var response = (ModifyResponse)_executor.SendRequest(new ModifyRequest(dn, DirectoryAttributeOperation.Replace, mechanism.Attribute, mechanism.Value));
             if (response.ResultCode != ResultCode.Success)
-            {
                 throw new LdapException((int)response.ResultCode, response.ErrorMessage);
-            }
         }
 
         _logger.Information("LdapConnectorExport.ProcessDisable: Successfully disabled object at '{Dn}'", LogSanitiser.Sanitise(dn));
-        return disableAttribute;
+        return DisableSucceeded(mechanism.Attribute);
+    }
+
+    /// <summary>
+    /// How this directory disables an account: the attribute, and the value written to it, or no value where the
+    /// attribute is a flag word whose disable bit is set and the rest kept (Active Directory's userAccountControl). Null
+    /// for a directory JIM knows no way to disable an account in.
+    /// </summary>
+    /// <remarks>
+    /// OpenLDAP's lock is the password policy overlay's administrative lock: a pwdAccountLockedTime of 000001010000Z
+    /// locks the account until an administrator removes it, and a directory without the overlay refuses the write.
+    /// </remarks>
+    private (string Attribute, string? Value)? DisableMechanism() => _directoryType switch
+    {
+        LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD => (LdapConnectorConstants.UserAccountControlAttributeName, null),
+        LdapDirectoryType.DirectoryServer389 => ("nsAccountLock", "TRUE"),
+        LdapDirectoryType.OpenLDAP => ("pwdAccountLockedTime", "000001010000Z"),
+        _ => null
+    };
+
+    /// <summary>The entry a Disable acts on, or the refusal when it has no usable DN or the directory cannot disable.</summary>
+    private (string? Dn, ConnectedSystemExportResult? Refusal) ResolveDisableTarget(PendingExport pendingExport)
+    {
+        var dn = GetDistinguishedNameForUpdate(pendingExport);
+        if (string.IsNullOrEmpty(dn))
+            throw new InvalidOperationException("Cannot disable object: Distinguished Name (DN) could not be determined.");
+
+        if (!LdapConnectorUtilities.HasValidRdnValues(dn))
+            return (dn, ConnectedSystemExportResult.Failed(
+                $"Cannot disable object: Distinguished Name '{dn}' contains empty RDN components.",
+                ConnectedSystemExportErrorType.InvalidGeneratedExternalId));
+
+        if (DisableMechanism() == null)
+            return (dn, ConnectedSystemExportResult.Failed(
+                "JIM does not know how this directory disables an account, so it was not disabled. Change the export Synchronisation " +
+                "Rule's Deprovisioning Action to Delete or Disconnect.",
+                ConnectedSystemExportErrorType.RejectedByConnectedSystem));
+
+        return (dn, null);
     }
 
     private void DisableUsingUserAccountControl(string dn)
@@ -824,6 +848,7 @@ internal class LdapConnectorExport
             PendingExportChangeType.Create => await ProcessCreateAsync(pendingExport),
             PendingExportChangeType.Update => await ProcessUpdateAsync(pendingExport),
             PendingExportChangeType.Delete => await ProcessDeleteAsync(pendingExport),
+            PendingExportChangeType.Disable => await ProcessDisableAsync(pendingExport),
             _ => throw new InvalidOperationException($"Unknown change type: {pendingExport.ChangeType}")
         };
 
@@ -1008,16 +1033,8 @@ internal class LdapConnectorExport
                 $"Cannot delete object: Distinguished Name '{dn}' contains empty RDN components.",
                 ConnectedSystemExportErrorType.InvalidGeneratedExternalId);
 
-        var deleteBehaviour = GetSettingValue(SettingDeleteBehaviour) ?? LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE;
-
-        if (deleteBehaviour != LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE)
-        {
-            await ProcessHardDeleteAsync(dn);
-            return ConnectedSystemExportResult.Succeeded();
-        }
-
-        var disabledThrough = await ProcessDisableAsync(pendingExport, dn);
-        return DisableSucceeded(disabledThrough);
+        await ProcessHardDeleteAsync(dn);
+        return ConnectedSystemExportResult.Succeeded();
     }
 
     private async Task ProcessHardDeleteAsync(string dn)
@@ -1049,34 +1066,30 @@ internal class LdapConnectorExport
     }
 
     /// <summary>
-    /// Disables the account in place of deleting it, and returns the attribute the disable was written through.
+    /// Disables the account an export Synchronisation Rule is deprovisioning with Disable (#2085); see
+    /// <see cref="ProcessDisable"/>.
     /// </summary>
-    private async Task<string> ProcessDisableAsync(PendingExport pendingExport, string dn)
+    private async Task<ConnectedSystemExportResult> ProcessDisableAsync(PendingExport pendingExport)
     {
-        _logger.Debug("LdapConnectorExport.ProcessDisableAsync: Disabling object at DN '{Dn}'", LogSanitiser.Sanitise(dn));
+        var (dn, refusal) = ResolveDisableTarget(pendingExport);
+        if (refusal != null)
+            return refusal;
 
-        var disableAttribute = GetSettingValue(SettingDisableAttribute) ?? "userAccountControl";
-
-        if (disableAttribute.Equals("userAccountControl", StringComparison.OrdinalIgnoreCase))
+        var mechanism = DisableMechanism()!.Value;
+        _logger.Debug("LdapConnectorExport.ProcessDisableAsync: Disabling object at DN '{Dn}' through {Attribute}", LogSanitiser.Sanitise(dn), mechanism.Attribute);
+        if (mechanism.Value == null)
         {
-            await DisableUsingUserAccountControlAsync(dn);
+            await DisableUsingUserAccountControlAsync(dn!);
         }
         else
         {
-            var modifyRequest = new ModifyRequest(dn,
-                DirectoryAttributeOperation.Replace,
-                disableAttribute,
-                "TRUE");
-
-            var response = (ModifyResponse)await _executor.SendRequestAsync(modifyRequest);
+            var response = (ModifyResponse)await _executor.SendRequestAsync(new ModifyRequest(dn, DirectoryAttributeOperation.Replace, mechanism.Attribute, mechanism.Value));
             if (response.ResultCode != ResultCode.Success)
-            {
                 throw new LdapException((int)response.ResultCode, response.ErrorMessage);
-            }
         }
 
         _logger.Information("LdapConnectorExport.ProcessDisableAsync: Successfully disabled object at '{Dn}'", LogSanitiser.Sanitise(dn));
-        return disableAttribute;
+        return DisableSucceeded(mechanism.Attribute);
     }
 
     private async Task DisableUsingUserAccountControlAsync(string dn)

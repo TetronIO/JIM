@@ -350,6 +350,8 @@ public static class OutcomeDisplayMap
                 new OutcomeDisplay("Changes applied", CausalityTone.Info, Icons.Material.Filled.Output),
             CausalReasonCode.ExportDeleteStaged =>
                 new OutcomeDisplay("Connected System Object deleted", CausalityTone.Error, Icons.Material.Filled.Delete),
+            CausalReasonCode.ExportDisableStaged =>
+                new OutcomeDisplay("Connected System Object disabled", CausalityTone.Warning, Icons.Material.Filled.Block),
             _ => Get(ActivityRunProfileExecutionItemSyncOutcomeType.Exported)
         };
     }
@@ -458,11 +460,17 @@ public static class OutcomeDisplayMap
                 PendingExportChangeType.Create => GetQueueingDecisionOperation(CausalReasonCode.ExportCreateStaged),
                 PendingExportChangeType.Update => GetQueueingDecisionOperation(CausalReasonCode.ExportUpdateStaged),
                 PendingExportChangeType.Delete => GetQueueingDecisionOperation(CausalReasonCode.ExportDeleteStaged),
+                PendingExportChangeType.Disable => GetQueueingDecisionOperation(CausalReasonCode.ExportDisableStaged),
                 // Null covers outcomes recorded before this was captured: honestly "unknown kind"
                 // rather than a guess.
                 _ => null
             };
         }
+
+        // A deprovisioning that disabled the object rather than deleting it says so (#2085).
+        if (stagedChangeType == PendingExportChangeType.Disable &&
+            outcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned or ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued)
+            return GetQueueingDecisionOperation(CausalReasonCode.ExportDisableStaged);
 
         return outcomeType switch
         {
@@ -520,6 +528,8 @@ public static class OutcomeDisplayMap
                 new OutcomeDisplay("Updated", CausalityTone.Info, Icons.Material.Filled.Edit),
             CausalReasonCode.ExportDeleteStaged =>
                 new OutcomeDisplay("Deleted", CausalityTone.Error, Icons.Material.Filled.Delete),
+            CausalReasonCode.ExportDisableStaged =>
+                new OutcomeDisplay("Disabled", CausalityTone.Warning, Icons.Material.Filled.Block),
             // NotSet covers edges written before the reason codes existed: guessing create/update/delete
             // for that history would be worse than stating nothing.
             _ => null

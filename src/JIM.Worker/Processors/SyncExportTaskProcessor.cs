@@ -435,7 +435,7 @@ public class SyncExportTaskProcessor
                     ? ObjectChangeType.PendingExport
                     : exportItem.ChangeType switch
                     {
-                        PendingExportChangeType.Delete => ObjectChangeType.Deprovisioned,
+                        PendingExportChangeType.Delete or PendingExportChangeType.Disable => ObjectChangeType.Deprovisioned,
                         _ => ObjectChangeType.Exported
                     },
                 PendingExportId = stillQueued ? exportItem.PendingExportId : null
@@ -509,11 +509,13 @@ public class SyncExportTaskProcessor
             {
                 var outcomeType = exportItem.ChangeType switch
                 {
-                    PendingExportChangeType.Delete => ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned,
+                    PendingExportChangeType.Delete or PendingExportChangeType.Disable => ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned,
                     _ => ActivityRunProfileExecutionItemSyncOutcomeType.Exported
                 };
+                // The change type travels on a Deprovisioned outcome so the portal says Disabled rather than Deleted (#2085).
                 exportOutcome = SyncOutcomeBuilder.AddRootOutcome(executionItem, outcomeType,
-                    detailCount: exportItem.AttributeChangeCount > 0 ? exportItem.AttributeChangeCount : null);
+                    detailCount: exportItem.AttributeChangeCount > 0 ? exportItem.AttributeChangeCount : null,
+                    stagedChangeType: exportItem.ChangeType.IsDeprovisioning() ? exportItem.ChangeType : null);
             }
 
             // Record why this export happened (#1223). An export run knows only that it had a queue of changes

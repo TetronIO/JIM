@@ -30,8 +30,10 @@ public enum MvoDeletionExportReason
     NoMatchingExportRule,
     /// <summary>Rules match, and every one of them says Disconnect rather than Delete.</summary>
     MatchingRulesDeclineDeletion,
-    /// <summary>A matching rule with OutboundDeprovisionAction.Delete won; Delete beats Disconnect when rules conflict (#655).</summary>
-    DeleteRuleWon
+    /// <summary>A matching rule with OutboundDeprovisionAction.Delete won; Delete beats Disable and Disconnect when rules conflict (#655).</summary>
+    DeleteRuleWon,
+    /// <summary>A matching rule with OutboundDeprovisionAction.Disable won, no matching rule saying Delete; Disable beats Disconnect (#2085).</summary>
+    DisableRuleWon
 }
 
 /// <summary>
@@ -43,14 +45,13 @@ public enum OutOfScopeDeprovisioningAction
 {
     /// <summary>Break the join between the CSO and the MVO; the object stays in the Connected System.</summary>
     Disconnect,
-    /// <summary>Stage a Delete export for the CSO (and break the join), per the rule's Delete action.</summary>
-    StageDeleteExport,
+    /// <summary>Stage a Delete or Disable export for the CSO, per the rule's action (<see cref="OutOfScopeDeprovisioningDecision.ExportChangeType"/>).</summary>
+    StageDeprovisioningExport,
     /// <summary>The rule carries an OutboundDeprovisionAction this engine does not recognise; do nothing, visibly.</summary>
     UnknownAction,
-    /// <summary>The rule says Disconnect, but a Delete queued for the CSO while the rule said Delete has already been
-    /// sent (or is being sent): the object is gone or going from the Connected System, so there is nothing left to
-    /// disconnect and the confirming import finishes the Delete. Nothing is done here (#1970).</summary>
-    DeleteAlreadySent
+    /// <summary>The rule says Disconnect, but a Delete or Disable queued for the CSO under an earlier action has already
+    /// been sent (or is being sent): its own completion finishes the deprovisioning, so nothing is done here (#1970).</summary>
+    DeprovisioningAlreadySent
 }
 
 /// <summary>

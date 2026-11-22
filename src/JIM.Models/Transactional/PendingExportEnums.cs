@@ -328,3 +328,15 @@ public enum ExportValueLoadFallbackReason
     /// </summary>
     UnrecognisedChangeType = 5
 }
+
+/// <summary>Questions about a <see cref="PendingExportChangeType"/> asked in several places.</summary>
+public static class PendingExportChangeTypeExtensions
+{
+    /// <summary>
+    /// Whether the change deprovisions the object: a Delete, or a Disable (#2085). Both are queued by an export
+    /// Synchronisation Rule's Deprovisioning Action, supersede ordinary changes to the object, carry no attribute
+    /// values, and are withdrawn when the object comes back into scope before they are sent.
+    /// </summary>
+    public static bool IsDeprovisioning(this PendingExportChangeType changeType) =>
+        changeType is PendingExportChangeType.Delete or PendingExportChangeType.Disable;
+}

@@ -52,8 +52,10 @@ public partial class SyncEngine
         if (matchingRules.Count == 0)
             return MvoDeletionExportDecision.DisconnectOnly(MvoDeletionExportReason.NoMatchingExportRule);
 
-        var deleteRule = matchingRules.Find(r => r.OutboundDeprovisionAction == OutboundDeprovisionAction.Delete);
-        if (deleteRule == null)
+        // The strongest action wins a conflict: Delete, then Disable (#2085), then Disconnect (#655).
+        var winningRule = matchingRules.Find(r => r.OutboundDeprovisionAction == OutboundDeprovisionAction.Delete)
+                          ?? matchingRules.Find(r => r.OutboundDeprovisionAction == OutboundDeprovisionAction.Disable);
+        if (winningRule == null)
         {
             // Every matching rule says Disconnect, so the first of them is named as the one that decided: the account
             // is left in place, and the outcome reporting that says which rule's action did it (#1811).
@@ -68,16 +70,18 @@ public partial class SyncEngine
         var hasSecondaryId = secondaryIdAttributeValue?.Attribute != null &&
                              !string.IsNullOrEmpty(secondaryIdAttributeValue.StringValue);
 
-        var reuseExisting = existingPendingExport?.ChangeType == PendingExportChangeType.Delete;
+        var changeType = ExportChangeTypeFor(winningRule.OutboundDeprovisionAction);
+        var reuseExisting = existingPendingExport?.ChangeType == changeType;
 
         return new MvoDeletionExportDecision
         {
-            ShouldStageDeleteExport = true,
-            Reason = MvoDeletionExportReason.DeleteRuleWon,
-            WinningRule = deleteRule,
+            ShouldStageDeprovisioningExport = true,
+            ExportChangeType = changeType,
+            Reason = changeType == PendingExportChangeType.Disable ? MvoDeletionExportReason.DisableRuleWon : MvoDeletionExportReason.DeleteRuleWon,
+            WinningRule = winningRule,
             MatchingRuleCount = matchingRules.Count,
             RulesConflicted = matchingRules.Count > 1 &&
-                              matchingRules.Exists(r => r.OutboundDeprovisionAction != OutboundDeprovisionAction.Delete),
+                              matchingRules.Exists(r => r.OutboundDeprovisionAction != winningRule.OutboundDeprovisionAction),
             ExistingPendingExportToReuse = reuseExisting ? existingPendingExport : null,
             MustReplaceExistingPendingExport = existingPendingExport != null && !reuseExisting,
             SecondaryExternalIdValue = hasSecondaryId ? secondaryIdAttributeValue!.StringValue : null,
@@ -107,24 +111,28 @@ public partial class SyncEngine
                 // Connected System, so there is nothing left to disconnect and the confirming import finishes it. Until
                 // then it is withdrawn: the account stays, so exporting the Delete would remove an account the run
                 // reports keeping. A queued Update needs nothing here; the export withdraws an unjoined account's changes.
-                if (existingPendingExport?.ChangeType == PendingExportChangeType.Delete)
+                if (existingPendingExport != null && existingPendingExport.ChangeType.IsDeprovisioning())
                 {
                     return existingPendingExport.Status is PendingExportStatus.Executing or PendingExportStatus.Exported
-                        ? new OutOfScopeDeprovisioningDecision { Action = OutOfScopeDeprovisioningAction.DeleteAlreadySent }
+                        ? new OutOfScopeDeprovisioningDecision { Action = OutOfScopeDeprovisioningAction.DeprovisioningAlreadySent }
                         : new OutOfScopeDeprovisioningDecision
                         {
                             Action = OutOfScopeDeprovisioningAction.Disconnect,
-                            ExistingDeleteToWithdraw = existingPendingExport
+                            ExistingDeprovisioningToWithdraw = existingPendingExport
                         };
                 }
 
                 return new OutOfScopeDeprovisioningDecision { Action = OutOfScopeDeprovisioningAction.Disconnect };
 
             case OutboundDeprovisionAction.Delete:
-                var reuseExisting = existingPendingExport?.ChangeType == PendingExportChangeType.Delete;
+            case OutboundDeprovisionAction.Disable:
+                // A queued deprovisioning export of the other kind is replaced, not reused: the rule's action changed.
+                var changeType = ExportChangeTypeFor(exportRule.OutboundDeprovisionAction);
+                var reuseExisting = existingPendingExport?.ChangeType == changeType;
                 return new OutOfScopeDeprovisioningDecision
                 {
-                    Action = OutOfScopeDeprovisioningAction.StageDeleteExport,
+                    Action = OutOfScopeDeprovisioningAction.StageDeprovisioningExport,
+                    ExportChangeType = changeType,
                     ExistingPendingExportToReuse = reuseExisting ? existingPendingExport : null,
                     MustReplaceExistingPendingExport = existingPendingExport != null && !reuseExisting
                 };
@@ -133,6 +141,10 @@ public partial class SyncEngine
                 return new OutOfScopeDeprovisioningDecision { Action = OutOfScopeDeprovisioningAction.UnknownAction };
         }
     }
+
+    /// <summary>The Pending Export change a deprovisioning action stages: Disable for Disable, otherwise Delete.</summary>
+    private static PendingExportChangeType ExportChangeTypeFor(OutboundDeprovisionAction action) =>
+        action == OutboundDeprovisionAction.Disable ? PendingExportChangeType.Disable : PendingExportChangeType.Delete;
 
     /// <summary>
     /// Decides whether a CSO's provisioning was provably never exported, in which case deprovisioning it means

@@ -1520,7 +1520,7 @@ public partial class SyncEngine
         foreach (var (csoId, persistedPe) in persistedPendingExportsByCsoId)
         {
             // Only a Delete that has not been attempted can be cancelled or relied on to supersede an Update.
-            if (persistedPe.ChangeType != PendingExportChangeType.Delete || persistedPe.Status != PendingExportStatus.Pending)
+            if (!persistedPe.ChangeType.IsDeprovisioning() || persistedPe.Status != PendingExportStatus.Pending)
                 continue;
 
             var deferredPe = deferredPendingExports.FirstOrDefault(pe =>
