@@ -192,8 +192,15 @@ function Get-GroupMismatch {
     $mismatches = @()
     if ($entraGroup.displayName -ne $Group.DisplayName) { $mismatches += "$($Group.AccountName).displayName is '$($entraGroup.displayName)'" }
     if ($entraGroup.mailEnabled -ne $false -or $entraGroup.securityEnabled -ne $true) { $mismatches += "$($Group.AccountName) is not a security group" }
-    $members = @(Get-EntraIdConnectorLabGraphCollection -Token $script:HarnessToken -Path "/groups/$($entraGroup.id)/members?`$select=mailNickname&`$top=999" |
-        ForEach-Object { "$($_.mailNickname)" } | Sort-Object)
+    # A group just created can be found before its members can be read (404): not there yet, so keep waiting.
+    try {
+        $members = @(Get-EntraIdConnectorLabGraphCollection -Token $script:HarnessToken -Path "/groups/$($entraGroup.id)/members?`$select=mailNickname&`$top=999" |
+            ForEach-Object { "$($_.mailNickname)" } | Sort-Object)
+    }
+    catch {
+        if ("$($_.Exception.Message)" -match '\(404\)') { return "the members of $($Group.AccountName) cannot be read yet" }
+        throw
+    }
     $expected = @($Group.Members | Sort-Object)
     $missing = @($expected | Where-Object { $_ -notin $members })
     $extra = @($members | Where-Object { $_ -notin $expected })
