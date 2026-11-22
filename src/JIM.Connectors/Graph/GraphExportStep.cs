@@ -9,9 +9,11 @@ namespace JIM.Connectors.Graph;
 /// later rounds.
 /// </summary>
 /// <param name="References">For <see cref="GraphExportStepKind.AddReferences"/> and <see cref="GraphExportStepKind.RemoveReference"/>, the ids concerned.</param>
+/// <param name="Attempt">How many times the step has been sent again because Graph could not yet find an object it refers to.</param>
 internal sealed record GraphExportStep(
     GraphExportState State,
     GraphExportStepKind Kind,
     GraphBatchRequest Request,
     string? Relationship = null,
-    IReadOnlyList<string>? References = null);
+    IReadOnlyList<string>? References = null,
+    int Attempt = 0);

@@ -156,6 +156,71 @@ public class GraphConnectorExportTests
     }
 
     [Test]
+    public async Task Create_GroupBindingAMemberNotYetReplicated_TriesAgainAndCreatesItWithTheMemberAsync()
+    {
+        // Found against a real tenant: a group whose members are groups the same export created moments earlier was
+        // refused with 404, since Graph had not yet replicated them.
+        _tenant.AddGroup("engineering", "Engineering");
+        _tenant.NotYetReferenceable["engineering"] = 2;
+        _tenant.NextIds.Enqueue("all-departments");
+
+        var result = (await ExportAsync(Create(GroupType, [.. NewGroupAttributes(), Add("members", "engineering")]))).Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.ExternalId, Is.EqualTo("all-departments"));
+            Assert.That(_tenant.Members["all-departments"].Select(m => m.Id), Is.EqualTo(new[] { "engineering" }));
+            Assert.That(_tenant.Groups, Has.Count.EqualTo(2), "One group created, however many times the create was sent.");
+        }
+    }
+
+    [Test]
+    public async Task Create_GroupBindingAMemberGraphNeverFinds_FailsAsAMissingDependencyForJimToSendAgainAsync()
+    {
+        var result = (await ExportAsync(Create(GroupType, [.. NewGroupAttributes(), Add("members", "never-created")]))).Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorType, Is.EqualTo(ConnectedSystemExportErrorType.MissingDependency));
+            Assert.That(_tenant.Groups, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task Create_UserWhoseManagerIsNotYetReplicated_SetsTheManagerOnceGraphFindsThemAsync()
+    {
+        _tenant.AddUser("boss", "Grace");
+        _tenant.NotYetReferenceable["boss"] = 2;
+        _tenant.NextIds.Enqueue("new-user");
+
+        var result = (await ExportAsync(NewAda(Set("manager", "boss")))).Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That((string?)_tenant.User("new-user")!["managerId"], Is.EqualTo("boss"));
+        }
+    }
+
+    [Test]
+    public async Task Update_MemberNotYetReplicated_TriesAgainAndAddsItAsync()
+    {
+        _tenant.AddUser("u1", "u1");
+        _tenant.NotYetReferenceable["u1"] = 2;
+        _tenant.AddGroup("g1", "Finance");
+
+        var result = (await ExportAsync(Against("g1", GroupType, PendingExportChangeType.Update, Add("members", "u1")))).Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(_tenant.Members["g1"].Select(m => m.Id), Is.EqualTo(new[] { "u1" }));
+        }
+    }
+
+    [Test]
     public async Task Create_TwentyFiveUsers_TravelInTwoBatchesAsync()
     {
         var exports = Enumerable.Range(1, 25).Select(i => Create(UserType,

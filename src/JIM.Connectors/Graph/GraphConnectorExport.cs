@@ -23,6 +23,12 @@ namespace JIM.Connectors.Graph;
 /// member already present counts as added, and a member, manager or object already gone counts as removed or deleted.
 /// </para>
 /// <para>
+/// Graph is eventually consistent: an object created moments earlier, often by the same export (a group nested in the
+/// next, a manager), can be refused as not found when another write refers to it. Such a write is sent again after 2, 5
+/// and 10 seconds, as a Delta Import reads a changed object again, and only then reported as a Missing Dependency for
+/// JIM to send again on a later export. A refused create made nothing, so sending it again cannot make a second object.
+/// </para>
+/// <para>
 /// A create that succeeded reports its new id whatever its follow-ups did. Failing it would have JIM send the create
 /// again and make a second object; a follow-up left unwritten is found by the confirming import, which stages it again.
 /// </para>
@@ -32,6 +38,9 @@ internal sealed class GraphConnectorExport
     private readonly GraphHttpClient _client;
     private readonly bool _disableUsersInsteadOfDeleting;
     private readonly ILogger _logger;
+
+    /// <summary>How long to wait before each time a write refused for a reference Graph cannot find yet is sent again.</summary>
+    internal static readonly TimeSpan[] MissingReferenceRetryDelays = GraphConnectorImport.NotFoundRetryDelays;
 
     public GraphConnectorExport(GraphHttpClient client, bool disableUsersInsteadOfDeleting, ILogger logger)
     {
@@ -64,6 +73,16 @@ internal sealed class GraphConnectorExport
                 var responses = await _client.SendBatchAsync(chunk.Select(s => s.Request).ToList(), CancellationToken.None);
                 for (var i = 0; i < chunk.Length; i++)
                     next.AddRange(await HandleAsync(chunk[i], responses[i]));
+            }
+
+            // A step sent again (Attempt above zero) waits for replication first; the longest wait due covers them all.
+            var retryAttempt = next.Count == 0 ? 0 : next.Max(s => s.Attempt);
+            if (retryAttempt > 0)
+            {
+                var delay = MissingReferenceRetryDelays[retryAttempt - 1];
+                _logger.Information("Microsoft Graph export: {Count} write(s) refer to objects Graph cannot find yet. Sending them again in {Delay}.",
+                    next.Count(s => s.Attempt > 0), delay);
+                await _client.DelayAsync(delay, CancellationToken.None);
             }
 
             steps = next;
@@ -135,7 +154,14 @@ internal sealed class GraphConnectorExport
             case GraphExportStepKind.Create:
                 if (!response.IsSuccess)
                 {
+                    // Only a create that binds members or owners refers to anything; a 404 on any other is not a missing reference.
+                    var bindsReferences = step.Request.Body is JsonObject body && body.Any(p => p.Key.EndsWith("@odata.bind", StringComparison.Ordinal));
+                    if (bindsReferences && CanSendAgain(step, response))
+                        return [Again(step)];
+
                     state.Failure = GraphExportErrorClassifier.Classify(response, $"create the {Singular(state)}");
+                    if (bindsReferences && GraphExportErrorClassifier.IsMissingReference(response))
+                        state.Failure.ErrorType = ConnectedSystemExportErrorType.MissingDependency;
                     return [];
                 }
 
@@ -174,8 +200,11 @@ internal sealed class GraphConnectorExport
                 return [];
 
             case GraphExportStepKind.SetManager:
-                if (!response.IsSuccess)
-                    state.FollowUpFailures.Add(MissingOrClassified(response, step));
+                if (response.IsSuccess)
+                    return [];
+                if (CanSendAgain(step, response))
+                    return [Again(step)];
+                state.FollowUpFailures.Add(MissingOrClassified(response, step));
                 return [];
 
             case GraphExportStepKind.AddReferences:
@@ -199,9 +228,18 @@ internal sealed class GraphConnectorExport
         if (step.References!.Count > 1 && response.Status == (int)HttpStatusCode.BadRequest)
             return step.References.Select(reference => AddOne(step.State, step.Relationship!, reference)).ToList();
 
+        if (CanSendAgain(step, response))
+            return [Again(step)];
+
         step.State.FollowUpFailures.Add(MissingOrClassified(response, step));
         return [];
     }
+
+    /// <summary>Whether a refusal is for a reference Graph cannot find yet, and the step has waits left.</summary>
+    private static bool CanSendAgain(GraphExportStep step, GraphBatchResponse response) =>
+        GraphExportErrorClassifier.IsMissingReference(response) && step.Attempt < MissingReferenceRetryDelays.Length;
+
+    private static GraphExportStep Again(GraphExportStep step) => step with { Attempt = step.Attempt + 1 };
 
     private static ConnectedSystemExportResult MissingOrClassified(GraphBatchResponse response, GraphExportStep step)
     {
