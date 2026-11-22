@@ -2807,10 +2807,62 @@ public class ExportExecutionServer
     private static async Task CompleteDisablesAsync(List<PendingExport> completedDisables, ISyncRepository repository)
     {
         await repository.DeletePendingExportsAsync(completedDisables);
+        var resolved = await ResolveReferencesOwedToDisabledAccountsAsync(completedDisables, repository);
         var csoIds = completedDisables.Where(pe => pe.ConnectedSystemObjectId.HasValue).Select(pe => pe.ConnectedSystemObjectId!.Value).Distinct().ToList();
         await repository.DisconnectConnectedSystemObjectsAsync(csoIds);
-        Log.Information("CompleteDisablesAsync: {Count} Disable Pending Export(s) completed; {CsoCount} Connected System Object(s) disconnected and kept",
-            completedDisables.Count, csoIds.Count);
+        Log.Information("CompleteDisablesAsync: {Count} Disable Pending Export(s) completed; {CsoCount} Connected System Object(s) disconnected and kept; " +
+            "{ResolvedCount} reference(s) other exports still owed to them resolved first", completedDisables.Count, csoIds.Count, resolved);
+    }
+
+    /// <summary>
+    /// Resolves, to the disabled accounts, every reference other Pending Exports in the Connected System still owe to the
+    /// people they belong to, before those accounts are disconnected (#2085). A leaver taken out of groups by the same
+    /// synchronisation is the usual case: each group's export names the leaver by Metaverse Object, resolved only when it
+    /// is sent, and it is sent in the deferred pass, after this. Once the account is disconnected nothing names it as the
+    /// leaver's, so the removal could never be written. The exports keep their unresolved-reference flag, so the deferred
+    /// pass of this run still sends them; one held back from this run is sent by the next, already resolved.
+    /// </summary>
+    /// <returns>How many references were resolved.</returns>
+    private static async Task<int> ResolveReferencesOwedToDisabledAccountsAsync(List<PendingExport> completedDisables, ISyncRepository repository)
+    {
+        // Read from the account's join, which is what is about to be cleared; the export's source is the fallback.
+        var metaverseObjectIds = completedDisables
+            .Select(pe => pe.ConnectedSystemObject?.MetaverseObjectId ?? pe.SourceMetaverseObjectId)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+        if (metaverseObjectIds.Count == 0)
+            return 0;
+
+        var connectedSystemId = completedDisables[0].ConnectedSystemId;
+        var referring = await repository.GetPendingExportsWithUnresolvedReferencesToAsync(connectedSystemId, metaverseObjectIds);
+        if (referring.Count == 0)
+            return 0;
+
+        var anchors = await repository.GetReferenceAnchorsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
+        var resolvedChanges = new List<PendingExportAttributeValueChange>();
+        var exportsResolved = new List<PendingExport>();
+        foreach (var export in referring)
+        {
+            var before = resolvedChanges.Count;
+            // Only the departing people's anchors are in hand, so any other reference the export owes stays as it is.
+            TryResolveReferencesFromLookup(export, anchors, resolvedChanges);
+            if (resolvedChanges.Count > before)
+                exportsResolved.Add(export);
+        }
+
+        if (resolvedChanges.Count > 0)
+            await repository.PersistResolvedReferencesAsync(exportsResolved, resolvedChanges);
+
+        var unresolved = metaverseObjectIds.Count(id => !anchors.TryGetValue(id, out var anchor) || anchor.AnchorValue == null);
+        if (unresolved > 0)
+        {
+            Log.Warning("ResolveReferencesOwedToDisabledAccountsAsync: {Count} disabled account(s) in Connected System {ConnectedSystemId} hold no anchor " +
+                "value, so references other exports owe them could not be resolved before they were disconnected", unresolved, connectedSystemId);
+        }
+
+        return resolvedChanges.Count;
     }
 
     /// <summary>

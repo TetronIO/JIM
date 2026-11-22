@@ -2734,6 +2734,119 @@ public class ExportExecutionTests
     }
 
     /// <summary>
+    /// #2085: a leaver deprovisioned with Disable is usually also taken out of groups by the same synchronisation. The
+    /// group's export refers to the leaver by Metaverse Object, resolved only when it is sent, and it goes in the deferred
+    /// pass, after the Disable has finished and disconnected the account. Nothing then joins the leaver to an account in
+    /// this system, so the removal could never be written. Before letting the account go, the Disable resolves every
+    /// reference still owed to it, so the removal goes out.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DisableOfAnObjectAnotherExportStillRefersTo_ThatReferenceIsWrittenAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        targetSystem.ConnectorDefinition.SupportsDisable = true;
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+
+        var leaverMvoId = Guid.NewGuid();
+        SyncRepo.SeedMetaverseObject(new MetaverseObject { Id = leaverMvoId });
+        var leaverAccount = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObjectId = leaverMvoId,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            AttributeValues = [new() { Id = Guid.NewGuid(), Attribute = objectGuidAttr, AttributeId = objectGuidAttr.Id, GuidValue = Guid.NewGuid() }]
+        };
+        SyncRepo.SeedConnectedSystemObject(leaverAccount);
+        var disable = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = leaverAccount,
+            ConnectedSystemObjectId = leaverAccount.Id,
+            SourceMetaverseObjectId = leaverMvoId,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Disable,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = []
+        };
+        PendingExportsData.Add(disable);
+        SyncRepo.SeedPendingExport(disable);
+
+        // Another object's export that takes the leaver out: a reference still owed, so it waits for the deferred pass.
+        var referrer = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            AttributeValues = [new() { Id = Guid.NewGuid(), Attribute = objectGuidAttr, AttributeId = objectGuidAttr.Id, GuidValue = Guid.NewGuid() }]
+        };
+        ConnectedSystemObjectsData.Add(referrer);
+        SyncRepo.SeedConnectedSystemObject(referrer);
+        var removal = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportAttributeChangeType.Remove,
+            AttributeId = managerAttr.Id,
+            Attribute = managerAttr,
+            UnresolvedReferenceValue = leaverMvoId.ToString(),
+            Status = PendingExportAttributeChangeStatus.Pending
+        };
+        var referringExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = referrer,
+            ConnectedSystemObjectId = referrer.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            HasUnresolvedReferences = true,
+            CreatedAt = DateTime.UtcNow.AddSeconds(1),
+            AttributeValueChanges = [removal]
+        };
+        PendingExportsData.Add(referringExport);
+        SyncRepo.SeedPendingExport(referringExport);
+
+        // What each export carried when the Connector was handed it, since the instances change afterwards.
+        var sent = new List<(PendingExportChangeType ChangeType, Guid? CsoId, string? Reference, string? Unresolved)>();
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+            {
+                foreach (var export in exports)
+                {
+                    var change = export.AttributeValueChanges.SingleOrDefault();
+                    sent.Add((export.ChangeType, export.ConnectedSystemObjectId, change?.StringValue, change?.UnresolvedReferenceValue));
+                }
+                return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+            });
+
+        // Act
+        await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, mockConnector.Object, SyncRunMode.PreviewAndSync);
+
+        // Assert
+        var sentRemoval = sent.Where(s => s.CsoId == referrer.Id).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sent.Any(s => s.ChangeType == PendingExportChangeType.Disable), Is.True, "the leaver is disabled");
+            Assert.That(SyncRepo.ConnectedSystemObjects[leaverAccount.Id].MetaverseObjectId, Is.Null, "and disconnected once disabled");
+            Assert.That(sentRemoval, Has.Count.EqualTo(1), "the removal is sent in the same run");
+            Assert.That(sentRemoval.SingleOrDefault().Unresolved, Is.Null, "with nothing left unresolved");
+            Assert.That(sentRemoval.SingleOrDefault().Reference, Is.Not.Null, "naming the leaver's account");
+        }
+    }
+
+    /// <summary>
     /// Spy repository counting calls to the broad and targeted deferred-reference lookups (#1102).
     /// </summary>
     private sealed class DeferredReferenceQueryCountingSyncRepository : SyncRepository

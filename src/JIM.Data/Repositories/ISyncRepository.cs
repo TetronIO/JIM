@@ -1067,6 +1067,13 @@ public interface ISyncRepository
     Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId);
 
     /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that still owe a reference to any of the given Metaverse
+    /// Objects, with their attribute value changes, untracked. A Disable reads them before letting its account go, so it
+    /// can resolve them to that account while the join still names it (#2085).
+    /// </summary>
+    Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesToAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds);
+
+    /// <summary>
     /// Gets the count of Pending Exports for a Connected System.
     /// Used by the export processor to determine paging.
     /// </summary>

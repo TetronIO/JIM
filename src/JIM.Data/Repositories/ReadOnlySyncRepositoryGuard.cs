@@ -264,6 +264,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId)
         => _inner.GetPendingExportsWithUnresolvedReferencesAsync(connectedSystemId);
 
+    public Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesToAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds)
+        => _inner.GetPendingExportsWithUnresolvedReferencesToAsync(connectedSystemId, metaverseObjectIds);
+
     public Task<int> GetPendingExportsCountAsync(int connectedSystemId)
         => _inner.GetPendingExportsCountAsync(connectedSystemId);
 
