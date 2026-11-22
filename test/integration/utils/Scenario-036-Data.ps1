@@ -67,7 +67,8 @@ function New-Scenario036People {
             Number      = $number
             AccountName = Get-Scenario036AccountName -Prefix $Prefix -Number $number
             FirstName   = "Person"
-            LastName    = ("{0:D2}" -f $number)
+            # Not digits alone: the File Connector types a column from its values, and "01" would make it a Number.
+            LastName    = ("Tester{0:D2}" -f $number)
             DisplayName = ("{0}Person {1:D2}" -f $Prefix, $number)
             Upn         = ("{0}person.{1:D2}@{2}" -f $Prefix, $number, $Domain)
             Department  = if ($number -le $half) { "Engineering" } else { "Finance" }
