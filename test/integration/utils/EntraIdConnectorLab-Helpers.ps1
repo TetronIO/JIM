@@ -43,6 +43,26 @@ $script:EntraIdConnectorLabUserProperties = @(
 $script:EntraIdConnectorLabGroupProperties = @(
     'id', 'displayName', 'description', 'mailNickname', 'mailEnabled', 'securityEnabled', 'visibility', 'groupTypes')
 
+function Get-EntraIdConnectorLabValue {
+    <#
+    .SYNOPSIS
+        A property of an object Graph returned, or $null when Graph left it out. Graph omits what does not apply (the
+        last page's @odata.nextLink, a group's userPrincipalName, an error body on a gateway failure), and the scenarios
+        run under strict mode, where reading a missing property throws.
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowNull()][object]$Object,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    if ($null -eq $Object) { return $null }
+    $property = $Object.PSObject.Properties[$Name]
+    if ($property) { return $property.Value }
+    if ($Object -is [System.Collections.IDictionary] -and $Object.Contains($Name)) { return $Object[$Name] }
+    return $null
+}
+
 function Get-EntraIdConnectorLabRunPrefix {
     <#
     .SYNOPSIS
@@ -189,10 +209,12 @@ function Get-EntraIdConnectorLabToken {
                 client_assertion_type = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
                 client_assertion = New-EntraIdConnectorLabClientAssertion -TenantId $TenantId -ClientId $ClientId -Certificate $Certificate
             }
-        if ($response.StatusCode -eq 200 -and $response.Body.access_token) {
-            return ConvertTo-SecureString -String ([string]$response.Body.access_token) -AsPlainText -Force
+        $accessToken = Get-EntraIdConnectorLabValue -Object $response.Body -Name 'access_token'
+        if ($response.StatusCode -eq 200 -and $accessToken) {
+            return ConvertTo-SecureString -String ([string]$accessToken) -AsPlainText -Force
         }
-        $reason = if ($response.Body.error_description) { [string]$response.Body.error_description } else { "status $($response.StatusCode)" }
+        $description = Get-EntraIdConnectorLabValue -Object $response.Body -Name 'error_description'
+        $reason = if ($description) { [string]$description } else { "status $($response.StatusCode)" }
         # AADSTS700027: the certificate is not yet known; AADSTS7000215 and AADSTS700016: nor is the app, on a new one.
         $propagating = $reason -match 'AADSTS700027|AADSTS7000215|AADSTS700016'
         if (-not $propagating -or [DateTime]::UtcNow -ge $deadline) {
@@ -228,11 +250,14 @@ function Invoke-EntraIdConnectorLabGraph {
         $response = Invoke-EntraIdConnectorLabHttp @request
         if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300) { return $response.Body }
         if ($response.StatusCode -notin 429, 503, 504 -or $attempt -ge $MaximumAttempts) {
-            $graphError = if ($response.Body.error) { "$($response.Body.error.code): $($response.Body.error.message)" } else { $response.Content }
+            $errorBody = Get-EntraIdConnectorLabValue -Object (Get-EntraIdConnectorLabValue -Object $response -Name 'Body') -Name 'error'
+            $graphError = if ($errorBody) { "$(Get-EntraIdConnectorLabValue $errorBody 'code'): $(Get-EntraIdConnectorLabValue $errorBody 'message')" }
+            else { Get-EntraIdConnectorLabValue -Object $response -Name 'Content' }
             throw "Microsoft Graph refused $($Method.ToUpperInvariant()) $Path ($($response.StatusCode)): $graphError"
         }
         $retryAfter = 0
-        $value = if ($response.Headers) { @($response.Headers['Retry-After'])[0] } else { $null }
+        $headers = Get-EntraIdConnectorLabValue -Object $response -Name 'Headers'
+        $value = if ($headers) { @($headers['Retry-After'])[0] } else { $null }
         if (-not [int]::TryParse([string]$value, [ref]$retryAfter)) { $retryAfter = [Math]::Min(60, [Math]::Pow(2, $attempt)) }
         Start-Sleep -Seconds ([Math]::Max(1, $retryAfter))
     }
@@ -254,10 +279,11 @@ function Get-EntraIdConnectorLabGraphCollection {
     $next = $Path
     while ($next) {
         $page = Invoke-EntraIdConnectorLabGraph -Token $Token -Path $next -Headers $Headers
-        foreach ($item in @($page.value)) { $items.Add($item) }
-        $next = $page.'@odata.nextLink'
+        foreach ($item in @(Get-EntraIdConnectorLabValue -Object $page -Name 'value')) { if ($null -ne $item) { $items.Add($item) } }
+        $next = Get-EntraIdConnectorLabValue -Object $page -Name '@odata.nextLink'
     }
-    return , $items.ToArray()
+    # One item at a time, so an empty collection is nothing at all; callers wrap the call in @() for an array.
+    return $items.ToArray()
 }
 
 function Add-EntraIdConnectorLabCredential {
@@ -359,7 +385,7 @@ function Get-EntraIdConnectorLabSnapshot {
     foreach ($group in @($groups | Where-Object { -not (Test-EntraIdConnectorLabRunObject -Object $_) })) {
         $members = Get-EntraIdConnectorLabGraphCollection -Token $Token -Path "/groups/$($group.id)/members?`$select=id&`$top=999"
         $record = [ordered]@{}
-        foreach ($name in $script:EntraIdConnectorLabGroupProperties) { $record[$name] = $group.$name }
+        foreach ($name in $script:EntraIdConnectorLabGroupProperties) { $record[$name] = Get-EntraIdConnectorLabValue -Object $group -Name $name }
         $record['members'] = @($members | ForEach-Object { [string]$_.id } | Sort-Object)
         $snapshot["group:$($group.id)"] = ConvertTo-EntraIdConnectorLabCanonicalJson -Object ([PSCustomObject]$record) -Properties (@($script:EntraIdConnectorLabGroupProperties) + 'members')
     }
@@ -378,7 +404,7 @@ function Test-EntraIdConnectorLabRunObject {
         [Parameter(Mandatory)][object]$Object
     )
 
-    foreach ($value in @($Object.displayName, $Object.userPrincipalName, $Object.mailNickname)) {
+    foreach ($value in @('displayName', 'userPrincipalName', 'mailNickname' | ForEach-Object { Get-EntraIdConnectorLabValue -Object $Object -Name $_ })) {
         if ($value -and ([string]$value).StartsWith($script:EntraIdConnectorLabPrefixRoot, [StringComparison]::OrdinalIgnoreCase)) { return $true }
     }
     return $false
@@ -398,7 +424,7 @@ function ConvertTo-EntraIdConnectorLabCanonicalJson {
 
     $record = [ordered]@{}
     foreach ($name in $Properties) {
-        $value = $Object.$name
+        $value = Get-EntraIdConnectorLabValue -Object $Object -Name $name
         $record[$name] = if ($value -is [array] -or $value -is [System.Collections.IList]) { @($value | ForEach-Object { [string]$_ } | Sort-Object) } else { $value }
     }
     return ConvertTo-Json -InputObject $record -Depth 5 -Compress
@@ -455,8 +481,9 @@ function Remove-EntraIdConnectorLabObject {
         $found = Get-EntraIdConnectorLabGraphCollection -Token $Token -Path "/$kind`?`$filter=startswith(displayName,'$match')&`$select=id,displayName,createdDateTime&`$top=999"
         # The filter is Graph's; the prefix is checked again here, case and all, before anything is deleted.
         $doomed = @($found | Where-Object {
+            $created = Get-EntraIdConnectorLabValue -Object $_ -Name 'createdDateTime'
             ([string]$_.displayName).StartsWith($match, [StringComparison]::Ordinal) -and
-            (-not $_.createdDateTime -or ([DateTime]$_.createdDateTime).ToUniversalTime() -lt $cutoff) })
+            (-not $created -or ([DateTime]$created).ToUniversalTime() -lt $cutoff) })
         foreach ($object in $doomed) {
             try {
                 $null = Invoke-EntraIdConnectorLabGraph -Token $Token -Method Delete -Path "/$kind/$($object.id)"

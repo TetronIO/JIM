@@ -11,6 +11,9 @@
 #>
 
 BeforeAll {
+    # The scenarios run under strict mode, where reading a property Graph left out (the last page's @odata.nextLink, a
+    # group's userPrincipalName) throws; the helpers must hold up under it, so the tests run under it too.
+    Set-StrictMode -Version Latest
     . (Join-Path $PSScriptRoot 'EntraIdConnectorLab-Helpers.ps1')
     $script:Token = ConvertTo-SecureString -String 'graph-token' -AsPlainText -Force
     $script:SavedRunId = $env:GITHUB_RUN_ID
@@ -166,6 +169,12 @@ Describe 'Invoke-EntraIdConnectorLabGraph' {
         Should -Invoke Invoke-EntraIdConnectorLabHttp -Times 1
     }
 
+    It 'throws with the response text when Graph''s error is not JSON' {
+        Mock Invoke-EntraIdConnectorLabHttp { [PSCustomObject]@{ StatusCode = 502; Body = $null; Content = 'Bad Gateway' } }
+
+        { Invoke-EntraIdConnectorLabGraph -Token $script:Token -Path '/users' } | Should -Throw '*(502)*Bad Gateway*'
+    }
+
     It 'sends a body as JSON with the bearer token' {
         Mock Invoke-EntraIdConnectorLabHttp { [PSCustomObject]@{ StatusCode = 201; Body = [PSCustomObject]@{ id = 'g1' } } }
 
@@ -299,6 +308,36 @@ Describe 'Snapshot of the accounts a run must not touch' {
         $after = Get-EntraIdConnectorLabSnapshot -Token $script:Token
 
         (Compare-EntraIdConnectorLabSnapshot -Before $before -After $after)[0] | Should -BeLike 'user:admin was deleted*'
+    }
+}
+
+Describe 'Get-EntraIdConnectorLabGraphCollection' {
+
+    It 'follows next links, and stops at the page that has none' {
+        Mock Invoke-EntraIdConnectorLabGraph {
+            if ($Path -eq '/users') { [PSCustomObject]@{ value = @([PSCustomObject]@{ id = 'u1' }, [PSCustomObject]@{ id = 'u2' }); '@odata.nextLink' = 'https://graph.microsoft.com/v1.0/users?$skiptoken=x' } }
+            else { [PSCustomObject]@{ value = @([PSCustomObject]@{ id = 'u3' }) } }
+        }
+
+        @(Get-EntraIdConnectorLabGraphCollection -Token $script:Token -Path '/users' | ForEach-Object { $_.id }) | Should -Be @('u1', 'u2', 'u3')
+    }
+
+    It 'returns nothing for an empty collection' {
+        Mock Invoke-EntraIdConnectorLabGraph { [PSCustomObject]@{ value = @() } }
+
+        @(Get-EntraIdConnectorLabGraphCollection -Token $script:Token -Path '/groups').Count | Should -Be 0
+    }
+}
+
+Describe 'Test-EntraIdConnectorLabRunObject' {
+
+    It 'tells a group by its display name or mail nickname, though a group has no user principal name' {
+        Test-EntraIdConnectorLabRunObject -Object ([PSCustomObject]@{ id = 'g'; displayName = 'jimit-abc-sales'; mailNickname = 'x' }) | Should -BeTrue
+        Test-EntraIdConnectorLabRunObject -Object ([PSCustomObject]@{ id = 'g'; displayName = 'Staff'; mailNickname = 'staff' }) | Should -BeFalse
+    }
+
+    It 'tells a user by any of the three' {
+        Test-EntraIdConnectorLabRunObject -Object ([PSCustomObject]@{ displayName = 'Alice'; userPrincipalName = 'jimit-abc-alice@t'; mailNickname = 'a' }) | Should -BeTrue
     }
 }
 
