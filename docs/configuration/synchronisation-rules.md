@@ -178,7 +178,7 @@ Saving a Synchronisation Rule can be harmless or far-reaching, and the two sit s
 
 - **Cosmetic changes** (name, description) save straight away with no prompt.
 - **Changes that affect synchronisation** (scope, mappings, Object Matching Rules, direction, enabling or disabling the rule) show a confirmation listing exactly what is changing, from which value to which, and when it takes effect; see [When a change takes effect](configuration-changes.md#when-a-change-takes-effect).
-- **Destructive changes** (Deprovisioning Action, Inbound Out-of-Scope Action) additionally state, in plain terms, what the change will do: which objects will be deleted rather than disconnected, or disconnected rather than left joined.
+- **Destructive changes** (Deprovisioning Action, Inbound Out-of-Scope Action) additionally state, in plain terms, what the change will do: which objects will be deleted or disabled rather than disconnected, or disconnected rather than left joined.
 - **Changes that stop a test case passing** (see [Tests](#tests)) stop the save first: keep editing, accept the new result, or save anyway.
 - **Rules that may clash** save with a warning, which stays on screen until you close it: another enabled rule that could cover the same objects ([Several rules for the same objects](scoping-criteria.md#several-rules-for-the-same-objects)), or an export rule that flows a [Connector-defined attribute](connected-system-schema.md#connector-defined-attributes) and the attribute it is written through from different sources. The REST API returns these in the save's `warnings`, and PowerShell writes them as warnings.
 

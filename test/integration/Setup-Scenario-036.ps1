@@ -12,11 +12,11 @@
       - an HR CSV source (File Connector) holding both people and groups, told apart by its objectType column. A
         person's manager and a group's members are References to accountNames in the same file, and one group's members
         are the other groups, so JIM exports a nested group;
-      - the Entra ID Connected System's Delete Behaviour set to Disable, its schema imported, and users and groups
-        selected, with Entra ID's id as the External ID;
+      - the Entra ID Connected System's schema imported, and users and groups selected, with Entra ID's id as the
+        External ID;
       - inbound rules projecting people and groups from HR, and outbound rules provisioning them to Entra ID. Users are
-        in scope unless their department is the leaver department; leaving scope deletes them, which Delete Behaviour
-        turns into a disable;
+        in scope unless their department is the leaver department; leaving scope disables them, the user rule's
+        Deprovisioning Action being Disable (the scenario later switches it to Delete);
       - an Initial Password on the user export rule, generated from the policy JIM discovered in the tenant, so every
         user JIM creates is given a password through the password channel after the create.
 
@@ -215,14 +215,6 @@ function Invoke-WhileCertificatePropagates {
 }
 
 $entraSystem = Get-JIMConnectedSystem -Id $ConnectedSystemId
-$graphConnectorFull = Get-JIMConnectorDefinition -Id $graphConnector.id
-# Disable first: the scenario's first leaver is disabled, and the second, after it switches to Delete, deleted.
-Invoke-WhileCertificatePropagates -Description "saving Delete Behaviour" -Action {
-    Set-JIMConnectedSystem -Id $entraSystem.id -SettingValues @{
-        (Get-ConnectorSettingId $graphConnectorFull "Delete Behaviour") = @{ stringValue = "Disable" }
-    } | Out-Null
-}
-
 Invoke-WhileCertificatePropagates -Description "reading the schema" -Action { Import-JIMConnectedSystemSchema -Id $entraSystem.id | Out-Null }
 $entraObjectTypes = Get-JIMConnectedSystem -Id $entraSystem.id -ObjectTypes
 $entraUserType = $entraObjectTypes | Where-Object { $_.name -eq "user" }
@@ -237,7 +229,7 @@ Select-CsAttributes -ConnectedSystemId $entraSystem.id -ObjectType $entraUserTyp
         "jobTitle", "employeeId", "manager", "sourceOfAuthority")
 Select-CsAttributes -ConnectedSystemId $entraSystem.id -ObjectType $entraGroupType -ExternalId "id" `
     -Names @("id", "displayName", "mailNickname", "mailEnabled", "securityEnabled", "description", "members", "sourceOfAuthority")
-Write-Host "  OK '$($entraSystem.name)' (ID: $($entraSystem.id)): Delete Behaviour Disable, user and group selected (id is the External ID)" -ForegroundColor Green
+Write-Host "  OK '$($entraSystem.name)' (ID: $($entraSystem.id)): user and group selected (id is the External ID)" -ForegroundColor Green
 
 # Step 7: Resolve the Metaverse
 Write-TestStep "Step 7" "Resolving Metaverse object types"
@@ -318,7 +310,8 @@ foreach ($flow in @(
 $userScope = New-JIMScopingCriteriaGroup -SyncRuleId $userExportRule.id -Type All -PassThru
 New-JIMScopingCriterion -SyncRuleId $userExportRule.id -GroupId $userScope.id `
     -MetaverseAttributeId (Get-MvAttribute "Department").id -ComparisonType NotEquals -StringValue $script:Scenario036LeaverDepartment | Out-Null
-Set-JIMSyncRule -Id $userExportRule.id -OutboundDeprovisionAction Delete | Out-Null
+# Disable first: the scenario's first leaver is disabled, and the second, after it switches to Delete, deleted.
+Set-JIMSyncRule -Id $userExportRule.id -OutboundDeprovisionAction Disable | Out-Null
 
 $groupExportRule = New-JIMSyncRule -Name $script:Scenario036GroupExportRuleName -ConnectedSystemId $entraSystem.id `
     -ConnectedSystemObjectTypeId $entraGroupType.id -MetaverseObjectTypeId $mvGroupType.id -Direction Export -ProvisionToConnectedSystem -PassThru

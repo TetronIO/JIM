@@ -173,7 +173,7 @@ Describe 'Get-DirectoryConfig' {
 
             # Everything that describes the tree rather than the server is identical, because the
             # populate scripts and scenario assertions are shared between the two.
-            foreach ($key in 'BaseDN', 'UserContainer', 'GroupContainer', 'UserObjectClass', 'GroupObjectClass', 'UserRdnAttr', 'UserNameAttr', 'ExternalIdAttr', 'DepartmentAttr', 'DeleteBehaviour', 'DnTemplate', 'Domain', 'JimBindDN', 'JimBindPassword', 'PopulateScript') {
+            foreach ($key in 'BaseDN', 'UserContainer', 'GroupContainer', 'UserObjectClass', 'GroupObjectClass', 'UserRdnAttr', 'UserNameAttr', 'ExternalIdAttr', 'DepartmentAttr', 'DnTemplate', 'Domain', 'JimBindDN', 'JimBindPassword', 'PopulateScript') {
                 $dirsrv[$key] | Should -Be $openLdap[$key] -Because "$key must match OpenLDAP's $Instance instance"
             }
         }
@@ -437,7 +437,7 @@ Describe 'Get-DirectoryConfig -DirectoryType ActiveDirectory' {
         $ad = Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance $Instance
 
         foreach ($key in 'BaseDN', 'UserContainer', 'GroupContainer', 'UserObjectClass', 'GroupObjectClass', 'UserRdnAttr', 'UserNameAttr',
-                'ExternalIdAttr', 'DepartmentAttr', 'DeleteBehaviour', 'DisableAttribute', 'DnTemplate', 'Domain', 'ShortDomain', 'AuthType',
+                'ExternalIdAttr', 'DepartmentAttr', 'DnTemplate', 'Domain', 'ShortDomain', 'AuthType',
                 'BindDN', 'JimBindDN', 'MultiPartitionJimBindDN', 'ConnectedSystemName') {
             $ad[$key] | Should -Be $samba[$key] -Because "$key must match SambaAD's $Instance instance"
         }

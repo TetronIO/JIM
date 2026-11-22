@@ -105,9 +105,9 @@ The objects, the one object, its values of `-AttributeName`, or with `-Count` ho
 | `HasPendingExport` | `bool` | Whether a Pending Export is queued for the object. |
 | `PendingExportId` | `guid` | The ID of the queued Pending Export; empty when there is none. |
 | `PendingExportStatus` | `string` | The status of the queued Pending Export: Pending while it is waiting to be exported, Exported once it is awaiting a confirming import, and so on. Empty when none is queued. One of `Pending`, `ExportNotConfirmed`, `Executing`, `Exported` or `Parked`. |
-| `PendingExportChangeType` | `string` | Whether the queued Pending Export creates, updates or deletes the object; empty when there is none. One of `Create`, `Update` or `Delete`. |
+| `PendingExportChangeType` | `string` | Whether the queued Pending Export creates, updates, deletes or disables the object; empty when there is none. One of `Create`, `Update`, `Delete` or `Disable`. |
 | `PendingExportFailingSince` | `datetime` | When the queued Pending Export's current run of failed attempts began (UTC); empty when there is none, or when its last attempt did not fail. |
-| `State` | `string` | The object's state, combining its status with any queued Pending Export: InSync, UpdatePending, ProvisioningExportPending, ProvisioningAwaitingConfirmation, ExportNotConfirmed, ExportFailed, DeletePending or Obsolete. One of `InSync`, `UpdatePending`, `ProvisioningExportPending`, `ProvisioningAwaitingConfirmation`, `ExportNotConfirmed`, `ExportFailed`, `DeletePending` or `Obsolete`. |
+| `State` | `string` | The object's state, combining its status with any queued Pending Export: InSync, UpdatePending, ProvisioningExportPending, ProvisioningAwaitingConfirmation, ExportNotConfirmed, ExportFailed, DeletePending or Obsolete. One of `InSync`, `UpdatePending`, `ProvisioningExportPending`, `ProvisioningAwaitingConfirmation`, `ExportNotConfirmed`, `ExportFailed`, `DeletePending`, `Obsolete` or `DisablePending`. |
 | `UnresolvedReferenceCount` | `int` | How many of the object's reference values JIM has not resolved to a Connected System Object. Zero when there are none. |
 
 **With `-Id`**:

@@ -73,7 +73,7 @@ Source: a CSV HR source projecting people and their departments, as Scenario 001
 2. **Initial Password:** each new user's Initial Password is set through the password channel after the create, and the harness signs nobody in (the tenant's sign-in policy is Scenario 035's concern); it checks `passwordProfile` was accepted and the Pending Export completed.
 3. **Update:** an attribute change, a UPN change, and a manager reference.
 4. **Membership:** add and remove members; add a member beyond the 20 Graph takes on a create.
-5. **Leaver:** with Delete Behaviour Disable, a leaver is disabled; with Delete, deleted, and the harness finds it in deleted items.
+5. **Leaver:** with the rule's Deprovisioning Action Disable, a leaver is disabled and disconnected (#2085); with Delete, deleted, and the harness finds it in deleted items.
 6. **Idempotence:** a second synchronisation and export with nothing changed produce no Pending Exports.
 7. **Untouchable accounts:** the tenant's own accounts are imported, out of every rule's scope, and the snapshot comparison shows them unchanged.
 

@@ -105,6 +105,7 @@ Deprovisioning is removing or releasing an identity's accounts in target systems
 | Action | Description |
 |--------|-------------|
 | **Disconnect** (default) | Unlinks the Connected System Object from the Metaverse Object, and leaves the target account in place, untouched |
+| **Disable** | Disables the account in the target system, then unlinks it and leaves it in place, so it can be kept for audit and re-enabled for a rehire |
 | **Delete** | Removes the account from the target system entirely |
 
 The action applies however JIM came to manage the account: accounts JIM provisioned, and existing accounts it matched (joined), are treated the same. So what happens when someone leaves is set per target system.

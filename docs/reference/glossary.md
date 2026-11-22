@@ -76,7 +76,7 @@ Deprovisioning { #deprovisioning }
 :   The process of removing or releasing accounts in target systems when an identity no longer meets the criteria for access. Deprovisioning ensures that stale or revoked accounts are cleaned up across all Connected Systems.
 
 Deprovisioning Action { #deprovisioning-action }
-:   What an export Synchronisation Rule does to a Connected System Object when its identity is deleted or leaves the rule's scope. **Disconnect** (the default) unlinks the objects and leaves the target account in place; **Delete** removes the account from the target system, whether JIM originally provisioned it or matched a pre-existing one.
+:   What an export Synchronisation Rule does to a Connected System Object when its identity is deleted or leaves the rule's scope. **Disconnect** (the default) unlinks the objects and leaves the target account in place; **Disable** disables the target account and then unlinks it; **Delete** removes the account from the target system, whether JIM originally provisioned it or matched a pre-existing one.
 
 Drift Correction { #drift-correction }
 :   The re-application of JIM's expected values to a Connected System Object after drift detection finds that the target system's values no longer match what JIM's Attribute Flows say they should be. Attributes marked Initial Export Only are exempt.

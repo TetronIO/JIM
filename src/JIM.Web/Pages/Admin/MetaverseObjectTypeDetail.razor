@@ -294,6 +294,8 @@
                                            ValueChanged="@((OutboundDeprovisionAction newAction) => OnDeprovisionActionChangedAsync(header, newAction))"
                                            Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-0" Style="max-width: 200px;">
                                     <MudSelectItem Value="OutboundDeprovisionAction.Disconnect">Disconnect</MudSelectItem>
+                                    @* Only where the Connector can disable an account (#2085). *@
+                                    <MudSelectItem Value="OutboundDeprovisionAction.Disable" Disabled="@(!header.ConnectorSupportsDisable)">@(header.ConnectorSupportsDisable ? "Disable" : "Disable (not supported by Connector)")</MudSelectItem>
                                     <MudSelectItem Value="OutboundDeprovisionAction.Delete">Delete</MudSelectItem>
                                 </MudSelect>
                             </CellTemplate>

@@ -25,8 +25,9 @@
                            the password channel; none is parked or expires.
       3  Update            A job title, a user principal name and a manager change.
       4  Membership        A member added to and one removed from a department group.
-      5  Leaver (disable)  With Delete Behaviour Disable, a person leaving scope is disabled and kept.
-      6  Leaver (delete)   With Delete Behaviour Delete, a person leaving scope is deleted, and is in deleted items.
+      5  Leaver (disable)  With the rule's Deprovisioning Action Disable, a person leaving scope is disabled, kept and
+                           disconnected.
+      6  Leaver (delete)   With it switched to Delete, a person leaving scope is deleted, and is in deleted items.
       7  Idempotence       Synchronising again with nothing changed queues no Pending Exports.
       8  Untouchable       The tenant's own accounts are imported, stay disconnected, and are unchanged afterwards.
 
@@ -390,9 +391,9 @@ try {
     Add-StepResult -Name "Membership" -Passed $true -Detail "One member added and one removed"
     Write-Host "  OK Membership change read back from Graph" -ForegroundColor Green
 
-    # --- 5: Leaver, Delete Behaviour Disable ---
+    # --- 5: Leaver, Deprovisioning Action Disable ---
     $disabled = $people[5]
-    Write-TestStep "LeaverDisable" "$($disabled.AccountName) leaves scope with Delete Behaviour Disable"
+    Write-TestStep "LeaverDisable" "$($disabled.AccountName) leaves scope with the Deprovisioning Action Disable"
 
     $disabled.Department = $script:Scenario036LeaverDepartment
     Remove-FromGroups -AccountName $disabled.AccountName
@@ -406,17 +407,18 @@ try {
     }
     Invoke-EntraExportAndConfirm -Label "leaver disable" -Expected $disabledCheck
     Wait-EntraState -Description "$($disabled.AccountName) disabled" -Check $disabledCheck
+    $disabledObject = @(Get-JIMConnectedSystemObject -ConnectedSystemId $entraSystem.id -All) | Where-Object { $_.externalIdValue -eq $entraIds[$disabled.AccountName] }
+    Assert-Condition -Condition ($null -ne $disabledObject -and "$($disabledObject.joinType)" -eq 'NotJoined') `
+        -Message "$($disabled.AccountName)'s account is kept in JIM, disconnected (join: $($disabledObject.joinType))"
 
-    Add-StepResult -Name "LeaverDisable" -Passed $true -Detail "$($disabled.AccountName) disabled and kept"
+    Add-StepResult -Name "LeaverDisable" -Passed $true -Detail "$($disabled.AccountName) disabled, kept and disconnected"
     Write-Host "  OK $($disabled.AccountName) disabled in Entra ID, not deleted" -ForegroundColor Green
 
-    # --- 6: Leaver, Delete Behaviour Delete ---
+    # --- 6: Leaver, Deprovisioning Action Delete ---
     $deleted = $people[6]
-    Write-TestStep "LeaverDelete" "$($deleted.AccountName) leaves scope with Delete Behaviour Delete"
+    Write-TestStep "LeaverDelete" "$($deleted.AccountName) leaves scope with the Deprovisioning Action Delete"
 
-    $graphConnector = Get-JIMConnectorDefinition | Where-Object { $_.name -eq "JIM Microsoft Entra ID Connector" }
-    $deleteBehaviour = (Get-JIMConnectorDefinition -Id $graphConnector.id).settings | Where-Object { $_.name -eq "Delete Behaviour" }
-    Set-JIMConnectedSystem -Id $entraSystem.id -SettingValues @{ $deleteBehaviour.id = @{ stringValue = "Delete" } } | Out-Null
+    Set-JIMSyncRule -Id $exportRule.id -OutboundDeprovisionAction Delete | Out-Null
 
     $deleted.Department = $script:Scenario036LeaverDepartment
     Remove-FromGroups -AccountName $deleted.AccountName

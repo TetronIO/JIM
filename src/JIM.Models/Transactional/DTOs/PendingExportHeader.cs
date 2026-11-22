@@ -19,7 +19,7 @@ public class PendingExportHeader
     public int ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// Whether the Pending Export creates, updates or deletes the object.
+    /// Whether the Pending Export creates, updates, deletes or disables the object.
     /// </summary>
     public PendingExportChangeType ChangeType { get; set; }
 

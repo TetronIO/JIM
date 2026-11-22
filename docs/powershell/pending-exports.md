@@ -90,7 +90,7 @@ The Pending Exports, the one Pending Export, its value changes for `-AttributeNa
 |----------|------|-------------|
 | `Id` | `guid` | The ID of the Pending Export. |
 | `ConnectedSystemId` | `int` | The ID of the Connected System the change is for. |
-| `ChangeType` | `string` | Whether the Pending Export creates, updates or deletes the object. One of `Create`, `Update` or `Delete`. |
+| `ChangeType` | `string` | Whether the Pending Export creates, updates, deletes or disables the object. One of `Create`, `Update`, `Delete` or `Disable`. |
 | `Status` | `string` | Where the Pending Export has got to: Pending, Executing, Exported (awaiting a confirming import), ExportNotConfirmed (to be retried), or Parked (waiting on a decision about a generated value). A Pending Export whose last attempt failed is Pending, with FailingSince set. One of `Pending`, `ExportNotConfirmed`, `Executing`, `Exported` or `Parked`. |
 | `CreatedAt` | `datetime` | When this Pending Export was created. |
 | `LastAttemptedAt` | `datetime` | When the last export attempt was made (UTC); empty before the first. |
@@ -113,7 +113,7 @@ The Pending Exports, the one Pending Export, its value changes for `-AttributeNa
 | `Id` | `guid` | The ID of the Pending Export. |
 | `ConnectedSystemId` | `int` | The ID of the Connected System the change is for. |
 | `ConnectedSystemName` | `string` | The name of that Connected System. |
-| `ChangeType` | `string` | Whether the Pending Export creates, updates or deletes the object. One of `Create`, `Update` or `Delete`. |
+| `ChangeType` | `string` | Whether the Pending Export creates, updates, deletes or disables the object. One of `Create`, `Update`, `Delete` or `Disable`. |
 | `Status` | `string` | Where the Pending Export has got to: Pending, Executing, Exported (awaiting a confirming import), ExportNotConfirmed (to be retried), or Parked (waiting on a decision about a generated value). A Pending Export whose last attempt failed is Pending, with FailingSince set. One of `Pending`, `ExportNotConfirmed`, `Executing`, `Exported` or `Parked`. |
 | `CreatedAt` | `datetime` | When the Pending Export was created (UTC). |
 | `ErrorCount` | `int` | How many export attempts in a row have failed; zero once an attempt succeeds. A failing Pending Export is attempted again at every export run, however many attempts have failed. |

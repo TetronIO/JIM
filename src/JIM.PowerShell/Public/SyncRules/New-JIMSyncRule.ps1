@@ -44,8 +44,9 @@ function New-JIMSyncRule {
 
     .PARAMETER OutboundDeprovisionAction
         On an export rule, what happens to a Connected System Object when its Metaverse Object leaves the rule's
-        scope or is deleted: Disconnect breaks the join and leaves the object in the Connected System, and Delete
-        removes it from there. Disconnect when omitted.
+        scope or is deleted: Disconnect breaks the join and leaves the object in the Connected System, Disable
+        disables it there and then breaks the join, and Delete removes it from there. Disable needs a Connector that
+        can disable an account (SupportsDisable on Get-JIMConnectorDefinition). Disconnect when omitted.
 
     .PARAMETER ChangeReason
         An optional reason for the change, recorded against this Synchronisation Rule's change history.
@@ -124,7 +125,7 @@ function New-JIMSyncRule {
         [bool]$Enabled = $true,
 
         [Parameter()]
-        [ValidateSet('Disconnect', 'Delete')]
+        [ValidateSet('Disconnect', 'Disable', 'Delete')]
         [string]$OutboundDeprovisionAction,
 
         [Parameter()]

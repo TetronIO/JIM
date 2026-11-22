@@ -192,7 +192,7 @@ Describe 'New-JIMConfigurationChangePreview' {
             $command = Get-Command New-JIMConfigurationChangePreview
             $outbound = $command.Parameters['OutboundDeprovisionAction'].Attributes |
                 Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
-            $outbound.ValidValues | Should -Be @('Disconnect', 'Delete')
+            $outbound.ValidValues | Should -Be @('Disconnect', 'Disable', 'Delete')
             $inbound = $command.Parameters['InboundOutOfScopeAction'].Attributes |
                 Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
             $inbound.ValidValues | Should -Be @('RemainJoined', 'Disconnect')

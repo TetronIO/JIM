@@ -11,9 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ The JIM Microsoft Entra ID Connector synchronises users and groups with Microsoft Entra ID through Microsoft Graph, passwords included; `Register-JIMEntraIdConnector` sets up its app registration, permissions and certificate in one command. (#361)
 - ✨ The REST API and `Get-JIMConnectedSystem -Id` now return a Connected System's setting values, so a script can check a configuration before changing it; an encrypted setting reports only whether a value is held.
+- ✨ Export Synchronisation Rules can deprovision leavers with **Disable**: the account is disabled and kept for audit, and re-enabled if the person returns. Works with Active Directory, Samba AD, 389 Directory Server, OpenLDAP and Microsoft Entra ID. (#2085)
 
 ### Changed
 
+- 🔄 The LDAP Connector's **Delete Behaviour** and **Disable Attribute** settings are removed: a delete always deletes. To disable leavers instead, set the export Synchronisation Rule's Deprovisioning Action to **Disable**. (#2085)
 - 🔄 `Register-JIMIdentityProvider -Provider EntraId` signs you in through your browser, so it works in tenants whose Conditional Access blocks device code sign-in, as Microsoft recommends; add `-UseDeviceCode` on a computer with no browser. (#3021)
 
 ## [1.0.0] - 2026-11-20

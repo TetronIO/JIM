@@ -31,7 +31,7 @@ public class PendingExportDetailDto
     public string ConnectedSystemName { get; set; } = null!;
 
     /// <summary>
-    /// Whether the Pending Export creates, updates or deletes the object.
+    /// Whether the Pending Export creates, updates, deletes or disables the object.
     /// </summary>
     public PendingExportChangeType ChangeType { get; set; }
 
