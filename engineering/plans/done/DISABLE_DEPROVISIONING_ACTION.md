@@ -1,6 +1,7 @@
 # Disable Deprovisioning Action
 
-- **Status:** Doing
+- **Status:** Done
+- **Note:** Disable for SCIM and SQL, refusing Disable on a group Object Type when a rule is saved, and stamping a Metaverse Object's last-connector date when a disable leaves it with none are deferred; see Not in scope.
 - **Issue:** [#2085](https://github.com/TetronIO/JIM/issues/2085) (found blocking [#361](https://github.com/TetronIO/JIM/issues/361), Scenario 036)
 - **Created:** 2026-11-22
 
@@ -29,7 +30,11 @@ JIM has no users yet, so the setting is removed outright rather than deprecated 
 8. **Reporting and previews.** Staging reports Deprovision Queued; the export reports Deprovisioned, with the change type shown as Disable. Previews gain "would stage a Disable export" where they name "would stage a Delete export" (Sync Preview, Full Synchronisation preview, the destructive-toggle and scoping Configuration Change Previews, and the change consequences wording).
 9. **Surfaces.** Portal: the rule's Deprovisioning radio group and the Metaverse Object Type page's per-rule select offer Disable, disabled with the reason where the Connector cannot. REST: the enum gains the value. PowerShell: `-OutboundDeprovisionAction Disable` on `New-JIMSyncRule`, `Set-JIMSyncRule` and `New-JIMConfigurationChangePreview`.
 
-## Phases
+## Results
+
+Verified against the local Samba AD and OpenLDAP labs (Scenario 004, Test 11b): the leaver's account is disabled (`userAccountControl`, `pwdAccountLockedTime`), kept and disconnected with nothing pending, and a rehire rejoins it, re-enabled on Samba AD. Scenario 036 carries the Entra ID case; it runs in the AD lab.
+
+## Phases ✅
 
 1. Model, capability and migration; rule-save validation.
 2. Staging and execution in the engine and export execution, with unit, workflow and real-PostgreSQL tests.
@@ -42,3 +47,5 @@ JIM has no users yet, so the setting is removed outright rather than deprecated 
 
 - Disable for SCIM (`active: false`) and SQL (a named column): later, behind the same capability.
 - Refusing Disable on a group Object Type when the rule is saved, rather than at export: needs per-Object-Type knowledge the capability does not carry.
+- Stamping a Metaverse Object's last-connector date when completing a Disable leaves it with no joined object (the scope-out Disconnect path does), so a Deletion Rule of When Last Connector Disconnected applies to it. Only affects an object with no source system left joined.
+- Re-enabling on OpenLDAP and 389 Directory Server: a rehire is rejoined, but only a rule that flows or clears the lock attribute unlocks the account.
