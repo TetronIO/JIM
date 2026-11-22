@@ -498,10 +498,9 @@ function Invoke-JIMEntraIdConnectorChange {
         'NewCertificate' {
             $made = New-JIMEntraIdConnectorCertificate -Name $Change.Target -ValidityDays $Connection.CertificateValidityDays
             # Graph replaces the whole list, so the certificates the application has go back with the new one; only a
-            # request for one application returns their keys.
-            $existing = @((Invoke-JIMEntraIdGraphApi -Connection $Connection -Path "/applications/$($Connection.ApplicationId)?`$select=keyCredentials").keyCredentials)
-            $keep = @($existing | ForEach-Object {
-                @{ keyId = $_.keyId; type = $_.type; usage = $_.usage; key = $_.key; displayName = $_.displayName; startDateTime = $_.startDateTime; endDateTime = $_.endDateTime } })
+            # request for one application returns their keys. Each goes back exactly as Graph returned it: one with any
+            # property changed or missing (customKeyIdentifier, say) is refused as an edit, KeyNotUpdatable.
+            $keep = @((Invoke-JIMEntraIdGraphApi -Connection $Connection -Path "/applications/$($Connection.ApplicationId)?`$select=keyCredentials").keyCredentials)
             $null = Invoke-JIMEntraIdGraphApi -Connection $Connection -Method Patch -Path "/applications/$($Connection.ApplicationId)" -Body @{ keyCredentials = @($keep) + @($made.KeyCredential) }
             $Connection.Certificate = $made
         }
@@ -553,9 +552,9 @@ function Invoke-JIMEntraIdConnectorChange {
             }
         }
         'RetireCertificates' {
+            # The rest go back exactly as Graph returned them, as for a new certificate.
             $existing = @((Invoke-JIMEntraIdGraphApi -Connection $Connection -Path "/applications/$($Connection.ApplicationId)?`$select=keyCredentials").keyCredentials)
-            $keep = @($existing | Where-Object { $_.keyId -notin $arguments.KeyIds } | ForEach-Object {
-                @{ keyId = $_.keyId; type = $_.type; usage = $_.usage; key = $_.key; displayName = $_.displayName; startDateTime = $_.startDateTime; endDateTime = $_.endDateTime } })
+            $keep = @($existing | Where-Object { $_.keyId -notin $arguments.KeyIds })
             $null = Invoke-JIMEntraIdGraphApi -Connection $Connection -Method Patch -Path "/applications/$($Connection.ApplicationId)" -Body @{ keyCredentials = @($keep) }
         }
         default { throw "Unknown change: $($Change.Action)" }
@@ -567,13 +566,14 @@ function Test-JIMEntraIdPropagationRefusal {
     .SYNOPSIS
         Whether JIM refused the Connected System's settings only because Entra ID has not yet applied a credential or
         permissions granted moments ago: a token with no permissions yet, or a certificate or federated credential the
-        token service does not know yet.
+        token service does not know yet, or a
+        service principal Microsoft Graph does not know yet (Authorization_IdentityNotFound).
     #>
     [CmdletBinding()]
     [OutputType([bool])]
     param([Parameter(Mandatory)][AllowEmptyString()][string]$Message)
 
-    return $Message -match 'carries no Microsoft Graph application permissions|cannot read users or groups|AADSTS700027|AADSTS700213|AADSTS70021\b|AADSTS7000215|AADSTS700016'
+    return $Message -match 'carries no Microsoft Graph application permissions|cannot read users or groups|AADSTS700027|AADSTS700213|AADSTS70021\b|AADSTS7000215|AADSTS700016|Authorization_IdentityNotFound'
 }
 
 function Invoke-JIMEntraIdWithRetry {

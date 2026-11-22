@@ -632,7 +632,7 @@ Describe 'Invoke-JIMEntraIdConnectorChange' {
                 $script:GraphCalls.Add([PSCustomObject]@{ Method = $Method; Path = $Path; Body = $Body })
                 if ($Path -like '*select=keyCredentials') {
                     [PSCustomObject]@{ keyCredentials = @([PSCustomObject]@{
-                        keyId = 'other-key'; type = 'AsymmetricX509Cert'; usage = 'Verify'; key = 'b3RoZXI='; displayName = 'Someone else'
+                        keyId = 'other-key'; type = 'AsymmetricX509Cert'; usage = 'Verify'; key = 'b3RoZXI='; displayName = 'Someone else'; customKeyIdentifier = 'QUJDRA=='
                         startDateTime = '2026-01-01T00:00:00Z'; endDateTime = '2027-01-01T00:00:00Z' }) }
                 }
             }
@@ -721,6 +721,26 @@ Describe 'Invoke-JIMEntraIdConnectorChange' {
         }
     }
 
+    It 'tries the Connected System again while Microsoft Graph does not yet know a service principal made moments ago' {
+        # Seen against a real tenant: a new application's service principal is refused as unknown for a while after
+        # it is created, though its token is issued.
+        InModuleScope JIM {
+            Mock Start-Sleep {}
+            $script:Puts = 0
+            Mock Invoke-JIMApi {
+                if ($Method -eq 'PUT') {
+                    $script:Puts++
+                    if ($script:Puts -le 1) { throw 'JIM API error (400): One or more Connected System settings are invalid. - Tenant ID: Authenticated, but Microsoft Graph refused the test request: Microsoft Graph refused GET /v1.0/users with HTTP 401 (Authorization_IdentityNotFound): The identity of the calling application could not be established.' }
+                }
+            }
+            Invoke-JIMEntraIdConnectorChange -Connection $script:Connection -Change ([PSCustomObject]@{
+                Action = 'SetConnectedSystem'; Target = 'Microsoft Entra ID'
+                Arguments = @{ ConnectedSystemId = 42; Settings = @{ 'Tenant ID' = 'tenant' }; SetsClientId = $false; SetsCertificate = $false } })
+
+            $script:Puts | Should -Be 2
+        }
+    }
+
     It 'does not try the Connected System again for a refusal that waiting will not cure' {
         InModuleScope JIM {
             Mock Start-Sleep {}
@@ -730,6 +750,29 @@ Describe 'Invoke-JIMEntraIdConnectorChange' {
                 Action = 'SetConnectedSystem'; Target = 'Microsoft Entra ID'
                 Arguments = @{ ConnectedSystemId = 42; Settings = @{ 'Tenant ID' = 'x' }; SetsClientId = $false; SetsCertificate = $false } }) } | Should -Throw '*GUID*'
             Should -Invoke Start-Sleep -Times 0
+        }
+    }
+
+    # Microsoft Graph refuses the whole list (KeyNotUpdatable) when a credential it already holds comes back with any
+    # property changed or missing, so a kept credential goes back exactly as Graph returned it.
+    It 'sends the certificates it keeps back exactly as Microsoft Graph returned them, when adding one' {
+        InModuleScope JIM {
+            Invoke-JIMEntraIdConnectorChange -Connection $script:Connection -Change ([PSCustomObject]@{ Action = 'NewCertificate'; Target = 'JIM Entra ID Connector'; Arguments = @{} })
+
+            $patch = $script:GraphCalls | Where-Object Method -eq 'Patch' | Select-Object -First 1
+            $kept = $patch.Body.keyCredentials | Where-Object { $_.keyId -eq 'other-key' }
+            $kept.customKeyIdentifier | Should -Be 'QUJDRA=='
+            $kept.key | Should -Be 'b3RoZXI='
+            $kept.endDateTime | Should -Be '2027-01-01T00:00:00Z'
+        }
+    }
+
+    It 'sends the certificates it keeps back exactly as Microsoft Graph returned them, when retiring others' {
+        InModuleScope JIM {
+            Invoke-JIMEntraIdConnectorChange -Connection $script:Connection -Change ([PSCustomObject]@{ Action = 'RetireCertificates'; Target = 'x'; Arguments = @{ KeyIds = @('cert-1') } })
+
+            $patch = $script:GraphCalls | Where-Object Method -eq 'Patch' | Select-Object -First 1
+            ($patch.Body.keyCredentials | Where-Object { $_.keyId -eq 'other-key' }).customKeyIdentifier | Should -Be 'QUJDRA=='
         }
     }
 
