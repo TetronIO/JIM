@@ -29,6 +29,12 @@ namespace JIM.Connectors.Graph;
 /// JIM to send again on a later export. A refused create made nothing, so sending it again cannot make a second object.
 /// </para>
 /// <para>
+/// A Create JIM sends again whose object already carries a Graph id (an earlier send succeeded, and a confirming import
+/// did not yet see it) first reads that id: if Graph holds the object, the Create becomes an update of it, since a
+/// security group has no unique name and a second <c>POST</c> would make a second group. Only once Graph still cannot
+/// find it after the same waits does the Create go ahead.
+/// </para>
+/// <para>
 /// A create that succeeded reports its new id whatever its follow-ups did. Failing it would have JIM send the create
 /// again and make a second object; a follow-up left unwritten is found by the confirming import, which stages it again.
 /// </para>
@@ -99,8 +105,12 @@ internal sealed class GraphConnectorExport
     {
         switch (state.PendingExport.ChangeType)
         {
+            case PendingExportChangeType.Create when state.PreviouslyCreatedId != null:
+                return [new GraphExportStep(state, GraphExportStepKind.FindPreviouslyCreated,
+                    new GraphBatchRequest(HttpMethod.Get, $"/{state.Collection}/{Uri.EscapeDataString(state.PreviouslyCreatedId)}?$select=id"))];
+
             case PendingExportChangeType.Create:
-                return [new GraphExportStep(state, GraphExportStepKind.Create, new GraphBatchRequest(HttpMethod.Post, $"/{state.Collection}", CreateBody(state)))];
+                return [CreateStep(state)];
 
             case PendingExportChangeType.Delete when state.IsUser && _disableUsersInsteadOfDeleting:
                 return [new GraphExportStep(state, GraphExportStepKind.Disable,
@@ -114,6 +124,36 @@ internal sealed class GraphConnectorExport
                     ? [new GraphExportStep(state, GraphExportStepKind.Update, new GraphBatchRequest(HttpMethod.Patch, ObjectPath(state), state.Properties.DeepClone()))]
                     : await FollowUpsAsync(state);
         }
+    }
+
+    private GraphExportStep CreateStep(GraphExportState state) =>
+        new(state, GraphExportStepKind.Create, new GraphBatchRequest(HttpMethod.Post, $"/{state.Collection}", CreateBody(state)));
+
+    /// <summary>
+    /// What a Create sent again does once Graph has answered whether an earlier send made the object: update it if so;
+    /// create it once Graph still cannot find it after the waits; otherwise report why it could not tell.
+    /// </summary>
+    private async Task<List<GraphExportStep>> HandlePreviouslyCreatedAsync(GraphExportStep step, GraphBatchResponse response)
+    {
+        var state = step.State;
+        if (response.IsSuccess)
+        {
+            _logger.Information("Microsoft Graph export: the {ObjectType} {Id} a Create was sent again for already exists; updating it rather than creating another.",
+                Singular(state), LogSanitiser.Sanitise(state.PreviouslyCreatedId));
+            state.Id = state.PreviouslyCreatedId;
+            state.Created = true;
+            foreach (var property in GraphSchemaCatalogue.CreateOnlyProperties)
+                state.Properties.Remove(property);
+            return state.Properties.Count > 0
+                ? [new GraphExportStep(state, GraphExportStepKind.Update, new GraphBatchRequest(HttpMethod.Patch, ObjectPath(state), state.Properties.DeepClone()))]
+                : await FollowUpsAsync(state);
+        }
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return step.Attempt < MissingReferenceRetryDelays.Length ? [Again(step)] : [CreateStep(state)];
+
+        state.Failure = GraphExportErrorClassifier.Classify(response, $"read the {Singular(state)} an earlier Create made, to avoid making another");
+        return [];
     }
 
     /// <summary>
@@ -209,6 +249,9 @@ internal sealed class GraphConnectorExport
 
             case GraphExportStepKind.AddReferences:
                 return HandleAddReferences(step, response);
+
+            case GraphExportStepKind.FindPreviouslyCreated:
+                return await HandlePreviouslyCreatedAsync(step, response);
 
             default:
                 throw new InvalidOperationException($"Unhandled Microsoft Graph export step {step.Kind}.");

@@ -107,6 +107,8 @@ Changes are written through Microsoft Graph's `$batch`, twenty requests at a tim
 
 A new user is created with a long random password, which Microsoft Graph requires and nobody knows; it is never stored. Give users a password they can use with [Initial Password](../concepts/passwords.md), or sign them in another way, such as a Temporary Access Pass.
 
+Entra ID takes a few seconds to make a new object visible everywhere, so a write that refers to one created moments before (a nested group, a new user's manager) can be refused as not found. The Connector sends such a write again after 2, 5 and 10 seconds before reporting it as a Missing Dependency, which JIM retries on the next export. If an import runs before Entra ID lists a new object and JIM sends its create again, the Connector finds the object it already made and updates it, so a group is never created twice.
+
 A deletion deletes the object, which Entra ID keeps for 30 days in case it needs restoring. With **Delete Behaviour** set to **Disable**, a user is disabled instead. A group cannot be disabled, so it is deleted either way.
 
 ### Passwords

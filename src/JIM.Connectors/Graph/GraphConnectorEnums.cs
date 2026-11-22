@@ -31,5 +31,11 @@ internal enum GraphExportStepKind
     AddReferences,
 
     /// <summary><c>DELETE /groups/{id}/{relationship}/{reference}/$ref</c>; one already gone counts as removed.</summary>
-    RemoveReference
+    RemoveReference,
+
+    /// <summary>
+    /// <c>GET</c> of the object a Create sent again already names: an earlier send made it if Graph holds it, and the
+    /// Create becomes an update of it rather than a second object.
+    /// </summary>
+    FindPreviouslyCreated
 }

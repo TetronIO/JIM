@@ -48,6 +48,12 @@ internal static class GraphSchemaCatalogue
 
     public static IReadOnlyList<GraphSchemaAttribute> GroupAttributes { get; } = BuildGroupAttributes();
 
+    /// <summary>The properties Graph takes only on a create, such as a group's <c>mailEnabled</c>, which an update must leave out.</summary>
+    public static IReadOnlySet<string> CreateOnlyProperties { get; } = UserAttributes.Concat(GroupAttributes)
+        .Where(a => a.Writability == AttributeWritability.WritableOnCreate)
+        .Select(a => a.Name)
+        .ToHashSet(StringComparer.Ordinal);
+
     private static List<GraphSchemaAttribute> BuildUserAttributes()
     {
         var attributes = new List<GraphSchemaAttribute>

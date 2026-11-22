@@ -221,6 +221,62 @@ public class GraphConnectorExportTests
     }
 
     [Test]
+    public async Task Create_SentAgainForAGroupGraphAlreadyHolds_UpdatesItRatherThanMakingASecondAsync()
+    {
+        // JIM sends a Create again when a confirming import did not see the object, which Graph's lagging lists can
+        // cause moments after it was made. A security group has no unique name, so a second POST makes a second group.
+        _tenant.AddGroup("g1", "Finance", g => { g["mailNickname"] = "finance"; g["mailEnabled"] = false; g["securityEnabled"] = true; });
+        _tenant.Members["g1"] = [];
+        _tenant.AddUser("u1", "u1");
+
+        var result = (await ExportAsync(Against("g1", GroupType, PendingExportChangeType.Create, [.. NewGroupAttributes(), Add("members", "u1")]))).Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.ExternalId, Is.EqualTo("g1"));
+            Assert.That(_tenant.Groups, Has.Count.EqualTo(1), "No second group.");
+            Assert.That(_tenant.Members["g1"].Select(m => m.Id), Is.EqualTo(new[] { "u1" }));
+            Assert.That(WriteRequests().Any(r => r["method"]!.GetValue<string>() == "POST" && r["url"]!.GetValue<string>() == "/groups"), Is.False);
+            Assert.That(WriteRequests().Where(r => r["method"]!.GetValue<string>() == "PATCH").Select(r => r["body"]!["mailEnabled"]), Is.All.Null,
+                "Graph takes mailEnabled only on a create.");
+        }
+    }
+
+    [Test]
+    public async Task Create_SentAgainForAnObjectGraphNoLongerHolds_CreatesItAsync()
+    {
+        _tenant.NextIds.Enqueue("new-group");
+
+        var result = (await ExportAsync(Against("deleted-since", GroupType, PendingExportChangeType.Create, NewGroupAttributes()))).Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.ExternalId, Is.EqualTo("new-group"));
+            Assert.That(_tenant.Groups, Has.Count.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task Create_SentAgainBeforeGraphCanReadTheFirst_WaitsAndUpdatesItAsync()
+    {
+        _tenant.AddUser("u1", "Ada", u => u["userPrincipalName"] = "ada@contoso.com");
+        _tenant.NotYetReadable["u1"] = 2;
+
+        var result = (await ExportAsync(Against("u1", UserType, PendingExportChangeType.Create,
+            Set("userPrincipalName", "ada@contoso.com"), Set("displayName", "Ada Lovelace"), Set("mailNickname", "ada"), Set("accountEnabled", true)))).Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.True, result.ErrorMessage);
+            Assert.That(result.ExternalId, Is.EqualTo("u1"));
+            Assert.That(_tenant.Users, Has.Count.EqualTo(1), "No second user, and no refusal of the user principal name as taken.");
+            Assert.That((string?)_tenant.User("u1")!["displayName"], Is.EqualTo("Ada Lovelace"));
+        }
+    }
+
+    [Test]
     public async Task Create_TwentyFiveUsers_TravelInTwoBatchesAsync()
     {
         var exports = Enumerable.Range(1, 25).Select(i => Create(UserType,
