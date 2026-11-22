@@ -4533,6 +4533,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("SupportsDeltaImport")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("SupportsDisable")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("SupportsExport")
                         .HasColumnType("boolean");
 

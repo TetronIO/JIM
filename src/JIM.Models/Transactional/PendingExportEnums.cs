@@ -16,7 +16,13 @@ public enum PendingExportChangeType
     /// <summary>
     /// Delete an object in a Connected System.
     /// </summary>
-    Delete = 2
+    Delete = 2,
+    /// <summary>
+    /// Disable an account in a Connected System, keeping it, as an export Synchronisation Rule's Disable deprovisioning
+    /// action asks. Once the Connector reports it done, the Pending Export is complete and the Connected System Object
+    /// is disconnected.
+    /// </summary>
+    Disable = 3
 }
 
 public enum PendingExportAttributeChangeType

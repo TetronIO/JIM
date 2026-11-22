@@ -179,6 +179,9 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
     public bool SupportsUniquenessRejectionClassification => true;
 
+    /// <summary>Disables an account the way its directory does: userAccountControl on Active Directory, nsAccountLock on 389 Directory Server, pwdAccountLockedTime on OpenLDAP.</summary>
+    public bool SupportsDisable => true;
+
     // objectGUID, entryUUID and nsUniqueId are each unique within a directory whatever class an entry has, so an
     // entry arriving under a different Object Type is the same object having changed type (#2049).
     public bool ExternalIdsUniqueAcrossObjectTypes => true;

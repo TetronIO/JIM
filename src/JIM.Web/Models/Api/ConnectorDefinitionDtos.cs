@@ -157,6 +157,12 @@ public class ConnectorDefinitionDto
     public bool SupportsUniquenessRejectionClassification { get; set; }
 
     /// <summary>
+    /// Whether the Connector can disable an account rather than delete it, so an export Synchronisation Rule may
+    /// deprovision with Disable.
+    /// </summary>
+    public bool SupportsDisable { get; set; }
+
+    /// <summary>
     /// Whether an external ID identifies one object across every Object Type of a Connected System using the
     /// Connector. When true, an import refuses an object that has changed Object Type, rather than treating it as a
     /// deletion and a new object, unless the Full Import Run Profile allows Object Type changes. When false, a Run
@@ -208,6 +214,7 @@ public class ConnectorDefinitionDto
             SupportsPasswordPolicyDiscovery = entity.SupportsPasswordPolicyDiscovery,
             SupportsUniquenessProbe = entity.SupportsUniquenessProbe,
             SupportsUniquenessRejectionClassification = entity.SupportsUniquenessRejectionClassification,
+            SupportsDisable = entity.SupportsDisable,
             ExternalIdsUniqueAcrossObjectTypes = entity.ExternalIdsUniqueAcrossObjectTypes,
             SchemaStandard = entity.SchemaStandard.ToString()
         };

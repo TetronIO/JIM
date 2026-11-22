@@ -81,6 +81,9 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
     public bool SupportsUniquenessProbe => false;
     public bool SupportsUniquenessRejectionClassification => false;
 
+    /// <summary>Disables a user by setting accountEnabled to false. A group cannot be disabled.</summary>
+    public bool SupportsDisable => true;
+
     /// <summary>A directory object's <c>id</c> is unique across the tenant, whether the object is a user or a group.</summary>
     public bool ExternalIdsUniqueAcrossObjectTypes => true;
     #endregion
