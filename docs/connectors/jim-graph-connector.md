@@ -174,7 +174,7 @@ The **Cloud** setting reaches a tenant in the US Government L4 (GCC High), US Go
 |--------------|------------|
 | Saving the settings names a missing permission | Add it under the app registration's **API permissions**, as an application permission, and grant admin consent. |
 | `AADSTS7000215` | The **Client Secret** is not valid: supply the secret's **Value**, not its **Secret ID**. |
-| `AADSTS700027` | The certificate is not on the app registration: upload its public part under **Certificates & secrets**. |
+| `AADSTS700027` | The certificate is not on the app registration: upload its public part under **Certificates & secrets**. Entra ID takes a few minutes to apply a certificate uploaded moments ago, and JIM asks again for about half a minute before reporting this; if the refusal persists after that, try again a few minutes later before changing anything. |
 | `AADSTS700213`, `AADSTS70021` | No federated credential matches the managed identity: add one for the identity in **Managed Identity Client ID**. |
 | A Delta Import read every object | Its Activity says why; see [Full and Delta Import](#full-and-delta-import). |
 | An export refused because the object is synchronised from Active Directory | Scope the export Synchronisation Rule on the Metaverse Attribute that holds `sourceOfAuthority`, or write the attribute in Active Directory. See [Source of Authority](#source-of-authority). |

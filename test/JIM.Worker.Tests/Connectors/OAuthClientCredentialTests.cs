@@ -99,6 +99,77 @@ public class OAuthClientCredentialTests
     }
 
     [Test]
+    public async Task ApplyAsync_RefusalStillBeingApplied_AsksAgainAfterEachDelayUntilATokenIsIssuedAsync()
+    {
+        // An authorisation server can refuse a credential added moments ago until it has applied it everywhere.
+        var handler = new StubHttpMessageHandler((_, call) => Task.FromResult(call <= 2 ? StillApplyingRefusal() : TokenResponse()));
+        using var tokenClient = new HttpClient(handler);
+        var credential = new RecordingCredential();
+        var waits = new List<TimeSpan>();
+        var strategy = new OAuthClientCredentialsAuthentication(tokenClient, new Uri(TokenEndpoint), "client-id", credential, scope: null, () => Start,
+            describeFailure: (status, _) => $"described {(int)status}",
+            stillBeingApplied: new OAuthStillBeingAppliedRetry(IsStillApplying, [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3)]),
+            delay: (wait, _) => { waits.Add(wait); return Task.CompletedTask; });
+        using var request = new HttpRequestMessage(HttpMethod.Get, "https://graph.example.com/v1.0/users");
+
+        await strategy.ApplyAsync(request, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(request.Headers.Authorization?.Parameter, Is.EqualTo("token-value"));
+            Assert.That(handler.Requests, Has.Count.EqualTo(3));
+            Assert.That(waits, Is.EqualTo(new[] { TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2) }));
+            Assert.That(credential.Calls, Has.Count.EqualTo(3), "each request carries a freshly built credential");
+        }
+    }
+
+    [Test]
+    public void ApplyAsync_RefusalStillBeingAppliedEveryTime_ThrowsTheDescribedRefusalAfterTheLastDelay()
+    {
+        var handler = new StubHttpMessageHandler(_ => StillApplyingRefusal());
+        using var tokenClient = new HttpClient(handler);
+        var waits = new List<TimeSpan>();
+        var strategy = new OAuthClientCredentialsAuthentication(tokenClient, new Uri(TokenEndpoint), "client-id", new RecordingCredential(), scope: null, () => Start,
+            describeFailure: (status, _) => $"described {(int)status}",
+            stillBeingApplied: new OAuthStillBeingAppliedRetry(IsStillApplying, [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)]),
+            delay: (wait, _) => { waits.Add(wait); return Task.CompletedTask; });
+        using var request = new HttpRequestMessage(HttpMethod.Get, "https://graph.example.com/v1.0/users");
+
+        var exception = Assert.ThrowsAsync<HttpAuthenticationException>(async () => await strategy.ApplyAsync(request, CancellationToken.None));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exception!.Message, Is.EqualTo("described 401"));
+            Assert.That(handler.Requests, Has.Count.EqualTo(3));
+            Assert.That(waits, Is.EqualTo(new[] { TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2) }));
+        }
+    }
+
+    [Test]
+    public void ApplyAsync_RefusalNotStillBeingApplied_ThrowsWithoutAskingAgain()
+    {
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)
+        {
+            Content = new StringContent("""{"error":"invalid_client","error_codes":[7000215]}""", Encoding.UTF8, "application/json")
+        });
+        using var tokenClient = new HttpClient(handler);
+        var waits = new List<TimeSpan>();
+        var strategy = new OAuthClientCredentialsAuthentication(tokenClient, new Uri(TokenEndpoint), "client-id", new RecordingCredential(), scope: null, () => Start,
+            describeFailure: (status, _) => $"described {(int)status}",
+            stillBeingApplied: new OAuthStillBeingAppliedRetry(IsStillApplying, [TimeSpan.FromSeconds(1)]),
+            delay: (wait, _) => { waits.Add(wait); return Task.CompletedTask; });
+        using var request = new HttpRequestMessage(HttpMethod.Get, "https://graph.example.com/v1.0/users");
+
+        Assert.ThrowsAsync<HttpAuthenticationException>(async () => await strategy.ApplyAsync(request, CancellationToken.None));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(handler.Requests, Has.Count.EqualTo(1));
+            Assert.That(waits, Is.Empty);
+        }
+    }
+
+    [Test]
     public void Constructor_CleartextEndpointWithCustomCredential_IsRefused()
     {
         using var tokenClient = new HttpClient(TokenHandler());
@@ -107,10 +178,19 @@ public class OAuthClientCredentialTests
             tokenClient, new Uri("http://login.example.com/token"), "client-id", new RecordingCredential()));
     }
 
-    private static StubHttpMessageHandler TokenHandler() => new(_ => new HttpResponseMessage(HttpStatusCode.OK)
+    private static StubHttpMessageHandler TokenHandler() => new(_ => TokenResponse());
+
+    private static HttpResponseMessage TokenResponse() => new(HttpStatusCode.OK)
     {
         Content = new StringContent("""{"access_token":"token-value","expires_in":3600}""", Encoding.UTF8, "application/json")
-    });
+    };
+
+    private static HttpResponseMessage StillApplyingRefusal() => new(HttpStatusCode.Unauthorized)
+    {
+        Content = new StringContent("""{"error":"invalid_client","error_codes":[700027]}""", Encoding.UTF8, "application/json")
+    };
+
+    private static bool IsStillApplying(HttpStatusCode status, string? body) => body?.Contains("700027") == true;
 
     private sealed class RecordingCredential : IOAuthClientCredential
     {

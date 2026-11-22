@@ -31,6 +31,25 @@ public class EntraTokenFailureTests
     }
 
     [Test]
+    public void IsStillBeingApplied_CertificateNotYetKnown_IsTrue()
+    {
+        // Entra ID learns a newly uploaded certificate unevenly, so a token request signed with it can be refused for
+        // some minutes after one has already succeeded.
+        Assert.That(EntraTokenFailure.IsStillBeingApplied(HttpStatusCode.Unauthorized, """{"error":"invalid_client","error_codes":[700027]}"""), Is.True);
+    }
+
+    [TestCase("""{"error":"invalid_client","error_codes":[7000215]}""")]
+    [TestCase("""{"error":"unauthorized_client","error_codes":[700016]}""")]
+    [TestCase("""{"error":"invalid_request","error_codes":[123456]}""")]
+    [TestCase("not json")]
+    [TestCase(null)]
+    public void IsStillBeingApplied_AnyOtherRefusal_IsFalse(string? body)
+    {
+        // A mistyped secret or client ID would only be retried into a longer wait for the same answer.
+        Assert.That(EntraTokenFailure.IsStillBeingApplied(HttpStatusCode.Unauthorized, body), Is.False);
+    }
+
+    [Test]
     public void Describe_UnknownErrorCode_NamesTheCodeAndTheError()
     {
         var message = EntraTokenFailure.Describe(HttpStatusCode.BadRequest, """{"error":"invalid_request","error_codes":[123456]}""");

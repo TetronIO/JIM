@@ -4,6 +4,7 @@
 using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using JIM.Connectors.Http;
 
 namespace JIM.Connectors.Graph;
 
@@ -29,7 +30,7 @@ internal static partial class EntraTokenFailure
         [700016] = $"No application with this {GraphConnectorConstants.SettingClientId} was found in the tenant. Check the {GraphConnectorConstants.SettingClientId}, and that the app registration belongs to the tenant named in {GraphConnectorConstants.SettingTenantId}.",
         [90002] = $"The tenant named in {GraphConnectorConstants.SettingTenantId} was not found. Check it, and check the {GraphConnectorConstants.SettingCloud} setting: a tenant in a national cloud is not found on the global endpoints, nor the other way round.",
         [900023] = $"The {GraphConnectorConstants.SettingTenantId} is not a valid tenant identifier. Supply the tenant's ID (a GUID) or one of its verified domain names.",
-        [700027] = $"Microsoft Entra ID could not verify the assertion signed with the {GraphConnectorConstants.SettingCertificate}. Check that the same certificate is uploaded under Certificates & secrets on the app registration.",
+        [700027] = $"Microsoft Entra ID could not verify the assertion signed with the {GraphConnectorConstants.SettingCertificate}. Check that the same certificate is uploaded under Certificates & secrets on the app registration. One uploaded in the last few minutes can still be refused while Entra ID applies it; if so, try again shortly.",
         [700024] = "The client assertion was outside its valid time range. Check that the clock on the JIM server is correct.",
         [7000112] = "The application is disabled in the tenant. Enable its enterprise application (service principal) and try again.",
         [70021] = FederatedMismatch,
@@ -38,6 +39,21 @@ internal static partial class EntraTokenFailure
         [700213] = FederatedMismatch,
         [500011] = $"Microsoft Graph was not found in the tenant. Check that the {GraphConnectorConstants.SettingCloud} setting matches the cloud the tenant is in."
     };
+
+    /// <summary>
+    /// The refusals Entra ID gives while it is still applying a credential added moments ago, and how long JIM waits
+    /// before each fresh token request: about half a minute in all.
+    /// </summary>
+    public static OAuthStillBeingAppliedRetry StillBeingAppliedRetry { get; } =
+        new(IsStillBeingApplied, [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(15)]);
+
+    /// <summary>
+    /// Whether Entra ID refused the token request only because it has not yet applied a newly uploaded certificate
+    /// everywhere (AADSTS700027): it learns one unevenly, so a request can be refused for some minutes after another
+    /// has succeeded. Nothing else counts, because every other refusal also means a wrong setting, and asking again
+    /// would only make the administrator wait longer for the same answer.
+    /// </summary>
+    public static bool IsStillBeingApplied(HttpStatusCode statusCode, string? body) => Read(body).Codes.Contains(700027);
 
     public static string Describe(HttpStatusCode statusCode, string? body)
     {
