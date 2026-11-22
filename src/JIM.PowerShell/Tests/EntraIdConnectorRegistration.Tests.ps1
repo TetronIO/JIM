@@ -279,6 +279,18 @@ Describe 'Get-JIMEntraIdConnectorPlan' {
             & $script:Actions $plan | Should -Be @('NewCertificate', 'SetConnectedSystem', 'RetireCertificates')
         }
 
+        It 'under -WhatIf, still names the certificates it would retire' {
+            # ForEach-Object with a member name honours -WhatIf, so under a preview it read nothing back.
+            $plan = InModuleScope JIM -Parameters @{ Current = (& $script:NewRegisteredState); Now = $script:Now } {
+                $WhatIfPreference = $true
+                Get-JIMEntraIdConnectorPlan -Name 'JIM Entra ID Connector' -ConnectedSystemName 'Microsoft Entra ID' -Current $Current -Now $Now -ResetCertificate
+            }
+
+            $retire = $plan.Changes | Where-Object Action -eq 'RetireCertificates'
+            @($retire.Arguments.KeyIds).Count | Should -BeGreaterThan 0
+            @($retire.Arguments.KeyIds) | Should -Not -Contain $null
+        }
+
         It 'makes a certificate when the Connected System is new, since the one the application has cannot be read back' {
             $state = & $script:NewRegisteredState
             $state.ConnectedSystem = $null
@@ -397,6 +409,15 @@ Describe 'Resolve-JIMEntraIdConnectorOption' {
         $options.TrackSourceOfAuthority | Should -BeTrue
     }
 
+    It 'under -WhatIf, still reads what the application was granted, so a preview reports no drift that is not there' {
+        $options = InModuleScope JIM -Parameters @{ Current = (& $script:NewRegisteredState) } {
+            $WhatIfPreference = $true
+            Resolve-JIMEntraIdConnectorOption -Current $Current -Bound @{}
+        }
+
+        $options.SkipHiddenMembership | Should -BeFalse
+    }
+
     It 'turns tracking on where the setting was ticked in the portal, so a re-run grants its permissions' {
         $state = & $script:NewRegisteredState
         $state.ConnectedSystem.Settings['Track Source of Authority Changes'] = $true
@@ -444,6 +465,25 @@ Describe 'New-JIMEntraIdConnectorCertificate' {
                 $made.KeyCredential.usage | Should -Be 'Verify'
                 $made.KeyCredential.key | Should -Be ([Convert]::ToBase64String($certificate.RawData))
                 $made.Thumbprint | Should -Be $certificate.Thumbprint
+            }
+            finally {
+                $certificate.Dispose()
+            }
+        }
+    }
+
+    It 'gives Microsoft Graph exactly the dates the certificate holds, which are whole seconds' {
+        # Graph refuses a keyCredential whose end date is later than the certificate's (KeyCredentialsInvalidEndDate),
+        # and an X.509 certificate keeps its dates to the second, so fractional seconds made every end date too late.
+        InModuleScope JIM {
+            $made = New-JIMEntraIdConnectorCertificate -Name 'JIM Entra ID Connector' -ValidityDays 365
+            $certificate = [System.Security.Cryptography.X509Certificates.X509CertificateLoader]::LoadCertificate([Convert]::FromBase64String($made.KeyCredential.key))
+            try {
+                $start = [datetime]::Parse($made.KeyCredential.startDateTime, $null, 'RoundtripKind')
+                $end = [datetime]::Parse($made.KeyCredential.endDateTime, $null, 'RoundtripKind')
+                $start | Should -Be $certificate.NotBefore.ToUniversalTime()
+                $end | Should -Be $certificate.NotAfter.ToUniversalTime()
+                $made.NotAfter | Should -Be $certificate.NotAfter.ToUniversalTime()
             }
             finally {
                 $certificate.Dispose()

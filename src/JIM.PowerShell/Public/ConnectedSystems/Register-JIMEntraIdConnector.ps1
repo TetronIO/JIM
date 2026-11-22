@@ -97,7 +97,7 @@ function Register-JIMEntraIdConnector {
         Permissions (string[]): The Microsoft Graph application permissions the application holds.
         Changes (string[]): The changes this run made. Empty when everything was already right.
 
-        With -WhatIf, nothing is returned.
+        With -WhatIf, nothing is returned when there is something to change; when everything is already right, the result comes back with no Changes.
 
     .EXAMPLE
         Connect-JIM -Url 'https://jim.example.com'

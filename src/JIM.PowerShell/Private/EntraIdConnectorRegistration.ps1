@@ -53,7 +53,7 @@ function Resolve-JIMEntraIdConnectorOption {
 
     $roles = $Current.GraphServicePrincipal.Roles
     $existing = @($Current.Applications).Count -eq 1 -and $Current.ServicePrincipal
-    $granted = @(if ($existing) { @($Current.GrantedRoles) | ForEach-Object AppRoleId })
+    $granted = @(if ($existing) { @($Current.GrantedRoles) | ForEach-Object { $_.AppRoleId } })
     $holds = { param($permission) $roles.ContainsKey($permission) -and $roles[$permission] -in $granted }
     $settings = if ($Current.ConnectedSystem) { $Current.ConnectedSystem.Settings } else { @{} }
 
@@ -219,7 +219,7 @@ function Get-JIMEntraIdConnectorPlan {
                     audiences = @($script:JIMEntraIdTokenExchangeAudience)
                     description = 'JIM''s Microsoft Entra ID Connector, signing in as the managed identity of the virtual machine it runs on.' } }))
         }
-        $retire = @($ours | ForEach-Object KeyId)
+        $retire = @($ours | ForEach-Object { $_.KeyId })
     }
     else {
         $lasting = @($ours | Where-Object { $_.EndDateTime -gt $Now.AddDays($script:JIMEntraIdCertificateRenewalDays) })
@@ -233,7 +233,7 @@ function Get-JIMEntraIdConnectorPlan {
             $changes.Add((New-JIMEntraIdChange -Action 'NewCertificate' -Target $Name `
                 -Description "Make a certificate and add it to the application, $why"))
             $newCertificate = $true
-            $retire = @($ours | ForEach-Object KeyId)
+            $retire = @($ours | ForEach-Object { $_.KeyId })
         }
     }
 
@@ -306,8 +306,11 @@ function New-JIMEntraIdConnectorCertificate {
     try {
         $request = [System.Security.Cryptography.X509Certificates.CertificateRequest]::new(
             "CN=$Name", $rsa, [System.Security.Cryptography.HashAlgorithmName]::SHA256, [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
-        $notBefore = [DateTimeOffset]::UtcNow.AddMinutes(-5)
-        $notAfter = [DateTimeOffset]::UtcNow.AddDays($ValidityDays)
+        # Whole seconds: a certificate keeps its dates to the second, and Microsoft Graph refuses a keyCredential whose
+        # end date is later than the certificate's, which fractional seconds would make it.
+        $now = [DateTimeOffset]::FromUnixTimeSeconds([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
+        $notBefore = $now.AddMinutes(-5)
+        $notAfter = $now.AddDays($ValidityDays)
         $certificate = $request.CreateSelfSigned($notBefore, $notAfter)
         try {
             $pfxBytes = $certificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx)
