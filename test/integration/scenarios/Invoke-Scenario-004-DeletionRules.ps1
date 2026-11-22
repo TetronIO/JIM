@@ -916,13 +916,19 @@ function Invoke-ProvisionJoinedUser {
 function Test-DirectoryAccountDisabled {
     param([Parameter(Mandatory=$true)][string]$SamAccountName)
 
-    $raw = Invoke-LDAPSearch -DirectoryConfig $DirectoryConfig -BaseDN $DirectoryConfig.BaseDN `
+    # Resolved from the config as Get-LDAPUser resolves it; the search runs in its container, or the toolbox.
+    $containerName = if ($DirectoryConfig.ContainerName) { $DirectoryConfig.ContainerName } else { "samba-ad-primary" }
+    $raw = Invoke-LDAPSearch -DirectoryConfig $DirectoryConfig -ContainerName $containerName -Server "localhost" `
+        -Port $DirectoryConfig.LdapSearchPort -Scheme $DirectoryConfig.LdapSearchScheme -BaseDN $DirectoryConfig.BaseDN `
+        -BindDN $DirectoryConfig.BindDN -BindPassword $DirectoryConfig.BindPassword `
         -Filter "($($DirectoryConfig.UserNameAttr)=$SamAccountName)" -Attributes @('userAccountControl', 'nsAccountLock', 'pwdAccountLockedTime')
-    $lines = @(Expand-LDIFFoldedLine -RawLdif ($raw -join "`n"))
+    # One entry, short single-valued attributes: no folded lines to unfold. Read line by line, by exact name.
+    $lines = @(($raw -join "`n") -split "`r?`n")
     $value = {
-        param($name)
-        $line = $lines | Where-Object { $_ -match "^${name}:\s" } | Select-Object -First 1
-        if ($line) { ($line -split ':\s*', 2)[1].Trim() } else { $null }
+        param([string]$attributeName)
+        $prefix = "${attributeName}:"
+        $line = $lines | Where-Object { $_.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1
+        if ($line) { $line.Substring($prefix.Length).Trim() } else { $null }
     }
     switch ("$($DirectoryConfig.DirectoryType)") {
         { $_ -in 'SambaAD', 'ActiveDirectory' } { $uac = & $value 'userAccountControl'; return ($null -ne $uac -and (([int]$uac -band 2) -ne 0)) }
