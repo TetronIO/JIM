@@ -239,7 +239,17 @@ function Invoke-EntraExportAndConfirm {
         }
 
         $result = Start-JIMRunProfile -ConnectedSystemId $entraSystem.id -RunProfileName "Full Import" -Wait -PassThru
-        Assert-ActivitySuccess -ActivityId $result.activityId -Name "Entra ID Confirming Full Import ($Label, round $round)"
+        if ($round -lt $MaximumRounds) {
+            # Graph's lists lag differently from one query to the next, so the import can still miss an object the wait
+            # above saw listed. JIM then reports the export unconfirmed and sends it again next round, where the
+            # Connector finds the object it created rather than creating a second; that is what a later round is for.
+            # Only that shape passes, and the last round allows nothing.
+            Assert-ActivitySuccess -ActivityId $result.activityId -Name "Entra ID Confirming Full Import ($Label, round $round)" `
+                -AllowWarnings -AllowedWarningTypes @('ExportNotConfirmed')
+        }
+        else {
+            Assert-ActivitySuccess -ActivityId $result.activityId -Name "Entra ID Confirming Full Import ($Label, round $round)"
+        }
         $result = Start-JIMRunProfile -ConnectedSystemId $entraSystem.id -RunProfileName "Full Synchronisation" -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $result.activityId -Name "Entra ID Full Synchronisation ($Label, round $round)"
 
