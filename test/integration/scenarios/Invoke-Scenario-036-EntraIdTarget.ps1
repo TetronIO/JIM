@@ -262,7 +262,7 @@ $cleanupProblems = [System.Collections.Generic.List[string]]::new()
 try {
     Write-TestStep "Tenant" "Registering the Connector and signing the harness in"
 
-    $modulePath = "$PSScriptRoot/../../src/JIM.PowerShell/JIM.psd1"
+    $modulePath = "$PSScriptRoot/../../../src/JIM.PowerShell/JIM.psd1"
     Remove-Module JIM -Force -ErrorAction SilentlyContinue
     Import-Module $modulePath -Force -ErrorAction Stop
     Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
@@ -329,12 +329,8 @@ try {
     Assert-Equal -Actual $expired.Count -Expected 0 -Message "Initial Passwords that expired undelivered"
     $initialPassword = Get-JIMSyncRuleInitialPassword -Id $exportRule.id
     Assert-Equal -Actual $initialPassword.parkedAccountCount -Expected 0 -Message "Accounts parked on the user export rule"
-    # Graph never returns a password; that one was set after the create is what it does show.
-    $unset = @($people | Where-Object {
-        $user = Get-GraphObject -Path "/users/$($entraIds[$_.AccountName])?`$select=createdDateTime,lastPasswordChangeDateTime"
-        -not $user.lastPasswordChangeDateTime -or ([DateTime]$user.lastPasswordChangeDateTime) -lt ([DateTime]$user.createdDateTime)
-    })
-    Assert-Equal -Actual $unset.Count -Expected 0 -Message "Users whose password was never set ($(($unset | ForEach-Object { $_.AccountName }) -join ', '))"
+    # Graph shows no sign of which password a user holds (lastPasswordChangeDateTime is set by the create as well), so
+    # the delivery is judged by JIM's queue: every Initial Password left it, none refused, none expired.
 
     Add-StepResult -Name "InitialPassword" -Passed $true -Detail "$($people.Count) delivered; none parked or expired"
     Write-Host "  OK Initial Passwords delivered through the password channel" -ForegroundColor Green
@@ -486,7 +482,7 @@ finally {
         $testResults.Success = $false
         foreach ($problem in $cleanupProblems) { Write-Failure $problem }
     }
-    Disconnect-JIM -ErrorAction SilentlyContinue
+    if (Get-Module JIM) { Disconnect-JIM -ErrorAction SilentlyContinue }
 }
 
 Write-TestSection "Scenario 036 $(if ($testResults.Success) { 'Complete' } else { 'Failed' })"
