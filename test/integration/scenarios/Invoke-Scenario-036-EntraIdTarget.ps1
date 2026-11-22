@@ -212,15 +212,23 @@ function Invoke-HrImportAndSync {
     Assert-ActivitySuccess -ActivityId $result.activityId -Name "HR Full Synchronisation ($Label)"
 }
 
-# Exports to Entra ID, then reads it back, until no Pending Export is left. A change that references something not yet
-# created (a member or manager the same export creates) goes out once that exists, and a confirming import can miss a
-# write Graph has not yet made visible to a list, so this goes round several times, waiting between rounds.
+# Exports to Entra ID, then reads it back, until no Pending Export is left. Graph's lists lag its writes, and a confirming
+# import that misses a create has JIM send it again, which for a group (no unique name) makes a second one. So before
+# each confirming import the harness waits until Graph itself shows what the step expects ($Expected, returning what
+# still differs), as an administrator's schedule would leave time for. A change referring to something not yet
+# exported goes out in a later round.
 function Invoke-EntraExportAndConfirm {
-    param([string]$Label, [int]$MaximumRounds = 6)
+    param([string]$Label, [scriptblock]$Expected, [int]$MaximumRounds = 4)
 
     for ($round = 1; $round -le $MaximumRounds; $round++) {
         $result = Start-JIMRunProfile -ConnectedSystemId $entraSystem.id -RunProfileName "Export" -Wait -PassThru
         Assert-ExportSuccess -ActivityId $result.activityId -Name "Entra ID Export ($Label, round $round)"
+
+        if ($Expected) {
+            # Not fatal here: what a later round still has to export cannot show yet. The import's check is what fails.
+            try { Wait-EntraState -Description "Graph to show the export ($Label, round $round)" -Check $Expected -TimeoutSeconds 120 }
+            catch { Write-Host "    $($_.Exception.Message)" -ForegroundColor DarkGray }
+        }
 
         $result = Start-JIMRunProfile -ConnectedSystemId $entraSystem.id -RunProfileName "Full Import" -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $result.activityId -Name "Entra ID Confirming Full Import ($Label, round $round)"
@@ -307,7 +315,16 @@ try {
 
     Write-HrCsv
     Invoke-HrImportAndSync -Label "baseline"
-    Invoke-EntraExportAndConfirm -Label "provision"
+    $provisioned = {
+        foreach ($person in $people) { Get-PersonMismatch -Person $person -Key $person.Upn }
+        foreach ($group in $groups) { Get-GroupMismatch -Group $group }
+        # The confirming import lists every user and group, and a list lags a direct read.
+        $listed = @(Get-EntraIdConnectorLabGraphCollection -Token $script:HarnessToken -Path "/groups?`$filter=startswith(displayName,'$prefix')&`$select=id")
+        if ($listed.Count -ne $groups.Count) { "Graph lists $($listed.Count) of the run's $($groups.Count) groups" }
+        $listed = @(Get-EntraIdConnectorLabGraphCollection -Token $script:HarnessToken -Path "/users?`$filter=startswith(displayName,'$prefix')&`$select=id")
+        if ($listed.Count -ne $people.Count) { "Graph lists $($listed.Count) of the run's $($people.Count) users" }
+    }
+    Invoke-EntraExportAndConfirm -Label "provision" -Expected $provisioned
 
     Wait-EntraState -Description "the people in Entra ID" -Check { foreach ($person in $people) { Get-PersonMismatch -Person $person -Key $person.Upn } }
     foreach ($person in $people) { $entraIds[$person.AccountName] = (Get-GraphObject -Path "/users/$($person.Upn)?`$select=id").id }
@@ -343,10 +360,9 @@ try {
     $moved = $people[3]; $moved.Manager = $people[[int]($people.Count / 2)].AccountName
     Write-HrCsv
     Invoke-HrImportAndSync -Label "update"
-    Invoke-EntraExportAndConfirm -Label "update"
-    Wait-EntraState -Description "the updates in Entra ID" -Check {
-        foreach ($person in @($retitled, $renamed, $moved)) { Get-PersonMismatch -Person $person -Key $entraIds[$person.AccountName] }
-    }
+    $updated = { foreach ($person in @($retitled, $renamed, $moved)) { Get-PersonMismatch -Person $person -Key $entraIds[$person.AccountName] } }
+    Invoke-EntraExportAndConfirm -Label "update" -Expected $updated
+    Wait-EntraState -Description "the updates in Entra ID" -Check $updated
 
     Add-StepResult -Name "Update" -Passed $true -Detail "jobTitle, userPrincipalName and manager changed"
     Write-Host "  OK Attribute, user principal name and manager changes read back from Graph" -ForegroundColor Green
@@ -361,7 +377,7 @@ try {
     $engineering.Members.Add($joiningGroup)
     Write-HrCsv
     Invoke-HrImportAndSync -Label "membership"
-    Invoke-EntraExportAndConfirm -Label "membership"
+    Invoke-EntraExportAndConfirm -Label "membership" -Expected { Get-GroupMismatch -Group $engineering }
     Wait-EntraState -Description "the membership change in Entra ID" -Check { Get-GroupMismatch -Group $engineering }
 
     Add-StepResult -Name "Membership" -Passed $true -Detail "One member added and one removed"
@@ -375,12 +391,14 @@ try {
     Remove-FromGroups -AccountName $disabled.AccountName
     Write-HrCsv
     Invoke-HrImportAndSync -Label "leaver disable"
-    Invoke-EntraExportAndConfirm -Label "leaver disable"
-    Wait-EntraState -Description "$($disabled.AccountName) disabled" -Check {
+    $disabledCheck = {
         $user = Get-GraphObject -Path "/users/$($entraIds[$disabled.AccountName])?`$select=accountEnabled"
         if (-not $user) { "$($disabled.AccountName) was deleted, not disabled" }
         elseif ($user.accountEnabled -ne $false) { "$($disabled.AccountName) is still enabled" }
+        foreach ($group in $groups) { Get-GroupMismatch -Group $group }
     }
+    Invoke-EntraExportAndConfirm -Label "leaver disable" -Expected $disabledCheck
+    Wait-EntraState -Description "$($disabled.AccountName) disabled" -Check $disabledCheck
 
     Add-StepResult -Name "LeaverDisable" -Passed $true -Detail "$($disabled.AccountName) disabled and kept"
     Write-Host "  OK $($disabled.AccountName) disabled in Entra ID, not deleted" -ForegroundColor Green
@@ -397,12 +415,14 @@ try {
     Remove-FromGroups -AccountName $deleted.AccountName
     Write-HrCsv
     Invoke-HrImportAndSync -Label "leaver delete"
-    Invoke-EntraExportAndConfirm -Label "leaver delete"
     $deletedId = $entraIds[$deleted.AccountName]
-    Wait-EntraState -Description "$($deleted.AccountName) deleted" -Check {
+    $deletedCheck = {
         if (Get-GraphObject -Path "/users/$deletedId`?`$select=id") { "$($deleted.AccountName) is still in Entra ID" }
         elseif (-not (Get-GraphObject -Path "/directory/deletedItems/$deletedId")) { "$($deleted.AccountName) is not in deleted items" }
+        foreach ($group in $groups) { Get-GroupMismatch -Group $group }
     }
+    Invoke-EntraExportAndConfirm -Label "leaver delete" -Expected $deletedCheck
+    Wait-EntraState -Description "$($deleted.AccountName) deleted" -Check $deletedCheck
 
     Add-StepResult -Name "LeaverDelete" -Passed $true -Detail "$($deleted.AccountName) deleted, and in deleted items"
     Write-Host "  OK $($deleted.AccountName) deleted, and restorable from deleted items" -ForegroundColor Green
