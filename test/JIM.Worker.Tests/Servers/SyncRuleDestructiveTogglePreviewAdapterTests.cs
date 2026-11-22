@@ -563,6 +563,24 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
     }
 
     [Test]
+    public async Task EvaluateDeltasAsync_OutboundDisconnectToDisable_ImminentDisableNamedAsSuchAsync()
+    {
+        GivenExportRule();
+        GivenRuleScopedToSales(_rule);
+        var leaving = GivenJoinedCso("Engineering");
+
+        var deltas = await EvaluateAsync(UnchangedProposal() with { OutboundDeprovisionAction = OutboundDeprovisionAction.Disable });
+
+        var imminent = deltas.Single(d => d.ConnectedSystemObjectId == leaving.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(imminent.TransitionType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDisableExport));
+            Assert.That(imminent.OldValue, Does.Contain("Disconnect"));
+            Assert.That(imminent.NewValue, Does.Contain("Disable"));
+        }
+    }
+
+    [Test]
     public async Task EvaluateDeltasAsync_OutboundToggleOverAnIdentityASiblingExportRuleCovers_ReportsNoImminentDeprovisioningAsync()
     {
         // Out of the edited rule's scope but covered by another export rule on the same system and Object Type: that rule

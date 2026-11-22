@@ -224,9 +224,11 @@ internal static class FullSynchronisationPreviewDeltas
             }
         }
 
-        foreach (var deletion in preview.Outbound.ProposedExports.Where(export => export.ChangeType == PendingExportChangeType.Delete))
+        foreach (var deletion in preview.Outbound.ProposedExports.Where(export => export.ChangeType.IsDeprovisioning()))
         {
-            yield return Target(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport,
+            yield return Target(deletion.ChangeType == PendingExportChangeType.Disable
+                    ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDisableExport
+                    : ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport,
                 identity with { Id = deletion.SourceMetaverseObjectId ?? identity.Id }, deletion.ConnectedSystemObjectId, deletion.ConnectedSystemId);
         }
 

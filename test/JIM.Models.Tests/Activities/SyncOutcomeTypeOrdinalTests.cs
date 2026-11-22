@@ -138,7 +138,8 @@ public class SyncOutcomeTypeOrdinalTests
         // and the candidates passed over because a value built from them was already held.
         [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting] = 59,
         [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped] = 60,
-        [ActivityRunProfileExecutionItemSyncOutcomeType.HandedToAnotherExportRule] = 61
+        [ActivityRunProfileExecutionItemSyncOutcomeType.HandedToAnotherExportRule] = 61,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDisableExport] = 62
     };
 
     [Test]

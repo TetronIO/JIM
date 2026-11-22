@@ -2630,7 +2630,7 @@ public class SyncPreviewServer
 
             result.Outbound.ProposedExports.Add(new PendingExport
             {
-                ChangeType = PendingExportChangeType.Delete,
+                ChangeType = exportDecision.ExportChangeType,
                 ConnectedSystemId = downstreamCso.ConnectedSystemId,
                 ConnectedSystemObjectId = downstreamCso.Id,
                 SourceMetaverseObjectId = mvoId,
@@ -2645,7 +2645,7 @@ public class SyncPreviewServer
                 SyncRuleName = exportDecision.WinningRule?.Name,
                 DetailCount = attributeChanges.Count,
                 DetailMessage = downstreamCso.ConnectedSystemId.ToString(),
-                StagedChangeType = PendingExportChangeType.Delete,
+                StagedChangeType = exportDecision.ExportChangeType,
                 Ordinal = deletionNode.Children.Count
             });
         }
@@ -2946,7 +2946,7 @@ public class SyncPreviewServer
                     when entry.DeprovisioningDecision?.Action == OutOfScopeDeprovisioningAction.StageDeprovisioningExport:
                     result.Outbound.ProposedExports.Add(new PendingExport
                     {
-                        ChangeType = PendingExportChangeType.Delete,
+                        ChangeType = entry.DeprovisioningDecision.Value.ExportChangeType,
                         ConnectedSystemId = entry.ConnectedSystemId,
                         ConnectedSystemObjectId = entry.ExistingTargetCsoId,
                         SourceMetaverseObjectId = entry.MetaverseObjectId
@@ -3041,7 +3041,7 @@ public class SyncPreviewServer
                         // carries the target's secondary external id), and the real run records that count (#1964).
                         DetailCount = 0,
                         DetailMessage = entry.ConnectedSystemId.ToString(),
-                        StagedChangeType = PendingExportChangeType.Delete,
+                        StagedChangeType = entry.DeprovisioningDecision.Value.ExportChangeType,
                         Ordinal = siblings.Count
                     });
                     break;

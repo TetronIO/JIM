@@ -634,6 +634,7 @@ public static class CausalityModelBuilder
                 // An account another export rule took over (#2822): the object it names is in the target system.
                 or ActivityRunProfileExecutionItemSyncOutcomeType.HandedToAnotherExportRule
                 or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDisableExport
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Exported
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed

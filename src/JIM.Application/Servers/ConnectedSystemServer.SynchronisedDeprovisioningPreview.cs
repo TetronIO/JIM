@@ -457,10 +457,15 @@ public partial class ConnectedSystemServer
     /// decision: a delete export, or a disconnection that leaves the object where it is.
     /// </summary>
     private static ActivityRunProfileExecutionItemSyncOutcomeType DeletionCascadeExportTransition(
-        DeprovisioningPreviewPass pass, ConnectedSystemObject cso, MetaverseObject mvo) =>
-        pass.SyncEngine.DecideMvoDeletionExport(cso, mvo.Type?.Id, pass.ExportEvaluationCache.ExportRulesByMvoTypeId, existingPendingExport: null).ShouldStageDeprovisioningExport
-            ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport
-            : ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject;
+        DeprovisioningPreviewPass pass, ConnectedSystemObject cso, MetaverseObject mvo)
+    {
+        var decision = pass.SyncEngine.DecideMvoDeletionExport(cso, mvo.Type?.Id, pass.ExportEvaluationCache.ExportRulesByMvoTypeId, existingPendingExport: null);
+        if (!decision.ShouldStageDeprovisioningExport)
+            return ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject;
+        return decision.ExportChangeType == PendingExportChangeType.Disable
+            ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDisableExport
+            : ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport;
+    }
 
     /// <summary>
     /// Classifies a recall's change to one Metaverse Object, attribute by attribute: cleared when nothing replaces the
@@ -562,7 +567,10 @@ public partial class ConnectedSystemServer
                     break;
 
                 case OutboundPreviewEntryKind.Deprovisioning when entry.DeprovisioningDecision?.Action == OutOfScopeDeprovisioningAction.StageDeprovisioningExport:
-                    yield return OutboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport, mvo, objectName, entry, entry.ExistingTargetCsoId);
+                    yield return OutboundDelta(entry.DeprovisioningDecision.Value.ExportChangeType == PendingExportChangeType.Disable
+                            ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDisableExport
+                            : ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport,
+                        mvo, objectName, entry, entry.ExistingTargetCsoId);
                     break;
 
                 case OutboundPreviewEntryKind.Deprovisioning when entry.DeprovisioningDecision?.Action == OutOfScopeDeprovisioningAction.Disconnect:

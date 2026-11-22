@@ -491,6 +491,24 @@ public class SyncRuleScopingPreviewAdapterTests
     }
 
     [Test]
+    public async Task EvaluateDeltasAsync_ExportNarrowingWithDisableAction_ReportsADisableExportAsync()
+    {
+        // #2085: objects leaving scope are disabled and kept, and the preview says so rather than "removed".
+        GivenExportRule();
+        GivenRuleScopedToSales(_rule);
+        _rule.OutboundDeprovisionAction = OutboundDeprovisionAction.Disable;
+        GivenMvoWithTargetObject("Sales");
+
+        var deltas = await EvaluateAsync(ProposalScopedTo("Marketing"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas.Select(d => d.TransitionType), Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDisableExport));
+            Assert.That(deltas.Select(d => d.TransitionType), Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport));
+        }
+    }
+
+    [Test]
     public async Task EvaluateDeltasAsync_ExportNarrowingWhileASiblingExportRuleCoversTheIdentity_ReportsAScopeExitWithoutDeprovisioningAsync()
     {
         // Another export rule on the same system and Object Type still covers the identity, so it takes the account over

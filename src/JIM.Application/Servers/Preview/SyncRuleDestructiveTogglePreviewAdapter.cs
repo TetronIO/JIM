@@ -8,6 +8,7 @@ using JIM.Models.Logic;
 using JIM.Models.Preview;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
+using JIM.Models.Transactional;
 using System.Runtime.CompilerServices;
 
 namespace JIM.Application.Servers.Preview;
@@ -52,6 +53,7 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
     private const string OutOfScopeActionAttributeName = "Out-of-Scope Action";
     private const string DisconnectValue = "Disconnect";
     private const string DeleteValue = "Delete";
+    private const string DisableValue = "Disable";
     private const string RemainJoinedValue = "Remain joined";
 
     /// <summary>
@@ -345,15 +347,18 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
                         (answer.Undecided || answer.InScope)))
                     continue;
 
-                var fate = _syncEngine.DecideOutOfScopeDeprovisioning(proposedRule, queuedByCsoId.GetValueOrDefault(cso.Id)).Action;
+                var fateDecision = _syncEngine.DecideOutOfScopeDeprovisioning(proposedRule, queuedByCsoId.GetValueOrDefault(cso.Id));
+                var fate = fateDecision.Action;
 
-                // A Delete already sent goes ahead whichever action the rule carries, so the proposal changes nothing.
+                // A Delete or Disable already sent goes ahead whichever action the rule carries, so the proposal changes nothing.
                 if (fate == OutOfScopeDeprovisioningAction.DeprovisioningAlreadySent)
                     continue;
 
-                transition = fate == OutOfScopeDeprovisioningAction.StageDeprovisioningExport
-                    ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport
-                    : ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject;
+                transition = fate != OutOfScopeDeprovisioningAction.StageDeprovisioningExport
+                    ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject
+                    : fateDecision.ExportChangeType == PendingExportChangeType.Disable
+                        ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDisableExport
+                        : ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport;
             }
 
             deltas.Add(OutboundDelta(transition, rule, cso, mvo, DeprovisioningActionAttributeName, oldValue, newValue));
@@ -541,8 +546,12 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
         ObjectScopingCriteriaGroups = rule.ObjectScopingCriteriaGroups
     };
 
-    private static string DescribeOutboundAction(OutboundDeprovisionAction action) =>
-        action == OutboundDeprovisionAction.Delete ? DeleteValue : DisconnectValue;
+    private static string DescribeOutboundAction(OutboundDeprovisionAction action) => action switch
+    {
+        OutboundDeprovisionAction.Delete => DeleteValue,
+        OutboundDeprovisionAction.Disable => DisableValue,
+        _ => DisconnectValue
+    };
 
     private async Task<SyncRule> GetRuleAsync(PreviewContext context)
     {

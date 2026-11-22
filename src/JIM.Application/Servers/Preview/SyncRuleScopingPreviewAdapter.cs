@@ -462,9 +462,11 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
                     continue;
                 }
 
-                if (rule.OutboundDeprovisionAction == OutboundDeprovisionAction.Delete)
+                if (rule.OutboundDeprovisionAction is OutboundDeprovisionAction.Delete or OutboundDeprovisionAction.Disable)
                 {
-                    yield return MetaverseScopeDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport,
+                    yield return MetaverseScopeDelta(rule.OutboundDeprovisionAction == OutboundDeprovisionAction.Disable
+                            ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDisableExport
+                            : ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport,
                         rule, mvo, targetObject, InScopeValue, OutOfScopeValue);
                     continue;
                 }

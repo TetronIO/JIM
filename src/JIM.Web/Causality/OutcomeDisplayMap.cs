@@ -189,6 +189,10 @@ public static class OutcomeDisplayMap
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport] =
             new OutcomeDisplay("Removed from the target system", CausalityTone.Error, Icons.Material.Filled.AutoDelete,
                 "be removed from their target Connected System"),
+        // Warning rather than Error: the account stays, disabled, and a rehire can be re-enabled (#2085).
+        [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDisableExport] =
+            new OutcomeDisplay("Disabled in the target system", CausalityTone.Warning, Icons.Material.Filled.Block,
+                "be disabled in their target Connected System and disconnected"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined] =
             new OutcomeDisplay("Keeps its Metaverse Object join", CausalityTone.Success, Icons.Material.Filled.Link,
                 "keep their Metaverse Object join"),
