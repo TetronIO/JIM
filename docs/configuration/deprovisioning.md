@@ -19,7 +19,7 @@ states:
 - {id: in, label: In scope, sub: 'account provisioned and kept current'}
 transitions:
 - {from: out, to: in, label: enters scope, note: provisioned if the rule provisions}
-- {from: in, to: out, label: 'leaves scope: Disconnect or Disable', note: 'join broken; account stays, disabled for Disable'}
+- {from: in, to: out, label: 'leaves: Disconnect, Disable', note: 'join broken; account stays'}
 end: {from: in, label: 'leaves scope: Delete', state: {label: Account deleted, sub: on the next export run}}
 ```
 
