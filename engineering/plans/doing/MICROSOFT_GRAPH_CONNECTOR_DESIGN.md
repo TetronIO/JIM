@@ -136,7 +136,7 @@ Like the SCIM connector, the connector is registered in `ConnectorFactory` from 
 ## Testing Strategy
 
 - TDD throughout. All HTTP behaviour against a stateful mock Graph service in unit tests; no network.
-- **Integration against a real tenant.** Planned in detail in [`ENTRA_ID_CONNECTOR_INTEGRATION_SCENARIOS.md`](../ENTRA_ID_CONNECTOR_INTEGRATION_SCENARIOS.md): Entra ID as a target (Scenario 036) and as a source (Scenario 037) in the JIM test tenant, run in the AD lab, and hybrid Source of Authority (Scenario 038, #3029) in a dedicated tenant.
+- **Integration against a real tenant.** Planned in detail in [`ENTRA_ID_CONNECTOR_INTEGRATION_SCENARIOS.md`](ENTRA_ID_CONNECTOR_INTEGRATION_SCENARIOS.md): Entra ID as a target (Scenario 036) and as a source (Scenario 037) in the JIM test tenant, run in the AD lab, and hybrid Source of Authority (Scenario 038, #3029) in a dedicated tenant.
 - Scale: an import and a paced export of a few thousand users in the test tenant, to measure real throughput against the write pacing.
 
 ## Dependencies

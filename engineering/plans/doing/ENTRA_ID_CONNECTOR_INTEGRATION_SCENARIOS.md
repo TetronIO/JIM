@@ -1,9 +1,9 @@
 # Microsoft Entra ID Connector Integration Scenarios
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 complete but for the runner and AD lab wiring, which arrive with Scenario 036)
 - **Issue:** [#361](https://github.com/TetronIO/JIM/issues/361) (Phase 9 of the Connector's design plan)
 - **Related Issues:** [#3028](https://github.com/TetronIO/JIM/issues/3028) (import limited to Administrative Units, a possible later add-on), [#3029](https://github.com/TetronIO/JIM/issues/3029) (Scenario 038)
-- **Related Plans:** [`MICROSOFT_GRAPH_CONNECTOR_DESIGN.md`](doing/MICROSOFT_GRAPH_CONNECTOR_DESIGN.md), whose Testing Strategy this replaces in detail
+- **Related Plans:** [`MICROSOFT_GRAPH_CONNECTOR_DESIGN.md`](MICROSOFT_GRAPH_CONNECTOR_DESIGN.md), whose Testing Strategy this replaces in detail
 - **Created:** 2026-11-22
 
 ## Overview
@@ -49,7 +49,7 @@ The harness seeds and checks data as the Connector app, but through its own Grap
 
 A new `test/integration/utils/EntraIdConnectorLab-Helpers.ps1`, with Pester tests beside it like `EntraIdLab-Helpers.Tests.ps1`:
 
-- **Token:** a certificate client assertion built with the .NET base class library (no Graph SDK or MSAL), from the certificate this run minted.
+- **Token:** a certificate client assertion built with the .NET base class library (no Graph SDK or MSAL). `Register-JIMEntraIdConnector` hands its certificate's private key only to JIM, so the harness adds a short-lived certificate of its own to the Connector app (named "JIM integration harness", valid two days), signs in with it, and removes it at the end; the next run removes one a failed run stranded. The setup command manages only certificates named after the app, so neither touches the other's.
 - **Run prefix:** every object the run creates is named `jimit-<run id>-<name>` (UPN, `mailNickname`, display name), so runs never collide and cleanup never reaches anything else.
 - **Waiting:** Graph is eventually consistent. A read straight after a write can miss it, and a delta query can lag. Every wait polls Graph until the expected state is visible or a timeout expires, never a fixed sleep. Before a Delta Import, the harness waits until a direct read shows the change; if the Delta Import still misses it, one bounded retry follows, and the lag is logged.
 - **Snapshot of untouchable accounts:** before the run, the harness records every property of each account it did not create (the tenant's administrators and Scenario 035's test people). After the run it compares them, and any difference fails the run.
@@ -57,7 +57,7 @@ A new `test/integration/utils/EntraIdConnectorLab-Helpers.ps1`, with Pester test
 
 ### Deleted objects
 
-Entra ID keeps a deleted user or group for 30 days, holding its UPN and counting towards the tenant's object quota (50,000 by default on Entra ID Free; to verify that deleted objects count). Unique per-run names mean a soft-deleted object never blocks a later run, at about 40 objects a run. Permanent deletion needs a further permission and is deferred to the scale test, which would otherwise fill the quota.
+Entra ID keeps a deleted user or group for 30 days, holding its UPN and counting in full towards the tenant's object quota while it can be restored (Microsoft's service limits page; 50,000 for a tenant with no verified domain, as `tetronjim` is). At about 40 objects a nightly run, deleted objects peak at about 1,200, well within it. Unique per-run names mean a soft-deleted object never blocks a later run. Permanent deletion needs a further permission and is deferred to the scale test, which would otherwise fill the quota.
 
 ### Where it runs
 
@@ -102,13 +102,17 @@ Tracked by [#3029](https://github.com/TetronIO/JIM/issues/3029), since it needs 
 
 ## Implementation Phases
 
-### Phase 1: Tenant, identities and harness
+### Phase 1: Tenant, identities and harness ✅
 
-- An administrator (interactively, with the user ready per the sign-in rule) creates the Connector app with `Register-JIMEntraIdConnector -PasswordManagement`, and makes the CI app an owner of the app and its service principal.
-- Verify, and record in this plan: that `Application.ReadWrite.OwnedBy` covers the rotation (reading the service principal's grants, adding and removing key credentials), and whether deleted objects count towards the quota.
-- The harness helpers and their Pester tests; the scenarios registered with the runner; the `ad-lab.yml` step and its status.
+- ✅ The Connector app "JIM Entra ID Connector (CI)" was created on 2026-11-22 with `Register-JIMEntraIdConnector -PasswordManagement`: four Microsoft Graph permissions and User Administrator across the tenant. The CI app owns the app and its service principal, and a `-WhatIf` re-run found nothing to change. The run found two bugs in the setup command, both fixed: a new service principal Graph did not yet know (`Authorization_IdentityNotFound`) was not waited out, and existing certificates were sent back without `customKeyIdentifier` (`KeyNotUpdatable`).
+- ✅ `Application.ReadWrite.OwnedBy` covers the rotation, by Microsoft's permissions reference: it lists every application and service principal, reads an owned service principal's app role assignments, and changes an owned app's credentials. Without `-PasswordManagement` the setup command reads no role assignments, so the CI run needs nothing more. The first AD lab run confirms it.
+- ✅ Deleted objects count towards the quota (see Deleted objects).
+- ✅ The harness helpers, `test/integration/utils/EntraIdConnectorLab-Helpers.ps1`, with Pester tests beside them.
+- The scenarios registered with the runner, and the `ad-lab.yml` step and its `jim-entra-connector` status, arrive with Scenario 036, the first thing they run.
 
 ### Phase 2: Scenario 036
+
+The scenario, its registration with the runner, and the `ad-lab.yml` step and status.
 
 ### Phase 3: Scenario 037
 
