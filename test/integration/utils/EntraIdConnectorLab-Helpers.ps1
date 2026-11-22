@@ -457,6 +457,11 @@ function Remove-EntraIdConnectorLabObject {
         Deletes every user and group whose display name starts with the prefix: this run's (a run prefix), or, with
         -OlderThanHours, any run's (jimit-) created before then, left by a run that failed. Returns how many it
         deleted. Deleted objects stay in Entra ID's deleted items for 30 days, under names no later run reuses.
+
+    .DESCRIPTION
+        Graph's lists lag its writes, so a list read just after a run can miss what it made, and can still show what was
+        just deleted. A run's cleanup therefore lists again, ten seconds apart, until three lists in a row find nothing
+        it has not already deleted (up to eighteen lists). Leftovers are old enough to be listed, so one pass does.
     #>
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Test harness; deletes only what runs created.')]
     [CmdletBinding()]
@@ -471,27 +476,37 @@ function Remove-EntraIdConnectorLabObject {
         Assert-EntraIdConnectorLabRunPrefix -Prefix $Prefix
         $match = $Prefix
         $cutoff = [DateTime]::MaxValue
+        $quietListingsNeeded = 3
     }
     else {
         $match = $script:EntraIdConnectorLabPrefixRoot
         $cutoff = [DateTime]::UtcNow.AddHours(-$OlderThanHours)
+        $quietListingsNeeded = 1
     }
     $deleted = 0
     foreach ($kind in 'users', 'groups') {
-        $found = Get-EntraIdConnectorLabGraphCollection -Token $Token -Path "/$kind`?`$filter=startswith(displayName,'$match')&`$select=id,displayName,createdDateTime&`$top=999"
-        # The filter is Graph's; the prefix is checked again here, case and all, before anything is deleted.
-        $doomed = @($found | Where-Object {
-            $created = Get-EntraIdConnectorLabValue -Object $_ -Name 'createdDateTime'
-            ([string]$_.displayName).StartsWith($match, [StringComparison]::Ordinal) -and
-            (-not $created -or ([DateTime]$created).ToUniversalTime() -lt $cutoff) })
-        foreach ($object in $doomed) {
-            try {
-                $null = Invoke-EntraIdConnectorLabGraph -Token $Token -Method Delete -Path "/$kind/$($object.id)"
-                $deleted++
-            }
-            catch {
-                # Already gone (JIM deleted it, or another run's sweep did) is what was wanted.
-                if ("$($_.Exception.Message)" -notmatch '\(404\)') { throw }
+        $handled = [System.Collections.Generic.HashSet[string]]::new()
+        $quiet = 0
+        for ($listing = 1; $listing -le 18 -and $quiet -lt $quietListingsNeeded; $listing++) {
+            if ($listing -gt 1) { Start-Sleep -Seconds 10 }
+            $found = @(Get-EntraIdConnectorLabGraphCollection -Token $Token -Path "/$kind`?`$filter=startswith(displayName,'$match')&`$select=id,displayName,createdDateTime&`$top=999")
+            # The filter is Graph's; the prefix is checked again here, case and all, before anything is deleted.
+            $doomed = @($found | Where-Object {
+                $created = Get-EntraIdConnectorLabValue -Object $_ -Name 'createdDateTime'
+                -not $handled.Contains([string]$_.id) -and
+                ([string]$_.displayName).StartsWith($match, [StringComparison]::Ordinal) -and
+                (-not $created -or ([DateTime]$created).ToUniversalTime() -lt $cutoff) })
+            $quiet = if ($doomed.Count -eq 0) { $quiet + 1 } else { 0 }
+            foreach ($object in $doomed) {
+                $null = $handled.Add([string]$object.id)
+                try {
+                    $null = Invoke-EntraIdConnectorLabGraph -Token $Token -Method Delete -Path "/$kind/$($object.id)"
+                    $deleted++
+                }
+                catch {
+                    # Already gone (JIM deleted it, or another run's sweep did) is what was wanted.
+                    if ("$($_.Exception.Message)" -notmatch '\(404\)') { throw }
+                }
             }
         }
     }

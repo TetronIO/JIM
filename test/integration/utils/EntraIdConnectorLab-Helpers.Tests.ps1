@@ -263,9 +263,9 @@ Describe 'Snapshot of the accounts a run must not touch' {
         $script:Members = @{ staff = @([PSCustomObject]@{ id = 'admin' }) }
         Mock Get-EntraIdConnectorLabGraphCollection {
             switch -Wildcard ($Path) {
-                '/users`?*' { , $script:Users }
-                '/groups`?*' { , $script:Groups }
-                '/groups/*/members*' { , @($script:Members[($Path -split '/')[2]]) }
+                '/users`?*' { $script:Users }
+                '/groups`?*' { $script:Groups }
+                '/groups/*/members*' { @($script:Members[($Path -split '/')[2]]) }
             }
         }
     }
@@ -358,9 +358,14 @@ Describe 'Remove-EntraIdConnectorLabObject' {
         Mock Get-EntraIdConnectorLabGraphCollection {
             $kind = ($Path -split '[/?]')[1]
             $prefix = [regex]::Match($Path, "startswith\(displayName,'([^']*)'\)").Groups[1].Value
-            , @($script:Found[$kind] | Where-Object { $_.displayName.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) })
+            @($script:Found[$kind] | Where-Object { $_.displayName.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) })
         }
-        Mock Invoke-EntraIdConnectorLabGraph -ParameterFilter { $Method -eq 'Delete' } { $script:Deleted.Add($Path) }
+        Mock Invoke-EntraIdConnectorLabGraph -ParameterFilter { $Method -eq 'Delete' } {
+            $script:Deleted.Add($Path)
+            $kind, $id = ($Path -split '/')[1, 2]
+            $script:Found[$kind] = @($script:Found[$kind] | Where-Object { $_.id -ne $id })
+        }
+        Mock Start-Sleep {}
     }
 
     It 'deletes this run''s users and groups, and nothing of any other run''s' {
@@ -373,6 +378,21 @@ Describe 'Remove-EntraIdConnectorLabObject' {
         Remove-EntraIdConnectorLabObject -OlderThanHours 24 -Token $script:Token | Should -Be 1
 
         @($script:Deleted) | Should -Be @('/users/other-run-old')
+    }
+
+    It 'keeps listing until Graph has listed everything the run made, since a list lags the writes before it' {
+        # Graph listed three of the run's objects at first and the fourth only on a later read.
+        $late = [PSCustomObject]@{ id = 'late'; displayName = 'jimit-abc-erin'; createdDateTime = [DateTime]::UtcNow.ToString('o') }
+        $script:Listings = 0
+        Mock Get-EntraIdConnectorLabGraphCollection -ParameterFilter { $Path -like '/users*' } {
+            $script:Listings++
+            if ($script:Listings -eq 2) { $script:Found.users = @($script:Found.users) + $late }
+            @($script:Found.users | Where-Object { $_.displayName.StartsWith('jimit-abc-', [StringComparison]::Ordinal) })
+        }
+
+        Remove-EntraIdConnectorLabObject -Prefix 'jimit-abc-' -Token $script:Token | Should -Be 3
+
+        @($script:Deleted) | Should -Be @('/users/mine', '/users/late', '/groups/my-group')
     }
 
     It 'refuses a prefix that is not a whole run prefix, deleting nothing' {
