@@ -160,16 +160,16 @@ Describe 'Get-JIMEntraIdConnectorPlan' {
             $plan.Permissions | Should -Contain 'Directory.Read.All'
         }
 
-        It 'with -PasswordManagement, adds the permission and assigns User Administrator over the Administrative Unit' {
-            $plan = & $script:Plan (& $script:NewEmptyState) @{ PasswordManagement = $true; AdministrativeUnitId = 'au-1' }
+        It 'with -PasswordManagement, adds the permission and assigns User Administrator across the tenant' {
+            $plan = & $script:Plan (& $script:NewEmptyState) @{ PasswordManagement = $true; CheckRole = $true }
 
             $plan.Permissions | Should -Contain 'User-PasswordProfile.ReadWrite.All'
             $assign = $plan.Changes | Where-Object Action -eq 'AssignUserAdministrator'
-            $assign.Arguments.DirectoryScopeId | Should -Be '/administrativeUnits/au-1'
+            $assign.Arguments.DirectoryScopeId | Should -Be '/'
             (& $script:Actions $plan).IndexOf('AssignUserAdministrator') | Should -BeLessThan (& $script:Actions $plan).IndexOf('NewConnectedSystem')
         }
 
-        It 'with password management kept from an earlier run and no Administrative Unit, keeps the permission and leaves the role alone' {
+        It 'with password management kept from an earlier run, keeps the permission and leaves the role alone' {
             $plan = & $script:Plan (& $script:NewEmptyState) @{ PasswordManagement = $true }
 
             $plan.Permissions | Should -Contain 'User-PasswordProfile.ReadWrite.All'
@@ -357,15 +357,30 @@ Describe 'Get-JIMEntraIdConnectorPlan' {
             & $script:Actions $plan | Should -Be @('NewFederatedCredential', 'SetConnectedSystem', 'RetireCertificates')
         }
 
-        It 'leaves a User Administrator assignment that already covers the Administrative Unit' {
+        It 'leaves a User Administrator assignment the application already holds across the tenant' {
             $state = & $script:NewRegisteredState
             $state.Applications[0].GraphRoleIds += 'role-password'
             $state.GrantedRoles += [PSCustomObject]@{ Id = 'grant-role-password'; AppRoleId = 'role-password' }
-            $state.UserAdministratorAssignments = @([PSCustomObject]@{ Id = 'ra-1'; DirectoryScopeId = '/administrativeUnits/au-1' })
+            $state.UserAdministratorAssignments = @([PSCustomObject]@{ Id = 'ra-1'; DirectoryScopeId = '/' })
 
-            $plan = & $script:Plan $state @{ PasswordManagement = $true; AdministrativeUnitId = 'au-1' }
+            $plan = & $script:Plan $state @{ PasswordManagement = $true; CheckRole = $true }
 
             $plan.Changes | Should -BeNullOrEmpty
+        }
+
+        It 'with -PasswordManagement:$false, revokes the permission and removes the User Administrator role' {
+            # Turning password management off leaves the application with no privileged directory role.
+            $state = & $script:NewRegisteredState
+            $state.Applications[0].GraphRoleIds += 'role-password'
+            $state.GrantedRoles += [PSCustomObject]@{ Id = 'grant-role-password'; AppRoleId = 'role-password' }
+            $state.UserAdministratorAssignments = @([PSCustomObject]@{ Id = 'ra-1'; DirectoryScopeId = '/' })
+
+            $plan = & $script:Plan $state @{ PasswordManagement = $false; CheckRole = $true }
+
+            $plan.Permissions | Should -Not -Contain 'User-PasswordProfile.ReadWrite.All'
+            & $script:Actions $plan | Should -Contain 'RevokePermission'
+            $remove = $plan.Changes | Where-Object Action -eq 'RemoveUserAdministrator'
+            $remove.Arguments.AssignmentId | Should -Be 'ra-1'
         }
     }
 
@@ -533,10 +548,14 @@ Describe 'Register-JIMEntraIdConnector' {
         }
     }
 
-    It 'refuses -PasswordManagement without an Administrative Unit before anyone signs in' {
+    It 'takes no Administrative Unit: password management assigns its role across the tenant' {
+        (Get-Command Register-JIMEntraIdConnector).Parameters.ContainsKey('AdministrativeUnitId') | Should -BeFalse
+    }
+
+    It 'with -PasswordManagement:$false, asks to manage directory roles, so it can remove the role' {
         InModuleScope JIM {
-            { Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -PasswordManagement -Confirm:$false } | Should -Throw '*AdministrativeUnitId*'
-            Should -Invoke Get-JIMEntraIdAdminToken -Times 0
+            $null = Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -PasswordManagement:$false -Confirm:$false
+            Should -Invoke Get-JIMEntraIdAdminToken -Times 1 -ParameterFilter { $Scopes -contains 'https://graph.microsoft.com/RoleManagement.ReadWrite.Directory' }
         }
     }
 
@@ -547,7 +566,7 @@ Describe 'Register-JIMEntraIdConnector' {
                 -not $UseDeviceCode -and $Scopes -contains 'https://graph.microsoft.com/AppRoleAssignment.ReadWrite.All' -and
                 $Scopes -notcontains 'https://graph.microsoft.com/RoleManagement.ReadWrite.Directory' }
 
-            $null = Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -PasswordManagement -AdministrativeUnitId '9d6f4c2e-1b3a-4e5f-8a7b-6c5d4e3f2a1b' -Confirm:$false
+            $null = Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -PasswordManagement -Confirm:$false
             Should -Invoke Get-JIMEntraIdAdminToken -Times 1 -ParameterFilter { $Scopes -contains 'https://graph.microsoft.com/RoleManagement.ReadWrite.Directory' }
         }
     }
@@ -625,6 +644,16 @@ Describe 'Invoke-JIMEntraIdConnectorChange' {
                 ApplicationId = 'app-object'; AppId = 'client-id'; ServicePrincipalId = 'app-sp'; GraphServicePrincipalId = 'graph-sp'
                 CertificateValidityDays = 365; SettingIds = @{ 'Tenant ID' = 1; 'Client ID' = 2; 'Authentication Method' = 3; 'Certificate' = 4; 'Track Source of Authority Changes' = 6 }
             }
+        }
+    }
+
+    It 'removes the User Administrator role assignment it is given' {
+        InModuleScope JIM {
+            Invoke-JIMEntraIdConnectorChange -Connection $script:Connection -Change ([PSCustomObject]@{ Action = 'RemoveUserAdministrator'; Target = 'JIM Entra ID Connector'; Arguments = @{ AssignmentId = 'ra-1' } })
+
+            $call = $script:GraphCalls | Select-Object -Last 1
+            $call.Method | Should -Be 'Delete'
+            $call.Path | Should -Be '/roleManagement/directory/roleAssignments/ra-1'
         }
     }
 

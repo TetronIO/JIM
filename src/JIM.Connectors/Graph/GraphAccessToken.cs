@@ -18,7 +18,8 @@ internal static class GraphAccessToken
 
     /// <summary>
     /// The directory roles assigned to the app tenant-wide, as role template ids, from the token's <c>wids</c> claim. A role
-    /// assigned over an Administrative Unit is not listed, so an absent role proves nothing.
+    /// assigned since the token was issued, or one scoped more narrowly than the tenant, is not listed, so an absent role
+    /// proves nothing.
     /// </summary>
     public static IReadOnlyList<string> ReadDirectoryRoles(string accessToken) => ReadStrings(accessToken, "wids");
 

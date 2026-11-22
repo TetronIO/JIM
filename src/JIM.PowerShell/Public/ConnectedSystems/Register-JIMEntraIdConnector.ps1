@@ -39,7 +39,7 @@ function Register-JIMEntraIdConnector {
 
     .PARAMETER AccessToken
         A Microsoft Graph access token to use instead of signing in, holding Application.ReadWrite.All and
-        AppRoleAssignment.ReadWrite.All, and RoleManagement.ReadWrite.Directory with -PasswordManagement.
+        AppRoleAssignment.ReadWrite.All, and RoleManagement.ReadWrite.Directory when -PasswordManagement is given, either way.
 
     .PARAMETER Name
         The application's display name, by which it is found.
@@ -59,8 +59,10 @@ function Register-JIMEntraIdConnector {
 
     .PARAMETER PasswordManagement
         Lets JIM set passwords in Entra ID: its Initial Password, Set Password and Password Synchronisation. Adds
-        User-PasswordProfile.ReadWrite.All and assigns the application the User Administrator role over the
-        Administrative Unit -AdministrativeUnitId names, which Microsoft Graph also requires.
+        User-PasswordProfile.ReadWrite.All and assigns the application the User Administrator role across the tenant,
+        which Microsoft Graph also requires; that role can manage every user and group and reset any non-administrator's
+        password. A later run that leaves it out keeps password management and leaves the role as it is; given as false,
+        the permission is revoked and the role removed.
 
     .PARAMETER TrackSourceOfAuthority
         Turns on the Connected System's Track Source of Authority Changes, and adds the
@@ -68,11 +70,6 @@ function Register-JIMEntraIdConnector {
         so an object whose Source of Authority was switched between Active Directory and Entra ID reads as managed where
         it now is. Microsoft offers no read-only form of these permissions: they also allow switching an object's
         Source of Authority, which JIM never does.
-
-    .PARAMETER AdministrativeUnitId
-        With -PasswordManagement, the object ID of the Administrative Unit holding the users JIM manages. The User
-        Administrator role is assigned over it only, never across the tenant. A later run that leaves -PasswordManagement
-        out keeps the permission and leaves the role assignment as it is.
 
     .PARAMETER ManagedIdentityClientId
         The client ID of the user-assigned managed identity attached to the Azure virtual machine JIM runs on. The
@@ -111,9 +108,9 @@ function Register-JIMEntraIdConnector {
         Lists what is missing or has drifted, and changes nothing.
 
     .EXAMPLE
-        Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -PasswordManagement -AdministrativeUnitId '9d6f4c2e-1b3a-4e5f-8a7b-6c5d4e3f2a1b'
+        Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -PasswordManagement
 
-        Also lets JIM set passwords, assigning User Administrator over that Administrative Unit only.
+        Also lets JIM set passwords, assigning the application the User Administrator role across the tenant.
 
     .EXAMPLE
         Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -TrackSourceOfAuthority
@@ -160,9 +157,6 @@ function Register-JIMEntraIdConnector {
         [switch]$TrackSourceOfAuthority,
 
         [ValidatePattern('^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$')]
-        [string]$AdministrativeUnitId,
-
-        [ValidatePattern('^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$')]
         [string]$ManagedIdentityClientId,
 
         [ValidateRange(30, 730)]
@@ -174,24 +168,18 @@ function Register-JIMEntraIdConnector {
     if (-not $script:JIMConnection) {
         throw 'You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again.'
     }
-    # Refused before anyone is asked to sign in. Assigning the role needs the Administrative Unit; keeping password
-    # management from an earlier run, with the switch left out, does not.
-    if ($PasswordManagement -and -not $AdministrativeUnitId) {
-        throw ('-PasswordManagement needs -AdministrativeUnitId: Microsoft Graph lets an application set passwords only while it holds the User Administrator role, ' +
-            'which this command assigns over an Administrative Unit of the users JIM manages rather than across the tenant.')
-    }
-
-    $assignsRole = $PasswordManagement -and $AdministrativeUnitId
-    $scopes = @($script:JIMEntraIdConnectorSignInScopes) + @(if ($assignsRole) { $script:JIMEntraIdConnectorRoleScope })
+    # The User Administrator role is read, and assigned or removed, only when -PasswordManagement is given either way.
+    $checksRole = $PSBoundParameters.ContainsKey('PasswordManagement')
+    $scopes = @($script:JIMEntraIdConnectorSignInScopes) + @(if ($checksRole) { $script:JIMEntraIdConnectorRoleScope })
     $token = if ($AccessToken) { $AccessToken } else { Get-JIMEntraIdAdminToken -TenantId $TenantId -UseDeviceCode:$UseDeviceCode -Scopes $scopes }
     $connection = @{ Token = $token; TenantId = Get-JIMEntraIdTokenTenantId -AccessToken $token; CertificateValidityDays = $CertificateValidityDays }
 
     $current = Get-JIMEntraIdConnectorState -Connection $connection -Name $Name -ConnectedSystemName $ConnectedSystemName `
-        -ManagedIdentityClientId $ManagedIdentityClientId -ResetCertificate:$ResetCertificate -PasswordManagement:$assignsRole
+        -ManagedIdentityClientId $ManagedIdentityClientId -ResetCertificate:$ResetCertificate -CheckRole:$checksRole
     # Each capability switch left out keeps what the setup already does.
     $bound = @{}
     foreach ($key in 'ReadOnly', 'SkipHiddenMembership', 'DirectoryExtensions', 'PasswordManagement', 'TrackSourceOfAuthority',
-        'AdministrativeUnitId', 'ManagedIdentityClientId', 'ResetCertificate') {
+        'ManagedIdentityClientId', 'ResetCertificate') {
         if ($PSBoundParameters.ContainsKey($key)) { $bound[$key] = $PSBoundParameters[$key] }
     }
     $options = Resolve-JIMEntraIdConnectorOption -Current $current -Bound $bound

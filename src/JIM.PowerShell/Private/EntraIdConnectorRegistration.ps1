@@ -69,7 +69,9 @@ function Resolve-JIMEntraIdConnectorOption {
         $options[$name] = if ($Bound.ContainsKey($name)) { [bool]$Bound[$name] } else { $kept[$name] }
     }
     $options.ResetCertificate = [bool]$Bound['ResetCertificate']
-    if ($Bound['AdministrativeUnitId']) { $options.AdministrativeUnitId = [string]$Bound['AdministrativeUnitId'] }
+    # The User Administrator role is read, and assigned or removed, only when -PasswordManagement is given either way:
+    # reading role assignments needs a sign-in that may manage them, which a run that only keeps it does not ask for.
+    $options.CheckRole = $Bound.ContainsKey('PasswordManagement')
 
     # A managed identity given is used; otherwise the one the Connected System already authenticates with, unless a
     # certificate was asked for.
@@ -138,7 +140,7 @@ function Get-JIMEntraIdConnectorPlan {
         [switch]$DirectoryExtensions,
         [switch]$PasswordManagement,
         [switch]$TrackSourceOfAuthority,
-        [string]$AdministrativeUnitId,
+        [switch]$CheckRole,
         [string]$ManagedIdentityClientId,
         [switch]$ResetCertificate
     )
@@ -237,14 +239,22 @@ function Get-JIMEntraIdConnectorPlan {
         }
     }
 
-    # The role is checked, and assigned, only when an Administrative Unit is named: reading role assignments needs a
-    # sign-in that may manage them, which a re-run that only keeps password management does not ask for.
-    if ($PasswordManagement -and $AdministrativeUnitId) {
-        $scope = "/administrativeUnits/$AdministrativeUnitId"
-        if (-not (@($Current.UserAdministratorAssignments) | Where-Object { $_.DirectoryScopeId -in '/', $scope })) {
+    # The User Administrator role, across the tenant: Microsoft Graph sets a password for an application only while it
+    # holds the role. Checked only when -PasswordManagement is given either way (CheckRole), since reading role
+    # assignments needs a sign-in that may manage them; with it off, the role is removed with the permission.
+    if ($CheckRole) {
+        $assignments = @($Current.UserAdministratorAssignments)
+        if ($PasswordManagement -and -not ($assignments | Where-Object { $_.DirectoryScopeId -eq '/' })) {
             $changes.Add((New-JIMEntraIdChange -Action 'AssignUserAdministrator' -Target $Name `
-                -Description "Assign it the User Administrator role over the Administrative Unit $AdministrativeUnitId, which Microsoft Graph requires to set passwords" `
-                -Arguments @{ DirectoryScopeId = $scope }))
+                -Description 'Assign it the User Administrator role across the tenant, which Microsoft Graph requires to set passwords' `
+                -Arguments @{ DirectoryScopeId = '/' }))
+        }
+        if (-not $PasswordManagement) {
+            foreach ($assignment in $assignments) {
+                $changes.Add((New-JIMEntraIdChange -Action 'RemoveUserAdministrator' -Target $Name `
+                    -Description 'Remove its User Administrator role, which the Connector no longer needs' `
+                    -Arguments @{ AssignmentId = $assignment.Id }))
+            }
         }
     }
 
@@ -353,7 +363,7 @@ function Get-JIMEntraIdConnectorState {
         [Parameter(Mandatory)][string]$ConnectedSystemName,
         [string]$ManagedIdentityClientId,
         [switch]$ResetCertificate,
-        [switch]$PasswordManagement
+        [switch]$CheckRole
     )
 
     # JIM first: the Connected System says which managed identity it already authenticates with, if any.
@@ -418,7 +428,7 @@ function Get-JIMEntraIdConnectorState {
             $servicePrincipal = [PSCustomObject]@{ Id = [string]$sp.id }
             $granted = @((Invoke-JIMEntraIdGraphApi -Connection $Connection -Path "/servicePrincipals/$($sp.id)/appRoleAssignments").value |
                 Where-Object resourceId -eq $graph.id | ForEach-Object { [PSCustomObject]@{ Id = [string]$_.id; AppRoleId = [string]$_.appRoleId } })
-            if ($PasswordManagement) {
+            if ($CheckRole) {
                 $assignments = @((Invoke-JIMEntraIdGraphApi -Connection $Connection -Path "/roleManagement/directory/roleAssignments?`$filter=principalId eq '$($sp.id)' and roleDefinitionId eq '$script:JIMEntraIdUserAdministratorRoleId'").value |
                     ForEach-Object { [PSCustomObject]@{ Id = [string]$_.id; DirectoryScopeId = [string]$_.directoryScopeId } })
             }
@@ -503,6 +513,9 @@ function Invoke-JIMEntraIdConnectorChange {
                 $null = Invoke-JIMEntraIdGraphApi -Connection $Connection -Method Post -Path '/roleManagement/directory/roleAssignments' -Body @{
                     principalId = $Connection.ServicePrincipalId; roleDefinitionId = $script:JIMEntraIdUserAdministratorRoleId; directoryScopeId = $arguments.DirectoryScopeId }
             }
+        }
+        'RemoveUserAdministrator' {
+            $null = Invoke-JIMEntraIdGraphApi -Connection $Connection -Method Delete -Path "/roleManagement/directory/roleAssignments/$($arguments.AssignmentId)"
         }
         { $_ -in 'NewConnectedSystem', 'SetConnectedSystem' } {
             $settingIds = $Connection.SettingIds

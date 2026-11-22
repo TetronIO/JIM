@@ -111,7 +111,7 @@ A deletion deletes the object, which Entra ID keeps for 30 days in case it needs
 
 ### Passwords
 
-The Connector takes passwords from JIM: [Initial Password](../concepts/passwords.md), Set Password and [Password Synchronisation](../concepts/password-synchronisation.md). Microsoft Graph needs two things for that: the `User-PasswordProfile.ReadWrite.All` permission, and the app registration holding the **User Administrator** directory role. Assign the role over an Administrative Unit holding the users JIM manages, not across the tenant: within its scope it can manage users and groups and reset passwords. `Register-JIMEntraIdConnector -PasswordManagement` does both.
+The Connector takes passwords from JIM: [Initial Password](../concepts/passwords.md), Set Password and [Password Synchronisation](../concepts/password-synchronisation.md). Microsoft Graph needs two things for that: the `User-PasswordProfile.ReadWrite.All` permission, and the app registration holding the **User Administrator** directory role across the tenant. That role is privileged: it can manage every user and group and reset any password but an administrator's. Password management is therefore off unless asked for, and reading and writing users and groups never needs the role. `Register-JIMEntraIdConnector -PasswordManagement` grants the permission and assigns the role; `-PasswordManagement:$false` takes both away.
 
 Every expiry choice JIM offers is applied as asked: a change required at the next sign-in, expiry by the tenant's policy, or a password that never expires. Some passwords cannot be set here, and the delivery stops with Entra ID's reason rather than retrying:
 
@@ -119,7 +119,7 @@ Every expiry choice JIM offers is applied as asked: a change required at the nex
 - A user synchronised from Active Directory, whose password lives there; set it through the [JIM LDAP Connector](jim-ldap-connector.md).
 - A user who signs in through another identity provider.
 
-**Check password channel**, on the Connected System's Passwords tab, confirms the permission. A User Administrator role assigned over an Administrative Unit does not appear in what JIM can see, so the check says it cannot confirm the role rather than that it is missing.
+**Check password channel**, on the Connected System's Passwords tab, confirms the permission and the role. A role assigned in the last hour can be missing from what JIM sees until its access token is renewed, so the check then says it cannot confirm the role rather than that it is missing.
 
 ### National clouds
 

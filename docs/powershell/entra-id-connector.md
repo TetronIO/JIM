@@ -37,7 +37,7 @@ In the tenant `-TenantId` names, it creates or corrects:
 | Its service principal | What the permissions are granted to. |
 | Microsoft Graph application permissions, with admin consent | What the Connector may do, least privilege: see the next table. A permission it no longer needs is revoked. |
 | A credential | A certificate, or a federated credential trusting a managed identity: see below. |
-| With `-PasswordManagement`, the User Administrator role | Microsoft Graph lets an application set passwords only while it holds this role. It is assigned over the Administrative Unit `-AdministrativeUnitId` names, never across the tenant. |
+| With `-PasswordManagement`, the User Administrator role | Microsoft Graph lets an application set passwords only while it holds this role, assigned across the tenant. It can manage every user and group and reset any password but an administrator's. `-PasswordManagement:$false` removes it. |
 
 In JIM, it creates the Connected System (*ConnectedSystemName*) with the tenant, the application and the credential already set, or corrects one that has drifted. Connect to JIM with `Connect-JIM` first.
 
@@ -61,10 +61,10 @@ In JIM, it creates the Connected System (*ConnectedSystemName*) with the tenant,
 
 ```powershell
 # SignIn (default)
-Register-JIMEntraIdConnector -TenantId <string> [-UseDeviceCode] [-Name <string>] [-ConnectedSystemName <string>] [-ReadOnly] [-SkipHiddenMembership] [-DirectoryExtensions] [-PasswordManagement] [-TrackSourceOfAuthority] [-AdministrativeUnitId <string>] [-ManagedIdentityClientId <string>] [-CertificateValidityDays <int>] [-ResetCertificate] [-WhatIf] [-Confirm]
+Register-JIMEntraIdConnector -TenantId <string> [-UseDeviceCode] [-Name <string>] [-ConnectedSystemName <string>] [-ReadOnly] [-SkipHiddenMembership] [-DirectoryExtensions] [-PasswordManagement] [-TrackSourceOfAuthority] [-ManagedIdentityClientId <string>] [-CertificateValidityDays <int>] [-ResetCertificate] [-WhatIf] [-Confirm]
 
 # Token
-Register-JIMEntraIdConnector -AccessToken <SecureString> [-Name <string>] [-ConnectedSystemName <string>] [-ReadOnly] [-SkipHiddenMembership] [-DirectoryExtensions] [-PasswordManagement] [-TrackSourceOfAuthority] [-AdministrativeUnitId <string>] [-ManagedIdentityClientId <string>] [-CertificateValidityDays <int>] [-ResetCertificate] [-WhatIf] [-Confirm]
+Register-JIMEntraIdConnector -AccessToken <SecureString> [-Name <string>] [-ConnectedSystemName <string>] [-ReadOnly] [-SkipHiddenMembership] [-DirectoryExtensions] [-PasswordManagement] [-TrackSourceOfAuthority] [-ManagedIdentityClientId <string>] [-CertificateValidityDays <int>] [-ResetCertificate] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -73,15 +73,14 @@ Register-JIMEntraIdConnector -AccessToken <SecureString> [-Name <string>] [-Conn
 |------|------|----------|---------|-------------|
 | `TenantId` | `string` | Yes (SignIn) |  | The tenant to set the Connector up in: its tenant ID or one of its verified domain names, such as contoso.onmicrosoft.com. |
 | `UseDeviceCode` | `switch` | No (SignIn) |  | Signs in to Microsoft Graph with a device code instead of a browser, for a console with no browser. Microsoft recommends that Conditional Access blocks device code sign-in, so it fails in many tenants. |
-| `AccessToken` | `SecureString` | Yes (Token) |  | A Microsoft Graph access token to use instead of signing in, holding Application.ReadWrite.All and AppRoleAssignment.ReadWrite.All, and RoleManagement.ReadWrite.Directory with `-PasswordManagement`. |
+| `AccessToken` | `SecureString` | Yes (Token) |  | A Microsoft Graph access token to use instead of signing in, holding Application.ReadWrite.All and AppRoleAssignment.ReadWrite.All, and RoleManagement.ReadWrite.Directory when `-PasswordManagement` is given, either way. |
 | `Name` | `string` | No | `'JIM Entra ID Connector'` | The application's display name, by which it is found. |
 | `ConnectedSystemName` | `string` | No | `'Microsoft Entra ID'` | The name of the Connected System in JIM, by which it is found. |
 | `ReadOnly` | `switch` | No |  | Asks only to read users and groups, for a Connected System that imports and never exports. |
 | `SkipHiddenMembership` | `switch` | No |  | Leaves out Member.Read.Hidden. Without it, the members of groups whose membership is hidden are never read, and JIM leaves them as it holds them; with it, anyone who can view those groups in JIM sees their members. |
 | `DirectoryExtensions` | `switch` | No |  | Adds Directory.Read.All, so a schema refresh can offer the tenant's directory extensions. |
-| `PasswordManagement` | `switch` | No |  | Lets JIM set passwords in Entra ID: its Initial Password, Set Password and Password Synchronisation. Adds User-PasswordProfile.ReadWrite.All and assigns the application the User Administrator role over the Administrative Unit `-AdministrativeUnitId` names, which Microsoft Graph also requires. |
+| `PasswordManagement` | `switch` | No |  | Lets JIM set passwords in Entra ID: its Initial Password, Set Password and Password Synchronisation. Adds User-PasswordProfile.ReadWrite.All and assigns the application the User Administrator role across the tenant, which Microsoft Graph also requires; that role can manage every user and group and reset any non-administrator's password. A later run that leaves it out keeps password management and leaves the role as it is; given as false, the permission is revoked and the role removed. |
 | `TrackSourceOfAuthority` | `switch` | No |  | Turns on the Connected System's Track Source of Authority Changes, and adds the User-OnPremisesSyncBehavior.ReadWrite.All and Group-OnPremisesSyncBehavior.ReadWrite.All permissions it needs, so an object whose Source of Authority was switched between Active Directory and Entra ID reads as managed where it now is. Microsoft offers no read-only form of these permissions: they also allow switching an object's Source of Authority, which JIM never does. |
-| `AdministrativeUnitId` | `string` | No |  | With `-PasswordManagement`, the object ID of the Administrative Unit holding the users JIM manages. The User Administrator role is assigned over it only, never across the tenant. A later run that leaves `-PasswordManagement` out keeps the permission and leaves the role assignment as it is. |
 | `ManagedIdentityClientId` | `string` | No |  | The client ID of the user-assigned managed identity attached to the Azure virtual machine JIM runs on. The application trusts it with a federated credential, and no certificate is made. A later run that leaves it out keeps the managed identity the Connected System already uses. |
 | `CertificateValidityDays` | `int` | No | `365` | How long a certificate this command makes is valid, in days. From 30 to 730. |
 | `ResetCertificate` | `switch` | No |  | Makes a new certificate even though the current one is still valid, and removes the old one once JIM holds the new. On a Connected System that authenticates with a managed identity, it moves it back to a certificate. |
@@ -114,8 +113,8 @@ $setup | Select-Object ClientId, ConnectedSystemId, CertificateExpires
 Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -WhatIf
 ```
 
-```powershell title="Let JIM set passwords, over one Administrative Unit"
-Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -PasswordManagement -AdministrativeUnitId '9d6f4c2e-1b3a-4e5f-8a7b-6c5d4e3f2a1b'
+```powershell title="Let JIM set passwords"
+Register-JIMEntraIdConnector -TenantId 'contoso.onmicrosoft.com' -PasswordManagement
 ```
 
 ```powershell title="Track objects whose Source of Authority is switched, keeping the rest of the setup"

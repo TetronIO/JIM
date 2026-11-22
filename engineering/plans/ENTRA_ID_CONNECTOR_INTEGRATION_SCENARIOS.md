@@ -2,7 +2,7 @@
 
 - **Status:** Planned
 - **Issue:** [#361](https://github.com/TetronIO/JIM/issues/361) (Phase 9 of the Connector's design plan)
-- **Related Issues:** [#3028](https://github.com/TetronIO/JIM/issues/3028) (import limited to Administrative Units, decision 3), [#3029](https://github.com/TetronIO/JIM/issues/3029) (Scenario 038)
+- **Related Issues:** [#3028](https://github.com/TetronIO/JIM/issues/3028) (import limited to Administrative Units, a possible later add-on), [#3029](https://github.com/TetronIO/JIM/issues/3029) (Scenario 038)
 - **Related Plans:** [`MICROSOFT_GRAPH_CONNECTOR_DESIGN.md`](doing/MICROSOFT_GRAPH_CONNECTOR_DESIGN.md), whose Testing Strategy this replaces in detail
 - **Created:** 2026-11-22
 
@@ -24,36 +24,14 @@ Unit tests run every Graph call against a stateful fake tenant, which proves JIM
 
 1. **CI never grants permissions.** The scenarios use a permanent, pre-made app registration for the Connector, created once by an administrator with `Register-JIMEntraIdConnector`. No CI credential holds `AppRoleAssignment.ReadWrite.All`. The setup command stays covered by Pester and a manual run at release.
 2. **Hybrid goes in a second, dedicated tenant**, after Scenarios 036 and 037. Turning on directory synchronisation is hard to reverse (switching it off takes up to 72 hours and leaves objects behind), and `tetronjim` also serves the Entra ID sign-in checks (Scenario 035).
-3. **Administrators are excluded by Synchronisation Rule scoping for now.** The Connector has no import filter: it reads every user in the tenant. An import filter scoped to an Administrative Unit is a separate enhancement, [#3028](https://github.com/TetronIO/JIM/issues/3028).
+3. **Administrators are excluded by Synchronisation Rule scoping for now.** The Connector has no import filter: it reads every user in the tenant. Limiting import to Administrative Units is a possible later add-on, [#3028](https://github.com/TetronIO/JIM/issues/3028).
 
-### Refinement to decision 1, for review
-
-Decision 1 assumed the Connector app's certificate would be stored in the lab's secrets. Scenario 035 shows a better way, already working in this tenant: its CI app signs in with GitHub's OIDC token through a federated credential, holds only `Application.ReadWrite.OwnedBy`, and owns the registration it manages, replacing that registration's credential on every run. The same pattern here:
-
-- The CI app is added as an owner of the Connector's app registration and its service principal, once, by an administrator.
-- Each run, the CI app gives the Connector app a fresh certificate, hands it to JIM, and removes the previous one. No certificate or secret is stored anywhere.
-- `Application.ReadWrite.OwnedBy` manages credentials of owned applications but cannot grant Microsoft Graph permissions, so decision 1 still holds.
-- Where its read paths work under that permission, the rotation is `Register-JIMEntraIdConnector -AccessToken <CI token> -ResetCertificate`, which also exercises the setup command's repair path in CI. If the tenant has drifted so that a permission needs granting, the run fails, which is the right signal.
-
-Either the CI app or the stored certificate can sign in as the Connector app; the difference is that this way nothing long-lived exists to leak.
-
-## Finding: password management and Administrative Units (decision needed)
-
-Found while writing this plan, from the export code, not yet observed live:
-
-- The design (decision 17) assigns the app the User Administrator role over an Administrative Unit holding the users JIM manages, because Graph sets a password app-only only for an app holding that role.
-- The Connector creates users with a random password in the create request, then sets JIM's Initial Password, Set Password or synchronised password with a `PATCH` of `passwordProfile`.
-- The Connector never adds a user it creates to the Administrative Unit. So the role's scope does not cover that user, and the `PATCH` is refused. Every Initial Password for a user JIM provisions would fail in a tenant set up the way the docs and the setup command recommend.
-
-Options:
-
-| Option | What it takes | Covers |
-|---|---|---|
-| **A. Send the Initial Password in the create request** | No new permission: `User.ReadWrite.All` may set `passwordProfile` when creating a user | Initial Password for users JIM creates; Set Password and Password Synchronisation still need the user in the Administrative Unit |
-| **B. Add each created user to a configured Administrative Unit** | A new Connector setting, and a permission to add Administrative Unit members (to verify; likely `AdministrativeUnit.ReadWrite.All`, which manages every Administrative Unit) | Everything, for users JIM creates |
-| **C. Document it** | An administrator keeps the Administrative Unit's membership, by hand or with a dynamic membership rule (Entra ID P1 per member) | Everything, at the administrator's cost |
-
-**Recommendation:** A now, plus C in the docs. A removes the failure for the common case at no privilege cost, and C states plainly what Set Password and Password Synchronisation need. B is a possible later enhancement once a customer needs it. Scenario 036 tests whichever is chosen.
+4. **No stored credential for the Connector app.** Scenario 035 shows the way, already working in this tenant: its CI app signs in with GitHub's OIDC token through a federated credential, holds only `Application.ReadWrite.OwnedBy`, and owns the registration it manages, replacing that registration's credential on every run. The same here:
+   - The CI app is made an owner of the Connector's app registration and its service principal, once, by an administrator.
+   - Each run, the CI app gives the Connector app a fresh certificate, hands it to JIM, and removes the previous one. Nothing long-lived exists to leak, and nothing needs renewing by hand.
+   - `Application.ReadWrite.OwnedBy` manages credentials of owned applications but cannot grant Microsoft Graph permissions, so decision 1 still holds.
+   - Where its read paths work under that permission, the rotation is `Register-JIMEntraIdConnector -AccessToken <CI token> -ResetCertificate`, which also exercises the setup command's repair path in CI. If the tenant has drifted so that a permission needs granting, the run fails, which is the right signal.
+5. **No Administrative Units** (design plan decision 20). Password management assigns User Administrator across the tenant, so the scenarios need no Administrative Unit, and the users JIM creates are covered by the role like any other.
 
 ## Technical Architecture
 
@@ -62,8 +40,8 @@ Options:
 | Identity | Signs in with | Holds | Used for |
 |---|---|---|---|
 | CI app (existing) | GitHub OIDC, federated credential | `Application.ReadWrite.OwnedBy` | Rotating the Connector app's certificate each run |
-| Connector app "JIM Entra ID Connector (CI)" (new, permanent) | The certificate minted for this run | `User.ReadWrite.All`, `Group.ReadWrite.All`, `Member.Read.Hidden`, `User-PasswordProfile.ReadWrite.All`; User Administrator over the test Administrative Unit | JIM's Connected System, and the harness's own Graph reads and writes |
-| Administrator | Interactive, once | Global Administrator | Creating the Connector app, its Administrative Unit and role, and making the CI app an owner |
+| Connector app "JIM Entra ID Connector (CI)" (new, permanent) | The certificate minted for this run | `User.ReadWrite.All`, `Group.ReadWrite.All`, `Member.Read.Hidden`, `User-PasswordProfile.ReadWrite.All`; User Administrator across the tenant | JIM's Connected System, and the harness's own Graph reads and writes |
+| Administrator | Interactive, once | Global Administrator | Creating the Connector app and its role, and making the CI app an owner |
 
 The harness seeds and checks data as the Connector app, but through its own Graph requests written in PowerShell, not through JIM. A mistake mirrored in JIM's import and export (an attribute mapped wrongly both ways) would cancel out if JIM created the data it then read. Writing it independently catches that.
 
@@ -92,7 +70,7 @@ In the AD lab (`ad-lab.yml`, the `jim-ad-lab` environment), as its own harness s
 Source: a CSV HR source projecting people and their departments, as Scenario 001 does; a group per department, with one nested group.
 
 1. **Provision:** a Full Synchronisation and an Export create the users and groups. A confirming import, then the harness's own Graph reads, check every exported attribute and membership.
-2. **Initial Password:** each new user's Initial Password is set, and the harness signs nobody in (the tenant's sign-in policy is Scenario 035's concern); it checks `passwordProfile` was accepted and the Pending Export completed.
+2. **Initial Password:** each new user's Initial Password is set through the password channel after the create, and the harness signs nobody in (the tenant's sign-in policy is Scenario 035's concern); it checks `passwordProfile` was accepted and the Pending Export completed.
 3. **Update:** an attribute change, a UPN change, and a manager reference.
 4. **Membership:** add and remove members; add a member beyond the 20 Graph takes on a create.
 5. **Leaver:** with Delete Behaviour Disable, a leaver is disabled; with Delete, deleted, and the harness finds it in deleted items.
@@ -126,10 +104,9 @@ Tracked by [#3029](https://github.com/TetronIO/JIM/issues/3029), since it needs 
 
 ### Phase 1: Tenant, identities and harness
 
-- An administrator (interactively, with the user ready per the sign-in rule) creates the Connector app with `Register-JIMEntraIdConnector -PasswordManagement -AdministrativeUnitId <test unit>`, creates the test Administrative Unit, and makes the CI app an owner of the app and its service principal.
-- Verify, and record in this plan: that `Application.ReadWrite.OwnedBy` covers the rotation (reading the service principal's grants, adding and removing key credentials); whether an Administrative Unit scoped role for a service principal needs an Entra ID P1 licence in the tenant; and whether deleted objects count towards the quota.
+- An administrator (interactively, with the user ready per the sign-in rule) creates the Connector app with `Register-JIMEntraIdConnector -PasswordManagement`, and makes the CI app an owner of the app and its service principal.
+- Verify, and record in this plan: that `Application.ReadWrite.OwnedBy` covers the rotation (reading the service principal's grants, adding and removing key credentials), and whether deleted objects count towards the quota.
 - The harness helpers and their Pester tests; the scenarios registered with the runner; the `ad-lab.yml` step and its status.
-- The password finding's chosen option, as its own stack layer if it changes the Connector.
 
 ### Phase 2: Scenario 036
 
@@ -151,7 +128,6 @@ Import and a paced export of a few thousand users, measuring real throughput aga
 ## Dependencies
 
 - No new packages: the harness uses `Invoke-RestMethod` and the .NET base class library.
-- Possibly an Entra ID P1 licence (or trial) in `tetronjim`, for the Administrative Unit scoped role; Phase 1 confirms.
 - For Scenario 038: a second tenant, and the Cloud Sync agent on the lab's domain controller.
 
 ## Risks and Mitigations

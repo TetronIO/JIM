@@ -268,10 +268,9 @@ public class GraphConnectorPasswordTests
     }
 
     [Test]
-    public async Task Preflight_PermissionWithoutATenantWideRole_CannotTellSinceAScopedRoleIsNotInTheTokenAsync()
+    public async Task Preflight_PermissionWithoutARoleInTheToken_CannotTellSinceTheTokenMayPredateTheRoleAsync()
     {
-        // The recommended assignment scopes the role to an Administrative Unit, and the token's wids claim lists only
-        // tenant-wide roles, so its absence proves nothing.
+        // The token's wids claim lists only tenant-wide roles held when it was issued, so a role's absence proves nothing.
         _tenant.Roles = ["User.Read.All", "Group.Read.All", "User-PasswordProfile.ReadWrite.All"];
 
         var result = await PreflightAsync();
@@ -280,7 +279,7 @@ public class GraphConnectorPasswordTests
         {
             Assert.That(result.Outcome, Is.EqualTo(PasswordPreflightOutcome.Inconclusive));
             Assert.That(Check(result, PasswordPreflightCheck.ResetRights).State, Is.EqualTo(PasswordPreflightState.CouldNotDetermine));
-            Assert.That(Check(result, PasswordPreflightCheck.ResetRights).Message, Does.Contain("Administrative Unit"));
+            Assert.That(Check(result, PasswordPreflightCheck.ResetRights).Message, Does.Contain("User Administrator"));
         }
     }
 
