@@ -199,14 +199,31 @@ Write-Host "  OK HR CSV system configured (ID: $($hrSystem.id)); manager and mem
 # Step 6: The Entra ID Connected System
 Write-TestStep "Step 6" "Configuring the Entra ID Connected System"
 
+# The certificate was made seconds ago, and Entra ID's token service learns of it unevenly: one sign-in can succeed and
+# the next be refused (AADSTS700027). Saving settings and reading the schema each sign in, so each waits that out.
+function Invoke-WhileCertificatePropagates {
+    param([Parameter(Mandatory)][string]$Description, [Parameter(Mandatory)][scriptblock]$Action, [int]$TimeoutSeconds = 180)
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    while ($true) {
+        try { return & $Action }
+        catch {
+            if ("$($_.Exception.Message)" -notmatch 'AADSTS700027|AADSTS7000215|AADSTS700016' -or [DateTime]::UtcNow -ge $deadline) { throw }
+            Write-Host "  Entra ID does not yet know the new certificate everywhere; $Description again in 15 seconds" -ForegroundColor DarkGray
+            Start-Sleep -Seconds 15
+        }
+    }
+}
+
 $entraSystem = Get-JIMConnectedSystem -Id $ConnectedSystemId
 $graphConnectorFull = Get-JIMConnectorDefinition -Id $graphConnector.id
 # Disable first: the scenario's first leaver is disabled, and the second, after it switches to Delete, deleted.
-Set-JIMConnectedSystem -Id $entraSystem.id -SettingValues @{
-    (Get-ConnectorSettingId $graphConnectorFull "Delete Behaviour") = @{ stringValue = "Disable" }
-} | Out-Null
+Invoke-WhileCertificatePropagates -Description "saving Delete Behaviour" -Action {
+    Set-JIMConnectedSystem -Id $entraSystem.id -SettingValues @{
+        (Get-ConnectorSettingId $graphConnectorFull "Delete Behaviour") = @{ stringValue = "Disable" }
+    } | Out-Null
+}
 
-Import-JIMConnectedSystemSchema -Id $entraSystem.id | Out-Null
+Invoke-WhileCertificatePropagates -Description "reading the schema" -Action { Import-JIMConnectedSystemSchema -Id $entraSystem.id | Out-Null }
 $entraObjectTypes = Get-JIMConnectedSystem -Id $entraSystem.id -ObjectTypes
 $entraUserType = $entraObjectTypes | Where-Object { $_.name -eq "user" }
 $entraGroupType = $entraObjectTypes | Where-Object { $_.name -eq "group" }
