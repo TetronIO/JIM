@@ -1147,7 +1147,7 @@ The dedicated scoping evaluation matrix scenario is Scenario 011 (below).
 - File connector with column-based object-type discovery (one CSO type per matrix cell).
 - No LDAP step; the matrix is template-independent and DirectoryConfig-agnostic.
 
-**Three coverage tiers** (PRD: [engineering/prd/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md](prd/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md)):
+**Three coverage tiers** (PRD: [engineering/prd/done/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md](prd/done/PRD_SCOPING_CRITERIA_EVALUATION_MATRIX.md)):
 
 | Tier | Selector | Cells (approx) | Target | Purpose |
 |------|----------|----------------|--------|---------|
