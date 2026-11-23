@@ -46,7 +46,7 @@
                     @if (_currentEntries.Count == 0)
                     {
                         <MudListItem T="FileSystemEntry" Disabled="true">
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary">No files or directories found</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@ConnectedSystemText.FileBrowserEmpty</MudText>
                         </MudListItem>
                     }
                 </MudList>
@@ -56,15 +56,15 @@
             {
                 @* Show selected file *@
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                    Selected: @_selectedEntry.FullPath
+                    @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.FileBrowserSelected, _selectedEntry.FullPath)
                 </MudText>
             }
             else if (AllowNewFilename)
             {
                 @* Show filename input for creating new file (only when no file selected) *@
                 <MudTextField @bind-Value="_filename"
-                              Label="Filename"
-                              Placeholder="Enter filename (e.g., export.csv)"
+                              Label="@ConnectedSystemText.FileBrowserFilename"
+                              Placeholder="@ConnectedSystemText.FileBrowserFilenamePlaceholder"
                               Variant="Variant.Outlined"
                               Immediate="true"
                               HelperText="@GetFilenameHelperText()" />
@@ -72,12 +72,12 @@
         </MudStack>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Cancel">@CommonText.Cancel</MudButton>
         <MudButton Color="Color.Primary"
                    Variant="Variant.Filled"
                    OnClick="Submit"
                    Disabled="@(!CanSubmit())">
-            Select
+            @ConnectedSystemText.DsSelect
         </MudButton>
     </DialogActions>
 </MudDialog>
@@ -90,7 +90,7 @@
     /// The dialog title.
     /// </summary>
     [Parameter]
-    public string Title { get; set; } = "Select File";
+    public string Title { get; set; } = ConnectedSystemText.SettingFieldSelectFile;
 
     /// <summary>
     /// Whether to show a filename input field (for export paths where file may not exist).
@@ -130,7 +130,7 @@
         }
         else
         {
-            _errorMessage = result.Error ?? "Failed to load directory.";
+            _errorMessage = result.Error ?? ConnectedSystemText.FileBrowserLoadFailed;
         }
     }
 
@@ -209,7 +209,7 @@
 
     private string GetFilenameHelperText()
     {
-        return $"File will be created in: {_currentPath}";
+        return string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.FileBrowserWillCreate, _currentPath);
     }
 
     private bool CanSubmit()

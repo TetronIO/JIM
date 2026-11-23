@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="RunProfilesIntro" xml:space="preserve">
+    <value>Run Profiles define what operations can be performed on a Connector, i.e. import, export and synchronization, with any required settings.</value>
+  </data>
+  <data name="RunProfilePreviewTooltip" xml:space="preserve">
+    <value>Preview what this Full Synchronization would do, without running it</value>
+  </data>
+  <data name="RunProfilePreviewAriaLabel" xml:space="preserve">
+    <value>Preview this Full Synchronization</value>
+  </data>
+  <data name="RunProfileVerificationModeHelp" xml:space="preserve">
+    <value>Runs the honest attribute diff on every object instead of skipping unchanged objects by content hash, and reports any disagreement between the stored hash and the diff as an error. Use temporarily to validate the content-hash skip optimization; leave off for normal, faster Full Imports.</value>
+  </data>
+  <data name="ScimEndpointInfo" xml:space="preserve">
+    <value>Give your identity provider this base URL and one of the keys below. The Users and Groups it sends are kept here and reach the Metaverse at the next import and synchronization of this Connected System.</value>
+  </data>
+  <data name="DetailInfoBody" xml:space="preserve">
+    <value>A Connected System is one system JIM imports from or exports to, with its connection settings, schema, Run Profiles and the objects JIM holds for it.</value>
+  </data>
+  <data name="DetailDeprovisioningDetail" xml:space="preserve">
+    <value>This system is being deleted through synchronization and is excluded from scheduled runs; configuration is read-only until the run completes.</value>
+  </data>
+  <data name="DetailDeprovisioningStoppedDetail" xml:space="preserve">
+    <value>A Synchronized Deprovisioning run did not finish, so this system remains fenced and excluded from scheduled runs; the work already done stands. Deleting the system again with {0} resumes from where the run stopped; {1} finishes the deletion at once.</value>
+  </data>
+  <data name="DetailImportIncompleteDetail" xml:space="preserve">
+    <value>An import of this Connected System began saving what it read on {0} UTC and did not finish, so the Connector Space holds only part of it. Full and Delta Synchronization of this Connected System will not run until it is whole again.</value>
+  </data>
+  <data name="DetailObsoleteSingle" xml:space="preserve">
+    <value>1 Connected System Object is obsolete. It was not returned by the last Full Import, so the next Synchronization Run Profile on this system will disconnect it from their Metaverse Objects and delete it.</value>
+  </data>
+  <data name="DetailObsoleteMany" xml:space="preserve">
+    <value>{0} Connected System Objects are obsolete. They were not returned by the last Full Import, so the next Synchronization Run Profile on this system will disconnect them from their Metaverse Objects and delete them.</value>
+  </data>
+  <data name="DetailSweepArmedReady" xml:space="preserve">
+    <value>A stranded-value sweep is armed: the Connector Space was cleared on {0} UTC and a Full Import completed on {1} UTC. The next Full Synchronization of this Connected System will recall values contributed by objects that did not return.</value>
+  </data>
+  <data name="DetailSweepArmedWaiting" xml:space="preserve">
+    <value>A stranded-value sweep is armed: the Connector Space was cleared on {0} UTC. It will run at the first Full Synchronization after a Full Import of this Connected System completes successfully; a Full Synchronization run before then does nothing beyond ordinary synchronization.</value>
+  </data>
+  <data name="DetailDriftOneDated" xml:space="preserve">
+    <value>1 configuration change has been made since the last Full Synchronization ({0}).</value>
+  </data>
+  <data name="DetailDriftOneUndated" xml:space="preserve">
+    <value>1 configuration change has been made since the last Full Synchronization.</value>
+  </data>
+  <data name="DetailDriftManyDated" xml:space="preserve">
+    <value>{0} configuration changes have been made since the last Full Synchronization ({1}).</value>
+  </data>
+  <data name="DetailDriftManyUndated" xml:space="preserve">
+    <value>{0} configuration changes have been made since the last Full Synchronization.</value>
+  </data>
+  <data name="DetailDriftGuidanceDestructiveSingle" xml:space="preserve">
+    <value>It is destructive and can cascade deletions or mass deprovisioning the moment it is applied. Review it before running a Full Synchronization.</value>
+  </data>
+  <data name="DetailDriftGuidanceDestructiveMany" xml:space="preserve">
+    <value>At least one of them is destructive and can cascade deletions or mass deprovisioning the moment it is applied. Review them before running a Full Synchronization.</value>
+  </data>
+  <data name="DetailDriftGuidanceSingle" xml:space="preserve">
+    <value>Run a Full Synchronization for it to take effect.</value>
+  </data>
+  <data name="DetailDriftGuidanceMany" xml:space="preserve">
+    <value>Run a Full Synchronization for them to take effect.</value>
+  </data>
+  <data name="DetailPreviewFullSync" xml:space="preserve">
+    <value>Preview Full Synchronization</value>
+  </data>
+  <data name="DetailNeverSynchronised" xml:space="preserve">
+    <value>This Connected System has never completed a Full Synchronization, so its configuration has never been applied in full.</value>
+  </data>
+  <data name="DetailTrackingOff" xml:space="preserve">
+    <value>Configuration change tracking is switched off, so JIM cannot tell whether this Connected System has configuration changes waiting for a Full Synchronization.</value>
+  </data>
+  <data name="ConnectedSystemDeprovisionThroughSynchronisation" xml:space="preserve">
+    <value>Deprovision through synchronization</value>
+  </data>
+  <data name="DeleteSystemFencedAttached" xml:space="preserve">
+    <value>A Synchronized Deprovisioning run for this system is already queued or running. {0} attaches to it, resuming from its checkpoint; {1} abandons the remaining deprovisioning and completes the deletion at once.</value>
+  </data>
+  <data name="DeleteSystemFencedWarning" xml:space="preserve">
+    <value>A previous Synchronized Deprovisioning run stopped before completing and this system remains fenced. {0} resumes from where the run stopped; {1} finishes the deletion at once, keeping the remaining contributed data.</value>
+  </data>
+  <data name="DeleteSystemDeprovisionDetail" xml:space="preserve">
+    <value>Each of this system's objects is processed as though it had disconnected through a normal synchronization: contributed values are recalled or handed to surviving contributors, Metaverse Object deletion rules are evaluated for objects losing their last connector, and downstream systems receive corrective exports. Runs as a queued operation you can monitor from the Operations page; deleting the system is its final step.</value>
+  </data>
+  <data name="DeleteSystemImmediateDetail" xml:space="preserve">
+    <value>The system is removed at once. Values it contributed remain in place with no record of where they came from; Metaverse Object deletion rules are evaluated in bulk for objects losing their last connector, but no per-object synchronization processing occurs; downstream systems are not corrected.</value>
+  </data>
+  <data name="DeleteSystemImmediatePreviewNote" xml:space="preserve">
+    <value>This preview describes deprovisioning through synchronization. Deleting immediately clears none of these values and sends no exports; Metaverse Objects whose last connector is this system still become eligible for deletion under their Object Type's deletion rule.</value>
+  </data>
+  <data name="DeleteSystemImpactSyncRules" xml:space="preserve">
+    <value>Synchronization Rules</value>
+  </data>
+  <data name="PwPanelPolicyInfo" xml:space="preserve">
+    <value>The password rules this Connected System enforces, read when the schema was last retrieved. JIM uses them to pre-fill the initial password settings on a Synchronization Rule, so the rules do not have to be retyped.</value>
+  </data>
+  <data name="PwPanelOutcomeNotPublished" xml:space="preserve">
+    <value>This directory publishes no password policy that JIM can read. There is nothing to configure here: the initial password settings on a Synchronization Rule are set by hand, and a password the directory refuses is reported when it happens.</value>
+  </data>
+  <data name="PwPanelOutcomeNotRead" xml:space="preserve">
+    <value>JIM has not read a password policy from this Connected System. Retrieve the schema to read the policy, if there is one; where a directory publishes none, the initial password settings are configured by hand on the Synchronization Rule.</value>
+  </data>
+  <data name="SettingsTabImportBehaviour" xml:space="preserve">
+    <value>Import Behavior</value>
+  </data>
+  <data name="SettingsTabPasswordsIntro" xml:space="preserve">
+    <value>These apply to every password JIM sends to this Connected System, whether it is the first password on a Connected System Object JIM creates, one you set by hand, or a password change synchronized from elsewhere.</value>
+  </data>
+  <data name="CsListTrackingOff" xml:space="preserve">
+    <value>Configuration change tracking is switched off, so JIM cannot tell which Connected Systems have configuration changes waiting for a Full Synchronization.</value>
+  </data>
+  <data name="PwSyncHeading" xml:space="preserve">
+    <value>Password Synchronization</value>
+  </data>
+  <data name="PwSyncOnSnackbar" xml:space="preserve">
+    <value>Password Synchronization is on for this Connected System. Anything queued while it was off will be delivered.</value>
+  </data>
+  <data name="PwSyncSavedSnackbar" xml:space="preserve">
+    <value>Your Password Synchronization settings have been saved.</value>
+  </data>
+  <data name="DangerListRules" xml:space="preserve">
+    <value>All Synchronization Rules</value>
+  </data>
+  <data name="FullSyncStaleBody" xml:space="preserve">
+    <value>It may no longer be accurate, so run it again before running a Full Synchronization; a run started now records that the preview informing it was out of date.</value>
+  </data>
+  <data name="FullSyncPreviewTitle" xml:space="preserve">
+    <value>Full Synchronization preview</value>
+  </data>
+  <data name="FullSyncAllDisabled" xml:space="preserve">
+    <value>Every Full Synchronization Run Profile of this Connected System is disabled. Enable one on the Run Profiles tab to run it.</value>
+  </data>
+  <data name="FullSyncRunButton" xml:space="preserve">
+    <value>Run Full Synchronization</value>
+  </data>
+  <data name="FullSyncQueueFailed" xml:space="preserve">
+    <value>Failed to queue the Full Synchronization.</value>
+  </data>
+  <data name="FullSyncQueueFailedDetail" xml:space="preserve">
+    <value>Failed to queue the Full Synchronization: {0}</value>
+  </data>
+  <data name="FullSyncRunProfileName" xml:space="preserve">
+    <value>Full Synchronization</value>
+  </data>
+  <data name="DsWarnBodySingle" xml:space="preserve">
+    <value>{0} has a Synchronization Rule that projects {1} objects to the Metaverse, but it is not selected above:</value>
+  </data>
+  <data name="DsWarnBodyMany" xml:space="preserve">
+    <value>{0} have a Synchronization Rule that projects {1} objects to the Metaverse, but they are not selected above:</value>
+  </data>
+  <data name="DsJoinOnlyNote" xml:space="preserve">
+    <value>Join-only Synchronization Rules (projection off) never show this; leaving those out of the authoritative sources is the normal way to add a system that only contributes attributes.</value>
+  </data>
+  <data name="DsSaveRule" xml:space="preserve">
+    <value>Save Synchronization Rule</value>
+  </data>
+  <data name="CertReasonUnrecognised" xml:space="preserve">
+    <value>Refused for an unrecognized reason</value>
+  </data>
+</root>

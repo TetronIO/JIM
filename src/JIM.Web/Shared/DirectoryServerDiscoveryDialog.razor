@@ -23,7 +23,7 @@
         {
             <MudStack AlignItems="AlignItems.Center" Class="pa-8" Spacing="4">
                 <MudProgressCircular Indeterminate="true" />
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">Discovering @(ServerTerm)...</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DsDiscovering, ServerTerm)</MudText>
             </MudStack>
         }
         else if (_errorMessage != null)
@@ -33,7 +33,9 @@
         else if (_directoryServers is { Count: 0 })
         {
             <MudAlert Severity="Severity.Info" data-testid="jim-directory-server-discovery-empty">
-                JIM did not find any @(ServerTerm) in @(_forestName is { } forest ? $"the {forest} forest" : "this directory").
+                @(_forestName is { } forest
+                    ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DsNoneInForest, ServerTerm, forest)
+                    : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DsNoneInDirectory, ServerTerm))
             </MudAlert>
         }
         else if (_directoryServers != null)
@@ -41,11 +43,12 @@
             <MudSimpleTable Dense="true" Hover="true" Elevation="0" Outlined="true">
                 <thead>
                     <tr>
+                        @* i18n: exempt - FQDN is a technical acronym, the same in every language *@
                         <th>FQDN</th>
-                        <th>Site</th>
+                        <th>@ConnectedSystemText.DsColumnSite</th>
                         @if (_showVersion)
                         {
-                            <th>Version</th>
+                            <th>@ConnectedSystemText.DsColumnVersion</th>
                         }
                         <th></th>
                     </tr>
@@ -81,7 +84,7 @@
                             <td class="text-right">
                                 <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
                                            OnClick="@(() => Select(directoryServer))">
-                                    Select
+                                    @ConnectedSystemText.DsSelect
                                 </MudButton>
                             </td>
                         </tr>
@@ -93,9 +96,9 @@
     <DialogActions>
         @if (_errorMessage != null)
         {
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false" OnClick="LoadAsync" data-testid="jim-directory-server-discovery-retry">Retry</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false" OnClick="LoadAsync" data-testid="jim-directory-server-discovery-retry">@CommonText.Retry</MudButton>
         }
-        <MudButton OnClick="Cancel" DropShadow="false" data-testid="jim-directory-server-discovery-close">Close</MudButton>
+        <MudButton OnClick="Cancel" DropShadow="false" data-testid="jim-directory-server-discovery-close">@CommonText.Close</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -127,7 +130,7 @@
     [Parameter]
     public string ServerTerm { get; set; } = DefaultServerTerm;
 
-    private const string DefaultServerTerm = "directory servers";
+    private static string DefaultServerTerm => ConnectedSystemText.DsDefaultServerTerm;
 
     /// <summary>
     /// Connectivity settings entered on screen but not yet saved, applied over the saved ones so an
@@ -193,8 +196,8 @@
     /// </summary>
     private static string Title(string serverTerm, string? forestName = null)
     {
-        var title = $"Discover {System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(serverTerm)}";
-        return forestName == null ? title : $"{title} in {forestName}";
+        var title = string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DsTitle, System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(serverTerm));
+        return forestName == null ? title : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DsTitleInForest, title, forestName);
     }
 
     /// <summary>

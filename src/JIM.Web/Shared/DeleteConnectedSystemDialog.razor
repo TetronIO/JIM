@@ -20,13 +20,13 @@
 @* engineering/plans/done/CONNECTED_SYSTEM_DELETION_IMPACT_PREVIEW.md (Phase 3).                   *@
 
 <ConsequenceConfirmationDialog Loading="@(_preview == null)"
-                               LoadingText="Loading deletion preview..."
-                               IrreversibleWarning="This action is permanent and cannot be undone."
+                               LoadingText="@ConnectedSystemText.DeleteSystemLoadingText"
+                               IrreversibleWarning="@ConnectedSystemText.DeleteSystemIrreversible"
                                Counts="@BuildCounts()"
                                Warnings="@(_preview?.Warnings ?? [])"
                                ConfirmationPhrase="@ConnectedSystem.Name"
-                               ConfirmButtonText="Delete Permanently"
-                               BusyText="Deleting..."
+                               ConfirmButtonText="@ConnectedSystemText.DeleteSystemConfirmButton"
+                               BusyText="@ConnectedSystemText.DeleteSystemBusy"
                                OnConfirmAsync="DeleteAsync">
     <LeadingContent>
         @* ─── Fenced-system exits (#809) ─── *@
@@ -35,17 +35,13 @@
             @if (_fencedTask != null)
             {
                 <MudAlert Severity="Severity.Info" data-testid="jim-delete-cs-fenced-notice">
-                    A Synchronised Deprovisioning run for this system is already queued or running. Deprovision through
-                    synchronisation attaches to it, resuming from its checkpoint; Delete immediately and keep contributed
-                    data abandons the remaining deprovisioning and completes the deletion at once.
+                    @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DeleteSystemFencedAttached, ConnectedSystemText.ConnectedSystemDeprovisionThroughSynchronisation, ConnectedSystemText.ConnectedSystemDeleteImmediatelyKeepData)
                 </MudAlert>
             }
             else
             {
                 <MudAlert Severity="Severity.Warning" data-testid="jim-delete-cs-fenced-notice">
-                    A previous Synchronised Deprovisioning run stopped before completing and this system remains fenced.
-                    Deprovision through synchronisation resumes from where the run stopped; Delete immediately and keep
-                    contributed data finishes the deletion at once, keeping the remaining contributed data.
+                    @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DeleteSystemFencedWarning, ConnectedSystemText.ConnectedSystemDeprovisionThroughSynchronisation, ConnectedSystemText.ConnectedSystemDeleteImmediatelyKeepData)
                 </MudAlert>
             }
         }
@@ -53,29 +49,21 @@
         @* ─── Deletion mode (#809): deprovision is the default; immediate is the warned opt-out ─── *@
         <MudRadioGroup T="bool" @bind-Value="_deleteImmediately">
             <div class="mt-1">
-                <MudRadio T="bool" Value="false" Color="Color.Primary">Deprovision through synchronisation (recommended)</MudRadio>
+                <MudRadio T="bool" Value="false" Color="Color.Primary">@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DeleteSystemDeprovisionRecommended, ConnectedSystemText.ConnectedSystemDeprovisionThroughSynchronisation)</MudRadio>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">
-                    Each of this system's objects is processed as though it had disconnected through a normal
-                    synchronisation: contributed values are recalled or handed to surviving contributors, Metaverse
-                    Object deletion rules are evaluated for objects losing their last connector, and downstream systems
-                    receive corrective exports. Runs as a queued operation you can monitor from the Operations page;
-                    deleting the system is its final step.
+                    @ConnectedSystemText.DeleteSystemDeprovisionDetail
                 </MudText>
             </div>
             <div class="mt-2">
-                <MudRadio T="bool" Value="true" Color="Color.Primary">Delete immediately and keep contributed data</MudRadio>
+                <MudRadio T="bool" Value="true" Color="Color.Primary">@ConnectedSystemText.ConnectedSystemDeleteImmediatelyKeepData</MudRadio>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">
-                    The system is removed at once. Values it contributed remain in place with no record of where they
-                    came from; Metaverse Object deletion rules are evaluated in bulk for objects losing their last
-                    connector, but no per-object synchronisation processing occurs; downstream systems are not
-                    corrected.
+                    @ConnectedSystemText.DeleteSystemImmediateDetail
                 </MudText>
                 @if (_deleteImmediately)
                 {
                     <MudAlert Severity="Severity.Warning" Class="mt-2 ms-12"
                               data-testid="jim-delete-cs-immediate-warning">
-                        Kept values become permanently unmanaged, and downstream systems keep whatever this system last
-                        exported. This cannot be reversed.
+                        @ConnectedSystemText.DeleteSystemImmediateWarning
                     </MudAlert>
                 }
             </div>
@@ -88,7 +76,7 @@
             <MudPaper Outlined="true" Class="pa-4" data-testid="jim-delete-cs-preview-slot">
                 <div class="d-flex align-center flex-wrap gap-2">
                     <MudChip T="string" Variant="Variant.Text" Color="@PreviewChipColour" Class="ma-0">@PreviewChipLabel</MudChip>
-                    <MudText Typo="Typo.body1"><b>Deletion impact preview</b></MudText>
+                    <MudText Typo="Typo.body1"><b>@ConnectedSystemText.DeleteSystemPreviewHeading</b></MudText>
                     @if (_previewState.Started is { } previewStarted)
                     {
                         <MudTooltip Text="@previewStarted.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -109,12 +97,11 @@
                             <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-3" />
                         }
                         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
-                            A preview is still running. Deleting now cancels it, and the deletion will record that no
-                            preview informed it.
+                            @ConnectedSystemText.DeleteSystemRunningPreview
                         </MudText>
                         <MudButton Variant="Variant.Text" Class="mt-2"
                                    OnClick="() => CloseWith(DeleteConnectedSystemDialogOutcome.ShowPreview)">
-                            Wait for the preview
+                            @ConnectedSystemText.DeleteSystemWaitForPreview
                         </MudButton>
                         break;
 
@@ -122,14 +109,12 @@
                         @if (_deleteImmediately)
                         {
                             <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
-                                This preview describes deprovisioning through synchronisation. Deleting immediately clears
-                                none of these values and sends no exports; Metaverse Objects whose last connector is this
-                                system still become eligible for deletion under their Object Type's deletion rule.
+                                @ConnectedSystemText.DeleteSystemImmediatePreviewNote
                             </MudAlert>
                         }
                         else if (_previewState.Lines is not { Count: > 0 } previewLines)
                         {
-                            <MudText Typo="Typo.body2" Class="mt-3">Deleting this system would change nothing outside it.</MudText>
+                            <MudText Typo="Typo.body2" Class="mt-3">@ConnectedSystemText.DeleteSystemNoChange</MudText>
                         }
                         else
                         {
@@ -140,55 +125,51 @@
                                 }
                                 @if (previewLines.Count > PreviewLinesShown)
                                 {
-                                    <MudText Typo="Typo.body2">The full preview lists @(previewLines.Count - PreviewLinesShown) more.</MudText>
+                                    <MudText Typo="Typo.body2">@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DeleteSystemMoreLines, previewLines.Count - PreviewLinesShown)</MudText>
                                 }
                             </MudAlert>
                         }
                         <div class="d-flex align-center flex-wrap gap-2 mt-2">
                             <MudButton Variant="Variant.Text"
                                        OnClick="() => CloseWith(DeleteConnectedSystemDialogOutcome.ShowPreview)">
-                                Open full preview
+                                @ConnectedSystemText.DeleteSystemOpenFullPreview
                             </MudButton>
                             <MudSpacer />
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Recorded on the deletion's Activity</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@ConnectedSystemText.DeleteSystemRecordedOnActivity</MudText>
                         </div>
                         break;
 
                     case ConnectedSystemPreviewStatus.Stale:
                         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
-                            @_previewState.StaleReason since this preview ran: <PreviewOvertakenBy Staleness="@_previewState.Staleness" />.
-                            It may no longer describe what deleting would do, so run it again for a current answer; a deletion now
-                            records that the preview informing it was out of date.
+                            @_previewState.StaleReason @ConnectedSystemText.DeleteSystemSinceThisPreviewRan <PreviewOvertakenBy Staleness="@_previewState.Staleness" />.
+                            @ConnectedSystemText.DeleteSystemStaleBody
                         </MudText>
                         <MudButton Variant="Variant.Filled" DropShadow="false" Class="mt-3"
                                    StartIcon="@Icons.Material.Filled.Visibility"
                                    OnClick="() => CloseWith(DeleteConnectedSystemDialogOutcome.PreviewRequested)">
-                            Run again
+                            @ConnectedSystemText.DeleteSystemRunAgain
                         </MudButton>
                         break;
 
                     case ConnectedSystemPreviewStatus.DidNotFinish:
                         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
-                            The last preview did not finish, so it says nothing about what deleting would do. The deletion
-                            will record that no preview informed it.
+                            @ConnectedSystemText.DeleteSystemDidNotFinishBody
                         </MudText>
                         <MudButton Variant="Variant.Filled" DropShadow="false" Class="mt-3"
                                    StartIcon="@Icons.Material.Filled.Visibility"
                                    OnClick="() => CloseWith(DeleteConnectedSystemDialogOutcome.PreviewRequested)">
-                            Preview again
+                            @ConnectedSystemText.DeleteSystemPreviewAgain
                         </MudButton>
                         break;
 
                     default:
                         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
-                            See which values would be cleared or taken over by another Connected System, and what would be
-                            exported, before you delete. The deletion's Activity will record that it went ahead without a
-                            preview.
+                            @ConnectedSystemText.DeleteSystemDefaultBody
                         </MudText>
                         <MudButton Variant="Variant.Filled" DropShadow="false" Class="mt-3"
                                    StartIcon="@Icons.Material.Filled.Visibility"
                                    OnClick="() => CloseWith(DeleteConnectedSystemDialogOutcome.PreviewRequested)">
-                            Preview first
+                            @ConnectedSystemText.DeleteSystemPreviewFirst
                         </MudButton>
                         break;
                 }
@@ -201,22 +182,21 @@
         @if (_deleteImmediately && _preview is { WillRunAsBackgroundJob: true })
         {
             <MudAlert Severity="Severity.Info">
-                Due to the size of this system, deletion will run as a background job.
-                Estimated time: @_preview.EstimatedDeletionTime.ToString(@"hh\:mm\:ss")
+                @ConnectedSystemText.DeleteSystemBackgroundJob
+                @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DeleteSystemEstimatedTime, _preview.EstimatedDeletionTime.ToString(@"hh\:mm\:ss"))
             </MudAlert>
         }
 
         <MudCheckBox @bind-Value="_deleteChangeHistory" Color="Color.Primary">
-            <MudText>Delete change history for deleted objects</MudText>
+            <MudText>@ConnectedSystemText.DeleteSystemChangeHistory</MudText>
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                When enabled, all change history records for the deleted Connected System Objects will also be deleted.
-                Leave unchecked to preserve the audit trail.
+                @ConnectedSystemText.DeleteSystemChangeHistoryHelp
             </MudText>
         </MudCheckBox>
 
         <MudTextField T="string"
                       @bind-Value="_changeReason"
-                      Label="Reason (optional)"
+                      Label="@ConnectedSystemText.DeleteSystemReason"
                       Variant="Variant.Outlined"
                       FullWidth="true"
                       Lines="2"
@@ -225,9 +205,9 @@
 </ConsequenceConfirmationDialog>
 
 @code {
-    private const string GroupRemoved = "Removed with the system";
-    private const string GroupAffected = "Affected, not removed";
-    private const string SubgroupMetaverseObjects = "Metaverse Objects";
+    private static string GroupRemoved => ConnectedSystemText.DeleteSystemGroupRemoved;
+    private static string GroupAffected => ConnectedSystemText.DeleteSystemGroupAffected;
+    private static string SubgroupMetaverseObjects => ConnectedSystemText.DeleteSystemSubgroupMetaverseObjects;
 
     /// <summary>
     /// How many verdict sentences the slot states before pointing at the full preview: enough for the worst
@@ -298,11 +278,11 @@
 
     private string PreviewChipLabel => _previewState.Status switch
     {
-        ConnectedSystemPreviewStatus.Running => "Running",
-        ConnectedSystemPreviewStatus.Current => "Complete",
-        ConnectedSystemPreviewStatus.Stale => "Stale",
-        ConnectedSystemPreviewStatus.DidNotFinish => "Did not finish",
-        _ => "Not previewed"
+        ConnectedSystemPreviewStatus.Running => ConnectedSystemText.DeleteSystemPreviewChipRunning,
+        ConnectedSystemPreviewStatus.Current => ConnectedSystemText.DeleteSystemPreviewChipComplete,
+        ConnectedSystemPreviewStatus.Stale => ConnectedSystemText.DeleteSystemPreviewChipStale,
+        ConnectedSystemPreviewStatus.DidNotFinish => ConnectedSystemText.DeleteSystemPreviewChipDidNotFinish,
+        _ => ConnectedSystemText.DeleteSystemPreviewChipNotPreviewed
     };
 
     private void CloseWith(DeleteConnectedSystemDialogOutcome outcome) => MudDialog.Close(DialogResult.Ok(outcome));
@@ -317,16 +297,16 @@
         // choice above against what it governs.
         return
         [
-            new ImpactCount { Group = GroupRemoved, Label = "Connected System Objects", Count = _preview.ConnectedSystemObjectCount },
-            new ImpactCount { Group = GroupRemoved, Label = "Synchronisation Rules", Count = _preview.SyncRuleCount },
-            new ImpactCount { Group = GroupRemoved, Label = "Run Profiles", Count = _preview.RunProfileCount },
-            new ImpactCount { Group = GroupRemoved, Label = "Partitions", Count = _preview.PartitionCount },
-            new ImpactCount { Group = GroupRemoved, Label = "Containers", Count = _preview.ContainerCount },
-            new ImpactCount { Group = GroupRemoved, Label = "Pending Exports", Count = _preview.PendingExportCount },
-            new ImpactCount { Group = GroupAffected, Subgroup = SubgroupMetaverseObjects, Label = "Joined", Count = _preview.JoinedMvoCount, Note = "disconnected from this system; they stay in the Metaverse unless this was their last connector, below" },
-            new ImpactCount { Group = GroupAffected, Subgroup = SubgroupMetaverseObjects, Label = "Contributed attribute values", Count = _preview.ContributedValueCount, Note = "recalled or kept per the choice above" },
-            new ImpactCount { Group = GroupAffected, Subgroup = SubgroupMetaverseObjects, Label = "Eligible for deletion rules", Count = _preview.MvosWithDeletionRuleCount, Note = "this system is their last connector; their Object Type's deletion rule decides" },
-            new ImpactCount { Group = GroupAffected, Label = "Activities", Count = _preview.ActivityCount, Note = "kept: the audit history of what this system did" }
+            new ImpactCount { Group = GroupRemoved, Label = ConnectedSystemText.DeleteSystemImpactConnectedSystemObjects, Count = _preview.ConnectedSystemObjectCount },
+            new ImpactCount { Group = GroupRemoved, Label = ConnectedSystemText.DeleteSystemImpactSyncRules, Count = _preview.SyncRuleCount },
+            new ImpactCount { Group = GroupRemoved, Label = ConnectedSystemText.DeleteSystemImpactRunProfiles, Count = _preview.RunProfileCount },
+            new ImpactCount { Group = GroupRemoved, Label = ConnectedSystemText.DeleteSystemImpactPartitions, Count = _preview.PartitionCount },
+            new ImpactCount { Group = GroupRemoved, Label = ConnectedSystemText.DeleteSystemImpactContainers, Count = _preview.ContainerCount },
+            new ImpactCount { Group = GroupRemoved, Label = ConnectedSystemText.DeleteSystemImpactPendingExports, Count = _preview.PendingExportCount },
+            new ImpactCount { Group = GroupAffected, Subgroup = SubgroupMetaverseObjects, Label = ConnectedSystemText.DeleteSystemImpactJoined, Count = _preview.JoinedMvoCount, Note = ConnectedSystemText.DeleteSystemImpactJoinedNote },
+            new ImpactCount { Group = GroupAffected, Subgroup = SubgroupMetaverseObjects, Label = ConnectedSystemText.DeleteSystemImpactContributed, Count = _preview.ContributedValueCount, Note = ConnectedSystemText.DeleteSystemImpactContributedNote },
+            new ImpactCount { Group = GroupAffected, Subgroup = SubgroupMetaverseObjects, Label = ConnectedSystemText.DeleteSystemImpactEligible, Count = _preview.MvosWithDeletionRuleCount, Note = ConnectedSystemText.DeleteSystemImpactEligibleNote },
+            new ImpactCount { Group = GroupAffected, Label = ConnectedSystemText.DeleteSystemImpactActivities, Count = _preview.ActivityCount, Note = ConnectedSystemText.DeleteSystemImpactActivitiesNote }
         ];
     }
 
@@ -346,14 +326,14 @@
 
             if (!result.Success)
             {
-                Snackbar.Add($"Failed to delete: {result.ErrorMessage}", Severity.Error);
+                Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DeleteSystemFailed, result.ErrorMessage), Severity.Error);
                 return false;
             }
 
             switch (result.Outcome)
             {
                 case DeletionOutcome.CompletedImmediately:
-                    Snackbar.Add("Connected System has been deleted.", Severity.Success);
+                    Snackbar.Add(ConnectedSystemText.DeleteSystemDeleted, Severity.Success);
                     break;
 
                 case DeletionOutcome.QueuedAsBackgroundJob:
@@ -364,10 +344,10 @@
                         // enqueued before the caller navigates; ISnackbar is circuit-scoped, so it survives
                         // the soft navigation.
                         var objectCount = _preview?.ConnectedSystemObjectCount ?? 0;
-                        Snackbar.Add($"Deprovisioning queued: {objectCount:N0} objects will be processed before {ConnectedSystem.Name} is deleted.",
+                        Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DeleteSystemDeprovisioningQueued, objectCount.ToString("N0", System.Globalization.CultureInfo.CurrentCulture), ConnectedSystem.Name),
                             Severity.Success, config =>
                             {
-                                config.Action = "View Activity";
+                                config.Action = ConnectedSystemText.DetailViewActivity;
                                 config.OnClick = _ =>
                                 {
                                     NavManager.NavigateTo($"/activity/{activityId}");
@@ -377,19 +357,19 @@
                     }
                     else
                     {
-                        Snackbar.Add("Deletion has been queued as a background job. You can monitor progress in the Operations view.", Severity.Info);
+                        Snackbar.Add(ConnectedSystemText.DeleteSystemQueuedBackground, Severity.Info);
                     }
                     break;
 
                 case DeletionOutcome.QueuedAfterSync:
-                    Snackbar.Add("A sync operation is running. Deletion will proceed after it completes.", Severity.Info);
+                    Snackbar.Add(ConnectedSystemText.DeleteSystemQueuedAfterSync, Severity.Info);
                     break;
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Log.Error(ex, "Error deleting Connected System {Id}", ConnectedSystem.Id);
-            Snackbar.Add($"An error occurred: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DeleteSystemError, ex.Message), Severity.Error);
             return false;
         }
 
@@ -407,7 +387,7 @@
             { x => x.ConnectedSystem, connectedSystem }
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
-        var dialog = await dialogService.ShowAsync<DeleteConnectedSystemDialog>($"Delete \"{connectedSystem.Name}\" Connected System", parameters, options);
+        var dialog = await dialogService.ShowAsync<DeleteConnectedSystemDialog>(string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DeleteSystemDialogTitle, connectedSystem.Name), parameters, options);
         var result = await dialog.Result;
         return result switch
         {

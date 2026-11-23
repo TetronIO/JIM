@@ -10,17 +10,17 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Create a Connected System</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected Systems:</span> <span class="mud-primary-text">New</span>
-    <PageInfo Title="New Connected System" DocsPage="configuration/connected-systems.md">
-        Provide some basic details here, and then we'll move on to configuring the Connected System.
+<PageTitle>@ConnectedSystemText.CsCreatePageTitle</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@ConnectedSystemText.CsCreateTitleLabel</span> <span class="mud-primary-text">@ConnectedSystemText.CsCreateNew</span>
+    <PageInfo Title="@ConnectedSystemText.CsCreateInfoTitle" DocsPage="configuration/connected-systems.md">
+        @ConnectedSystemText.CsCreateInfoBody
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 <MudPaper Class="pa-4 mt-2" Outlined="true">
     <MudForm @bind-IsValid="@_isFormValid" @bind-Errors="@_formErrors">
-        <MudSelect T="string" Label="Connector" Placeholder="Please select a connector..." Required="true"
+        <MudSelect T="string" Label="@ConnectedSystemText.CsCreateConnector" Placeholder="@ConnectedSystemText.CsCreateConnectorPlaceholder" Required="true"
                    @bind-Value="_model.ConnectorId" AdornmentIcon="@Icons.Material.Filled.Power" Adornment="Adornment.Start"
                    Variant="Variant.Outlined">
             @if (_connectorDefinitionHeaders != null)
@@ -33,14 +33,14 @@
                 }
             }
         </MudSelect>
-        <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="_model.Name"
+        <MudTextField Label="@CommonText.FieldName" Required="true" RequiredError="@ConnectedSystemText.ScimKeyNameRequired" @bind-Value="_model.Name"
                       Immediate="true" Variant="Variant.Outlined" />
-        <MudTextField Label="Description" @bind-Value="_model.Description" Lines="5" MaxLines="10" Sizing="InputSizing.Auto" Variant="Variant.Outlined" />
+        <MudTextField Label="@CommonText.FieldDescription" @bind-Value="_model.Description" Lines="5" MaxLines="10" Sizing="InputSizing.Auto" Variant="Variant.Outlined" />
     </MudForm>
 </MudPaper>
 
 <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!_isFormValid)" Class="mt-5"
-           OnClick="HandleValidSubmit" DropShadow="false">Create Connected System</MudButton>
+           OnClick="HandleValidSubmit" DropShadow="false">@ConnectedSystemText.CsListCreate</MudButton>
 
 @code {
     [CascadingParameter]
@@ -52,10 +52,10 @@
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new()
     {
-        new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new BreadcrumbItem("Administration", href: "/admin"),
-        new BreadcrumbItem("Connected Systems", href: "/admin/connected-systems/"),
-        new BreadcrumbItem("New", href: null, disabled: true)
+        new BreadcrumbItem(ConnectedSystemText.DetailBreadcrumbHome, href: "/", icon: Icons.Material.Filled.Home),
+        new BreadcrumbItem(ConnectedSystemText.DetailBreadcrumbAdministration, href: "/admin"),
+        new BreadcrumbItem(ConnectedSystemText.DetailBreadcrumbConnectedSystems, href: "/admin/connected-systems/"),
+        new BreadcrumbItem(ConnectedSystemText.CsCreateNew, href: null, disabled: true)
     };
 
     protected override async Task OnInitializedAsync()
@@ -67,7 +67,7 @@
     private async Task HandleValidSubmit()
     {
         // offer an optional reason for the configuration change history; cancelling aborts the create
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Create");
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, CommonText.Create);
         if (cancelled)
             return;
 

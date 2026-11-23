@@ -17,7 +17,7 @@
     <MudItem xs="12" Class="jim-import-read-range">
         @if (_reading != null)
         {
-            <MudText Typo="Typo.button" Class="mud-text-secondary">@_reading.Label:</MudText>
+            <MudText Typo="Typo.button" Class="mud-text-secondary">@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.WatermarkLabelColon, _reading.Label)</MudText>
             @foreach (var line in _reading.Lines)
             {
                 <MudText Class="@(_reading.Scoped ? "jim-import-read-range-point" : null)">@line</MudText>
@@ -35,14 +35,14 @@
                    Class="jim-import-read-range-toggle"
                    StartIcon="@(_stateShown ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
                    OnClick="@(() => _stateShown = !_stateShown)">
-            @(_stateShown ? "Hide Connector state" : "Show Connector state")
+            @(_stateShown ? ConnectedSystemText.WatermarkHideState : ConnectedSystemText.WatermarkShowState)
         </MudButton>
 
         @if (_stateShown && HasPartitionWatermarks)
         {
             @* A Connector that keeps a watermark per partition (#2715): one row each, every value in full. What it keeps for
                the Connected System as a whole holds no position, so the partitions are the state worth reading. *@
-            <MudText Typo="Typo.button" Class="mud-text-secondary d-block mt-2">Watermark recorded for each partition:</MudText>
+            <MudText Typo="Typo.button" Class="mud-text-secondary d-block mt-2">@ConnectedSystemText.WatermarkPerPartition</MudText>
             <div class="jim-import-partition-watermarks">
                 <MudSimpleTable Dense="true" Outlined="true" Elevation="0">
                     <colgroup>
@@ -52,9 +52,9 @@
                     </colgroup>
                     <thead>
                         <tr>
-                            <th scope="col">Partition</th>
-                            <th scope="col">Before this run</th>
-                            <th scope="col">After this run</th>
+                            <th scope="col">@ConnectedSystemText.PartitionLabel</th>
+                            <th scope="col">@ConnectedSystemText.WatermarkBeforeHeader</th>
+                            <th scope="col">@ConnectedSystemText.WatermarkAfterHeader</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -78,12 +78,12 @@
         {
             @if (WatermarkFrom != null)
             {
-                <MudText Typo="Typo.button" Class="mud-text-secondary d-block mt-2">Before this run:</MudText>
+                <MudText Typo="Typo.button" Class="mud-text-secondary d-block mt-2">@ConnectedSystemText.WatermarkBeforeLabel</MudText>
                 <div class="jim-json-syntax jim-import-read-range-state">@((MarkupString)Helpers.HighlightJson(Helpers.FormatJson(WatermarkFrom)))</div>
             }
             @if (WatermarkTo != null)
             {
-                <MudText Typo="Typo.button" Class="mud-text-secondary d-block mt-2">After this run:</MudText>
+                <MudText Typo="Typo.button" Class="mud-text-secondary d-block mt-2">@ConnectedSystemText.WatermarkAfterLabel</MudText>
                 <div class="jim-json-syntax jim-import-read-range-state">@((MarkupString)Helpers.HighlightJson(Helpers.FormatJson(WatermarkTo)))</div>
             }
         }
@@ -162,10 +162,10 @@
 
     private static string StateText(ImportPartitionWatermarkState state) => state switch
     {
-        ImportPartitionWatermarkState.None => "No watermark",
-        ImportPartitionWatermarkState.Unchanged => "Unchanged",
-        ImportPartitionWatermarkState.Cleared => "Cleared",
-        _ => "Nothing recorded"
+        ImportPartitionWatermarkState.None => ConnectedSystemText.WatermarkNoWatermark,
+        ImportPartitionWatermarkState.Unchanged => ConnectedSystemText.WatermarkUnchanged,
+        ImportPartitionWatermarkState.Cleared => ConnectedSystemText.WatermarkCleared,
+        _ => ConnectedSystemText.WatermarkNothingRecorded
     };
 
     /// <summary>
@@ -191,8 +191,8 @@
             return null;
 
         var scoped = IsScoped(watermark);
-        var lines = watermark.Points.Select(p => WithScope(scoped ? p.Scope : null, $"{Value(p)} ({watermark.Kind})")).ToList();
-        return new Reading("Next Delta Import Reads Changes After", lines, scoped, null);
+        var lines = watermark.Points.Select(p => WithScope(scoped ? p.Scope : null, string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.WatermarkFullReading, Value(p), watermark.Kind))).ToList();
+        return new Reading(ConnectedSystemText.WatermarkNextDeltaLabel, lines, scoped, null);
     }
 
     private Reading? ReadDelta()
@@ -213,9 +213,9 @@
             Find(to, scope, scoped), to?.Kind))).ToList();
 
         var note = from != null && to == null
-            ? "No new watermark was recorded, so the next Delta Import reads from the same point."
+            ? ConnectedSystemText.WatermarkNote
             : null;
-        return new Reading("Read Changes", lines, scoped, note);
+        return new Reading(ConnectedSystemText.WatermarkReadChangesLabel, lines, scoped, note);
     }
 
     private static string DeltaSentence(ImportWatermarkPoint? from, string? fromKind, ImportWatermarkPoint? to, string? toKind)
@@ -224,16 +224,16 @@
         {
             var sameKind = fromKind == toKind;
             if (sameKind && Value(from) == Value(to))
-                return $"No changes after {Value(from)} ({fromKind})";
+                return string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.WatermarkNoChanges, Value(from), fromKind);
 
             return sameKind
-                ? $"After {Value(from)}, up to {Value(to)} ({toKind})"
-                : $"After {Value(from)} ({fromKind}), up to {Value(to)} ({toKind})";
+                ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.WatermarkAfterSame, Value(from), Value(to), toKind)
+                : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.WatermarkAfterDifferent, Value(from), fromKind, Value(to), toKind);
         }
 
         return to != null
-            ? $"From the start, up to {Value(to)} ({toKind})"
-            : $"After {Value(from!)} ({fromKind})";
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.WatermarkFromStart, Value(to), toKind)
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.WatermarkAfterOnly, Value(from!), fromKind);
     }
 
     private static bool IsScoped(ImportWatermarkDescription watermark) => watermark.Points.Any(p => p.Scope != null);
@@ -245,7 +245,7 @@
     /// Prefixes a scoped line with what it belongs to, lower-casing the sentence's first letter to run on after it.
     /// </summary>
     private static string WithScope(string? scope, string sentence) =>
-        scope == null ? sentence : $"{scope}: {char.ToLowerInvariant(sentence[0])}{sentence[1..]}";
+        scope == null ? sentence : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.WatermarkScopedLine, scope, char.ToLowerInvariant(sentence[0]) + sentence[1..]);
 
     private static string Value(ImportWatermarkPoint point) => ImportWatermarkText.Value(point);
 }
