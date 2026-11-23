@@ -1,5 +1,6 @@
 @page "/admin/settings"
 @attribute [Authorize(Roles = "Administrator")]
+@using System.Globalization
 @using JIM.Application.Services
 @using JIM.Models.Activities
 @using JIM.Models.Core
@@ -16,10 +17,10 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Service Settings</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.DisplaySettings" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Service Settings
-    <PageInfo Title="Service Settings" DocsPage="configuration/service-settings.md">
-        Configure service-wide settings. Read-only settings are defined by environment variables and cannot be modified here.
+<PageTitle>@AdminText.ServiceSettingNounPlural</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.DisplaySettings" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@AdminText.ServiceSettingNounPlural
+    <PageInfo Title="@AdminText.ServiceSettingNounPlural" DocsPage="configuration/service-settings.md">
+        @AdminText.SettingsPageInfo
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
@@ -37,27 +38,27 @@
                      ContainerId="service-setting-list"
                      DefaultSortBy="category"
                      LoadWindow="LoadSettingWindowAsync"
-                     SingularName="Service Setting"
-                     PluralName="Service Settings"
-                     SearchPlaceholder="Search settings"
+                     SingularName="@AdminText.ServiceSettingNounSingular"
+                     PluralName="@AdminText.ServiceSettingNounPlural"
+                     SearchPlaceholder="@AdminText.SettingsSearchPlaceholder"
                      RowClassFunc="RowClass">
     <ToolBarExtras>
-        <MudCheckBox @bind-Value="_showConfigurableOnly" @bind-Value:after="OnFilterChangedAsync" Label="Show configurable only" Color="Color.Primary" Class="mr-4" />
-        <MudCheckBox @bind-Value="_showOverriddenOnly" @bind-Value:after="OnFilterChangedAsync" Label="Show overridden only" Color="Color.Primary" Class="mr-4" />
-        <MudCheckBox @bind-Value="_showPreviewFeaturesOnly" @bind-Value:after="OnFilterChangedAsync" Label="Show preview features only" Color="Color.Primary" />
+        <MudCheckBox @bind-Value="_showConfigurableOnly" @bind-Value:after="OnFilterChangedAsync" Label="@AdminText.SettingsShowConfigurableOnly" Color="Color.Primary" Class="mr-4" />
+        <MudCheckBox @bind-Value="_showOverriddenOnly" @bind-Value:after="OnFilterChangedAsync" Label="@AdminText.SettingsShowOverriddenOnly" Color="Color.Primary" Class="mr-4" />
+        <MudCheckBox @bind-Value="_showPreviewFeaturesOnly" @bind-Value:after="OnFilterChangedAsync" Label="@AdminText.SettingsShowPreviewFeaturesOnly" Color="Color.Primary" />
     </ToolBarExtras>
     <Columns>
-        <TemplateColumn Title="Category" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn Title="@AdminText.SettingsColumnCategory" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Category" Name="category" />
+                <VirtualisedSortHeader Title="@AdminText.SettingsColumnCategory" Name="category" />
             </HeaderTemplate>
             <CellTemplate>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">@GetCategoryDisplayName(context.Item.Category.ToString())</MudText>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Setting" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+        <TemplateColumn Title="@AdminText.SettingsColumnSetting" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Setting" Name="setting" />
+                <VirtualisedSortHeader Title="@AdminText.SettingsColumnSetting" Name="setting" />
             </HeaderTemplate>
             <CellTemplate>
                 @* A row in a virtualised grid is one line, and a MudText renders a paragraph, so the description
@@ -87,7 +88,7 @@
                         }
                         else
                         {
-                            <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Size="Size.Small" Class="jim-nowrap">In development</MudChip>
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Size="Size.Small" Class="jim-nowrap">@AdminText.SettingsInDevelopment</MudChip>
                         }
                     </div>
                 }
@@ -97,9 +98,9 @@
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Value" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn Title="@AdminText.SettingsColumnValue" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <MudText Typo="Typo.button">Value</MudText>
+                <MudText Typo="Typo.button">@AdminText.SettingsColumnValue</MudText>
             </HeaderTemplate>
             <CellTemplate>
                 @* Controls sit to the left of the value so values stay left-aligned regardless of their length.
@@ -113,7 +114,7 @@
                     @if (_revealedSecrets.Contains(encryptedKey) && _decryptedCache.TryGetValue(encryptedKey, out var decrypted))
                     {
                         <MudIconButton Icon="@Icons.Material.Outlined.VisibilityOff" Variant="Variant.Filled" Size="Size.Small" OnClick="() => HideSecret(encryptedKey)" />
-                        <span class="jim-text-code jim-one-line-list-value" title="@decrypted.Value">@(decrypted.Value ?? "(not set)")</span>
+                        <span class="jim-text-code jim-one-line-list-value" title="@decrypted.Value">@(decrypted.Value ?? AdminText.SettingsNotSet)</span>
                     }
                     else
                     {
@@ -126,30 +127,30 @@
                     var guidValue = context.Item.GetEffectiveValue();
                     @if (!string.IsNullOrEmpty(guidValue))
                     {
-                        <MudTooltip Text="Copy to clipboard" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@AdminText.SettingsCopyToClipboard" Arrow="true" Placement="Placement.Top">
                             <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy" Variant="Variant.Filled" Size="Size.Small"
                                            OnClick="() => CopyToClipboardAsync(guidValue)" />
                         </MudTooltip>
                     }
-                    <span class="jim-text-code jim-one-line-list-value" title="@guidValue">@(guidValue ?? "(not set)")</span>
+                    <span class="jim-text-code jim-one-line-list-value" title="@guidValue">@(guidValue ?? AdminText.SettingsNotSet)</span>
                 }
                 else
                 {
                     var effectiveValue = context.Item.GetEffectiveValue();
-                    <span class="jim-text-code jim-one-line-list-value" title="@effectiveValue">@(effectiveValue ?? "(not set)")</span>
+                    <span class="jim-text-code jim-one-line-list-value" title="@effectiveValue">@(effectiveValue ?? AdminText.SettingsNotSet)</span>
                 }
                 </div>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Status" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn Title="@CommonText.ColumnStatus" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Status" Name="status" />
+                <VirtualisedSortHeader Title="@CommonText.ColumnStatus" Name="status" />
             </HeaderTemplate>
             <CellTemplate>
                 @* Each status gets its own colour so the column scans at a glance: grey locked, blue modified, green default. *@
                 @if (context.Item.IsReadOnly)
                 {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.Lock">Read-only</MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.Lock">@AdminText.SettingsReadOnly</MudChip>
                 }
                 else if (context.Item.IsOverridden)
                 {
@@ -158,27 +159,27 @@
                             @if (context.Item.LastUpdated.HasValue)
                             {
                                 var lastUpdated = context.Item.LastUpdated.Value.ToLocalTime();
-                                <MudText Typo="Typo.caption">Modified @lastUpdated.ToFriendlyDate()</MudText>
+                                <MudText Typo="Typo.caption">@string.Format(CultureInfo.CurrentCulture, AdminText.SettingsModifiedOn, lastUpdated.ToFriendlyDate())</MudText>
                                 @if (context.Item.LastUpdatedByName != null)
                                 {
-                                    <MudText Typo="Typo.caption">by @context.Item.LastUpdatedByName</MudText>
+                                    <MudText Typo="Typo.caption">@string.Format(CultureInfo.CurrentCulture, AdminText.SettingsModifiedBy, context.Item.LastUpdatedByName)</MudText>
                                 }
                             }
                         </TooltipContent>
                         <ChildContent>
-                            <MudChip T="string" Variant="Variant.Text" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit">Modified</MudChip>
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit">@AdminText.SettingsModified</MudChip>
                         </ChildContent>
                     </MudTooltip>
                 }
                 else
                 {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Default</MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Success" Icon="@Icons.Material.Filled.Check">@AdminText.SettingsDefault</MudChip>
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Actions" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn Title="@CommonText.ColumnActions" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <MudText Typo="Typo.button">Actions</MudText>
+                <MudText Typo="Typo.button">@CommonText.ColumnActions</MudText>
             </HeaderTemplate>
             <CellTemplate>
                 @{
@@ -187,17 +188,17 @@
                 <div class="d-flex justify-end gap-2">
                     @if (!setting.IsReadOnly)
                     {
-                        <MudTooltip Text="Edit" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@CommonText.Edit" Arrow="true" Placement="Placement.Top">
                             <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowEditDialog(setting)" />
                         </MudTooltip>
                         @if (setting.IsOverridden)
                         {
-                            <MudTooltip Text="Revert to Default" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@AdminText.SettingsRevertToDefault" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Outlined.RestartAlt" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => HandleRevertAsync(setting)" />
                             </MudTooltip>
                         }
                     }
-                    <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="@AdminText.SchemaChangeHistory" Arrow="true" Placement="Placement.Top">
                         <MudIconButton Icon="@Icons.Material.Outlined.History" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowHistoryDialogAsync(setting)" />
                     </MudTooltip>
                 </div>
@@ -208,24 +209,24 @@
         @if (!string.IsNullOrWhiteSpace(grid.SearchText))
         {
             <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                             PrimaryText="@($"No Service Settings match \"{grid.SearchText}\"")"
-                             SecondaryText="Try a different search term, or clear the search."
-                             ActionText="Clear Search"
+                             PrimaryText="@string.Format(CultureInfo.CurrentCulture, AdminText.SettingsEmptySearch, grid.SearchText)"
+                             SecondaryText="@CommonText.TrySearchAgain"
+                             ActionText="@CommonText.ClearSearch"
                              OnAction="@(() => grid.ClearSearchAsync())" />
         }
         else if (_showConfigurableOnly || _showOverriddenOnly || _showPreviewFeaturesOnly)
         {
             <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
-                             PrimaryText="No Service Settings match the filters"
-                             SecondaryText="Clear the filters above to see every setting, including the read-only ones defined by environment variables."
-                             ActionText="Clear Filters"
+                             PrimaryText="@AdminText.SettingsEmptyFilters"
+                             SecondaryText="@AdminText.SettingsEmptyFiltersHint"
+                             ActionText="@AdminText.SchemaClearFilters"
                              OnAction="ClearFiltersAsync" />
         }
         else
         {
             <TableEmptyState Icon="@Icons.Material.Filled.DisplaySettings"
-                             PrimaryText="No Service Settings are available"
-                             SecondaryText="Service Settings are seeded when JIM starts; if none are listed, the service has not finished initialising." />
+                             PrimaryText="@AdminText.SettingsEmptyNone"
+                             SecondaryText="@AdminText.SettingsEmptyNoneHint" />
         }
     </EmptyContent>
 </VirtualisedDataGrid>
@@ -249,9 +250,9 @@
 
     private readonly List<BreadcrumbItem> _breadcrumbs =
     [
-        new("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new("Administration", href: "/admin"),
-        new("Service Settings", href: null, disabled: true)
+        new(LayoutText.NavHome, href: "/", icon: Icons.Material.Filled.Home),
+        new(LayoutText.NavAdministration, href: "/admin"),
+        new(AdminText.ServiceSettingNounPlural, href: null, disabled: true)
     ];
 
     protected override async Task OnInitializedAsync()
@@ -381,14 +382,14 @@
         var categoryString = categoryValue?.ToString();
         return categoryString switch
         {
-            "SSO" => "Single Sign-On (SSO)",
-            "Synchronisation" => "Synchronisation",
-            "Maintenance" => "Maintenance",
-            "History" => "History",
-            "Security" => "Security",
-            "Instance" => "Instance",
-            "FeatureFlags" => "Preview Features",
-            _ => categoryString ?? "Unknown"
+            "SSO" => AdminText.SettingsCategorySso,
+            "Synchronisation" => AdminText.SettingsCategorySynchronisation,
+            "Maintenance" => AdminText.SettingsCategoryMaintenance,
+            "History" => AdminText.SettingsCategoryHistory,
+            "Security" => AdminText.SettingsCategorySecurity,
+            "Instance" => AdminText.SettingsCategoryInstance,
+            "FeatureFlags" => AdminText.SettingsCategoryPreviewFeatures,
+            _ => categoryString ?? CommonText.Unknown
         };
     }
 
@@ -402,9 +403,9 @@
         if (result.Error)
         {
             await DialogService.ShowMessageBoxAsync(
-                "Decryption Failed",
-                "Unable to decrypt this value. The encryption key may have changed or been deleted (e.g. after a environment reset). Edit and re-save this setting to re-encrypt it with the current key.",
-                yesText: "OK");
+                AdminText.SettingsDecryptionFailedTitle,
+                AdminText.SettingsDecryptionFailedMessage,
+                yesText: AdminText.SettingsOk);
             return;
         }
 
@@ -471,7 +472,7 @@
         };
 
         var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
-        var dialog = await DialogService.ShowAsync<EditSettingDialog>($"Edit {setting.DisplayName}", parameters, options);
+        var dialog = await DialogService.ShowAsync<EditSettingDialog>(string.Format(CultureInfo.CurrentCulture, AdminText.SettingsEditTitle, setting.DisplayName), parameters, options);
         var result = await dialog.Result;
 
         if (result is { Canceled: false, Data: string newValue })
@@ -484,7 +485,7 @@
                 // synchronisation are acknowledged first.
                 var preflight = await jim.ConfigurationChangePreflight.EvaluateServiceSettingAsync(WithValue(setting, newValue));
                 if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
-                        "Service Setting", setting.DisplayName))
+                        AdminText.ServiceSettingNounSingular, setting.DisplayName))
                     return;
 
                 // offer an optional reason for the configuration change history; cancelling aborts the save
@@ -504,11 +505,11 @@
                     await jim.ServiceSettings.UpdateSettingValueAsync(setting.Key, newValue, user, changeReason);
 
                 await ReloadListAsync();
-                Snackbar.Add($"Setting '{setting.DisplayName}' updated.", Severity.Success);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.SettingsUpdatedSuccess, setting.DisplayName), Severity.Success);
             }
             catch (Exception ex)
             {
-                Snackbar.Add($"Failed to update setting: {ex.Message}", Severity.Error);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.SettingsUpdateFailed, ex.Message), Severity.Error);
             }
         }
     }
@@ -516,9 +517,9 @@
     private async Task HandleRevertAsync(ServiceSetting setting)
     {
         var confirm = await DialogService.ShowMessageBoxAsync(
-            "Revert to Default",
-            $"Are you sure you want to revert '{setting.DisplayName}' to its default value?",
-            yesText: "Revert", cancelText: "Cancel");
+            AdminText.SettingsRevertToDefault,
+            string.Format(CultureInfo.CurrentCulture, AdminText.SettingsRevertConfirm, setting.DisplayName),
+            yesText: AdminText.SettingsRevert, cancelText: CommonText.Cancel);
 
         if (confirm == true)
         {
@@ -530,11 +531,11 @@
                 // A null value is the setting's own way of saying "use the default", matching what the revert stores.
                 var preflight = await jim.ConfigurationChangePreflight.EvaluateServiceSettingAsync(WithValue(setting, null));
                 if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
-                        "Service Setting", setting.DisplayName))
+                        AdminText.ServiceSettingNounSingular, setting.DisplayName))
                     return;
 
                 // offer an optional reason for the configuration change history; cancelling aborts the revert
-                var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Revert");
+                var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, AdminText.SettingsRevert);
                 if (cancelled)
                     return;
 
@@ -549,11 +550,11 @@
                     await jim.ServiceSettings.RevertSettingToDefaultAsync(setting.Key, user, changeReason);
 
                 await ReloadListAsync();
-                Snackbar.Add($"Setting '{setting.DisplayName}' reverted to default.", Severity.Success);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.SettingsRevertedSuccess, setting.DisplayName), Severity.Success);
             }
             catch (Exception ex)
             {
-                Snackbar.Add($"Failed to revert setting: {ex.Message}", Severity.Error);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.SettingsRevertFailed, ex.Message), Severity.Error);
             }
         }
     }
@@ -561,7 +562,7 @@
     private async Task ShowHistoryDialogAsync(ServiceSetting setting)
     {
         await ConfigurationChangeHistoryDialog.ShowAsync(DialogService, ActivityTargetType.ServiceSetting,
-            setting.Key, "Service Setting", setting.DisplayName);
+            setting.Key, AdminText.ServiceSettingNounSingular, setting.DisplayName);
     }
 
     private async Task CopyToClipboardAsync(string value)
@@ -569,11 +570,11 @@
         try
         {
             await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", value);
-            Snackbar.Add("Copied to clipboard.", Severity.Success);
+            Snackbar.Add(AdminText.SettingsCopiedToClipboard, Severity.Success);
         }
         catch (JSException)
         {
-            Snackbar.Add("Failed to copy to clipboard.", Severity.Error);
+            Snackbar.Add(AdminText.SettingsCopyFailed, Severity.Error);
         }
     }
 }

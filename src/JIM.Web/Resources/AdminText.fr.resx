@@ -494,4 +494,133 @@
   <data name="ApiKeyDeleteMessage" xml:space="preserve">
     <value>Voulez-vous vraiment supprimer la clé d’API « {0} » ? Toute requête utilisant cette clé échouera immédiatement.</value>
   </data>
+  <data name="SettingsPageInfo" xml:space="preserve">
+    <value>Configurez les paramètres à l’échelle du service. Les paramètres en lecture seule sont définis par des variables d’environnement et ne peuvent pas être modifiés ici.</value>
+  </data>
+  <data name="ServiceSettingNounSingular" xml:space="preserve">
+    <value>Paramètre de service</value>
+  </data>
+  <data name="ServiceSettingNounPlural" xml:space="preserve">
+    <value>Paramètres de service</value>
+  </data>
+  <data name="SettingsSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher des paramètres</value>
+  </data>
+  <data name="SettingsShowConfigurableOnly" xml:space="preserve">
+    <value>Afficher uniquement les paramètres modifiables</value>
+  </data>
+  <data name="SettingsShowOverriddenOnly" xml:space="preserve">
+    <value>Afficher uniquement les paramètres modifiés</value>
+  </data>
+  <data name="SettingsShowPreviewFeaturesOnly" xml:space="preserve">
+    <value>Afficher uniquement les fonctionnalités en préversion</value>
+  </data>
+  <data name="SettingsColumnCategory" xml:space="preserve">
+    <value>Catégorie</value>
+  </data>
+  <data name="SettingsColumnSetting" xml:space="preserve">
+    <value>Paramètre</value>
+  </data>
+  <data name="SettingsColumnValue" xml:space="preserve">
+    <value>Valeur</value>
+  </data>
+  <data name="SettingsCategorySso" xml:space="preserve">
+    <value>Authentification unique (SSO)</value>
+  </data>
+  <data name="SettingsCategorySynchronisation" xml:space="preserve">
+    <value>Synchronisation</value>
+  </data>
+  <data name="SettingsCategoryMaintenance" xml:space="preserve">
+    <value>Maintenance</value>
+  </data>
+  <data name="SettingsCategoryHistory" xml:space="preserve">
+    <value>Historique</value>
+  </data>
+  <data name="SettingsCategorySecurity" xml:space="preserve">
+    <value>Sécurité</value>
+  </data>
+  <data name="SettingsCategoryInstance" xml:space="preserve">
+    <value>Instance</value>
+  </data>
+  <data name="SettingsCategoryPreviewFeatures" xml:space="preserve">
+    <value>Fonctionnalités en préversion</value>
+  </data>
+  <data name="SettingsInDevelopment" xml:space="preserve">
+    <value>En développement</value>
+  </data>
+  <data name="SettingsNotSet" xml:space="preserve">
+    <value>(non défini)</value>
+  </data>
+  <data name="SettingsCopyToClipboard" xml:space="preserve">
+    <value>Copier dans le presse-papiers</value>
+  </data>
+  <data name="SettingsReadOnly" xml:space="preserve">
+    <value>Lecture seule</value>
+  </data>
+  <data name="SettingsModifiedOn" xml:space="preserve">
+    <value>Modifié le {0}</value>
+  </data>
+  <data name="SettingsModifiedBy" xml:space="preserve">
+    <value>par {0}</value>
+  </data>
+  <data name="SettingsDefault" xml:space="preserve">
+    <value>Par défaut</value>
+  </data>
+  <data name="SettingsRevertToDefault" xml:space="preserve">
+    <value>Rétablir la valeur par défaut</value>
+  </data>
+  <data name="SettingsRevert" xml:space="preserve">
+    <value>Rétablir</value>
+  </data>
+  <data name="SettingsRevertConfirm" xml:space="preserve">
+    <value>Voulez-vous vraiment rétablir la valeur par défaut de « {0} » ?</value>
+  </data>
+  <data name="SettingsRevertedSuccess" xml:space="preserve">
+    <value>Paramètre « {0} » rétabli à sa valeur par défaut.</value>
+  </data>
+  <data name="SettingsRevertFailed" xml:space="preserve">
+    <value>Échec du rétablissement du paramètre : {0}</value>
+  </data>
+  <data name="SettingsUpdatedSuccess" xml:space="preserve">
+    <value>Paramètre « {0} » mis à jour.</value>
+  </data>
+  <data name="SettingsUpdateFailed" xml:space="preserve">
+    <value>Échec de la mise à jour du paramètre : {0}</value>
+  </data>
+  <data name="SettingsEditTitle" xml:space="preserve">
+    <value>Modifier {0}</value>
+  </data>
+  <data name="SettingsDecryptionFailedTitle" xml:space="preserve">
+    <value>Échec du déchiffrement</value>
+  </data>
+  <data name="SettingsDecryptionFailedMessage" xml:space="preserve">
+    <value>Impossible de déchiffrer cette valeur. La clé de chiffrement a peut-être été modifiée ou supprimée (par exemple après une réinitialisation de l’environnement). Modifiez ce paramètre et enregistrez-le à nouveau pour le chiffrer avec la clé actuelle.</value>
+  </data>
+  <data name="SettingsCopiedToClipboard" xml:space="preserve">
+    <value>Copié dans le presse-papiers.</value>
+  </data>
+  <data name="SettingsCopyFailed" xml:space="preserve">
+    <value>Échec de la copie dans le presse-papiers.</value>
+  </data>
+  <data name="SettingsEmptySearch" xml:space="preserve">
+    <value>Aucun paramètre de service ne correspond à « {0} ».</value>
+  </data>
+  <data name="SettingsEmptyFilters" xml:space="preserve">
+    <value>Aucun paramètre de service ne correspond aux filtres.</value>
+  </data>
+  <data name="SettingsEmptyFiltersHint" xml:space="preserve">
+    <value>Effacez les filtres ci-dessus pour voir tous les paramètres, y compris ceux en lecture seule définis par des variables d’environnement.</value>
+  </data>
+  <data name="SettingsEmptyNone" xml:space="preserve">
+    <value>Aucun paramètre de service n’est disponible.</value>
+  </data>
+  <data name="SettingsEmptyNoneHint" xml:space="preserve">
+    <value>Les paramètres de service sont créés au démarrage de JIM ; si aucun n’apparaît, le service n’a pas encore fini de s’initialiser.</value>
+  </data>
+  <data name="SettingsModified" xml:space="preserve">
+    <value>Modifié</value>
+  </data>
+  <data name="SettingsOk" xml:space="preserve">
+    <value>OK</value>
+  </data>
 </root>

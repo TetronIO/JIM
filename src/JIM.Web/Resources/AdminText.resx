@@ -654,4 +654,176 @@
     <value>Are you sure you want to delete the API key '{0}'? Any requests using this key will immediately fail.</value>
     <comment>Confirmation dialog message; {0} is the key name</comment>
   </data>
+  <data name="SettingsPageInfo" xml:space="preserve">
+    <value>Configure service-wide settings. Read-only settings are defined by environment variables and cannot be modified here.</value>
+    <comment>Page information popover</comment>
+  </data>
+  <data name="ServiceSettingNounSingular" xml:space="preserve">
+    <value>Service Setting</value>
+    <comment>Noun used in the count, the change history dialog and the acknowledgement dialog</comment>
+  </data>
+  <data name="ServiceSettingNounPlural" xml:space="preserve">
+    <value>Service Settings</value>
+    <comment>Page title, breadcrumb and noun used in the count</comment>
+  </data>
+  <data name="SettingsSearchPlaceholder" xml:space="preserve">
+    <value>Search settings</value>
+    <comment>Search box placeholder</comment>
+  </data>
+  <data name="SettingsShowConfigurableOnly" xml:space="preserve">
+    <value>Show configurable only</value>
+    <comment>Toolbar check box</comment>
+  </data>
+  <data name="SettingsShowOverriddenOnly" xml:space="preserve">
+    <value>Show overridden only</value>
+    <comment>Toolbar check box</comment>
+  </data>
+  <data name="SettingsShowPreviewFeaturesOnly" xml:space="preserve">
+    <value>Show preview features only</value>
+    <comment>Toolbar check box</comment>
+  </data>
+  <data name="SettingsColumnCategory" xml:space="preserve">
+    <value>Category</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="SettingsColumnSetting" xml:space="preserve">
+    <value>Setting</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="SettingsColumnValue" xml:space="preserve">
+    <value>Value</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="SettingsCategorySso" xml:space="preserve">
+    <value>Single Sign-On (SSO)</value>
+    <comment>Category name shown in the Category column</comment>
+  </data>
+  <data name="SettingsCategorySynchronisation" xml:space="preserve">
+    <value>Synchronisation</value>
+    <comment>Category name shown in the Category column</comment>
+  </data>
+  <data name="SettingsCategoryMaintenance" xml:space="preserve">
+    <value>Maintenance</value>
+    <comment>Category name shown in the Category column</comment>
+  </data>
+  <data name="SettingsCategoryHistory" xml:space="preserve">
+    <value>History</value>
+    <comment>Category name shown in the Category column</comment>
+  </data>
+  <data name="SettingsCategorySecurity" xml:space="preserve">
+    <value>Security</value>
+    <comment>Category name shown in the Category column</comment>
+  </data>
+  <data name="SettingsCategoryInstance" xml:space="preserve">
+    <value>Instance</value>
+    <comment>Category name shown in the Category column</comment>
+  </data>
+  <data name="SettingsCategoryPreviewFeatures" xml:space="preserve">
+    <value>Preview Features</value>
+    <comment>Category name for feature flags</comment>
+  </data>
+  <data name="SettingsInDevelopment" xml:space="preserve">
+    <value>In development</value>
+    <comment>Chip on a feature flag that is in development</comment>
+  </data>
+  <data name="SettingsNotSet" xml:space="preserve">
+    <value>(not set)</value>
+    <comment>Shown in place of an empty value</comment>
+  </data>
+  <data name="SettingsCopyToClipboard" xml:space="preserve">
+    <value>Copy to clipboard</value>
+    <comment>Tooltip on the copy button</comment>
+  </data>
+  <data name="SettingsReadOnly" xml:space="preserve">
+    <value>Read-only</value>
+    <comment>Status chip for a value fixed by an environment variable</comment>
+  </data>
+  <data name="SettingsModifiedOn" xml:space="preserve">
+    <value>Modified {0}</value>
+    <comment>Tooltip on the Modified chip; {0} is the date and time</comment>
+  </data>
+  <data name="SettingsModifiedBy" xml:space="preserve">
+    <value>by {0}</value>
+    <comment>Tooltip on the Modified chip; {0} is the name of the person who changed it</comment>
+  </data>
+  <data name="SettingsDefault" xml:space="preserve">
+    <value>Default</value>
+    <comment>Status chip for a value at its default</comment>
+  </data>
+  <data name="SettingsRevertToDefault" xml:space="preserve">
+    <value>Revert to Default</value>
+    <comment>Tooltip on the revert button and the revert dialog title</comment>
+  </data>
+  <data name="SettingsRevert" xml:space="preserve">
+    <value>Revert</value>
+    <comment>Revert confirm button and the reason dialog confirm button</comment>
+  </data>
+  <data name="SettingsRevertConfirm" xml:space="preserve">
+    <value>Are you sure you want to revert '{0}' to its default value?</value>
+    <comment>Revert dialog message; {0} is the setting name</comment>
+  </data>
+  <data name="SettingsRevertedSuccess" xml:space="preserve">
+    <value>Setting '{0}' reverted to default.</value>
+    <comment>Snackbar; {0} is the setting name</comment>
+  </data>
+  <data name="SettingsRevertFailed" xml:space="preserve">
+    <value>Failed to revert setting: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="SettingsUpdatedSuccess" xml:space="preserve">
+    <value>Setting '{0}' updated.</value>
+    <comment>Snackbar; {0} is the setting name</comment>
+  </data>
+  <data name="SettingsUpdateFailed" xml:space="preserve">
+    <value>Failed to update setting: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="SettingsEditTitle" xml:space="preserve">
+    <value>Edit {0}</value>
+    <comment>Edit dialog title; {0} is the setting name</comment>
+  </data>
+  <data name="SettingsDecryptionFailedTitle" xml:space="preserve">
+    <value>Decryption Failed</value>
+    <comment>Dialog title</comment>
+  </data>
+  <data name="SettingsDecryptionFailedMessage" xml:space="preserve">
+    <value>Unable to decrypt this value. The encryption key may have changed or been deleted (e.g. after a environment reset). Edit and re-save this setting to re-encrypt it with the current key.</value>
+    <comment>Dialog message</comment>
+  </data>
+  <data name="SettingsCopiedToClipboard" xml:space="preserve">
+    <value>Copied to clipboard.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="SettingsCopyFailed" xml:space="preserve">
+    <value>Failed to copy to clipboard.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="SettingsEmptySearch" xml:space="preserve">
+    <value>No Service Settings match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="SettingsEmptyFilters" xml:space="preserve">
+    <value>No Service Settings match the filters</value>
+    <comment>Empty state when filters exclude everything</comment>
+  </data>
+  <data name="SettingsEmptyFiltersHint" xml:space="preserve">
+    <value>Clear the filters above to see every setting, including the read-only ones defined by environment variables.</value>
+    <comment>Empty state secondary text</comment>
+  </data>
+  <data name="SettingsEmptyNone" xml:space="preserve">
+    <value>No Service Settings are available</value>
+    <comment>Empty state when there are no settings</comment>
+  </data>
+  <data name="SettingsEmptyNoneHint" xml:space="preserve">
+    <value>Service Settings are seeded when JIM starts; if none are listed, the service has not finished initialising.</value>
+    <comment>Empty state secondary text</comment>
+  </data>
+  <data name="SettingsModified" xml:space="preserve">
+    <value>Modified</value>
+    <comment>Status chip for a value changed from its default</comment>
+  </data>
+  <data name="SettingsOk" xml:space="preserve">
+    <value>OK</value>
+    <comment>Button on the decryption failure dialog</comment>
+  </data>
 </root>
