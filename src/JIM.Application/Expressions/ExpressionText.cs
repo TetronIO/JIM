@@ -4,6 +4,9 @@
 using System.Collections;
 using System.Globalization;
 using JIM.Utilities;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 
 namespace JIM.Application.Expressions;
 
@@ -81,8 +84,17 @@ public static class ExpressionText
     /// </summary>
     public static string Describe(object value) =>
         TryFormat(value, out var text) ? text ?? string.Empty
-        : value is byte[] bytes ? $"(Binary value, {bytes.Length} bytes)"
-        : $"({value.GetType().Name})";
+        : DescribeMessage(value)?.ToEnglish() ?? $"({value.GetType().Name})";
+
+    /// <summary>
+    /// <see cref="Describe"/>'s wording as a message where JIM words it (a Binary value), so the portal can show it in
+    /// the viewer's language (#3030); null for a value that is its own text, or a type name.
+    /// </summary>
+    public static JimMessage? DescribeMessage(object value) =>
+        !TryFormat(value, out _) && value is byte[] bytes
+            ? JimMessage.Counted(ApplicationMessageCatalogues.Expressions, nameof(ExpressionMessages.ValueBinaryOne), bytes.Length,
+                bytes.Length.ToString(CultureInfo.InvariantCulture))
+            : null;
 
     /// <summary>
     /// An Expression's result as the lines a tester shows: one line per value, each in its text form, and none for
@@ -92,5 +104,15 @@ public static class ExpressionText
         ExpressionResultValues.Elements(result)
             .Where(element => element != null)
             .Select(element => Describe(element!))
+            .ToList();
+
+    /// <summary>
+    /// <see cref="ToDisplayLines(object?)"/>, with the text JIM words itself (a Binary value) shown through
+    /// <paramref name="show"/>, which the portal gives the viewer's language (#3030).
+    /// </summary>
+    public static IReadOnlyList<string> ToDisplayLines(object? result, Func<JimMessage, string> show) =>
+        ExpressionResultValues.Elements(result)
+            .Where(element => element != null)
+            .Select(element => DescribeMessage(element!) is { } message ? show(message) : Describe(element!))
             .ToList();
 }

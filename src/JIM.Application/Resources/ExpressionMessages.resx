@@ -1,0 +1,792 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FunctionTrim" xml:space="preserve">
+    <value>Remove spaces from the start and end</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ReturnsText" xml:space="preserve">
+    <value>text</value>
+    <comment>What a function returns, in a few words: "{Name} returns &lt;this&gt;, which ..." in a message. A noun phrase with its article.</comment>
+  </data>
+  <data name="CategoryText" xml:space="preserve">
+    <value>String Functions</value>
+    <comment>The group heading of the Insert function list.</comment>
+  </data>
+  <data name="ParamValue" xml:space="preserve">
+    <value>The value to use; each value of a Multi-Valued attribute is used in turn.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionUpper" xml:space="preserve">
+    <value>Convert to uppercase</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="FunctionLower" xml:space="preserve">
+    <value>Convert to lowercase</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="FunctionCapitalise" xml:space="preserve">
+    <value>Capitalise each word (handles hyphenated names like "O'Brien-Smith")</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="FunctionLeft" xml:space="preserve">
+    <value>Take the first N characters</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ParamCharacterCount" xml:space="preserve">
+    <value>How many characters to take.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionRight" xml:space="preserve">
+    <value>Take the last N characters</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="FunctionSubstring" xml:space="preserve">
+    <value>Extract a portion of text</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ParamStart" xml:space="preserve">
+    <value>Where to start, counting the first character as 0.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionReplace" xml:space="preserve">
+    <value>Replace one piece of text with another</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ParamTextToFind" xml:space="preserve">
+    <value>The text to find.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="ParamTextToPut" xml:space="preserve">
+    <value>The text to put in its place.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionLength" xml:space="preserve">
+    <value>Count the number of characters</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ReturnsWholeNumber" xml:space="preserve">
+    <value>a whole number</value>
+    <comment>What a function returns, in a few words: "{Name} returns &lt;this&gt;, which ..." in a message. A noun phrase with its article.</comment>
+  </data>
+  <data name="FunctionIsNullOrEmpty" xml:space="preserve">
+    <value>Check if there is no value: missing, blank, or a Multi-Valued attribute with no values</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ReturnsTrueOrFalse" xml:space="preserve">
+    <value>true or false</value>
+    <comment>What a function returns, in a few words: "{Name} returns &lt;this&gt;, which ..." in a message. A noun phrase with its article.</comment>
+  </data>
+  <data name="FunctionIsNullOrWhitespace" xml:space="preserve">
+    <value>Check if there is no value, or only spaces</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="FunctionHasValue" xml:space="preserve">
+    <value>Check if there is a value: the opposite of `IsNullOrEmpty`</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="FunctionStartsWith" xml:space="preserve">
+    <value>Check if text begins with a specific value, exactly unless `ignoreCase` is `true`</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ParamPrefix" xml:space="preserve">
+    <value>The text it should begin with.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="ParamIgnoreCase" xml:space="preserve">
+    <value>true to ignore case; text compares exactly when left out.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionEndsWith" xml:space="preserve">
+    <value>Check if text ends with a specific value, exactly unless `ignoreCase` is `true`</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ParamSuffix" xml:space="preserve">
+    <value>The text it should end with.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionContains" xml:space="preserve">
+    <value>Check if text contains a specific value, exactly unless `ignoreCase` is `true`</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ParamSearch" xml:space="preserve">
+    <value>The text it should contain.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionIsMatch" xml:space="preserve">
+    <value>Check if text matches a [regular expression](#pattern-functions), true when any value of a Multi-Valued attribute does</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="CategoryPattern" xml:space="preserve">
+    <value>Pattern Functions</value>
+    <comment>The group heading of the Insert function list.</comment>
+  </data>
+  <data name="ParamPattern" xml:space="preserve">
+    <value>A .NET regular expression, matched with a time limit.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionRegexReplace" xml:space="preserve">
+    <value>Replace every match of a regular expression; the replacement can use `$1` for the first group</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ParamReplacement" xml:space="preserve">
+    <value>The text to put in place of each match; $1, $2 and so on are its groups.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionRegexExtract" xml:space="preserve">
+    <value>The first match of a regular expression, or the group named by number; nothing when it does not match</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ParamGroup" xml:space="preserve">
+    <value>Which group to return: 0, the default, is the whole match.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionIIF" xml:space="preserve">
+    <value>Return one value if a condition is true, another if false</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ReturnsEitherValue" xml:space="preserve">
+    <value>either value</value>
+    <comment>What a function returns, in a few words: "{Name} returns &lt;this&gt;, which ..." in a message. A noun phrase with its article.</comment>
+  </data>
+  <data name="CategoryConditional" xml:space="preserve">
+    <value>Conditional Functions</value>
+    <comment>The group heading of the Insert function list.</comment>
+  </data>
+  <data name="ParamCondition" xml:space="preserve">
+    <value>A true or false test.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="ParamTrueValue" xml:space="preserve">
+    <value>The value when it is true.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="ParamFalseValue" xml:space="preserve">
+    <value>The value when it is false.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionCoalesce" xml:space="preserve">
+    <value>Use the first value if it has one (not missing, blank or an empty list), otherwise use the second</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ParamFirstChoice" xml:space="preserve">
+    <value>The value to use when it has one.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="ParamOtherwise" xml:space="preserve">
+    <value>The value to use otherwise.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionEq" xml:space="preserve">
+    <value>Check if two values are equal, true when any value of a Multi-Valued attribute is; a date compares by [instant](#dates-and-numbers-as-text)</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ParamFirstValue" xml:space="preserve">
+    <value>The first value.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="ParamCompareWith" xml:space="preserve">
+    <value>The value to compare it with.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionToString" xml:space="preserve">
+    <value>Convert a value to text</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="CategoryConversion" xml:space="preserve">
+    <value>Conversion Functions</value>
+    <comment>The group heading of the Insert function list.</comment>
+  </data>
+  <data name="FunctionToInt" xml:space="preserve">
+    <value>Convert text to a whole number (returns 0 if not a valid number)</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="FunctionToDecimal" xml:space="preserve">
+    <value>Convert to an exact decimal number: text is read with `.` as the decimal point, and accepts exponent notation (`1.5E3` is 1500). Returns 0 if not a valid number</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ReturnsDecimal" xml:space="preserve">
+    <value>a decimal number</value>
+    <comment>What a function returns, in a few words: "{Name} returns &lt;this&gt;, which ..." in a message. A noun phrase with its article.</comment>
+  </data>
+  <data name="FunctionNow" xml:space="preserve">
+    <value>Current date and time (UTC)</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ReturnsDate" xml:space="preserve">
+    <value>a date</value>
+    <comment>What a function returns, in a few words: "{Name} returns &lt;this&gt;, which ..." in a message. A noun phrase with its article.</comment>
+  </data>
+  <data name="CategoryDate" xml:space="preserve">
+    <value>Date Functions</value>
+    <comment>The group heading of the Insert function list.</comment>
+  </data>
+  <data name="FunctionToday" xml:space="preserve">
+    <value>Current date at midnight (UTC)</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="FunctionFormatDate" xml:space="preserve">
+    <value>Write a date, or ISO 8601 text, in a [.NET date format](https://learn.microsoft.com/dotnet/standard/base-types/custom-date-and-time-format-strings); nothing for other text or no value</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ParamDateOrIso" xml:space="preserve">
+    <value>A date, or ISO 8601 text.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="ParamDateFormatWrite" xml:space="preserve">
+    <value>A .NET date format, such as "dd MMM yyyy".</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionParseDate" xml:space="preserve">
+    <value>Read text in a [.NET date format](https://learn.microsoft.com/dotnet/standard/base-types/custom-date-and-time-format-strings) as a date, in UTC unless the format has an offset (`zzz` or `K`); nothing for empty text, an error for text that does not match</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ParamTextToRead" xml:space="preserve">
+    <value>The text to read.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="ParamDateFormatRead" xml:space="preserve">
+    <value>The .NET date format it is in, such as "dd/MM/yyyy".</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionToFileTime" xml:space="preserve">
+    <value>Convert a date, or ISO 8601 text, to Active Directory's FILETIME format</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ReturnsLongNumber" xml:space="preserve">
+    <value>a long number</value>
+    <comment>What a function returns, in a few words: "{Name} returns &lt;this&gt;, which ..." in a message. A noun phrase with its article.</comment>
+  </data>
+  <data name="FunctionFromFileTime" xml:space="preserve">
+    <value>Convert an Active Directory FILETIME back to a date</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ParamFileTime" xml:space="preserve">
+    <value>A FILETIME, such as accountExpires.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionEscapeDN" xml:space="preserve">
+    <value>Safely escape special characters for use in LDAP distinguished names</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="CategoryDistinguishedName" xml:space="preserve">
+    <value>Distinguished Name (DN) Functions</value>
+    <comment>The group heading of the Insert function list.</comment>
+  </data>
+  <data name="FunctionRandomPassword" xml:space="preserve">
+    <value>Generate a random password. Set extendedChars to `true` for special characters (!@#$%^&amp;*)</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="CategoryPassword" xml:space="preserve">
+    <value>Password Generation</value>
+    <comment>The group heading of the Insert function list.</comment>
+  </data>
+  <data name="ParamPasswordLength" xml:space="preserve">
+    <value>How many characters, from 8 to 128.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="ParamExtendedChars" xml:space="preserve">
+    <value>true to include special characters.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionRandomPassphrase" xml:space="preserve">
+    <value>Generate a passphrase from random words</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ParamWordCount" xml:space="preserve">
+    <value>How many words, from 3 to 10.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="ParamWordSeparator" xml:space="preserve">
+    <value>The text between words, such as "-".</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionCount" xml:space="preserve">
+    <value>How many values there are: 0 for none</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="CategoryMultiValued" xml:space="preserve">
+    <value>Multi-Valued Functions</value>
+    <comment>The group heading of the Insert function list.</comment>
+  </data>
+  <data name="ParamValues" xml:space="preserve">
+    <value>The values, usually a Multi-Valued attribute such as cs["proxyAddresses"].</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionMin" xml:space="preserve">
+    <value>The smallest value: numbers by value, dates by instant, text by ordinal; nothing for no values</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ReturnsOneOfTheValues" xml:space="preserve">
+    <value>one of the values</value>
+    <comment>What a function returns, in a few words: "{Name} returns &lt;this&gt;, which ..." in a message. A noun phrase with its article.</comment>
+  </data>
+  <data name="FunctionMax" xml:space="preserve">
+    <value>The largest value, compared as `Min` compares</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="FunctionWhere" xml:space="preserve">
+    <value>The values that meet a [scoping operator](../configuration/scoping-criteria.md#operators), named as the editor shows it (`"starts with"`) or as the REST API names it (`"StartsWith"`); text compares exactly unless `ignoreCase` is `true`</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ReturnsValuesThatMeetIt" xml:space="preserve">
+    <value>the values that meet it</value>
+    <comment>What a function returns, in a few words: "{Name} returns &lt;this&gt;, which ..." in a message. A noun phrase with its article.</comment>
+  </data>
+  <data name="ParamOperator" xml:space="preserve">
+    <value>A scoping operator, such as "starts with".</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="ParamCompareEach" xml:space="preserve">
+    <value>The value to compare each value with.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionSplit" xml:space="preserve">
+    <value>Split a delimited text value into several values, in the order they appear</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ReturnsSeveralValues" xml:space="preserve">
+    <value>several values</value>
+    <comment>What a function returns, in a few words: "{Name} returns &lt;this&gt;, which ..." in a message. A noun phrase with its article.</comment>
+  </data>
+  <data name="ParamSplitDelimiter" xml:space="preserve">
+    <value>The text between values, such as "|".</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionJoin" xml:space="preserve">
+    <value>Combine values into a single delimited text value, in the order they are read</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ParamJoinDelimiter" xml:space="preserve">
+    <value>The text to put between values; a comma when left empty.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionEnableUser" xml:space="preserve">
+    <value>Enable a user account</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="CategoryAccountControl" xml:space="preserve">
+    <value>Account Control Functions</value>
+    <comment>The group heading of the Insert function list.</comment>
+  </data>
+  <data name="ParamUac" xml:space="preserve">
+    <value>The userAccountControl value.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionDisableUser" xml:space="preserve">
+    <value>Disable a user account</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="FunctionSetBit" xml:space="preserve">
+    <value>Turn on a specific flag</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ParamFlagsNumber" xml:space="preserve">
+    <value>The number holding the flags.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="ParamFlagValueLarge" xml:space="preserve">
+    <value>The flag's value, such as 65536.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="FunctionClearBit" xml:space="preserve">
+    <value>Turn off a specific flag</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="FunctionHasBit" xml:space="preserve">
+    <value>Check if a specific flag is turned on</value>
+    <comment>What the function does, shown in the expression editor and the Insert function list. Keep the Markdown links and the `code` spans; do not translate function names, parameter names or the quoted operator names.</comment>
+  </data>
+  <data name="ParamFlagValueSmall" xml:space="preserve">
+    <value>The flag's value, such as 2.</value>
+    <comment>What to pass for a parameter of a function. Keep parameter names, true and false, and the quoted examples as they are.</comment>
+  </data>
+  <data name="ListJoin" xml:space="preserve">
+    <value>{0}, {1}</value>
+    <comment>Two items of a list, comma separated; longer lists nest this message.</comment>
+  </data>
+  <data name="DataTypeNotSet" xml:space="preserve">
+    <value>NotSet</value>
+    <comment>The name of an attribute data type inside a sentence ("a Number attribute"). Lower case in French.</comment>
+  </data>
+  <data name="DataTypeText" xml:space="preserve">
+    <value>Text</value>
+    <comment>The name of an attribute data type inside a sentence ("a Number attribute"). Lower case in French.</comment>
+  </data>
+  <data name="DataTypeNumber" xml:space="preserve">
+    <value>Number</value>
+    <comment>The name of an attribute data type inside a sentence ("a Number attribute"). Lower case in French.</comment>
+  </data>
+  <data name="DataTypeDateTime" xml:space="preserve">
+    <value>DateTime</value>
+    <comment>The name of an attribute data type inside a sentence ("a Number attribute"). Lower case in French.</comment>
+  </data>
+  <data name="DataTypeBinary" xml:space="preserve">
+    <value>Binary</value>
+    <comment>The name of an attribute data type inside a sentence ("a Number attribute"). Lower case in French.</comment>
+  </data>
+  <data name="DataTypeReference" xml:space="preserve">
+    <value>Reference</value>
+    <comment>The name of an attribute data type inside a sentence ("a Number attribute"). Lower case in French.</comment>
+  </data>
+  <data name="DataTypeGuid" xml:space="preserve">
+    <value>Guid</value>
+    <comment>The name of an attribute data type inside a sentence ("a Number attribute"). Lower case in French.</comment>
+  </data>
+  <data name="DataTypeBoolean" xml:space="preserve">
+    <value>Boolean</value>
+    <comment>The name of an attribute data type inside a sentence ("a Number attribute"). Lower case in French.</comment>
+  </data>
+  <data name="DataTypeLongNumber" xml:space="preserve">
+    <value>LongNumber</value>
+    <comment>The name of an attribute data type inside a sentence ("a Number attribute"). Lower case in French.</comment>
+  </data>
+  <data name="DataTypeDecimal" xml:space="preserve">
+    <value>Decimal</value>
+    <comment>The name of an attribute data type inside a sentence ("a Number attribute"). Lower case in French.</comment>
+  </data>
+  <data name="AttributeKindText" xml:space="preserve">
+    <value>a Text</value>
+    <comment>Completes "can never hold as {this} attribute" in a problem with an Attribute Flow Expression.</comment>
+  </data>
+  <data name="AttributeKindNumber" xml:space="preserve">
+    <value>a Number</value>
+    <comment>Completes "can never hold as {this} attribute" in a problem with an Attribute Flow Expression.</comment>
+  </data>
+  <data name="AttributeKindLongNumber" xml:space="preserve">
+    <value>a Long Number</value>
+    <comment>Completes "can never hold as {this} attribute" in a problem with an Attribute Flow Expression.</comment>
+  </data>
+  <data name="AttributeKindDecimal" xml:space="preserve">
+    <value>a Decimal</value>
+    <comment>Completes "can never hold as {this} attribute" in a problem with an Attribute Flow Expression.</comment>
+  </data>
+  <data name="AttributeKindDateTime" xml:space="preserve">
+    <value>a Date Time</value>
+    <comment>Completes "can never hold as {this} attribute" in a problem with an Attribute Flow Expression.</comment>
+  </data>
+  <data name="AttributeKindBoolean" xml:space="preserve">
+    <value>a Boolean</value>
+    <comment>Completes "can never hold as {this} attribute" in a problem with an Attribute Flow Expression.</comment>
+  </data>
+  <data name="AttributeKindGuid" xml:space="preserve">
+    <value>a Guid</value>
+    <comment>Completes "can never hold as {this} attribute" in a problem with an Attribute Flow Expression.</comment>
+  </data>
+  <data name="AttributeKindBinary" xml:space="preserve">
+    <value>a Binary</value>
+    <comment>Completes "can never hold as {this} attribute" in a problem with an Attribute Flow Expression.</comment>
+  </data>
+  <data name="AttributeKindReference" xml:space="preserve">
+    <value>a Reference</value>
+    <comment>Completes "can never hold as {this} attribute" in a problem with an Attribute Flow Expression.</comment>
+  </data>
+  <data name="AttributeKindOther" xml:space="preserve">
+    <value>this</value>
+    <comment>Completes "can never hold as {this} attribute" in a problem with an Attribute Flow Expression.</comment>
+  </data>
+  <data name="ProblemResultTypeMismatch" xml:space="preserve">
+    <value>{0} returns {1}, which '{2}' can never hold as {3} attribute.</value>
+    <comment>{0} is a function name, {1} what it returns (for example "text" or "a date"), {2} the target attribute, {3} the attribute kind.</comment>
+  </data>
+  <data name="ProblemDoesNotParse" xml:space="preserve">
+    <value>The expression for '{0}' does not parse: {1}</value>
+    <comment>{1} is the parser’s message.</comment>
+  </data>
+  <data name="ProblemWrongSide" xml:space="preserve">
+    <value>The expression for '{0}' reads {1}, but an export Attribute Flow reads the Metaverse Object, so it never has a value. Read mv["..."] instead.</value>
+    <comment>{1} is an input such as cs["sn"]. Keep mv["..."] as it is.</comment>
+  </data>
+  <data name="ProblemUnknownAttribute" xml:space="preserve">
+    <value>The expression for '{0}' reads {1}, which is not an attribute of '{2}', so it never has a value.</value>
+    <comment>{2} is an object type name.</comment>
+  </data>
+  <data name="ProblemNonRepeatable" xml:space="preserve">
+    <value>The expression for '{0}' calls {1}, which returns a different value each time, so every synchronisation can change the value it flows.</value>
+    <comment>{1} is a list of function names.</comment>
+  </data>
+  <data name="FlowKeepsValue" xml:space="preserve">
+    <value>synchronisation records an error and '{0}' keeps its current value</value>
+    <comment>A fragment of a longer sentence: it is placed inside another message and starts lower case.</comment>
+  </data>
+  <data name="FlowFailsObject" xml:space="preserve">
+    <value>synchronisation records an error and nothing on the object is synchronised</value>
+    <comment>A fragment of a longer sentence: it is placed inside another message and starts lower case.</comment>
+  </data>
+  <data name="DescribeSingleValue" xml:space="preserve">
+    <value>'{0}' would be set to this value.</value>
+    <comment>{0} is the target attribute.</comment>
+  </data>
+  <data name="DescribeSeveralValues" xml:space="preserve">
+    <value>'{0}' would hold these {1} values.</value>
+    <comment>{0} is the target attribute.</comment>
+  </data>
+  <data name="DescribeNoValueMissingInput" xml:space="preserve">
+    <value>Not evaluated: the object has no value for {1}, and Missing Input Behaviour is Contribute no value, so '{0}' gets no value, resolved by Attribute Priority and "Null is a value".</value>
+    <comment>{0} is the target attribute, {1} the inputs with no value. The option names follow the portal.</comment>
+  </data>
+  <data name="DescribeNoValueExpression" xml:space="preserve">
+    <value>The Expression produced no value, so '{0}' gets no value, resolved by Attribute Priority and "Null is a value".</value>
+  </data>
+  <data name="DescribeLeftAsHeld" xml:space="preserve">
+    <value>Not evaluated: {1} until the next import, because a schema refresh changed its data type, so '{0}' keeps its current value.</value>
+    <comment>{1} lists the inputs held under another data type.</comment>
+  </data>
+  <data name="HeldInput" xml:space="preserve">
+    <value>{0} (held as {1})</value>
+    <comment>{0} is an input such as cs["sn"], {1} the data type it is held as.</comment>
+  </data>
+  <data name="DescribeMissingFailMapping" xml:space="preserve">
+    <value>Not evaluated: the object has no value for {0}, and Missing Input Behaviour is Fail this mapping, so {1}.</value>
+    <comment>{1} is a sentence fragment.</comment>
+  </data>
+  <data name="DescribeMissingFailObject" xml:space="preserve">
+    <value>Not evaluated: the object has no value for {0}, and Missing Input Behaviour is Fail the object, so {1}.</value>
+    <comment>{1} is a sentence fragment.</comment>
+  </data>
+  <data name="DescribeEvaluationFailed" xml:space="preserve">
+    <value>The Expression failed, so {0}: {1}</value>
+    <comment>{0} is a sentence fragment, {1} the error.</comment>
+  </data>
+  <data name="DescribeNotConvertible" xml:space="preserve">
+    <value>The Expression returned '{0}', which a {1} attribute cannot hold, so {2}.</value>
+    <comment>{1} is a data type name.</comment>
+  </data>
+  <data name="DescribeMultiValuedNamed" xml:space="preserve">
+    <value>'{0}' has {1} values, but '{2}' is single-valued, so {3}. Use {4}, {5}, {6}, {7} or {8} to say which value it should have.</value>
+    <comment>{4} to {8} are function names; keep them in this order.</comment>
+  </data>
+  <data name="DescribeMultiValuedUnnamed" xml:space="preserve">
+    <value>The Expression returned {0} values, but '{1}' is single-valued, so {2}.</value>
+  </data>
+  <data name="GenTokenSequence" xml:space="preserve">
+    <value>the next number in its sequence</value>
+    <comment>Follows "adding" or "with": a noun phrase with its article.</comment>
+  </data>
+  <data name="GenTokenRandom" xml:space="preserve">
+    <value>a random token</value>
+    <comment>Follows "adding" or "with": a noun phrase with its article.</comment>
+  </data>
+  <data name="GenTokenLetter" xml:space="preserve">
+    <value>a letter</value>
+    <comment>Follows "adding" or "with": a noun phrase with its article.</comment>
+  </data>
+  <data name="GenTokenNumber" xml:space="preserve">
+    <value>a number</value>
+    <comment>Follows "adding" or "with": a noun phrase with its article.</comment>
+  </data>
+  <data name="GenNothingGenerated" xml:space="preserve">
+    <value>synchronisation records an error and nothing is generated for '{0}'</value>
+    <comment>A fragment of a longer sentence: it is placed inside another message and starts lower case.</comment>
+  </data>
+  <data name="GenWaits" xml:space="preserve">
+    <value>generation waits: nothing is generated yet, and a value already generated is kept</value>
+    <comment>A fragment of a longer sentence: it is placed inside another message and starts lower case.</comment>
+  </data>
+  <data name="DescribeBaseOnlyIfTaken" xml:space="preserve">
+    <value>'{0}' would be generated from the base '{1}': the base itself if no other object holds it, otherwise with {2} added. Whether the base is still free is checked when a Synchronisation runs.</value>
+    <comment>{2} is one of the GenToken phrases.</comment>
+  </data>
+  <data name="DescribeBase" xml:space="preserve">
+    <value>'{0}' would be generated from the base '{1}' with {2} added when a Synchronisation runs.</value>
+    <comment>{2} is one of the GenToken phrases.</comment>
+  </data>
+  <data name="DescribeNoBaseExpression" xml:space="preserve">
+    <value>'{0}' has no base expression, so it would be generated from {1} alone when a Synchronisation runs.</value>
+    <comment>{1} is one of the GenToken phrases.</comment>
+  </data>
+  <data name="DescribeGenWaitsMissing" xml:space="preserve">
+    <value>Not evaluated: the object has no value for {0}, and Missing Input Behaviour is Contribute no value, so {1}.</value>
+  </data>
+  <data name="DescribeGenWaitsHeld" xml:space="preserve">
+    <value>Not evaluated: {0} until the next import, because a schema refresh changed its data type, so {1}.</value>
+  </data>
+  <data name="DescribeGenWaitsNoValue" xml:space="preserve">
+    <value>The base expression produced no value, so {0}.</value>
+  </data>
+  <data name="DescribeGenNotSingle" xml:space="preserve">
+    <value>The base expression returned {0} values, but a generated value is built from one, so {1}.</value>
+  </data>
+  <data name="DescribeGenNotConvertible" xml:space="preserve">
+    <value>The base expression returned {0}, which has no text to build a value from, so {1}.</value>
+  </data>
+  <data name="DescribeGenEvaluationFailed" xml:space="preserve">
+    <value>The base expression failed, so {0}: {1}</value>
+  </data>
+  <data name="SampleTooManyValues" xml:space="preserve">
+    <value>{0} has {1} values, but the attribute is single-valued, so an object holds at most one.</value>
+    <comment>{0} is an input such as cs["sn"].</comment>
+  </data>
+  <data name="SampleWrongType" xml:space="preserve">
+    <value>The value '{0}' for {1} is not a {2} value, the type of that attribute.</value>
+    <comment>{2} is a data type name.</comment>
+  </data>
+  <data name="SampleWrongTypeWithHint" xml:space="preserve">
+    <value>The value '{0}' for {1} is not a {2} value, the type of that attribute. {3}</value>
+    <comment>{3} is one of the SampleHint sentences.</comment>
+  </data>
+  <data name="SampleHintDate" xml:space="preserve">
+    <value>Enter a date in ISO 8601, such as 2026-03-15 or 2026-03-15T10:30:00Z.</value>
+  </data>
+  <data name="SampleHintReference" xml:space="preserve">
+    <value>Enter the id of the object it refers to.</value>
+  </data>
+  <data name="SampleHintBinary" xml:space="preserve">
+    <value>Enter the value in base64.</value>
+  </data>
+  <data name="FlowExportReadsOnlyMetaverse" xml:space="preserve">
+    <value>{0} has a value, but an export Attribute Flow reads only the Metaverse Object, so the Expression would never see it.</value>
+  </data>
+  <data name="FlowNotInSchemaNamed" xml:space="preserve">
+    <value>{0} has a value, but '{1}' has no attribute named '{2}', so the Expression would never see one.</value>
+    <comment>{1} is an object type name.</comment>
+  </data>
+  <data name="FlowNotInSchemaUnnamed" xml:space="preserve">
+    <value>{0} has a value, but the object type has no attribute named '{1}', so the Expression would never see one.</value>
+  </data>
+  <data name="ValueBinaryOne" xml:space="preserve">
+    <value>(Binary value, {0} bytes)</value>
+    <comment>A Binary value in an expression result; {0} is its size.</comment>
+  </data>
+  <data name="ValueBinaryOther" xml:space="preserve">
+    <value>(Binary value, {0} bytes)</value>
+    <comment>A Binary value in an expression result; {0} is its size.</comment>
+  </data>
+  <data name="ExpressionEmpty" xml:space="preserve">
+    <value>Expression cannot be empty.</value>
+  </data>
+  <data name="ExpressionTooLong" xml:space="preserve">
+    <value>Expression exceeds the maximum permitted length of {0} characters (actual length: {1}).</value>
+  </data>
+  <data name="BinaryHasNoText" xml:space="preserve">
+    <value>A Binary value has no text form, so it cannot be used as text.</value>
+  </data>
+  <data name="RegexNoSuchGroup" xml:space="preserve">
+    <value>RegexExtract's pattern has no group {0}.</value>
+  </data>
+  <data name="PatternTimedOut" xml:space="preserve">
+    <value>The pattern ran past its time limit of {0} ms on one of the values; simplify the pattern (nested repetition such as (a+)+ is the usual cause).</value>
+  </data>
+  <data name="ReflectionNotAvailable" xml:space="preserve">
+    <value>Reflection is not available in expressions.</value>
+  </data>
+  <data name="ExtremeMixedKinds" xml:space="preserve">
+    <value>{0} needs values of one kind: numbers, dates or text.</value>
+    <comment>{0} is a function name.</comment>
+  </data>
+  <data name="ExtremeUnsupportedKind" xml:space="preserve">
+    <value>{0} works on numbers, dates or text, not a {1} value.</value>
+    <comment>{0} is a function name, {1} the kind of value.</comment>
+  </data>
+  <data name="ValueKindBoolean" xml:space="preserve">
+    <value>Boolean</value>
+    <comment>Completes "not a {kind} value".</comment>
+  </data>
+  <data name="ValueKindGuid" xml:space="preserve">
+    <value>Guid</value>
+    <comment>Completes "not a {kind} value".</comment>
+  </data>
+  <data name="ValueKindBinary" xml:space="preserve">
+    <value>Binary</value>
+    <comment>Completes "not a {kind} value".</comment>
+  </data>
+  <data name="EvalToFileTimeType" xml:space="preserve">
+    <value>ToFileTime cannot convert value of type '{0}'. Expected a date, or text in ISO 8601 such as 2026-03-15T10:30:00Z.</value>
+    <comment>{0} is a .NET type name.</comment>
+  </data>
+  <data name="EvalFormatDateType" xml:space="preserve">
+    <value>FormatDate cannot format a value of type '{0}'. Expected a date, or text in ISO 8601 such as 2026-03-15T10:30:00Z.</value>
+    <comment>{0} is a .NET type name.</comment>
+  </data>
+  <data name="EvalParseDateNeedsFormat" xml:space="preserve">
+    <value>ParseDate needs the format the text is in, such as "dd/MM/yyyy".</value>
+  </data>
+  <data name="EvalParseDateUnreadable" xml:space="preserve">
+    <value>ParseDate could not read the text as a date in the format '{0}'.</value>
+  </data>
+  <data name="EvalParseDateType" xml:space="preserve">
+    <value>ParseDate cannot read a value of type '{0}'. Expected text, or a date.</value>
+    <comment>{0} is a .NET type name.</comment>
+  </data>
+  <data name="EvalFromFileTimeType" xml:space="preserve">
+    <value>FromFileTime cannot convert value of type '{0}'. Expected long, int, or string.</value>
+    <comment>{0} is a .NET type name.</comment>
+  </data>
+  <data name="WhereNeedsOneType" xml:space="preserve">
+    <value>Where needs values of one type.</value>
+  </data>
+  <data name="WhereOperatorTestsAttribute" xml:space="preserve">
+    <value>Where keeps the values that meet an operator, and '{0}' tests the attribute rather than a value. Use Count or IsNullOrEmpty instead.</value>
+  </data>
+  <data name="WhereUnknownOperator" xml:space="preserve">
+    <value>Where does not know the operator '{0}' for {1} values. Use one of: {2}.</value>
+    <comment>{1} is a kind of value; {2} lists operator names to type, which stay in English.</comment>
+  </data>
+  <data name="WhereKindText" xml:space="preserve">
+    <value>text</value>
+    <comment>A kind of value in "for {kind} values".</comment>
+  </data>
+  <data name="WhereKindNumber" xml:space="preserve">
+    <value>number</value>
+    <comment>A kind of value in "for {kind} values".</comment>
+  </data>
+  <data name="WhereKindLongNumber" xml:space="preserve">
+    <value>long number</value>
+    <comment>A kind of value in "for {kind} values".</comment>
+  </data>
+  <data name="WhereKindDecimal" xml:space="preserve">
+    <value>decimal</value>
+    <comment>A kind of value in "for {kind} values".</comment>
+  </data>
+  <data name="WhereKindDateTime" xml:space="preserve">
+    <value>date</value>
+    <comment>A kind of value in "for {kind} values".</comment>
+  </data>
+  <data name="WhereKindGuid" xml:space="preserve">
+    <value>Guid</value>
+    <comment>A kind of value in "for {kind} values".</comment>
+  </data>
+  <data name="WhereKindBoolean" xml:space="preserve">
+    <value>Boolean</value>
+    <comment>A kind of value in "for {kind} values".</comment>
+  </data>
+  <data name="WhereKindBinary" xml:space="preserve">
+    <value>binary</value>
+    <comment>A kind of value in "for {kind} values".</comment>
+  </data>
+  <data name="WhereKindReference" xml:space="preserve">
+    <value>reference</value>
+    <comment>A kind of value in "for {kind} values".</comment>
+  </data>
+  <data name="WhereKindNotSet" xml:space="preserve">
+    <value>notset</value>
+    <comment>A kind of value in "for {kind} values".</comment>
+  </data>
+  <data name="WhereNeedsValue" xml:space="preserve">
+    <value>Where needs a value to compare with.</value>
+  </data>
+  <data name="WhereCouldNotCompare" xml:space="preserve">
+    <value>Where could not compare: {0}</value>
+    <comment>{0} says why.</comment>
+  </data>
+  <data name="WhereUnsupportedType" xml:space="preserve">
+    <value>Where works on text, number, date, Boolean or Guid values.</value>
+  </data>
+  <data name="RefusalsJoin" xml:space="preserve">
+    <value>{0} {1}</value>
+    <comment>Two refusals of one save, separated by a space; more nest this message.</comment>
+  </data>
+</root>

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Expressions;
 using JIM.Models.Localisation;
 
 namespace JIM.Web.Localisation;
@@ -25,7 +26,9 @@ public static class MessageDisplay
     /// What to show a person for an exception: a <see cref="JimMessageException"/>'s message in their language, else the
     /// exception's own message (an unexpected fault, whose text is for support, not translation).
     /// </summary>
-    public static string ToDisplayText(this Exception exception) => exception is JimMessageException localised
-        ? localised.Detail.ToCurrentLanguage()
-        : exception.Message;
+    public static string ToDisplayText(this Exception exception) => exception switch
+    {
+        ExpressionEvaluationException { Detail: { } expressionDetail } => expressionDetail.ToCurrentLanguage(),
+        _ => ExceptionMessage.DetailOf(exception)?.ToCurrentLanguage() ?? exception.Message
+    };
 }

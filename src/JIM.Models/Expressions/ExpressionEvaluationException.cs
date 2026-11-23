@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Expressions;
 
 /// <summary>
@@ -16,6 +18,33 @@ namespace JIM.Models.Expressions;
 /// </remarks>
 public class ExpressionEvaluationException : Exception
 {
+    /// <summary>
+    /// Creates the error for a failure JIM detected itself, holding its text as a message: <see cref="Exception.Message"/>
+    /// is the message's British English, which logs, stored Activities and the REST API read, and the portal renders
+    /// <see cref="Detail"/> in the viewer's language (#3030).
+    /// </summary>
+    public ExpressionEvaluationException(JimMessage detail)
+        : base(detail.ToEnglish())
+    {
+        Detail = detail;
+    }
+
+    /// <summary>
+    /// Creates the error for a failure raised while the Expression was run, holding its text as a message and keeping
+    /// the original as the inner exception.
+    /// </summary>
+    public ExpressionEvaluationException(JimMessage detail, Exception innerException)
+        : base(detail.ToEnglish(), innerException)
+    {
+        Detail = detail;
+    }
+
+    /// <summary>
+    /// The error as a message, for rendering in the reader's language. Null for a failure whose text is another
+    /// library's (a parser's or the runtime's), which is shown as it is.
+    /// </summary>
+    public JimMessage? Detail { get; }
+
     /// <summary>
     /// Creates the error for a failure JIM detected itself, such as a Binary value used as text.
     /// </summary>

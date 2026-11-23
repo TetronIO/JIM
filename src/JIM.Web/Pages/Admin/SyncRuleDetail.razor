@@ -914,7 +914,7 @@ else if (_syncRule != null)
             {
                 // the Application layer refuses configurations the engine cannot honour, such as two Attribute Flows
                 // targeting the same attribute (#1532); surface its message rather than an unhandled error.
-                Snackbar.Add(ex.Message, Severity.Error);
+                Snackbar.Add(ex.ToDisplayText(), Severity.Error);
                 return;
             }
         }

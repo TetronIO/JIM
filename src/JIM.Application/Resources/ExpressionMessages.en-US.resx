@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FunctionCapitalise" xml:space="preserve">
+    <value>Capitalize each word (handles hyphenated names like "O'Brien-Smith")</value>
+  </data>
+  <data name="ProblemNonRepeatable" xml:space="preserve">
+    <value>The expression for '{0}' calls {1}, which returns a different value each time, so every synchronization can change the value it flows.</value>
+  </data>
+  <data name="FlowKeepsValue" xml:space="preserve">
+    <value>synchronization records an error and '{0}' keeps its current value</value>
+  </data>
+  <data name="FlowFailsObject" xml:space="preserve">
+    <value>synchronization records an error and nothing on the object is synchronized</value>
+  </data>
+  <data name="DescribeNoValueMissingInput" xml:space="preserve">
+    <value>Not evaluated: the object has no value for {1}, and Missing Input Behavior is Contribute no value, so '{0}' gets no value, resolved by Attribute Priority and "Null is a value".</value>
+  </data>
+  <data name="DescribeMissingFailMapping" xml:space="preserve">
+    <value>Not evaluated: the object has no value for {0}, and Missing Input Behavior is Fail this mapping, so {1}.</value>
+  </data>
+  <data name="DescribeMissingFailObject" xml:space="preserve">
+    <value>Not evaluated: the object has no value for {0}, and Missing Input Behavior is Fail the object, so {1}.</value>
+  </data>
+  <data name="GenNothingGenerated" xml:space="preserve">
+    <value>synchronization records an error and nothing is generated for '{0}'</value>
+  </data>
+  <data name="DescribeBaseOnlyIfTaken" xml:space="preserve">
+    <value>'{0}' would be generated from the base '{1}': the base itself if no other object holds it, otherwise with {2} added. Whether the base is still free is checked when a Synchronization runs.</value>
+  </data>
+  <data name="DescribeBase" xml:space="preserve">
+    <value>'{0}' would be generated from the base '{1}' with {2} added when a Synchronization runs.</value>
+  </data>
+  <data name="DescribeNoBaseExpression" xml:space="preserve">
+    <value>'{0}' has no base expression, so it would be generated from {1} alone when a Synchronization runs.</value>
+  </data>
+  <data name="DescribeGenWaitsMissing" xml:space="preserve">
+    <value>Not evaluated: the object has no value for {0}, and Missing Input Behavior is Contribute no value, so {1}.</value>
+  </data>
+</root>

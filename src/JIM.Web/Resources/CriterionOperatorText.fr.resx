@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LabelEquals" xml:space="preserve">
+    <value>est égal à</value>
+  </data>
+  <data name="LabelNotEquals" xml:space="preserve">
+    <value>n’est pas égal à</value>
+  </data>
+  <data name="LabelStartsWith" xml:space="preserve">
+    <value>commence par</value>
+  </data>
+  <data name="LabelNotStartsWith" xml:space="preserve">
+    <value>ne commence pas par</value>
+  </data>
+  <data name="LabelEndsWith" xml:space="preserve">
+    <value>se termine par</value>
+  </data>
+  <data name="LabelNotEndsWith" xml:space="preserve">
+    <value>ne se termine pas par</value>
+  </data>
+  <data name="LabelContains" xml:space="preserve">
+    <value>contient</value>
+  </data>
+  <data name="LabelNotContains" xml:space="preserve">
+    <value>ne contient pas</value>
+  </data>
+  <data name="LabelLessThan" xml:space="preserve">
+    <value>inférieur à</value>
+  </data>
+  <data name="LabelLessThanOrEquals" xml:space="preserve">
+    <value>inférieur ou égal à</value>
+  </data>
+  <data name="LabelGreaterThan" xml:space="preserve">
+    <value>supérieur à</value>
+  </data>
+  <data name="LabelGreaterThanOrEquals" xml:space="preserve">
+    <value>supérieur ou égal à</value>
+  </data>
+  <data name="LabelHasValue" xml:space="preserve">
+    <value>a une valeur</value>
+  </data>
+  <data name="LabelHasNoValue" xml:space="preserve">
+    <value>n’a aucune valeur</value>
+  </data>
+  <data name="LabelMatchesPattern" xml:space="preserve">
+    <value>correspond au motif</value>
+  </data>
+  <data name="LabelNotMatchesPattern" xml:space="preserve">
+    <value>ne correspond pas au motif</value>
+  </data>
+  <data name="LabelDateBefore" xml:space="preserve">
+    <value>avant</value>
+  </data>
+  <data name="LabelDateOnOrBefore" xml:space="preserve">
+    <value>au plus tard le</value>
+  </data>
+  <data name="LabelDateAfter" xml:space="preserve">
+    <value>après</value>
+  </data>
+  <data name="LabelDateOnOrAfter" xml:space="preserve">
+    <value>à partir du</value>
+  </data>
+</root>

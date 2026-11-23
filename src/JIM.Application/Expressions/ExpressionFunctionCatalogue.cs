@@ -1,7 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Models.Expressions;
+using JIM.Models.Localisation;
 
 namespace JIM.Application.Expressions;
 
@@ -23,153 +26,153 @@ public static class ExpressionFunctionCatalogue
     public static IReadOnlyList<ExpressionFunction> All { get; } =
     [
         // Text
-        Function("Trim", ExpressionFunctionCategory.Text, "text", ExpressionResultType.Text, "Remove spaces from the start and end", "Trim(mv[\"Name\"])",
+        Function("Trim", ExpressionFunctionCategory.Text, nameof(ExpressionMessages.ReturnsText), ExpressionResultType.Text, nameof(ExpressionMessages.FunctionTrim), "Trim(mv[\"Name\"])",
             Value()),
-        Function("Upper", ExpressionFunctionCategory.Text, "text", ExpressionResultType.Text, "Convert to uppercase", "Upper(mv[\"Name\"])",
+        Function("Upper", ExpressionFunctionCategory.Text, nameof(ExpressionMessages.ReturnsText), ExpressionResultType.Text, nameof(ExpressionMessages.FunctionUpper), "Upper(mv[\"Name\"])",
             Value()),
-        Function("Lower", ExpressionFunctionCategory.Text, "text", ExpressionResultType.Text, "Convert to lowercase", "Lower(mv[\"Name\"])",
+        Function("Lower", ExpressionFunctionCategory.Text, nameof(ExpressionMessages.ReturnsText), ExpressionResultType.Text, nameof(ExpressionMessages.FunctionLower), "Lower(mv[\"Name\"])",
             Value()),
-        Function("Capitalise", ExpressionFunctionCategory.Text, "text", ExpressionResultType.Text,
-            "Capitalise each word (handles hyphenated names like \"O'Brien-Smith\")", "Capitalise(mv[\"Name\"])",
+        Function("Capitalise", ExpressionFunctionCategory.Text, nameof(ExpressionMessages.ReturnsText), ExpressionResultType.Text,
+            nameof(ExpressionMessages.FunctionCapitalise), "Capitalise(mv[\"Name\"])",
             Value()),
-        Function("Left", ExpressionFunctionCategory.Text, "text", ExpressionResultType.Text, "Take the first N characters", "Left(mv[\"Name\"], 3)",
-            Value(), Param("count", "How many characters to take.")),
-        Function("Right", ExpressionFunctionCategory.Text, "text", ExpressionResultType.Text, "Take the last N characters", "Right(mv[\"Name\"], 4)",
-            Value(), Param("count", "How many characters to take.")),
-        Function("Substring", ExpressionFunctionCategory.Text, "text", ExpressionResultType.Text, "Extract a portion of text", "Substring(mv[\"Name\"], 2, 4)",
-            Value(), Param("start", "Where to start, counting the first character as 0."), Param("length", "How many characters to take.")),
-        Function("Replace", ExpressionFunctionCategory.Text, "text", ExpressionResultType.Text, "Replace one piece of text with another",
+        Function("Left", ExpressionFunctionCategory.Text, nameof(ExpressionMessages.ReturnsText), ExpressionResultType.Text, nameof(ExpressionMessages.FunctionLeft), "Left(mv[\"Name\"], 3)",
+            Value(), Param("count", nameof(ExpressionMessages.ParamCharacterCount))),
+        Function("Right", ExpressionFunctionCategory.Text, nameof(ExpressionMessages.ReturnsText), ExpressionResultType.Text, nameof(ExpressionMessages.FunctionRight), "Right(mv[\"Name\"], 4)",
+            Value(), Param("count", nameof(ExpressionMessages.ParamCharacterCount))),
+        Function("Substring", ExpressionFunctionCategory.Text, nameof(ExpressionMessages.ReturnsText), ExpressionResultType.Text, nameof(ExpressionMessages.FunctionSubstring), "Substring(mv[\"Name\"], 2, 4)",
+            Value(), Param("start", nameof(ExpressionMessages.ParamStart)), Param("length", nameof(ExpressionMessages.ParamCharacterCount))),
+        Function("Replace", ExpressionFunctionCategory.Text, nameof(ExpressionMessages.ReturnsText), ExpressionResultType.Text, nameof(ExpressionMessages.FunctionReplace),
             "Replace(mv[\"Email\"], \"@old.com\", \"@new.com\")",
-            Value(), Param("old", "The text to find."), Param("new", "The text to put in its place.")),
-        Function("Length", ExpressionFunctionCategory.Text, "a whole number", ExpressionResultType.Number, "Count the number of characters", "Length(mv[\"Name\"])",
+            Value(), Param("old", nameof(ExpressionMessages.ParamTextToFind)), Param("new", nameof(ExpressionMessages.ParamTextToPut))),
+        Function("Length", ExpressionFunctionCategory.Text, nameof(ExpressionMessages.ReturnsWholeNumber), ExpressionResultType.Number, nameof(ExpressionMessages.FunctionLength), "Length(mv[\"Name\"])",
             Value()),
-        Function("IsNullOrEmpty", ExpressionFunctionCategory.Text, "true or false", ExpressionResultType.Boolean,
-            "Check if there is no value: missing, blank, or a Multi-Valued attribute with no values", "IsNullOrEmpty(mv[\"Name\"])",
+        Function("IsNullOrEmpty", ExpressionFunctionCategory.Text, nameof(ExpressionMessages.ReturnsTrueOrFalse), ExpressionResultType.Boolean,
+            nameof(ExpressionMessages.FunctionIsNullOrEmpty), "IsNullOrEmpty(mv[\"Name\"])",
             Value()),
-        Function("IsNullOrWhitespace", ExpressionFunctionCategory.Text, "true or false", ExpressionResultType.Boolean,
-            "Check if there is no value, or only spaces", "IsNullOrWhitespace(mv[\"Name\"])",
+        Function("IsNullOrWhitespace", ExpressionFunctionCategory.Text, nameof(ExpressionMessages.ReturnsTrueOrFalse), ExpressionResultType.Boolean,
+            nameof(ExpressionMessages.FunctionIsNullOrWhitespace), "IsNullOrWhitespace(mv[\"Name\"])",
             Value()),
-        Function("HasValue", ExpressionFunctionCategory.Text, "true or false", ExpressionResultType.Boolean,
-            "Check if there is a value: the opposite of `IsNullOrEmpty`", "HasValue(mv[\"Manager\"])",
+        Function("HasValue", ExpressionFunctionCategory.Text, nameof(ExpressionMessages.ReturnsTrueOrFalse), ExpressionResultType.Boolean,
+            nameof(ExpressionMessages.FunctionHasValue), "HasValue(mv[\"Manager\"])",
             Value()),
-        Function("StartsWith", ExpressionFunctionCategory.Text, "true or false", ExpressionResultType.Boolean,
-            "Check if text begins with a specific value, exactly unless `ignoreCase` is `true`", "StartsWith(mv[\"Email\"], \"admin\")",
-            Value(), Param("prefix", "The text it should begin with."), IgnoreCase()),
-        Function("EndsWith", ExpressionFunctionCategory.Text, "true or false", ExpressionResultType.Boolean,
-            "Check if text ends with a specific value, exactly unless `ignoreCase` is `true`", "EndsWith(mv[\"Email\"], \"@company.com\")",
-            Value(), Param("suffix", "The text it should end with."), IgnoreCase()),
-        Function("Contains", ExpressionFunctionCategory.Text, "true or false", ExpressionResultType.Boolean,
-            "Check if text contains a specific value, exactly unless `ignoreCase` is `true`", "Contains(mv[\"Email\"], \"@company\")",
-            Value(), Param("search", "The text it should contain."), IgnoreCase()),
+        Function("StartsWith", ExpressionFunctionCategory.Text, nameof(ExpressionMessages.ReturnsTrueOrFalse), ExpressionResultType.Boolean,
+            nameof(ExpressionMessages.FunctionStartsWith), "StartsWith(mv[\"Email\"], \"admin\")",
+            Value(), Param("prefix", nameof(ExpressionMessages.ParamPrefix)), IgnoreCase()),
+        Function("EndsWith", ExpressionFunctionCategory.Text, nameof(ExpressionMessages.ReturnsTrueOrFalse), ExpressionResultType.Boolean,
+            nameof(ExpressionMessages.FunctionEndsWith), "EndsWith(mv[\"Email\"], \"@company.com\")",
+            Value(), Param("suffix", nameof(ExpressionMessages.ParamSuffix)), IgnoreCase()),
+        Function("Contains", ExpressionFunctionCategory.Text, nameof(ExpressionMessages.ReturnsTrueOrFalse), ExpressionResultType.Boolean,
+            nameof(ExpressionMessages.FunctionContains), "Contains(mv[\"Email\"], \"@company\")",
+            Value(), Param("search", nameof(ExpressionMessages.ParamSearch)), IgnoreCase()),
 
         // Pattern
-        Function("IsMatch", ExpressionFunctionCategory.Pattern, "true or false", ExpressionResultType.Boolean,
-            "Check if text matches a [regular expression](#pattern-functions), true when any value of a Multi-Valued attribute does",
+        Function("IsMatch", ExpressionFunctionCategory.Pattern, nameof(ExpressionMessages.ReturnsTrueOrFalse), ExpressionResultType.Boolean,
+            nameof(ExpressionMessages.FunctionIsMatch),
             "IsMatch(cs[\"employeeId\"], \"^E[0-9]{6}$\")",
             Value(), Pattern(), IgnoreCase()),
-        Function("RegexReplace", ExpressionFunctionCategory.Pattern, "text", ExpressionResultType.Text,
-            "Replace every match of a regular expression; the replacement can use `$1` for the first group",
+        Function("RegexReplace", ExpressionFunctionCategory.Pattern, nameof(ExpressionMessages.ReturnsText), ExpressionResultType.Text,
+            nameof(ExpressionMessages.FunctionRegexReplace),
             "RegexReplace(cs[\"phone\"], \"[^0-9+]\", \"\")",
-            Value(), Pattern(), Param("replacement", "The text to put in place of each match; $1, $2 and so on are its groups."), IgnoreCase()),
-        Function("RegexExtract", ExpressionFunctionCategory.Pattern, "text", ExpressionResultType.Text,
-            "The first match of a regular expression, or the group named by number; nothing when it does not match",
+            Value(), Pattern(), Param("replacement", nameof(ExpressionMessages.ParamReplacement)), IgnoreCase()),
+        Function("RegexExtract", ExpressionFunctionCategory.Pattern, nameof(ExpressionMessages.ReturnsText), ExpressionResultType.Text,
+            nameof(ExpressionMessages.FunctionRegexExtract),
             "RegexExtract(cs[\"mail\"], \"@(.+)$\", 1)",
-            Value(), Pattern(), Param("group", "Which group to return: 0, the default, is the whole match.", isOptional: true)),
+            Value(), Pattern(), Param("group", nameof(ExpressionMessages.ParamGroup), isOptional: true)),
 
         // Conditional
-        Function("IIF", ExpressionFunctionCategory.Conditional, "either value", ExpressionResultType.Unknown,
-            "Return one value if a condition is true, another if false", "IIF(Eq(mv[\"Status\"], \"Active\"), 512, 514)",
-            Param("condition", "A true or false test."), Param("trueValue", "The value when it is true."), Param("falseValue", "The value when it is false.")),
-        Function("Coalesce", ExpressionFunctionCategory.Conditional, "either value", ExpressionResultType.Unknown,
-            "Use the first value if it has one (not missing, blank or an empty list), otherwise use the second",
+        Function("IIF", ExpressionFunctionCategory.Conditional, nameof(ExpressionMessages.ReturnsEitherValue), ExpressionResultType.Unknown,
+            nameof(ExpressionMessages.FunctionIIF), "IIF(Eq(mv[\"Status\"], \"Active\"), 512, 514)",
+            Param("condition", nameof(ExpressionMessages.ParamCondition)), Param("trueValue", nameof(ExpressionMessages.ParamTrueValue)), Param("falseValue", nameof(ExpressionMessages.ParamFalseValue))),
+        Function("Coalesce", ExpressionFunctionCategory.Conditional, nameof(ExpressionMessages.ReturnsEitherValue), ExpressionResultType.Unknown,
+            nameof(ExpressionMessages.FunctionCoalesce),
             "Coalesce(mv[\"Preferred Name\"], mv[\"First Name\"])",
-            Param("value1", "The value to use when it has one."), Param("value2", "The value to use otherwise.")),
-        Function("Eq", ExpressionFunctionCategory.Conditional, "true or false", ExpressionResultType.Boolean,
-            "Check if two values are equal, true when any value of a Multi-Valued attribute is; a date compares by [instant](#dates-and-numbers-as-text)",
+            Param("value1", nameof(ExpressionMessages.ParamFirstChoice)), Param("value2", nameof(ExpressionMessages.ParamOtherwise))),
+        Function("Eq", ExpressionFunctionCategory.Conditional, nameof(ExpressionMessages.ReturnsTrueOrFalse), ExpressionResultType.Boolean,
+            nameof(ExpressionMessages.FunctionEq),
             "Eq(cs[\"memberOf\"], \"CN=Admins\")",
-            Param("value1", "The first value."), Param("value2", "The value to compare it with.")),
+            Param("value1", nameof(ExpressionMessages.ParamFirstValue)), Param("value2", nameof(ExpressionMessages.ParamCompareWith))),
 
         // Conversion
-        Function("ToString", ExpressionFunctionCategory.Conversion, "text", ExpressionResultType.Text, "Convert a value to text", "ToString(mv[\"EmployeeId\"])",
+        Function("ToString", ExpressionFunctionCategory.Conversion, nameof(ExpressionMessages.ReturnsText), ExpressionResultType.Text, nameof(ExpressionMessages.FunctionToString), "ToString(mv[\"EmployeeId\"])",
             Value()),
-        Function("ToInt", ExpressionFunctionCategory.Conversion, "a whole number", ExpressionResultType.Number,
-            "Convert text to a whole number (returns 0 if not a valid number)", "ToInt(mv[\"Age\"])",
+        Function("ToInt", ExpressionFunctionCategory.Conversion, nameof(ExpressionMessages.ReturnsWholeNumber), ExpressionResultType.Number,
+            nameof(ExpressionMessages.FunctionToInt), "ToInt(mv[\"Age\"])",
             Value()),
-        Function("ToDecimal", ExpressionFunctionCategory.Conversion, "a decimal number", ExpressionResultType.Decimal,
-            "Convert to an exact decimal number: text is read with `.` as the decimal point, and accepts exponent notation (`1.5E3` is 1500). Returns 0 if not a valid number",
+        Function("ToDecimal", ExpressionFunctionCategory.Conversion, nameof(ExpressionMessages.ReturnsDecimal), ExpressionResultType.Decimal,
+            nameof(ExpressionMessages.FunctionToDecimal),
             "ToDecimal(cs[\"Salary\"])",
             Value()),
 
         // Date
-        Function("Now", ExpressionFunctionCategory.Date, "a date", ExpressionResultType.DateTime, "Current date and time (UTC)", "Now()", isRepeatable: false),
-        Function("Today", ExpressionFunctionCategory.Date, "a date", ExpressionResultType.DateTime, "Current date at midnight (UTC)", "Today()", isRepeatable: false),
-        Function("FormatDate", ExpressionFunctionCategory.Date, "text", ExpressionResultType.Text,
-            "Write a date, or ISO 8601 text, in a [.NET date format](https://learn.microsoft.com/dotnet/standard/base-types/custom-date-and-time-format-strings); nothing for other text or no value",
+        Function("Now", ExpressionFunctionCategory.Date, nameof(ExpressionMessages.ReturnsDate), ExpressionResultType.DateTime, nameof(ExpressionMessages.FunctionNow), "Now()", isRepeatable: false),
+        Function("Today", ExpressionFunctionCategory.Date, nameof(ExpressionMessages.ReturnsDate), ExpressionResultType.DateTime, nameof(ExpressionMessages.FunctionToday), "Today()", isRepeatable: false),
+        Function("FormatDate", ExpressionFunctionCategory.Date, nameof(ExpressionMessages.ReturnsText), ExpressionResultType.Text,
+            nameof(ExpressionMessages.FunctionFormatDate),
             "FormatDate(mv[\"Hire Date\"], \"yyyy-MM-dd\")",
-            Param("value", "A date, or ISO 8601 text."), Param("format", "A .NET date format, such as \"dd MMM yyyy\".")),
-        Function("ParseDate", ExpressionFunctionCategory.Date, "a date", ExpressionResultType.DateTime,
-            "Read text in a [.NET date format](https://learn.microsoft.com/dotnet/standard/base-types/custom-date-and-time-format-strings) as a date, in UTC unless the format has an offset (`zzz` or `K`); nothing for empty text, an error for text that does not match",
+            Param("value", nameof(ExpressionMessages.ParamDateOrIso)), Param("format", nameof(ExpressionMessages.ParamDateFormatWrite))),
+        Function("ParseDate", ExpressionFunctionCategory.Date, nameof(ExpressionMessages.ReturnsDate), ExpressionResultType.DateTime,
+            nameof(ExpressionMessages.FunctionParseDate),
             "ParseDate(cs[\"hireDate\"], \"dd/MM/yyyy\")",
-            Param("text", "The text to read."), Param("format", "The .NET date format it is in, such as \"dd/MM/yyyy\".")),
-        Function("ToFileTime", ExpressionFunctionCategory.Date, "a long number", ExpressionResultType.LongNumber,
-            "Convert a date, or ISO 8601 text, to Active Directory's FILETIME format", "ToFileTime(mv[\"Account Expires\"])",
-            Param("date", "A date, or ISO 8601 text.")),
-        Function("FromFileTime", ExpressionFunctionCategory.Date, "a date", ExpressionResultType.DateTime,
-            "Convert an Active Directory FILETIME back to a date", "FromFileTime(cs[\"accountExpires\"])",
-            Param("filetime", "A FILETIME, such as accountExpires.")),
+            Param("text", nameof(ExpressionMessages.ParamTextToRead)), Param("format", nameof(ExpressionMessages.ParamDateFormatRead))),
+        Function("ToFileTime", ExpressionFunctionCategory.Date, nameof(ExpressionMessages.ReturnsLongNumber), ExpressionResultType.LongNumber,
+            nameof(ExpressionMessages.FunctionToFileTime), "ToFileTime(mv[\"Account Expires\"])",
+            Param("date", nameof(ExpressionMessages.ParamDateOrIso))),
+        Function("FromFileTime", ExpressionFunctionCategory.Date, nameof(ExpressionMessages.ReturnsDate), ExpressionResultType.DateTime,
+            nameof(ExpressionMessages.FunctionFromFileTime), "FromFileTime(cs[\"accountExpires\"])",
+            Param("filetime", nameof(ExpressionMessages.ParamFileTime))),
 
         // Distinguished names
-        Function("EscapeDN", ExpressionFunctionCategory.DistinguishedName, "text", ExpressionResultType.Text,
-            "Safely escape special characters for use in LDAP distinguished names",
+        Function("EscapeDN", ExpressionFunctionCategory.DistinguishedName, nameof(ExpressionMessages.ReturnsText), ExpressionResultType.Text,
+            nameof(ExpressionMessages.FunctionEscapeDN),
             "\"CN=\" + EscapeDN(mv[\"Display Name\"]) + \",OU=Users,DC=domain,DC=local\"",
             Value()),
 
         // Passwords
-        Function("RandomPassword", ExpressionFunctionCategory.Password, "text", ExpressionResultType.Text,
-            "Generate a random password. Set extendedChars to `true` for special characters (!@#$%^&*)", "RandomPassword(16, true)",
-            Param("length", "How many characters, from 8 to 128."), Param("extendedChars", "true to include special characters."),
+        Function("RandomPassword", ExpressionFunctionCategory.Password, nameof(ExpressionMessages.ReturnsText), ExpressionResultType.Text,
+            nameof(ExpressionMessages.FunctionRandomPassword), "RandomPassword(16, true)",
+            Param("length", nameof(ExpressionMessages.ParamPasswordLength)), Param("extendedChars", nameof(ExpressionMessages.ParamExtendedChars)),
             isRepeatable: false),
-        Function("RandomPassphrase", ExpressionFunctionCategory.Password, "text", ExpressionResultType.Text,
-            "Generate a passphrase from random words", "RandomPassphrase(4, \"-\")",
-            Param("wordCount", "How many words, from 3 to 10."), Param("separator", "The text between words, such as \"-\"."),
+        Function("RandomPassphrase", ExpressionFunctionCategory.Password, nameof(ExpressionMessages.ReturnsText), ExpressionResultType.Text,
+            nameof(ExpressionMessages.FunctionRandomPassphrase), "RandomPassphrase(4, \"-\")",
+            Param("wordCount", nameof(ExpressionMessages.ParamWordCount)), Param("separator", nameof(ExpressionMessages.ParamWordSeparator)),
             isRepeatable: false),
 
         // Multi-valued
-        Function("Count", ExpressionFunctionCategory.MultiValued, "a whole number", ExpressionResultType.Number, "How many values there are: 0 for none",
+        Function("Count", ExpressionFunctionCategory.MultiValued, nameof(ExpressionMessages.ReturnsWholeNumber), ExpressionResultType.Number, nameof(ExpressionMessages.FunctionCount),
             "Count(cs[\"proxyAddresses\"])",
             Values()),
-        Function("Min", ExpressionFunctionCategory.MultiValued, "one of the values", ExpressionResultType.Unknown,
-            "The smallest value: numbers by value, dates by instant, text by ordinal; nothing for no values", "Min(mv[\"Start Dates\"])",
+        Function("Min", ExpressionFunctionCategory.MultiValued, nameof(ExpressionMessages.ReturnsOneOfTheValues), ExpressionResultType.Unknown,
+            nameof(ExpressionMessages.FunctionMin), "Min(mv[\"Start Dates\"])",
             Values()),
-        Function("Max", ExpressionFunctionCategory.MultiValued, "one of the values", ExpressionResultType.Unknown,
-            "The largest value, compared as `Min` compares", "Max(cs[\"employeeNumbers\"])",
+        Function("Max", ExpressionFunctionCategory.MultiValued, nameof(ExpressionMessages.ReturnsOneOfTheValues), ExpressionResultType.Unknown,
+            nameof(ExpressionMessages.FunctionMax), "Max(cs[\"employeeNumbers\"])",
             Values()),
-        Function("Where", ExpressionFunctionCategory.MultiValued, "the values that meet it", ExpressionResultType.Unknown,
-            "The values that meet a [scoping operator](../configuration/scoping-criteria.md#operators), named as the editor shows it (`\"starts with\"`) or as the REST API names it (`\"StartsWith\"`); text compares exactly unless `ignoreCase` is `true`",
+        Function("Where", ExpressionFunctionCategory.MultiValued, nameof(ExpressionMessages.ReturnsValuesThatMeetIt), ExpressionResultType.Unknown,
+            nameof(ExpressionMessages.FunctionWhere),
             "Where(cs[\"proxyAddresses\"], \"starts with\", \"SMTP:\")",
-            Values(), Param("operator", "A scoping operator, such as \"starts with\"."), Param("value", "The value to compare each value with."),
+            Values(), Param("operator", nameof(ExpressionMessages.ParamOperator)), Param("value", nameof(ExpressionMessages.ParamCompareEach)),
             IgnoreCase()),
-        Function("Split", ExpressionFunctionCategory.MultiValued, "several values", ExpressionResultType.Text,
-            "Split a delimited text value into several values, in the order they appear", "Split(cs[\"coursesCompleted\"], \"|\")",
-            Value(), Param("delimiter", "The text between values, such as \"|\".")),
-        Function("Join", ExpressionFunctionCategory.MultiValued, "text", ExpressionResultType.Text,
-            "Combine values into a single delimited text value, in the order they are read", "Join(mv[\"Groups\"], \",\")",
-            Values(), Param("delimiter", "The text to put between values; a comma when left empty.")),
+        Function("Split", ExpressionFunctionCategory.MultiValued, nameof(ExpressionMessages.ReturnsSeveralValues), ExpressionResultType.Text,
+            nameof(ExpressionMessages.FunctionSplit), "Split(cs[\"coursesCompleted\"], \"|\")",
+            Value(), Param("delimiter", nameof(ExpressionMessages.ParamSplitDelimiter))),
+        Function("Join", ExpressionFunctionCategory.MultiValued, nameof(ExpressionMessages.ReturnsText), ExpressionResultType.Text,
+            nameof(ExpressionMessages.FunctionJoin), "Join(mv[\"Groups\"], \",\")",
+            Values(), Param("delimiter", nameof(ExpressionMessages.ParamJoinDelimiter))),
 
         // Account control
-        Function("EnableUser", ExpressionFunctionCategory.AccountControl, "a whole number", ExpressionResultType.Number, "Enable a user account",
+        Function("EnableUser", ExpressionFunctionCategory.AccountControl, nameof(ExpressionMessages.ReturnsWholeNumber), ExpressionResultType.Number, nameof(ExpressionMessages.FunctionEnableUser),
             "EnableUser(cs[\"userAccountControl\"])",
-            Param("uac", "The userAccountControl value.")),
-        Function("DisableUser", ExpressionFunctionCategory.AccountControl, "a whole number", ExpressionResultType.Number, "Disable a user account",
+            Param("uac", nameof(ExpressionMessages.ParamUac))),
+        Function("DisableUser", ExpressionFunctionCategory.AccountControl, nameof(ExpressionMessages.ReturnsWholeNumber), ExpressionResultType.Number, nameof(ExpressionMessages.FunctionDisableUser),
             "DisableUser(cs[\"userAccountControl\"])",
-            Param("uac", "The userAccountControl value.")),
-        Function("SetBit", ExpressionFunctionCategory.AccountControl, "a whole number", ExpressionResultType.Number, "Turn on a specific flag", "SetBit(mv[\"uac\"], 65536)",
-            Param("value", "The number holding the flags."), Param("bit", "The flag's value, such as 65536.")),
-        Function("ClearBit", ExpressionFunctionCategory.AccountControl, "a whole number", ExpressionResultType.Number, "Turn off a specific flag", "ClearBit(mv[\"uac\"], 65536)",
-            Param("value", "The number holding the flags."), Param("bit", "The flag's value, such as 65536.")),
-        Function("HasBit", ExpressionFunctionCategory.AccountControl, "true or false", ExpressionResultType.Boolean, "Check if a specific flag is turned on",
+            Param("uac", nameof(ExpressionMessages.ParamUac))),
+        Function("SetBit", ExpressionFunctionCategory.AccountControl, nameof(ExpressionMessages.ReturnsWholeNumber), ExpressionResultType.Number, nameof(ExpressionMessages.FunctionSetBit), "SetBit(mv[\"uac\"], 65536)",
+            Param("value", nameof(ExpressionMessages.ParamFlagsNumber)), Param("bit", nameof(ExpressionMessages.ParamFlagValueLarge))),
+        Function("ClearBit", ExpressionFunctionCategory.AccountControl, nameof(ExpressionMessages.ReturnsWholeNumber), ExpressionResultType.Number, nameof(ExpressionMessages.FunctionClearBit), "ClearBit(mv[\"uac\"], 65536)",
+            Param("value", nameof(ExpressionMessages.ParamFlagsNumber)), Param("bit", nameof(ExpressionMessages.ParamFlagValueLarge))),
+        Function("HasBit", ExpressionFunctionCategory.AccountControl, nameof(ExpressionMessages.ReturnsTrueOrFalse), ExpressionResultType.Boolean, nameof(ExpressionMessages.FunctionHasBit),
             "HasBit(cs[\"userAccountControl\"], 2)",
-            Param("value", "The number holding the flags."), Param("bit", "The flag's value, such as 2.")),
+            Param("value", nameof(ExpressionMessages.ParamFlagsNumber)), Param("bit", nameof(ExpressionMessages.ParamFlagValueSmall))),
     ];
 
     private static readonly Dictionary<string, ExpressionFunction> ByName =
@@ -184,44 +187,68 @@ public static class ExpressionFunctionCatalogue
     /// <summary>
     /// The reference's name for a category: its section heading, and the editor's group heading.
     /// </summary>
-    public static string CategoryName(ExpressionFunctionCategory category) => category switch
+    public static string CategoryName(ExpressionFunctionCategory category) =>
+        CategoryNameDetail(category)?.ToEnglish() ?? category.ToString();
+
+    /// <summary>
+    /// <see cref="CategoryName"/> as a message, so the portal's Insert function list can head each group in the viewer's
+    /// language; null for a category with no name.
+    /// </summary>
+    public static JimMessage? CategoryNameDetail(ExpressionFunctionCategory category) => category switch
     {
-        ExpressionFunctionCategory.Text => "String Functions",
-        ExpressionFunctionCategory.Pattern => "Pattern Functions",
-        ExpressionFunctionCategory.Conditional => "Conditional Functions",
-        ExpressionFunctionCategory.Conversion => "Conversion Functions",
-        ExpressionFunctionCategory.Date => "Date Functions",
-        ExpressionFunctionCategory.DistinguishedName => "Distinguished Name (DN) Functions",
-        ExpressionFunctionCategory.Password => "Password Generation",
-        ExpressionFunctionCategory.MultiValued => "Multi-Valued Functions",
-        ExpressionFunctionCategory.AccountControl => "Account Control Functions",
-        _ => category.ToString()
+        ExpressionFunctionCategory.Text => Say(nameof(ExpressionMessages.CategoryText)),
+        ExpressionFunctionCategory.Pattern => Say(nameof(ExpressionMessages.CategoryPattern)),
+        ExpressionFunctionCategory.Conditional => Say(nameof(ExpressionMessages.CategoryConditional)),
+        ExpressionFunctionCategory.Conversion => Say(nameof(ExpressionMessages.CategoryConversion)),
+        ExpressionFunctionCategory.Date => Say(nameof(ExpressionMessages.CategoryDate)),
+        ExpressionFunctionCategory.DistinguishedName => Say(nameof(ExpressionMessages.CategoryDistinguishedName)),
+        ExpressionFunctionCategory.Password => Say(nameof(ExpressionMessages.CategoryPassword)),
+        ExpressionFunctionCategory.MultiValued => Say(nameof(ExpressionMessages.CategoryMultiValued)),
+        ExpressionFunctionCategory.AccountControl => Say(nameof(ExpressionMessages.CategoryAccountControl)),
+        _ => null
     };
 
-    private static ExpressionFunction Function(string name, ExpressionFunctionCategory category, string returns, ExpressionResultType resultType, string description,
+    private static JimMessage Say(string key) => JimMessage.Create(ApplicationMessageCatalogues.Expressions, key);
+
+    private static string English(string key) => Say(key).ToEnglish();
+
+    /// <summary>
+    /// A function whose text is held as messages: <see cref="ExpressionFunction.Description"/> and
+    /// <see cref="ExpressionFunction.Returns"/> are the messages' British English, which the documentation and the REST
+    /// API read, and the messages themselves are for the portal.
+    /// </summary>
+    private static ExpressionFunction Build(string name, ExpressionFunctionCategory category, ExpressionFunctionParameter[] parameters,
+        string returnsKey, ExpressionResultType resultType, string descriptionKey, string example, bool isRepeatable) =>
+        new(name, category, parameters, English(returnsKey), resultType, English(descriptionKey), example, isRepeatable)
+        {
+            DescriptionDetail = Say(descriptionKey),
+            ReturnsDetail = Say(returnsKey)
+        };
+
+    private static ExpressionFunction Function(string name, ExpressionFunctionCategory category, string returnsKey, ExpressionResultType resultType, string descriptionKey,
         string example, params ExpressionFunctionParameter[] parameters) =>
-        new(name, category, parameters, returns, resultType, description, example);
+        Build(name, category, parameters, returnsKey, resultType, descriptionKey, example, true);
 
-    private static ExpressionFunction Function(string name, ExpressionFunctionCategory category, string returns, ExpressionResultType resultType, string description,
+    private static ExpressionFunction Function(string name, ExpressionFunctionCategory category, string returnsKey, ExpressionResultType resultType, string descriptionKey,
         string example, bool isRepeatable) =>
-        new(name, category, [], returns, resultType, description, example, isRepeatable);
+        Build(name, category, [], returnsKey, resultType, descriptionKey, example, isRepeatable);
 
-    private static ExpressionFunction Function(string name, ExpressionFunctionCategory category, string returns, ExpressionResultType resultType, string description,
+    private static ExpressionFunction Function(string name, ExpressionFunctionCategory category, string returnsKey, ExpressionResultType resultType, string descriptionKey,
         string example, ExpressionFunctionParameter first, ExpressionFunctionParameter second, bool isRepeatable) =>
-        new(name, category, [first, second], returns, resultType, description, example, isRepeatable);
+        Build(name, category, [first, second], returnsKey, resultType, descriptionKey, example, isRepeatable);
 
-    private static ExpressionFunctionParameter Param(string name, string description, bool isOptional = false) =>
-        new(name, description, isOptional);
+    private static ExpressionFunctionParameter Param(string name, string descriptionKey, bool isOptional = false) =>
+        new(name, English(descriptionKey), isOptional) { DescriptionDetail = Say(descriptionKey) };
 
     private static ExpressionFunctionParameter Value() =>
-        Param("value", "The value to use; each value of a Multi-Valued attribute is used in turn.");
+        Param("value", nameof(ExpressionMessages.ParamValue));
 
     private static ExpressionFunctionParameter Values() =>
-        Param("values", "The values, usually a Multi-Valued attribute such as cs[\"proxyAddresses\"].");
+        Param("values", nameof(ExpressionMessages.ParamValues));
 
     private static ExpressionFunctionParameter Pattern() =>
-        Param("pattern", "A .NET regular expression, matched with a time limit.");
+        Param("pattern", nameof(ExpressionMessages.ParamPattern));
 
     private static ExpressionFunctionParameter IgnoreCase() =>
-        Param("ignoreCase", "true to ignore case; text compares exactly when left out.", isOptional: true);
+        Param("ignoreCase", nameof(ExpressionMessages.ParamIgnoreCase), isOptional: true);
 }

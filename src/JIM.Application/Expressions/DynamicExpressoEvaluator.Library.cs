@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
+using JIM.Models.Localisation;
+using JIM.Application.Resources;
 using System.Text.RegularExpressions;
 using DynamicExpresso;
 using JIM.Application.Servers.Scoping;
@@ -68,7 +71,7 @@ public partial class DynamicExpressoEvaluator
     {
         var regex = CriterionPatterns.Get(PatternText(pattern), caseSensitive: true);
         if (group < 0 || group >= regex.GetGroupNumbers().Length)
-            throw new ExpressionEvaluationException($"RegexExtract's pattern has no group {group}.");
+            throw new ExpressionEvaluationException(ExpressionMessage.Of(nameof(ExpressionMessages.RegexNoSuchGroup), ExpressionMessage.Digits(group)));
 
         return WithinTimeLimit(() => ExpressionValueSets.Map(input, value =>
         {
@@ -117,9 +120,8 @@ public partial class DynamicExpressoEvaluator
         }
         catch (RegexMatchTimeoutException)
         {
-            throw new ExpressionEvaluationException(
-                $"The pattern ran past its time limit of {CriterionPatterns.MatchTimeout.TotalMilliseconds:0} ms on one of the values; " +
-                "simplify the pattern (nested repetition such as (a+)+ is the usual cause).");
+            throw new ExpressionEvaluationException(ExpressionMessage.Of(nameof(ExpressionMessages.PatternTimedOut),
+                CriterionPatterns.MatchTimeout.TotalMilliseconds.ToString("0", CultureInfo.InvariantCulture)));
         }
     }
 }
