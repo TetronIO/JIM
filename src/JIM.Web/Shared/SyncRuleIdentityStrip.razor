@@ -18,7 +18,7 @@
 <MudPaper Outlined="true" Class="jim-identity-strip d-inline-flex align-center gap-3 px-4 py-2">
     @(IsOutbound ? MetaverseChip : ConnectedSystemChip)
     <MudTooltip Text="@FlowTooltip" Arrow="true" Placement="Placement.Top">
-        <span class="@($"jim-identity-flow {FlowClass}")">
+        <span class="@FlowSpanClass">
             <span class="jim-identity-flow-line"></span>
             <span class="jim-identity-flow-label">@DirectionLabel</span>
             <span class="jim-identity-flow-line"></span>
@@ -27,7 +27,7 @@
     </MudTooltip>
     @(IsOutbound ? ConnectedSystemChip : MetaverseChip)
     <MudDivider Vertical="true" FlexItem="true" />
-    <span class="mud-text-secondary">in</span>
+    <span class="mud-text-secondary">@SyncRuleText.IdentityIn</span>
     <MudLink Href="@ConnectedSystemHref" Class="jim-identity-strip-system">
         <MudIcon Icon="@Icons.Material.Filled.Power" Size="Size.Small" />
         @ConnectedSystemName
@@ -46,7 +46,7 @@
             <ChildContent>
                 <MudChip T="string" Color="Color.Info" Variant="Variant.Text" Href="@ConnectedSystemHref" Class="ma-0"
                          data-testid="jim-awaiting-synchronisation-chip">
-                    Awaiting synchronisation
+                    @SyncRuleText.IdentityAwaitingChip
                 </MudChip>
             </ChildContent>
         </MudTooltip>
@@ -117,27 +117,32 @@
     {
         get
         {
-            var changes = AwaitingSynchronisationChangeCount == 1
-                ? "1 saved change reaches"
-                : $"{AwaitingSynchronisationChangeCount:N0} saved changes reach";
-            var objects = string.IsNullOrWhiteSpace(ConnectedSystemObjectTypeName) ? "object" : $"{ConnectedSystemObjectTypeName} object";
-            return $"{changes} existing objects at the next synchronisation of {ConnectedSystemName}, which processes every {objects}.";
+            var culture = System.Globalization.CultureInfo.CurrentCulture;
+            var objects = string.IsNullOrWhiteSpace(ConnectedSystemObjectTypeName)
+                ? SyncRuleText.IdentityObjectGeneric
+                : string.Format(culture, SyncRuleText.IdentityObjectOfType, ConnectedSystemObjectTypeName);
+            return AwaitingSynchronisationChangeCount == 1
+                ? string.Format(culture, SyncRuleText.IdentityAwaitingOne, ConnectedSystemName, objects)
+                : string.Format(culture, SyncRuleText.IdentityAwaitingMany, AwaitingSynchronisationChangeCount, ConnectedSystemName, objects);
         }
     }
 
-    private string DirectionLabel => IsOutbound ? "Outbound" : "Inbound";
+    private string DirectionLabel => IsOutbound ? SyncRuleText.DirectionOutbound : SyncRuleText.DirectionInbound;
 
     private RenderFragment MetaverseChip =>
-        @<ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@MetaverseObjectTypeName" Tooltip="Metaverse Object Type" Class="ma-0" />;
+        @<ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@MetaverseObjectTypeName" Tooltip="@SyncRuleText.MetaverseObjectTypeLabel" Class="ma-0" />;
 
     private RenderFragment ConnectedSystemChip =>
-        @<ObjectChip Kind="ObjectChipKind.ConnectedSystemObject" TypeName="@ConnectedSystemObjectTypeName" Tooltip="Connected System Object Type" Class="ma-0" />;
+        @<ObjectChip Kind="ObjectChipKind.ConnectedSystemObject" TypeName="@ConnectedSystemObjectTypeName" Tooltip="@SyncRuleText.ConnectedSystemObjectTypeLabel" Class="ma-0" />;
 
     private string FlowClass => IsOutbound ? "jim-identity-flow-outbound" : "jim-identity-flow-inbound";
+
+    // i18n: exempt - CSS class names, not text.
+    private string FlowSpanClass => $"jim-identity-flow {FlowClass}";
 
     /// <summary>
     /// The same wording the create form's direction arrow carries, so the two states of the page explain the
     /// arrow identically.
     /// </summary>
-    private string FlowTooltip => IsOutbound ? "Exports to the Connected System" : "Imports to the Metaverse";
+    private string FlowTooltip => IsOutbound ? SyncRuleText.ExportsToConnectedSystem : SyncRuleText.ImportsToMetaverse;
 }

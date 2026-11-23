@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Preview;
+using JIM.Web.Resources;
 using JIM.Web.Shared;
 using MudBlazor;
 
@@ -26,7 +27,7 @@ public class PreviewDataSetSizePrompt(IDialogService dialogService) : IPreviewDa
             { x => x.EstimatedDuration, estimate.EstimatedDuration }
         };
 
-        var dialog = await _dialogService.ShowAsync<PreviewDataSetSizeDialog>("How much detail should this preview keep?", parameters);
+        var dialog = await _dialogService.ShowAsync<PreviewDataSetSizeDialog>(SyncRuleText.PreviewDataSetSizeTitle, parameters);
         var result = await dialog.Result;
 
         // Cancelled, dismissed, or closed without a value: all of them mean the administrator did not agree to run

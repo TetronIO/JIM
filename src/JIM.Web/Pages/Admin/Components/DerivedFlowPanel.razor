@@ -13,17 +13,17 @@
 {
     <MudPaper Outlined="true" Class="pa-3 mt-3" data-testid="jim-derived-flow-panel">
         <div class="d-flex align-center flex-wrap gap-2">
-            <MudText Typo="Typo.subtitle2">Derived Attribute Flow</MudText>
+            <MudText Typo="Typo.subtitle2">@SyncRuleText.DerivedPanelHeading</MudText>
             @if (derived.Step is { } step)
             {
                 <MudChip T="string" Variant="Variant.Text" Color="Color.Secondary">
-                    <span data-testid="jim-derived-flow-panel-step">step @step of @derived.StepCount</span>
+                    <span data-testid="jim-derived-flow-panel-step">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.DerivedStepOf, step, derived.StepCount)</span>
                 </MudChip>
             }
         </div>
 
         <div class="d-flex align-center flex-wrap gap-1 mt-2">
-            <MudText>Reads</MudText>
+            <MudText>@SyncRuleText.DerivedReadsLabel</MudText>
             @foreach (var input in derived.MetaverseInputs)
             {
                 <AttributeChip @key="input" Kind="AttributeChipKind.Metaverse" Name="@input" />
@@ -39,6 +39,7 @@
                     var chainStep = derived.Steps[i];
                     var isCurrent = chainStep.Step == derived.Step;
                     var label = $"{chainStep.Step} {DerivedFlowWording.JoinNames(chainStep.AttributeNames)}";
+                    // The step number and the attribute names are data; only the words between them are translated.
                     @if (i > 0)
                     {
                         <MudText Class="mud-text-secondary" aria-hidden="true">→</MudText>
@@ -69,7 +70,7 @@
             {
                 <MudText @key="warning">@warning</MudText>
             }
-            <MudText Class="mt-1">You can still save it.</MudText>
+            <MudText Class="mt-1">@SyncRuleText.DerivedCanStillSave</MudText>
         </MudAlert>
     }
 
@@ -79,8 +80,8 @@
             @if (derived.Cycle is { } cycle)
             {
                 <MudText>
-                    <strong>This Attribute Flow cannot be saved because it creates a loop.</strong>
-                    Each attribute below is worked out from the one before it, so none can be calculated first:
+                    @((MarkupString)SyncRuleText.DerivedLoopHeading)
+                    @SyncRuleText.DerivedLoopExplain
                 </MudText>
                 <ul class="mt-1 mb-1">
                     @foreach (var link in DerivedFlowWording.CycleLinksInReadingOrder(cycle))
@@ -88,7 +89,7 @@
                         <li @key="link.MetaverseAttributeName">@DerivedFlowWording.DescribeCycleLink(link)</li>
                     }
                 </ul>
-                <MudText>Change one of these expressions so it stops reading the next attribute in the loop.</MudText>
+                <MudText>@SyncRuleText.DerivedLoopChange</MudText>
             }
             @foreach (var error in derived.Errors.Where(error => derived.Cycle == null || error != derived.Cycle.Message))
             {
@@ -112,16 +113,23 @@
     [Parameter]
     public string? ConnectedSystemName { get; set; }
 
-    private string PossessiveConnectedSystemName =>
-        string.IsNullOrWhiteSpace(ConnectedSystemName) ? "this Connected System's" : $"{ConnectedSystemName}'s";
+    /// <summary>Whether the Connected System's name is known; the sentences name it, or fall back to saying "this one".</summary>
+    private bool HasConnectedSystemName => !string.IsNullOrWhiteSpace(ConnectedSystemName);
 
-    private string SequencingHelper(DerivedFlowAnalysis derived) =>
-        $"When another Connected System changes {DerivedFlowWording.JoinNames(derived.MetaverseInputs, "or")}, JIM marks this " +
-        $"object so {PossessiveConnectedSystemName} next synchronisation picks it up. Synchronise the source first for the " +
-        "value to be right in the same cycle.";
+    private string SequencingHelper(DerivedFlowAnalysis derived) => HasConnectedSystemName
+        ? string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.DerivedSequencingNamed,
+            DerivedFlowWording.JoinNames(derived.MetaverseInputs, "or"), ConnectedSystemName)
+        : string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.DerivedSequencingFallback,
+            DerivedFlowWording.JoinNames(derived.MetaverseInputs, "or"));
 
-    private string ReadsSentenceEnding(DerivedFlowAnalysis derived) => derived.Step == null
-        ? "from the Metaverse."
-        : $"from the Metaverse. JIM runs it after {DerivedFlowWording.ResolvedPhrase(derived.MetaverseInputs)}, in " +
-          $"{PossessiveConnectedSystemName} own synchronisation.";
+    private string ReadsSentenceEnding(DerivedFlowAnalysis derived)
+    {
+        if (derived.Step == null)
+            return SyncRuleText.DerivedFromMetaverse;
+
+        var resolved = DerivedFlowWording.ResolvedPhrase(derived.MetaverseInputs);
+        return HasConnectedSystemName
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.DerivedRunsAfterOwnSyncNamed, resolved, ConnectedSystemName)
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.DerivedRunsAfterOwnSyncFallback, resolved);
+    }
 }

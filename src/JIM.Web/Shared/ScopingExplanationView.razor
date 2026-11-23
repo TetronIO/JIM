@@ -18,7 +18,7 @@
 
     @if (!Explanation.HasCriteria || Explanation.Groups.Count == 0)
     {
-        <div class="jim-scoping-no-criteria" data-testid="jim-scoping-no-criteria">In scope: no scoping criteria.</div>
+        <div class="jim-scoping-no-criteria" data-testid="jim-scoping-no-criteria">@SyncRuleText.ScopingNoCriteria</div>
     }
     else if (Explanation.Groups.Count == 1)
     {
@@ -28,7 +28,7 @@
     {
         @* A rule's top-level groups are alternatives: the object is in scope when any one of them is met. *@
         <div class="jim-scoping-alternatives" data-testid="jim-scoping-alternatives">
-            <div class="jim-scoping-group-heading">Any one of these groups</div>
+            <div class="jim-scoping-group-heading">@SyncRuleText.ScopingAnyOfGroups</div>
             @foreach (var group in Explanation.Groups)
             {
                 @RenderGroup(group)
@@ -61,7 +61,7 @@
                     @if (criterion.ExpressionInputs.Count > 0)
                     {
                         @* What an expression criterion was given, beside what it computed (#2054). *@
-                        <ul class="jim-scoping-expression-inputs" aria-label="Attributes the expression read">
+                        <ul class="jim-scoping-expression-inputs" aria-label="@SyncRuleText.ScopingExpressionReadAria">
                             @foreach (var input in criterion.ExpressionInputs)
                             {
                                 <li data-testid="jim-scoping-expression-input" data-accessor="@input.Accessor"
@@ -87,20 +87,22 @@
     private static string DescribeHeld(ScopingExpressionInputExplanation input)
     {
         if (input.Masked)
-            return "held a hidden value";
+            return SyncRuleText.ScopingHeldHidden;
         if (input.ValueCount == 0)
-            return "held no value";
+            return SyncRuleText.ScopingHeldNone;
 
-        var listed = string.Join(", ", input.Values.Select(value => $"\"{value}\""));
+        var listed = string.Join(SyncRuleText.ListSeparator, input.Values.Select(value => $"\"{value}\""));
         var unlisted = input.ValueCount - input.Values.Count;
-        return unlisted > 0 ? $"held {listed} and {unlisted} more" : $"held {listed}";
+        return unlisted > 0
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.ScopingHeldMore, listed, unlisted)
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.ScopingHeld, listed);
     }
 
     private static string OutcomeLabel(ScopingRuleOutcome outcome) => outcome switch
     {
-        ScopingRuleOutcome.InScope => "In scope",
-        ScopingRuleOutcome.OutOfScope => "Not in scope",
-        _ => "Cannot be evaluated"
+        ScopingRuleOutcome.InScope => SyncRuleText.ExpectInScope,
+        ScopingRuleOutcome.OutOfScope => SyncRuleText.ScopingNotInScope,
+        _ => SyncRuleText.ScopingCannotEvaluate
     };
 
     private static Color OutcomeColour(ScopingRuleOutcome outcome) => outcome switch
@@ -112,10 +114,10 @@
 
     private static (string Icon, Color Colour, string Label) CriterionOutcome(ScopingCriterionOutcome outcome) => outcome switch
     {
-        ScopingCriterionOutcome.Met => (Icons.Material.Outlined.CheckCircle, Color.Success, "Met"),
-        ScopingCriterionOutcome.NotMet => (Icons.Material.Outlined.Cancel, Color.Error, "Not met"),
-        ScopingCriterionOutcome.NoValue => (Icons.Material.Outlined.RemoveCircleOutline, Color.Warning, "No value, so not met"),
-        ScopingCriterionOutcome.AttributeMissing => (Icons.Material.Outlined.HelpOutline, Color.Error, "References no attribute"),
-        _ => (Icons.Material.Outlined.ErrorOutline, Color.Error, "Invalid; cannot be evaluated")
+        ScopingCriterionOutcome.Met => (Icons.Material.Outlined.CheckCircle, Color.Success, SyncRuleText.ScopingMet),
+        ScopingCriterionOutcome.NotMet => (Icons.Material.Outlined.Cancel, Color.Error, SyncRuleText.ScopingNotMet),
+        ScopingCriterionOutcome.NoValue => (Icons.Material.Outlined.RemoveCircleOutline, Color.Warning, SyncRuleText.ScopingNoValueNotMet),
+        ScopingCriterionOutcome.AttributeMissing => (Icons.Material.Outlined.HelpOutline, Color.Error, SyncRuleText.ScopingReferencesNone),
+        _ => (Icons.Material.Outlined.ErrorOutline, Color.Error, SyncRuleText.ScopingInvalid)
     };
 }
