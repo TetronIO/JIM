@@ -822,4 +822,576 @@
     <value>Edit Run Profile</value>
     <comment>Button that opens the Run Profile to change its limits</comment>
   </data>
+  <data name="DeleteSystemLoadingText" xml:space="preserve">
+    <value>Loading deletion preview...</value>
+    <comment>Shown while the deletion impact preview loads</comment>
+  </data>
+  <data name="DeleteSystemIrreversible" xml:space="preserve">
+    <value>This action is permanent and cannot be undone.</value>
+    <comment>Warning at the top of the delete confirmation</comment>
+  </data>
+  <data name="DeleteSystemConfirmButton" xml:space="preserve">
+    <value>Delete Permanently</value>
+    <comment>Confirm button of the delete Connected System dialog</comment>
+  </data>
+  <data name="DeleteSystemBusy" xml:space="preserve">
+    <value>Deleting...</value>
+    <comment>Confirm button text while the deletion runs</comment>
+  </data>
+  <data name="DeleteSystemFencedAttached" xml:space="preserve">
+    <value>A Synchronised Deprovisioning run for this system is already queued or running. {0} attaches to it, resuming from its checkpoint; {1} abandons the remaining deprovisioning and completes the deletion at once.</value>
+    <comment>Notice when a synchronised deprovisioning is already running; {0} and {1} are the two deletion options</comment>
+  </data>
+  <data name="DeleteSystemFencedWarning" xml:space="preserve">
+    <value>A previous Synchronised Deprovisioning run stopped before completing and this system remains fenced. {0} resumes from where the run stopped; {1} finishes the deletion at once, keeping the remaining contributed data.</value>
+    <comment>Warning when a synchronised deprovisioning stopped; {0} and {1} are the two deletion options</comment>
+  </data>
+  <data name="DeleteSystemDeprovisionRecommended" xml:space="preserve">
+    <value>{0} (recommended)</value>
+    <comment>Radio option label; {0} is the deprovision option name</comment>
+  </data>
+  <data name="DeleteSystemDeprovisionDetail" xml:space="preserve">
+    <value>Each of this system's objects is processed as though it had disconnected through a normal synchronisation: contributed values are recalled or handed to surviving contributors, Metaverse Object deletion rules are evaluated for objects losing their last connector, and downstream systems receive corrective exports. Runs as a queued operation you can monitor from the Operations page; deleting the system is its final step.</value>
+    <comment>Explains what the deprovision option does</comment>
+  </data>
+  <data name="DeleteSystemImmediateDetail" xml:space="preserve">
+    <value>The system is removed at once. Values it contributed remain in place with no record of where they came from; Metaverse Object deletion rules are evaluated in bulk for objects losing their last connector, but no per-object synchronisation processing occurs; downstream systems are not corrected.</value>
+    <comment>Explains what the delete-immediately option does</comment>
+  </data>
+  <data name="DeleteSystemImmediateWarning" xml:space="preserve">
+    <value>Kept values become permanently unmanaged, and downstream systems keep whatever this system last exported. This cannot be reversed.</value>
+    <comment>Warning shown when delete-immediately is chosen</comment>
+  </data>
+  <data name="DeleteSystemPreviewHeading" xml:space="preserve">
+    <value>Deletion impact preview</value>
+    <comment>Heading of the deletion impact preview panel</comment>
+  </data>
+  <data name="DeleteSystemPreviewChipRunning" xml:space="preserve">
+    <value>Running</value>
+    <comment>Status chip of a running preview</comment>
+  </data>
+  <data name="DeleteSystemPreviewChipComplete" xml:space="preserve">
+    <value>Complete</value>
+    <comment>Status chip of a finished preview</comment>
+  </data>
+  <data name="DeleteSystemPreviewChipStale" xml:space="preserve">
+    <value>Stale</value>
+    <comment>Status chip of a preview that something has overtaken</comment>
+  </data>
+  <data name="DeleteSystemPreviewChipDidNotFinish" xml:space="preserve">
+    <value>Did not finish</value>
+    <comment>Status chip of a preview that did not finish</comment>
+  </data>
+  <data name="DeleteSystemPreviewChipNotPreviewed" xml:space="preserve">
+    <value>Not previewed</value>
+    <comment>Status chip when no preview has been run</comment>
+  </data>
+  <data name="DeleteSystemRunningPreview" xml:space="preserve">
+    <value>A preview is still running. Deleting now cancels it, and the deletion will record that no preview informed it.</value>
+    <comment>Preview panel while the preview runs</comment>
+  </data>
+  <data name="DeleteSystemWaitForPreview" xml:space="preserve">
+    <value>Wait for the preview</value>
+    <comment>Button that returns to the preview as it runs</comment>
+  </data>
+  <data name="DeleteSystemImmediatePreviewNote" xml:space="preserve">
+    <value>This preview describes deprovisioning through synchronisation. Deleting immediately clears none of these values and sends no exports; Metaverse Objects whose last connector is this system still become eligible for deletion under their Object Type's deletion rule.</value>
+    <comment>Preview note when delete-immediately is chosen</comment>
+  </data>
+  <data name="DeleteSystemNoChange" xml:space="preserve">
+    <value>Deleting this system would change nothing outside it.</value>
+    <comment>Preview result when nothing outside the system would change</comment>
+  </data>
+  <data name="DeleteSystemMoreLines" xml:space="preserve">
+    <value>The full preview lists {0} more.</value>
+    <comment>Preview note for the verdict lines not shown; {0} is the number not shown</comment>
+  </data>
+  <data name="DeleteSystemOpenFullPreview" xml:space="preserve">
+    <value>Open full preview</value>
+    <comment>Button that opens the full preview</comment>
+  </data>
+  <data name="DeleteSystemRecordedOnActivity" xml:space="preserve">
+    <value>Recorded on the deletion's Activity</value>
+    <comment>Caption saying the preview is recorded on the deletion's Activity</comment>
+  </data>
+  <data name="DeleteSystemSinceThisPreviewRan" xml:space="preserve">
+    <value>since this preview ran:</value>
+    <comment>Joins the reason a preview is stale to the stale reason's details</comment>
+  </data>
+  <data name="DeleteSystemStaleBody" xml:space="preserve">
+    <value>It may no longer describe what deleting would do, so run it again for a current answer; a deletion now records that the preview informing it was out of date.</value>
+    <comment>Explains a stale preview</comment>
+  </data>
+  <data name="DeleteSystemRunAgain" xml:space="preserve">
+    <value>Run again</value>
+    <comment>Button that runs a stale preview again</comment>
+  </data>
+  <data name="DeleteSystemDidNotFinishBody" xml:space="preserve">
+    <value>The last preview did not finish, so it says nothing about what deleting would do. The deletion will record that no preview informed it.</value>
+    <comment>Explains a preview that did not finish</comment>
+  </data>
+  <data name="DeleteSystemPreviewAgain" xml:space="preserve">
+    <value>Preview again</value>
+    <comment>Button that runs a preview that did not finish</comment>
+  </data>
+  <data name="DeleteSystemDefaultBody" xml:space="preserve">
+    <value>See which values would be cleared or taken over by another Connected System, and what would be exported, before you delete. The deletion's Activity will record that it went ahead without a preview.</value>
+    <comment>Invites the administrator to preview before deleting</comment>
+  </data>
+  <data name="DeleteSystemPreviewFirst" xml:space="preserve">
+    <value>Preview first</value>
+    <comment>Button that runs the first preview</comment>
+  </data>
+  <data name="DeleteSystemBackgroundJob" xml:space="preserve">
+    <value>Due to the size of this system, deletion will run as a background job.</value>
+    <comment>Notice when deletion runs as a background job</comment>
+  </data>
+  <data name="DeleteSystemEstimatedTime" xml:space="preserve">
+    <value>Estimated time: {0}</value>
+    <comment>Estimated deletion time; {0} is a duration hh:mm:ss</comment>
+  </data>
+  <data name="DeleteSystemChangeHistory" xml:space="preserve">
+    <value>Delete change history for deleted objects</value>
+    <comment>Checkbox label</comment>
+  </data>
+  <data name="DeleteSystemChangeHistoryHelp" xml:space="preserve">
+    <value>When enabled, all change history records for the deleted Connected System Objects will also be deleted. Leave unchecked to preserve the audit trail.</value>
+    <comment>Caption under the change history checkbox</comment>
+  </data>
+  <data name="DeleteSystemReason" xml:space="preserve">
+    <value>Reason (optional)</value>
+    <comment>Label of the change reason field</comment>
+  </data>
+  <data name="DeleteSystemGroupRemoved" xml:space="preserve">
+    <value>Removed with the system</value>
+    <comment>Impact group: objects that the deletion removes</comment>
+  </data>
+  <data name="DeleteSystemGroupAffected" xml:space="preserve">
+    <value>Affected, not removed</value>
+    <comment>Impact group: objects the deletion affects but leaves in place</comment>
+  </data>
+  <data name="DeleteSystemSubgroupMetaverseObjects" xml:space="preserve">
+    <value>Metaverse Objects</value>
+    <comment>Impact subgroup for Metaverse Objects</comment>
+  </data>
+  <data name="DeleteSystemImpactConnectedSystemObjects" xml:space="preserve">
+    <value>Connected System Objects</value>
+    <comment>Impact count label</comment>
+  </data>
+  <data name="DeleteSystemImpactSyncRules" xml:space="preserve">
+    <value>Synchronisation Rules</value>
+    <comment>Impact count label; Synchronisation Rule is a glossary term</comment>
+  </data>
+  <data name="DeleteSystemImpactRunProfiles" xml:space="preserve">
+    <value>Run Profiles</value>
+    <comment>Impact count label</comment>
+  </data>
+  <data name="DeleteSystemImpactPartitions" xml:space="preserve">
+    <value>Partitions</value>
+    <comment>Impact count label</comment>
+  </data>
+  <data name="DeleteSystemImpactContainers" xml:space="preserve">
+    <value>Containers</value>
+    <comment>Impact count label</comment>
+  </data>
+  <data name="DeleteSystemImpactPendingExports" xml:space="preserve">
+    <value>Pending Exports</value>
+    <comment>Impact count label</comment>
+  </data>
+  <data name="DeleteSystemImpactJoined" xml:space="preserve">
+    <value>Joined</value>
+    <comment>Impact count label for Metaverse Objects joined to the system</comment>
+  </data>
+  <data name="DeleteSystemImpactJoinedNote" xml:space="preserve">
+    <value>disconnected from this system; they stay in the Metaverse unless this was their last connector, below</value>
+    <comment>Note on the joined count</comment>
+  </data>
+  <data name="DeleteSystemImpactContributed" xml:space="preserve">
+    <value>Contributed attribute values</value>
+    <comment>Impact count label</comment>
+  </data>
+  <data name="DeleteSystemImpactContributedNote" xml:space="preserve">
+    <value>recalled or kept per the choice above</value>
+    <comment>Note on the contributed values count</comment>
+  </data>
+  <data name="DeleteSystemImpactEligible" xml:space="preserve">
+    <value>Eligible for deletion rules</value>
+    <comment>Impact count label for Metaverse Objects whose deletion rule applies</comment>
+  </data>
+  <data name="DeleteSystemImpactEligibleNote" xml:space="preserve">
+    <value>this system is their last connector; their Object Type's deletion rule decides</value>
+    <comment>Note on the eligible-for-deletion count</comment>
+  </data>
+  <data name="DeleteSystemImpactActivities" xml:space="preserve">
+    <value>Activities</value>
+    <comment>Impact count label</comment>
+  </data>
+  <data name="DeleteSystemImpactActivitiesNote" xml:space="preserve">
+    <value>kept: the audit history of what this system did</value>
+    <comment>Note on the Activities count</comment>
+  </data>
+  <data name="DeleteSystemDialogTitle" xml:space="preserve">
+    <value>Delete "{0}" Connected System</value>
+    <comment>Dialog title; {0} is the Connected System's name</comment>
+  </data>
+  <data name="DeleteSystemFailed" xml:space="preserve">
+    <value>Failed to delete: {0}</value>
+    <comment>Snackbar when the deletion fails; {0} is the reason</comment>
+  </data>
+  <data name="DeleteSystemDeleted" xml:space="preserve">
+    <value>Connected System has been deleted.</value>
+    <comment>Snackbar after an immediate deletion</comment>
+  </data>
+  <data name="DeleteSystemDeprovisioningQueued" xml:space="preserve">
+    <value>Deprovisioning queued: {0} objects will be processed before {1} is deleted.</value>
+    <comment>Snackbar after a deprovisioning is queued; {0} is the object count, {1} the Connected System's name</comment>
+  </data>
+  <data name="DeleteSystemQueuedBackground" xml:space="preserve">
+    <value>Deletion has been queued as a background job. You can monitor progress in the Operations view.</value>
+    <comment>Snackbar after an immediate deletion is queued</comment>
+  </data>
+  <data name="DeleteSystemQueuedAfterSync" xml:space="preserve">
+    <value>A sync operation is running. Deletion will proceed after it completes.</value>
+    <comment>Snackbar when deletion waits for a running synchronisation</comment>
+  </data>
+  <data name="DeleteSystemError" xml:space="preserve">
+    <value>An error occurred: {0}</value>
+    <comment>Snackbar on an unexpected error; {0} is the message</comment>
+  </data>
+  <data name="PwPanelChannelHeading" xml:space="preserve">
+    <value>Password Channel</value>
+    <comment>Heading of the password channel check panel and its info popover title</comment>
+  </data>
+  <data name="PwPanelChannelInfo" xml:space="preserve">
+    <value>Checks whether JIM would be able to set a password on this Connected System. Nothing is written and no password is set: there is no way to prove a password set works without performing one, so this checks everything around it instead, which is where most failures occur.</value>
+    <comment>Info popover text of the password channel check</comment>
+  </data>
+  <data name="PwPanelSettingsFirst" xml:space="preserve">
+    <value>Complete this Connected System's connection settings first, on the Settings tab. JIM needs them to connect before it can check anything.</value>
+    <comment>Info alert when the connection settings are missing or invalid</comment>
+  </data>
+  <data name="PwPanelChecking" xml:space="preserve">
+    <value>Checking</value>
+    <comment>Text beside the spinner while the check runs</comment>
+  </data>
+  <data name="PwPanelCheckButton" xml:space="preserve">
+    <value>Check Password Channel</value>
+    <comment>Button that runs the password channel check</comment>
+  </data>
+  <data name="PwPanelReadAt" xml:space="preserve">
+    <value>Checked {0}. This reflects the Connected System at that moment only, and is not stored.</value>
+    <comment>Caption under the check result; {0} is how long ago it ran</comment>
+  </data>
+  <data name="PwPanelThisSystem" xml:space="preserve">
+    <value>this Connected System</value>
+    <comment>Stands in for the system's name in the check summary when it has none</comment>
+  </data>
+  <data name="PwPanelOutcomeReady" xml:space="preserve">
+    <value>Everything JIM can check about setting passwords on {0} looks right.</value>
+    <comment>Check summary when everything is ready; {0} names the system</comment>
+  </data>
+  <data name="PwPanelOutcomeReadyWarnings" xml:space="preserve">
+    <value>JIM can set passwords on {0}, but something below should be a deliberate choice.</value>
+    <comment>Check summary when ready with warnings; {0} names the system</comment>
+  </data>
+  <data name="PwPanelOutcomeInconclusive" xml:space="preserve">
+    <value>JIM could not establish everything it needs to about {0}. Setting a password may still work.</value>
+    <comment>Check summary when the check could not conclude; {0} names the system</comment>
+  </data>
+  <data name="PwPanelOutcomeFailed" xml:space="preserve">
+    <value>Setting passwords on {0} will not work until the problems below are addressed.</value>
+    <comment>Check summary when setting passwords will not work; {0} names the system</comment>
+  </data>
+  <data name="PwPanelCheckConnection" xml:space="preserve">
+    <value>Connection</value>
+    <comment>Name of the connection check</comment>
+  </data>
+  <data name="PwPanelCheckEncryption" xml:space="preserve">
+    <value>Encryption</value>
+    <comment>Name of the encryption check</comment>
+  </data>
+  <data name="PwPanelCheckMechanism" xml:space="preserve">
+    <value>Password mechanism</value>
+    <comment>Name of the password mechanism check</comment>
+  </data>
+  <data name="PwPanelCheckResetRights" xml:space="preserve">
+    <value>Password reset rights</value>
+    <comment>Name of the password reset rights check</comment>
+  </data>
+  <data name="PwPanelCheckPolicy" xml:space="preserve">
+    <value>Password policy</value>
+    <comment>Name of the password policy check</comment>
+  </data>
+  <data name="PwPanelNotConfigured" xml:space="preserve">
+    <value>This Connected System is not configured enough to check yet. Complete its settings first.</value>
+    <comment>Snackbar when a check is attempted on an incompletely configured system</comment>
+  </data>
+  <data name="PwPanelPolicyHeading" xml:space="preserve">
+    <value>Password Policy</value>
+    <comment>Heading of the password policy panel and its info popover title</comment>
+  </data>
+  <data name="PwPanelPolicyInfo" xml:space="preserve">
+    <value>The password rules this Connected System enforces, read when the schema was last retrieved. JIM uses them to pre-fill the initial password settings on a Synchronisation Rule, so the rules do not have to be retyped.</value>
+    <comment>Info popover text of the password policy panel</comment>
+  </data>
+  <data name="PwPanelMinimumLength" xml:space="preserve">
+    <value>Minimum length</value>
+    <comment>Row label in the policy table</comment>
+  </data>
+  <data name="PwPanelCharacters" xml:space="preserve">
+    <value>{0} characters</value>
+    <comment>Minimum length value; {0} is the number</comment>
+  </data>
+  <data name="PwPanelComplexity" xml:space="preserve">
+    <value>Complexity</value>
+    <comment>Row label in the policy table</comment>
+  </data>
+  <data name="PwPanelRequired" xml:space="preserve">
+    <value>Required</value>
+    <comment>Complexity value when required</comment>
+  </data>
+  <data name="PwPanelNotRequired" xml:space="preserve">
+    <value>Not required</value>
+    <comment>Complexity value when not required</comment>
+  </data>
+  <data name="PwPanelComplexityDetail" xml:space="preserve">
+    <value>A password must use at least {0} of the {1} character categories: {2}.</value>
+    <comment>Complexity detail; {0} is the number required, {1} the number of categories, {2} their names</comment>
+  </data>
+  <data name="PwPanelCategoryUppercase" xml:space="preserve">
+    <value>uppercase</value>
+    <comment>Name of a character category in the complexity detail</comment>
+  </data>
+  <data name="PwPanelCategoryLowercase" xml:space="preserve">
+    <value>lowercase</value>
+    <comment>Name of a character category in the complexity detail</comment>
+  </data>
+  <data name="PwPanelCategoryDigits" xml:space="preserve">
+    <value>digits</value>
+    <comment>Name of a character category in the complexity detail</comment>
+  </data>
+  <data name="PwPanelCategorySymbols" xml:space="preserve">
+    <value>symbols</value>
+    <comment>Name of a character category in the complexity detail</comment>
+  </data>
+  <data name="PwPanelCategoryLettersWithoutCase" xml:space="preserve">
+    <value>letters without case</value>
+    <comment>Name of a character category in the complexity detail</comment>
+  </data>
+  <data name="PwPanelHistory" xml:space="preserve">
+    <value>Password history</value>
+    <comment>Row label in the policy table</comment>
+  </data>
+  <data name="PwPanelRememberedOne" xml:space="preserve">
+    <value>{0} remembered</value>
+    <comment>Password history value for one remembered password; {0} is the number</comment>
+  </data>
+  <data name="PwPanelRememberedOther" xml:space="preserve">
+    <value>{0} remembered</value>
+    <comment>Password history value for several remembered passwords; {0} is the number</comment>
+  </data>
+  <data name="PwPanelMaxAge" xml:space="preserve">
+    <value>Maximum password age</value>
+    <comment>Row label in the policy table</comment>
+  </data>
+  <data name="PwPanelMinAge" xml:space="preserve">
+    <value>Minimum password age</value>
+    <comment>Row label in the policy table</comment>
+  </data>
+  <data name="PwPanelNoMaxAge" xml:space="preserve">
+    <value>Passwords do not expire</value>
+    <comment>Maximum age value when there is no limit</comment>
+  </data>
+  <data name="PwPanelNoMinAge" xml:space="preserve">
+    <value>A password can be changed straight away</value>
+    <comment>Minimum age value when there is no minimum</comment>
+  </data>
+  <data name="PwPanelDayOne" xml:space="preserve">
+    <value>{0} day</value>
+    <comment>Duration of one day; {0} is the number</comment>
+  </data>
+  <data name="PwPanelDayOther" xml:space="preserve">
+    <value>{0} days</value>
+    <comment>Duration of several days; {0} is the number</comment>
+  </data>
+  <data name="PwPanelHours" xml:space="preserve">
+    <value>{0} hours</value>
+    <comment>Duration in hours; {0} is the number, with up to one decimal place</comment>
+  </data>
+  <data name="PwPanelMinutes" xml:space="preserve">
+    <value>{0} minutes</value>
+    <comment>Duration in minutes; {0} is the number, with up to one decimal place</comment>
+  </data>
+  <data name="PwPanelFurtherChecks" xml:space="preserve">
+    <value>The directory applies further checks JIM cannot see, so a password satisfying everything above can still be refused.</value>
+    <comment>Caption shown when the directory applies checks JIM cannot see</comment>
+  </data>
+  <data name="PwPanelOverridePresent" xml:space="preserve">
+    <value>Some objects in this directory are governed by a policy other than the system-wide one above (Active Directory's Fine-Grained Password Policies, OpenLDAP's &lt;code&gt;{0}&lt;/code&gt; or 389 Directory Server's subtree policies, depending on the directory), so an object governed by a stricter one may reject a password that satisfies it.</value>
+    <comment>Warning when other policies are present; {0} is the OpenLDAP attribute name in code formatting, not translated</comment>
+  </data>
+  <data name="PwPanelOverrideUnknown" xml:space="preserve">
+    <value>JIM could not establish whether some objects in this directory are governed by a policy other than the system-wide one above (Active Directory's Fine-Grained Password Policies, OpenLDAP's &lt;code&gt;{0}&lt;/code&gt; or 389 Directory Server's subtree policies, depending on the directory). Reading them needs privileges the account JIM connects as should not normally hold, and a directory returns nothing rather than an error when it refuses. Treat the policy above as a minimum.</value>
+    <comment>Warning when JIM cannot tell whether other policies are present; {0} is the OpenLDAP attribute name in code formatting, not translated</comment>
+  </data>
+  <data name="PwPanelOutcomeNotPublished" xml:space="preserve">
+    <value>This directory publishes no password policy that JIM can read. There is nothing to configure here: the initial password settings on a Synchronisation Rule are set by hand, and a password the directory refuses is reported when it happens.</value>
+    <comment>Policy outcome when the directory publishes no policy</comment>
+  </data>
+  <data name="PwPanelOutcomeUnreadable" xml:space="preserve">
+    <value>JIM could not read this directory's password policy: the account it connects as cannot read the server configuration that holds it. Grant that account read access to the configuration, then refresh the schema.</value>
+    <comment>Policy outcome when the configuration cannot be read; a warning</comment>
+  </data>
+  <data name="PwPanelOutcomeNoPolicy" xml:space="preserve">
+    <value>This directory's password policy mechanism is loaded but no policy is configured, so no rules apply. If one is configured later, refresh the schema for JIM to read it.</value>
+    <comment>Policy outcome when the mechanism is loaded but no policy is set</comment>
+  </data>
+  <data name="PwPanelOutcomeNotRead" xml:space="preserve">
+    <value>JIM has not read a password policy from this Connected System. Retrieve the schema to read the policy, if there is one; where a directory publishes none, the initial password settings are configured by hand on the Synchronisation Rule.</value>
+    <comment>Policy outcome when nothing has been read yet</comment>
+  </data>
+  <data name="PwPanelReadFrom" xml:space="preserve">
+    <value>Read from the Connected System {0}. Refresh the schema to read it again.</value>
+    <comment>Caption showing when the policy was read; {0} is how long ago</comment>
+  </data>
+  <data name="SettingsTabIntro" xml:space="preserve">
+    <value>Each connector requires specific settings to connect to your environment. Complete the required fields below, then save your changes before importing the schema.</value>
+    <comment>Intro text of the settings tab</comment>
+  </data>
+  <data name="SettingsTabImportBehaviour" xml:space="preserve">
+    <value>Import Behaviour</value>
+    <comment>Heading of the Import Behaviour panel</comment>
+  </data>
+  <data name="SettingsTabImportBehaviourIntro" xml:space="preserve">
+    <value>These settings control how JIM processes imports, independently of connector-specific settings above.</value>
+    <comment>Intro under the Import Behaviour heading</comment>
+  </data>
+  <data name="SettingsTabUnresolvedReferenceHandling" xml:space="preserve">
+    <value>Unresolved Reference Handling</value>
+    <comment>Label of the unresolved reference setting</comment>
+  </data>
+  <data name="SettingsTabUnresolvedReferenceHelp" xml:space="preserve">
+    <value>Controls what happens when an imported reference value (for example a group member) cannot be resolved to a Connected System Object, commonly because the referenced object sits outside the configured Container Scope, or inside a Container it excludes.</value>
+    <comment>Helper text of the unresolved reference setting</comment>
+  </data>
+  <data name="SettingsTabUnresolvedError" xml:space="preserve">
+    <value>Error (default): record an error on each affected object</value>
+    <comment>Option: record an error on each affected object (the default)</comment>
+  </data>
+  <data name="SettingsTabUnresolvedWarn" xml:space="preserve">
+    <value>Warn: complete with a warning summary</value>
+    <comment>Option: finish the run with a summary of warnings</comment>
+  </data>
+  <data name="SettingsTabUnresolvedIgnore" xml:space="preserve">
+    <value>Ignore: no error or warning</value>
+    <comment>Option: take no action on unresolved references</comment>
+  </data>
+  <data name="SettingsTabExportPerformance" xml:space="preserve">
+    <value>Export Performance</value>
+    <comment>Heading of the Export Performance panel</comment>
+  </data>
+  <data name="SettingsTabExportPerformanceIntro" xml:space="preserve">
+    <value>Controls how quickly JIM sends changes to this Connected System during an export.</value>
+    <comment>Intro under the Export Performance heading</comment>
+  </data>
+  <data name="SettingsTabMaxExportParallelism" xml:space="preserve">
+    <value>Max Export Parallelism</value>
+    <comment>Label of the parallel batches setting</comment>
+  </data>
+  <data name="SettingsTabMaxExportParallelismHelp" xml:space="preserve">
+    <value>How many batches of changes JIM sends to this system at once. Leave empty to use the Connector's recommended value, or set 1 to send one batch at a time. Higher values finish large exports faster but put more load on the target system.</value>
+    <comment>Helper text of the parallel batches setting</comment>
+  </data>
+  <data name="SettingsTabPasswords" xml:space="preserve">
+    <value>Passwords</value>
+    <comment>Heading of the Passwords panel</comment>
+  </data>
+  <data name="SettingsTabPasswordsIntro" xml:space="preserve">
+    <value>These apply to every password JIM sends to this Connected System, whether it is the first password on a Connected System Object JIM creates, one you set by hand, or a password change synchronised from elsewhere.</value>
+    <comment>Intro under the Passwords heading</comment>
+  </data>
+  <data name="SettingsTabRequireSecureTransport" xml:space="preserve">
+    <value>Only send passwords over an encrypted connection</value>
+    <comment>Switch label</comment>
+  </data>
+  <data name="SettingsTabSecureTransportHelp" xml:space="preserve">
+    <value>JIM cannot always tell an encrypted connection from an unencrypted one; a signed and sealed bind is encrypted but does not look it from this system's settings, which is why JIM warns rather than refusing by default. Turn this on, once you know this system's connection is encrypted, to have JIM refuse to send instead. Nothing is discarded when it refuses: queued password changes wait, and Connected System Objects stay owed their first password.</value>
+    <comment>Help text under the secure transport switch</comment>
+  </data>
+  <data name="SettingsTabGiveUpAfter" xml:space="preserve">
+    <value>Give up after</value>
+    <comment>Label of the password time to live field</comment>
+  </data>
+  <data name="SettingsTabDays" xml:space="preserve">
+    <value>days</value>
+    <comment>Unit adornment of the password time to live field</comment>
+  </data>
+  <data name="SettingsTabGiveUpHelp" xml:space="preserve">
+    <value>How long JIM keeps trying to deliver a password to this system before it gives up on it: the first password owed to a Connected System Object it provisions, and a queued password change alike. Leave empty to use JIM's default of 7 days. Raise it before taking this system out of service for longer than the current window, or work waiting meanwhile expires undelivered.</value>
+    <comment>Helper text of the password time to live field</comment>
+  </data>
+  <data name="SettingsTabIssues" xml:space="preserve">
+    <value>There are issues with the settings:</value>
+    <comment>Heading of the list of validation errors</comment>
+  </data>
+  <data name="SettingsTabErrorLine" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>One line of a list: {0} is a setting name or a general issue, {1} the message</comment>
+  </data>
+  <data name="SettingsTabGeneralIssue" xml:space="preserve">
+    <value>General issue {0}</value>
+    <comment>Name for an error that is not about one setting; {0} is its number</comment>
+  </data>
+  <data name="SettingsTabSavedWithWarnings" xml:space="preserve">
+    <value>Your settings were saved, but some of this will not work as it stands:</value>
+    <comment>Heading of the list of warnings after a save</comment>
+  </data>
+  <data name="SettingsTabProcessing" xml:space="preserve">
+    <value>Processing</value>
+    <comment>Text beside the spinner while settings save</comment>
+  </data>
+  <data name="SettingsTabSave" xml:space="preserve">
+    <value>Save Settings</value>
+    <comment>Button that saves the Connected System's settings</comment>
+  </data>
+  <data name="SettingsTabFixBeforeSave" xml:space="preserve">
+    <value>Fix the problems shown with {0} before saving.</value>
+    <comment>Explains why saving is blocked; {0} is the name of the catalogue document setting</comment>
+  </data>
+  <data name="SettingsTabServerCertificate" xml:space="preserve">
+    <value>Server Certificate</value>
+    <comment>Heading of the server certificate section</comment>
+  </data>
+  <data name="SettingsTabCertificateIntro" xml:space="preserve">
+    <value>Read the certificate the endpoint above presents, to check JIM trusts it before saving. Nothing is stored until you choose to trust it.</value>
+    <comment>Intro under the server certificate heading</comment>
+  </data>
+  <data name="SettingsTabFetchingCertificate" xml:space="preserve">
+    <value>Fetching certificate</value>
+    <comment>Text beside the spinner while a certificate is fetched</comment>
+  </data>
+  <data name="SettingsTabFetchCertificate" xml:space="preserve">
+    <value>Fetch certificate</value>
+    <comment>Button that reads the endpoint's certificate</comment>
+  </data>
+  <data name="SettingsTabCertificateTrusted" xml:space="preserve">
+    <value>JIM already trusts this certificate. Nothing needs adding.</value>
+    <comment>Notice when the fetched certificate is already trusted</comment>
+  </data>
+  <data name="SettingsTabCertificateNotTrusted" xml:space="preserve">
+    <value>JIM does not yet trust this certificate. Nothing has been saved; trusting it is a separate step.</value>
+    <comment>Notice when the fetched certificate is not yet trusted</comment>
+  </data>
+  <data name="SettingsTabCertificateUnreadable" xml:space="preserve">
+    <value>JIM could not read a certificate from this endpoint.</value>
+    <comment>Message when the endpoint's certificate could not be read</comment>
+  </data>
+  <data name="SettingsTabSavedSnackbar" xml:space="preserve">
+    <value>Your setting changes have been saved.</value>
+    <comment>Snackbar after settings save without warnings</comment>
+  </data>
+  <data name="SettingsTabSavedWithWarningsSnackbar" xml:space="preserve">
+    <value>Your setting changes have been saved, with warnings.</value>
+    <comment>Snackbar after settings save with warnings</comment>
+  </data>
 </root>

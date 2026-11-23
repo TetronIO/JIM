@@ -89,4 +89,37 @@
   <data name="ConnectedSystemDeprovisionThroughSynchronisation" xml:space="preserve">
     <value>Deprovision through synchronization</value>
   </data>
+  <data name="DeleteSystemFencedAttached" xml:space="preserve">
+    <value>A Synchronized Deprovisioning run for this system is already queued or running. {0} attaches to it, resuming from its checkpoint; {1} abandons the remaining deprovisioning and completes the deletion at once.</value>
+  </data>
+  <data name="DeleteSystemFencedWarning" xml:space="preserve">
+    <value>A previous Synchronized Deprovisioning run stopped before completing and this system remains fenced. {0} resumes from where the run stopped; {1} finishes the deletion at once, keeping the remaining contributed data.</value>
+  </data>
+  <data name="DeleteSystemDeprovisionDetail" xml:space="preserve">
+    <value>Each of this system's objects is processed as though it had disconnected through a normal synchronization: contributed values are recalled or handed to surviving contributors, Metaverse Object deletion rules are evaluated for objects losing their last connector, and downstream systems receive corrective exports. Runs as a queued operation you can monitor from the Operations page; deleting the system is its final step.</value>
+  </data>
+  <data name="DeleteSystemImmediateDetail" xml:space="preserve">
+    <value>The system is removed at once. Values it contributed remain in place with no record of where they came from; Metaverse Object deletion rules are evaluated in bulk for objects losing their last connector, but no per-object synchronization processing occurs; downstream systems are not corrected.</value>
+  </data>
+  <data name="DeleteSystemImmediatePreviewNote" xml:space="preserve">
+    <value>This preview describes deprovisioning through synchronization. Deleting immediately clears none of these values and sends no exports; Metaverse Objects whose last connector is this system still become eligible for deletion under their Object Type's deletion rule.</value>
+  </data>
+  <data name="DeleteSystemImpactSyncRules" xml:space="preserve">
+    <value>Synchronization Rules</value>
+  </data>
+  <data name="PwPanelPolicyInfo" xml:space="preserve">
+    <value>The password rules this Connected System enforces, read when the schema was last retrieved. JIM uses them to pre-fill the initial password settings on a Synchronization Rule, so the rules do not have to be retyped.</value>
+  </data>
+  <data name="PwPanelOutcomeNotPublished" xml:space="preserve">
+    <value>This directory publishes no password policy that JIM can read. There is nothing to configure here: the initial password settings on a Synchronization Rule are set by hand, and a password the directory refuses is reported when it happens.</value>
+  </data>
+  <data name="PwPanelOutcomeNotRead" xml:space="preserve">
+    <value>JIM has not read a password policy from this Connected System. Retrieve the schema to read the policy, if there is one; where a directory publishes none, the initial password settings are configured by hand on the Synchronization Rule.</value>
+  </data>
+  <data name="SettingsTabImportBehaviour" xml:space="preserve">
+    <value>Import Behavior</value>
+  </data>
+  <data name="SettingsTabPasswordsIntro" xml:space="preserve">
+    <value>These apply to every password JIM sends to this Connected System, whether it is the first password on a Connected System Object JIM creates, one you set by hand, or a password change synchronized from elsewhere.</value>
+  </data>
 </root>
