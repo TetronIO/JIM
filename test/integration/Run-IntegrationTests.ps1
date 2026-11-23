@@ -2920,6 +2920,13 @@ if (-not $SkipBuild -and -not $SkipReset) {
         exit 1
     }
     Write-Success "JIM stack built successfully"
+    # Records the commit these images were built from, so a later run of this script in the same CI job can pass
+    # -SkipBuild rather than build the same commit again (ad-lab.yml's AD FS, Entra ID and Entra ID Connector steps,
+    # about 6 minutes each). Untracked and ignored, so the CI checkout removes it at the start of every job.
+    $builtCommit = git -C $repoRoot rev-parse HEAD 2>$null
+    if ($LASTEXITCODE -eq 0 -and $builtCommit) {
+        Set-Content -LiteralPath (Join-Path $scriptRoot ".jim-images-built") -Value $builtCommit -Encoding utf8
+    }
 }
 elseif ($SkipBuild) {
     Write-Section "Step 2: Build Skipped"
