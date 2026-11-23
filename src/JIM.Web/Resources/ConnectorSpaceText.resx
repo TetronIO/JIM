@@ -1430,4 +1430,20 @@
     <value>{0} minutes</value>
     <comment>Grace period part; {0} is the count</comment>
   </data>
+  <data name="CsoMvaNoValues" xml:space="preserve">
+    <value>This attribute has no values</value>
+    <comment>Empty state on a nested value table</comment>
+  </data>
+  <data name="PmvNoMatch" xml:space="preserve">
+    <value>No changes match "{0}"</value>
+    <comment>Empty state; {0} is the search text</comment>
+  </data>
+  <data name="PmvNone" xml:space="preserve">
+    <value>No changes are queued for this attribute</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="PmvNoneHint" xml:space="preserve">
+    <value>Changes appear here while the Pending Export is waiting to be exported, and are cleared once the Connected System confirms them.</value>
+    <comment>Empty state hint</comment>
+  </data>
 </root>

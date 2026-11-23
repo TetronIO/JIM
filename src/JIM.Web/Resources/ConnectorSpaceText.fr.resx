@@ -1076,4 +1076,16 @@
   <data name="DpvMinuteOther" xml:space="preserve">
     <value>{0} minutes</value>
   </data>
+  <data name="CsoMvaNoValues" xml:space="preserve">
+    <value>Cet attribut ne possède aucune valeur</value>
+  </data>
+  <data name="PmvNoMatch" xml:space="preserve">
+    <value>Aucune modification ne correspond à « {0} »</value>
+  </data>
+  <data name="PmvNone" xml:space="preserve">
+    <value>Aucune modification n’est en file d’attente pour cet attribut</value>
+  </data>
+  <data name="PmvNoneHint" xml:space="preserve">
+    <value>Les modifications apparaissent ici tant que l’exportation en attente attend d’être exportée, et sont effacées une fois que le système connecté les a confirmées.</value>
+  </data>
 </root>

@@ -25,16 +25,16 @@
                          ExpectedItemCount="@ValueCount"
                          DefaultSortBy="@SourceOrderSort"
                          LoadWindow="LoadValueWindowAsync"
-                         SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
-                         SingularName="Value"
-                         PluralName="Values">
+                         SearchPlaceholder="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.ImvSearch, AttributeName.ToLower())"
+                         SingularName="@ConnectorSpaceText.CsoColumnValue"
+                         PluralName="@ConnectorSpaceText.ImvValuesPlural">
         <Columns>
             @* Display Name is the fill column and the others keep to one line: two unbounded Distinguished Names in an
                auto-layout table (an unresolved value here, a Secondary ID there) squeezed the Type column to a letter
                a line, and a virtualised row must stay one line (JIM.Web/CLAUDE.md, "One line per row"). *@
-            <TemplateColumn Title="Display Name" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+            <TemplateColumn Title="@ConnectorSpaceText.DeletedColumnDisplayName" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                 <HeaderTemplate>
-                    <MudText Typo="Typo.button">Display Name</MudText>
+                    <MudText Typo="Typo.button">@ConnectorSpaceText.DeletedColumnDisplayName</MudText>
                 </HeaderTemplate>
                 <CellTemplate>
                     @if (context.Item.ReferenceValue != null)
@@ -59,9 +59,9 @@
                     }
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Type" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <TemplateColumn Title="@CommonText.ColumnType" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
-                    <MudText Typo="Typo.button">Type</MudText>
+                    <MudText Typo="Typo.button">@CommonText.ColumnType</MudText>
                 </HeaderTemplate>
                 <CellTemplate>
                     @if (context.Item.ReferenceValue != null)
@@ -73,9 +73,9 @@
                     }
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Secondary ID" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <TemplateColumn Title="@ConnectorSpaceText.CsoChipSecondaryId" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
-                    <MudText Typo="Typo.button">Secondary ID</MudText>
+                    <MudText Typo="Typo.button">@ConnectorSpaceText.CsoChipSecondaryId</MudText>
                 </HeaderTemplate>
                 <CellTemplate>
                     @{
@@ -108,13 +108,13 @@ else
                          ExpectedItemCount="@ValueCount"
                          DefaultSortBy="@SourceOrderSort"
                          LoadWindow="LoadValueWindowAsync"
-                         SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
-                         SingularName="Value"
-                         PluralName="Values">
+                         SearchPlaceholder="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.ImvSearch, AttributeName.ToLower())"
+                         SingularName="@ConnectorSpaceText.CsoColumnValue"
+                         PluralName="@ConnectorSpaceText.ImvValuesPlural">
         <Columns>
-            <TemplateColumn Title="Value" Sortable="false">
+            <TemplateColumn Title="@ConnectorSpaceText.CsoColumnValue" Sortable="false">
                 <HeaderTemplate>
-                    <MudText Typo="Typo.button">Value</MudText>
+                    <MudText Typo="Typo.button">@ConnectorSpaceText.CsoColumnValue</MudText>
                 </HeaderTemplate>
                 <CellTemplate>
                     <CsoAttributeValue Value="@context.Item" />
@@ -138,16 +138,16 @@ else
         if (!string.IsNullOrWhiteSpace(grid.SearchText))
         {
             <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                             PrimaryText="@($"No values match \"{grid.SearchText}\"")"
-                             SecondaryText="Try a different search term, or clear the search."
-                             ActionText="Clear Search"
+                             PrimaryText="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.ImvNoMatch, grid.SearchText)"
+                             SecondaryText="@CommonText.TrySearchAgain"
+                             ActionText="@CommonText.ClearSearch"
                              OnAction="@(() => grid.ClearSearchAsync())" />
         }
         else
         {
             <TableEmptyState Icon="@Icons.Material.Filled.List"
-                             PrimaryText="This attribute has no values"
-                             SecondaryText="Values appear here once an Import brings them in from the Connected System." />
+                             PrimaryText="@ConnectorSpaceText.CsoMvaNoValues"
+                             SecondaryText="@ConnectorSpaceText.CsoNoAttributeValuesHint" />
         }
     };
 }
