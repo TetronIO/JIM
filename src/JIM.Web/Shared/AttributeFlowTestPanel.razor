@@ -98,9 +98,9 @@ else if (!Tried)
 @if (_result is { InputErrors.Count: > 0 } inputProblem)
 {
     <MudAlert Severity="Severity.Error" Class="mt-3">
-        @foreach (var inputError in inputProblem.InputErrors)
+        @foreach (var inputError in inputProblem.InputErrorDetails)
         {
-            <MudText Typo="Typo.body2">@inputError</MudText>
+            <MudText Typo="Typo.body2">@inputError.Show()</MudText>
         }
     </MudAlert>
 }
@@ -118,7 +118,7 @@ else if (!Tried)
                         @switch (source.Outcome)
                         {
                             case ExpressionSourceOutcome.Result:
-                                @foreach (var line in ExpressionText.ToDisplayLines(source.Result))
+                                @foreach (var line in ExpressionDisplay.Lines(source.Result))
                                 {
                                     <MudText Typo="Typo.body1" Class="jim-expression-output">@line</MudText>
                                 }
@@ -129,7 +129,7 @@ else if (!Tried)
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@SyncRuleText.FlowTestNoValue</MudText>
                                 break;
                             case ExpressionSourceOutcome.EvaluationFailed:
-                                <MudText Typo="Typo.body2">@string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestFailed, source.EvaluationException?.Message)</MudText>
+                                <MudText Typo="Typo.body2">@string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestFailed, source.EvaluationException?.ToDisplayText())</MudText>
                                 break;
                             default:
                                 <MudText Typo="Typo.body2">@string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestNotEvaluated, string.Join(", ", source.MissingInputs))</MudText>
@@ -146,7 +146,7 @@ else if (!Tried)
                     <td>
                         @if (evaluation.Outcome == AttributeFlowOutcome.Values)
                         {
-                            @foreach (var line in evaluation.Values.Select(ExpressionText.Describe))
+                            @foreach (var line in evaluation.Values.Select(ExpressionDisplay.Line))
                             {
                                 <MudText Typo="Typo.body1" Class="jim-expression-output">@line</MudText>
                             }
@@ -175,11 +175,11 @@ else if (!Tried)
                     <td>
                         @if (evaluation.Outcome == AttributeFlowOutcome.Error)
                         {
-                            <MudAlert Severity="Severity.Error" Dense="true">@AttributeFlowTester.Describe(evaluation, _targetName)</MudAlert>
+                            <MudAlert Severity="Severity.Error" Dense="true">@AttributeFlowTester.DescribeMessage(evaluation, _targetName).Show()</MudAlert>
                         }
                         else
                         {
-                            <MudText Typo="Typo.body2">@AttributeFlowTester.Describe(evaluation, _targetName)</MudText>
+                            <MudText Typo="Typo.body2">@AttributeFlowTester.DescribeMessage(evaluation, _targetName).Show()</MudText>
                         }
                     </td>
                 </tr>
@@ -201,7 +201,7 @@ else if (!Tried)
                                 <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Class="ma-0"
                                          Color="@OutcomeColour(absentOutcome.Evaluation.Outcome)">@OutcomeLabel(absentOutcome.Evaluation.Outcome)</MudChip>
                             </td>
-                            <td><MudText Typo="Typo.body2">@AttributeFlowTester.Describe(absentOutcome.Evaluation, _targetName)</MudText></td>
+                            <td><MudText Typo="Typo.body2">@AttributeFlowTester.DescribeMessage(absentOutcome.Evaluation, _targetName).Show()</MudText></td>
                         </tr>
                     }
                 </tbody>
@@ -223,7 +223,7 @@ else if (!Tried)
                         @switch (baseSource?.Outcome)
                         {
                             case ExpressionSourceOutcome.Result:
-                                @foreach (var line in ExpressionText.ToDisplayLines(baseSource.Result))
+                                @foreach (var line in ExpressionDisplay.Lines(baseSource.Result))
                                 {
                                     <MudText Typo="Typo.body1" Class="jim-expression-output">@line</MudText>
                                 }
@@ -234,7 +234,7 @@ else if (!Tried)
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@SyncRuleText.FlowTestNoValue</MudText>
                                 break;
                             case ExpressionSourceOutcome.EvaluationFailed:
-                                <MudText Typo="Typo.body2">@string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestFailed, baseSource.EvaluationException?.Message)</MudText>
+                                <MudText Typo="Typo.body2">@string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestFailed, baseSource.EvaluationException?.ToDisplayText())</MudText>
                                 break;
                             case null:
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary">@SyncRuleText.FlowTestNoBaseExpression</MudText>
@@ -269,11 +269,11 @@ else if (!Tried)
                     <td>
                         @if (generated.Outcome == GeneratedBaseOutcome.Error)
                         {
-                            <MudAlert Severity="Severity.Error" Dense="true">@AttributeFlowTester.DescribeGeneratedBase(generated, Mapping.Generation!, _targetName)</MudAlert>
+                            <MudAlert Severity="Severity.Error" Dense="true">@AttributeFlowTester.DescribeGeneratedBaseMessage(generated, Mapping.Generation!, _targetName).Show()</MudAlert>
                         }
                         else
                         {
-                            <MudText Typo="Typo.body2">@AttributeFlowTester.DescribeGeneratedBase(generated, Mapping.Generation!, _targetName)</MudText>
+                            <MudText Typo="Typo.body2">@AttributeFlowTester.DescribeGeneratedBaseMessage(generated, Mapping.Generation!, _targetName).Show()</MudText>
                         }
                     </td>
                 </tr>
@@ -298,7 +298,7 @@ else if (!Tried)
                                 <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Class="ma-0"
                                          Color="@BaseOutcomeColour(absentOutcome.GeneratedBase.Outcome)">@BaseOutcomeLabel(absentOutcome.GeneratedBase.Outcome)</MudChip>
                             </td>
-                            <td><MudText Typo="Typo.body2">@AttributeFlowTester.DescribeGeneratedBase(absentOutcome.GeneratedBase, Mapping.Generation!, _targetName)</MudText></td>
+                            <td><MudText Typo="Typo.body2">@AttributeFlowTester.DescribeGeneratedBaseMessage(absentOutcome.GeneratedBase, Mapping.Generation!, _targetName).Show()</MudText></td>
                         </tr>
                     }
                 </tbody>
@@ -552,7 +552,7 @@ else if (!Tried)
         var validation = ExpressionEvaluator.Validate(Expression);
         if (!validation.IsValid)
         {
-            _parseError = validation.ErrorMessage ?? SyncRuleText.FlowTestParseFailed;
+            _parseError = MessageDisplay.Show(validation.ErrorDetail, validation.ErrorMessage) ?? SyncRuleText.FlowTestParseFailed;
             _errorPosition = validation.ErrorPosition;
             return;
         }

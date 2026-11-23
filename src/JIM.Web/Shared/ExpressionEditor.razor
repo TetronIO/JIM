@@ -73,11 +73,11 @@ else if (_signature != null)
     var signature = _signature;
     <div class="jim-expression-signature" aria-live="polite" data-testid="jim-expression-signature">
         <code class="jim-expression-signature-call">@foreach (var part in SignatureParts(signature)){@if (part.Active){<span class="jim-expression-signature-active">@part.Text</span>}else{@part.Text}}</code>
-        <span class="jim-expression-signature-description">@ExpressionAssist.PlainText(signature.Function.Description)</span>
+        <span class="jim-expression-signature-description">@ExpressionAssist.PlainText(ExpressionAssist.DescriptionText(signature.Function))</span>
         @if (signature.Function.Parameters.Count > 0)
         {
             var active = signature.Function.Parameters[signature.ParameterIndex];
-            <span class="jim-expression-signature-parameter"><code>@active.Name</code>: @active.Description</span>
+            <span class="jim-expression-signature-parameter"><code>@active.Name</code>: @ExpressionAssist.DescriptionText(active)</span>
         }
     </div>
 }

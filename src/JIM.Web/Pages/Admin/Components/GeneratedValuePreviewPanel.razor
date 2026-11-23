@@ -364,11 +364,11 @@
                 if (testResult.IsValid)
                     sampleBaseValue = ExpressionText.TryFormat(testResult.Result, out var formatted) ? formatted : null;
                 else
-                    _evaluationError = testResult.ErrorMessage;
+                    _evaluationError = MessageDisplay.Show(testResult.ErrorDetail, testResult.ErrorMessage);
             }
             else
             {
-                _evaluationError = validation.ErrorMessage;
+                _evaluationError = MessageDisplay.Show(validation.ErrorDetail, validation.ErrorMessage);
             }
         }
         else

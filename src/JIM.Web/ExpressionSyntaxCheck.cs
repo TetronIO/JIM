@@ -7,6 +7,7 @@ using JIM.Application.Expressions;
 using JIM.Application.Servers;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
+using JIM.Web.Localisation;
 using JIM.Web.Resources;
 
 namespace JIM.Web;
@@ -32,7 +33,7 @@ public static partial class ExpressionSyntaxCheck
         if (result.IsValid)
             return null;
 
-        var message = result.ErrorMessage ?? SyncRuleText.ExpressionDoesNotParse;
+        var message = MessageDisplay.Show(result.ErrorDetail, result.ErrorMessage) ?? SyncRuleText.ExpressionDoesNotParse;
 
         // Function names are case-sensitive, and the commonest unknown function is a real one in the wrong case.
         var unknown = UnknownIdentifier().Match(message);
@@ -77,7 +78,7 @@ public static partial class ExpressionSyntaxCheck
 
         return new AttributeFlowExpressionValidator(evaluator)
             .Validate(proposed, syncRule.Direction, connectedSystemObjectType, metaverseObjectType)
-            .FirstOrDefault(problem => !problem.IsWarningOnly)?.Message;
+            .FirstOrDefault(problem => !problem.IsWarningOnly)?.Detail.Show();
     }
 
     [GeneratedRegex(@"Unknown identifier '(?<name>\w+)'", RegexOptions.CultureInvariant)]

@@ -1,10 +1,13 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Application.Servers;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 
@@ -258,7 +261,7 @@ public static class AttributeFlowTester
     {
         var objects = BuildTestObjects(syncRule, source?.Expression, inputs);
         if (objects.InputErrors.Count > 0)
-            return new AttributeFlowTestResult { InputErrors = objects.InputErrors };
+            return new AttributeFlowTestResult { InputErrorDetails = objects.InputErrors };
 
         return new AttributeFlowTestResult
         {
@@ -279,7 +282,7 @@ public static class AttributeFlowTester
     {
         var objects = BuildTestObjects(syncRule, source.Expression, inputs);
         if (objects.InputErrors.Count > 0)
-            return new AttributeFlowTestResult { InputErrors = objects.InputErrors };
+            return new AttributeFlowTestResult { InputErrorDetails = objects.InputErrors };
 
         return new AttributeFlowTestResult
         {
@@ -297,7 +300,7 @@ public static class AttributeFlowTester
     /// <c>mv[...]</c>) for import.
     /// </summary>
     private sealed record TestObjects(
-        IReadOnlyList<string> InputErrors,
+        IReadOnlyList<JimMessage> InputErrors,
         IDictionary<string, object?>? ExportView = null,
         ConnectedSystemObject? ConnectedSystemObject = null,
         ConnectedSystemObjectType? ConnectedSystemObjectType = null,
@@ -305,7 +308,7 @@ public static class AttributeFlowTester
 
     private static TestObjects BuildTestObjects(SyncRule syncRule, string? expression, IReadOnlyList<AttributeFlowTestInput> inputs)
     {
-        var errors = new List<string>();
+        var errors = new List<JimMessage>();
         var exporting = syncRule.Direction == SyncRuleDirection.Export;
         var connectedSystemValues = new List<ConnectedSystemObjectAttributeValue>();
         var metaverseValues = new List<MetaverseObjectAttributeValue>();
@@ -316,7 +319,7 @@ public static class AttributeFlowTester
             {
                 if (exporting)
                 {
-                    errors.Add($"{input.Accessor} has a value, but an export Attribute Flow reads only the Metaverse Object, so the Expression would never see it.");
+                    errors.Add(ExpressionMessage.Of(nameof(ExpressionMessages.FlowExportReadsOnlyMetaverse), input.Accessor));
                     continue;
                 }
 
@@ -380,52 +383,57 @@ public static class AttributeFlowTester
 
     /// <summary>
     /// What synchronisation would do with <paramref name="evaluation"/>'s outcome, in one sentence an administrator
-    /// reads beside the result. The portal tester and the REST API word it the same way.
+    /// reads beside the result. The portal tester and the REST API word it the same way: this is the message's British
+    /// English, and <see cref="DescribeMessage"/> is the message itself, which the portal renders in the viewer's language.
     /// </summary>
-    public static string Describe(AttributeFlowEvaluation evaluation, string targetAttributeName)
+    public static string Describe(AttributeFlowEvaluation evaluation, string targetAttributeName) =>
+        DescribeMessage(evaluation, targetAttributeName).ToEnglish();
+
+    /// <summary>
+    /// <see cref="Describe"/> as a message (#3030), so the portal can show the sentence in the viewer's language.
+    /// </summary>
+    public static JimMessage DescribeMessage(AttributeFlowEvaluation evaluation, string targetAttributeName)
     {
         ArgumentNullException.ThrowIfNull(evaluation);
 
-        var target = $"'{targetAttributeName}'";
+        MessageArgument target = targetAttributeName;
         var missingInputs = string.Join(", ", evaluation.Source.MissingInputs);
-        var keepsValue = $"synchronisation records an error and {target} keeps its current value";
-        const string failsObject = "synchronisation records an error and nothing on the object is synchronised";
+        var keepsValue = ExpressionMessage.Of(nameof(ExpressionMessages.FlowKeepsValue), target);
+        var failsObject = ExpressionMessage.Of(nameof(ExpressionMessages.FlowFailsObject));
 
         return evaluation.Outcome switch
         {
             AttributeFlowOutcome.Values => evaluation.Values.Count == 1
-                ? $"{target} would be set to this value."
-                : $"{target} would hold these {evaluation.Values.Count} values.",
+                ? ExpressionMessage.Of(nameof(ExpressionMessages.DescribeSingleValue), target)
+                : ExpressionMessage.Of(nameof(ExpressionMessages.DescribeSeveralValues), target, ExpressionMessage.Digits(evaluation.Values.Count)),
 
             AttributeFlowOutcome.NoValue when evaluation.Source.MissingInputs.Count > 0 =>
-                $"Not evaluated: the object has no value for {missingInputs}, and Missing Input Behaviour is Contribute no value, " +
-                $"so {target} gets no value, resolved by Attribute Priority and \"Null is a value\".",
+                ExpressionMessage.Of(nameof(ExpressionMessages.DescribeNoValueMissingInput), target, missingInputs),
 
             AttributeFlowOutcome.NoValue =>
-                $"The Expression produced no value, so {target} gets no value, resolved by Attribute Priority and \"Null is a value\".",
+                ExpressionMessage.Of(nameof(ExpressionMessages.DescribeNoValueExpression), target),
 
             AttributeFlowOutcome.LeftAsHeld =>
-                $"Not evaluated: {string.Join(", ", evaluation.Source.HeldInputs)} until the next import, because a schema " +
-                $"refresh changed its data type, so {target} keeps its current value.",
+                ExpressionMessage.Of(nameof(ExpressionMessages.DescribeLeftAsHeld), target, HeldInputs(evaluation.Source.HeldInputs)),
 
             _ => evaluation.ErrorReason switch
             {
                 AttributeFlowErrorReason.MissingInputFailedMapping =>
-                    $"Not evaluated: the object has no value for {missingInputs}, and Missing Input Behaviour is Fail this mapping, so " +
-                    $"{keepsValue}.",
+                    ExpressionMessage.Of(nameof(ExpressionMessages.DescribeMissingFailMapping), missingInputs, keepsValue),
                 AttributeFlowErrorReason.MissingInputFailedObject =>
-                    $"Not evaluated: the object has no value for {missingInputs}, and Missing Input Behaviour is Fail the object, so {failsObject}.",
+                    ExpressionMessage.Of(nameof(ExpressionMessages.DescribeMissingFailObject), missingInputs, failsObject),
                 AttributeFlowErrorReason.EvaluationFailed =>
-                    $"The Expression failed, so {failsObject}: {evaluation.Source.EvaluationException?.Message}",
+                    ExpressionMessage.Of(nameof(ExpressionMessages.DescribeEvaluationFailed), failsObject,
+                        ExpressionMessage.Reason(evaluation.Source.EvaluationException)),
                 AttributeFlowErrorReason.ResultNotConvertible =>
-                    $"The Expression returned '{evaluation.Resolution?.UnconvertibleValue}', which a {evaluation.TargetType} attribute cannot hold, so " +
-                    $"{keepsValue}.",
+                    ExpressionMessage.Of(nameof(ExpressionMessages.DescribeNotConvertible),
+                        evaluation.Resolution?.UnconvertibleValue?.ToString() ?? string.Empty, ExpressionMessage.DataType(evaluation.TargetType), keepsValue),
                 AttributeFlowErrorReason.ResultMultiValued when evaluation.Resolution?.SourceAttributeName is { } sourceAttribute =>
-                    $"'{sourceAttribute}' has {evaluation.Resolution.ValueCount} values, but {target} is single-valued, so {keepsValue}. " +
-                    "Use Where, Join, Count, Min or Max to say which value it should have.",
+                    ExpressionMessage.Of(nameof(ExpressionMessages.DescribeMultiValuedNamed), sourceAttribute,
+                        ExpressionMessage.Digits(evaluation.Resolution.ValueCount), target, keepsValue, "Where", "Join", "Count", "Min", "Max"),
                 AttributeFlowErrorReason.ResultMultiValued =>
-                    $"The Expression returned {evaluation.Resolution?.ValueCount} values, but {target} is single-valued, so " +
-                    $"{keepsValue}.",
+                    ExpressionMessage.Of(nameof(ExpressionMessages.DescribeMultiValuedUnnamed),
+                        evaluation.Resolution is { } resolution ? ExpressionMessage.Digits(resolution.ValueCount) : string.Empty, target, keepsValue),
                 _ => throw new InvalidOperationException($"Unknown Attribute Flow error reason '{evaluation.ErrorReason}'.")
             }
         };
@@ -434,66 +442,79 @@ public static class AttributeFlowTester
     /// <summary>
     /// What synchronisation would do with a Generated Value's base, in one or two sentences an administrator reads beside
     /// it. The test stops before generation, so this says how the token would be added, never which candidate is free.
-    /// The portal tester and the REST API word it the same way.
+    /// The portal tester and the REST API word it the same way; <see cref="DescribeGeneratedBaseMessage"/> is the message.
     /// </summary>
-    public static string DescribeGeneratedBase(GeneratedBaseEvaluation generated, SyncRuleMappingGeneration generation, string targetAttributeName)
+    public static string DescribeGeneratedBase(GeneratedBaseEvaluation generated, SyncRuleMappingGeneration generation, string targetAttributeName) =>
+        DescribeGeneratedBaseMessage(generated, generation, targetAttributeName).ToEnglish();
+
+    /// <summary>
+    /// <see cref="DescribeGeneratedBase"/> as a message (#3030), so the portal can show it in the viewer's language.
+    /// </summary>
+    public static JimMessage DescribeGeneratedBaseMessage(GeneratedBaseEvaluation generated, SyncRuleMappingGeneration generation, string targetAttributeName)
     {
         ArgumentNullException.ThrowIfNull(generated);
         ArgumentNullException.ThrowIfNull(generation);
 
-        var target = $"'{targetAttributeName}'";
+        MessageArgument target = targetAttributeName;
         var missingInputs = generated.Source == null ? string.Empty : string.Join(", ", generated.Source.MissingInputs);
-        var nothingGenerated = $"synchronisation records an error and nothing is generated for {target}";
-        const string failsObject = "synchronisation records an error and nothing on the object is synchronised";
-        const string waits = "generation waits: nothing is generated yet, and a value already generated is kept";
+        var nothingGenerated = ExpressionMessage.Of(nameof(ExpressionMessages.GenNothingGenerated), target);
+        var failsObject = ExpressionMessage.Of(nameof(ExpressionMessages.FlowFailsObject));
+        var waits = ExpressionMessage.Of(nameof(ExpressionMessages.GenWaits));
         var token = generation.TokenKind switch
         {
-            GeneratedValueTokenKind.Sequence => "the next number in its sequence",
-            GeneratedValueTokenKind.Random => "a random token",
-            _ => generation.SuffixStyle == GeneratedValueSuffixStyle.Letter ? "a letter" : "a number"
+            GeneratedValueTokenKind.Sequence => ExpressionMessage.Of(nameof(ExpressionMessages.GenTokenSequence)),
+            GeneratedValueTokenKind.Random => ExpressionMessage.Of(nameof(ExpressionMessages.GenTokenRandom)),
+            _ => generation.SuffixStyle == GeneratedValueSuffixStyle.Letter
+                ? ExpressionMessage.Of(nameof(ExpressionMessages.GenTokenLetter))
+                : ExpressionMessage.Of(nameof(ExpressionMessages.GenTokenNumber))
         };
 
         return generated.Outcome switch
         {
             GeneratedBaseOutcome.Base when generation.TokenKind == GeneratedValueTokenKind.OnlyIfTaken =>
-                $"{target} would be generated from the base '{generated.BaseValue}': the base itself if no other object holds it, otherwise " +
-                $"with {token} added. Whether the base is still free is checked when a Synchronisation runs.",
+                ExpressionMessage.Of(nameof(ExpressionMessages.DescribeBaseOnlyIfTaken), target, generated.BaseValue ?? string.Empty, token),
 
             GeneratedBaseOutcome.Base =>
-                $"{target} would be generated from the base '{generated.BaseValue}' with {token} added when a Synchronisation runs.",
+                ExpressionMessage.Of(nameof(ExpressionMessages.DescribeBase), target, generated.BaseValue ?? string.Empty, token),
 
             GeneratedBaseOutcome.NoBaseExpression =>
-                $"{target} has no base expression, so it would be generated from {token} alone when a Synchronisation runs.",
+                ExpressionMessage.Of(nameof(ExpressionMessages.DescribeNoBaseExpression), target, token),
 
             GeneratedBaseOutcome.Waits when generated.Source?.MissingInputs.Count > 0 =>
-                $"Not evaluated: the object has no value for {missingInputs}, and Missing Input Behaviour is Contribute no value, so {waits}.",
+                ExpressionMessage.Of(nameof(ExpressionMessages.DescribeGenWaitsMissing), missingInputs, waits),
 
             GeneratedBaseOutcome.Waits when generated.Source is { HeldInputs.Count: > 0 } heldSource =>
-                $"Not evaluated: {string.Join(", ", heldSource.HeldInputs)} until the next import, because a schema " +
-                $"refresh changed its data type, so {waits}.",
+                ExpressionMessage.Of(nameof(ExpressionMessages.DescribeGenWaitsHeld), HeldInputs(heldSource.HeldInputs), waits),
 
-            GeneratedBaseOutcome.Waits => $"The base expression produced no value, so {waits}.",
+            GeneratedBaseOutcome.Waits => ExpressionMessage.Of(nameof(ExpressionMessages.DescribeGenWaitsNoValue), waits),
 
             _ => generated.ErrorReason switch
             {
                 AttributeFlowErrorReason.GeneratedBaseNotSingleValue =>
-                    $"The base expression returned {ExpressionResultValues.Elements(generated.Source?.Result).Count()} values, but a generated " +
-                    $"value is built from one, so {nothingGenerated}.",
+                    ExpressionMessage.Of(nameof(ExpressionMessages.DescribeGenNotSingle),
+                        ExpressionMessage.Digits(ExpressionResultValues.Elements(generated.Source?.Result).Count()), nothingGenerated),
                 AttributeFlowErrorReason.ResultNotConvertible =>
-                    $"The base expression returned {generated.UnconvertibleValue}, which has no text to build a value from, so {nothingGenerated}.",
+                    ExpressionMessage.Of(nameof(ExpressionMessages.DescribeGenNotConvertible), generated.UnconvertibleValue?.ToString() ?? string.Empty, nothingGenerated),
                 AttributeFlowErrorReason.MissingInputFailedMapping =>
-                    $"Not evaluated: the object has no value for {missingInputs}, and Missing Input Behaviour is Fail this mapping, so {nothingGenerated}.",
+                    ExpressionMessage.Of(nameof(ExpressionMessages.DescribeMissingFailMapping), missingInputs, nothingGenerated),
                 AttributeFlowErrorReason.MissingInputFailedObject =>
-                    $"Not evaluated: the object has no value for {missingInputs}, and Missing Input Behaviour is Fail the object, so {failsObject}.",
+                    ExpressionMessage.Of(nameof(ExpressionMessages.DescribeMissingFailObject), missingInputs, failsObject),
                 AttributeFlowErrorReason.EvaluationFailed =>
-                    $"The base expression failed, so {failsObject}: {generated.Source?.EvaluationException?.Message}",
+                    ExpressionMessage.Of(nameof(ExpressionMessages.DescribeGenEvaluationFailed), failsObject,
+                        ExpressionMessage.Reason(generated.Source?.EvaluationException)),
                 _ => throw new InvalidOperationException($"Unknown generated base error reason '{generated.ErrorReason}'.")
             }
         };
     }
 
-    private static string NotInSchema(AttributeFlowTestInput input, string? objectTypeName) =>
-        $"{input.Accessor} has a value, but {(objectTypeName == null ? "the object type" : $"'{objectTypeName}'")} has no attribute " +
-        $"named '{input.AttributeName}', so the Expression would never see one.";
+    /// <summary>The inputs held under another data type, as a list in the reader's language: <c>cs["sn"] (held as Text)</c>.</summary>
+    private static MessageArgument HeldInputs(IEnumerable<HeldExpressionInput> held) =>
+        ExpressionMessage.List(held.Select(input =>
+            (MessageArgument)ExpressionMessage.Of(nameof(ExpressionMessages.HeldInput), input.Accessor, ExpressionMessage.DataType(input.HeldDataType))));
+
+    private static JimMessage NotInSchema(AttributeFlowTestInput input, string? objectTypeName) =>
+        objectTypeName == null
+            ? ExpressionMessage.Of(nameof(ExpressionMessages.FlowNotInSchemaUnnamed), input.Accessor, input.AttributeName)
+            : ExpressionMessage.Of(nameof(ExpressionMessages.FlowNotInSchemaNamed), input.Accessor, objectTypeName, input.AttributeName);
 
 }

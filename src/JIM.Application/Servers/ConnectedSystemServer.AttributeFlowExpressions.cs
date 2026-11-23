@@ -2,7 +2,10 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Expressions;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Models.Core;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Utilities;
@@ -65,7 +68,7 @@ public partial class ConnectedSystemServer
             ? await Application.Repository.ConnectedSystems.GetSyncRuleMappingExpressionStatesAsync(storedIds) ?? []
             : [];
 
-        var refusals = new List<string>();
+        var refusals = new List<JimMessage>();
         foreach (var mapping in withExpressions)
         {
             var unchanged = mapping.Id > 0 && stored.TryGetValue(mapping.Id, out var state) && state.IsUnchangedIn(mapping);
@@ -74,17 +77,20 @@ public partial class ConnectedSystemServer
                 if (problem.IsWarningOnly || unchanged)
                     mapping.SaveWarnings.Add(problem.Message);
                 else
-                    refusals.Add(problem.Message);
+                    refusals.Add(problem.Detail);
             }
         }
 
         if (refusals.Count == 0)
             return;
 
-        var message = string.Join(" ", refusals);
+        // One message holding every refusal, so the portal shows them in the viewer's language while the REST API reads
+        // the same sentences, space separated, that it always has.
+        var refusal = refusals.Skip(1).Aggregate(refusals[0],
+            (joined, next) => JimMessage.Create(ApplicationMessageCatalogues.Expressions, nameof(ExpressionMessages.RefusalsJoin), joined, next));
         Log.Warning("EnsureAttributeFlowExpressionsAreValidAsync: rejecting Attribute Flow save on Synchronisation Rule {SyncRuleId}; {Message}",
-            syncRule.Id, LogSanitiser.Sanitise(message));
-        throw new ArgumentException(message);
+            syncRule.Id, LogSanitiser.Sanitise(refusal.ToEnglish()));
+        throw LocalisedExceptions.Attach(new ArgumentException(refusal.ToEnglish()), refusal);
     }
 
     private static bool HasExpression(SyncRuleMapping mapping) => mapping.Sources.Any(s => !string.IsNullOrWhiteSpace(s.Expression));
