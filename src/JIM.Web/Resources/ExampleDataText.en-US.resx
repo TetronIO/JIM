@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DataSetListInfo" xml:space="preserve">
+    <value>You can quickly populate JIM with example data, as a way to demo, or prototype new features without needing to fully configure JIM with Connected Systems, Synchronization Rules and wait for data to be imported and synchronized. Example Data Sets provide the raw values that are used to construct example data in Example Data Templates.</value>
+  </data>
+  <data name="TemplateListInfo" xml:space="preserve">
+    <value>You can quickly populate JIM with example data, as a way to demo, or prototype new features without needing to fully configure JIM with Connected Systems, Synchronization Rules and wait for data to be imported and synchronized. Templates define example data to be created in JIM. They consist of one or more object types, with data sets being used to generate values for the object attributes.</value>
+  </data>
+  <data name="TemplateWarning" xml:space="preserve">
+    <value>Executing this template will cause example data to be inserted into the Metaverse. It's not recommended to do this on a system with Connectors and that is already initialized. This feature is primarily designed to enable demo or proof of concept work. There is no easy way to undo this once performed.</value>
+  </data>
+  <data name="GenerationCancelled" xml:space="preserve">
+    <value>Generation was canceled.</value>
+  </data>
+</root>
