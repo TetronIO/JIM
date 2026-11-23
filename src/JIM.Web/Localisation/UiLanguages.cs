@@ -16,15 +16,15 @@ namespace JIM.Web.Localisation;
 public static class UiLanguages
 {
     /// <summary>The language the portal falls back to: the neutral (en-GB) resources.</summary>
-    public static readonly UiLanguage Default = new("en-GB", "English (UK)", IsReleased: true);
+    public static readonly UiLanguage Default = new("en-GB", "English (UK)", LanguageStage.Released);
 
     /// <summary>Every language the portal has resources for, in the order the picker lists them.</summary>
     public static readonly IReadOnlyList<UiLanguage> All =
     [
         Default,
-        new("en-US", "English (US)", IsReleased: false),
-        new("de", "Deutsch", IsReleased: false),
-        new("fr", "Français", IsReleased: false)
+        new("en-US", "English (US)", LanguageStage.InProgress),
+        new("fr", "Français", LanguageStage.InProgress),
+        new("de", "Deutsch", LanguageStage.Planned)
     ];
 
     /// <summary>

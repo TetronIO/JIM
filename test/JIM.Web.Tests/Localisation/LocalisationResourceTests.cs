@@ -100,12 +100,13 @@ public partial class LocalisationResourceTests
     }
 
     [Test]
-    public void ReleasedLanguages_TranslateEveryString()
+    public void LanguagesInProgressOrReleased_TranslateEveryString()
     {
-        // English variants hold only the strings whose spelling differs, so completeness is a different question
-        // for them; AmericanEnglish_OverridesEveryBritishSpelling asks it.
+        // A language being delivered gets its translation in the change that adds each string, so it is complete the
+        // day the last hard-coded text is converted. English variants hold only the strings whose spelling differs, so
+        // completeness is a different question for them; AmericanEnglish_OverridesEveryBritishSpelling asks it.
         var released = UiLanguages.All
-            .Where(language => language.IsReleased && !language.CultureName.StartsWith("en", StringComparison.OrdinalIgnoreCase));
+            .Where(language => language.IsRequiredInEveryChange && !language.CultureName.StartsWith("en", StringComparison.OrdinalIgnoreCase));
 
         var problems = new List<string>();
         foreach (var language in released)
@@ -122,8 +123,8 @@ public partial class LocalisationResourceTests
         }
 
         Assert.That(problems, Is.Empty,
-            "A released language must have every string translated, or users see a page in two languages. Translate " +
-            "these, or mark the language IsReleased: false in UiLanguages until it is complete." + Environment.NewLine +
+            "A language in progress or released must have every string translated, in the change that adds the string " +
+            "(engineering/LOCALISATION.md). Translate these." + Environment.NewLine +
             string.Join(Environment.NewLine, problems));
     }
 

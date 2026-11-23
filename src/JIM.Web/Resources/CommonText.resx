@@ -46,4 +46,138 @@
     <value>Status</value>
     <comment>Table column heading.</comment>
   </data>
+  <data name="Save" xml:space="preserve">
+    <value>Save</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="SaveChanges" xml:space="preserve">
+    <value>Save Changes</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Delete</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="Edit" xml:space="preserve">
+    <value>Edit</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="Create" xml:space="preserve">
+    <value>Create</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="Add" xml:space="preserve">
+    <value>Add</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="Remove" xml:space="preserve">
+    <value>Remove</value>
+    <comment>Button: takes something out of a list without deleting it.</comment>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Close</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="Back" xml:space="preserve">
+    <value>Back</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="Next" xml:space="preserve">
+    <value>Next</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="Confirm" xml:space="preserve">
+    <value>Confirm</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="Apply" xml:space="preserve">
+    <value>Apply</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="Refresh" xml:space="preserve">
+    <value>Refresh</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="Retry" xml:space="preserve">
+    <value>Retry</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="Copy" xml:space="preserve">
+    <value>Copy</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="Copied" xml:space="preserve">
+    <value>Copied</value>
+    <comment>Confirmation after copying to the clipboard.</comment>
+  </data>
+  <data name="Search" xml:space="preserve">
+    <value>Search</value>
+    <comment>Search box placeholder where nothing more specific fits.</comment>
+  </data>
+  <data name="Yes" xml:space="preserve">
+    <value>Yes</value>
+  </data>
+  <data name="No" xml:space="preserve">
+    <value>No</value>
+  </data>
+  <data name="None" xml:space="preserve">
+    <value>None</value>
+    <comment>No item, e.g. in a select list.</comment>
+  </data>
+  <data name="Unknown" xml:space="preserve">
+    <value>Unknown</value>
+    <comment>A value JIM does not know.</comment>
+  </data>
+  <data name="Loading" xml:space="preserve">
+    <value>Loading...</value>
+    <comment>While data is being fetched.</comment>
+  </data>
+  <data name="ColumnDescription" xml:space="preserve">
+    <value>Description</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="ColumnType" xml:space="preserve">
+    <value>Type</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="ColumnCreated" xml:space="preserve">
+    <value>Created</value>
+    <comment>Table column heading: when it was created.</comment>
+  </data>
+  <data name="ColumnLastUpdated" xml:space="preserve">
+    <value>Last Updated</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="ColumnActions" xml:space="preserve">
+    <value>Actions</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="FieldName" xml:space="preserve">
+    <value>Name</value>
+    <comment>Form field label.</comment>
+  </data>
+  <data name="FieldDescription" xml:space="preserve">
+    <value>Description</value>
+    <comment>Form field label.</comment>
+  </data>
+  <data name="Required" xml:space="preserve">
+    <value>Required</value>
+    <comment>Validation message for an empty mandatory field.</comment>
+  </data>
+  <data name="True" xml:space="preserve">
+    <value>True</value>
+    <comment>A Boolean value.</comment>
+  </data>
+  <data name="False" xml:space="preserve">
+    <value>False</value>
+    <comment>A Boolean value.</comment>
+  </data>
+  <data name="SavedSuccessfully" xml:space="preserve">
+    <value>Changes saved.</value>
+    <comment>Snackbar after a successful save.</comment>
+  </data>
+  <data name="ErrorPrefix" xml:space="preserve">
+    <value>Error: {0}</value>
+    <comment>{0} is an error message.</comment>
+  </data>
 </root>
