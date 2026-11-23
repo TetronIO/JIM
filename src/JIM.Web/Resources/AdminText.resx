@@ -826,4 +826,156 @@
     <value>OK</value>
     <comment>Button on the decryption failure dialog</comment>
   </data>
+  <data name="LogsPageTitle" xml:space="preserve">
+    <value>Logs</value>
+    <comment>Browser title, page heading and breadcrumb</comment>
+  </data>
+  <data name="LogsPageInfo" xml:space="preserve">
+    <value>View and search logs from all JIM services. Each service keeps its 100 most recent log files.</value>
+    <comment>Page information popover</comment>
+  </data>
+  <data name="LogsService" xml:space="preserve">
+    <value>Service</value>
+    <comment>Filter label and column heading</comment>
+  </data>
+  <data name="LogsAllServices" xml:space="preserve">
+    <value>All Services</value>
+    <comment>Placeholder of the service filter</comment>
+  </data>
+  <data name="LogsDate" xml:space="preserve">
+    <value>Date</value>
+    <comment>Filter label</comment>
+  </data>
+  <data name="LogsToday" xml:space="preserve">
+    <value>Today</value>
+    <comment>Placeholder of the date filter</comment>
+  </data>
+  <data name="LogsLevels" xml:space="preserve">
+    <value>Level(s)</value>
+    <comment>Filter label</comment>
+  </data>
+  <data name="LogsAllLevels" xml:space="preserve">
+    <value>All Levels</value>
+    <comment>Placeholder of the level filter, and the selection text when every level is chosen</comment>
+  </data>
+  <data name="LogsLevelCountOne" xml:space="preserve">
+    <value>{0} level</value>
+    <comment>Level filter selection text, singular; {0} is a number</comment>
+  </data>
+  <data name="LogsLevelCountOther" xml:space="preserve">
+    <value>{0} levels</value>
+    <comment>Level filter selection text, plural; {0} is a number</comment>
+  </data>
+  <data name="LogsLevelVerbose" xml:space="preserve">
+    <value>Verbose</value>
+    <comment>Log level name in the filter and the detail panel</comment>
+  </data>
+  <data name="LogsLevelDebug" xml:space="preserve">
+    <value>Debug</value>
+    <comment>Log level name in the filter and the detail panel</comment>
+  </data>
+  <data name="LogsLevelInformation" xml:space="preserve">
+    <value>Information</value>
+    <comment>Log level name in the filter and the detail panel</comment>
+  </data>
+  <data name="LogsLevelWarning" xml:space="preserve">
+    <value>Warning</value>
+    <comment>Log level name in the filter and the detail panel</comment>
+  </data>
+  <data name="LogsLevelError" xml:space="preserve">
+    <value>Error</value>
+    <comment>Log level name in the filter and the detail panel</comment>
+  </data>
+  <data name="LogsLevelFatal" xml:space="preserve">
+    <value>Fatal</value>
+    <comment>Log level name in the filter and the detail panel</comment>
+  </data>
+  <data name="LogsAutoRefresh" xml:space="preserve">
+    <value>Auto-refresh (5s)</value>
+    <comment>Switch label</comment>
+  </data>
+  <data name="LogsSearchPlaceholder" xml:space="preserve">
+    <value>Search messages...</value>
+    <comment>Search box placeholder</comment>
+  </data>
+  <data name="LogsColumnTime" xml:space="preserve">
+    <value>Time</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="LogsColumnLevel" xml:space="preserve">
+    <value>Level</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="LogsColumnMessage" xml:space="preserve">
+    <value>Message</value>
+    <comment>Column heading and detail panel heading</comment>
+  </data>
+  <data name="LogsHasException" xml:space="preserve">
+    <value>Has exception</value>
+    <comment>Tooltip on the exception icon</comment>
+  </data>
+  <data name="LogsPropertyCountOne" xml:space="preserve">
+    <value>{0} property</value>
+    <comment>Chip showing how many properties an entry has, singular; {0} is a number</comment>
+  </data>
+  <data name="LogsPropertyCountOther" xml:space="preserve">
+    <value>{0} properties</value>
+    <comment>Chip showing how many properties an entry has, plural; {0} is a number</comment>
+  </data>
+  <data name="LogsEmptySearch" xml:space="preserve">
+    <value>No log entries match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="LogsEmptyFilters" xml:space="preserve">
+    <value>No log entries match your filters</value>
+    <comment>Empty state when the applied filters exclude everything</comment>
+  </data>
+  <data name="LogsEmptyFiltersHint" xml:space="preserve">
+    <value>Adjust the filters above and select Refresh, or clear them to view the latest log entries.</value>
+    <comment>Empty state secondary text</comment>
+  </data>
+  <data name="LogsEmptyNone" xml:space="preserve">
+    <value>No log entries found</value>
+    <comment>Empty state when there are no entries</comment>
+  </data>
+  <data name="LogsEmptyNoneHint" xml:space="preserve">
+    <value>Log entries appear here as JIM services write to their logs.</value>
+    <comment>Empty state secondary text</comment>
+  </data>
+  <data name="LogsNounSingular" xml:space="preserve">
+    <value>log entry</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="LogsNounPlural" xml:space="preserve">
+    <value>log entries</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="LogsDetailsTitle" xml:space="preserve">
+    <value>Log Entry Details</value>
+    <comment>Detail panel heading</comment>
+  </data>
+  <data name="LogsPropertiesHeading" xml:space="preserve">
+    <value>Properties ({0})</value>
+    <comment>Expansion panel heading; {0} is the number of properties</comment>
+  </data>
+  <data name="LogsPropertyKey" xml:space="preserve">
+    <value>Key</value>
+    <comment>Table heading in the properties table</comment>
+  </data>
+  <data name="LogsException" xml:space="preserve">
+    <value>Exception</value>
+    <comment>Expansion panel heading</comment>
+  </data>
+  <data name="LogsRawJson" xml:space="preserve">
+    <value>Raw JSON</value>
+    <comment>Expansion panel heading</comment>
+  </data>
+  <data name="LogsCopiedToClipboard" xml:space="preserve">
+    <value>Copied to clipboard</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="LogsLoadFailed" xml:space="preserve">
+    <value>Failed to load logs: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
 </root>

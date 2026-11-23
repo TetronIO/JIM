@@ -623,4 +623,118 @@
   <data name="SettingsOk" xml:space="preserve">
     <value>OK</value>
   </data>
+  <data name="LogsPageTitle" xml:space="preserve">
+    <value>Journaux</value>
+  </data>
+  <data name="LogsPageInfo" xml:space="preserve">
+    <value>Consultez et recherchez les journaux de tous les services JIM. Chaque service conserve ses 100 fichiers journaux les plus récents.</value>
+  </data>
+  <data name="LogsService" xml:space="preserve">
+    <value>Service</value>
+  </data>
+  <data name="LogsAllServices" xml:space="preserve">
+    <value>Tous les services</value>
+  </data>
+  <data name="LogsDate" xml:space="preserve">
+    <value>Date</value>
+  </data>
+  <data name="LogsToday" xml:space="preserve">
+    <value>Aujourd’hui</value>
+  </data>
+  <data name="LogsLevels" xml:space="preserve">
+    <value>Niveau(x)</value>
+  </data>
+  <data name="LogsAllLevels" xml:space="preserve">
+    <value>Tous les niveaux</value>
+  </data>
+  <data name="LogsLevelCountOne" xml:space="preserve">
+    <value>{0} niveau</value>
+  </data>
+  <data name="LogsLevelCountOther" xml:space="preserve">
+    <value>{0} niveaux</value>
+  </data>
+  <data name="LogsLevelVerbose" xml:space="preserve">
+    <value>Détaillé</value>
+  </data>
+  <data name="LogsLevelDebug" xml:space="preserve">
+    <value>Débogage</value>
+  </data>
+  <data name="LogsLevelInformation" xml:space="preserve">
+    <value>Information</value>
+  </data>
+  <data name="LogsLevelWarning" xml:space="preserve">
+    <value>Avertissement</value>
+  </data>
+  <data name="LogsLevelError" xml:space="preserve">
+    <value>Erreur</value>
+  </data>
+  <data name="LogsLevelFatal" xml:space="preserve">
+    <value>Critique</value>
+  </data>
+  <data name="LogsAutoRefresh" xml:space="preserve">
+    <value>Actualisation automatique (5 s)</value>
+  </data>
+  <data name="LogsSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher dans les messages...</value>
+  </data>
+  <data name="LogsColumnTime" xml:space="preserve">
+    <value>Heure</value>
+  </data>
+  <data name="LogsColumnLevel" xml:space="preserve">
+    <value>Niveau</value>
+  </data>
+  <data name="LogsColumnMessage" xml:space="preserve">
+    <value>Message</value>
+  </data>
+  <data name="LogsHasException" xml:space="preserve">
+    <value>Contient une exception</value>
+  </data>
+  <data name="LogsPropertyCountOne" xml:space="preserve">
+    <value>{0} propriété</value>
+  </data>
+  <data name="LogsPropertyCountOther" xml:space="preserve">
+    <value>{0} propriétés</value>
+  </data>
+  <data name="LogsEmptySearch" xml:space="preserve">
+    <value>Aucune entrée de journal ne correspond à « {0} ».</value>
+  </data>
+  <data name="LogsEmptyFilters" xml:space="preserve">
+    <value>Aucune entrée de journal ne correspond à vos filtres.</value>
+  </data>
+  <data name="LogsEmptyFiltersHint" xml:space="preserve">
+    <value>Ajustez les filtres ci-dessus et sélectionnez Actualiser, ou effacez-les pour afficher les dernières entrées de journal.</value>
+  </data>
+  <data name="LogsEmptyNone" xml:space="preserve">
+    <value>Aucune entrée de journal trouvée.</value>
+  </data>
+  <data name="LogsEmptyNoneHint" xml:space="preserve">
+    <value>Les entrées de journal apparaissent ici au fur et à mesure que les services JIM écrivent dans leurs journaux.</value>
+  </data>
+  <data name="LogsNounSingular" xml:space="preserve">
+    <value>entrée de journal</value>
+  </data>
+  <data name="LogsNounPlural" xml:space="preserve">
+    <value>entrées de journal</value>
+  </data>
+  <data name="LogsDetailsTitle" xml:space="preserve">
+    <value>Détails de l’entrée de journal</value>
+  </data>
+  <data name="LogsPropertiesHeading" xml:space="preserve">
+    <value>Propriétés ({0})</value>
+  </data>
+  <data name="LogsPropertyKey" xml:space="preserve">
+    <value>Clé</value>
+  </data>
+  <data name="LogsException" xml:space="preserve">
+    <value>Exception</value>
+  </data>
+  <data name="LogsRawJson" xml:space="preserve">
+    <value>JSON brut</value>
+  </data>
+  <data name="LogsCopiedToClipboard" xml:space="preserve">
+    <value>Copié dans le presse-papiers</value>
+  </data>
+  <data name="LogsLoadFailed" xml:space="preserve">
+    <value>Échec du chargement des journaux : {0}</value>
+  </data>
 </root>

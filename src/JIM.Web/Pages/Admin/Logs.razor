@@ -1,5 +1,6 @@
 @page "/admin/logs"
 @attribute [Authorize(Roles = "Administrator")]
+@using System.Globalization
 @using JIM.Application.Services
 @using JIM.Models.Utility
 @using JIM.Web.Models
@@ -12,10 +13,10 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Logs</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Custom.FileFormats.FileDocument" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Logs
-    <PageInfo Title="Logs" DocsPage="administration/logs.md">
-        View and search logs from all JIM services. Each service keeps its 100 most recent log files.
+<PageTitle>@AdminText.LogsPageTitle</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Custom.FileFormats.FileDocument" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@AdminText.LogsPageTitle
+    <PageInfo Title="@AdminText.LogsPageTitle" DocsPage="administration/logs.md">
+        @AdminText.LogsPageInfo
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
@@ -23,8 +24,8 @@
 <MudPaper Elevation="0" Class="pa-4 mt-2" Outlined="true">
     <MudGrid>
         <MudItem xs="12" sm="6" md="4">
-            <MudSelect T="string" @bind-Value="_selectedService" Label="Service" Variant="Variant.Outlined"
-                Dense="true" Clearable="true" Placeholder="All Services">
+            <MudSelect T="string" @bind-Value="_selectedService" Label="@AdminText.LogsService" Variant="Variant.Outlined"
+                Dense="true" Clearable="true" Placeholder="@AdminText.LogsAllServices">
                 <MudSelectItem T="string" Value="@("web")">Web</MudSelectItem>
                 <MudSelectItem T="string" Value="@("worker")">Worker</MudSelectItem>
                 <MudSelectItem T="string" Value="@("scheduler")">Scheduler</MudSelectItem>
@@ -32,28 +33,28 @@
             </MudSelect>
         </MudItem>
         <MudItem xs="12" sm="6" md="4">
-            <MudDatePicker @bind-Date="_selectedDate" Label="Date" Variant="Variant.Outlined"
-                MaxDate="DateTime.Today" Clearable="true" Placeholder="Today" />
+            <MudDatePicker @bind-Date="_selectedDate" Label="@AdminText.LogsDate" Variant="Variant.Outlined"
+                MaxDate="DateTime.Today" Clearable="true" Placeholder="@AdminText.LogsToday" />
         </MudItem>
         <MudItem xs="12" sm="6" md="4">
-            <MudSelect T="string" @bind-SelectedValues="_selectedLevels" Label="Level(s)" Variant="Variant.Outlined"
-                Dense="true" Clearable="true" Placeholder="All Levels" MultiSelection="true"
+            <MudSelect T="string" @bind-SelectedValues="_selectedLevels" Label="@AdminText.LogsLevels" Variant="Variant.Outlined"
+                Dense="true" Clearable="true" Placeholder="@AdminText.LogsAllLevels" MultiSelection="true"
                 MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetSelectedLevelsText))">
-                <MudSelectItem T="string" Value="@("Verbose")">Verbose</MudSelectItem>
-                <MudSelectItem T="string" Value="@("Debug")">Debug</MudSelectItem>
-                <MudSelectItem T="string" Value="@("Information")">Information</MudSelectItem>
-                <MudSelectItem T="string" Value="@("Warning")">Warning</MudSelectItem>
-                <MudSelectItem T="string" Value="@("Error")">Error</MudSelectItem>
-                <MudSelectItem T="string" Value="@("Fatal")">Fatal</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Verbose")">@AdminText.LogsLevelVerbose</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Debug")">@AdminText.LogsLevelDebug</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Information")">@AdminText.LogsLevelInformation</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Warning")">@AdminText.LogsLevelWarning</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Error")">@AdminText.LogsLevelError</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Fatal")">@AdminText.LogsLevelFatal</MudSelectItem>
             </MudSelect>
         </MudItem>
     </MudGrid>
     <div class="d-flex align-center gap-3 mt-4">
         <MudButton OnClick="RefreshAsync" StartIcon="@Icons.Material.Filled.Refresh" Variant="Variant.Filled"
             Color="Color.Primary" DropShadow="false">
-            Refresh
+            @CommonText.Refresh
         </MudButton>
-        <MudSwitch T="bool" Value="_autoRefresh" ValueChanged="OnAutoRefreshChanged" Color="Color.Primary" Label="Auto-refresh (5s)" />
+        <MudSwitch T="bool" Value="_autoRefresh" ValueChanged="OnAutoRefreshChanged" Color="Color.Primary" Label="@AdminText.LogsAutoRefresh" />
     </div>
 </MudPaper>
 
@@ -66,18 +67,18 @@
                      DefaultSortBy="Timestamp"
                      LoadWindow="LoadWindowAsync"
                      RowClicked="HandleRowClicked"
-                     SingularName="log entry"
-                     PluralName="log entries"
-                     SearchPlaceholder="Search messages...">
+                     SingularName="@AdminText.LogsNounSingular"
+                     PluralName="@AdminText.LogsNounPlural"
+                     SearchPlaceholder="@AdminText.LogsSearchPlaceholder">
     <Columns>
-        <TemplateColumn T="LogEntry" Title="Time" Sortable="false" HeaderStyle="width: 100px;" CellStyleFunc="@GetRowStyle">
+        <TemplateColumn T="LogEntry" Title="@AdminText.LogsColumnTime" Sortable="false" HeaderStyle="width: 100px;" CellStyleFunc="@GetRowStyle">
             <CellTemplate>
                 <MudTooltip Text="@context.Item.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff")" Arrow="true" Placement="Placement.Top">
                     <span class="jim-text-code">@context.Item.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff")</span>
                 </MudTooltip>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="LogEntry" Title="Level" Sortable="false" HeaderStyle="width: 70px;" CellStyleFunc="@GetRowStyle">
+        <TemplateColumn T="LogEntry" Title="@AdminText.LogsColumnLevel" Sortable="false" HeaderStyle="width: 70px;" CellStyleFunc="@GetRowStyle">
             <CellTemplate>
                 <MudChip T="string" Variant="Variant.Text" Color="@GetLevelColor(context.Item.Level)"
                     Class="ma-0" Style="min-width: 50px; justify-content: center;">
@@ -85,12 +86,12 @@
                 </MudChip>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="LogEntry" Title="Service" Sortable="false" HeaderStyle="width: 80px;" CellStyleFunc="@GetRowStyle">
+        <TemplateColumn T="LogEntry" Title="@AdminText.LogsService" Sortable="false" HeaderStyle="width: 80px;" CellStyleFunc="@GetRowStyle">
             <CellTemplate>
                 <span class="jim-text-code">@context.Item.Service</span>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="LogEntry" Title="Message" Sortable="false" CellStyleFunc="@GetRowStyle">
+        <TemplateColumn T="LogEntry" Title="@AdminText.LogsColumnMessage" Sortable="false" CellStyleFunc="@GetRowStyle">
             <CellTemplate>
                 @* A row in a virtualised grid is one line, so the message is clipped rather than wrapped, and the
                    exception and property markers beside it never give way to a long one. A log line is what the
@@ -102,13 +103,13 @@
                     @if (!string.IsNullOrEmpty(context.Item.Exception))
                     {
                         <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error"
-                            Title="Has exception" />
+                            Title="@AdminText.LogsHasException" />
                     }
                     @if (context.Item.Properties != null && context.Item.Properties.Count > 0)
                     {
                         <MudChip T="string" Variant="Variant.Text" Color="Color.Default"
                             Class="ma-0" Style="font-size: 0.7rem;">
-                            @context.Item.Properties.Count props
+                            @FormatCount(context.Item.Properties.Count, AdminText.LogsPropertyCountOne, AdminText.LogsPropertyCountOther)
                         </MudChip>
                     }
                 </div>
@@ -122,24 +123,24 @@
         @if (!string.IsNullOrWhiteSpace(grid.SearchText))
         {
             <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                             PrimaryText="@($"No log entries match \"{grid.SearchText}\"")"
-                             SecondaryText="Try a different search term, or clear the search."
-                             ActionText="Clear Search"
+                             PrimaryText="@string.Format(CultureInfo.CurrentCulture, AdminText.LogsEmptySearch, grid.SearchText)"
+                             SecondaryText="@CommonText.TrySearchAgain"
+                             ActionText="@CommonText.ClearSearch"
                              OnAction="@(() => grid.ClearSearchAsync())" />
         }
         else if (AppliedFiltersActive)
         {
             <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
-                             PrimaryText="No log entries match your filters"
-                             SecondaryText="Adjust the filters above and select Refresh, or clear them to view the latest log entries."
-                             ActionText="Clear Filters"
+                             PrimaryText="@AdminText.LogsEmptyFilters"
+                             SecondaryText="@AdminText.LogsEmptyFiltersHint"
+                             ActionText="@AdminText.SchemaClearFilters"
                              OnAction="ClearFiltersAsync" />
         }
         else
         {
             <TableEmptyState Icon="@Icons.Custom.FileFormats.FileDocument"
-                             PrimaryText="No log entries found"
-                             SecondaryText="Log entries appear here as JIM services write to their logs." />
+                             PrimaryText="@AdminText.LogsEmptyNone"
+                             SecondaryText="@AdminText.LogsEmptyNoneHint" />
         }
     </EmptyContent>
 </VirtualisedDataGrid>
@@ -152,14 +153,14 @@
         <div class="d-flex flex-column gap-4 pa-4" style="height: 100%; overflow-y: auto;">
             @* Header with close button *@
             <div class="d-flex justify-space-between align-center">
-                <MudText Typo="Typo.h6">Log Entry Details</MudText>
+                <MudText Typo="Typo.h6">@AdminText.LogsDetailsTitle</MudText>
                 <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="@(() => _drawerOpen = false)" />
             </div>
 
             @* Timestamp and Level *@
             <div class="d-flex gap-4 align-center flex-wrap">
                 <MudChip T="string" Size="Size.Medium" Variant="Variant.Filled" Color="@GetLevelColor(_selectedEntry.Level)">
-                    @_selectedEntry.Level
+                    @DescribeLevel(_selectedEntry.Level)
                 </MudChip>
                 <MudText Typo="Typo.body1" Class="jim-text-code">
                     @_selectedEntry.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff")
@@ -171,7 +172,7 @@
 
             @* Message *@
             <MudPaper Elevation="0" Class="pa-3" Outlined="true">
-                <MudText Typo="Typo.subtitle2" Class="mb-2" Color="Color.Primary">Message</MudText>
+                <MudText Typo="Typo.subtitle2" Class="mb-2" Color="Color.Primary">@AdminText.LogsColumnMessage</MudText>
                 <MudText Typo="Typo.body1" Style="word-break: break-word; white-space: pre-wrap;">@_selectedEntry.Message</MudText>
             </MudPaper>
 
@@ -179,12 +180,12 @@
             @if (_selectedEntry.Properties != null && _selectedEntry.Properties.Count > 0)
             {
                 <MudExpansionPanels Elevation="0">
-                    <MudExpansionPanel Text="@($"Properties ({_selectedEntry.Properties.Count})")" Expanded="true">
+                    <MudExpansionPanel Text="@string.Format(CultureInfo.CurrentCulture, AdminText.LogsPropertiesHeading, _selectedEntry.Properties.Count)" Expanded="true">
                         <MudSimpleTable Dense="true" Hover="true" Bordered="true" Style="overflow-x: auto;">
                             <thead>
                                 <tr>
-                                    <th style="width: 30%;">Key</th>
-                                    <th>Value</th>
+                                    <th style="width: 30%;">@AdminText.LogsPropertyKey</th>
+                                    <th>@AdminText.SettingsColumnValue</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -209,14 +210,14 @@
                         <TitleContent>
                             <div class="d-flex align-center gap-2">
                                 <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" />
-                                <MudText Color="Color.Error">Exception</MudText>
+                                <MudText Color="Color.Error">@AdminText.LogsException</MudText>
                             </div>
                         </TitleContent>
                         <ChildContent>
                             <div class="d-flex justify-end mb-2">
                                 <MudButton StartIcon="@Icons.Material.Filled.ContentCopy"
                                     Variant="Variant.Text" OnClick="@CopyExceptionAsync">
-                                    Copy
+                                    @CommonText.Copy
                                 </MudButton>
                             </div>
                             <pre class="jim-text-code" style="white-space: pre-wrap; word-break: break-word; font-size: 0.8rem; margin: 0; padding: 12px; background: var(--mud-palette-background); border-radius: 4px; overflow-x: auto;">@_selectedEntry.Exception</pre>
@@ -227,11 +228,11 @@
 
             @* Raw JSON *@
             <MudExpansionPanels Elevation="0">
-                <MudExpansionPanel Text="Raw JSON">
+                <MudExpansionPanel Text="@AdminText.LogsRawJson">
                     <div class="d-flex justify-end mb-2">
                         <MudButton StartIcon="@Icons.Material.Filled.ContentCopy"
                             Variant="Variant.Text" OnClick="@CopyRawJsonAsync">
-                            Copy
+                            @CommonText.Copy
                         </MudButton>
                     </div>
                     <div class="jim-json-syntax">@((MarkupString)GetHighlightedJson(_selectedEntry))</div>
@@ -269,9 +270,9 @@
 
     private readonly List<BreadcrumbItem> _breadcrumbs =
     [
-        new("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new("Administration", href: "/admin"),
-        new("Logs", href: null, disabled: true)
+        new(LayoutText.NavHome, href: "/", icon: Icons.Material.Filled.Home),
+        new(LayoutText.NavAdministration, href: "/admin"),
+        new(AdminText.LogsPageTitle, href: null, disabled: true)
     ];
 
     private bool AppliedFiltersActive =>
@@ -298,7 +299,7 @@
         {
             // The log directory became unreadable (permissions, storage failure); surface it rather than leaving
             // the grid spinning, and report an empty window. Zero is only claimed when a count was asked for.
-            Snackbar.Add($"Failed to load logs: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.LogsLoadFailed, ex.Message), Severity.Error);
             return new VirtualisedWindow<LogEntry>([], request.IncludeTotalCount ? 0 : null);
         }
     }
@@ -362,6 +363,23 @@
         _drawerOpen = true;
     }
 
+    private static string FormatCount(int count, string one, string other) =>
+        string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(count, one, other), count);
+
+    /// <summary>
+    /// The log level's name for a reader. A level the portal does not recognise is shown as it was written.
+    /// </summary>
+    private static string DescribeLevel(string level) => level switch
+    {
+        "Verbose" => AdminText.LogsLevelVerbose,
+        "Debug" => AdminText.LogsLevelDebug,
+        "Information" => AdminText.LogsLevelInformation,
+        "Warning" => AdminText.LogsLevelWarning,
+        "Error" => AdminText.LogsLevelError,
+        "Fatal" => AdminText.LogsLevelFatal,
+        _ => level
+    };
+
     private static Color GetLevelColor(string level)
     {
         return level switch
@@ -385,9 +403,9 @@
             return selectedLevels[0];
 
         if (selectedLevels.Count == 6)
-            return "All Levels";
+            return AdminText.LogsAllLevels;
 
-        return $"{selectedLevels.Count} levels";
+        return FormatCount(selectedLevels.Count, AdminText.LogsLevelCountOne, AdminText.LogsLevelCountOther);
     }
 
     private static string GetRowStyle(LogEntry entry)
@@ -487,7 +505,7 @@
 
         var json = GetRawJson(_selectedEntry);
         await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", json);
-        Snackbar.Add("Copied to clipboard", Severity.Success);
+        Snackbar.Add(AdminText.LogsCopiedToClipboard, Severity.Success);
     }
 
     private async Task CopyExceptionAsync()
@@ -496,7 +514,7 @@
             return;
 
         await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", _selectedEntry.Exception);
-        Snackbar.Add("Copied to clipboard", Severity.Success);
+        Snackbar.Add(AdminText.LogsCopiedToClipboard, Severity.Success);
     }
 
     public ValueTask DisposeAsync()
