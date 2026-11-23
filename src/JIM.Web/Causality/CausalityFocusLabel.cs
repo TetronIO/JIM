@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities.DTOs;
+using JIM.Web.Resources;
+using System.Globalization;
 
 namespace JIM.Web.Causality;
 
@@ -14,7 +16,7 @@ public static class CausalityFocusLabel
     /// What a focus the labels no longer find is called: history retention has removed its item, or the object and
     /// every record of its deletion are gone.
     /// </summary>
-    public const string NotRetained = "No longer retained";
+    public static string NotRetained => CausalityText.FocusNotRetained;
 
     /// <summary>
     /// Names a focus: an item by the object it was about and the run that recorded it, an object by its type and name.
@@ -41,9 +43,11 @@ public static class CausalityFocusLabel
     public static string ForItem(CausalTimelineEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        var name = ObjectDescription.ChipName(entry.DisplayName, entry.ExternalId) ?? "Unnamed object";
+        var name = ObjectDescription.ChipName(entry.DisplayName, entry.ExternalId) ?? CausalityText.LineageUnnamedObject;
         var objectLabel = ObjectDescription.ForConnectedSystemObjectLabel(entry.ObjectType, name);
-        return string.IsNullOrWhiteSpace(entry.ActivityTargetName) ? objectLabel : $"{objectLabel} · {entry.ActivityTargetName}";
+        return string.IsNullOrWhiteSpace(entry.ActivityTargetName)
+            ? objectLabel
+            : string.Format(CultureInfo.CurrentCulture, CausalityText.FocusItemLabel, objectLabel, entry.ActivityTargetName);
     }
 
     /// <summary>
@@ -52,14 +56,14 @@ public static class CausalityFocusLabel
     public static string ForObject(CausalObjectHeader header)
     {
         ArgumentNullException.ThrowIfNull(header);
-        var name = ObjectDescription.ChipName(header.DisplayName, header.ExternalId) ?? "Unnamed object";
+        var name = ObjectDescription.ChipName(header.DisplayName, header.ExternalId) ?? CausalityText.LineageUnnamedObject;
         return ObjectDescription.ForConnectedSystemObjectLabel(header.ObjectTypeName, name);
     }
 
     private static string Kind(CausalityFocusKind kind) => kind switch
     {
-        CausalityFocusKind.ConnectedSystemObject => "Connected System Object",
-        CausalityFocusKind.MetaverseObject => "Metaverse Object",
-        _ => "Execution item"
+        CausalityFocusKind.ConnectedSystemObject => CausalityText.FocusKindConnectedSystemObject,
+        CausalityFocusKind.MetaverseObject => CausalityText.FocusKindMetaverseObject,
+        _ => CausalityText.FocusKindExecutionItem
     };
 }

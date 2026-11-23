@@ -1,0 +1,2188 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="OutcomeCsoAddedLabel" xml:space="preserve">
+    <value>Connected System Object added</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeCsoUpdatedLabel" xml:space="preserve">
+    <value>Connected System Object updated</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeCsoDeletedLabel" xml:space="preserve">
+    <value>Connected System Object deleted</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeCsoDeletedClause" xml:space="preserve">
+    <value>have their Connected System Object deleted</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeDeletionDetectedLabel" xml:space="preserve">
+    <value>Deletion detected</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeExportConfirmedLabel" xml:space="preserve">
+    <value>Export confirmed</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeExportFailedLabel" xml:space="preserve">
+    <value>Export failed</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeProjectedLabel" xml:space="preserve">
+    <value>Projected to the Metaverse</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeProjectedClause" xml:space="preserve">
+    <value>project a new Metaverse Object</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeProjectedSpeculative" xml:space="preserve">
+    <value>A Metaverse Object would be projected</value>
+    <comment>Conditional-mood card title used by a Sync Preview.</comment>
+  </data>
+  <data name="OutcomeJoinedLabel" xml:space="preserve">
+    <value>Joined to Metaverse Object</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeJoinedClause" xml:space="preserve">
+    <value>join an existing Metaverse Object</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeJoinedSpeculative" xml:space="preserve">
+    <value>Would join an existing Metaverse Object</value>
+    <comment>Conditional-mood card title used by a Sync Preview.</comment>
+  </data>
+  <data name="OutcomeAttributeFlowLabel" xml:space="preserve">
+    <value>Attributes flowed</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeAttributeFlowClause" xml:space="preserve">
+    <value>have a value changed</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeAttributeFlowSpeculative" xml:space="preserve">
+    <value>Attributes would flow</value>
+    <comment>Conditional-mood card title used by a Sync Preview.</comment>
+  </data>
+  <data name="OutcomeDisconnectedLabel" xml:space="preserve">
+    <value>Disconnected</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeDisconnectedOutOfScopeLabel" xml:space="preserve">
+    <value>Left scope</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeDisconnectedOutOfScopeSpeculative" xml:space="preserve">
+    <value>Would be disconnected from its Metaverse Object</value>
+    <comment>Conditional-mood card title used by a Sync Preview.</comment>
+  </data>
+  <data name="OutcomeOutOfScopeRetainJoinLabel" xml:space="preserve">
+    <value>Left scope, join kept</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeOutOfScopeRetainJoinClause" xml:space="preserve">
+    <value>leave import scope and keep their Metaverse Object join</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeOutOfScopeRetainJoinSpeculative" xml:space="preserve">
+    <value>Would leave scope and keep its Metaverse Object join</value>
+    <comment>Conditional-mood card title used by a Sync Preview.</comment>
+  </data>
+  <data name="OutcomeMvoDeletedLabel" xml:space="preserve">
+    <value>Metaverse Object deleted</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeMvoDeletedSpeculative" xml:space="preserve">
+    <value>The Metaverse Object would be deleted</value>
+    <comment>Conditional-mood card title used by a Sync Preview.</comment>
+  </data>
+  <data name="OutcomeMvoDeletionScheduledLabel" xml:space="preserve">
+    <value>Metaverse Object deletion scheduled</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeMvoDeletionScheduledSpeculative" xml:space="preserve">
+    <value>Metaverse Object deletion would be scheduled</value>
+    <comment>Conditional-mood card title used by a Sync Preview.</comment>
+  </data>
+  <data name="OutcomeMvoDeletionCancelledLabel" xml:space="preserve">
+    <value>Metaverse Object deletion cancelled</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeDriftCorrectionLabel" xml:space="preserve">
+    <value>Drift corrected</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeDriftCorrectionClause" xml:space="preserve">
+    <value>be corrected where they were changed outside JIM</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeDriftCorrectionSpeculative" xml:space="preserve">
+    <value>Drift would be corrected</value>
+    <comment>Conditional-mood card title used by a Sync Preview.</comment>
+  </data>
+  <data name="OutcomeProvisionedLabel" xml:space="preserve">
+    <value>Provisioned</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeProvisionedClause" xml:space="preserve">
+    <value>be provisioned to a target Connected System</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeProvisionedSpeculative" xml:space="preserve">
+    <value>A Connected System Object would be provisioned</value>
+    <comment>Conditional-mood card title used by a Sync Preview.</comment>
+  </data>
+  <data name="OutcomePendingExportCreatedLabel" xml:space="preserve">
+    <value>Export queued</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomePendingExportCreatedSpeculative" xml:space="preserve">
+    <value>An export would be queued</value>
+    <comment>Conditional-mood card title used by a Sync Preview.</comment>
+  </data>
+  <data name="OutcomeDeprovisionQueuedLabel" xml:space="preserve">
+    <value>Deprovision queued</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeDeprovisionQueuedSpeculative" xml:space="preserve">
+    <value>Would be deprovisioned from its target Connected System</value>
+    <comment>Conditional-mood card title used by a Sync Preview.</comment>
+  </data>
+  <data name="OutcomeProvisioningCancelledLabel" xml:space="preserve">
+    <value>Provisioning cancelled</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeProvisioningCancelledClause" xml:space="preserve">
+    <value>have their provisioning to a target Connected System cancelled</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeProvisioningCancelledSpeculative" xml:space="preserve">
+    <value>Provisioning to its target Connected System would be cancelled</value>
+    <comment>Conditional-mood card title used by a Sync Preview.</comment>
+  </data>
+  <data name="OutcomeTargetDisconnectedLabel" xml:space="preserve">
+    <value>Disconnected from target system</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeTargetDisconnectedSpeculative" xml:space="preserve">
+    <value>Would be disconnected from its target Connected System</value>
+    <comment>Conditional-mood card title used by a Sync Preview.</comment>
+  </data>
+  <data name="OutcomeHandedToAnotherExportRuleLabel" xml:space="preserve">
+    <value>Handed to another rule</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeHandedToAnotherExportRuleClause" xml:space="preserve">
+    <value>were taken over by another export rule</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeHandedToAnotherExportRuleSpeculative" xml:space="preserve">
+    <value>Another export rule would take its account over</value>
+    <comment>Conditional-mood card title used by a Sync Preview.</comment>
+  </data>
+  <data name="OutcomePendingExportChangesWithdrawnLabel" xml:space="preserve">
+    <value>Pending Export changes withdrawn</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomePendingExportChangesWithdrawnClause" xml:space="preserve">
+    <value>have changes withdrawn from their Pending Export</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomePendingExportChangesWithdrawnSpeculative" xml:space="preserve">
+    <value>Changes queued for its target Connected System would be withdrawn</value>
+    <comment>Conditional-mood card title used by a Sync Preview.</comment>
+  </data>
+  <data name="OutcomeExportedLabel" xml:space="preserve">
+    <value>Exported</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeDeprovisionedLabel" xml:space="preserve">
+    <value>Deprovisioned</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeAssertedNullLabel" xml:space="preserve">
+    <value>Blank asserted</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeNoContributorLabel" xml:space="preserve">
+    <value>Value cleared</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeNoContributorClause" xml:space="preserve">
+    <value>have a value cleared</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeNoContributorSpeculative" xml:space="preserve">
+    <value>Value would be cleared</value>
+    <comment>Conditional-mood card title used by a Sync Preview.</comment>
+  </data>
+  <data name="OutcomeValuesPreservedLabel" xml:space="preserve">
+    <value>Values preserved</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeValuesPreservedSpeculative" xml:space="preserve">
+    <value>Values would be preserved</value>
+    <comment>Conditional-mood card title used by a Sync Preview.</comment>
+  </data>
+  <data name="OutcomeWouldFallInScopeLabel" xml:space="preserve">
+    <value>Enters import scope</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldFallInScopeClause" xml:space="preserve">
+    <value>enter import scope</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldFallOutOfScopeLabel" xml:space="preserve">
+    <value>Leaves import scope</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldFallOutOfScopeClause" xml:space="preserve">
+    <value>leave import scope</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldBecomeDeletionEligibleLabel" xml:space="preserve">
+    <value>Becomes eligible for deletion</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldBecomeDeletionEligibleClause" xml:space="preserve">
+    <value>become eligible for deletion</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldCeaseToBeDeletionEligibleLabel" xml:space="preserve">
+    <value>No longer eligible for deletion</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldCeaseToBeDeletionEligibleClause" xml:space="preserve">
+    <value>no longer be eligible for deletion</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldChangeDeletionEligibleDateLabel" xml:space="preserve">
+    <value>Deletion date changes</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldChangeDeletionEligibleDateClause" xml:space="preserve">
+    <value>have their deletion date changed</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldDisconnectFromMetaverseObjectLabel" xml:space="preserve">
+    <value>Disconnects from its Metaverse Object</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldDisconnectFromMetaverseObjectClause" xml:space="preserve">
+    <value>disconnect from their Metaverse Object</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldStageDeleteExportLabel" xml:space="preserve">
+    <value>Removed from the target system</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldStageDeleteExportClause" xml:space="preserve">
+    <value>be removed from their target Connected System</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldStageDisableExportLabel" xml:space="preserve">
+    <value>Disabled in the target system</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldStageDisableExportClause" xml:space="preserve">
+    <value>be disabled in their target Connected System and disconnected</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldRemainJoinedLabel" xml:space="preserve">
+    <value>Keeps its Metaverse Object join</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldRemainJoinedClause" xml:space="preserve">
+    <value>keep their Metaverse Object join</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldChangeDeprovisionActionLabel" xml:space="preserve">
+    <value>Scope-exit action changes</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldChangeDeprovisionActionClause" xml:space="preserve">
+    <value>have their scope-exit action changed</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldFailAttributeFlowLabel" xml:space="preserve">
+    <value>Attribute Flow does not evaluate</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldFailAttributeFlowClause" xml:space="preserve">
+    <value>have an Attribute Flow that would not evaluate</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldJoinDifferentMetaverseObjectLabel" xml:space="preserve">
+    <value>Joins a different Metaverse Object</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldJoinDifferentMetaverseObjectClause" xml:space="preserve">
+    <value>join a different Metaverse Object</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldJoinInsteadOfProjectLabel" xml:space="preserve">
+    <value>Joins instead of projecting</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldJoinInsteadOfProjectClause" xml:space="preserve">
+    <value>join an existing Metaverse Object instead of projecting a new one</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldProjectInsteadOfJoinLabel" xml:space="preserve">
+    <value>Projects instead of joining</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldProjectInsteadOfJoinClause" xml:space="preserve">
+    <value>project a new Metaverse Object instead of joining an existing one</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldMatchAmbiguouslyLabel" xml:space="preserve">
+    <value>Matches more than one Metaverse Object</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldMatchAmbiguouslyClause" xml:space="preserve">
+    <value>match more than one Metaverse Object</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldStopProjectingLabel" xml:space="preserve">
+    <value>No longer creates a Metaverse Object</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldStopProjectingClause" xml:space="preserve">
+    <value>no longer have a Metaverse Object created for them</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldStopProvisioningLabel" xml:space="preserve">
+    <value>No longer creates a Connected System Object</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldStopProvisioningClause" xml:space="preserve">
+    <value>no longer have a Connected System Object created for them</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldStopCorrectingDriftLabel" xml:space="preserve">
+    <value>Free to drift from JIM</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldStopCorrectingDriftClause" xml:space="preserve">
+    <value>be free to drift from what JIM holds</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldStopBeingImportedLabel" xml:space="preserve">
+    <value>Stops being imported, stays joined</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldStopBeingImportedClause" xml:space="preserve">
+    <value>stop being imported while staying joined, keeping the values they last imported</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldResumeBeingImportedLabel" xml:space="preserve">
+    <value>Imported again</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldResumeBeingImportedClause" xml:space="preserve">
+    <value>be imported again, so their values track the Connected System once more</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldWithdrawContributedValuesLabel" xml:space="preserve">
+    <value>Contributed values withdrawn</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldWithdrawContributedValuesClause" xml:space="preserve">
+    <value>have the values this Connected System contributed withdrawn</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldRetainContributedValuesLabel" xml:space="preserve">
+    <value>Contributed values kept</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldRetainContributedValuesClause" xml:space="preserve">
+    <value>keep the values this Connected System contributed</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldLeaveExportScopeLabel" xml:space="preserve">
+    <value>Leaves export scope, nothing to remove</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldLeaveExportScopeClause" xml:space="preserve">
+    <value>leave export scope, with nothing in the target system to remove</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldEnterExportScopeLabel" xml:space="preserve">
+    <value>Enters export scope</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldEnterExportScopeClause" xml:space="preserve">
+    <value>enter export scope</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldTakeOverContributedValueLabel" xml:space="preserve">
+    <value>New contributor, value changes</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldTakeOverContributedValueClause" xml:space="preserve">
+    <value>have a value replaced by another contributor's</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldTakeOverSameValueLabel" xml:space="preserve">
+    <value>New contributor, same value</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldTakeOverSameValueClause" xml:space="preserve">
+    <value>keep the same value from another contributor</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldStageUpdateExportLabel" xml:space="preserve">
+    <value>Updated in the target system</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldStageUpdateExportClause" xml:space="preserve">
+    <value>be updated in their target Connected System</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldNotChangeLabel" xml:space="preserve">
+    <value>No change</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldNotChangeClause" xml:space="preserve">
+    <value>not change</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeWouldFailLabel" xml:space="preserve">
+    <value>Fails with an error</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeWouldFailClause" xml:space="preserve">
+    <value>fail with an error</value>
+    <comment>Infinitive clause completing "N objects would ..." in the Configuration Change Preview verdict.</comment>
+  </data>
+  <data name="OutcomeGeneratedValueAssignedLabel" xml:space="preserve">
+    <value>Value generated</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeGeneratedValueAdoptedLabel" xml:space="preserve">
+    <value>Existing value adopted</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeGeneratedValueRetiredLabel" xml:space="preserve">
+    <value>Value retired</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeGeneratedValueRemediatedLabel" xml:space="preserve">
+    <value>Value corrected</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeGeneratedValueWaitingLabel" xml:space="preserve">
+    <value>Value held back</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeGeneratedValueCandidatesSkippedLabel" xml:space="preserve">
+    <value>Candidate passed over</value>
+    <comment>Label of this sync outcome in the causality views and Activity lists.</comment>
+  </data>
+  <data name="OutcomeCsoCreatedLabel" xml:space="preserve">
+    <value>Connected System Object created</value>
+  </data>
+  <data name="OutcomeChangesAppliedLabel" xml:space="preserve">
+    <value>Changes applied</value>
+  </data>
+  <data name="OutcomeCsoDisabledLabel" xml:space="preserve">
+    <value>Connected System Object disabled</value>
+  </data>
+  <data name="OperationCreated" xml:space="preserve">
+    <value>Created</value>
+    <comment>Operation chip on a causality card.</comment>
+  </data>
+  <data name="OperationJoined" xml:space="preserve">
+    <value>Joined</value>
+    <comment>Operation chip on a causality card.</comment>
+  </data>
+  <data name="OperationUpdated" xml:space="preserve">
+    <value>Updated</value>
+    <comment>Operation chip on a causality card.</comment>
+  </data>
+  <data name="OperationDeleted" xml:space="preserve">
+    <value>Deleted</value>
+    <comment>Operation chip on a causality card.</comment>
+  </data>
+  <data name="OperationDisabled" xml:space="preserve">
+    <value>Disabled</value>
+    <comment>Operation chip on a causality card.</comment>
+  </data>
+  <data name="CauseProjected" xml:space="preserve">
+    <value>{0} was projected to the Metaverse</value>
+    <comment>Sentence in the "Caused by" chain; {0} is the cause's name, or a count and noun such as "10 Users".</comment>
+  </data>
+  <data name="CauseJoined" xml:space="preserve">
+    <value>{0} was joined to this existing Metaverse Object</value>
+    <comment>Sentence in the "Caused by" chain; {0} is the cause's name or count.</comment>
+  </data>
+  <data name="CauseCreatedDirectly" xml:space="preserve">
+    <value>This Metaverse Object was created directly in JIM</value>
+  </data>
+  <data name="CauseSourceSystemFallback" xml:space="preserve">
+    <value>the source system</value>
+    <comment>Stands in for a Connected System name that was not recorded.</comment>
+  </data>
+  <data name="CauseImportedChanged" xml:space="preserve">
+    <value>{0} was imported from {1} with changed attributes</value>
+    <comment>Sentence in the "Caused by" chain; {0} is the cause, {1} the Connected System.</comment>
+  </data>
+  <data name="CauseImportDeleted" xml:space="preserve">
+    <value>{0}'s Connected System Object was deleted from {1}</value>
+    <comment>Sentence in the "Caused by" chain; {0} is the cause, {1} the Connected System.</comment>
+  </data>
+  <data name="CauseImportAdded" xml:space="preserve">
+    <value>{0} was imported into {1} as a new Connected System Object</value>
+    <comment>Sentence in the "Caused by" chain; {0} is the cause, {1} the Connected System.</comment>
+  </data>
+  <data name="CauseExportConfirmedOne" xml:space="preserve">
+    <value>{0} was exported, and this import confirms it</value>
+  </data>
+  <data name="CauseExportConfirmedOther" xml:space="preserve">
+    <value>{0} were exported, and this import confirms them</value>
+  </data>
+  <data name="CauseProvisionedTo" xml:space="preserve">
+    <value>{0} was provisioned to {1}, so this run created the Connected System Object</value>
+    <comment>Sentence in the "Caused by" chain; {1} is the Connected System.</comment>
+  </data>
+  <data name="CauseProvisioned" xml:space="preserve">
+    <value>{0} was provisioned, so this run created the Connected System Object</value>
+  </data>
+  <data name="CauseMetaverseChangedSeveralRuns" xml:space="preserve">
+    <value>{0}'s Metaverse Object changed in {1} synchronisations, so this run applied the changes to the Connected System Object</value>
+    <comment>{1} is a count of synchronisation runs (always 2 or more).</comment>
+  </data>
+  <data name="CauseMetaverseChanged" xml:space="preserve">
+    <value>{0}'s Metaverse Object changed, so this run applied the changes to the Connected System Object</value>
+  </data>
+  <data name="CauseMetaverseDeleted" xml:space="preserve">
+    <value>The Metaverse Object {0} was deleted, so this run deleted the Connected System Object</value>
+  </data>
+  <data name="CauseDeprovisionedDisabled" xml:space="preserve">
+    <value>{0} was deprovisioned, so this run disabled the Connected System Object</value>
+  </data>
+  <data name="CauseStagedBySeveralRuns" xml:space="preserve">
+    <value>{0} synchronisations of {1} staged this change, and this run exported it</value>
+    <comment>{0} is a count (2 or more), {1} the object.</comment>
+  </data>
+  <data name="CauseStagedByOneRun" xml:space="preserve">
+    <value>A synchronisation of {0} staged this change, and this run exported it</value>
+  </data>
+  <data name="CauseDeprovisionQueuedOne" xml:space="preserve">
+    <value>{0} was deleted, so this deprovisioning was queued</value>
+  </data>
+  <data name="CauseDeprovisionQueuedOther" xml:space="preserve">
+    <value>{0} were deleted, so this deprovisioning was queued</value>
+  </data>
+  <data name="CauseGraceDeletionOne" xml:space="preserve">
+    <value>{0} was scheduled for deletion, and this run deleted it once the grace period ended</value>
+  </data>
+  <data name="CauseGraceDeletionOther" xml:space="preserve">
+    <value>{0} were scheduled for deletion, and this run deleted them once the grace period ended</value>
+  </data>
+  <data name="CauseRejectingSystemFallback" xml:space="preserve">
+    <value>The target Connected System</value>
+    <comment>Stands in for a Connected System name that was not recorded; starts a sentence.</comment>
+  </data>
+  <data name="CauseRejectedAlreadyInUse" xml:space="preserve">
+    <value>{0} rejected the generated value as already in use, so JIM generated a new one</value>
+  </data>
+  <data name="CauseRejectedAnchoredElsewhere" xml:space="preserve">
+    <value>{0} rejected the generated value, but another Connected System already holds it, so the object needs a decision</value>
+  </data>
+  <data name="CauseRejectedRenameAuthorised" xml:space="preserve">
+    <value>{0} rejected the generated value and an administrator allowed the rename, so JIM generated a new one</value>
+  </data>
+  <data name="CauseRejectedRevised" xml:space="preserve">
+    <value>{0} rejected the generated value, so JIM revised it</value>
+  </data>
+  <data name="ReasonProvisioningDecision" xml:space="preserve">
+    <value>made the provisioning decision</value>
+    <comment>Reads on from a Synchronisation Rule chip as its subject.</comment>
+  </data>
+  <data name="ReasonLastConnectionHeld" xml:space="preserve">
+    <value>held the last remaining connection, so the Deletion Rule deleted them</value>
+    <comment>Reads on from a Connected System chip as its subject.</comment>
+  </data>
+  <data name="ReasonLastConnectionHeldNoSources" xml:space="preserve">
+    <value>held the last remaining connection, so the Deletion Rule deleted them (no authoritative sources were configured)</value>
+  </data>
+  <data name="ReasonLastAuthoritativeDisconnected" xml:space="preserve">
+    <value>was the last authoritative source to disconnect, so the Deletion Rule deleted them</value>
+  </data>
+  <data name="ReasonAuthoritativeDisconnected" xml:space="preserve">
+    <value>was an authoritative source and disconnected, so the Deletion Rule deleted them</value>
+  </data>
+  <data name="ReasonLastConnectionRemoved" xml:space="preserve">
+    <value>The last remaining connection was removed, so the Deletion Rule deleted them</value>
+  </data>
+  <data name="ReasonLastConnectionRemovedNoSources" xml:space="preserve">
+    <value>The last remaining connection was removed, so the Deletion Rule deleted them (no authoritative sources were configured)</value>
+  </data>
+  <data name="ReasonLastAuthoritativeSourceDisconnected" xml:space="preserve">
+    <value>The last authoritative source disconnected, so the Deletion Rule deleted them</value>
+  </data>
+  <data name="ReasonAuthoritativeSourceDisconnected" xml:space="preserve">
+    <value>An authoritative source disconnected, so the Deletion Rule deleted them</value>
+  </data>
+  <data name="EndingNoFurtherCauses" xml:space="preserve">
+    <value>No earlier causes recorded</value>
+  </data>
+  <data name="EndingCauseNotRetained" xml:space="preserve">
+    <value>What caused this is no longer retained</value>
+  </data>
+  <data name="EndingDepthLimitReached" xml:space="preserve">
+    <value>More causes exist beyond this point</value>
+  </data>
+  <data name="MoreCausesSuffixOne" xml:space="preserve">
+    <value>, and {0} more cause</value>
+    <comment>Appended to a sentence; {0} is how many more.</comment>
+  </data>
+  <data name="MoreCausesSuffixOther" xml:space="preserve">
+    <value>, and {0} more causes</value>
+    <comment>Appended to a sentence; {0} is how many more.</comment>
+  </data>
+  <data name="ShowMembersLabel" xml:space="preserve">
+    <value>Show the {0} {1}</value>
+    <comment>Disclosure label; {0} is a count, {1} the plural noun for what is listed.</comment>
+  </data>
+  <data name="HideMembersLabel" xml:space="preserve">
+    <value>Hide the {0} {1}</value>
+    <comment>Disclosure label; {0} is a count, {1} the plural noun for what is listed.</comment>
+  </data>
+  <data name="MembersNounSynchronisations" xml:space="preserve">
+    <value>synchronisations</value>
+    <comment>Plural noun, used after a count.</comment>
+  </data>
+  <data name="MembersNounObjectOne" xml:space="preserve">
+    <value>object</value>
+    <comment>Generic noun where no object type name was recorded.</comment>
+  </data>
+  <data name="MembersNounObjectOther" xml:space="preserve">
+    <value>objects</value>
+    <comment>Generic plural noun where no object type name was recorded.</comment>
+  </data>
+  <data name="CauseReferencesRemovedOne" xml:space="preserve">
+    <value>{0} was deleted, so the references to them were removed</value>
+  </data>
+  <data name="CauseReferencesRemovedOther" xml:space="preserve">
+    <value>{0} were deleted, so the references to them were removed</value>
+  </data>
+  <data name="CauseReferencesRemovedFromOne" xml:space="preserve">
+    <value>{0} was deleted, so the references to them were removed from {1}</value>
+  </data>
+  <data name="CauseReferencesRemovedFromOther" xml:space="preserve">
+    <value>{0} were deleted, so the references to them were removed from {1}</value>
+  </data>
+  <data name="CauseAttributeRemovedOne" xml:space="preserve">
+    <value>{0} was deleted, so they were removed from</value>
+    <comment>Followed by the attribute name (a highlighted span) after one space; no trailing space here.</comment>
+  </data>
+  <data name="CauseAttributeRemovedOther" xml:space="preserve">
+    <value>{0} were deleted, so they were removed from</value>
+    <comment>Followed by the attribute name (a highlighted span) after one space; no trailing space here.</comment>
+  </data>
+  <data name="CauseAttributeRemovedOwnerOne" xml:space="preserve">
+    <value>{0} was deleted, so they were removed from {1}'s</value>
+    <comment>Followed by the attribute name (a highlighted span) after one space; {1} owns the attribute.</comment>
+  </data>
+  <data name="CauseAttributeRemovedOwnerOther" xml:space="preserve">
+    <value>{0} were deleted, so they were removed from {1}'s</value>
+    <comment>Followed by the attribute name (a highlighted span) after one space; {1} owns the attribute.</comment>
+  </data>
+  <data name="SummarySentence" xml:space="preserve">
+    <value>{0}: {1}.</value>
+    <comment>Summary band sentence; {0} is the opening (who processed what), {1} the list of results.</comment>
+  </data>
+  <data name="SummaryListJoin" xml:space="preserve">
+    <value>{0}, {1}</value>
+    <comment>Joins two parts of the result list.</comment>
+  </data>
+  <data name="SummaryListJoinLast" xml:space="preserve">
+    <value>{0}, and {1}</value>
+    <comment>Joins the last result to the ones before it.</comment>
+  </data>
+  <data name="SummaryRun" xml:space="preserve">
+    <value>A run</value>
+  </data>
+  <data name="SummaryRunProfileA" xml:space="preserve">
+    <value>A {0}</value>
+    <comment>Summary band sentence; {0} is a Run Profile name; English picks "A" or "An" by its first letter.</comment>
+  </data>
+  <data name="SummaryRunProfileAn" xml:space="preserve">
+    <value>An {0}</value>
+    <comment>Summary band sentence; {0} is a Run Profile name; English picks "A" or "An" by its first letter, so French is the same as the "A" form.</comment>
+  </data>
+  <data name="SummarySubjectOnSystem" xml:space="preserve">
+    <value>{0} on {1}</value>
+    <comment>Summary band sentence; {0} is the run, {1} the Connected System.</comment>
+  </data>
+  <data name="SummaryProcessedMetaverseObject" xml:space="preserve">
+    <value>{0} processed the Metaverse Object</value>
+  </data>
+  <data name="SummaryWouldProcessMetaverseObject" xml:space="preserve">
+    <value>{0} would process the Metaverse Object</value>
+  </data>
+  <data name="SummaryProcessedConnectedSystemObject" xml:space="preserve">
+    <value>{0} processed the Connected System Object</value>
+  </data>
+  <data name="SummaryWouldProcessConnectedSystemObject" xml:space="preserve">
+    <value>{0} would process the Connected System Object</value>
+  </data>
+  <data name="SummaryProcessedObject" xml:space="preserve">
+    <value>{0} processed {1}</value>
+    <comment>Summary band sentence; {1} is the object's name.</comment>
+  </data>
+  <data name="SummaryWouldProcessObject" xml:space="preserve">
+    <value>{0} would process {1}</value>
+    <comment>Summary band sentence; {1} is the object's name.</comment>
+  </data>
+  <data name="SummaryProcessedTypedObject" xml:space="preserve">
+    <value>{0} processed {1} {2}</value>
+    <comment>Summary band sentence; {1} is the object type's name, {2} the object's name.</comment>
+  </data>
+  <data name="SummaryWouldProcessTypedObject" xml:space="preserve">
+    <value>{0} would process {1} {2}</value>
+    <comment>Summary band sentence; {1} is the object type's name, {2} the object's name.</comment>
+  </data>
+  <data name="SummaryHeldForDecision" xml:space="preserve">
+    <value>a generated value it carried was rejected as already in use, so the export is held until an administrator makes a decision</value>
+  </data>
+  <data name="SummaryGeneratedValueCorrected" xml:space="preserve">
+    <value>a generated value it carried was rejected as already in use, so JIM corrected it, and the next synchronisation will export the new value</value>
+  </data>
+  <data name="SummaryNoChangesWereNeeded" xml:space="preserve">
+    <value>no changes were needed</value>
+  </data>
+  <data name="SummaryNoChangesAreNeeded" xml:space="preserve">
+    <value>no changes are needed</value>
+  </data>
+  <data name="SummaryWouldProject" xml:space="preserve">
+    <value>a new Metaverse Object would be projected</value>
+  </data>
+  <data name="SummaryWouldJoinTo" xml:space="preserve">
+    <value>it would be joined to the Metaverse Object {0}</value>
+  </data>
+  <data name="SummaryWouldJoinExisting" xml:space="preserve">
+    <value>it would be joined to an existing Metaverse Object</value>
+  </data>
+  <data name="SummaryWouldFlowOne" xml:space="preserve">
+    <value>{0} attribute would flow to it</value>
+  </data>
+  <data name="SummaryWouldFlowOther" xml:space="preserve">
+    <value>{0} attributes would flow to it</value>
+  </data>
+  <data name="SummaryWouldFlowUnknown" xml:space="preserve">
+    <value>attributes would flow to it</value>
+  </data>
+  <data name="SummaryDownstreamSystem" xml:space="preserve">
+    <value>a downstream system</value>
+    <comment>Stands in for a Connected System name that was not recorded.</comment>
+  </data>
+  <data name="SummaryWouldQueueExportOne" xml:space="preserve">
+    <value>an export of {0} change would be queued for {1}</value>
+    <comment>{1} is a Connected System name.</comment>
+  </data>
+  <data name="SummaryWouldQueueExportOther" xml:space="preserve">
+    <value>an export of {0} changes would be queued for {1}</value>
+    <comment>{1} is a Connected System name.</comment>
+  </data>
+  <data name="SummaryWouldQueueExportUnknown" xml:space="preserve">
+    <value>an export would be queued for {0}</value>
+    <comment>{0} is a Connected System name.</comment>
+  </data>
+  <data name="SummaryWouldQueueExportsOne" xml:space="preserve">
+    <value>exports of {0} change would be queued for {1} systems</value>
+  </data>
+  <data name="SummaryWouldQueueExportsOther" xml:space="preserve">
+    <value>exports of {0} changes would be queued for {1} systems</value>
+  </data>
+  <data name="SummaryWouldLeaveScopeOfRule" xml:space="preserve">
+    <value>it would leave the scope of Synchronisation Rule {0}</value>
+  </data>
+  <data name="SummaryLeftScopeOfRule" xml:space="preserve">
+    <value>it left the scope of Synchronisation Rule {0}</value>
+  </data>
+  <data name="SummaryWouldLeaveScopeOfItsRule" xml:space="preserve">
+    <value>it would leave the scope of its Synchronisation Rule</value>
+  </data>
+  <data name="SummaryLeftScopeOfItsRule" xml:space="preserve">
+    <value>it left the scope of its Synchronisation Rule</value>
+  </data>
+  <data name="SummaryWouldKeepJoinTo" xml:space="preserve">
+    <value>and keep its join to the Metaverse Object {0}</value>
+  </data>
+  <data name="SummaryKeptJoinTo" xml:space="preserve">
+    <value>and kept its join to the Metaverse Object {0}</value>
+  </data>
+  <data name="SummaryWouldKeepJoin" xml:space="preserve">
+    <value>and keep its Metaverse Object join</value>
+  </data>
+  <data name="SummaryKeptJoin" xml:space="preserve">
+    <value>and kept its Metaverse Object join</value>
+  </data>
+  <data name="SummaryRetainedJoinJoin" xml:space="preserve">
+    <value>{0} {1}</value>
+    <comment>Joins the scope-exit part and the kept-join part of one clause.</comment>
+  </data>
+  <data name="SummaryMvoWouldBeDeleted" xml:space="preserve">
+    <value>the Metaverse Object {0} would be deleted</value>
+  </data>
+  <data name="SummaryMvoWouldBeDeletedUnnamed" xml:space="preserve">
+    <value>the Metaverse Object would be deleted</value>
+  </data>
+  <data name="SummaryMvoWouldBeScheduled" xml:space="preserve">
+    <value>the Metaverse Object {0} would be scheduled for deletion</value>
+  </data>
+  <data name="SummaryMvoWouldBeScheduledUnnamed" xml:space="preserve">
+    <value>the Metaverse Object would be scheduled for deletion</value>
+  </data>
+  <data name="SummaryWouldQueueDeprovisionOne" xml:space="preserve">
+    <value>deprovisioning would be queued for {0} system</value>
+  </data>
+  <data name="SummaryWouldQueueDeprovisionOther" xml:space="preserve">
+    <value>deprovisioning would be queued for {0} systems</value>
+  </data>
+  <data name="SummaryWouldCancelProvisioningOne" xml:space="preserve">
+    <value>provisioning would be cancelled for {0} system, since nothing had been exported yet</value>
+  </data>
+  <data name="SummaryWouldCancelProvisioningOther" xml:space="preserve">
+    <value>provisioning would be cancelled for {0} systems, since nothing had been exported yet</value>
+  </data>
+  <data name="SummaryProjected" xml:space="preserve">
+    <value>a new Metaverse Object was projected</value>
+  </data>
+  <data name="SummaryJoinedTo" xml:space="preserve">
+    <value>it was joined to the Metaverse Object {0}</value>
+  </data>
+  <data name="SummaryJoinedExisting" xml:space="preserve">
+    <value>it was joined to an existing Metaverse Object</value>
+  </data>
+  <data name="SummaryDeletionCancelled" xml:space="preserve">
+    <value>its scheduled deletion was cancelled</value>
+  </data>
+  <data name="SummaryFlowedOne" xml:space="preserve">
+    <value>{0} attribute flowed to it</value>
+  </data>
+  <data name="SummaryFlowedOther" xml:space="preserve">
+    <value>{0} attributes flowed to it</value>
+  </data>
+  <data name="SummaryFlowedUnknown" xml:space="preserve">
+    <value>attributes flowed to it</value>
+  </data>
+  <data name="SummaryWouldGenerateValue" xml:space="preserve">
+    <value>a value would be generated</value>
+  </data>
+  <data name="SummaryGeneratedValue" xml:space="preserve">
+    <value>a value was generated</value>
+  </data>
+  <data name="SummaryWouldGenerateAs" xml:space="preserve">
+    <value>{0} would be generated as {1}</value>
+    <comment>{0} is an attribute name, {1} the generated value.</comment>
+  </data>
+  <data name="SummaryGeneratedAs" xml:space="preserve">
+    <value>{0} was generated as {1}</value>
+    <comment>{0} is an attribute name, {1} the generated value.</comment>
+  </data>
+  <data name="SummaryQueuedExportOne" xml:space="preserve">
+    <value>an export of {0} change is now queued for {1}</value>
+    <comment>{1} is a Connected System name.</comment>
+  </data>
+  <data name="SummaryQueuedExportOther" xml:space="preserve">
+    <value>an export of {0} changes is now queued for {1}</value>
+    <comment>{1} is a Connected System name.</comment>
+  </data>
+  <data name="SummaryQueuedExportUnknown" xml:space="preserve">
+    <value>an export is now queued for {0}</value>
+    <comment>{0} is a Connected System name.</comment>
+  </data>
+  <data name="SummaryQueuedExportsOne" xml:space="preserve">
+    <value>exports of {0} change are now queued for {1} systems</value>
+  </data>
+  <data name="SummaryQueuedExportsOther" xml:space="preserve">
+    <value>exports of {0} changes are now queued for {1} systems</value>
+  </data>
+  <data name="SummaryDisconnectedFromMvo" xml:space="preserve">
+    <value>it was disconnected from the Metaverse Object {0}</value>
+  </data>
+  <data name="SummaryDisconnectedFromItsMvo" xml:space="preserve">
+    <value>it was disconnected from its Metaverse Object</value>
+  </data>
+  <data name="SummaryMvoWasDeleted" xml:space="preserve">
+    <value>the Metaverse Object {0} was deleted</value>
+  </data>
+  <data name="SummaryMvoWasDeletedUnnamed" xml:space="preserve">
+    <value>the Metaverse Object was deleted</value>
+  </data>
+  <data name="SummaryMvoWasScheduled" xml:space="preserve">
+    <value>the Metaverse Object {0} was scheduled for deletion</value>
+  </data>
+  <data name="SummaryMvoWasScheduledUnnamed" xml:space="preserve">
+    <value>the Metaverse Object was scheduled for deletion</value>
+  </data>
+  <data name="SummaryDeprovisioningQueuedOne" xml:space="preserve">
+    <value>deprovisioning is now queued for {0} system</value>
+  </data>
+  <data name="SummaryDeprovisioningQueuedOther" xml:space="preserve">
+    <value>deprovisioning is now queued for {0} systems</value>
+  </data>
+  <data name="SummaryProvisioningCancelledOne" xml:space="preserve">
+    <value>provisioning was cancelled for {0} system, since nothing had been exported yet</value>
+  </data>
+  <data name="SummaryProvisioningCancelledOther" xml:space="preserve">
+    <value>provisioning was cancelled for {0} systems, since nothing had been exported yet</value>
+  </data>
+  <data name="SummaryExportFailedOne" xml:space="preserve">
+    <value>an export of {0} change was attempted, but it failed and needs attention</value>
+  </data>
+  <data name="SummaryExportFailedOther" xml:space="preserve">
+    <value>an export of {0} changes was attempted, but it failed and needs attention</value>
+  </data>
+  <data name="SummaryExportFailedUnknown" xml:space="preserve">
+    <value>an export was attempted, but it failed and needs attention</value>
+  </data>
+  <data name="SummaryExportedOne" xml:space="preserve">
+    <value>{0} change was exported</value>
+  </data>
+  <data name="SummaryExportedOther" xml:space="preserve">
+    <value>{0} changes were exported</value>
+  </data>
+  <data name="SummaryExportedUnknown" xml:space="preserve">
+    <value>changes were exported</value>
+  </data>
+  <data name="SummaryConfirmedOne" xml:space="preserve">
+    <value>{0} exported change was confirmed</value>
+  </data>
+  <data name="SummaryConfirmedOther" xml:space="preserve">
+    <value>{0} exported changes were confirmed</value>
+  </data>
+  <data name="SummaryConfirmedUnknown" xml:space="preserve">
+    <value>the export was confirmed</value>
+  </data>
+  <data name="SummaryWithdrawnOneSpec" xml:space="preserve">
+    <value>{0} change queued for {1} would be withdrawn, since it already holds the value</value>
+    <comment>{1} is a Connected System name.</comment>
+  </data>
+  <data name="SummaryWithdrawnOtherSpec" xml:space="preserve">
+    <value>{0} changes queued for {1} would be withdrawn, since it already holds the values</value>
+    <comment>{1} is a Connected System name.</comment>
+  </data>
+  <data name="SummaryWithdrawnOne" xml:space="preserve">
+    <value>{0} change queued for {1} was withdrawn, since it already holds the value</value>
+    <comment>{1} is a Connected System name.</comment>
+  </data>
+  <data name="SummaryWithdrawnOther" xml:space="preserve">
+    <value>{0} changes queued for {1} were withdrawn, since it already holds the values</value>
+    <comment>{1} is a Connected System name.</comment>
+  </data>
+  <data name="SummaryWithdrawnSystemsOneSpec" xml:space="preserve">
+    <value>{0} change queued for {1} systems would be withdrawn, since they already hold the values</value>
+  </data>
+  <data name="SummaryWithdrawnSystemsOtherSpec" xml:space="preserve">
+    <value>{0} changes queued for {1} systems would be withdrawn, since they already hold the values</value>
+  </data>
+  <data name="SummaryWithdrawnSystemsOne" xml:space="preserve">
+    <value>{0} change queued for {1} systems were withdrawn, since they already hold the values</value>
+  </data>
+  <data name="SummaryWithdrawnSystemsOther" xml:space="preserve">
+    <value>{0} changes queued for {1} systems were withdrawn, since they already hold the values</value>
+  </data>
+  <data name="PillNeedsDecision" xml:space="preserve">
+    <value>Needs a decision</value>
+  </data>
+  <data name="PillAttributesFlowedOne" xml:space="preserve">
+    <value>{0} attribute flowed</value>
+  </data>
+  <data name="PillAttributesFlowedOther" xml:space="preserve">
+    <value>{0} attributes flowed</value>
+  </data>
+  <data name="PillProvisionedSystemsOne" xml:space="preserve">
+    <value>Provisioned · {0} system</value>
+    <comment>Outcome pill; {0} is a count of Connected Systems.</comment>
+  </data>
+  <data name="PillProvisionedSystemsOther" xml:space="preserve">
+    <value>Provisioned · {0} systems</value>
+    <comment>Outcome pill; {0} is a count of Connected Systems.</comment>
+  </data>
+  <data name="PillDeprovisionQueuedSystemsOne" xml:space="preserve">
+    <value>Deprovision queued · {0} system</value>
+    <comment>Outcome pill; {0} is a count of Connected Systems.</comment>
+  </data>
+  <data name="PillDeprovisionQueuedSystemsOther" xml:space="preserve">
+    <value>Deprovision queued · {0} systems</value>
+    <comment>Outcome pill; {0} is a count of Connected Systems.</comment>
+  </data>
+  <data name="PillDeprovisioningSystemsOne" xml:space="preserve">
+    <value>Deprovisioning · {0} system</value>
+    <comment>Outcome pill; {0} is a count of Connected Systems.</comment>
+  </data>
+  <data name="PillDeprovisioningSystemsOther" xml:space="preserve">
+    <value>Deprovisioning · {0} systems</value>
+    <comment>Outcome pill; {0} is a count of Connected Systems.</comment>
+  </data>
+  <data name="PillProvisioningCancelledSystemsOne" xml:space="preserve">
+    <value>Provisioning cancelled · {0} system</value>
+    <comment>Outcome pill; {0} is a count of Connected Systems.</comment>
+  </data>
+  <data name="PillProvisioningCancelledSystemsOther" xml:space="preserve">
+    <value>Provisioning cancelled · {0} systems</value>
+    <comment>Outcome pill; {0} is a count of Connected Systems.</comment>
+  </data>
+  <data name="PillTargetDisconnectedSystemsOne" xml:space="preserve">
+    <value>Disconnected from target system · {0} system</value>
+    <comment>Outcome pill; {0} is a count of Connected Systems.</comment>
+  </data>
+  <data name="PillTargetDisconnectedSystemsOther" xml:space="preserve">
+    <value>Disconnected from target system · {0} systems</value>
+    <comment>Outcome pill; {0} is a count of Connected Systems.</comment>
+  </data>
+  <data name="PillExportQueuedChangesOne" xml:space="preserve">
+    <value>Export queued · {0} change</value>
+    <comment>Outcome pill; {0} is a count of changes.</comment>
+  </data>
+  <data name="PillExportQueuedChangesOther" xml:space="preserve">
+    <value>Export queued · {0} changes</value>
+    <comment>Outcome pill; {0} is a count of changes.</comment>
+  </data>
+  <data name="PillExportedChangesOne" xml:space="preserve">
+    <value>Exported · {0} change</value>
+    <comment>Outcome pill; {0} is a count of changes.</comment>
+  </data>
+  <data name="PillExportedChangesOther" xml:space="preserve">
+    <value>Exported · {0} changes</value>
+    <comment>Outcome pill; {0} is a count of changes.</comment>
+  </data>
+  <data name="PillOutOfScope" xml:space="preserve">
+    <value>Out of scope</value>
+  </data>
+  <data name="PillDeletionScheduled" xml:space="preserve">
+    <value>Deletion scheduled</value>
+  </data>
+  <data name="LineageDeletionScheduledTitle" xml:space="preserve">
+    <value>Deletion scheduled</value>
+  </data>
+  <data name="LineageDeletionScheduledText" xml:space="preserve">
+    <value>Its grace period is running. It will be deleted when the grace period ends, unless it joins a Connected System Object again first.</value>
+  </data>
+  <data name="LineageFurtherThanShownTitle" xml:space="preserve">
+    <value>This goes further than shown</value>
+  </data>
+  <data name="LineageWalkStoppedAtItem" xml:space="preserve">
+    <value>The walk stopped at the item above. Carry on from there to see what followed.</value>
+  </data>
+  <data name="LineageWalkStoppedAtItems" xml:space="preserve">
+    <value>The walk stopped at the items above. Carry on from any of them by its own link.</value>
+  </data>
+  <data name="LineageConnectedSystemObjectFallback" xml:space="preserve">
+    <value>Connected System Object</value>
+    <comment>Heading for an object that has no name.</comment>
+  </data>
+  <data name="LineageConnectedSystemObjectsFallback" xml:space="preserve">
+    <value>Connected System Objects</value>
+    <comment>Heading for a group of objects with no type name.</comment>
+  </data>
+  <data name="LineageNothingMoreFollows" xml:space="preserve">
+    <value>Nothing more follows for this Connected System Object</value>
+  </data>
+  <data name="LineageItsConnectedSystem" xml:space="preserve">
+    <value>its Connected System</value>
+    <comment>Stands in for a Connected System name that was not recorded; used mid-sentence.</comment>
+  </data>
+  <data name="LineageStaysInSystem" xml:space="preserve">
+    <value>It stays in {0}, and JIM no longer manages it.</value>
+    <comment>Lineage card; {0} is a Connected System name.</comment>
+  </data>
+  <data name="LineageWaitingForSynchronisationTitle" xml:space="preserve">
+    <value>Waiting for the next Synchronisation of {0}</value>
+    <comment>Lineage card; {0} is a Connected System name.</comment>
+  </data>
+  <data name="LineageWaitingForSynchronisationText" xml:space="preserve">
+    <value>No Synchronisation of {0} has run since this import, so nothing has acted on the change yet.</value>
+    <comment>Lineage card; {0} is a Connected System name.</comment>
+  </data>
+  <data name="LineageWaitingForSynchronisationPill" xml:space="preserve">
+    <value>Waiting for a Synchronisation</value>
+  </data>
+  <data name="LineageNothingFollowed" xml:space="preserve">
+    <value>Nothing followed</value>
+  </data>
+  <data name="LineageNothingFollowedText" xml:space="preserve">
+    <value>A Synchronisation of {0} has run since this import and changed nothing as a result.</value>
+    <comment>Lineage card; {0} is a Connected System name.</comment>
+  </data>
+  <data name="LineageNeedsAttention" xml:space="preserve">
+    <value>Needs attention</value>
+  </data>
+  <data name="LineageNeedsAttentionTextOne" xml:space="preserve">
+    <value>{0} Pending Export has stopped, and nothing more will happen until someone acts on it.</value>
+    <comment>Lineage card; {0} is a count.</comment>
+  </data>
+  <data name="LineageNeedsAttentionTextOther" xml:space="preserve">
+    <value>{0} Pending Exports have stopped, and nothing more will happen until someone acts on them.</value>
+    <comment>Lineage card; {0} is a count.</comment>
+  </data>
+  <data name="LineageWaitingForRetryTitle" xml:space="preserve">
+    <value>Waiting for a retry</value>
+  </data>
+  <data name="LineageWaitingForRetryTextOne" xml:space="preserve">
+    <value>{0} Pending Export will be retried on the next Export of {1}.</value>
+    <comment>Lineage card; {0} is a count, {1} a Connected System name.</comment>
+  </data>
+  <data name="LineageWaitingForRetryTextOther" xml:space="preserve">
+    <value>{0} Pending Exports will be retried on the next Export of {1}.</value>
+    <comment>Lineage card; {0} is a count, {1} a Connected System name.</comment>
+  </data>
+  <data name="LineageRetryPending" xml:space="preserve">
+    <value>Retry pending</value>
+  </data>
+  <data name="LineageWaitingForImportTitle" xml:space="preserve">
+    <value>Waiting for the next import of {0}</value>
+    <comment>Lineage card; {0} is a Connected System name.</comment>
+  </data>
+  <data name="LineageWaitingForImportText" xml:space="preserve">
+    <value>Exported, and waiting for an import to confirm the change landed.</value>
+  </data>
+  <data name="LineageWaitingForImportPill" xml:space="preserve">
+    <value>Waiting for a confirming import</value>
+  </data>
+  <data name="LineageWaitingForExportTitle" xml:space="preserve">
+    <value>Waiting for the next Export of {0}</value>
+    <comment>Lineage card; {0} is a Connected System name.</comment>
+  </data>
+  <data name="LineageQueuedAsPendingExport" xml:space="preserve">
+    <value>The change is queued as a Pending Export.</value>
+  </data>
+  <data name="LineageQueuedPendingExports" xml:space="preserve">
+    <value>{0} Pending Exports are queued.</value>
+    <comment>Lineage card; {0} is a count (2 or more).</comment>
+  </data>
+  <data name="LineageWaitingForExportPill" xml:space="preserve">
+    <value>Waiting for an Export</value>
+  </data>
+  <data name="LineageViewPendingExport" xml:space="preserve">
+    <value>View Pending Export</value>
+  </data>
+  <data name="LineageViewPendingExports" xml:space="preserve">
+    <value>View Pending Exports</value>
+  </data>
+  <data name="LineageLaterRunActedOnObject" xml:space="preserve">
+    <value>A later run acted on this object</value>
+  </data>
+  <data name="LineageLaterRunActedOnObjects" xml:space="preserve">
+    <value>A later run acted on {0} {1}</value>
+    <comment>Lineage card; {0} is a count, {1} the plural noun for the objects.</comment>
+  </data>
+  <data name="LineageItemsNoLongerRetained" xml:space="preserve">
+    <value>The items it recorded are no longer retained.</value>
+  </data>
+  <data name="LineageBranchesWaitingOne" xml:space="preserve">
+    <value>{0} branch is waiting on {1}.</value>
+    <comment>{1} is a phrase such as "a retry" or "an Export of X".</comment>
+  </data>
+  <data name="LineageBranchesWaitingOther" xml:space="preserve">
+    <value>{0} branches are waiting on {1}.</value>
+    <comment>{1} is a phrase such as "a retry" or "an Export of X".</comment>
+  </data>
+  <data name="LineageBranchNeedsAttentionOne" xml:space="preserve">
+    <value>{0} branch needs attention.</value>
+  </data>
+  <data name="LineageBranchNeedsAttentionOther" xml:space="preserve">
+    <value>{0} branches need attention.</value>
+  </data>
+  <data name="LineageNothingFollowedFromRun" xml:space="preserve">
+    <value>Nothing followed from this run.</value>
+  </data>
+  <data name="LineageEveryBranchEnded" xml:space="preserve">
+    <value>Every branch has run to its end.</value>
+  </data>
+  <data name="LineagePillWithCount" xml:space="preserve">
+    <value>{0} · {1}</value>
+    <comment>A pill label followed by a count.</comment>
+  </data>
+  <data name="LineageWaitingOnSynchronisation" xml:space="preserve">
+    <value>a Synchronisation of {0}</value>
+    <comment>Follows "waiting on"; {0} is a Connected System name.</comment>
+  </data>
+  <data name="LineageWaitingOnExport" xml:space="preserve">
+    <value>an Export of {0}</value>
+    <comment>Follows "waiting on"; {0} is a Connected System name.</comment>
+  </data>
+  <data name="LineageWaitingOnImport" xml:space="preserve">
+    <value>an import of {0}</value>
+    <comment>Follows "waiting on"; {0} is a Connected System name.</comment>
+  </data>
+  <data name="LineageWaitingOnRetry" xml:space="preserve">
+    <value>a retry</value>
+    <comment>Follows "waiting on".</comment>
+  </data>
+  <data name="LineageWaitingOnScheduledDeletion" xml:space="preserve">
+    <value>a scheduled deletion</value>
+    <comment>Follows "waiting on".</comment>
+  </data>
+  <data name="LineageWhyReferencedDeletedOne" xml:space="preserve">
+    <value>The Metaverse Object it referenced was deleted.</value>
+  </data>
+  <data name="LineageWhyReferencedDeletedOther" xml:space="preserve">
+    <value>The Metaverse Object they referenced was deleted.</value>
+  </data>
+  <data name="LineageWhyMetaverseObjectDeleted" xml:space="preserve">
+    <value>Its Metaverse Object was deleted.</value>
+  </data>
+  <data name="LineageWhyGracePeriodEnded" xml:space="preserve">
+    <value>The grace period its Deletion Rule allowed had ended.</value>
+  </data>
+  <data name="LineageWhyExportRejected" xml:space="preserve">
+    <value>The export of its generated value was rejected.</value>
+  </data>
+  <data name="LineageSettingDeprovisioningAction" xml:space="preserve">
+    <value>Deprovisioning Action</value>
+  </data>
+  <data name="LineageSettingDelete" xml:space="preserve">
+    <value>Delete</value>
+    <comment>Value of the Deprovisioning Action setting.</comment>
+  </data>
+  <data name="LineageSettingDisconnect" xml:space="preserve">
+    <value>Disconnect</value>
+    <comment>Value of the Deprovisioning Action setting.</comment>
+  </data>
+  <data name="LineageSettingDeleteText" xml:space="preserve">
+    <value>This rule removes the objects it deprovisions rather than leaving them in place.</value>
+  </data>
+  <data name="LineageSettingDisconnectText" xml:space="preserve">
+    <value>This rule leaves the objects it deprovisions in place, so nothing was exported.</value>
+  </data>
+  <data name="LineageSettingDeletionRule" xml:space="preserve">
+    <value>Deletion Rule</value>
+  </data>
+  <data name="LineageDeletionRuleManual" xml:space="preserve">
+    <value>Manual</value>
+    <comment>Value of a Metaverse Object Type's Deletion Rule.</comment>
+  </data>
+  <data name="LineageDeletionRuleWhenLastConnectorDisconnected" xml:space="preserve">
+    <value>When Last Connector Disconnected</value>
+    <comment>Value of a Metaverse Object Type's Deletion Rule.</comment>
+  </data>
+  <data name="LineageDeletionRuleWhenAuthoritativeSourceDisconnected" xml:space="preserve">
+    <value>When Authoritative Source Disconnected</value>
+    <comment>Value of a Metaverse Object Type's Deletion Rule.</comment>
+  </data>
+  <data name="LineageGracePeriodScheduled" xml:space="preserve">
+    <value>Grace period: {0}, so it was scheduled for deletion rather than deleted in the same run.</value>
+    <comment>Lineage card; {0} is a duration, or the word for "none".</comment>
+  </data>
+  <data name="LineageGracePeriodNone" xml:space="preserve">
+    <value>none</value>
+    <comment>Stands in for a duration in "Grace period: none".</comment>
+  </data>
+  <data name="LineageGracePeriodEnded" xml:space="preserve">
+    <value>Deleted once its {0} grace period had ended.</value>
+    <comment>Lineage card; {0} is a duration.</comment>
+  </data>
+  <data name="LineageNoGracePeriod" xml:space="preserve">
+    <value>No grace period, so it was deleted in the same run.</value>
+  </data>
+  <data name="LineageDeletedMetaverseObjectFallback" xml:space="preserve">
+    <value>a deleted Metaverse Object</value>
+    <comment>Stands in for the name of a deleted object.</comment>
+  </data>
+  <data name="LineageReferenceFallback" xml:space="preserve">
+    <value>a reference</value>
+    <comment>Stands in for an attribute name.</comment>
+  </data>
+  <data name="LineageRemovedFrom" xml:space="preserve">
+    <value>Removed {0} from {1}</value>
+    <comment>Lineage card; {0} is the deleted object, {1} the attribute.</comment>
+  </data>
+  <data name="LineageRemovedFromOnObjects" xml:space="preserve">
+    <value>Removed {0} from {1} on {2} {3}</value>
+    <comment>Lineage card; {0} is the deleted object, {1} the attribute, {2} a count, {3} the plural noun.</comment>
+  </data>
+  <data name="LineageReferenceRemoved" xml:space="preserve">
+    <value>Reference removed</value>
+  </data>
+  <data name="LineageRemovedFromAttribute" xml:space="preserve">
+    <value>Removed from {0}</value>
+    <comment>Pill; {0} is an attribute name.</comment>
+  </data>
+  <data name="LineageConfirmedByNextImport" xml:space="preserve">
+    <value>Confirmed by the next import</value>
+  </data>
+  <data name="LineageConfirmedByNextImportOnObjects" xml:space="preserve">
+    <value>Confirmed by the next import, on {0} {1}</value>
+    <comment>{0} is a count, {1} the plural noun.</comment>
+  </data>
+  <data name="LineageNounObject" xml:space="preserve">
+    <value>object</value>
+  </data>
+  <data name="LineageNounObjects" xml:space="preserve">
+    <value>objects</value>
+  </data>
+  <data name="LineageNounTypeObjects" xml:space="preserve">
+    <value>{0} objects</value>
+    <comment>Plural noun for objects of a type with no curated plural; {0} is the type's own name.</comment>
+  </data>
+  <data name="LineageContinueFromLastItem" xml:space="preserve">
+    <value>Continue from the last item</value>
+  </data>
+  <data name="LineageContinueFrom" xml:space="preserve">
+    <value>Continue from {0}</value>
+    <comment>{0} is an object name.</comment>
+  </data>
+  <data name="LineageRunTypeFullImport" xml:space="preserve">
+    <value>Full Import</value>
+    <comment>Kind of run, shown on a Lineage card.</comment>
+  </data>
+  <data name="LineageRunTypeDeltaImport" xml:space="preserve">
+    <value>Delta Import</value>
+    <comment>Kind of run, shown on a Lineage card.</comment>
+  </data>
+  <data name="LineageRunTypeFullSynchronisation" xml:space="preserve">
+    <value>Full Synchronisation</value>
+    <comment>Kind of run, shown on a Lineage card.</comment>
+  </data>
+  <data name="LineageRunTypeDeltaSynchronisation" xml:space="preserve">
+    <value>Delta Synchronisation</value>
+    <comment>Kind of run, shown on a Lineage card.</comment>
+  </data>
+  <data name="LineageRunTypeExport" xml:space="preserve">
+    <value>Export</value>
+    <comment>Kind of run, shown on a Lineage card.</comment>
+  </data>
+  <data name="LineageViewActivity" xml:space="preserve">
+    <value>View Activity</value>
+    <comment>Link text.</comment>
+  </data>
+  <data name="LineageUnnamedObject" xml:space="preserve">
+    <value>Unnamed object</value>
+    <comment>Shown where an object has no recorded name.</comment>
+  </data>
+  <data name="LineageRunKindSynchronisation" xml:space="preserve">
+    <value>Synchronisation run</value>
+    <comment>Kind of run that recorded a cause.</comment>
+  </data>
+  <data name="LineageRunKindImport" xml:space="preserve">
+    <value>Import run</value>
+    <comment>Kind of run that recorded a cause.</comment>
+  </data>
+  <data name="LineageRunKindExport" xml:space="preserve">
+    <value>Export run</value>
+    <comment>Kind of run that recorded a cause.</comment>
+  </data>
+  <data name="LineageEarlierCauses" xml:space="preserve">
+    <value>Earlier causes</value>
+    <comment>Heading of the column holding causes from before this run.</comment>
+  </data>
+  <data name="LineageMetaverseObjectFallback" xml:space="preserve">
+    <value>Metaverse Object</value>
+    <comment>Heading for an object that has no name.</comment>
+  </data>
+  <data name="LineageMetaverseObjectsFallback" xml:space="preserve">
+    <value>Metaverse Objects</value>
+    <comment>Heading for a group of objects with no type name.</comment>
+  </data>
+  <data name="LineageFollowUpTitleState" xml:space="preserve">
+    <value>{0}, {1}</value>
+    <comment>A follow-up's title and its state, in lower case.</comment>
+  </data>
+  <data name="LineageFollowUpListJoin" xml:space="preserve">
+    <value>{0}; {1}</value>
+    <comment>Joins two follow-up descriptions.</comment>
+  </data>
+  <data name="LineageFollowUpsRunningOne" xml:space="preserve">
+    <value>{0} follow-up is still running: {1}.</value>
+    <comment>{0} is a count, {1} the list of follow-ups.</comment>
+  </data>
+  <data name="LineageFollowUpsRunningOther" xml:space="preserve">
+    <value>{0} follow-ups are still running: {1}.</value>
+    <comment>{0} is a count, {1} the list of follow-ups.</comment>
+  </data>
+  <data name="EventConnectedSystemFallback" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Link text where the system's name was not recorded.</comment>
+  </data>
+  <data name="EventIdentityFallback" xml:space="preserve">
+    <value>Identity</value>
+    <comment>Link text where the Metaverse Object's name was not recorded.</comment>
+  </data>
+  <data name="EventMetaverseObjectNotDeleted" xml:space="preserve">
+    <value>Metaverse Object not deleted</value>
+    <comment>Label of a synthetic event explaining why nothing was deleted.</comment>
+  </data>
+  <data name="EventDeletionRuleManual" xml:space="preserve">
+    <value>This object type's Deletion Rule is Manual, so a disconnection never deletes the Metaverse Object.</value>
+  </data>
+  <data name="EventAuthoritativeSourceStillConnected" xml:space="preserve">
+    <value>An authoritative source is still connected ({0}), and this object type deletes only when all of them disconnect.</value>
+    <comment>{0} is a comma-separated list of Connected System names.</comment>
+  </data>
+  <data name="EventDeletionRuleDeclined" xml:space="preserve">
+    <value>The Deletion Rule in force at the time was evaluated and did not delete the Metaverse Object.</value>
+  </data>
+  <data name="EventWouldMatchOn" xml:space="preserve">
+    <value>Would match on "{0}"</value>
+    <comment>{0} is the value the join matched on.</comment>
+  </data>
+  <data name="EventMatchedOn" xml:space="preserve">
+    <value>Matched on "{0}"</value>
+    <comment>{0} is the value the join matched on.</comment>
+  </data>
+  <data name="EventMatchedWhere" xml:space="preserve">
+    <value>{0}, where {1}</value>
+    <comment>{0} is "Matched on ..."; {1} describes what the Object Matching Rule compared.</comment>
+  </data>
+  <data name="EventBadgeDestructive" xml:space="preserve">
+    <value>Destructive</value>
+    <comment>Badge on an event that deletes something.</comment>
+  </data>
+  <data name="EventTypeAndId" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>{0} is an object type name, {1} an object id.</comment>
+  </data>
+  <data name="EventPendingExportLink" xml:space="preserve">
+    <value>Pending Export</value>
+    <comment>Link text.</comment>
+  </data>
+  <data name="EventPendingExportsLink" xml:space="preserve">
+    <value>Pending Exports</value>
+    <comment>Link text.</comment>
+  </data>
+  <data name="EventViewDeletionRecord" xml:space="preserve">
+    <value>View deletion record</value>
+    <comment>Link text.</comment>
+  </data>
+  <data name="EventSynchronisationRuleFallback" xml:space="preserve">
+    <value>Synchronisation Rule</value>
+    <comment>Link text where the rule's name was not recorded.</comment>
+  </data>
+  <data name="FocusNotRetained" xml:space="preserve">
+    <value>No longer retained</value>
+    <comment>Names a focus whose item or object history retention has removed.</comment>
+  </data>
+  <data name="FocusKindConnectedSystemObject" xml:space="preserve">
+    <value>Connected System Object</value>
+  </data>
+  <data name="FocusKindMetaverseObject" xml:space="preserve">
+    <value>Metaverse Object</value>
+  </data>
+  <data name="FocusKindExecutionItem" xml:space="preserve">
+    <value>Execution item</value>
+  </data>
+  <data name="FocusItemLabel" xml:space="preserve">
+    <value>{0} · {1}</value>
+    <comment>An object, then the run that recorded it; {0} is the object, {1} the Activity name.</comment>
+  </data>
+  <data name="SourceVerbCsoProcessed" xml:space="preserve">
+    <value>Connected System Object processed</value>
+  </data>
+  <data name="SourceVerbCsoWouldBeProcessed" xml:space="preserve">
+    <value>Connected System Object would be processed</value>
+  </data>
+  <data name="SourceVerbMvoProcessed" xml:space="preserve">
+    <value>Metaverse Object processed</value>
+  </data>
+  <data name="SourceVerbMvoWouldBeProcessed" xml:space="preserve">
+    <value>Metaverse Object would be processed</value>
+  </data>
+  <data name="AttributeTypeUnknown" xml:space="preserve">
+    <value>Unknown</value>
+  </data>
+  <data name="AttributeTypeText" xml:space="preserve">
+    <value>Text</value>
+  </data>
+  <data name="AttributeTypeNumber" xml:space="preserve">
+    <value>Number</value>
+  </data>
+  <data name="AttributeTypeDateTime" xml:space="preserve">
+    <value>Date and Time</value>
+  </data>
+  <data name="AttributeTypeBinary" xml:space="preserve">
+    <value>Binary</value>
+  </data>
+  <data name="AttributeTypeReference" xml:space="preserve">
+    <value>Reference</value>
+  </data>
+  <data name="AttributeTypeGuid" xml:space="preserve">
+    <value>GUID</value>
+  </data>
+  <data name="AttributeTypeBoolean" xml:space="preserve">
+    <value>Boolean</value>
+  </data>
+  <data name="AttributeTypeLongNumber" xml:space="preserve">
+    <value>Long Number</value>
+  </data>
+  <data name="AttributePluralityMulti" xml:space="preserve">
+    <value>Multi-valued</value>
+  </data>
+  <data name="AttributePluralitySingle" xml:space="preserve">
+    <value>Single-valued</value>
+  </data>
+  <data name="AttributeTypeAndPlurality" xml:space="preserve">
+    <value>{0} · {1}</value>
+    <comment>An attribute's data type, then whether it is single- or multi-valued.</comment>
+  </data>
+  <data name="EventTargetIdentifiedBy" xml:space="preserve">
+    <value>Target identified by</value>
+  </data>
+  <data name="EventWithdrawnFromPendingExport" xml:space="preserve">
+    <value>Withdrawn from the Pending Export</value>
+  </data>
+  <data name="TableViewCurrentHeading" xml:space="preserve">
+    <value>Current</value>
+    <comment>Column heading in a preview: the values as they are now.</comment>
+  </data>
+  <data name="TableViewBeforeHeading" xml:space="preserve">
+    <value>Before</value>
+    <comment>Column heading: the values before the run.</comment>
+  </data>
+  <data name="TableViewWouldBeHeading" xml:space="preserve">
+    <value>Would be</value>
+    <comment>Column heading in a preview: the values as they would become.</comment>
+  </data>
+  <data name="TableViewAfterHeading" xml:space="preserve">
+    <value>After</value>
+    <comment>Column heading: the values after the run.</comment>
+  </data>
+  <data name="TableViewNewObjectIn" xml:space="preserve">
+    <value>New object in {0}</value>
+    <comment>{0} is a Connected System name.</comment>
+  </data>
+  <data name="TableViewNewDownstreamObject" xml:space="preserve">
+    <value>New downstream object</value>
+  </data>
+  <data name="TableViewScheduledForDeletion" xml:space="preserve">
+    <value>Scheduled for deletion</value>
+  </data>
+  <data name="TableViewAttributeValue" xml:space="preserve">
+    <value>Attribute value</value>
+  </data>
+  <data name="TableViewObjectBeingSynchronised" xml:space="preserve">
+    <value>Object being synchronised</value>
+  </data>
+  <data name="TableChangeKindScope" xml:space="preserve">
+    <value>Scope</value>
+    <comment>Value of the Change column in the Table view.</comment>
+  </data>
+  <data name="TableChangeKindProjection" xml:space="preserve">
+    <value>Projection</value>
+    <comment>Value of the Change column in the Table view.</comment>
+  </data>
+  <data name="TableChangeKindJoin" xml:space="preserve">
+    <value>Join</value>
+    <comment>Value of the Change column in the Table view.</comment>
+  </data>
+  <data name="TableChangeKindDisconnect" xml:space="preserve">
+    <value>Disconnect</value>
+    <comment>Value of the Change column in the Table view.</comment>
+  </data>
+  <data name="TableChangeKindDelete" xml:space="preserve">
+    <value>Delete</value>
+    <comment>Value of the Change column in the Table view.</comment>
+  </data>
+  <data name="TableChangeKindDeprovision" xml:space="preserve">
+    <value>Deprovision</value>
+    <comment>Value of the Change column in the Table view.</comment>
+  </data>
+  <data name="TableChangeKindProvision" xml:space="preserve">
+    <value>Provision</value>
+    <comment>Value of the Change column in the Table view.</comment>
+  </data>
+  <data name="TableChangeKindExportQueued" xml:space="preserve">
+    <value>Export queued</value>
+    <comment>Value of the Change column in the Table view.</comment>
+  </data>
+  <data name="TableChangeKindProvisioningCancelled" xml:space="preserve">
+    <value>Provisioning cancelled</value>
+    <comment>Value of the Change column in the Table view.</comment>
+  </data>
+  <data name="TableChangeKindQueuedChangesWithdrawn" xml:space="preserve">
+    <value>Queued changes withdrawn</value>
+    <comment>Value of the Change column in the Table view.</comment>
+  </data>
+  <data name="TableChangeKindNoContributor" xml:space="preserve">
+    <value>No contributor</value>
+    <comment>Value of the Change column in the Table view.</comment>
+  </data>
+  <data name="TableChangeKindValuesPreserved" xml:space="preserve">
+    <value>Values preserved</value>
+    <comment>Value of the Change column in the Table view.</comment>
+  </data>
+  <data name="TableChangeKindAttributeChange" xml:space="preserve">
+    <value>Attribute change</value>
+    <comment>Value of the Change column in the Table view.</comment>
+  </data>
+  <data name="ItemLinkViewActivityItem" xml:space="preserve">
+    <value>View activity item</value>
+    <comment>Link text.</comment>
+  </data>
+  <data name="ItemLinkExploreFromHere" xml:space="preserve">
+    <value>Explore from here</value>
+    <comment>Link text.</comment>
+  </data>
+  <data name="ObjectTimelineTitle" xml:space="preserve">
+    <value>What happened to it</value>
+    <comment>Heading of an object's timeline in the Causality Explorer.</comment>
+  </data>
+  <data name="ObjectTimelineCountOf" xml:space="preserve">
+    <value>{0:N0} of {1:N0} items, newest first</value>
+    <comment>{0} is how many are shown, {1} how many there are.</comment>
+  </data>
+  <data name="ObjectTimelineCountOne" xml:space="preserve">
+    <value>{0:N0} item, newest first</value>
+    <comment>{0} is a count.</comment>
+  </data>
+  <data name="ObjectTimelineCountOther" xml:space="preserve">
+    <value>{0:N0} items, newest first</value>
+    <comment>{0} is a count.</comment>
+  </data>
+  <data name="ObjectTimelineWhen" xml:space="preserve">
+    <value>When</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="ObjectTimelineRun" xml:space="preserve">
+    <value>Run</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="ObjectTimelineWhatHappened" xml:space="preserve">
+    <value>What happened</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="ObjectTimelineBecause" xml:space="preserve">
+    <value>Because</value>
+    <comment>Column heading: the cause.</comment>
+  </data>
+  <data name="ObjectTimelineExplore" xml:space="preserve">
+    <value>Explore</value>
+    <comment>Button that re-centres the Causality Explorer on a row.</comment>
+  </data>
+  <data name="ObjectTimelineFollowUp" xml:space="preserve">
+    <value>Follow-up</value>
+    <comment>Names a piece of follow-up work that an item set in motion.</comment>
+  </data>
+  <data name="ObjectTimelineEmptyTitle" xml:space="preserve">
+    <value>Nothing recorded for this object</value>
+  </data>
+  <data name="ObjectTimelineEmptyText" xml:space="preserve">
+    <value>No execution item about it is retained. History retention may have removed them, or nothing has processed it yet.</value>
+  </data>
+  <data name="ObjectTimelineShowMore" xml:space="preserve">
+    <value>Show {0:N0} more</value>
+    <comment>{0} is a count.</comment>
+  </data>
+  <data name="ObjectTimelineDeletedConnectedSystemObject" xml:space="preserve">
+    <value>This object has been deleted. Its items are found through its deletion record and by its external ID within {0}, as the Lineage does for a deleted record.</value>
+    <comment>{0} is a Connected System name, or "its Connected System".</comment>
+  </data>
+  <data name="ObjectTimelineDeletedMetaverseObject" xml:space="preserve">
+    <value>This object has been deleted. Its items are found through the change records its deletion kept.</value>
+  </data>
+  <data name="ObjectTimelineChangesNotRecorded" xml:space="preserve">
+    <value>Changes made directly to this Metaverse Object are not recorded on this deployment, because change tracking is off. These rows come from the items recorded against its joined Connected System Objects.</value>
+  </data>
+  <data name="AttributeDetailFilterPlaceholder" xml:space="preserve">
+    <value>Filter attributes...</value>
+  </data>
+  <data name="AttributeDetailSingular" xml:space="preserve">
+    <value>Attribute</value>
+    <comment>Noun for one row of the attribute grid.</comment>
+  </data>
+  <data name="AttributeDetailPlural" xml:space="preserve">
+    <value>Attributes</value>
+    <comment>Noun for several rows of the attribute grid.</comment>
+  </data>
+  <data name="AttributeDetailFilterByOperation" xml:space="preserve">
+    <value>Filter by operation</value>
+    <comment>Accessible name of the group of filter buttons.</comment>
+  </data>
+  <data name="AttributeDetailAll" xml:space="preserve">
+    <value>All</value>
+    <comment>Filter button that shows every attribute.</comment>
+  </data>
+  <data name="AttributeDetailChange" xml:space="preserve">
+    <value>Change</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="AttributeDetailAttribute" xml:space="preserve">
+    <value>Attribute</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="AttributeDetailValue" xml:space="preserve">
+    <value>Value</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="AttributeOperationSet" xml:space="preserve">
+    <value>Set</value>
+    <comment>An attribute change operation: a value was set.</comment>
+  </data>
+  <data name="AttributeOperationAdd" xml:space="preserve">
+    <value>Add</value>
+    <comment>An attribute change operation: a value was added.</comment>
+  </data>
+  <data name="AttributeOperationRemove" xml:space="preserve">
+    <value>Remove</value>
+    <comment>An attribute change operation: a value was removed.</comment>
+  </data>
+  <data name="AttributeDetailNoMatch" xml:space="preserve">
+    <value>No attributes match "{0}"</value>
+    <comment>{0} is the search text.</comment>
+  </data>
+  <data name="AttributeDetailTryDifferent" xml:space="preserve">
+    <value>Try a different search term, or clear the filters.</value>
+  </data>
+  <data name="AttributeDetailClearFilters" xml:space="preserve">
+    <value>Clear Filters</value>
+  </data>
+  <data name="AttributeDetailNoneSet" xml:space="preserve">
+    <value>No attributes were set</value>
+  </data>
+  <data name="AttributeDetailNoneAdd" xml:space="preserve">
+    <value>No attributes were add</value>
+  </data>
+  <data name="AttributeDetailNoneRemove" xml:space="preserve">
+    <value>No attributes were remove</value>
+  </data>
+  <data name="AttributeDetailChooseAll" xml:space="preserve">
+    <value>Choose All to see every attribute this event touched.</value>
+  </data>
+  <data name="AttributeDetailNoValues" xml:space="preserve">
+    <value>This event carries no attribute values</value>
+  </data>
+  <data name="AttributeDetailNoValuesText" xml:space="preserve">
+    <value>Attribute values appear here when a change writes them, or when a Pending Export carries the values identifying its target.</value>
+  </data>
+  <data name="EventAttributeCountOne" xml:space="preserve">
+    <value>{0} attribute</value>
+    <comment>{0} is a formatted count.</comment>
+  </data>
+  <data name="EventAttributeCountOther" xml:space="preserve">
+    <value>{0} attributes</value>
+    <comment>{0} is a formatted count.</comment>
+  </data>
+  <data name="EventCardShowAttributeDetail" xml:space="preserve">
+    <value>{0}: show attribute detail</value>
+    <comment>Accessible name of a clickable event card; {0} is the card's title.</comment>
+  </data>
+  <data name="SourceDetailSubjectMetaverseObject" xml:space="preserve">
+    <value>Metaverse Object</value>
+    <comment>Follows "this" in the source row sentence; lower case in French.</comment>
+  </data>
+  <data name="SourceDetailSubjectConnectedSystemObject" xml:space="preserve">
+    <value>Connected System Object</value>
+    <comment>Follows "this" in the source row sentence; lower case in French.</comment>
+  </data>
+  <data name="SourceDetailWouldPickUpOnSystem" xml:space="preserve">
+    <value>{0} on {1} would pick up this object.</value>
+    <comment>Timeline source row; {0} is the Run Profile name (shown in bold; the sentence is rendered around it), {1} the Connected System, {2} the kind of object. </comment>
+  </data>
+  <data name="SourceDetailWouldPickUp" xml:space="preserve">
+    <value>{0} would pick up this object.</value>
+    <comment>Timeline source row; {0} is the Run Profile name (shown in bold; the sentence is rendered around it), {1} the Connected System, {2} the kind of object. </comment>
+  </data>
+  <data name="SourceDetailRunOnSystemWouldPickUp" xml:space="preserve">
+    <value>A run on {1} would pick up this object.</value>
+    <comment>Timeline source row; {0} is the Run Profile name (shown in bold; the sentence is rendered around it), {1} the Connected System, {2} the kind of object. </comment>
+  </data>
+  <data name="SourceDetailWouldBePickedUp" xml:space="preserve">
+    <value>This object would be picked up for processing.</value>
+  </data>
+  <data name="SourceDetailPickedUpOnSystem" xml:space="preserve">
+    <value>{0} on {1} picked up this {2}.</value>
+    <comment>Timeline source row; {0} is the Run Profile name (shown in bold; the sentence is rendered around it), {1} the Connected System, {2} the kind of object. </comment>
+  </data>
+  <data name="SourceDetailPickedUp" xml:space="preserve">
+    <value>{0} picked up this {2}.</value>
+    <comment>Timeline source row; {0} is the Run Profile name (shown in bold; the sentence is rendered around it), {1} the Connected System, {2} the kind of object. </comment>
+  </data>
+  <data name="SourceDetailRunOnSystemPickedUp" xml:space="preserve">
+    <value>A run on {1} picked up this {2}.</value>
+    <comment>Timeline source row; {0} is the Run Profile name (shown in bold; the sentence is rendered around it), {1} the Connected System, {2} the kind of object. </comment>
+  </data>
+  <data name="SourceDetailWasPickedUp" xml:space="preserve">
+    <value>This {2} was picked up for processing.</value>
+    <comment>Timeline source row; {0} is the Run Profile name (shown in bold; the sentence is rendered around it), {1} the Connected System, {2} the kind of object. </comment>
+  </data>
+  <data name="PanelNoTracking" xml:space="preserve">
+    <value>Outcome tracking was not enabled when this activity was recorded. Only the operation type is available.</value>
+  </data>
+  <data name="PanelPreviewPill" xml:space="preserve">
+    <value>Preview</value>
+  </data>
+  <data name="PanelPreviewNothingChanged" xml:space="preserve">
+    <value>Nothing has been changed.</value>
+  </data>
+  <data name="PanelPreviewFullSynchronisation" xml:space="preserve">
+    <value>What a Full Synchronisation of {0} would do to this object now.</value>
+    <comment>{0} is a Connected System name.</comment>
+  </data>
+  <data name="PanelPreviewExportRules" xml:space="preserve">
+    <value>What every enabled export Synchronisation Rule would do with this Metaverse Object as it stands now.</value>
+  </data>
+  <data name="PanelClosePreview" xml:space="preserve">
+    <value>Close preview</value>
+    <comment>Accessible name of a close button.</comment>
+  </data>
+  <data name="PanelOpenInExplorer" xml:space="preserve">
+    <value>Open in explorer</value>
+    <comment>Button; the explorer is the Causality Explorer.</comment>
+  </data>
+  <data name="PanelViewSwitcher" xml:space="preserve">
+    <value>Causality view</value>
+    <comment>Accessible name of the view switcher.</comment>
+  </data>
+  <data name="PanelCloseDetail" xml:space="preserve">
+    <value>Close detail</value>
+    <comment>Accessible name of a close button.</comment>
+  </data>
+  <data name="PanelViewLineage" xml:space="preserve">
+    <value>Lineage</value>
+    <comment>Name of one of the three causality views.</comment>
+  </data>
+  <data name="PanelViewTable" xml:space="preserve">
+    <value>Table</value>
+    <comment>Name of one of the three causality views.</comment>
+  </data>
+  <data name="PanelViewTimeline" xml:space="preserve">
+    <value>Timeline</value>
+    <comment>Name of one of the three causality views.</comment>
+  </data>
+  <data name="PanelAttributeChangesOne" xml:space="preserve">
+    <value>{0} attribute change</value>
+    <comment>{0} is a formatted count.</comment>
+  </data>
+  <data name="PanelAttributeChangesOther" xml:space="preserve">
+    <value>{0} attribute changes</value>
+    <comment>{0} is a formatted count.</comment>
+  </data>
+  <data name="PanelDrawerSubtitle" xml:space="preserve">
+    <value>{0} · {1}</value>
+    <comment>{0} describes the changes, {1} is the Connected System name.</comment>
+  </data>
+  <data name="QueuedByTitle" xml:space="preserve">
+    <value>Queued by</value>
+    <comment>Heading of the panel listing the runs that staged a Pending Export.</comment>
+  </data>
+  <data name="QueuedByIntro" xml:space="preserve">
+    <value>The runs that staged changes into this Pending Export, newest first, and why each did.</value>
+  </data>
+  <data name="QueuedByWhatItDid" xml:space="preserve">
+    <value>What it did</value>
+    <comment>Column heading; "it" is a run.</comment>
+  </data>
+  <data name="QueuedBySystemPrefix" xml:space="preserve">
+    <value>{0} · </value>
+    <comment>Precedes a relative time; {0} is a Connected System name. Keep the trailing space.</comment>
+  </data>
+  <data name="QueuedByEmptyTitle" xml:space="preserve">
+    <value>No run is recorded as staging this Pending Export</value>
+  </data>
+  <data name="QueuedByEmptyText" xml:space="preserve">
+    <value>It was queued before JIM recorded which run queues each change, or by a path that records no execution item. Its attribute changes are still exactly what will be exported.</value>
+  </data>
+  <data name="QueuedByOmittedNote" xml:space="preserve">
+    <value>A Pending Export keeps the most recent runs that staged it, so earlier runs may not be listed.</value>
+  </data>
+  <data name="QueuedByEarlierRunsOne" xml:space="preserve">
+    <value>{0} earlier run also staged it, whose items are no longer retained.</value>
+    <comment>{0} is a count.</comment>
+  </data>
+  <data name="QueuedByEarlierRunsOther" xml:space="preserve">
+    <value>{0} earlier runs also staged it, whose items are no longer retained.</value>
+    <comment>{0} is a count.</comment>
+  </data>
+  <data name="QueuedByRunsOne" xml:space="preserve">
+    <value>{0} run staged it, whose items are no longer retained.</value>
+    <comment>{0} is a count.</comment>
+  </data>
+  <data name="QueuedByRunsOther" xml:space="preserve">
+    <value>{0} runs staged it, whose items are no longer retained.</value>
+    <comment>{0} is a count.</comment>
+  </data>
+  <data name="FocusHeaderFocusedOn" xml:space="preserve">
+    <value>Focused on</value>
+    <comment>Label before the name of what the Causality Explorer has in view.</comment>
+  </data>
+  <data name="FocusHeaderOf" xml:space="preserve">
+    <value>of</value>
+    <comment>Joins a run and the object it was about: "A run of &lt;object&gt;".</comment>
+  </data>
+  <data name="FocusHeaderIn" xml:space="preserve">
+    <value>in {0}</value>
+    <comment>{0} is a Connected System name.</comment>
+  </data>
+  <data name="FocusHeaderItemNotRetained" xml:space="preserve">
+    <value>This execution item is no longer retained: history retention has removed it.</value>
+  </data>
+  <data name="FocusHeaderDeletedAgo" xml:space="preserve">
+    <value>deleted {0}</value>
+    <comment>{0} is a relative time such as "3 hours ago".</comment>
+  </data>
+  <data name="FocusHeaderDeleted" xml:space="preserve">
+    <value>deleted</value>
+  </data>
+  <data name="FocusHeaderObjectNotRetained" xml:space="preserve">
+    <value>This object is no longer retained: neither it nor a record of its deletion remains.</value>
+  </data>
+  <data name="FocusHeaderOpenActivityItem" xml:space="preserve">
+    <value>Open activity item</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="FocusHeaderOpenMetaverseObject" xml:space="preserve">
+    <value>Open Metaverse Object</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="FocusHeaderOpenConnectedSystemObject" xml:space="preserve">
+    <value>Open Connected System Object</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="TableViewObjectsTouched" xml:space="preserve">
+    <value>Objects touched</value>
+    <comment>Accessible name of the list of objects in the Table view.</comment>
+  </data>
+  <data name="TableViewGroupSource" xml:space="preserve">
+    <value>Object being synchronised</value>
+    <comment>Group caption in the Table view's object list.</comment>
+  </data>
+  <data name="TableViewGroupMetaverseObject" xml:space="preserve">
+    <value>Metaverse Object</value>
+    <comment>Group caption in the Table view's object list.</comment>
+  </data>
+  <data name="TableViewGroupDownstream" xml:space="preserve">
+    <value>Downstream objects</value>
+    <comment>Group caption in the Table view's object list.</comment>
+  </data>
+  <data name="TableViewResizeObjectsList" xml:space="preserve">
+    <value>Resize the objects list</value>
+    <comment>Accessible name of a drag handle.</comment>
+  </data>
+  <data name="TableViewFilterByChange" xml:space="preserve">
+    <value>Filter by change</value>
+    <comment>Accessible name of the group of filter buttons.</comment>
+  </data>
+  <data name="TableViewColumnObject" xml:space="preserve">
+    <value>Object</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="TableViewColumnChange" xml:space="preserve">
+    <value>Change</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="TableViewColumnAttribute" xml:space="preserve">
+    <value>Attribute</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="TableViewColumnSynchronisationRule" xml:space="preserve">
+    <value>Synchronisation Rule</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="TableViewColumnOutcome" xml:space="preserve">
+    <value>Outcome</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="TableViewViewAll" xml:space="preserve">
+    <value>View all {0}</value>
+    <comment>Button; {0} is a formatted count.</comment>
+  </data>
+  <data name="TableViewNoRowsMatch" xml:space="preserve">
+    <value>No rows match this filter</value>
+  </data>
+  <data name="TableViewChooseAll" xml:space="preserve">
+    <value>Choose All to see every change this object carries.</value>
+  </data>
+  <data name="TableViewSummaryAdded" xml:space="preserve">
+    <value>{0} added</value>
+    <comment>{0} is a formatted count.</comment>
+  </data>
+  <data name="TableViewSummaryRemoved" xml:space="preserve">
+    <value>{0} removed</value>
+    <comment>{0} is a formatted count.</comment>
+  </data>
+  <data name="TableViewSummarySet" xml:space="preserve">
+    <value>{0} set</value>
+    <comment>{0} is a formatted count.</comment>
+  </data>
+  <data name="TableViewSummaryJoin" xml:space="preserve">
+    <value>{0} · {1}</value>
+    <comment>Joins two counts.</comment>
+  </data>
+  <data name="TableViewResizeColumn" xml:space="preserve">
+    <value>Resize the {0} column</value>
+    <comment>Accessible name of a drag handle; {0} is a column heading.</comment>
+  </data>
+  <data name="TableViewOutcomeTitle" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>Tooltip: an outcome and its detail.</comment>
+  </data>
+  <data name="TableViewFilterScopeAndJoin" xml:space="preserve">
+    <value>Scope &amp; Join</value>
+    <comment>Filter button. Join is a JIM term.</comment>
+  </data>
+  <data name="TableViewFilterAttributeChanges" xml:space="preserve">
+    <value>Attribute changes</value>
+    <comment>Filter button.</comment>
+  </data>
+  <data name="TableViewFilterObjectChanges" xml:space="preserve">
+    <value>Object changes</value>
+    <comment>Filter button.</comment>
+  </data>
+  <data name="TableViewFilterDestructive" xml:space="preserve">
+    <value>Destructive</value>
+    <comment>Filter button.</comment>
+  </data>
+  <data name="TableViewFilterAll" xml:space="preserve">
+    <value>All</value>
+    <comment>Filter button.</comment>
+  </data>
+  <data name="LineageEarlierRun" xml:space="preserve">
+    <value>Earlier run</value>
+    <comment>Chip on a cause card where the kind of run is not known.</comment>
+  </data>
+  <data name="SummaryBandAfterThisRun" xml:space="preserve">
+    <value>After this run</value>
+    <comment>Label before the outcomes that followed a run.</comment>
+  </data>
+  <data name="SummaryBandRunLabel" xml:space="preserve">
+    <value>{0} · {1}</value>
+    <comment>A Connected System name, then a Run Profile name.</comment>
+  </data>
+  <data name="SummaryBandWouldRun" xml:space="preserve">
+    <value>Would run: {0}</value>
+    <comment>{0} is the system and Run Profile that would run.</comment>
+  </data>
+  <data name="TrailTitle" xml:space="preserve">
+    <value>Trail</value>
+    <comment>Heading of the list of steps taken through the Causality Explorer, and its accessible name.</comment>
+  </data>
+  <data name="SyncPreviewGeneratedValueNotice" xml:space="preserve">
+    <value>Generated values shown are the next free value now. The synchronisation checks again when it runs, so it can issue a different one if another object takes this one first.</value>
+  </data>
+  <data name="ConsequenceHide" xml:space="preserve">
+    <value>Hide</value>
+    <comment>Button that collapses a folded card.</comment>
+  </data>
+  <data name="ConsequenceShow" xml:space="preserve">
+    <value>Show</value>
+    <comment>Button that expands a folded card.</comment>
+  </data>
+  <data name="ConsequenceNamePrefix" xml:space="preserve">
+    <value>{0} · </value>
+    <comment>Precedes a relative time; {0} is a name. Keep the trailing space.</comment>
+  </data>
+  <data name="ConsequenceDue" xml:space="preserve">
+    <value>Due {0}</value>
+    <comment>{0} is a relative time such as "in 2 days" (shown with the full date on hover).</comment>
+  </data>
+  <data name="ConsequenceFindMembers" xml:space="preserve">
+    <value>Find {0}</value>
+    <comment>Placeholder of a search box; {0} is the plural noun for the objects listed.</comment>
+  </data>
+  <data name="ConsequenceShowingOf" xml:space="preserve">
+    <value>Showing {0:N0} of {1:N0}</value>
+    <comment>{0} is how many are shown, {1} how many there are.</comment>
+  </data>
+  <data name="LineageViewTruncated" xml:space="preserve">
+    <value>Some branches go further back than shown</value>
+  </data>
+  <data name="LineageViewThisRun" xml:space="preserve">
+    <value>This run</value>
+    <comment>Badge on a card that belongs to the run being viewed.</comment>
+  </data>
+  <data name="LineageViewMetaverseObjectDeleted" xml:space="preserve">
+    <value>This Metaverse Object was deleted after this run.</value>
+  </data>
+  <data name="LineageViewConnectedSystemObjectDeleted" xml:space="preserve">
+    <value>This Connected System Object was deleted after this run.</value>
+  </data>
+  <data name="LineageViewFurtherThanShown" xml:space="preserve">
+    <value>Some consequences go further than shown. Open the last item in a branch to carry on from there.</value>
+  </data>
+  <data name="LineageViewCheckedAt" xml:space="preserve">
+    <value>Checked at {0}.</value>
+    <comment>{0} is a time of day.</comment>
+  </data>
+  <data name="LineageViewCheckAgain" xml:space="preserve">
+    <value>Check again</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="LineageViewReadingConsequences" xml:space="preserve">
+    <value>Reading what this run went on to cause…</value>
+  </data>
+  <data name="LineageViewCannotOpen" xml:space="preserve">
+    <value>JIM cannot open a page for this object.</value>
+  </data>
+  <data name="LineageViewTypePrefix" xml:space="preserve">
+    <value>{0}: </value>
+    <comment>An object type before an object's name: "person: Ada". Keep the trailing space.</comment>
+  </data>
+  <data name="LineageViewInMetaverse" xml:space="preserve">
+    <value>in the Metaverse</value>
+    <comment>Sub-line under a Metaverse Object's name.</comment>
+  </data>
+  <data name="LineageViewUnplaceable" xml:space="preserve">
+    <value>causes this view could not place</value>
+    <comment>Sub-line under the column of causes that could not be placed.</comment>
+  </data>
+  <data name="ExplorerTitle" xml:space="preserve">
+    <value>Causality Explorer</value>
+    <comment>Page title. A JIM term.</comment>
+  </data>
+  <data name="ExplorerTitleWithFocus" xml:space="preserve">
+    <value>Causality Explorer: {0}</value>
+    <comment>Browser tab title; {0} names what the explorer has in view.</comment>
+  </data>
+  <data name="ExplorerPageInfo" xml:space="preserve">
+    <value>Follows why things happened and what they went on to cause, from one focus to the next, without leaving the page. An execution item shows its Lineage; a Connected System Object or Metaverse Object shows what happened to it. The trail leads back through everything followed.</value>
+  </data>
+  <data name="ExplorerStartTitle" xml:space="preserve">
+    <value>Start from what you want to explain</value>
+  </data>
+  <data name="ExplorerStartExploreCausality" xml:space="preserve">
+    <value>Explore causality</value>
+    <comment>Name of a button on object pages that opens the Causality Explorer.</comment>
+  </data>
+  <data name="ExplorerStartText" xml:space="preserve">
+    <value>Open the explorer from where the question arises: {0} on a Connected System Object or a Metaverse Object, {1} beside a run in a Pending Export's {2} panel, or {3} on an execution item's causality panel.</value>
+    <comment>Each of {0} to {3} is the name of a button or panel, shown in bold.</comment>
+  </data>
+  <data name="LineageJoinProjected" xml:space="preserve">
+    <value>projected</value>
+    <comment>Label on the arrow between two columns of the Lineage; the CSS shows it in capitals.</comment>
+  </data>
+  <data name="LineageJoinJoined" xml:space="preserve">
+    <value>joined</value>
+    <comment>Label on the arrow between two columns of the Lineage; the CSS shows it in capitals.</comment>
+  </data>
+  <data name="LineageJoinImported" xml:space="preserve">
+    <value>imported</value>
+    <comment>Label on the arrow between two columns of the Lineage; the CSS shows it in capitals.</comment>
+  </data>
+  <data name="LineageJoinProvisioned" xml:space="preserve">
+    <value>provisioned</value>
+    <comment>Label on the arrow between two columns of the Lineage; the CSS shows it in capitals.</comment>
+  </data>
+  <data name="LineageJoinDisconnected" xml:space="preserve">
+    <value>disconnected</value>
+    <comment>Label on the arrow between two columns of the Lineage; the CSS shows it in capitals.</comment>
+  </data>
+  <data name="LineageJoinExported" xml:space="preserve">
+    <value>exported</value>
+    <comment>Label on the arrow between two columns of the Lineage; the CSS shows it in capitals.</comment>
+  </data>
+  <data name="TableViewEverything" xml:space="preserve">
+    <value>Everything</value>
+    <comment>First entry of the Table view's object list: every object together.</comment>
+  </data>
+</root>

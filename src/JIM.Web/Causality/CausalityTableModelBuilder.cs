@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using System.Globalization;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Causality;
 
@@ -60,8 +62,8 @@ public static class CausalityTableModelBuilder
         {
             Objects = objects,
             Rows = orderedRows,
-            CurrentHeading = model.IsSpeculative ? "Current" : "Before",
-            NextHeading = model.IsSpeculative ? "Would be" : "After",
+            CurrentHeading = model.IsSpeculative ? CausalityText.TableViewCurrentHeading : CausalityText.TableViewBeforeHeading,
+            NextHeading = model.IsSpeculative ? CausalityText.TableViewWouldBeHeading : CausalityText.TableViewAfterHeading,
             IsSpeculative = model.IsSpeculative
         };
     }
@@ -95,7 +97,7 @@ public static class CausalityTableModelBuilder
             objectMeta[key] = new ObjectMeta(
                 CausalityTableObjectRole.Downstream,
                 DownstreamPlaceholderName(causalityEvent.SystemName),
-                causalityEvent.SystemName ?? "Connected System");
+                causalityEvent.SystemName ?? CausalityText.EventConnectedSystemFallback);
             downstreamOrder.Add(key);
         }
 
@@ -124,7 +126,9 @@ public static class CausalityTableModelBuilder
     /// (a Pending Export names its queue, not the object it will create).
     /// </summary>
     private static string DownstreamPlaceholderName(string? systemName) =>
-        systemName != null ? $"New object in {systemName}" : "New downstream object";
+        systemName != null
+            ? string.Format(CultureInfo.CurrentCulture, CausalityText.TableViewNewObjectIn, systemName)
+            : CausalityText.TableViewNewDownstreamObject;
 
     /// <summary>
     /// The curated object-level row for an outcome type, or null for a type the Table view leaves to
@@ -203,7 +207,7 @@ public static class CausalityTableModelBuilder
                 causalityEvent.SyncRuleId,
                 !string.IsNullOrWhiteSpace(causalityEvent.DetailMessage)
                     ? causalityEvent.DetailMessage
-                    : "Scheduled for deletion"),
+                    : CausalityText.TableViewScheduledForDeletion),
 
             ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued => Row(
                 causalityEvent, objectKey, CausalityTableChangeKind.Deprovision, null, effectiveVia, effectiveSyncRuleId),
@@ -362,10 +366,10 @@ public static class CausalityTableModelBuilder
     /// message where it carries one, else a generic subject.
     /// </summary>
     private static string AttributeSubject(CausalityEvent causalityEvent) =>
-        string.IsNullOrWhiteSpace(causalityEvent.DetailMessage) ? "Attribute value" : causalityEvent.DetailMessage;
+        string.IsNullOrWhiteSpace(causalityEvent.DetailMessage) ? CausalityText.TableViewAttributeValue : causalityEvent.DetailMessage;
 
     private static string SourceDisplayName(CausalityModel model) =>
-        ObjectDescription.ChipName(model.Context.CsoDisplayName, model.Context.CsoExternalId) ?? "Object being synchronised";
+        ObjectDescription.ChipName(model.Context.CsoDisplayName, model.Context.CsoExternalId) ?? CausalityText.TableViewObjectBeingSynchronised;
 
     private static string? SourceSubtitle(CausalityModel model)
     {
@@ -418,7 +422,7 @@ public static class CausalityTableModelBuilder
         // not its name, and showing the object's name twice reads as though the object and the Metaverse
         // Object were one.
         // An item that records a Metaverse Object names it outright (#1982).
-        return model.Context.SubjectMetaverseObjectName ?? linkedName ?? "Metaverse Object";
+        return model.Context.SubjectMetaverseObjectName ?? linkedName ?? CausalityText.LineageMetaverseObjectFallback;
     }
 
     private static List<CausalityTableObject> BuildObjects(
@@ -429,7 +433,7 @@ public static class CausalityTableModelBuilder
         orderedKeys.AddRange(downstreamOrder);
 
         var objects = new List<CausalityTableObject> { BuildObject(EverythingKey, CausalityTableObjectRole.Everything,
-            "Everything", null, null, rows) };
+            CausalityText.TableViewEverything, null, null, rows) };
 
         objects.AddRange(orderedKeys.Select(key =>
         {

@@ -39,7 +39,7 @@
                 @* An item that records a Metaverse Object (an export scope review) is about that object, not a record
                    (#1982). *@
                 <div class="evt-entities">
-                    <ObjectChip Name="@(Model.Context.SubjectMetaverseObjectName ?? "Metaverse Object")"
+                    <ObjectChip Name="@(Model.Context.SubjectMetaverseObjectName ?? CausalityText.LineageMetaverseObjectFallback)"
                                 Href="@Model.Context.SubjectMetaverseObjectHref"
                                 Kind="ObjectChipKind.MetaverseObject"
                                 TypeName="@Model.Context.MvoTypeName" />
@@ -171,8 +171,7 @@
                         <span class="chev"><MudIcon Icon="@Icons.Material.Filled.ChevronRight" aria-hidden="true" /></span>
                         @* A queued deprovision's rows identify the target rather than change it, so it says
                            what they are instead of counting them; see CausalityEvent.AttributeRowsCaption. *@
-                        @(causalityEvent.AttributeRowsCaption
-                          ?? $"{causalityEvent.AttributeRowCount.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)} attribute{(causalityEvent.AttributeRowCount == 1 ? "" : "s")}")
+                        @causalityEvent.AttributeRowsText
                     </button>
                     @if (expanded)
                     {
@@ -207,26 +206,33 @@
         var hasProfile = !string.IsNullOrWhiteSpace(profile);
         var hasSystem = !string.IsNullOrWhiteSpace(system);
 
+        // The sentence is one template per shape, so each language places the Run Profile (rendered in bold above
+        // this text), the system and the kind of object where it needs them. Where a Run Profile is named, only what
+        // follows its placeholder is returned.
+        string template;
         if (Model.IsSpeculative)
         {
             // A Sync Preview (#1519): conditional mood, and "object" rather than "record" (D-S9).
-            if (hasProfile && hasSystem)
-                return $" on {system} would pick up this object.";
-            if (hasProfile)
-                return " would pick up this object.";
-            if (hasSystem)
-                return $"A run on {system} would pick up this object.";
-            return "This object would be picked up for processing.";
+            template = hasProfile && hasSystem ? CausalityText.SourceDetailWouldPickUpOnSystem
+                : hasProfile ? CausalityText.SourceDetailWouldPickUp
+                : hasSystem ? CausalityText.SourceDetailRunOnSystemWouldPickUp
+                : CausalityText.SourceDetailWouldBePickedUp;
+        }
+        else
+        {
+            template = hasProfile && hasSystem ? CausalityText.SourceDetailPickedUpOnSystem
+                : hasProfile ? CausalityText.SourceDetailPickedUp
+                : hasSystem ? CausalityText.SourceDetailRunOnSystemPickedUp
+                : CausalityText.SourceDetailWasPickedUp;
         }
 
-        var subject = Model.Context.SubjectMetaverseObjectId != null ? "Metaverse Object" : "Connected System Object";
-        if (hasProfile && hasSystem)
-            return $" on {system} picked up this {subject}.";
+        var subject = Model.Context.SubjectMetaverseObjectId != null
+            ? CausalityText.SourceDetailSubjectMetaverseObject
+            : CausalityText.SourceDetailSubjectConnectedSystemObject;
         if (hasProfile)
-            return $" picked up this {subject}.";
-        if (hasSystem)
-            return $"A run on {system} picked up this {subject}.";
-        return $"This {subject} was picked up for processing.";
+            template = template[(template.IndexOf("{0}", StringComparison.Ordinal) + "{0}".Length)..];
+
+        return string.Format(System.Globalization.CultureInfo.CurrentCulture, template, profile, system, subject);
     }
 
     private Task ToggleExpandedAsync(CausalityEvent causalityEvent)

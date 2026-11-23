@@ -21,7 +21,7 @@
         <div class="ln-fold">
             <div class="ln-fold-head">
                 <button type="button" class="ln-fold-toggle" aria-expanded="@(_expanded ? "true" : "false")"
-                        @onclick="ToggleExpanded">@(_expanded ? "Hide" : "Show")</button>
+                        @onclick="ToggleExpanded">@(_expanded ? CausalityText.ConsequenceHide : CausalityText.ConsequenceShow)</button>
                 <span class="ln-fold-text">@Consequence.DisplayTitle</span>
             </div>
             @if (_expanded)
@@ -40,7 +40,7 @@
         <div class="ln-followup" data-testid="ln-followup" data-state="@followUp.StateLabel">
             <div class="ln-followup-label">
                 <MudIcon Icon="@Icons.Material.Filled.SubdirectoryArrowRight" aria-hidden="true" />
-                <span>Follow-up</span>
+                <span>@CausalityText.ObjectTimelineFollowUp</span>
             </div>
             <div class="ln-followup-title">
                 <span>@followUp.Title</span>
@@ -55,11 +55,11 @@
             <div class="ln-wait-text">
                 @if (!string.IsNullOrWhiteSpace(followUp.TargetName))
                 {
-                    <span>@followUp.TargetName · </span>
+                    <span>@string.Format(System.Globalization.CultureInfo.CurrentCulture, CausalityText.ConsequenceNamePrefix, followUp.TargetName)</span>
                 }
                 <span title="@followUpLocal.ToFriendlyDate()">@followUpLocal.ToRelativeTime()</span>
             </div>
-            <a class="ln-link" href="@followUp.ActivityHref">View Activity</a>
+            <a class="ln-link" href="@followUp.ActivityHref">@CausalityText.LineageViewActivity</a>
         </div>
         break;
 
@@ -79,7 +79,8 @@
             @if (Consequence.DueAt is { } dueAt)
             {
                 var dueLocal = dueAt.ToLocalTime();
-                <div class="ln-wait-text">Due <span title="@dueLocal.ToFriendlyDate()">@dueLocal.ToRelativeTime()</span></div>
+                var dueParts = CausalityText.ConsequenceDue.Split("{0}", 2);
+                <div class="ln-wait-text">@dueParts[0]<span title="@dueLocal.ToFriendlyDate()">@dueLocal.ToRelativeTime()</span>@dueParts[1]</div>
             }
             @if (Consequence.LinkHref != null)
             {
@@ -208,7 +209,9 @@
     {
         <button type="button" class="ln-members-toggle @(_membersExpanded ? "on" : null)"
                 aria-expanded="@(_membersExpanded ? "true" : "false")" @onclick="ToggleMembers">
-            @(_membersExpanded ? "Hide" : "Show") the @cohort.MemberCount.ToString("N0") @Consequence.MembersNoun
+            @string.Format(System.Globalization.CultureInfo.CurrentCulture,
+                _membersExpanded ? CausalityText.HideMembersLabel : CausalityText.ShowMembersLabel,
+                cohort.MemberCount.ToString("N0"), Consequence.MembersNoun)
         </button>
         @if (_membersExpanded)
         {
@@ -216,14 +219,14 @@
             {
                 <div class="ln-members-find">
                     <SearchField Value="@_search" ValueChanged="SearchMembersAsync" DebounceInterval="500"
-                                 Placeholder="@($"Find {Consequence.MembersNoun}")" />
+                                 Placeholder="@string.Format(System.Globalization.CultureInfo.CurrentCulture, CausalityText.ConsequenceFindMembers, Consequence.MembersNoun)" />
                 </div>
             }
             <ul class="ln-members">
                 @foreach (var member in _members ?? [])
                 {
                     <li class="ln-member" @key="member">
-                        <span class="ln-member-name">@(string.IsNullOrWhiteSpace(member.DisplayName) ? "Unnamed object" : member.DisplayName)</span>
+                        <span class="ln-member-name">@(string.IsNullOrWhiteSpace(member.DisplayName) ? CausalityText.LineageUnnamedObject : member.DisplayName)</span>
                         @if (member.RunProfileExecutionItemId is { } itemId)
                         {
                             <a class="ln-link" href="@Links.ItemHref(itemId)">@Links.ItemLinkText</a>
@@ -232,11 +235,11 @@
                 }
             </ul>
             <div class="ln-members-foot">
-                <span class="ln-members-count">Showing @((_members?.Count ?? 0).ToString("N0")) of @_membersTotal.ToString("N0")</span>
+                <span class="ln-members-count">@string.Format(System.Globalization.CultureInfo.CurrentCulture, CausalityText.ConsequenceShowingOf, _members?.Count ?? 0, _membersTotal)</span>
                 @if (LoadMembers != null && (_members?.Count ?? 0) < _membersTotal)
                 {
                     <button type="button" class="ln-members-more" disabled="@_loadingMembers" @onclick="LoadMoreMembersAsync">
-                        Show @Math.Min(MemberPageSize, _membersTotal - (_members?.Count ?? 0)).ToString("N0") more
+                        @string.Format(System.Globalization.CultureInfo.CurrentCulture, CausalityText.ObjectTimelineShowMore, Math.Min(MemberPageSize, _membersTotal - (_members?.Count ?? 0)))
                     </button>
                 }
             </div>
