@@ -2516,4 +2516,52 @@
     <value>Invalid; cannot be evaluated</value>
     <comment>Criterion outcome: the criterion is invalid.</comment>
   </data>
+  <data name="AddBindingAllBound" xml:space="preserve">
+    <value>Every custom attribute is already bound to {0}. Create a new attribute to add one.</value>
+    <comment>Shown when there is nothing to add. {0} is the Metaverse Object Type name.</comment>
+  </data>
+  <data name="AddBindingSearchPlaceholder" xml:space="preserve">
+    <value>Search attributes</value>
+    <comment>Placeholder of the attribute search box.</comment>
+  </data>
+  <data name="AddBindingNotYetOnType" xml:space="preserve">
+    <value>Not yet on this Object Type</value>
+    <comment>Heading of the list of attributes that can be added.</comment>
+  </data>
+  <data name="AddBindingNotAssigned" xml:space="preserve">
+    <value>Not assigned</value>
+    <comment>Shown beside an attribute that is on no Object Type.</comment>
+  </data>
+  <data name="AddBindingOn" xml:space="preserve">
+    <value>on {0}</value>
+    <comment>Shown beside an attribute on Object Types. {0} is the list of Object Types.</comment>
+  </data>
+  <data name="AddBindingCreateHint" xml:space="preserve">
+    <value>Need one that doesn't exist yet? Create a new attribute and bind it in one step from the Schema Attributes list.</value>
+    <comment>Hint at the foot of the dialog.</comment>
+  </data>
+  <data name="AddBindingButtonNone" xml:space="preserve">
+    <value>Add attributes</value>
+    <comment>Confirm button when nothing is selected.</comment>
+  </data>
+  <data name="AddBindingButtonOne" xml:space="preserve">
+    <value>Add 1 attribute</value>
+    <comment>Confirm button when one attribute is selected.</comment>
+  </data>
+  <data name="AddBindingButtonMany" xml:space="preserve">
+    <value>Add {0} attributes</value>
+    <comment>Confirm button when several are selected. {0} is the count.</comment>
+  </data>
+  <data name="AddBindingAdded" xml:space="preserve">
+    <value>Added {0} attribute(s) to {1}.</value>
+    <comment>Snackbar after adding. {0} is the count, {1} the Metaverse Object Type.</comment>
+  </data>
+  <data name="AddBindingFailed" xml:space="preserve">
+    <value>Failed to add attributes: {0}</value>
+    <comment>Snackbar on failure. {0} is the error message.</comment>
+  </data>
+  <data name="AddBindingTitle" xml:space="preserve">
+    <value>Add Attributes to "{0}"</value>
+    <comment>Dialog title. {0} is the Metaverse Object Type name.</comment>
+  </data>
 </root>

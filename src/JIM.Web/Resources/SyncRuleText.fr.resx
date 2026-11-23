@@ -1910,4 +1910,40 @@
   <data name="ScopingInvalid" xml:space="preserve">
     <value>Invalide ; impossible à évaluer</value>
   </data>
+  <data name="AddBindingAllBound" xml:space="preserve">
+    <value>Tous les attributs personnalisés sont déjà liés à {0}. Créez un nouvel attribut pour en ajouter un.</value>
+  </data>
+  <data name="AddBindingSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher des attributs</value>
+  </data>
+  <data name="AddBindingNotYetOnType" xml:space="preserve">
+    <value>Pas encore sur ce type d’objet</value>
+  </data>
+  <data name="AddBindingNotAssigned" xml:space="preserve">
+    <value>Non attribué</value>
+  </data>
+  <data name="AddBindingOn" xml:space="preserve">
+    <value>sur {0}</value>
+  </data>
+  <data name="AddBindingCreateHint" xml:space="preserve">
+    <value>Besoin d’un attribut qui n’existe pas encore ? Créez un nouvel attribut et liez-le en une étape depuis la liste des attributs du schéma.</value>
+  </data>
+  <data name="AddBindingButtonNone" xml:space="preserve">
+    <value>Ajouter des attributs</value>
+  </data>
+  <data name="AddBindingButtonOne" xml:space="preserve">
+    <value>Ajouter 1 attribut</value>
+  </data>
+  <data name="AddBindingButtonMany" xml:space="preserve">
+    <value>Ajouter {0} attributs</value>
+  </data>
+  <data name="AddBindingAdded" xml:space="preserve">
+    <value>{0} attribut(s) ajouté(s) à {1}.</value>
+  </data>
+  <data name="AddBindingFailed" xml:space="preserve">
+    <value>Échec de l’ajout des attributs : {0}</value>
+  </data>
+  <data name="AddBindingTitle" xml:space="preserve">
+    <value>Ajouter des attributs à « {0} »</value>
+  </data>
 </root>
