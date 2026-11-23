@@ -2123,4 +2123,19 @@
   <data name="DependentFlowsAfterwards" xml:space="preserve">
     <value>Chacun suit ensuite son comportement en cas d’entrée manquante lors de la prochaine synchronisation. Les valeurs déjà présentes sur les objets Metaverse restent en place jusqu’alors.</value>
   </data>
+  <data name="TestCaseTargetFallback" xml:space="preserve">
+    <value>sa cible</value>
+  </data>
+  <data name="TestCaseGeneratedBaseName" xml:space="preserve">
+    <value>base de la valeur générée pour {0}</value>
+  </data>
+  <data name="TestCaseAttributeFlowName" xml:space="preserve">
+    <value>flux d’attributs vers {0}</value>
+  </data>
+  <data name="TestCaseInScopeName" xml:space="preserve">
+    <value>Dans le périmètre</value>
+  </data>
+  <data name="TestCaseOutOfScopeName" xml:space="preserve">
+    <value>Hors du périmètre</value>
+  </data>
 </root>

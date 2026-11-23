@@ -2800,4 +2800,24 @@
     <value>Each one then follows its Missing Input Behaviour at the next synchronisation. Values already on Metaverse Objects stay until then.</value>
     <comment>Explains what happens to the dependent flows after the change.</comment>
   </data>
+  <data name="TestCaseTargetFallback" xml:space="preserve">
+    <value>its target</value>
+    <comment>Fills the target in a test case name when the Attribute Flow has no target name.</comment>
+  </data>
+  <data name="TestCaseGeneratedBaseName" xml:space="preserve">
+    <value>Generated Value base for {0}</value>
+    <comment>Name of a saved test case for a Generated Value's base. {0} is the target attribute.</comment>
+  </data>
+  <data name="TestCaseAttributeFlowName" xml:space="preserve">
+    <value>Attribute Flow to {0}</value>
+    <comment>Name of a saved test case for an Attribute Flow. {0} is the target attribute.</comment>
+  </data>
+  <data name="TestCaseInScopeName" xml:space="preserve">
+    <value>In scope</value>
+    <comment>Name of a saved Scope test case whose expectation is in scope.</comment>
+  </data>
+  <data name="TestCaseOutOfScopeName" xml:space="preserve">
+    <value>Out of scope</value>
+    <comment>Name of a saved Scope test case whose expectation is out of scope.</comment>
+  </data>
 </root>
