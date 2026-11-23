@@ -1465,7 +1465,7 @@ PRD Scenario 5 (re-derivation after Collision Remediation) joins #242 release 4'
 
 #### Scenario 024: Active Directory Password Policy
 
-**Status**: written for [PRD functional requirement 17](prd/doing/PRD_ACTIVE_DIRECTORY_LAB.md) and checked everywhere but on a domain controller (it parses, every helper and cmdlet it calls exists with the parameters it passes, ScriptAnalyzer is clean, and a mocked dry run of every step passes). **Not yet run against the lab**, which needs `-DirectoryType ActiveDirectory`. Active Directory lab only.
+**Status**: written for [PRD functional requirement 17](prd/done/PRD_ACTIVE_DIRECTORY_LAB.md); runs in every Active Directory lab run (`ad-lab.yml`) and passes. Active Directory lab only.
 
 **Purpose**: Scenario 022 for a real domain controller. Prove that JIM reads the domain password policy a Windows domain controller enforces, reports what it can about a Fine-Grained Password Policy, and provisions accounts with generated Initial Passwords the domain accepts; and that a password only a domain controller can refuse parks the account with the directory's own words and is released when the rule is corrected. The unit tests in `LdapConnectorPasswordPolicyTests` and `LdapConnectorPasswordTests` assert against a mocked LDAP executor, so they prove how JIM maps what a directory says and nothing about what Active Directory says or enforces.
 
