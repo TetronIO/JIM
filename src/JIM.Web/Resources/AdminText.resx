@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="SchemaPageTitle" xml:space="preserve">
+    <value>Schema</value>
+    <comment>Browser and breadcrumb title for the Schema page</comment>
+  </data>
+  <data name="SchemaHeading" xml:space="preserve">
+    <value>Schema:</value>
+    <comment>Heading label before the name of the active tab</comment>
+  </data>
+  <data name="SchemaPageInfo" xml:space="preserve">
+    <value>Manage Metaverse Object Types and their attributes, and see how data flows into and out of them.</value>
+    <comment>Page information popover</comment>
+  </data>
+  <data name="SchemaTabObjectTypes" xml:space="preserve">
+    <value>Object Types</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="SchemaTabAttributes" xml:space="preserve">
+    <value>Attributes</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="SchemaTabDataFlow" xml:space="preserve">
+    <value>Data Flow</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="SchemaDeletionRule" xml:space="preserve">
+    <value>Deletion Rule</value>
+    <comment>Column heading and filter label</comment>
+  </data>
+  <data name="SchemaDeletionRuleManual" xml:space="preserve">
+    <value>Manual</value>
+    <comment>Deletion Rule value shown as a chip</comment>
+  </data>
+  <data name="SchemaDeletionRuleAuto" xml:space="preserve">
+    <value>Auto</value>
+    <comment>Deletion Rule value shown as a chip: deletes when the last connector disconnects</comment>
+  </data>
+  <data name="SchemaDeletionRuleAuthoritativeSource" xml:space="preserve">
+    <value>Authoritative Source</value>
+    <comment>Deletion Rule value shown as a chip</comment>
+  </data>
+  <data name="SchemaPredefinedSearches" xml:space="preserve">
+    <value>Predefined Searches?</value>
+    <comment>Column heading and filter label: whether the Object Type has Predefined Searches</comment>
+  </data>
+  <data name="SchemaBuiltIn" xml:space="preserve">
+    <value>Built-in?</value>
+    <comment>Column heading and filter label</comment>
+  </data>
+  <data name="SchemaNewObjectType" xml:space="preserve">
+    <value>New Object Type</value>
+    <comment>Toolbar button</comment>
+  </data>
+  <data name="SchemaNewAttribute" xml:space="preserve">
+    <value>New Attribute</value>
+    <comment>Toolbar button</comment>
+  </data>
+  <data name="SchemaEditObjectType" xml:space="preserve">
+    <value>Edit Object Type</value>
+    <comment>Tooltip on an icon button</comment>
+  </data>
+  <data name="SchemaDeleteObjectType" xml:space="preserve">
+    <value>Delete Object Type</value>
+    <comment>Tooltip on an icon button</comment>
+  </data>
+  <data name="SchemaBuiltInObjectTypeLocked" xml:space="preserve">
+    <value>Built-in Object Types cannot be renamed or deleted.</value>
+    <comment>Tooltip on a disabled lock icon</comment>
+  </data>
+  <data name="SchemaChangeHistory" xml:space="preserve">
+    <value>Change history</value>
+    <comment>Tooltip on an icon button</comment>
+  </data>
+  <data name="SchemaSearchByName" xml:space="preserve">
+    <value>Search by name</value>
+    <comment>Search box placeholder on the Object Types tab</comment>
+  </data>
+  <data name="SchemaNoObjectTypesMatchSearch" xml:space="preserve">
+    <value>No Metaverse Object Types match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="SchemaNoObjectTypesMatchFilters" xml:space="preserve">
+    <value>No Metaverse Object Types match the current filters</value>
+    <comment>Empty state when filters exclude everything</comment>
+  </data>
+  <data name="SchemaTryDifferentFilters" xml:space="preserve">
+    <value>Try different filters, or clear them.</value>
+    <comment>Empty state secondary text</comment>
+  </data>
+  <data name="SchemaClearFilters" xml:space="preserve">
+    <value>Clear Filters</value>
+    <comment>Empty state action button</comment>
+  </data>
+  <data name="SchemaNoObjectTypesYet" xml:space="preserve">
+    <value>No Metaverse Object Types yet</value>
+    <comment>Empty state when there are no Object Types</comment>
+  </data>
+  <data name="SchemaUseNewObjectTypeButton" xml:space="preserve">
+    <value>Use the New Object Type button to create one.</value>
+    <comment>Empty state secondary text; quotes the toolbar button label</comment>
+  </data>
+  <data name="SchemaNoAttributesMatchSearch" xml:space="preserve">
+    <value>No Metaverse Attributes match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="SchemaNoAttributesMatchFilters" xml:space="preserve">
+    <value>No Metaverse Attributes match the current filters</value>
+    <comment>Empty state when filters exclude everything</comment>
+  </data>
+  <data name="SchemaNoAttributesYet" xml:space="preserve">
+    <value>No Metaverse Attributes yet</value>
+    <comment>Empty state when there are no attributes</comment>
+  </data>
+  <data name="SchemaUseNewAttributeButton" xml:space="preserve">
+    <value>Use the New Attribute button to create one.</value>
+    <comment>Empty state secondary text; quotes the toolbar button label</comment>
+  </data>
+  <data name="SchemaSingleValued" xml:space="preserve">
+    <value>Single-Valued</value>
+    <comment>Attribute plurality value</comment>
+  </data>
+  <data name="SchemaMultiValued" xml:space="preserve">
+    <value>Multi-Valued</value>
+    <comment>Attribute plurality value</comment>
+  </data>
+  <data name="SchemaPlurality" xml:space="preserve">
+    <value>Plurality</value>
+    <comment>Column heading and filter label</comment>
+  </data>
+  <data name="SchemaCustom" xml:space="preserve">
+    <value>Custom</value>
+    <comment>Shown in the Built-in column for an attribute that is not built in</comment>
+  </data>
+  <data name="SchemaBuiltInAttribute" xml:space="preserve">
+    <value>Built-in attribute</value>
+    <comment>Tooltip on a lock icon</comment>
+  </data>
+  <data name="SchemaObjectTypes" xml:space="preserve">
+    <value>Object Types</value>
+    <comment>Column heading and the bound Object Types panel heading</comment>
+  </data>
+  <data name="SchemaNotAssigned" xml:space="preserve">
+    <value>Not assigned</value>
+    <comment>Chip for a custom attribute bound to no Object Type</comment>
+  </data>
+  <data name="SchemaNotAssignedTooltip" xml:space="preserve">
+    <value>This custom attribute is not bound to any Object Type, so it is not collecting data.</value>
+    <comment>Tooltip on the Not assigned chip</comment>
+  </data>
+  <data name="SchemaEditAttribute" xml:space="preserve">
+    <value>Edit attribute</value>
+    <comment>Tooltip on an icon button</comment>
+  </data>
+  <data name="SchemaDeleteAttribute" xml:space="preserve">
+    <value>Delete attribute</value>
+    <comment>Tooltip on an icon button</comment>
+  </data>
+  <data name="SchemaViewAttributeAndMappings" xml:space="preserve">
+    <value>View attribute and Standard Mappings</value>
+    <comment>Tooltip on a view icon for a built-in attribute</comment>
+  </data>
+  <data name="SchemaObjectTypeFilter" xml:space="preserve">
+    <value>Object Type</value>
+    <comment>Filter label for the attribute's Object Type</comment>
+  </data>
+  <data name="SchemaNounObjectTypeSingular" xml:space="preserve">
+    <value>Metaverse Object Type</value>
+    <comment>Noun used in the count and in the change history dialog</comment>
+  </data>
+  <data name="SchemaNounObjectTypePlural" xml:space="preserve">
+    <value>Metaverse Object Types</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="SchemaNounAttributeSingular" xml:space="preserve">
+    <value>Metaverse Attribute</value>
+    <comment>Noun used in the count and in the change history dialog</comment>
+  </data>
+  <data name="SchemaNounAttributePlural" xml:space="preserve">
+    <value>Metaverse Attributes</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="SchemaGracePeriodDayOne" xml:space="preserve">
+    <value>{0} day</value>
+    <comment>Grace period, singular; {0} is a number</comment>
+  </data>
+  <data name="SchemaGracePeriodDayOther" xml:space="preserve">
+    <value>{0} days</value>
+    <comment>Grace period, plural; {0} is a number</comment>
+  </data>
+  <data name="SchemaGracePeriodHourOne" xml:space="preserve">
+    <value>{0} hour</value>
+    <comment>Grace period, singular; {0} is a number</comment>
+  </data>
+  <data name="SchemaGracePeriodHourOther" xml:space="preserve">
+    <value>{0} hours</value>
+    <comment>Grace period, plural; {0} is a number</comment>
+  </data>
+  <data name="SchemaGracePeriodMinuteOne" xml:space="preserve">
+    <value>{0} minute</value>
+    <comment>Grace period, singular; {0} is a number</comment>
+  </data>
+  <data name="SchemaGracePeriodMinuteOther" xml:space="preserve">
+    <value>{0} minutes</value>
+    <comment>Grace period, plural; {0} is a number</comment>
+  </data>
+  <data name="SchemaGracePeriodSeparator" xml:space="preserve">
+    <value>, </value>
+    <comment>Separates the parts of a grace period such as "1 day, 2 hours"</comment>
+  </data>
+  <data name="SchemaGracePeriodWithDelay" xml:space="preserve">
+    <value>({0} grace period)</value>
+    <comment>Parenthesised grace period in a Deletion Rule tooltip; {0} is the duration</comment>
+  </data>
+  <data name="SchemaGracePeriodImmediate" xml:space="preserve">
+    <value>(immediate)</value>
+    <comment>Shown in a Deletion Rule tooltip when there is no grace period</comment>
+  </data>
+  <data name="SchemaTooltipManualDeletion" xml:space="preserve">
+    <value>Manual deletion only - objects are never automatically deleted</value>
+    <comment>Deletion Rule tooltip for Manual</comment>
+  </data>
+  <data name="SchemaTooltipDeleteWhenAllDisconnect" xml:space="preserve">
+    <value>Delete when all connectors disconnect {0}</value>
+    <comment>Deletion Rule tooltip for Auto; {0} is the grace period or immediate</comment>
+  </data>
+  <data name="SchemaTooltipAllSourcesDisconnect" xml:space="preserve">
+    <value>All sources disconnect: delete only once every selected authoritative source has disconnected {0}</value>
+    <comment>Deletion Rule tooltip; {0} is the grace period or immediate</comment>
+  </data>
+  <data name="SchemaTooltipSpecificSourceDisconnect" xml:space="preserve">
+    <value>Specific source(s) disconnect: delete when any one of the selected authoritative sources disconnects {0}</value>
+    <comment>Deletion Rule tooltip; {0} is the grace period or immediate</comment>
+  </data>
+  <data name="SchemaTooltipUnknownRule" xml:space="preserve">
+    <value>Unknown deletion rule</value>
+    <comment>Deletion Rule tooltip for a value the portal does not recognise</comment>
+  </data>
+</root>
