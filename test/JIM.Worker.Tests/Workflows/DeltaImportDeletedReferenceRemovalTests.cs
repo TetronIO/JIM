@@ -112,6 +112,39 @@ public class DeltaImportDeletedReferenceRemovalTests : WorkflowTestBase
             "only an exported removal awaits confirmation");
     }
 
+    [Test]
+    public async Task DeltaImport_ObjectWhoseDeleteWasExportedIsReportedDeleted_ConfirmsTheDeleteAsync()
+    {
+        var (connectedSystem, type) = await ArrangeAsync();
+        var leaver = SeedCso(connectedSystem, type, "Leaver");
+        var delete = new PendingExport
+        {
+            Id = Guid.NewGuid(), ConnectedSystemId = connectedSystem.Id, ConnectedSystemObjectId = leaver.Id,
+            ChangeType = PendingExportChangeType.Delete, Status = PendingExportStatus.Exported, CreatedAt = DateTime.UtcNow
+        };
+        SyncRepo.SeedPendingExport(delete);
+
+        await RunDeltaImportAsync(connectedSystem, [[Delete(type, leaver)]]);
+
+        Assert.That(await PendingExportOfAsync(leaver), Is.Null, "the target reports the object deleted, which confirms the Delete");
+    }
+
+    [Test]
+    public async Task DeltaImport_DeletionWithheldByItsLimit_LeavesTheExportedDeleteAwaitingConfirmationAsync()
+    {
+        var (connectedSystem, type) = await ArrangeAsync();
+        var leaver = SeedCso(connectedSystem, type, "Leaver");
+        SyncRepo.SeedPendingExport(new PendingExport
+        {
+            Id = Guid.NewGuid(), ConnectedSystemId = connectedSystem.Id, ConnectedSystemObjectId = leaver.Id,
+            ChangeType = PendingExportChangeType.Delete, Status = PendingExportStatus.Exported, CreatedAt = DateTime.UtcNow
+        });
+
+        await RunDeltaImportAsync(connectedSystem, [[Delete(type, leaver)]], maxDeletions: 0);
+
+        Assert.That(await PendingExportOfAsync(leaver), Is.Not.Null, "a deletion the Run Profile withheld confirms nothing");
+    }
+
     #region Helpers
 
     private async Task<(ConnectedSystem ConnectedSystem, ConnectedSystemObjectType Type)> ArrangeAsync()

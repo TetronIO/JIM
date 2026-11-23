@@ -121,8 +121,28 @@ public partial class SyncImportTaskProcessor
         if (updatedCount == 0)
             return null;
 
+        // Read once the run's deletes are settled: a Delta Import's withheld ones are put back before its save phase, and a
+        // delete a later page superseded leaves its object as it was.
+        var deletedObjectIds = _connectorReportedDeletes
+            .Where(delete => delete.Cso.Status == ConnectedSystemObjectStatus.Obsolete && delete.StatusBefore != ConnectedSystemObjectStatus.Obsolete)
+            .Select(delete => delete.Cso.Id)
+            .ToHashSet();
+
+        // An object the Connector reports deleted has nothing left to export to: an exported Delete is confirmed by the
+        // deletion itself, and anything else staged for it is moot. Cleared as a Full Import's deletion detection clears
+        // the Pending Exports of an object it finds gone (ApplyDeletionCandidatesAsync); left in place, an exported Delete
+        // waited for a confirmation reconciliation never gives (it confirms attribute changes, and a Delete has none) and
+        // outlived its object once synchronisation deleted it (#3053).
+        if (deletedObjectIds.Count > 0)
+        {
+            var clearedCount = await _syncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync([.. deletedObjectIds]);
+            if (clearedCount > 0)
+                Log.Information("BeginPendingExportReconciliationAsync: Cleared {Count} Pending Export(s) of {DeletedCount} object(s) the Connector " +
+                    "reported deleted, exported Deletes among them", clearedCount, deletedObjectIds.Count);
+        }
+
         // Asked of the database as the save phase starts, as the Pending Exports were once loaded here: a Pending Export
-        // deletion detection has just removed is not one to reconcile.
+        // deletion detection, or the clearing above, has just removed is not one to reconcile.
         int pendingExportCount;
         using (Diagnostics.Sync.StartSpan("CountPendingExports"))
         {
@@ -150,13 +170,6 @@ public partial class SyncImportTaskProcessor
             "in pages of {PageSize}", pendingExportCount, updatedCount, pageSize);
 
         var deferredIds = await FindObjectsSavedMoreThanOnceWithPendingExportsAsync(updatedCsoIds);
-
-        // Read once the run's deletes are settled: a Delta Import's withheld ones are put back before its save phase, and a
-        // delete a later page superseded leaves its object as it was.
-        var deletedObjectIds = _connectorReportedDeletes
-            .Where(delete => delete.Cso.Status == ConnectedSystemObjectStatus.Obsolete && delete.StatusBefore != ConnectedSystemObjectStatus.Obsolete)
-            .Select(delete => delete.Cso.Id)
-            .ToHashSet();
 
         return new PendingExportReconciliationRun
         {

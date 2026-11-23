@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- 🐛 A Delta Import that finds an object deleted now confirms JIM's exported removals of references to it, such as a leaver's group memberships in Microsoft Entra ID, rather than leaving them waiting for the next Full Import.
+- 🐛 A Delta Import that finds an object deleted now confirms JIM's exported Delete of it and its exported removals of references to it, such as a leaver's group memberships, rather than leaving them waiting for a Full Import or, for the Delete, for ever.
 - 🐛 Behind an outbound proxy, the SCIM Connector now reads a service provider's certificate through the proxy, so **Fetch certificate** and a failed connection test show the certificate a TLS-inspecting proxy presents, ready to trust.
 
 ## [1.0.0] - 2026-11-20
