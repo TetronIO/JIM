@@ -1751,4 +1751,40 @@
   <data name="RemoveBindingTitle" xml:space="preserve">
     <value>Supprimer « {0} » de {1}</value>
   </data>
+  <data name="ContributedBreakdown" xml:space="preserve">
+    <value>{0} : {1:N0} valeur(s) sur {2:N0} objet Metaverse(s)</value>
+  </data>
+  <data name="ContributedRecall" xml:space="preserve">
+    <value>Rappeler les valeurs d’attributs (recommandé)</value>
+  </data>
+  <data name="ContributedKeep" xml:space="preserve">
+    <value>Conserver les valeurs d’attributs</value>
+  </data>
+  <data name="ContributedRuleImpact" xml:space="preserve">
+    <value>Cette règle a apporté les valeurs actuelles de {0:N0} valeur(s) d’attribut sur {1:N0} objets Metaverse.</value>
+  </data>
+  <data name="ContributedRuleRecallHelp" xml:space="preserve">
+    <value>JIM met en file d’attente une opération de rappel. Lorsqu’un autre flux d’attributs contribue aussi à un attribut, sa valeur prend le relais ; sinon, la valeur est supprimée et les modifications qui en résultent sont préparées pour l’exportation. La progression peut être suivie depuis la page Opérations.</value>
+  </data>
+  <data name="ContributedKeepHelp" xml:space="preserve">
+    <value>Les valeurs restent en place sans trace de leur origine. JIM ne les rappellera jamais ; il faudrait un nouveau flux d’attributs entrant, ou une suppression manuelle ou automatisée, pour les modifier ensuite.</value>
+  </data>
+  <data name="ContributedRuleKeepWarning" xml:space="preserve">
+    <value>Les valeurs conservées deviennent définitivement non gérées. Cela ne peut pas être annulé une fois la règle supprimée.</value>
+  </data>
+  <data name="ContributedFlowImpact" xml:space="preserve">
+    <value>Ce flux d’attributs a apporté les valeurs actuelles de {0} sur {1:N0} objets Metaverse.</value>
+  </data>
+  <data name="ContributedFlowRecallHelp" xml:space="preserve">
+    <value>Les valeurs sont rappelées lors de la prochaine synchronisation du système connecté contributeur, delta ou complète, un autre flux d’attributs contributeur prenant le relais.</value>
+  </data>
+  <data name="ContributedFlowKeepWarning" xml:space="preserve">
+    <value>Les valeurs conservées deviennent définitivement non gérées. Cela ne peut pas être annulé une fois le mappage supprimé.</value>
+  </data>
+  <data name="ContributedFlowInfo" xml:space="preserve">
+    <value>Votre choix prend effet lorsque vous enregistrez la règle de synchronisation.</value>
+  </data>
+  <data name="ContributedRemoveMapping" xml:space="preserve">
+    <value>Supprimer le mappage d’attribut</value>
+  </data>
 </root>

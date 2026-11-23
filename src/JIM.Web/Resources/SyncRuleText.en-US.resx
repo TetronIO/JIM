@@ -218,4 +218,10 @@
   <data name="SyncRuleDisabledTooltip" xml:space="preserve">
     <value>This Synchronization Rule is disabled. It holds its position but never contributes during synchronization.</value>
   </data>
+  <data name="ContributedFlowRecallHelp" xml:space="preserve">
+    <value>The values are recalled at the next synchronization of the contributing Connected System, Delta or Full, with any other contributing Attribute Flow taking over.</value>
+  </data>
+  <data name="ContributedFlowInfo" xml:space="preserve">
+    <value>Your choice takes effect when you save the Synchronization Rule.</value>
+  </data>
 </root>

@@ -2304,4 +2304,52 @@
     <value>Remove "{0}" from {1}</value>
     <comment>Dialog title. {0} is the attribute, {1} the Metaverse Object Type.</comment>
   </data>
+  <data name="ContributedBreakdown" xml:space="preserve">
+    <value>{0}: {1:N0} value(s) on {2:N0} Metaverse Object(s)</value>
+    <comment>A line per attribute: its name, the values held, and the objects holding them.</comment>
+  </data>
+  <data name="ContributedRecall" xml:space="preserve">
+    <value>Recall the attribute values (recommended)</value>
+    <comment>Option: the values are recalled. Recommended.</comment>
+  </data>
+  <data name="ContributedKeep" xml:space="preserve">
+    <value>Keep the attribute values</value>
+    <comment>Option: the values are kept, unmanaged.</comment>
+  </data>
+  <data name="ContributedRuleImpact" xml:space="preserve">
+    <value>This rule contributed the current values of {0:N0} attribute value(s) across {1:N0} Metaverse Objects.</value>
+    <comment>Impact of deleting a rule. {0} is the number of values, {1} the number of objects.</comment>
+  </data>
+  <data name="ContributedRuleRecallHelp" xml:space="preserve">
+    <value>JIM queues a recall operation. Where another Attribute Flow also contributes an attribute, its value takes over; otherwise the value is removed and any resulting changes are staged for export. Progress can be monitored from the Operations page.</value>
+    <comment>Explains the recall, when a rule is deleted.</comment>
+  </data>
+  <data name="ContributedKeepHelp" xml:space="preserve">
+    <value>The values remain in place with no record of where they came from. JIM will never recall them; a new inbound Attribute Flow, or manual or automated removal, would be needed to change them later.</value>
+    <comment>Explains the keep option.</comment>
+  </data>
+  <data name="ContributedRuleKeepWarning" xml:space="preserve">
+    <value>Kept values become permanently unmanaged. This cannot be reversed once the rule is deleted.</value>
+    <comment>Warning shown when keep is chosen for a rule deletion.</comment>
+  </data>
+  <data name="ContributedFlowImpact" xml:space="preserve">
+    <value>This Attribute Flow contributed the current values of {0} on {1:N0} Metaverse Objects.</value>
+    <comment>Impact of removing an Attribute Flow. {0} is the attribute, {1} the number of objects.</comment>
+  </data>
+  <data name="ContributedFlowRecallHelp" xml:space="preserve">
+    <value>The values are recalled at the next synchronisation of the contributing Connected System, Delta or Full, with any other contributing Attribute Flow taking over.</value>
+    <comment>Explains the recall, when an Attribute Flow is removed.</comment>
+  </data>
+  <data name="ContributedFlowKeepWarning" xml:space="preserve">
+    <value>Kept values become permanently unmanaged. This cannot be reversed once the mapping is removed.</value>
+    <comment>Warning shown when keep is chosen for an Attribute Flow removal.</comment>
+  </data>
+  <data name="ContributedFlowInfo" xml:space="preserve">
+    <value>Your choice takes effect when you save the Synchronisation Rule.</value>
+    <comment>Info under the choice for an Attribute Flow removal.</comment>
+  </data>
+  <data name="ContributedRemoveMapping" xml:space="preserve">
+    <value>Remove Attribute Mapping</value>
+    <comment>Dialog title and confirm button for removing an Attribute Flow.</comment>
+  </data>
 </root>
