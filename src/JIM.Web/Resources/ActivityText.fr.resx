@@ -1640,4 +1640,142 @@
   <data name="ActivityPreviewStageObjectDetail" xml:space="preserve">
     <value>Détail des objets</value>
   </data>
+  <data name="ActivityObjectChangesTitle" xml:space="preserve">
+    <value>Modifications d’objets</value>
+  </data>
+  <data name="ActivityObjectChangesDescription" xml:space="preserve">
+    <value>Recherchez les modifications apportées aux objets Metaverse, tous objets confondus : quand elles ont été faites, sur quel type d’objet et comment leurs attributs ont changé. Seules les modifications enregistrées par JIM peuvent être retrouvées ; aucune n’apparaît tant que le suivi des modifications d’objets Metaverse est désactivé, et la conservation de l’historique supprime les plus anciennes.</value>
+  </data>
+  <data name="ActivityObjectChangesChangedBetween" xml:space="preserve">
+    <value>Modifié entre</value>
+  </data>
+  <data name="ActivityObjectChangesObjectType" xml:space="preserve">
+    <value>Type d’objet Metaverse</value>
+  </data>
+  <data name="ActivityObjectChangesAttributeChanges" xml:space="preserve">
+    <value>Modifications d’attributs</value>
+  </data>
+  <data name="ActivityObjectChangesHowCombine" xml:space="preserve">
+    <value>Comment les conditions se combinent</value>
+  </data>
+  <data name="ActivityObjectChangesCondition" xml:space="preserve">
+    <value>Condition</value>
+  </data>
+  <data name="ActivityOperatorChangedTo" xml:space="preserve">
+    <value>modifié en</value>
+  </data>
+  <data name="ActivityOperatorChangedFrom" xml:space="preserve">
+    <value>modifié depuis</value>
+  </data>
+  <data name="ActivityOperatorChanged" xml:space="preserve">
+    <value>modifié (en ou depuis)</value>
+  </data>
+  <data name="ActivityObjectChangesRemoveCondition" xml:space="preserve">
+    <value>Supprimer la condition</value>
+  </data>
+  <data name="ActivityObjectChangesAddCondition" xml:space="preserve">
+    <value>Ajouter une condition</value>
+  </data>
+  <data name="ActivityObjectChangesSearch" xml:space="preserve">
+    <value>Rechercher par nom d’objet Metaverse</value>
+  </data>
+  <data name="ActivityObjectChangesChanged" xml:space="preserve">
+    <value>Modifié</value>
+  </data>
+  <data name="ActivityObjectChangesAttributes" xml:space="preserve">
+    <value>Attributs</value>
+  </data>
+  <data name="ActivityObjectChangesFinalValues" xml:space="preserve">
+    <value>Valeurs finales</value>
+  </data>
+  <data name="ActivityObjectChangesCleared" xml:space="preserve">
+    <value>(effacé)</value>
+  </data>
+  <data name="ActivityObjectChangesMadeBy" xml:space="preserve">
+    <value>Effectué par</value>
+  </data>
+  <data name="ActivityObjectChangesNoMatchName" xml:space="preserve">
+    <value>Aucune modification d’objet Metaverse ne correspond au nom « {0} »</value>
+  </data>
+  <data name="ActivityObjectChangesTryDifferentName" xml:space="preserve">
+    <value>Essayez un autre nom, ou effacez la recherche.</value>
+  </data>
+  <data name="ActivityObjectChangesWidenRange" xml:space="preserve">
+    <value>Élargissez la période, ou ajustez ou effacez les conditions sur les attributs.</value>
+  </data>
+  <data name="ActivityObjectChangesNoneRecorded" xml:space="preserve">
+    <value>Aucune modification enregistrée</value>
+  </data>
+  <data name="ActivityObjectChangesNoneRecordedDetail" xml:space="preserve">
+    <value>Les modifications d’objets Metaverse apparaissent ici lorsque les synchronisations et les administrateurs les effectuent, tant que le suivi des modifications d’objets Metaverse est activé.</value>
+  </data>
+  <data name="ActivityObjectChangesMatchAll" xml:space="preserve">
+    <value>Toutes les conditions</value>
+  </data>
+  <data name="ActivityObjectChangesMatchAllTooltip" xml:space="preserve">
+    <value>Chaque condition remplie par la même modification : un seul objet Metaverse, dans une seule activité</value>
+  </data>
+  <data name="ActivityObjectChangesMatchAny" xml:space="preserve">
+    <value>Une condition quelconque</value>
+  </data>
+  <data name="ActivityObjectChangesMatchAnyTooltip" xml:space="preserve">
+    <value>Au moins une condition remplie</value>
+  </data>
+  <data name="ActivityObjectChangesDeleted" xml:space="preserve">
+    <value>Supprimé {0}</value>
+  </data>
+  <data name="ActivityHintText" xml:space="preserve">
+    <value>Toute valeur ; * correspond à n’importe quoi</value>
+  </data>
+  <data name="ActivityHintReference" xml:space="preserve">
+    <value>Le nom de l’objet référencé ; * correspond à n’importe quoi</value>
+  </data>
+  <data name="ActivityHintDate" xml:space="preserve">
+    <value>aaaa-MM-jj pour la journée entière</value>
+  </data>
+  <data name="ActivityHintBoolean" xml:space="preserve">
+    <value>true ou false</value>
+  </data>
+  <data name="ActivityHintBinary" xml:space="preserve">
+    <value>Laisser vide ; les valeurs binaires ne sont pas enregistrées</value>
+  </data>
+  <data name="ActivityHintAny" xml:space="preserve">
+    <value>Toute valeur</value>
+  </data>
+  <data name="ActivityPendingDelete" xml:space="preserve">
+    <value>Cet objet est mis en attente de suppression dans le système connecté. Les valeurs d’attributs ci-dessous sont portées par l’exportation en attente, afin que la suppression puisse être effectuée une fois l’objet de système connecté disparu.</value>
+  </data>
+  <data name="ActivityPendingAwaiting" xml:space="preserve">
+    <value>Les modifications d’attributs suivantes sont en attente d’exportation vers le système connecté.</value>
+  </data>
+  <data name="ActivityPendingExportNotConfirmed" xml:space="preserve">
+    <value>Les modifications d’attributs suivantes ont été exportées mais n’ont pas encore été confirmées. Elles seront reprises lors de la prochaine exécution d’exportation.</value>
+  </data>
+  <data name="ActivityPendingFailed" xml:space="preserve">
+    <value>Les modifications d’attributs suivantes n’ont pas pu être exportées après plusieurs tentatives et peuvent nécessiter une intervention manuelle.</value>
+  </data>
+  <data name="ActivityPendingChangeType" xml:space="preserve">
+    <value>Type de modification</value>
+  </data>
+  <data name="ActivityPendingFailingSince" xml:space="preserve">
+    <value>En échec depuis le {0}. JIM la retente à chaque exécution d’exportation.</value>
+  </data>
+  <data name="ActivityPendingFailing" xml:space="preserve">
+    <value>En échec</value>
+  </data>
+  <data name="ActivityPendingLastAttempted" xml:space="preserve">
+    <value>Dernière tentative</value>
+  </data>
+  <data name="ActivityPendingAttributeChangesHeading" xml:space="preserve">
+    <value>Modifications d’attributs en attente ({0})</value>
+  </data>
+  <data name="ActivityPendingAttributeFallback" xml:space="preserve">
+    <value>Attribut {0}</value>
+  </data>
+  <data name="ActivityPendingNoAttributeChanges" xml:space="preserve">
+    <value>Aucune modification d’attribut enregistrée.</value>
+  </data>
+  <data name="ActivityPendingViewDetails" xml:space="preserve">
+    <value>Afficher le détail complet de l’exportation en attente</value>
+  </data>
 </root>

@@ -2182,4 +2182,188 @@
     <value>Object detail</value>
     <comment>Name of the stage that records the object detail of a preview</comment>
   </data>
+  <data name="ActivityObjectChangesTitle" xml:space="preserve">
+    <value>Object Changes</value>
+    <comment>Title of the Object Changes page</comment>
+  </data>
+  <data name="ActivityObjectChangesDescription" xml:space="preserve">
+    <value>Find changes to Metaverse Objects across every object: when they were made, to which type of object, and how their attributes changed. Only changes JIM recorded can be found, so none appear while Metaverse Object change tracking is turned off, and history retention removes older ones.</value>
+    <comment>Page info text on the Object Changes page</comment>
+  </data>
+  <data name="ActivityObjectChangesChangedBetween" xml:space="preserve">
+    <value>Changed between</value>
+    <comment>Label of the date range filter on Object Changes</comment>
+  </data>
+  <data name="ActivityObjectChangesObjectType" xml:space="preserve">
+    <value>Metaverse Object Type</value>
+    <comment>Label of the Metaverse Object Type filter</comment>
+  </data>
+  <data name="ActivityObjectChangesAttributeChanges" xml:space="preserve">
+    <value>Attribute changes</value>
+    <comment>Heading of the attribute condition filters, and the summary label of an attribute change list</comment>
+  </data>
+  <data name="ActivityObjectChangesHowCombine" xml:space="preserve">
+    <value>How conditions combine</value>
+    <comment>Accessible label of the control choosing how attribute conditions combine</comment>
+  </data>
+  <data name="ActivityObjectChangesCondition" xml:space="preserve">
+    <value>Condition</value>
+    <comment>Label of the operator filter for an attribute condition</comment>
+  </data>
+  <data name="ActivityOperatorChangedTo" xml:space="preserve">
+    <value>changed to</value>
+    <comment>Operator: the attribute changed to a value</comment>
+  </data>
+  <data name="ActivityOperatorChangedFrom" xml:space="preserve">
+    <value>changed from</value>
+    <comment>Operator: the attribute changed from a value</comment>
+  </data>
+  <data name="ActivityOperatorChanged" xml:space="preserve">
+    <value>changed (to or from)</value>
+    <comment>Operator: the attribute changed to or from a value</comment>
+  </data>
+  <data name="ActivityObjectChangesRemoveCondition" xml:space="preserve">
+    <value>Remove condition</value>
+    <comment>Accessible label of the button removing an attribute condition</comment>
+  </data>
+  <data name="ActivityObjectChangesAddCondition" xml:space="preserve">
+    <value>Add Condition</value>
+    <comment>Button adding an attribute condition</comment>
+  </data>
+  <data name="ActivityObjectChangesSearch" xml:space="preserve">
+    <value>Search Metaverse Object name</value>
+    <comment>Placeholder of the search box on Object Changes</comment>
+  </data>
+  <data name="ActivityObjectChangesChanged" xml:space="preserve">
+    <value>Changed</value>
+    <comment>Column heading: when a change was made</comment>
+  </data>
+  <data name="ActivityObjectChangesAttributes" xml:space="preserve">
+    <value>Attributes</value>
+    <comment>Column heading: the attributes a change touched</comment>
+  </data>
+  <data name="ActivityObjectChangesFinalValues" xml:space="preserve">
+    <value>Final values</value>
+    <comment>Label of the last values an object held, when it was deleted</comment>
+  </data>
+  <data name="ActivityObjectChangesCleared" xml:space="preserve">
+    <value>(cleared)</value>
+    <comment>Shown when an attribute's value was cleared</comment>
+  </data>
+  <data name="ActivityObjectChangesMadeBy" xml:space="preserve">
+    <value>Made by</value>
+    <comment>Column heading: who made a change</comment>
+  </data>
+  <data name="ActivityObjectChangesNoMatchName" xml:space="preserve">
+    <value>No changes to Metaverse Objects named like "{0}"</value>
+    <comment>Empty state after a search by name; {0} is what was searched for</comment>
+  </data>
+  <data name="ActivityObjectChangesTryDifferentName" xml:space="preserve">
+    <value>Try a different name, or clear the search.</value>
+    <comment>Empty state secondary text after a search by name</comment>
+  </data>
+  <data name="ActivityObjectChangesWidenRange" xml:space="preserve">
+    <value>Widen the time range, or adjust or clear the attribute conditions.</value>
+    <comment>Empty state secondary text when filters match nothing</comment>
+  </data>
+  <data name="ActivityObjectChangesNoneRecorded" xml:space="preserve">
+    <value>No changes recorded</value>
+    <comment>Empty state when no Metaverse Object changes have been recorded</comment>
+  </data>
+  <data name="ActivityObjectChangesNoneRecordedDetail" xml:space="preserve">
+    <value>Changes to Metaverse Objects appear here as synchronisations and administrators make them, while Metaverse Object change tracking is turned on.</value>
+    <comment>Empty state secondary text when no Metaverse Object changes have been recorded</comment>
+  </data>
+  <data name="ActivityObjectChangesMatchAll" xml:space="preserve">
+    <value>All conditions</value>
+    <comment>Choice: a change must meet every condition</comment>
+  </data>
+  <data name="ActivityObjectChangesMatchAllTooltip" xml:space="preserve">
+    <value>Every condition met by the same change: one Metaverse Object, in one Activity</value>
+    <comment>Tooltip on the All conditions choice</comment>
+  </data>
+  <data name="ActivityObjectChangesMatchAny" xml:space="preserve">
+    <value>Any condition</value>
+    <comment>Choice: a change may meet any one condition</comment>
+  </data>
+  <data name="ActivityObjectChangesMatchAnyTooltip" xml:space="preserve">
+    <value>At least one condition met</value>
+    <comment>Tooltip on the Any condition choice</comment>
+  </data>
+  <data name="ActivityObjectChangesDeleted" xml:space="preserve">
+    <value>Deleted {0}</value>
+    <comment>Tooltip on a deleted object; {0} is when it was deleted</comment>
+  </data>
+  <data name="ActivityHintText" xml:space="preserve">
+    <value>Any value; * matches anything</value>
+    <comment>Hint under a text attribute value field</comment>
+  </data>
+  <data name="ActivityHintReference" xml:space="preserve">
+    <value>The referenced object's name; * matches anything</value>
+    <comment>Hint under a reference attribute value field</comment>
+  </data>
+  <data name="ActivityHintDate" xml:space="preserve">
+    <value>yyyy-MM-dd for the whole day</value>
+    <comment>Hint under a date attribute value field; the format is kept as written</comment>
+  </data>
+  <data name="ActivityHintBoolean" xml:space="preserve">
+    <value>true or false</value>
+    <comment>Hint under a Boolean attribute value field</comment>
+  </data>
+  <data name="ActivityHintBinary" xml:space="preserve">
+    <value>Leave empty; Binary values are not recorded</value>
+    <comment>Hint under a binary attribute value field</comment>
+  </data>
+  <data name="ActivityHintAny" xml:space="preserve">
+    <value>Any value</value>
+    <comment>Hint under an attribute value field whose type is unknown</comment>
+  </data>
+  <data name="ActivityPendingDelete" xml:space="preserve">
+    <value>This object is staged for deletion in the Connected System. Any attribute values below are carried on the Pending Export so the delete can still be performed once the Connected System Object is gone.</value>
+    <comment>Lead sentence on a Pending Export that deletes an object</comment>
+  </data>
+  <data name="ActivityPendingAwaiting" xml:space="preserve">
+    <value>The following attribute changes are staged and awaiting export to the Connected System.</value>
+    <comment>Lead sentence on a Pending Export awaiting export</comment>
+  </data>
+  <data name="ActivityPendingExportNotConfirmed" xml:space="preserve">
+    <value>The following attribute changes were exported but have not yet been confirmed. They will be retried on the next export run.</value>
+    <comment>Lead sentence on a Pending Export exported but not yet confirmed</comment>
+  </data>
+  <data name="ActivityPendingFailed" xml:space="preserve">
+    <value>The following attribute changes failed to export after multiple attempts and may require manual intervention.</value>
+    <comment>Lead sentence on a Pending Export that failed after retries</comment>
+  </data>
+  <data name="ActivityPendingChangeType" xml:space="preserve">
+    <value>Change Type</value>
+    <comment>Column heading and label: the kind of change a Pending Export makes</comment>
+  </data>
+  <data name="ActivityPendingFailingSince" xml:space="preserve">
+    <value>Failing since {0}. JIM attempts it again at every export run.</value>
+    <comment>Tooltip on the Failing chip; {0} is the date it started failing</comment>
+  </data>
+  <data name="ActivityPendingFailing" xml:space="preserve">
+    <value>Failing</value>
+    <comment>Chip shown on a Pending Export that is failing</comment>
+  </data>
+  <data name="ActivityPendingLastAttempted" xml:space="preserve">
+    <value>Last Attempted</value>
+    <comment>Label of when a Pending Export was last attempted</comment>
+  </data>
+  <data name="ActivityPendingAttributeChangesHeading" xml:space="preserve">
+    <value>Pending Attribute Changes ({0})</value>
+    <comment>Heading of the staged attribute changes; {0} is the count</comment>
+  </data>
+  <data name="ActivityPendingAttributeFallback" xml:space="preserve">
+    <value>Attribute {0}</value>
+    <comment>Name shown for an attribute that no longer exists; {0} is its id</comment>
+  </data>
+  <data name="ActivityPendingNoAttributeChanges" xml:space="preserve">
+    <value>No attribute changes recorded.</value>
+    <comment>Shown when a Pending Export has no attribute changes</comment>
+  </data>
+  <data name="ActivityPendingViewDetails" xml:space="preserve">
+    <value>View Full Pending Export Details</value>
+    <comment>Button linking to the full Pending Export page</comment>
+  </data>
 </root>

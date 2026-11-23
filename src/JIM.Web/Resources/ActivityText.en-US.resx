@@ -86,4 +86,10 @@
   <data name="ActivityMechanismSynchronisation" xml:space="preserve">
     <value>Synchronization</value>
   </data>
+  <data name="ActivityObjectChangesDescription" xml:space="preserve">
+    <value>Find changes to Metaverse Objects across every object: when they were made, to which type of object, and how their attributes changed. Only changes JIM recorded can be found, so none appear while Metaverse Object change tracking is turned off, and history retention removes older ones.</value>
+  </data>
+  <data name="ActivityObjectChangesNoneRecordedDetail" xml:space="preserve">
+    <value>Changes to Metaverse Objects appear here as synchronizations and administrators make them, while Metaverse Object change tracking is turned on.</value>
+  </data>
 </root>
