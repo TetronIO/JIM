@@ -20,8 +20,8 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>@ActivityText.ActivityTitleLabel @_activity?.TargetOperationType.ForDisplay() @(_activity == null ? null : Helpers.GetActivityTargetTypeName(_activity.TargetType))@(ShowTargetInTitle() ? $": {GetTargetDisplayText()}" : "")</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span class="jim-title-segment">@ActivityText.ActivityTitleLabel</span> <span class="jim-title-segment mud-primary-text">@_activity?.TargetOperationType.ForDisplay() @(_activity == null ? null : Helpers.GetActivityTargetTypeName(_activity.TargetType))</span>@if (ShowTargetInTitle()) {<span class="jim-title-segment">: <span class="jim-title-accent">@GetTargetDisplayText()</span></span>}
+<PageTitle>@ActivityText.ActivityTitleLabel @_activity?.TargetOperationType.ForDisplay() @(_activity == null ? null : Helpers.GetActivityTargetTypeName(_activity.TargetType))@(ShowTargetInTitle() ? ActivityText.ActivityTitleTargetSeparator + GetTargetDisplayText() : "")</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span class="jim-title-segment">@ActivityText.ActivityTitleLabel</span> <span class="jim-title-segment mud-primary-text">@_activity?.TargetOperationType.ForDisplay() @(_activity == null ? null : Helpers.GetActivityTargetTypeName(_activity.TargetType))</span>@if (ShowTargetInTitle()) {<span class="jim-title-segment">@ActivityText.ActivityTitleTargetSeparator<span class="jim-title-accent">@GetTargetDisplayText()</span></span>}
     <PageInfo Title="@ActivityText.ActivityPageTitle" DocsPage="configuration/activities.md">
         @ActivityText.ActivityPageDescription
     </PageInfo>

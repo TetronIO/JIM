@@ -2598,4 +2598,8 @@
     <value>configuration</value>
     <comment>Words for the kind of object when none is named</comment>
   </data>
+  <data name="ActivityTitleTargetSeparator" xml:space="preserve">
+    <value>: </value>
+    <comment>Between the Activity title and its target name. French puts a space before the colon.</comment>
+  </data>
 </root>

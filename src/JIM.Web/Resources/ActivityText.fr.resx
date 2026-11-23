@@ -1952,4 +1952,7 @@
   <data name="ActivityAckDefaultLabel" xml:space="preserve">
     <value>configuration</value>
   </data>
+  <data name="ActivityTitleTargetSeparator" xml:space="preserve">
+    <value> : </value>
+  </data>
 </root>
