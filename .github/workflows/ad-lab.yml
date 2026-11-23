@@ -336,7 +336,12 @@ jobs:
           JIM_BENCH_API_URL: ${{ vars.JIM_BENCH_API_URL }}
           JIM_BENCH_API_KEY: ${{ secrets.JIM_BENCH_API_KEY }}
         run: |
-          pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario 31 -Template Nano -DirectoryType ActiveDirectory
+          # -SkipBuild only when the suite built this very commit's images in this job (Run-IntegrationTests.ps1 writes
+          # the marker after a successful build; the checkout deletes it at the start of every job). Otherwise build,
+          # so a run whose suite failed early never tests images left from an earlier commit.
+          $marker = 'test/integration/.jim-images-built'
+          $build = @(if ((Test-Path -LiteralPath $marker) -and ((Get-Content -LiteralPath $marker -Raw).Trim() -eq (git rev-parse HEAD))) { '-SkipBuild' })
+          pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario 31 -Template Nano -DirectoryType ActiveDirectory @build
           exit $LASTEXITCODE
 
       # The Entra ID sign-in checks (Scenario 035, #2367): people sign in to JIM through the JIM test tenant in Microsoft
@@ -359,7 +364,10 @@ jobs:
           JIM_BENCH_API_URL: ${{ vars.JIM_BENCH_API_URL }}
           JIM_BENCH_API_KEY: ${{ secrets.JIM_BENCH_API_KEY }}
         run: |
-          pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario 35 -Template Nano -DirectoryType ActiveDirectory
+          # -SkipBuild as in the AD FS step above.
+          $marker = 'test/integration/.jim-images-built'
+          $build = @(if ((Test-Path -LiteralPath $marker) -and ((Get-Content -LiteralPath $marker -Raw).Trim() -eq (git rev-parse HEAD))) { '-SkipBuild' })
+          pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario 35 -Template Nano -DirectoryType ActiveDirectory @build
           exit $LASTEXITCODE
 
       # The Entra ID Connector checks (#361): in Scenario 036 JIM provisions, updates, disables and deletes users and
@@ -384,8 +392,11 @@ jobs:
           ENTRA_CONNECTOR_SCENARIOS: ${{ steps.plan.outputs.entra_connector_scenarios }}
         run: |
           $failed = @()
+          # -SkipBuild as in the AD FS step above; a scenario that builds writes the marker, so the next one reuses it.
+          $marker = 'test/integration/.jim-images-built'
           foreach ($number in ($env:ENTRA_CONNECTOR_SCENARIOS -split ' ' | Where-Object { $_ })) {
-            pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario $number -Template Nano -DirectoryType ActiveDirectory
+            $build = @(if ((Test-Path -LiteralPath $marker) -and ((Get-Content -LiteralPath $marker -Raw).Trim() -eq (git rev-parse HEAD))) { '-SkipBuild' })
+            pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario $number -Template Nano -DirectoryType ActiveDirectory @build
             if ($LASTEXITCODE -ne 0) { $failed += $number }
           }
           if ($failed.Count -gt 0) { Write-Host "::error::Entra ID Connector scenario(s) failed: $($failed -join ', ')"; exit 1 }
