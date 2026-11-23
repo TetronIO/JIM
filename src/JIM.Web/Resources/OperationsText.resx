@@ -432,4 +432,292 @@
     <value>Unknown Profile</value>
     <comment>Shown for a step whose Run Profile is not found.</comment>
   </data>
+  <data name="CompletedHeading" xml:space="preserve">
+    <value>Completed</value>
+    <comment>Heading of the Completed section of the Activity tab.</comment>
+  </data>
+  <data name="CompletedCollapse" xml:space="preserve">
+    <value>Collapse Completed</value>
+    <comment>Tooltip and label of the button that folds the Completed section.</comment>
+  </data>
+  <data name="CompletedExpand" xml:space="preserve">
+    <value>Expand Completed</value>
+    <comment>Tooltip and label of the button that unfolds the Completed section.</comment>
+  </data>
+  <data name="CompletedSearchPlaceholder" xml:space="preserve">
+    <value>Search target or initiator</value>
+    <comment>Placeholder of the search box above the Completed list.</comment>
+  </data>
+  <data name="CompletedResumeRefresh" xml:space="preserve">
+    <value>Resume auto-refresh</value>
+    <comment>Tooltip and label of the button that restarts automatic refresh.</comment>
+  </data>
+  <data name="CompletedPauseRefresh" xml:space="preserve">
+    <value>Pause auto-refresh</value>
+    <comment>Tooltip and label of the button that pauses automatic refresh.</comment>
+  </data>
+  <data name="CompletedColResult" xml:space="preserve">
+    <value>Result</value>
+    <comment>Column heading: how the execution finished.</comment>
+  </data>
+  <data name="CompletedColConnectedSystem" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Column heading and field label.</comment>
+  </data>
+  <data name="CompletedColRunProfile" xml:space="preserve">
+    <value>Run Profile</value>
+    <comment>Column heading and field label.</comment>
+  </data>
+  <data name="CompletedColOutcomes" xml:space="preserve">
+    <value>Outcomes</value>
+    <comment>Column heading: the counts of what the execution changed.</comment>
+  </data>
+  <data name="CompletedColInitiatedBy" xml:space="preserve">
+    <value>Initiated By</value>
+    <comment>Column heading and field heading: who started the execution.</comment>
+  </data>
+  <data name="CompletedColExecuted" xml:space="preserve">
+    <value>Executed</value>
+    <comment>Column heading and field label: when the execution ran.</comment>
+  </data>
+  <data name="CompletedColDuration" xml:space="preserve">
+    <value>Duration</value>
+    <comment>Column heading and field label: how long the execution took.</comment>
+  </data>
+  <data name="CompletedNoChanges" xml:space="preserve">
+    <value>No changes</value>
+    <comment>Shown in the Outcomes column when an execution changed nothing.</comment>
+  </data>
+  <data name="CompletedStatusNotSet" xml:space="preserve">
+    <value>Not Set</value>
+    <comment>Activity status: not set.</comment>
+  </data>
+  <data name="CompletedStatusInProgress" xml:space="preserve">
+    <value>In Progress</value>
+    <comment>Activity status.</comment>
+  </data>
+  <data name="CompletedStatusComplete" xml:space="preserve">
+    <value>Complete</value>
+    <comment>Activity status.</comment>
+  </data>
+  <data name="CompletedStatusCompleteWithWarning" xml:space="preserve">
+    <value>Complete With Warning</value>
+    <comment>Activity status.</comment>
+  </data>
+  <data name="CompletedStatusCompleteWithError" xml:space="preserve">
+    <value>Complete With Error</value>
+    <comment>Activity status.</comment>
+  </data>
+  <data name="CompletedStatusFailedWithError" xml:space="preserve">
+    <value>Failed With Error</value>
+    <comment>Activity status.</comment>
+  </data>
+  <data name="CompletedStatusCancelled" xml:space="preserve">
+    <value>Cancelled</value>
+    <comment>Activity status.</comment>
+  </data>
+  <data name="CompletedOpExecute" xml:space="preserve">
+    <value>Execute</value>
+    <comment>Operation performed on a Run Profile: execute it.</comment>
+  </data>
+  <data name="CompletedOpClear" xml:space="preserve">
+    <value>Clear</value>
+    <comment>Operation performed on a Connected System: clear its objects.</comment>
+  </data>
+  <data name="CompletedStatAdded" xml:space="preserve">
+    <value>Connected System Objects added</value>
+    <comment>Outcome chip: count of objects added. Count shown beside it.</comment>
+  </data>
+  <data name="CompletedStatUpdated" xml:space="preserve">
+    <value>Connected System Objects updated</value>
+    <comment>Outcome chip: count of objects updated.</comment>
+  </data>
+  <data name="CompletedStatDeletionsDetected" xml:space="preserve">
+    <value>Connected System Object deletions detected</value>
+    <comment>Outcome chip: deletions found in the source system.</comment>
+  </data>
+  <data name="CompletedStatProjected" xml:space="preserve">
+    <value>Metaverse Objects projected</value>
+    <comment>Outcome chip: Metaverse Objects projected.</comment>
+  </data>
+  <data name="CompletedStatJoined" xml:space="preserve">
+    <value>Connected System Objects joined</value>
+    <comment>Outcome chip: objects joined to a Metaverse Object.</comment>
+  </data>
+  <data name="CompletedStatAttributeFlow" xml:space="preserve">
+    <value>Metaverse Objects with Attribute Flow</value>
+    <comment>Outcome chip and statistic: Metaverse Objects with an Attribute Flow applied.</comment>
+  </data>
+  <data name="CompletedStatDisconnected" xml:space="preserve">
+    <value>Connected System Objects disconnected</value>
+    <comment>Outcome chip: objects disconnected.</comment>
+  </data>
+  <data name="CompletedStatDisconnectedOutOfScope" xml:space="preserve">
+    <value>Connected System Objects disconnected (out of scope)</value>
+    <comment>Outcome chip: objects disconnected because they left the scope.</comment>
+  </data>
+  <data name="CompletedStatOutOfScopeRetainJoin" xml:space="preserve">
+    <value>Connected System Objects out of scope (join retained)</value>
+    <comment>Outcome chip: objects out of scope whose join was kept.</comment>
+  </data>
+  <data name="CompletedStatDeleted" xml:space="preserve">
+    <value>Connected System Objects deleted</value>
+    <comment>Outcome chip: objects deleted.</comment>
+  </data>
+  <data name="CompletedStatDriftCorrected" xml:space="preserve">
+    <value>Connected System Objects drift corrected</value>
+    <comment>Outcome chip: attribute drift corrected.</comment>
+  </data>
+  <data name="CompletedStatProvisioned" xml:space="preserve">
+    <value>Connected System Objects provisioned</value>
+    <comment>Outcome chip: objects provisioned.</comment>
+  </data>
+  <data name="CompletedStatPendingExports" xml:space="preserve">
+    <value>Connected System Object Pending Exports</value>
+    <comment>Outcome chip and statistic: Pending Exports created.</comment>
+  </data>
+  <data name="CompletedStatExported" xml:space="preserve">
+    <value>Connected System Objects exported</value>
+    <comment>Outcome chip: objects exported.</comment>
+  </data>
+  <data name="CompletedStatDeprovisioned" xml:space="preserve">
+    <value>Connected System Objects deprovisioned</value>
+    <comment>Outcome chip: objects deprovisioned.</comment>
+  </data>
+  <data name="CompletedStatErrors" xml:space="preserve">
+    <value>Errors</value>
+    <comment>Outcome chip and statistic: errors.</comment>
+  </data>
+  <data name="CompletedSideAdded" xml:space="preserve">
+    <value>Connected System Objects Added</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideUpdated" xml:space="preserve">
+    <value>Connected System Objects Updated</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideDeletionsDetected" xml:space="preserve">
+    <value>Connected System Object Deletions Detected</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideJoined" xml:space="preserve">
+    <value>Connected System Objects Joined</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideProjected" xml:space="preserve">
+    <value>Metaverse Objects Projected</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideProvisioned" xml:space="preserve">
+    <value>Connected System Objects Provisioned</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideDisconnected" xml:space="preserve">
+    <value>Connected System Objects Disconnected</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideDeleted" xml:space="preserve">
+    <value>Connected System Objects Deleted</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideDriftCorrected" xml:space="preserve">
+    <value>Connected System Objects Drift Corrected</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideExported" xml:space="preserve">
+    <value>Connected System Objects Exported</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSideDeprovisioned" xml:space="preserve">
+    <value>Connected System Objects Deprovisioned</value>
+    <comment>Statistic row in the execution details panel.</comment>
+  </data>
+  <data name="CompletedNoSearchMatch" xml:space="preserve">
+    <value>No executions match "{0}"</value>
+    <comment>{0} is the search text typed by the reader.</comment>
+  </data>
+  <data name="CompletedSearchHint" xml:space="preserve">
+    <value>Try a different search term, or clear the search.</value>
+    <comment>Empty state when a search matched nothing.</comment>
+  </data>
+  <data name="CompletedNoFilterMatch" xml:space="preserve">
+    <value>No completed executions match the current filters</value>
+    <comment>Empty state when the filters match nothing.</comment>
+  </data>
+  <data name="CompletedFilterHint" xml:space="preserve">
+    <value>Adjust or clear the filters above to see more executions.</value>
+    <comment>Empty state hint for the filters.</comment>
+  </data>
+  <data name="CompletedClearFilters" xml:space="preserve">
+    <value>Clear Filters</value>
+    <comment>Button in the empty state that clears the filters.</comment>
+  </data>
+  <data name="CompletedNothingFinished" xml:space="preserve">
+    <value>Nothing has finished yet</value>
+    <comment>Empty state when no execution has finished.</comment>
+  </data>
+  <data name="CompletedNothingFinishedHint" xml:space="preserve">
+    <value>Run Profile executions appear here once one has finished, whether queued from this tab, by a Schedule, or through the API.</value>
+    <comment>Empty state hint. Run Profile is the glossary term.</comment>
+  </data>
+  <data name="CompletedExecutionDetails" xml:space="preserve">
+    <value>Execution Details</value>
+    <comment>Heading of the execution details panel.</comment>
+  </data>
+  <data name="CompletedTarget" xml:space="preserve">
+    <value>Target</value>
+    <comment>Heading of the target section of the execution details panel.</comment>
+  </data>
+  <data name="CompletedSyncRule" xml:space="preserve">
+    <value>Synchronisation Rule</value>
+    <comment>Target type label in the execution details panel.</comment>
+  </data>
+  <data name="CompletedMetaverseObject" xml:space="preserve">
+    <value>Metaverse Object</value>
+    <comment>Target type label in the execution details panel.</comment>
+  </data>
+  <data name="CompletedDataGeneration" xml:space="preserve">
+    <value>Data Generation</value>
+    <comment>Target type label in the execution details panel.</comment>
+  </data>
+  <data name="CompletedTrustedCertificate" xml:space="preserve">
+    <value>Trusted Certificate</value>
+    <comment>Target type label in the execution details panel.</comment>
+  </data>
+  <data name="CompletedMetaverseAttribute" xml:space="preserve">
+    <value>Metaverse Attribute</value>
+    <comment>Target type label in the execution details panel.</comment>
+  </data>
+  <data name="CompletedObjectMatchingRule" xml:space="preserve">
+    <value>Object Matching Rule</value>
+    <comment>Target type label in the execution details panel.</comment>
+  </data>
+  <data name="CompletedSystemTask" xml:space="preserve">
+    <value>System Task</value>
+    <comment>Target type label in the execution details panel.</comment>
+  </data>
+  <data name="CompletedServiceSetting" xml:space="preserve">
+    <value>Service Setting</value>
+    <comment>Target type label in the execution details panel.</comment>
+  </data>
+  <data name="CompletedOperation" xml:space="preserve">
+    <value>Operation</value>
+    <comment>Heading of the operation section of the execution details panel.</comment>
+  </data>
+  <data name="CompletedStatistics" xml:space="preserve">
+    <value>Statistics</value>
+    <comment>Heading of the statistics section of the execution details panel.</comment>
+  </data>
+  <data name="CompletedTiming" xml:space="preserve">
+    <value>Timing</value>
+    <comment>Heading of the timing section of the execution details panel.</comment>
+  </data>
+  <data name="CompletedErrorDetails" xml:space="preserve">
+    <value>Error Details</value>
+    <comment>Heading of the error section of the execution details panel.</comment>
+  </data>
+  <data name="CompletedViewDetails" xml:space="preserve">
+    <value>View Full Details</value>
+    <comment>Button that opens the full Activity page.</comment>
+  </data>
 </root>

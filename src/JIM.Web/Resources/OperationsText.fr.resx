@@ -329,4 +329,220 @@
   <data name="ScheduleEditorUnknownProfile" xml:space="preserve">
     <value>Profil inconnu</value>
   </data>
+  <data name="CompletedHeading" xml:space="preserve">
+    <value>Terminées</value>
+  </data>
+  <data name="CompletedCollapse" xml:space="preserve">
+    <value>Replier Terminées</value>
+  </data>
+  <data name="CompletedExpand" xml:space="preserve">
+    <value>Déplier Terminées</value>
+  </data>
+  <data name="CompletedSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher une cible ou un initiateur</value>
+  </data>
+  <data name="CompletedResumeRefresh" xml:space="preserve">
+    <value>Reprendre l’actualisation automatique</value>
+  </data>
+  <data name="CompletedPauseRefresh" xml:space="preserve">
+    <value>Suspendre l’actualisation automatique</value>
+  </data>
+  <data name="CompletedColResult" xml:space="preserve">
+    <value>Résultat</value>
+  </data>
+  <data name="CompletedColConnectedSystem" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="CompletedColRunProfile" xml:space="preserve">
+    <value>Profil d’exécution</value>
+  </data>
+  <data name="CompletedColOutcomes" xml:space="preserve">
+    <value>Bilan</value>
+  </data>
+  <data name="CompletedColInitiatedBy" xml:space="preserve">
+    <value>Initié par</value>
+  </data>
+  <data name="CompletedColExecuted" xml:space="preserve">
+    <value>Exécutée</value>
+  </data>
+  <data name="CompletedColDuration" xml:space="preserve">
+    <value>Durée</value>
+  </data>
+  <data name="CompletedNoChanges" xml:space="preserve">
+    <value>Aucune modification</value>
+  </data>
+  <data name="CompletedStatusNotSet" xml:space="preserve">
+    <value>Non défini</value>
+  </data>
+  <data name="CompletedStatusInProgress" xml:space="preserve">
+    <value>En cours</value>
+  </data>
+  <data name="CompletedStatusComplete" xml:space="preserve">
+    <value>Terminé</value>
+  </data>
+  <data name="CompletedStatusCompleteWithWarning" xml:space="preserve">
+    <value>Terminé avec avertissement</value>
+  </data>
+  <data name="CompletedStatusCompleteWithError" xml:space="preserve">
+    <value>Terminé avec erreur</value>
+  </data>
+  <data name="CompletedStatusFailedWithError" xml:space="preserve">
+    <value>Échec avec erreur</value>
+  </data>
+  <data name="CompletedStatusCancelled" xml:space="preserve">
+    <value>Annulé</value>
+  </data>
+  <data name="CompletedOpExecute" xml:space="preserve">
+    <value>Exécuter</value>
+  </data>
+  <data name="CompletedOpClear" xml:space="preserve">
+    <value>Vider</value>
+  </data>
+  <data name="CompletedStatAdded" xml:space="preserve">
+    <value>Objets de systèmes connectés ajoutés</value>
+  </data>
+  <data name="CompletedStatUpdated" xml:space="preserve">
+    <value>Objets de systèmes connectés mis à jour</value>
+  </data>
+  <data name="CompletedStatDeletionsDetected" xml:space="preserve">
+    <value>Suppressions d’objets de systèmes connectés détectées</value>
+  </data>
+  <data name="CompletedStatProjected" xml:space="preserve">
+    <value>Objets Metaverse projetés</value>
+  </data>
+  <data name="CompletedStatJoined" xml:space="preserve">
+    <value>Objets de systèmes connectés joints</value>
+  </data>
+  <data name="CompletedStatAttributeFlow" xml:space="preserve">
+    <value>Objets Metaverse avec flux d’attributs</value>
+  </data>
+  <data name="CompletedStatDisconnected" xml:space="preserve">
+    <value>Objets de systèmes connectés déconnectés</value>
+  </data>
+  <data name="CompletedStatDisconnectedOutOfScope" xml:space="preserve">
+    <value>Objets de systèmes connectés déconnectés (hors périmètre)</value>
+  </data>
+  <data name="CompletedStatOutOfScopeRetainJoin" xml:space="preserve">
+    <value>Objets de systèmes connectés hors périmètre (jointure conservée)</value>
+  </data>
+  <data name="CompletedStatDeleted" xml:space="preserve">
+    <value>Objets de systèmes connectés supprimés</value>
+  </data>
+  <data name="CompletedStatDriftCorrected" xml:space="preserve">
+    <value>Dérives d’objets de systèmes connectés corrigées</value>
+  </data>
+  <data name="CompletedStatProvisioned" xml:space="preserve">
+    <value>Objets de systèmes connectés provisionnés</value>
+  </data>
+  <data name="CompletedStatPendingExports" xml:space="preserve">
+    <value>Exportations en attente d’objets de systèmes connectés</value>
+  </data>
+  <data name="CompletedStatExported" xml:space="preserve">
+    <value>Objets de systèmes connectés exportés</value>
+  </data>
+  <data name="CompletedStatDeprovisioned" xml:space="preserve">
+    <value>Objets de systèmes connectés déprovisionnés</value>
+  </data>
+  <data name="CompletedStatErrors" xml:space="preserve">
+    <value>Erreurs</value>
+  </data>
+  <data name="CompletedSideAdded" xml:space="preserve">
+    <value>Objets de systèmes connectés ajoutés</value>
+  </data>
+  <data name="CompletedSideUpdated" xml:space="preserve">
+    <value>Objets de systèmes connectés mis à jour</value>
+  </data>
+  <data name="CompletedSideDeletionsDetected" xml:space="preserve">
+    <value>Suppressions d’objets de systèmes connectés détectées</value>
+  </data>
+  <data name="CompletedSideJoined" xml:space="preserve">
+    <value>Objets de systèmes connectés joints</value>
+  </data>
+  <data name="CompletedSideProjected" xml:space="preserve">
+    <value>Objets Metaverse projetés</value>
+  </data>
+  <data name="CompletedSideProvisioned" xml:space="preserve">
+    <value>Objets de systèmes connectés provisionnés</value>
+  </data>
+  <data name="CompletedSideDisconnected" xml:space="preserve">
+    <value>Objets de systèmes connectés déconnectés</value>
+  </data>
+  <data name="CompletedSideDeleted" xml:space="preserve">
+    <value>Objets de systèmes connectés supprimés</value>
+  </data>
+  <data name="CompletedSideDriftCorrected" xml:space="preserve">
+    <value>Dérives d’objets de systèmes connectés corrigées</value>
+  </data>
+  <data name="CompletedSideExported" xml:space="preserve">
+    <value>Objets de systèmes connectés exportés</value>
+  </data>
+  <data name="CompletedSideDeprovisioned" xml:space="preserve">
+    <value>Objets de systèmes connectés déprovisionnés</value>
+  </data>
+  <data name="CompletedNoSearchMatch" xml:space="preserve">
+    <value>Aucune exécution ne correspond à « {0} »</value>
+  </data>
+  <data name="CompletedSearchHint" xml:space="preserve">
+    <value>Essayez un autre terme de recherche, ou effacez la recherche.</value>
+  </data>
+  <data name="CompletedNoFilterMatch" xml:space="preserve">
+    <value>Aucune exécution terminée ne correspond aux filtres actuels</value>
+  </data>
+  <data name="CompletedFilterHint" xml:space="preserve">
+    <value>Modifiez ou effacez les filtres ci-dessus pour afficher davantage d’exécutions.</value>
+  </data>
+  <data name="CompletedClearFilters" xml:space="preserve">
+    <value>Effacer les filtres</value>
+  </data>
+  <data name="CompletedNothingFinished" xml:space="preserve">
+    <value>Aucune exécution n’est encore terminée</value>
+  </data>
+  <data name="CompletedNothingFinishedHint" xml:space="preserve">
+    <value>Les exécutions de profil d’exécution apparaissent ici une fois terminées, qu’elles aient été mises en file depuis cet onglet, par une planification ou par l’API.</value>
+  </data>
+  <data name="CompletedExecutionDetails" xml:space="preserve">
+    <value>Détails de l’exécution</value>
+  </data>
+  <data name="CompletedTarget" xml:space="preserve">
+    <value>Cible</value>
+  </data>
+  <data name="CompletedSyncRule" xml:space="preserve">
+    <value>Règle de synchronisation</value>
+  </data>
+  <data name="CompletedMetaverseObject" xml:space="preserve">
+    <value>Objet Metaverse</value>
+  </data>
+  <data name="CompletedDataGeneration" xml:space="preserve">
+    <value>Génération de données</value>
+  </data>
+  <data name="CompletedTrustedCertificate" xml:space="preserve">
+    <value>Certificat de confiance</value>
+  </data>
+  <data name="CompletedMetaverseAttribute" xml:space="preserve">
+    <value>Attribut Metaverse</value>
+  </data>
+  <data name="CompletedObjectMatchingRule" xml:space="preserve">
+    <value>Règle de correspondance d’objets</value>
+  </data>
+  <data name="CompletedSystemTask" xml:space="preserve">
+    <value>Tâche système</value>
+  </data>
+  <data name="CompletedServiceSetting" xml:space="preserve">
+    <value>Paramètre de service</value>
+  </data>
+  <data name="CompletedOperation" xml:space="preserve">
+    <value>Opération</value>
+  </data>
+  <data name="CompletedStatistics" xml:space="preserve">
+    <value>Statistiques</value>
+  </data>
+  <data name="CompletedTiming" xml:space="preserve">
+    <value>Chronologie</value>
+  </data>
+  <data name="CompletedErrorDetails" xml:space="preserve">
+    <value>Détails de l’erreur</value>
+  </data>
+  <data name="CompletedViewDetails" xml:space="preserve">
+    <value>Afficher tous les détails</value>
+  </data>
 </root>
