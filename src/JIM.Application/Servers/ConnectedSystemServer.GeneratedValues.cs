@@ -71,10 +71,10 @@ public partial class ConnectedSystemServer
     private async Task<GeneratedValueRestartResult> RestartGeneratedValuesCoreAsync(int mappingId, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey)
     {
         var mapping = await Application.Repository.ConnectedSystems.GetSyncRuleMappingAsync(mappingId)
-            ?? throw new JimArgumentException(Msg.Create(nameof(CsText.RestartMappingNotFound), mappingId), nameof(mappingId));
+            ?? throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.RestartMappingNotFound), mappingId), nameof(mappingId));
 
         if (mapping.Generation == null)
-            throw new JimArgumentException(Msg.Create(nameof(CsText.RestartNotGenerated)), nameof(mappingId));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.RestartNotGenerated)), nameof(mappingId));
 
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
 
@@ -308,7 +308,7 @@ public partial class ConnectedSystemServer
         if (errors.Count == 0)
             return;
 
-        var refusal = new JimArgumentException(Msg.Sentences(errors));
+        var refusal = LocalisedExceptions.Argument(Msg.Sentences(errors));
         Log.Warning("{Caller}: rejecting generated value exclusions; {Message}", caller, LogSanitiser.Sanitise(refusal.Message));
         throw refusal;
     }
@@ -752,7 +752,7 @@ public partial class ConnectedSystemServer
         if (!mapping.KeepUnique && !CanKeepUnique(mapping))
         {
             var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
-            throw new JimArgumentException(Msg.Create(nameof(CsText.TargetPrefixed), targetName, Msg.Create(nameof(CsText.KeepUniqueNotApplicable))));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.TargetPrefixed), targetName, Msg.Create(nameof(CsText.KeepUniqueNotApplicable))));
         }
     }
 

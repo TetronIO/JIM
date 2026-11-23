@@ -23,11 +23,12 @@ namespace JIM.Web.Tests.Localisation;
 public class ConnectedSystemMessageDisplayTests
 {
     [Test]
-    public void JimArgumentException_KeepsItsEnglishMessage_ParameterNameIncluded()
+    public void LocalisedArgument_KeepsItsEnglishMessage_ParameterNameIncluded()
     {
-        var exception = new JimArgumentException(
+        var exception = LocalisedExceptions.Argument(
             ConnectedSystemMessage.Create(nameof(ConnectedSystemMessages.ConnectedSystemNotFoundById), 7), "connectedSystemId");
 
+        Assert.That(exception.GetType(), Is.EqualTo(typeof(ArgumentException)));
         Assert.That(exception.Message, Does.StartWith("No Connected System found with id 7."));
         Assert.That(exception.Message, Does.Contain("connectedSystemId"));
     }
@@ -36,7 +37,7 @@ public class ConnectedSystemMessageDisplayTests
     [SetUICulture("fr")]
     public void ToDisplayText_AMessageCarryingException_InFrench_ShowsTheFrench()
     {
-        var exception = new JimArgumentException(
+        var exception = LocalisedExceptions.Argument(
             ConnectedSystemMessage.Create(nameof(ConnectedSystemMessages.ConnectedSystemNotFoundById), 7), "connectedSystemId");
 
         Assert.That(exception.ToDisplayText(), Is.EqualTo("Aucun système connecté trouvé avec l’ID 7."));

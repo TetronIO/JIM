@@ -2412,7 +2412,7 @@ public partial class ConnectedSystemServer
             : connectedSystemTypeChanged
                 ? Msg.Create(nameof(CsText.ChangedObjectTypeConnectedSystem))
                 : Msg.Create(nameof(CsText.ChangedObjectTypeMetaverse));
-        var refusal = new JimArgumentException(Msg.Create(nameof(CsText.SyncRuleObjectTypesCannotChange), changed, syncRule.Name));
+        var refusal = LocalisedExceptions.Argument(Msg.Create(nameof(CsText.SyncRuleObjectTypesCannotChange), changed, syncRule.Name));
         Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(refusal.Message));
         throw refusal;
     }
@@ -2490,7 +2490,7 @@ public partial class ConnectedSystemServer
         if (objectType == null || objectType.Selected)
             return;
 
-        var refusal = new JimArgumentException(Msg.Create(nameof(CsText.SyncRuleEnabledOnDeselectedObjectType), syncRule.Name, objectType.Name));
+        var refusal = LocalisedExceptions.Argument(Msg.Create(nameof(CsText.SyncRuleEnabledOnDeselectedObjectType), syncRule.Name, objectType.Name));
         Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(refusal.Message));
         throw refusal;
     }
@@ -2512,7 +2512,7 @@ public partial class ConnectedSystemServer
         if (connector == null || connector.SupportsDisable)
             return;
 
-        var refusal = new JimArgumentException(Msg.Create(nameof(CsText.SyncRuleDeprovisionDisableUnsupported), syncRule.Name, connector.Name, connectedSystem!.Name));
+        var refusal = LocalisedExceptions.Argument(Msg.Create(nameof(CsText.SyncRuleDeprovisionDisableUnsupported), syncRule.Name, connector.Name, connectedSystem!.Name));
         Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(refusal.Message));
         throw refusal;
     }
@@ -2551,7 +2551,7 @@ public partial class ConnectedSystemServer
         // unsupported connector must never leave an in-flight activity behind.
         var connector = CreateConnector(connectedSystem);
         if (connector is not IConnectorSchema schemaConnector)
-            throw new JimNotSupportedException(Msg.Create(nameof(CsText.ConnectorNoSchemaImport), connectedSystem.ConnectorDefinition.Name));
+            throw LocalisedExceptions.NotSupported(Msg.Create(nameof(CsText.ConnectorNoSchemaImport), connectedSystem.ConnectorDefinition.Name));
 
         // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
         var activity = new Activity
@@ -2611,7 +2611,7 @@ public partial class ConnectedSystemServer
         // unsupported connector must never leave an in-flight activity behind.
         var connector = CreateConnector(connectedSystem);
         if (connector is not IConnectorSchema schemaConnector)
-            throw new JimNotSupportedException(Msg.Create(nameof(CsText.ConnectorNoSchemaImport), connectedSystem.ConnectorDefinition.Name));
+            throw LocalisedExceptions.NotSupported(Msg.Create(nameof(CsText.ConnectorNoSchemaImport), connectedSystem.ConnectorDefinition.Name));
 
         var activity = new Activity
         {
@@ -2668,7 +2668,7 @@ public partial class ConnectedSystemServer
 
         var connector = CreateConnector(connectedSystem);
         if (connector is not IConnectorSchema schemaConnector)
-            throw new JimNotSupportedException(Msg.Create(nameof(CsText.ConnectorNoSchemaImport), connectedSystem.ConnectorDefinition.Name));
+            throw LocalisedExceptions.NotSupported(Msg.Create(nameof(CsText.ConnectorNoSchemaImport), connectedSystem.ConnectorDefinition.Name));
 
         var schema = await schemaConnector.GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
         var result = MergeSchemaIntoConnectedSystem(connectedSystem, schema);
@@ -3837,7 +3837,7 @@ public partial class ConnectedSystemServer
         MessageArgument connectorName = connectedSystem.ConnectorDefinition?.Name is { } definitionName
             ? definitionName
             : Msg.Create(nameof(CsText.ConnectorFallbackName));
-        throw new JimInvalidOperationException(Msg.Create(nameof(CsText.ConnectorDefinedAttributeNameCollision),
+        throw LocalisedExceptions.InvalidOperation(Msg.Create(nameof(CsText.ConnectorDefinedAttributeNameCollision),
             connectorName, collision.Attribute.Name, collision.ObjectType.Name, connectedSystem.Name));
     }
 
@@ -4074,7 +4074,7 @@ public partial class ConnectedSystemServer
 
         var connector = CreateConnector(connectedSystem);
         if (connector is not IConnectorPasswordManagement passwordConnector)
-            throw new JimNotSupportedException(Msg.Create(nameof(CsText.ConnectorNoPasswordChannel), connectedSystem.ConnectorDefinition.Name));
+            throw LocalisedExceptions.NotSupported(Msg.Create(nameof(CsText.ConnectorNoPasswordChannel), connectedSystem.ConnectorDefinition.Name));
 
         var containerExternalIds = connectedSystem.GetSelectedContainerExternalIds();
         Log.Debug("RunPasswordPreflightAsync: Checking the password channel for Connected System {ConnectedSystemId} against {ContainerCount} selected container(s).",
@@ -4417,14 +4417,14 @@ public partial class ConnectedSystemServer
         // Loaded without change tracking, so applying the drafts below cannot reach the database.
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            throw new JimArgumentException(Msg.Create(nameof(CsText.ConnectedSystemNotFoundById), connectedSystemId), nameof(connectedSystemId));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.ConnectedSystemNotFoundById), connectedSystemId), nameof(connectedSystemId));
 
         if (draftSettingValues is { Count: > 0 })
             ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues, ResolveCredentialProtection);
 
         var connector = CreateConnector(connectedSystem);
         if (connector is not IConnectorDirectoryServers directoryServersConnector)
-            throw new JimNotSupportedException(Msg.Create(nameof(CsText.ConnectorNoDirectoryDiscovery), connectedSystem.ConnectorDefinition.Name));
+            throw LocalisedExceptions.NotSupported(Msg.Create(nameof(CsText.ConnectorNoDirectoryDiscovery), connectedSystem.ConnectorDefinition.Name));
 
         var discoveries = await AvailableDiscoveriesAsync(connectedSystem, directoryServersConnector);
         var discovery = targetSettingName == null
@@ -4432,7 +4432,7 @@ public partial class ConnectedSystemServer
             : discoveries.FirstOrDefault(d => d.TargetSettingName == targetSettingName);
         if (discovery == null)
         {
-            throw new JimNotSupportedException(targetSettingName == null
+            throw LocalisedExceptions.NotSupported(targetSettingName == null
                 ? Msg.Create(nameof(CsText.ConnectorNoDirectoryDiscovery), connectedSystem.ConnectorDefinition.Name)
                 : Msg.Create(nameof(CsText.ConnectorNoDiscoveryForSetting), connectedSystem.ConnectorDefinition.Name, targetSettingName));
         }
@@ -4594,7 +4594,7 @@ public partial class ConnectedSystemServer
     {
         // Loaded without change tracking, so applying the drafts below cannot reach the database.
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId)
-            ?? throw new JimArgumentException(Msg.Create(nameof(CsText.ConnectedSystemNotFoundById), connectedSystemId), nameof(connectedSystemId));
+            ?? throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.ConnectedSystemNotFoundById), connectedSystemId), nameof(connectedSystemId));
 
         if (draftSettingValues is { Count: > 0 })
             ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues, ResolveCredentialProtection);
@@ -4604,7 +4604,7 @@ public partial class ConnectedSystemServer
             return (connectedSystem, connector, catalogue);
 
         (connector as IDisposable)?.Dispose();
-        throw new JimNotSupportedException(Msg.Create(nameof(CsText.ConnectorNoCatalogue), connectedSystem.ConnectorDefinition.Name));
+        throw LocalisedExceptions.NotSupported(Msg.Create(nameof(CsText.ConnectorNoCatalogue), connectedSystem.ConnectorDefinition.Name));
     }
     #endregion
 
@@ -4663,13 +4663,13 @@ public partial class ConnectedSystemServer
         RemovedPartitionRunProfileAction runProfileAction)
     {
         var connectedSystem = await GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true)
-            ?? throw new JimArgumentException(Msg.Create(nameof(CsText.ConnectedSystemNotFoundById), connectedSystemId), nameof(connectedSystemId));
+            ?? throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.ConnectedSystemNotFoundById), connectedSystemId), nameof(connectedSystemId));
 
         // resolve the connector, and confirm it supports hierarchy import, before creating the activity: an
         // unsupported connector must never leave an in-flight activity behind.
         var connector = CreateConnector(connectedSystem);
         if (connector is not IConnectorPartitions partitionsConnector)
-            throw new JimNotSupportedException(Msg.Create(nameof(CsText.ConnectorNoHierarchyImport), connectedSystem.ConnectorDefinition.Name));
+            throw LocalisedExceptions.NotSupported(Msg.Create(nameof(CsText.ConnectorNoHierarchyImport), connectedSystem.ConnectorDefinition.Name));
 
         // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
         var activity = new Activity
@@ -8144,14 +8144,14 @@ public partial class ConnectedSystemServer
 
             // Reject NotSet types - indicates schema issues
             if (sourceType == AttributeDataType.NotSet)
-                throw new JimArgumentException(Msg.Create(nameof(CsText.MappingSourceTypeNotSet), sourceAttrName));
+                throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingSourceTypeNotSet), sourceAttrName));
 
             if (targetType == AttributeDataType.NotSet)
-                throw new JimArgumentException(Msg.Create(nameof(CsText.MappingTargetTypeNotSet), targetAttrName));
+                throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingTargetTypeNotSet), targetAttrName));
 
             // Validate type compatibility
             if (sourceType != targetType)
-                throw new JimArgumentException(Msg.Create(nameof(CsText.MappingTypeMismatch),
+                throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingTypeMismatch),
                     sourceAttrName, sourceType.ToString(), targetAttrName, targetType.ToString()));
 
             // Multi-valued to single-valued is permitted at configuration time (#435). At runtime, if a
@@ -8180,7 +8180,7 @@ public partial class ConnectedSystemServer
             return;
 
         if (mapping.TargetConnectedSystemAttribute.Writability == AttributeWritability.ReadOnly)
-            throw new JimArgumentException(Msg.Create(nameof(CsText.MappingTargetReadOnly), mapping.TargetConnectedSystemAttribute.Name));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingTargetReadOnly), mapping.TargetConnectedSystemAttribute.Name));
     }
 
     /// <summary>
@@ -8228,7 +8228,7 @@ public partial class ConnectedSystemServer
             ?? duplicate.TargetMetaverseAttribute?.Name
             ?? duplicate.TargetConnectedSystemAttribute?.Name
             ?? $"ID {targetMetaverseAttributeId ?? targetConnectedSystemAttributeId}";
-        var refusal = new JimArgumentException(BuildDuplicateMappingTargetMessage(mapping.SyncRule?.Name, targetAttributeName));
+        var refusal = LocalisedExceptions.Argument(BuildDuplicateMappingTargetMessage(mapping.SyncRule?.Name, targetAttributeName));
         Log.Warning("ValidateNoDuplicateMappingTargetAsync: rejecting mapping; {Message}", LogSanitiser.Sanitise(refusal.Message));
         throw refusal;
     }
@@ -8259,7 +8259,7 @@ public partial class ConnectedSystemServer
             .Select(candidate => candidate.Mapping.TargetMetaverseAttribute?.Name ?? candidate.Mapping.TargetConnectedSystemAttribute?.Name)
             .FirstOrDefault(name => name != null)
             ?? $"ID {duplicateTargetGroup.Key.MetaverseTargetId ?? duplicateTargetGroup.Key.ConnectedSystemTargetId}";
-        var refusal = new JimArgumentException(BuildDuplicateMappingTargetMessage(syncRule.Name, targetAttributeName));
+        var refusal = LocalisedExceptions.Argument(BuildDuplicateMappingTargetMessage(syncRule.Name, targetAttributeName));
         Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(refusal.Message));
         throw refusal;
     }
@@ -8487,7 +8487,7 @@ public partial class ConnectedSystemServer
         ArgumentNullException.ThrowIfNull(settings);
 
         if (!settings.HasChanges)
-            throw new JimArgumentException(Msg.Create(nameof(CsText.MappingSettingsNoChanges)), nameof(settings));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingSettingsNoChanges)), nameof(settings));
 
         var mapping = await Application.Repository.ConnectedSystems.GetSyncRuleMappingForUpdateAsync(mappingId);
         if (mapping == null)
@@ -8587,19 +8587,19 @@ public partial class ConnectedSystemServer
         var expressionSources = mapping.Sources.Where(s => !string.IsNullOrWhiteSpace(s.Expression)).ToList();
 
         if ((settings.Expression != null || settings.MissingInputBehaviour.HasValue) && expressionSources.Count == 0)
-            throw new JimArgumentException(Msg.Create(nameof(CsText.MappingNoExpressionSource)));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingNoExpressionSource)));
 
         if (settings.Expression != null && expressionSources.Count > 1)
-            throw new JimArgumentException(Msg.Create(nameof(CsText.MappingSeveralExpressionSources)));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingSeveralExpressionSources)));
 
         if (!isImport && (settings.NullIsValue.HasValue || settings.InboundValueProcessing.HasValue || settings.CaseNormalisation.HasValue))
-            throw new JimArgumentException(Msg.Create(nameof(CsText.MappingImportOnlySettings)));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingImportOnlySettings)));
 
         if (isImport && settings.InitialExportOnly.HasValue)
-            throw new JimArgumentException(Msg.Create(nameof(CsText.MappingExportOnlySettings)));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingExportOnlySettings)));
 
         if (settings.KeepUnique.HasValue && !CanKeepUnique(mapping))
-            throw new JimArgumentException(Msg.Create(nameof(CsText.KeepUniqueNotApplicable)));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.KeepUniqueNotApplicable)));
 
         if (settings.Expression != null)
             expressionSources[0].Expression = settings.Expression;
@@ -8650,7 +8650,7 @@ public partial class ConnectedSystemServer
             return;
 
         if (mapping.Generation == null)
-            throw new JimArgumentException(Msg.Create(nameof(CsText.MappingNotGenerated)));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingNotGenerated)));
 
         var generation = mapping.Generation;
 
@@ -9049,12 +9049,12 @@ public partial class ConnectedSystemServer
 
         var existing = await Application.Repository.ConnectedSystems.GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId, metaverseAttributeId);
         if (existing.Count == 0)
-            throw new JimArgumentException(Msg.Create(nameof(CsText.PriorityNoContributions), metaverseAttributeId, metaverseObjectTypeId));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.PriorityNoContributions), metaverseAttributeId, metaverseObjectTypeId));
 
         var requestedIds = orderedContributors.Select(c => c.MappingId).ToList();
         var requestedDistinct = new HashSet<int>(requestedIds);
         if (requestedDistinct.Count != requestedIds.Count)
-            throw new JimArgumentException(Msg.Create(nameof(CsText.PriorityDuplicateMappings)));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.PriorityDuplicateMappings)));
 
         var existingIds = existing.Select(m => m.Id).ToHashSet();
         var notContributors = requestedIds.Where(id => !existingIds.Contains(id)).ToList();
@@ -9063,7 +9063,7 @@ public partial class ConnectedSystemServer
         var missing = omitted.Where(m => !omittedPendingDeletion.Contains(m)).ToList();
 
         if (notContributors.Count > 0 || missing.Count > 0)
-            throw new JimArgumentException(BuildAttributePriorityMismatchMessage(missing, notContributors));
+            throw LocalisedExceptions.Argument(BuildAttributePriorityMismatchMessage(missing, notContributors));
 
         var snapshot = SnapshotPriorityState(existing);
         var byId = existing.ToDictionary(m => m.Id);
@@ -9133,11 +9133,11 @@ public partial class ConnectedSystemServer
     {
         var existing = await Application.Repository.ConnectedSystems.GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId, metaverseAttributeId);
         if (existing.Count == 0)
-            throw new JimArgumentException(Msg.Create(nameof(CsText.PriorityNoContributions), metaverseAttributeId, metaverseObjectTypeId));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.PriorityNoContributions), metaverseAttributeId, metaverseObjectTypeId));
 
         var moving = existing.SingleOrDefault(m => m.Id == mappingId);
         if (moving == null)
-            throw new JimArgumentException(Msg.Create(nameof(CsText.PriorityNotAContributor), mappingId, metaverseAttributeId, metaverseObjectTypeId));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.PriorityNotAContributor), mappingId, metaverseAttributeId, metaverseObjectTypeId));
 
         var snapshot = SnapshotPriorityState(existing);
 
@@ -9531,9 +9531,9 @@ public partial class ConnectedSystemServer
             throw new ArgumentException(safeguardsError);
 
         // Core: IsRunProfileValid only reads ConnectorDefinition.Supports* and we read .Name for activity context.
-        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw new JimArgumentException(Msg.Create(nameof(CsText.RunProfileNoConnectedSystem)));
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.RunProfileNoConnectedSystem)));
         if (!IsRunProfileValid(connectedSystem, connectedSystemRunProfile))
-            throw new JimArgumentException(Msg.Create(nameof(CsText.RunProfileNotValidForConnector)));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.RunProfileNotValidForConnector)));
 
         // every CRUD operation requires tracking with an activity...
         var activity = new Activity
@@ -9568,9 +9568,9 @@ public partial class ConnectedSystemServer
             throw new ArgumentException(safeguardsError);
 
         // Core: IsRunProfileValid only reads ConnectorDefinition.Supports* and we read .Name for activity context.
-        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw new JimArgumentException(Msg.Create(nameof(CsText.RunProfileNoConnectedSystem)));
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId) ?? throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.RunProfileNoConnectedSystem)));
         if (!IsRunProfileValid(connectedSystem, connectedSystemRunProfile))
-            throw new JimArgumentException(Msg.Create(nameof(CsText.RunProfileNotValidForConnector)));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.RunProfileNotValidForConnector)));
 
         var activity = new Activity
         {
@@ -9647,7 +9647,7 @@ public partial class ConnectedSystemServer
 
         // SPEC-1082 D10: Verification Mode only applies to Full Import.
         if (connectedSystemRunProfile.VerifyImportContentHashes && connectedSystemRunProfile.RunType != ConnectedSystemRunType.FullImport)
-            throw new JimArgumentException(Msg.Create(nameof(CsText.RunProfileVerifyFullImportOnly)));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.RunProfileVerifyFullImportOnly)));
 
         // Run Profile Safeguards (#1618): an export limit only makes sense on an Export Run Profile.
         var safeguardsError = RunProfileSafeguardsValidator.Validate(connectedSystemRunProfile);
@@ -9687,7 +9687,7 @@ public partial class ConnectedSystemServer
 
         // SPEC-1082 D10: Verification Mode only applies to Full Import.
         if (connectedSystemRunProfile.VerifyImportContentHashes && connectedSystemRunProfile.RunType != ConnectedSystemRunType.FullImport)
-            throw new JimArgumentException(Msg.Create(nameof(CsText.RunProfileVerifyFullImportOnly)));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.RunProfileVerifyFullImportOnly)));
 
         // Run Profile Safeguards (#1618): an export limit only makes sense on an Export Run Profile.
         var safeguardsError = RunProfileSafeguardsValidator.Validate(connectedSystemRunProfile);
@@ -9908,7 +9908,7 @@ public partial class ConnectedSystemServer
             var unchanged = criterion.Id > 0 && stored.TryGetValue(criterion.Id, out var state) && state.IsUnchangedIn(criterion);
             if (!unchanged)
             {
-                var refusal = new JimArgumentException(Msg.Create(nameof(CsText.ScopingCriterionCannotBeSaved), problems[0].Subject, problems[0].Reason));
+                var refusal = LocalisedExceptions.Argument(Msg.Create(nameof(CsText.ScopingCriterionCannotBeSaved), problems[0].Subject, problems[0].Reason));
                 Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(refusal.Message));
                 throw refusal;
             }
@@ -11321,15 +11321,15 @@ public partial class ConnectedSystemServer
             return;
 
         if (syncRule.Id == 0)
-            throw new JimArgumentException(Msg.Create(nameof(CsText.MappingRemovalChoicesUpdatesOnly)));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingRemovalChoicesUpdatesOnly)));
 
         if (mappingRemovalChoices.Select(c => c.MappingId).Distinct().Count() != mappingRemovalChoices.Count)
-            throw new JimArgumentException(Msg.Create(nameof(CsText.MappingRemovalChoicesDuplicate)));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingRemovalChoicesDuplicate)));
 
         var stagedMappingIds = syncRule.AttributeFlowRules.Where(m => m.Id != 0).Select(m => m.Id).ToHashSet();
         var stillPresent = mappingRemovalChoices.FirstOrDefault(c => stagedMappingIds.Contains(c.MappingId));
         if (stillPresent != null)
-            throw new JimArgumentException(Msg.Create(nameof(CsText.MappingRemovalChoiceStillPresent), stillPresent.MappingId));
+            throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingRemovalChoiceStillPresent), stillPresent.MappingId));
     }
 
     /// <summary>
@@ -11363,12 +11363,12 @@ public partial class ConnectedSystemServer
             // The database state is authoritative: the staged collection no longer holds the mapping, and only
             // the persisted row can say which Metaverse attribute it targeted.
             var removedMapping = await Application.Repository.ConnectedSystems.GetSyncRuleMappingAsync(choice.MappingId)
-                ?? throw new JimArgumentException(Msg.Create(nameof(CsText.MappingRemovalChoiceMissing), choice.MappingId));
+                ?? throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingRemovalChoiceMissing), choice.MappingId));
             // The owner is read from the persisted foreign key: a mapping owned by a DIFFERENT rule is a caller
             // defect. On a tracking context the staged removal may have severed the loaded instance's rule
             // navigation, which is why the scalar is the authority here.
             if (removedMapping.SyncRuleId != syncRule.Id)
-                throw new JimArgumentException(Msg.Create(nameof(CsText.MappingRemovalChoiceWrongRule), choice.MappingId, syncRule.Id));
+                throw LocalisedExceptions.Argument(Msg.Create(nameof(CsText.MappingRemovalChoiceWrongRule), choice.MappingId, syncRule.Id));
 
             removedMappings.Add((choice, removedMapping));
         }

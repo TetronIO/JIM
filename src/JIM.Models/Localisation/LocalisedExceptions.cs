@@ -4,51 +4,40 @@
 namespace JIM.Models.Localisation;
 
 /// <summary>
-/// An <see cref="ArgumentException"/> whose reason a person reads (a refusal the application layer explains), carrying
-/// the reason as a <see cref="JimMessage"/> so the portal can show it in the viewer's language (#3030). Its
-/// <see cref="Exception.Message"/> is the same British English the exception always had, parameter name included, so the
-/// REST API and every existing <c>catch (ArgumentException)</c> are unchanged.
+/// Creates the framework's own exceptions (<see cref="ArgumentException"/>, <see cref="NotSupportedException"/>,
+/// <see cref="InvalidOperationException"/>) for a refusal a person reads, carrying the reason as a <see cref="JimMessage"/>
+/// in <see cref="Exception.Data"/> so the portal can show it in the viewer's language (#3030). The exception is exactly the
+/// type it always was, with the same British English <see cref="Exception.Message"/> (parameter name included), so the
+/// REST API and every existing <c>catch</c> and exact-type assertion are unchanged.
 /// </summary>
-public class JimArgumentException : ArgumentException, IJimMessageCarrier
+public static class LocalisedExceptions
 {
-    public JimArgumentException(JimMessage detail, string? paramName = null)
-        : base(detail.ToEnglish(), paramName)
+    /// <summary>The <see cref="Exception.Data"/> key the message is held under.</summary>
+    public const string DataKey = "JIM.Message";
+
+    /// <summary>An <see cref="ArgumentException"/> whose reason is <paramref name="detail"/>.</summary>
+    public static ArgumentException Argument(JimMessage detail, string? paramName = null) =>
+        Attach(new ArgumentException(detail.ToEnglish(), paramName), detail);
+
+    /// <summary>A <see cref="NotSupportedException"/> whose reason is <paramref name="detail"/>.</summary>
+    public static NotSupportedException NotSupported(JimMessage detail) =>
+        Attach(new NotSupportedException(detail.ToEnglish()), detail);
+
+    /// <summary>An <see cref="InvalidOperationException"/> whose reason is <paramref name="detail"/>.</summary>
+    public static InvalidOperationException InvalidOperation(JimMessage detail) =>
+        Attach(new InvalidOperationException(detail.ToEnglish()), detail);
+
+    /// <summary>Holds <paramref name="detail"/> on an exception, so <see cref="DetailOf"/> finds it.</summary>
+    public static TException Attach<TException>(TException exception, JimMessage detail) where TException : Exception
     {
-        Detail = detail;
+        exception.Data[DataKey] = detail;
+        return exception;
     }
 
-    /// <inheritdoc />
-    public JimMessage? Detail { get; }
-}
-
-/// <summary>
-/// A <see cref="NotSupportedException"/> whose reason a person reads, carrying it as a <see cref="JimMessage"/> (#3030).
-/// <see cref="Exception.Message"/> stays the British English.
-/// </summary>
-public class JimNotSupportedException : NotSupportedException, IJimMessageCarrier
-{
-    public JimNotSupportedException(JimMessage detail)
-        : base(detail.ToEnglish())
-    {
-        Detail = detail;
-    }
-
-    /// <inheritdoc />
-    public JimMessage? Detail { get; }
-}
-
-/// <summary>
-/// An <see cref="InvalidOperationException"/> whose reason a person reads, carrying it as a <see cref="JimMessage"/>
-/// (#3030). <see cref="Exception.Message"/> stays the British English.
-/// </summary>
-public class JimInvalidOperationException : InvalidOperationException, IJimMessageCarrier
-{
-    public JimInvalidOperationException(JimMessage detail)
-        : base(detail.ToEnglish())
-    {
-        Detail = detail;
-    }
-
-    /// <inheritdoc />
-    public JimMessage? Detail { get; }
+    /// <summary>
+    /// The message an exception carries for the reader: its <see cref="IJimMessageCarrier.Detail"/>, or the one held by
+    /// <see cref="Attach"/>; null for an exception with only English text.
+    /// </summary>
+    public static JimMessage? DetailOf(Exception exception) =>
+        exception is IJimMessageCarrier { Detail: { } detail } ? detail : exception.Data[DataKey] as JimMessage;
 }
