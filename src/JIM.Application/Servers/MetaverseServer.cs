@@ -346,6 +346,7 @@ public partial class MetaverseServer
 
         Log.Debug("CreateMetaverseAttributeAsync() called for {Attribute}", attribute.Name);
         EnsureAttributeCapability(attribute.Type, attribute.AttributePlurality);
+        EnsureContributionModeCompatible(attribute.ContributionMode, attribute.Type, attribute.AttributePlurality);
 
         var activity = new Activity
         {
@@ -373,6 +374,7 @@ public partial class MetaverseServer
             throw new ArgumentNullException(nameof(attribute));
 
         Log.Debug("UpdateMetaverseAttributeAsync() called for {Attribute}", attribute.Name);
+        EnsureContributionModeCompatible(attribute.ContributionMode, attribute.Type, attribute.AttributePlurality);
 
         var activity = new Activity
         {
@@ -401,6 +403,7 @@ public partial class MetaverseServer
 
         Log.Debug("CreateMetaverseAttributeAsync() called for {Attribute} (API key initiated)", attribute.Name);
         EnsureAttributeCapability(attribute.Type, attribute.AttributePlurality);
+        EnsureContributionModeCompatible(attribute.ContributionMode, attribute.Type, attribute.AttributePlurality);
 
         var activity = new Activity
         {
@@ -428,6 +431,7 @@ public partial class MetaverseServer
             throw new ArgumentNullException(nameof(attribute));
 
         Log.Debug("UpdateMetaverseAttributeAsync() called for {Attribute} (API key initiated)", attribute.Name);
+        EnsureContributionModeCompatible(attribute.ContributionMode, attribute.Type, attribute.AttributePlurality);
 
         var activity = new Activity
         {
@@ -1055,6 +1059,7 @@ public partial class MetaverseServer
             throw new InvalidOperationException($"Cannot change the type or plurality of built-in Metaverse Attribute '{attribute.Name}'.");
 
         EnsureAttributeCapability(newType, newPlurality);
+        EnsureContributionModeCompatible(attribute.ContributionMode, newType, newPlurality);
 
         var impact = await EvaluateAttributeSchemaChangeAsync(attribute, newType, newPlurality);
 
@@ -1091,6 +1096,28 @@ public partial class MetaverseServer
     {
         if (!AttributeDataTypeCapabilities.IsPermitted(type, plurality))
             throw new UnsupportedAttributePluralityException(type, plurality);
+    }
+
+    /// <summary>
+    /// Refuses a contribution mode the attribute's data type or plurality cannot use (#3059), before anything is created,
+    /// changed or audited. Only Priority is meaningful for a single-valued attribute, since there is only ever one value.
+    /// Accumulate is refused for Reference attributes, because a reference is deleted with the Metaverse Object it points
+    /// to (#1019), which would break Accumulate's promise that values are kept; a text attribute recording the source's
+    /// identifier for the reference is the supported alternative.
+    /// </summary>
+    private static void EnsureContributionModeCompatible(AttributeContributionMode mode, AttributeDataType type, AttributePlurality plurality)
+    {
+        if (mode == AttributeContributionMode.Priority)
+            return;
+
+        if (plurality != AttributePlurality.MultiValued)
+            throw new UnsupportedContributionModeException(mode, type, plurality,
+                $"The {mode} contribution mode applies only to multi-valued attributes. Set the mode to Priority before making the attribute single-valued.");
+
+        if (type == AttributeDataType.Reference)
+            throw new UnsupportedContributionModeException(mode, type, plurality,
+                $"The {mode} contribution mode is not available for Reference attributes, because a reference is removed when the Metaverse Object it points to is deleted. " +
+                "To keep a history of references, record the referenced object's identifier as text in a separate multi-valued text attribute.");
     }
 
     /// <summary>

@@ -739,6 +739,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("BuiltIn")
                         .HasColumnType("boolean");
 
+                    b.Property<int>("ContributionMode")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 

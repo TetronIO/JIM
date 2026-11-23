@@ -1,8 +1,8 @@
 # Contribution Modes for Multi-Valued Metaverse Attributes: Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 underway)
 - **Issue:** [#3059](https://github.com/TetronIO/JIM/issues/3059)
-- **PRD:** [`PRD_MULTI_VALUED_CONTRIBUTION_MODES.md`](../prd/PRD_MULTI_VALUED_CONTRIBUTION_MODES.md) (in review in PR #3063)
+- **PRD:** [`PRD_MULTI_VALUED_CONTRIBUTION_MODES.md`](../../prd/doing/PRD_MULTI_VALUED_CONTRIBUTION_MODES.md)
 - **Related Issues:** #91 (attribute priority), #3064 (per-Attribute Flow recall), #1570 (grace-period freeze), #2472 (value contributor kinds), #614 (internal Metaverse Object management)
 - **Last Updated:** 2026-11-23
 

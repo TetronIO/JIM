@@ -1,6 +1,6 @@
 # Contribution Modes for Multi-Valued Metaverse Attributes (Merge and Accumulate)
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 underway)
 - **Created:** 2026-11-23
 - **Author:** JayVDZ (drafted via Claude Code)
 - **Issue:** [#3059](https://github.com/TetronIO/JIM/issues/3059)
@@ -345,7 +345,7 @@ Account Audit Log (Accumulate)
 
 ## Resolved Questions
 
-Resolved while writing the implementation plan ([`MULTI_VALUED_CONTRIBUTION_MODES.md`](../plans/MULTI_VALUED_CONTRIBUTION_MODES.md)), which gives the code evidence for each.
+Resolved while writing the implementation plan ([`MULTI_VALUED_CONTRIBUTION_MODES.md`](../../plans/doing/MULTI_VALUED_CONTRIBUTION_MODES.md)), which gives the code evidence for each.
 
 1. **Where the mode lives: one mode per Metaverse attribute.** Priority is not stored per Metaverse attribute and Metaverse Object Type, as this PRD first assumed; it is stored on each import mapping, and the order is computed from them. The link between an object type and its attributes holds no data, so a per-type mode would mean turning that link into an entity of its own. The mode is a column on `MetaverseAttribute`, the same on every object type that uses the attribute. An administrator who wants Accumulate on Person and Priority on Group creates two attributes.
 2. **Duplicate values in Merge: one row per distinct value, recording one contributor.** Export assumes each value is held in one row. With a row per contributor, a value one source dropped while another still held it would be removed at the target, and a new object would be sent the value twice. Instead, when the recorded contributor stops supplying a value, the value is recorded against another contributor that still supplies it, or removed if none does.
