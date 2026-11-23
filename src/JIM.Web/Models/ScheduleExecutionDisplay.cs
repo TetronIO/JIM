@@ -1,9 +1,12 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
+
 using JIM.Models.Scheduling;
 using JIM.Models.Scheduling.DTOs;
 using JIM.Utilities;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -16,8 +19,7 @@ public static class ScheduleExecutionDisplay
     /// <summary>
     /// Shown when an execution is Complete With Error but recorded no message of its own.
     /// </summary>
-    public const string CompleteWithErrorFallback =
-        "The Schedule finished, but one or more steps failed. They are set to let the Schedule continue; the step statuses below show which.";
+    public static string CompleteWithErrorFallback => OperationsText.ScheduleExecCompleteWithErrorFallback;
 
     /// <summary>
     /// The label for a Schedule's last-run outcome chip. A failed run names the step it stopped on, and a run that
@@ -35,9 +37,24 @@ public static class ScheduleExecutionDisplay
         {
             ScheduleExecutionStatus.Failed => FailedLabel(header),
             ScheduleExecutionStatus.CompleteWithError => CompleteWithErrorLabel(header),
-            var status => status.ToString().SplitOnCapitalLetters()
+            var status => StatusLabel(status)
         };
     }
+
+    /// <summary>
+    /// The status of a Schedule Execution as a person reads it: one key per status, so a new status is a compile-time gap.
+    /// </summary>
+    public static string StatusLabel(ScheduleExecutionStatus status) => status switch
+    {
+        ScheduleExecutionStatus.Queued => OperationsText.ScheduleExecQueued,
+        ScheduleExecutionStatus.InProgress => OperationsText.CompletedStatusInProgress,
+        ScheduleExecutionStatus.Complete => OperationsText.CompletedStatusComplete,
+        ScheduleExecutionStatus.Failed => OperationsText.ScheduleExecFailed,
+        ScheduleExecutionStatus.Cancelled => OperationsText.CompletedStatusCancelled,
+        ScheduleExecutionStatus.Paused => OperationsText.ScheduleExecPaused,
+        ScheduleExecutionStatus.CompleteWithError => OperationsText.CompletedStatusCompleteWithError,
+        _ => status.ToString().SplitOnCapitalLetters()
+    };
 
     /// <summary>
     /// The warning shown on a Complete With Error execution: the execution's own message naming the failed steps, or
@@ -53,14 +70,14 @@ public static class ScheduleExecutionDisplay
     private static string FailedLabel(ScheduleHeader header)
     {
         if (!header.LastExecutionCurrentStepIndex.HasValue || !header.LastExecutionTotalSteps.HasValue)
-            return "Failed";
+            return OperationsText.ScheduleExecFailed;
 
         var totalSteps = header.LastExecutionTotalSteps.Value;
         if (totalSteps < 1)
-            return "Failed";
+            return OperationsText.ScheduleExecFailed;
 
         var stepNumber = Math.Min(header.LastExecutionCurrentStepIndex.Value + 1, totalSteps);
-        return $"Failed on step {stepNumber}";
+        return string.Format(CultureInfo.CurrentCulture, OperationsText.ScheduleExecFailedOnStep, stepNumber);
     }
 
     /// <summary>
@@ -77,9 +94,9 @@ public static class ScheduleExecutionDisplay
 
         return stepNumbers.Count switch
         {
-            0 => "Complete With Error",
-            1 => $"Complete With Error on step {stepNumbers[0]}",
-            _ => $"Complete With Error on steps {string.Join(", ", stepNumbers.Take(stepNumbers.Count - 1))} and {stepNumbers[^1]}"
+            0 => OperationsText.CompletedStatusCompleteWithError,
+            1 => string.Format(CultureInfo.CurrentCulture, OperationsText.ScheduleExecCompleteWithErrorOnStep, stepNumbers[0]),
+            _ => string.Format(CultureInfo.CurrentCulture, OperationsText.ScheduleExecCompleteWithErrorOnSteps, string.Join(", ", stepNumbers.Take(stepNumbers.Count - 1)), stepNumbers[^1])
         };
     }
 }

@@ -545,4 +545,148 @@
   <data name="CompletedViewDetails" xml:space="preserve">
     <value>Afficher tous les détails</value>
   </data>
+  <data name="SchedulesSingularName" xml:space="preserve">
+    <value>Planification</value>
+  </data>
+  <data name="SchedulesPluralName" xml:space="preserve">
+    <value>Planifications</value>
+  </data>
+  <data name="SchedulesSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher par nom ou description</value>
+  </data>
+  <data name="SchedulesManual" xml:space="preserve">
+    <value>Manuelle</value>
+  </data>
+  <data name="SchedulesManualTooltip" xml:space="preserve">
+    <value>Manuelle : ne s’exécute que lorsqu’elle est lancée</value>
+  </data>
+  <data name="SchedulesColNextRun" xml:space="preserve">
+    <value>Prochaine exécution</value>
+  </data>
+  <data name="SchedulesColLastRun" xml:space="preserve">
+    <value>Dernière exécution</value>
+  </data>
+  <data name="SchedulesColOutcome" xml:space="preserve">
+    <value>Bilan</value>
+  </data>
+  <data name="SchedulesStepOne" xml:space="preserve">
+    <value>{0} étape</value>
+  </data>
+  <data name="SchedulesStepOther" xml:space="preserve">
+    <value>{0} étapes</value>
+  </data>
+  <data name="SchedulesShowExecutions" xml:space="preserve">
+    <value>Afficher les exécutions de cette planification</value>
+  </data>
+  <data name="SchedulesDisable" xml:space="preserve">
+    <value>Désactiver</value>
+  </data>
+  <data name="SchedulesEnable" xml:space="preserve">
+    <value>Activer</value>
+  </data>
+  <data name="SchedulesRunNow" xml:space="preserve">
+    <value>Exécuter maintenant</value>
+  </data>
+  <data name="SchedulesBuiltInLocked" xml:space="preserve">
+    <value>Planification intégrée ; ne peut pas être supprimée</value>
+  </data>
+  <data name="SchedulesNoSearchMatch" xml:space="preserve">
+    <value>Aucune planification ne correspond à « {0} »</value>
+  </data>
+  <data name="SchedulesNoneYet" xml:space="preserve">
+    <value>Aucune planification n’a encore été créée</value>
+  </data>
+  <data name="SchedulesNoneYetHint" xml:space="preserve">
+    <value>Une planification exécute une suite de profils d’exécution selon un déclencheur de votre choix, ou à la demande.</value>
+  </data>
+  <data name="SchedulesCreateFirst" xml:space="preserve">
+    <value>Créer votre première planification</value>
+  </data>
+  <data name="SchedulesExecStarted" xml:space="preserve">
+    <value>Démarrage</value>
+  </data>
+  <data name="SchedulesViewExecution" xml:space="preserve">
+    <value>Voir l’exécution de planification</value>
+  </data>
+  <data name="SchedulesExecSingularName" xml:space="preserve">
+    <value>Exécution de planification</value>
+  </data>
+  <data name="SchedulesExecPluralName" xml:space="preserve">
+    <value>Exécutions de planification</value>
+  </data>
+  <data name="SchedulesExecSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher par initiateur</value>
+  </data>
+  <data name="SchedulesExecNoSearchMatch" xml:space="preserve">
+    <value>Aucune exécution de planification ne correspond à « {0} »</value>
+  </data>
+  <data name="SchedulesExecNone" xml:space="preserve">
+    <value>Cette planification ne s’est pas encore exécutée</value>
+  </data>
+  <data name="SchedulesExecNoneHint" xml:space="preserve">
+    <value>Les exécutions apparaissent ici lorsque le déclencheur de la planification se déclenche, ou une fois qu’elle est lancée avec l’action Exécuter maintenant.</value>
+  </data>
+  <data name="SchedulesDemoRefused" xml:space="preserve">
+    <value>Non disponible en mode démonstration : ces planifications sont des données d’exemple.</value>
+  </data>
+  <data name="SchedulesNoLongerExists" xml:space="preserve">
+    <value>La planification « {0} » n’existe plus.</value>
+  </data>
+  <data name="SchedulesEnabledNotice" xml:space="preserve">
+    <value>La planification « {0} » a été activée.</value>
+  </data>
+  <data name="SchedulesDisabledNotice" xml:space="preserve">
+    <value>La planification « {0} » a été désactivée.</value>
+  </data>
+  <data name="SchedulesNoStepsToRun" xml:space="preserve">
+    <value>Impossible d’exécuter une planification sans étape.</value>
+  </data>
+  <data name="SchedulesRunConfirmTitle" xml:space="preserve">
+    <value>Exécuter la planification maintenant</value>
+  </data>
+  <data name="SchedulesRunConfirmMessage" xml:space="preserve">
+    <value>Voulez-vous vraiment exécuter « {0} » maintenant ? Toutes les étapes seront mises en file d’attente pour exécution.</value>
+  </data>
+  <data name="SchedulesQueued" xml:space="preserve">
+    <value>La planification « {0} » a été mise en file d’attente pour exécution.</value>
+  </data>
+  <data name="SchedulesCouldNotStart" xml:space="preserve">
+    <value>La planification « {0} » n’a pas pu démarrer. Ouvrez sa dernière exécution pour en connaître la raison.</value>
+  </data>
+  <data name="SchedulesFailedToStart" xml:space="preserve">
+    <value>Échec du démarrage de la planification « {0} ». Elle ne contient peut-être aucune étape.</value>
+  </data>
+  <data name="SchedulesBuiltInDelete" xml:space="preserve">
+    <value>La planification intégrée « {0} » ne peut pas être supprimée.</value>
+  </data>
+  <data name="SchedulesDeleteConfirmTitle" xml:space="preserve">
+    <value>Supprimer la planification</value>
+  </data>
+  <data name="SchedulesDeleteConfirmMessage" xml:space="preserve">
+    <value>Voulez-vous vraiment supprimer « {0} » ? Cette action est irréversible.</value>
+  </data>
+  <data name="SchedulesDeleted" xml:space="preserve">
+    <value>La planification « {0} » a été supprimée.</value>
+  </data>
+  <data name="ScheduleExecQueued" xml:space="preserve">
+    <value>En file d’attente</value>
+  </data>
+  <data name="ScheduleExecFailed" xml:space="preserve">
+    <value>Échec</value>
+  </data>
+  <data name="ScheduleExecPaused" xml:space="preserve">
+    <value>En pause</value>
+  </data>
+  <data name="ScheduleExecFailedOnStep" xml:space="preserve">
+    <value>Échec à l’étape {0}</value>
+  </data>
+  <data name="ScheduleExecCompleteWithErrorOnStep" xml:space="preserve">
+    <value>Terminé avec erreur à l’étape {0}</value>
+  </data>
+  <data name="ScheduleExecCompleteWithErrorOnSteps" xml:space="preserve">
+    <value>Terminé avec erreur aux étapes {0} et {1}</value>
+  </data>
+  <data name="ScheduleExecCompleteWithErrorFallback" xml:space="preserve">
+    <value>La planification s’est terminée, mais une ou plusieurs étapes ont échoué. Elles sont configurées pour laisser la planification se poursuivre ; les états des étapes ci-dessous indiquent lesquelles.</value>
+  </data>
 </root>

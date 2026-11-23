@@ -720,4 +720,196 @@
     <value>View Full Details</value>
     <comment>Button that opens the full Activity page.</comment>
   </data>
+  <data name="SchedulesSingularName" xml:space="preserve">
+    <value>Schedule</value>
+    <comment>Noun in the toolbar count (one Schedule). Also the default title of the executions dialog.</comment>
+  </data>
+  <data name="SchedulesPluralName" xml:space="preserve">
+    <value>Schedules</value>
+    <comment>Noun in the toolbar count (several Schedules).</comment>
+  </data>
+  <data name="SchedulesSearchPlaceholder" xml:space="preserve">
+    <value>Search by name or description</value>
+    <comment>Placeholder of the search box above the Schedules list.</comment>
+  </data>
+  <data name="SchedulesManual" xml:space="preserve">
+    <value>Manual</value>
+    <comment>Trigger chip: the Schedule runs only when started by hand.</comment>
+  </data>
+  <data name="SchedulesManualTooltip" xml:space="preserve">
+    <value>Manual: runs only when started</value>
+    <comment>Tooltip on the Manual trigger chip. 'elle' is the planification.</comment>
+  </data>
+  <data name="SchedulesColNextRun" xml:space="preserve">
+    <value>Next Run</value>
+    <comment>Column heading: when the Schedule runs next.</comment>
+  </data>
+  <data name="SchedulesColLastRun" xml:space="preserve">
+    <value>Last Run</value>
+    <comment>Column heading: when the Schedule last ran.</comment>
+  </data>
+  <data name="SchedulesColOutcome" xml:space="preserve">
+    <value>Outcome</value>
+    <comment>Column heading: how the last run ended.</comment>
+  </data>
+  <data name="SchedulesStepOne" xml:space="preserve">
+    <value>{0} step</value>
+    <comment>Step count chip for one step. {0} is the count.</comment>
+  </data>
+  <data name="SchedulesStepOther" xml:space="preserve">
+    <value>{0} steps</value>
+    <comment>Step count chip for several steps. {0} is the count.</comment>
+  </data>
+  <data name="SchedulesShowExecutions" xml:space="preserve">
+    <value>Show this Schedule's executions</value>
+    <comment>Tooltip on the button that opens the Schedule's executions.</comment>
+  </data>
+  <data name="SchedulesDisable" xml:space="preserve">
+    <value>Disable</value>
+    <comment>Tooltip on the button that disables an enabled Schedule.</comment>
+  </data>
+  <data name="SchedulesEnable" xml:space="preserve">
+    <value>Enable</value>
+    <comment>Tooltip on the button that enables a disabled Schedule.</comment>
+  </data>
+  <data name="SchedulesRunNow" xml:space="preserve">
+    <value>Run Now</value>
+    <comment>Tooltip and confirmation button: start the Schedule now.</comment>
+  </data>
+  <data name="SchedulesBuiltInLocked" xml:space="preserve">
+    <value>Built-in schedule; cannot be deleted</value>
+    <comment>Tooltip on the locked delete button of a built-in Schedule.</comment>
+  </data>
+  <data name="SchedulesNoSearchMatch" xml:space="preserve">
+    <value>No Schedules match "{0}"</value>
+    <comment>Empty state. {0} is the search text typed by the reader.</comment>
+  </data>
+  <data name="SchedulesNoneYet" xml:space="preserve">
+    <value>No Schedules have been created yet</value>
+    <comment>Empty state when there are no Schedules.</comment>
+  </data>
+  <data name="SchedulesNoneYetHint" xml:space="preserve">
+    <value>A Schedule runs a sequence of Run Profiles on a trigger you choose, or on demand.</value>
+    <comment>Empty state hint. Run Profiles is the glossary term.</comment>
+  </data>
+  <data name="SchedulesCreateFirst" xml:space="preserve">
+    <value>Create Your First Schedule</value>
+    <comment>Button in the empty state that creates a Schedule.</comment>
+  </data>
+  <data name="SchedulesExecStarted" xml:space="preserve">
+    <value>Started</value>
+    <comment>Column heading of a Schedule's executions: when the run started.</comment>
+  </data>
+  <data name="SchedulesViewExecution" xml:space="preserve">
+    <value>View Schedule Execution</value>
+    <comment>Link to one Schedule Execution.</comment>
+  </data>
+  <data name="SchedulesExecSingularName" xml:space="preserve">
+    <value>Schedule Execution</value>
+    <comment>Noun in the executions toolbar count (one).</comment>
+  </data>
+  <data name="SchedulesExecPluralName" xml:space="preserve">
+    <value>Schedule Executions</value>
+    <comment>Noun in the executions toolbar count (several).</comment>
+  </data>
+  <data name="SchedulesExecSearchPlaceholder" xml:space="preserve">
+    <value>Search by initiator</value>
+    <comment>Placeholder of the search box in the executions dialog.</comment>
+  </data>
+  <data name="SchedulesExecNoSearchMatch" xml:space="preserve">
+    <value>No Schedule Executions match "{0}"</value>
+    <comment>Empty state in the executions dialog. {0} is the search text.</comment>
+  </data>
+  <data name="SchedulesExecNone" xml:space="preserve">
+    <value>This Schedule has not run yet</value>
+    <comment>Empty state in the executions dialog.</comment>
+  </data>
+  <data name="SchedulesExecNoneHint" xml:space="preserve">
+    <value>Executions appear here once the Schedule's trigger fires, or once it is run with the Run Now action.</value>
+    <comment>Empty state hint in the executions dialog.</comment>
+  </data>
+  <data name="SchedulesDemoRefused" xml:space="preserve">
+    <value>Not available in demo mode: these Schedules are sample data.</value>
+    <comment>Notice shown when an action would change a sample Schedule.</comment>
+  </data>
+  <data name="SchedulesNoLongerExists" xml:space="preserve">
+    <value>Schedule '{0}' no longer exists.</value>
+    <comment>Warning. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesEnabledNotice" xml:space="preserve">
+    <value>Schedule '{0}' has been enabled.</value>
+    <comment>Success notice. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesDisabledNotice" xml:space="preserve">
+    <value>Schedule '{0}' has been disabled.</value>
+    <comment>Success notice. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesNoStepsToRun" xml:space="preserve">
+    <value>Cannot run a schedule with no steps.</value>
+    <comment>Warning when a Schedule without steps is run now.</comment>
+  </data>
+  <data name="SchedulesRunConfirmTitle" xml:space="preserve">
+    <value>Run Schedule Now</value>
+    <comment>Title of the run confirmation.</comment>
+  </data>
+  <data name="SchedulesRunConfirmMessage" xml:space="preserve">
+    <value>Are you sure you want to run '{0}' now? This will queue all steps for execution.</value>
+    <comment>Run confirmation. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesQueued" xml:space="preserve">
+    <value>Schedule '{0}' has been queued for execution.</value>
+    <comment>Success notice. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesCouldNotStart" xml:space="preserve">
+    <value>Schedule '{0}' could not start. Open its latest execution for the reason.</value>
+    <comment>Error notice. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesFailedToStart" xml:space="preserve">
+    <value>Failed to start schedule '{0}'. It may have no steps.</value>
+    <comment>Warning notice. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesBuiltInDelete" xml:space="preserve">
+    <value>The built-in schedule '{0}' cannot be deleted.</value>
+    <comment>Warning notice. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesDeleteConfirmTitle" xml:space="preserve">
+    <value>Delete Schedule</value>
+    <comment>Title of the delete confirmation.</comment>
+  </data>
+  <data name="SchedulesDeleteConfirmMessage" xml:space="preserve">
+    <value>Are you sure you want to delete '{0}'? This action cannot be undone.</value>
+    <comment>Delete confirmation. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="SchedulesDeleted" xml:space="preserve">
+    <value>Schedule '{0}' has been deleted.</value>
+    <comment>Success notice. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="ScheduleExecQueued" xml:space="preserve">
+    <value>Queued</value>
+    <comment>Schedule Execution status: waiting to run.</comment>
+  </data>
+  <data name="ScheduleExecFailed" xml:space="preserve">
+    <value>Failed</value>
+    <comment>Schedule Execution status and outcome: the run failed.</comment>
+  </data>
+  <data name="ScheduleExecPaused" xml:space="preserve">
+    <value>Paused</value>
+    <comment>Schedule Execution status: paused.</comment>
+  </data>
+  <data name="ScheduleExecFailedOnStep" xml:space="preserve">
+    <value>Failed on step {0}</value>
+    <comment>Outcome chip. {0} is the 1-based step the run stopped on.</comment>
+  </data>
+  <data name="ScheduleExecCompleteWithErrorOnStep" xml:space="preserve">
+    <value>Complete With Error on step {0}</value>
+    <comment>Outcome chip. {0} is the 1-based failed step.</comment>
+  </data>
+  <data name="ScheduleExecCompleteWithErrorOnSteps" xml:space="preserve">
+    <value>Complete With Error on steps {0} and {1}</value>
+    <comment>Outcome chip. {0} is the list of failed steps except the last, {1} is the last failed step.</comment>
+  </data>
+  <data name="ScheduleExecCompleteWithErrorFallback" xml:space="preserve">
+    <value>The Schedule finished, but one or more steps failed. They are set to let the Schedule continue; the step statuses below show which.</value>
+    <comment>Shown on a Complete With Error execution that recorded no message of its own.</comment>
+  </data>
 </root>
