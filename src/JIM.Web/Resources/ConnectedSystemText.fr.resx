@@ -236,4 +236,166 @@
   <data name="RunProfileRemovedSnackbar" xml:space="preserve">
     <value>Profil d’exécution supprimé.</value>
   </data>
+  <data name="ScimEndpointHeading" xml:space="preserve">
+    <value>Point de terminaison SCIM</value>
+  </data>
+  <data name="ScimEndpointInfo" xml:space="preserve">
+    <value>Remettez à votre fournisseur d’identité cette URL de base et l’une des clés ci-dessous. Les utilisateurs et les groupes qu’il envoie sont conservés ici et atteignent le Metaverse lors de la prochaine importation et synchronisation de ce système connecté.</value>
+  </data>
+  <data name="ScimBaseUrl" xml:space="preserve">
+    <value>URL de base</value>
+  </data>
+  <data name="ScimCopy" xml:space="preserve">
+    <value>Copier</value>
+  </data>
+  <data name="ScimCopiedSnackbar" xml:space="preserve">
+    <value>« {0} » copié dans le presse-papiers.</value>
+  </data>
+  <data name="ScimKeyNoun" xml:space="preserve">
+    <value>Clé</value>
+  </data>
+  <data name="ScimCopyFailed" xml:space="preserve">
+    <value>Copie impossible. Sélectionnez le texte et copiez-le manuellement.</value>
+  </data>
+  <data name="ScimKeysHeading" xml:space="preserve">
+    <value>Clés</value>
+  </data>
+  <data name="ScimUsableKeyCount" xml:space="preserve">
+    <value>{0} sur {1} utilisables</value>
+  </data>
+  <data name="ScimCreateKey" xml:space="preserve">
+    <value>Créer une clé</value>
+  </data>
+  <data name="ScimKeyLimitTooltip" xml:space="preserve">
+    <value>Un système connecté peut avoir deux clés utilisables à la fois. Désactivez ou supprimez-en une pour en ajouter une autre.</value>
+  </data>
+  <data name="ScimColumnKeyPrefix" xml:space="preserve">
+    <value>Préfixe de clé</value>
+  </data>
+  <data name="ScimColumnExpires" xml:space="preserve">
+    <value>Expiration</value>
+  </data>
+  <data name="ScimColumnLastUsed" xml:space="preserve">
+    <value>Dernière utilisation</value>
+  </data>
+  <data name="ScimStatusExpired" xml:space="preserve">
+    <value>Expirée</value>
+  </data>
+  <data name="ScimActionEnable" xml:space="preserve">
+    <value>Activer</value>
+  </data>
+  <data name="ScimActionDisable" xml:space="preserve">
+    <value>Désactiver</value>
+  </data>
+  <data name="ScimRotateKeyHint" xml:space="preserve">
+    <value>Pour renouveler une clé, créez-en une nouvelle pendant que l’ancienne fonctionne encore, remettez-la à votre fournisseur d’identité, puis désactivez l’ancienne une fois que son dernier usage ne progresse plus.</value>
+  </data>
+  <data name="ScimLastUsedFrom" xml:space="preserve">
+    <value>depuis {0}</value>
+  </data>
+  <data name="ScimNoKeysYet" xml:space="preserve">
+    <value>Ce système connecté n’a encore aucune clé</value>
+  </data>
+  <data name="ScimNoKeysHint" xml:space="preserve">
+    <value>Créez-en une à remettre à votre fournisseur d’identité.</value>
+  </data>
+  <data name="ScimStoreHeading" xml:space="preserve">
+    <value>Stockage</value>
+  </data>
+  <data name="ScimAwaitingImport" xml:space="preserve">
+    <value>En attente d’importation</value>
+  </data>
+  <data name="ScimChangesSinceImport" xml:space="preserve">
+    <value>modifications depuis la dernière importation</value>
+  </data>
+  <data name="ScimNeverImported" xml:space="preserve">
+    <value>jamais importé</value>
+  </data>
+  <data name="ScimDeletionsHeld" xml:space="preserve">
+    <value>Suppressions retenues</value>
+  </data>
+  <data name="ScimDeletionsHeldHint" xml:space="preserve">
+    <value>jusqu’à ce qu’une importation les lise</value>
+  </data>
+  <data name="ScimRejected" xml:space="preserve">
+    <value>Rejetées</value>
+  </data>
+  <data name="ScimRejectedHint" xml:space="preserve">
+    <value>requêtes au cours des 24 dernières heures</value>
+  </data>
+  <data name="ScimLastWrite" xml:space="preserve">
+    <value>Dernière écriture</value>
+  </data>
+  <data name="ScimLastWriteBy" xml:space="preserve">
+    <value>par un client SCIM</value>
+  </data>
+  <data name="ScimResourceTypesHeading" xml:space="preserve">
+    <value>Types de ressources</value>
+  </data>
+  <data name="ScimReadOnly" xml:space="preserve">
+    <value>lecture seule</value>
+  </data>
+  <data name="ScimColumnEndpoint" xml:space="preserve">
+    <value>Point de terminaison</value>
+  </data>
+  <data name="ScimColumnSchema" xml:space="preserve">
+    <value>Schéma</value>
+  </data>
+  <data name="ScimColumnExtensions" xml:space="preserve">
+    <value>Extensions</value>
+  </data>
+  <data name="ScimKeyCreatedTitle" xml:space="preserve">
+    <value>Clé créée</value>
+  </data>
+  <data name="ScimKeyNameRequired" xml:space="preserve">
+    <value>Un nom est requis</value>
+  </data>
+  <data name="ScimKeyNameHelp" xml:space="preserve">
+    <value>Désigne généralement le fournisseur d’identité qui la détiendra, par exemple « Entra provisioning 2026 ».</value>
+  </data>
+  <data name="ScimOptional" xml:space="preserve">
+    <value>Facultatif</value>
+  </data>
+  <data name="ScimExpiryHelp" xml:space="preserve">
+    <value>Une clé expire toujours, au plus tard {0} ans après aujourd’hui.</value>
+  </data>
+  <data name="ScimKeyShownOnceWarning" xml:space="preserve">
+    <value>Copiez cette clé maintenant et conservez-la en lieu sûr. Elle n’est affichée qu’une seule fois ; si elle est perdue, créez-en une nouvelle.</value>
+  </data>
+  <data name="ScimCreatedKeyLabel" xml:space="preserve">
+    <value>Clé pour {0}</value>
+  </data>
+  <data name="ScimCopyKeyAria" xml:space="preserve">
+    <value>Copier la clé</value>
+  </data>
+  <data name="ScimDone" xml:space="preserve">
+    <value>Terminé</value>
+  </data>
+  <data name="ScimKeyCreateFailed" xml:space="preserve">
+    <value>La clé n’a pas été créée : {0}</value>
+  </data>
+  <data name="ScimKeyNoLongerExists" xml:space="preserve">
+    <value>La clé n’existe plus.</value>
+  </data>
+  <data name="ScimKeyEnabled" xml:space="preserve">
+    <value>Clé « {0} » activée.</value>
+  </data>
+  <data name="ScimKeyDisabled" xml:space="preserve">
+    <value>Clé « {0} » désactivée.</value>
+  </data>
+  <data name="ScimKeyNotChanged" xml:space="preserve">
+    <value>La clé n’a pas été modifiée : {0}</value>
+  </data>
+  <data name="ScimDeleteKeyTitle" xml:space="preserve">
+    <value>Supprimer la clé</value>
+  </data>
+  <data name="ScimDeleteKeyConfirm" xml:space="preserve">
+    <value>Supprimer la clé « {0} » ? Un fournisseur d’identité qui l’utilise encore se voit refuser l’accès dès cet instant. Pour conserver une trace de la clé, désactivez-la plutôt.</value>
+  </data>
+  <data name="ScimKeyDeleted" xml:space="preserve">
+    <value>Clé « {0} » supprimée.</value>
+  </data>
+  <data name="ScimKeyNotDeleted" xml:space="preserve">
+    <value>La clé n’a pas été supprimée : {0}</value>
+  </data>
 </root>

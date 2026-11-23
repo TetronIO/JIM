@@ -26,4 +26,7 @@
   <data name="RunProfileVerificationModeHelp" xml:space="preserve">
     <value>Runs the honest attribute diff on every object instead of skipping unchanged objects by content hash, and reports any disagreement between the stored hash and the diff as an error. Use temporarily to validate the content-hash skip optimization; leave off for normal, faster Full Imports.</value>
   </data>
+  <data name="ScimEndpointInfo" xml:space="preserve">
+    <value>Give your identity provider this base URL and one of the keys below. The Users and Groups it sends are kept here and reach the Metaverse at the next import and synchronization of this Connected System.</value>
+  </data>
 </root>

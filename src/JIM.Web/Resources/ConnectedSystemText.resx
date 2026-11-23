@@ -310,4 +310,220 @@
     <value>Run Profile removed.</value>
     <comment>Snackbar after a Run Profile is deleted</comment>
   </data>
+  <data name="ScimEndpointHeading" xml:space="preserve">
+    <value>SCIM Endpoint</value>
+    <comment>Heading of the SCIM endpoint panel and its info popover title</comment>
+  </data>
+  <data name="ScimEndpointInfo" xml:space="preserve">
+    <value>Give your identity provider this base URL and one of the keys below. The Users and Groups it sends are kept here and reach the Metaverse at the next import and synchronisation of this Connected System.</value>
+    <comment>Info popover text on the SCIM endpoint panel</comment>
+  </data>
+  <data name="ScimBaseUrl" xml:space="preserve">
+    <value>Base URL</value>
+    <comment>Label of the endpoint address field; also the name of the address in the key-created table</comment>
+  </data>
+  <data name="ScimCopy" xml:space="preserve">
+    <value>Copy</value>
+    <comment>Button that copies the base URL</comment>
+  </data>
+  <data name="ScimCopiedSnackbar" xml:space="preserve">
+    <value>{0} copied.</value>
+    <comment>Snackbar after copying; {0} is the name of what was copied (Base URL or Key)</comment>
+  </data>
+  <data name="ScimKeyNoun" xml:space="preserve">
+    <value>Key</value>
+    <comment>Name of the key secret, used in the copy message</comment>
+  </data>
+  <data name="ScimCopyFailed" xml:space="preserve">
+    <value>Could not copy. Select the text and copy it instead.</value>
+    <comment>Snackbar when the browser refuses the copy</comment>
+  </data>
+  <data name="ScimKeysHeading" xml:space="preserve">
+    <value>Keys</value>
+    <comment>Heading of the keys table</comment>
+  </data>
+  <data name="ScimUsableKeyCount" xml:space="preserve">
+    <value>{0} of {1} usable</value>
+    <comment>Count of usable keys beside the heading; {0} is the number usable, {1} the maximum</comment>
+  </data>
+  <data name="ScimCreateKey" xml:space="preserve">
+    <value>Create Key</value>
+    <comment>Toolbar button and dialog title for creating a key</comment>
+  </data>
+  <data name="ScimKeyLimitTooltip" xml:space="preserve">
+    <value>A Connected System can have two usable keys at once. Disable or delete one to add another.</value>
+    <comment>Tooltip on the Create Key button when the limit is reached</comment>
+  </data>
+  <data name="ScimColumnKeyPrefix" xml:space="preserve">
+    <value>Key Prefix</value>
+    <comment>Column heading for the visible start of a key</comment>
+  </data>
+  <data name="ScimColumnExpires" xml:space="preserve">
+    <value>Expires</value>
+    <comment>Column heading and date field label for when a key expires</comment>
+  </data>
+  <data name="ScimColumnLastUsed" xml:space="preserve">
+    <value>Last Used</value>
+    <comment>Column heading for when a key was last used</comment>
+  </data>
+  <data name="ScimStatusExpired" xml:space="preserve">
+    <value>Expired</value>
+    <comment>Status chip for a key past its expiry date</comment>
+  </data>
+  <data name="ScimActionEnable" xml:space="preserve">
+    <value>Enable</value>
+    <comment>Row button that enables a key, and the confirm button of the change reason dialog</comment>
+  </data>
+  <data name="ScimActionDisable" xml:space="preserve">
+    <value>Disable</value>
+    <comment>Row button that disables a key, and the confirm button of the change reason dialog</comment>
+  </data>
+  <data name="ScimRotateKeyHint" xml:space="preserve">
+    <value>To rotate a key, create a new one while the old one still works, give it to your identity provider, then disable the old key once its last use stops moving.</value>
+    <comment>Footer of the keys table explaining how to rotate a key</comment>
+  </data>
+  <data name="ScimLastUsedFrom" xml:space="preserve">
+    <value>from {0}</value>
+    <comment>Address a key was last used from; {0} is the address</comment>
+  </data>
+  <data name="ScimNoKeysYet" xml:space="preserve">
+    <value>This Connected System has no keys yet</value>
+    <comment>Empty state of the keys table</comment>
+  </data>
+  <data name="ScimNoKeysHint" xml:space="preserve">
+    <value>Create one to give to your identity provider.</value>
+    <comment>Empty state hint of the keys table</comment>
+  </data>
+  <data name="ScimStoreHeading" xml:space="preserve">
+    <value>Store</value>
+    <comment>Heading of the SCIM store panel</comment>
+  </data>
+  <data name="ScimAwaitingImport" xml:space="preserve">
+    <value>Awaiting Import</value>
+    <comment>Store tile: changes JIM has not yet imported</comment>
+  </data>
+  <data name="ScimChangesSinceImport" xml:space="preserve">
+    <value>changes since the last import</value>
+    <comment>Store tile sub-line when a previous import exists</comment>
+  </data>
+  <data name="ScimNeverImported" xml:space="preserve">
+    <value>never imported</value>
+    <comment>Store tile sub-line when no import has happened</comment>
+  </data>
+  <data name="ScimDeletionsHeld" xml:space="preserve">
+    <value>Deletions Held</value>
+    <comment>Store tile: deletions waiting for an import to read them</comment>
+  </data>
+  <data name="ScimDeletionsHeldHint" xml:space="preserve">
+    <value>until an import reads them</value>
+    <comment>Store tile sub-line for deletions held</comment>
+  </data>
+  <data name="ScimRejected" xml:space="preserve">
+    <value>Rejected</value>
+    <comment>Store tile: requests the endpoint rejected</comment>
+  </data>
+  <data name="ScimRejectedHint" xml:space="preserve">
+    <value>requests in the last 24 hours</value>
+    <comment>Store tile sub-line for rejected requests</comment>
+  </data>
+  <data name="ScimLastWrite" xml:space="preserve">
+    <value>Last Write</value>
+    <comment>Store tile: when a SCIM client last wrote</comment>
+  </data>
+  <data name="ScimLastWriteBy" xml:space="preserve">
+    <value>by a SCIM client</value>
+    <comment>Store tile sub-line for the last write</comment>
+  </data>
+  <data name="ScimResourceTypesHeading" xml:space="preserve">
+    <value>Resource Types</value>
+    <comment>Heading of the resource types table</comment>
+  </data>
+  <data name="ScimReadOnly" xml:space="preserve">
+    <value>read-only</value>
+    <comment>Caption beside the Resource Types heading</comment>
+  </data>
+  <data name="ScimColumnEndpoint" xml:space="preserve">
+    <value>Endpoint</value>
+    <comment>Column heading for a resource type's endpoint</comment>
+  </data>
+  <data name="ScimColumnSchema" xml:space="preserve">
+    <value>Schema</value>
+    <comment>Column heading for a resource type's schema</comment>
+  </data>
+  <data name="ScimColumnExtensions" xml:space="preserve">
+    <value>Extensions</value>
+    <comment>Column heading for a resource type's schema extensions</comment>
+  </data>
+  <data name="ScimKeyCreatedTitle" xml:space="preserve">
+    <value>Key Created</value>
+    <comment>Title of the dialog that shows a new key once</comment>
+  </data>
+  <data name="ScimKeyNameRequired" xml:space="preserve">
+    <value>A name is required</value>
+    <comment>Validation message for the key name</comment>
+  </data>
+  <data name="ScimKeyNameHelp" xml:space="preserve">
+    <value>Typically names the identity provider that will hold it, such as 'Entra provisioning 2026'</value>
+    <comment>Helper text of the key name field</comment>
+  </data>
+  <data name="ScimOptional" xml:space="preserve">
+    <value>Optional</value>
+    <comment>Helper text of the optional key description</comment>
+  </data>
+  <data name="ScimExpiryHelp" xml:space="preserve">
+    <value>A key always expires, at most {0} years from today.</value>
+    <comment>Helper text of the expiry date; {0} is the maximum lifetime in years</comment>
+  </data>
+  <data name="ScimKeyShownOnceWarning" xml:space="preserve">
+    <value>Copy this key now and keep it somewhere safe. This is the only time it is shown; if it is lost, create a new key.</value>
+    <comment>Warning shown once a new key is created</comment>
+  </data>
+  <data name="ScimCreatedKeyLabel" xml:space="preserve">
+    <value>Key for {0}</value>
+    <comment>Label of the key field in the key-created dialog; {0} is the key's name</comment>
+  </data>
+  <data name="ScimCopyKeyAria" xml:space="preserve">
+    <value>Copy key</value>
+    <comment>Accessible label of the copy button on the key field</comment>
+  </data>
+  <data name="ScimDone" xml:space="preserve">
+    <value>Done</value>
+    <comment>Button that closes the key-created dialog</comment>
+  </data>
+  <data name="ScimKeyCreateFailed" xml:space="preserve">
+    <value>The key was not created: {0}</value>
+    <comment>Snackbar when a key could not be created; {0} is the reason</comment>
+  </data>
+  <data name="ScimKeyNoLongerExists" xml:space="preserve">
+    <value>The key no longer exists.</value>
+    <comment>Snackbar when the key was removed before it could be changed</comment>
+  </data>
+  <data name="ScimKeyEnabled" xml:space="preserve">
+    <value>Key '{0}' enabled.</value>
+    <comment>Snackbar after a key is enabled; {0} is the key's name</comment>
+  </data>
+  <data name="ScimKeyDisabled" xml:space="preserve">
+    <value>Key '{0}' disabled.</value>
+    <comment>Snackbar after a key is disabled; {0} is the key's name</comment>
+  </data>
+  <data name="ScimKeyNotChanged" xml:space="preserve">
+    <value>The key was not changed: {0}</value>
+    <comment>Snackbar when a key could not be enabled or disabled; {0} is the reason</comment>
+  </data>
+  <data name="ScimDeleteKeyTitle" xml:space="preserve">
+    <value>Delete Key</value>
+    <comment>Title of the delete key confirmation</comment>
+  </data>
+  <data name="ScimDeleteKeyConfirm" xml:space="preserve">
+    <value>Delete the key '{0}'? An identity provider still using it is refused from that moment. To keep a record of the key, disable it instead.</value>
+    <comment>Delete key confirmation; {0} is the key's name</comment>
+  </data>
+  <data name="ScimKeyDeleted" xml:space="preserve">
+    <value>Key '{0}' deleted.</value>
+    <comment>Snackbar after a key is deleted; {0} is the key's name</comment>
+  </data>
+  <data name="ScimKeyNotDeleted" xml:space="preserve">
+    <value>The key was not deleted: {0}</value>
+    <comment>Snackbar when a key could not be deleted; {0} is the reason</comment>
+  </data>
 </root>
