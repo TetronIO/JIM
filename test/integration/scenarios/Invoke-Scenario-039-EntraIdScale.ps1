@@ -381,14 +381,32 @@ try {
         $person.Department = $script:Scenario036LeaverDepartment
         foreach ($group in $groups) { $null = $group.Members.Remove($person.AccountName) }
     }
+    # A leaver's reports move to the leaver's own manager, as an HR system moves them. Left naming the leaver, each would
+    # name someone Entra ID no longer holds (it clears their manager as it deletes the leaver), which JIM holds as a reference
+    # it cannot write, by design, rather than as anything to export.
+    $leaverNames = [System.Collections.Generic.HashSet[string]]::new([string[]]@($leavers | ForEach-Object { $_.AccountName }))
+    $byName = @{}
+    foreach ($person in $people) { $byName[$person.AccountName] = $person }
+    $reassigned = @(foreach ($person in $people) {
+        if ($leaverNames.Contains($person.AccountName) -or -not $person.Manager -or -not $leaverNames.Contains($person.Manager)) { continue }
+        $manager = $person.Manager
+        while ($manager -and $leaverNames.Contains($manager)) { $manager = $byName[$manager].Manager }
+        $person.Manager = $manager
+        $person
+    })
+    Write-Host "  $($reassigned.Count) report(s) of the leavers move to the leavers' managers" -ForegroundColor Gray
     Write-HrCsv
     Invoke-HrImportAndSync -Label "leavers"
     $leaverSample = @($leavers | Select-Object -First 20)
-    $gone = { foreach ($person in $leaverSample) { if (Get-GraphObject -Path "/users/$($person.Upn)?`$select=id") { "$($person.AccountName) is still in Entra ID" } } }
+    $reassignedSample = @($reassigned | Select-Object -First 20)
+    $gone = {
+        foreach ($person in $leaverSample) { if (Get-GraphObject -Path "/users/$($person.Upn)?`$select=id") { "$($person.AccountName) is still in Entra ID" } }
+        foreach ($person in $reassignedSample) { Get-PersonMismatch -Person $person }
+    }
     Invoke-EntraExportAndConfirm -Label "leavers" -ConfirmWith "Delta Import" -Objects $leavers.Count -Expected $gone
     Wait-EntraState -Description "the leavers deleted" -Check $gone
 
-    Add-StepResult -Name "Leavers" -Passed $true -Detail "$($leavers.Count) deleted"
+    Add-StepResult -Name "Leavers" -Passed $true -Detail "$($leavers.Count) deleted; $($reassigned.Count) of their reports moved to another manager"
     Write-Host "  OK Leavers deleted" -ForegroundColor Green
 
     # --- 4: Full Import ---

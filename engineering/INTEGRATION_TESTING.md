@@ -1622,7 +1622,7 @@ PRD Scenario 5 (re-derivation after Collision Remediation) joins #242 release 4'
 **Checks** (only `-Step All` is meaningful):
 - **Provision:** every user and group exported, confirmed by Full Import, counted in Graph, and a sample of 20 people read back attribute by attribute.
 - **Changes:** a tenth of the people get a new job title and a tenth move between groups, confirmed by Delta Import.
-- **Leavers:** a hundredth leave scope and are deleted (Deprovisioning Action Delete), confirmed by Delta Import.
+- **Leavers:** a hundredth leave scope and are deleted (Deprovisioning Action Delete), and their reports move to the leavers' own managers, as an HR system moves them; all confirmed by Delta Import. A report left naming a deleted leaver would name someone Entra ID no longer holds, which JIM holds as an unwritable reference by design (#1398).
 - **Full Import:** a Full Import and Full Synchronisation of everything find nothing to export.
 
 The Connected System writes at 20 a second, Graph's limit for an application in a tenant.
