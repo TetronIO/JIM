@@ -1709,4 +1709,46 @@
   <data name="AcceptBlockedOther" xml:space="preserve">
     <value>{0} ne peuvent pas prendre leurs nouveaux résultats comme prévu : modifiez les cas, ou enregistrez malgré tout.</value>
   </data>
+  <data name="RemoveBindingHasValue" xml:space="preserve">
+    <value>{0:N0} objet(s) {1} ont une valeur</value>
+  </data>
+  <data name="RemoveBindingViewObjects" xml:space="preserve">
+    <value>Voir les objets qui ont une valeur</value>
+  </data>
+  <data name="RemoveBindingClearFirst" xml:space="preserve">
+    <value>Effacez d’abord ces valeurs, puis supprimez la liaison.</value>
+  </data>
+  <data name="RemoveBindingReadBy" xml:space="preserve">
+    <value>{0:N0} élément(s) de configuration lisent cet attribut sur {1}</value>
+  </data>
+  <data name="RemoveBindingChangeFirst" xml:space="preserve">
+    <value>Modifiez ou supprimez chacun d’eux d’abord, puis supprimez la liaison.</value>
+  </data>
+  <data name="RemoveBindingSafe" xml:space="preserve">
+    <value>Aucun {0} n’a de valeur pour cet attribut. Suppression sans risque ; aucune donnée d’objet ne sera perdue.</value>
+  </data>
+  <data name="RemoveBindingCascadeTitle" xml:space="preserve">
+    <value>Ces {0} références seront aussi supprimées</value>
+  </data>
+  <data name="RemoveBindingTypeToConfirm" xml:space="preserve">
+    <value>Saisissez {0} pour confirmer</value>
+  </data>
+  <data name="RemoveBindingWithReferences" xml:space="preserve">
+    <value>Supprimer la liaison + {0} référence(s)</value>
+  </data>
+  <data name="RemoveBindingButton" xml:space="preserve">
+    <value>Supprimer la liaison</value>
+  </data>
+  <data name="RemoveBindingFailed" xml:space="preserve">
+    <value>La liaison n’a pas pu être supprimée ; elle contient peut-être désormais des valeurs stockées, ou la configuration peut maintenant la lire. Actualisez et réessayez.</value>
+  </data>
+  <data name="RemoveBindingRemoved" xml:space="preserve">
+    <value>« {0} » supprimé de {1}.</value>
+  </data>
+  <data name="RemoveBindingError" xml:space="preserve">
+    <value>Échec de la suppression de la liaison : {0}</value>
+  </data>
+  <data name="RemoveBindingTitle" xml:space="preserve">
+    <value>Supprimer « {0} » de {1}</value>
+  </data>
 </root>

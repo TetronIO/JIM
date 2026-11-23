@@ -2248,4 +2248,60 @@
     <value>{0} cannot take their new results as expected: edit the cases, or save anyway.</value>
     <comment>Shown when several test cases cannot accept their new results. {0} is the list of case names.</comment>
   </data>
+  <data name="RemoveBindingHasValue" xml:space="preserve">
+    <value>{0:N0} {1} object(s) have a value</value>
+    <comment>Alert: objects of the type hold a value for the attribute. {0} is the count, {1} the Metaverse Object Type name.</comment>
+  </data>
+  <data name="RemoveBindingViewObjects" xml:space="preserve">
+    <value>View the object(s) with a value</value>
+    <comment>Link to the objects holding a value.</comment>
+  </data>
+  <data name="RemoveBindingClearFirst" xml:space="preserve">
+    <value>Clear these values first, then remove the binding.</value>
+    <comment>Shown when values block removing the binding.</comment>
+  </data>
+  <data name="RemoveBindingReadBy" xml:space="preserve">
+    <value>{0:N0} configuration item(s) read this attribute on {1}</value>
+    <comment>Alert: configuration reads the attribute. {0} is the count, {1} the Metaverse Object Type name.</comment>
+  </data>
+  <data name="RemoveBindingChangeFirst" xml:space="preserve">
+    <value>Change or remove each one first, then remove the binding.</value>
+    <comment>Shown when configuration blocks removing the binding.</comment>
+  </data>
+  <data name="RemoveBindingSafe" xml:space="preserve">
+    <value>No {0} has a value for this attribute. Safe to remove; no object data will be lost.</value>
+    <comment>Shown when removing the binding is safe. {0} is the Metaverse Object Type name.</comment>
+  </data>
+  <data name="RemoveBindingCascadeTitle" xml:space="preserve">
+    <value>These {0} reference(s) will also be removed</value>
+    <comment>Warning: references removed with the binding. {0} is the count.</comment>
+  </data>
+  <data name="RemoveBindingTypeToConfirm" xml:space="preserve">
+    <value>Type {0} to confirm</value>
+    <comment>Asks for the attribute name to be typed. {0} is the attribute name in bold markup.</comment>
+  </data>
+  <data name="RemoveBindingWithReferences" xml:space="preserve">
+    <value>Remove binding + {0} reference(s)</value>
+    <comment>Button removing the binding and its references. {0} is the count.</comment>
+  </data>
+  <data name="RemoveBindingButton" xml:space="preserve">
+    <value>Remove binding</value>
+    <comment>Button removing the binding.</comment>
+  </data>
+  <data name="RemoveBindingFailed" xml:space="preserve">
+    <value>The binding could not be removed; it may now hold stored values, or configuration may now read it. Refresh and try again.</value>
+    <comment>Snackbar when the binding was not removed.</comment>
+  </data>
+  <data name="RemoveBindingRemoved" xml:space="preserve">
+    <value>Removed "{0}" from {1}.</value>
+    <comment>Snackbar after removing the binding. {0} is the attribute, {1} the Metaverse Object Type.</comment>
+  </data>
+  <data name="RemoveBindingError" xml:space="preserve">
+    <value>Failed to remove binding: {0}</value>
+    <comment>Snackbar on failure. {0} is the error message.</comment>
+  </data>
+  <data name="RemoveBindingTitle" xml:space="preserve">
+    <value>Remove "{0}" from {1}</value>
+    <comment>Dialog title. {0} is the attribute, {1} the Metaverse Object Type.</comment>
+  </data>
 </root>
