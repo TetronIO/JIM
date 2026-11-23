@@ -2664,4 +2664,52 @@
     <value>the Connected System</value>
     <comment>Fills the {0} of the Connected System group heading when the system has no name. Reads 'From the Connected System · cs[...]'.</comment>
   </data>
+  <data name="PreviewSizeRowsOne" xml:space="preserve">
+    <value>about {0:N0} object-level row</value>
+    <comment>Fills the {0} of the size sentence when the estimate is one row. Reads 'This preview would produce about 1 object-level row'.</comment>
+  </data>
+  <data name="PreviewSizeRowsOther" xml:space="preserve">
+    <value>about {0:N0} object-level rows</value>
+    <comment>Fills the {0} of the size sentence for any other count of rows.</comment>
+  </data>
+  <data name="PreviewSizeSentence" xml:space="preserve">
+    <value>This preview would produce {0} (roughly {1} of preview data).</value>
+    <comment>The size sentence. {0} is the row phrase, {1} the storage estimate.</comment>
+  </data>
+  <data name="PreviewSizeStorageGigabytes" xml:space="preserve">
+    <value>{0:N1} GB</value>
+    <comment>Storage estimate, in gigabytes.</comment>
+  </data>
+  <data name="PreviewSizeStorageMegabytes" xml:space="preserve">
+    <value>{0:N0} MB</value>
+    <comment>Storage estimate, in megabytes.</comment>
+  </data>
+  <data name="PreviewSizeRunsIn" xml:space="preserve">
+    <value>It runs in the background and changes nothing; expect it to take about {0}.</value>
+    <comment>Duration sentence. {0} is the time estimate.</comment>
+  </data>
+  <data name="PreviewSizeExactCounts" xml:space="preserve">
+    <value>The summary counts are exact either way. The choice is how much of it you can drill into, and how much storage the preview uses until it ages out under the retention period.</value>
+    <comment>Explains that the summary is exact whichever option is chosen.</comment>
+  </data>
+  <data name="PreviewSizeCappedTitle" xml:space="preserve">
+    <value>Keep a sample of each group (recommended)</value>
+    <comment>Radio option: keep a capped sample per summary group.</comment>
+  </data>
+  <data name="PreviewSizeCappedHelp" xml:space="preserve">
+    <value>Up to {0:N0} rows per summary group. Groups showing a sample are labelled as such.</value>
+    <comment>Help under the sample option. {0} is the cap per group.</comment>
+  </data>
+  <data name="PreviewSizeFullTitle" xml:space="preserve">
+    <value>Keep every row</value>
+    <comment>Radio option: keep every affected object.</comment>
+  </data>
+  <data name="PreviewSizeFullHelp" xml:space="preserve">
+    <value>Every affected object is drillable. Takes longer and uses the storage above.</value>
+    <comment>Help under the keep-every-row option.</comment>
+  </data>
+  <data name="PreviewSizeRunButton" xml:space="preserve">
+    <value>Run preview</value>
+    <comment>Confirming button of the preview size dialog.</comment>
+  </data>
 </root>

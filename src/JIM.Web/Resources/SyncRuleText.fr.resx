@@ -2021,4 +2021,40 @@
   <data name="InsertAttributeFromSystemFallback" xml:space="preserve">
     <value>le système connecté</value>
   </data>
+  <data name="PreviewSizeRowsOne" xml:space="preserve">
+    <value>environ {0:N0} ligne au niveau de l’objet</value>
+  </data>
+  <data name="PreviewSizeRowsOther" xml:space="preserve">
+    <value>environ {0:N0} lignes au niveau de l’objet</value>
+  </data>
+  <data name="PreviewSizeSentence" xml:space="preserve">
+    <value>Cet aperçu produirait {0} (environ {1} de données d’aperçu).</value>
+  </data>
+  <data name="PreviewSizeStorageGigabytes" xml:space="preserve">
+    <value>{0:N1} Go</value>
+  </data>
+  <data name="PreviewSizeStorageMegabytes" xml:space="preserve">
+    <value>{0:N0} Mo</value>
+  </data>
+  <data name="PreviewSizeRunsIn" xml:space="preserve">
+    <value>Il s’exécute en arrière-plan et ne modifie rien ; comptez environ {0}.</value>
+  </data>
+  <data name="PreviewSizeExactCounts" xml:space="preserve">
+    <value>Les totaux du récapitulatif sont exacts dans les deux cas. Le choix porte sur la part que vous pouvez détailler, et sur l’espace de stockage utilisé par l’aperçu jusqu’à son expiration selon la durée de conservation.</value>
+  </data>
+  <data name="PreviewSizeCappedTitle" xml:space="preserve">
+    <value>Conserver un échantillon de chaque groupe (recommandé)</value>
+  </data>
+  <data name="PreviewSizeCappedHelp" xml:space="preserve">
+    <value>Jusqu’à {0:N0} lignes par groupe de récapitulatif. Les groupes affichant un échantillon sont signalés comme tels.</value>
+  </data>
+  <data name="PreviewSizeFullTitle" xml:space="preserve">
+    <value>Conserver toutes les lignes</value>
+  </data>
+  <data name="PreviewSizeFullHelp" xml:space="preserve">
+    <value>Chaque objet concerné peut être détaillé. Prend plus de temps et utilise l’espace de stockage indiqué ci-dessus.</value>
+  </data>
+  <data name="PreviewSizeRunButton" xml:space="preserve">
+    <value>Lancer l’aperçu</value>
+  </data>
 </root>
