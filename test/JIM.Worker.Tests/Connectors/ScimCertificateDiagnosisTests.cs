@@ -118,23 +118,33 @@ public class ScimCertificateDiagnosisTests
 
     #region recognising a certificate failure
     [Test]
-    public void LooksLikeACertificateFailure_HandshakeFailureNestedInATransportError_IsRecognised()
+    public void IsTlsTrustFailure_HandshakeFailureNestedInATransportError_IsRecognised()
     {
         // The handshake failure arrives inside HttpRequestException, and the connector wraps that again.
         var exception = new ScimRequestException("The SCIM request failed.", HttpStatusCode.ServiceUnavailable,
             new HttpRequestException("The SSL connection could not be established.", new AuthenticationException("bad certificate")));
 
-        Assert.That(ScimCertificateDiagnosis.LooksLikeACertificateFailure(exception), Is.True);
+        Assert.That(TlsTrustFailure.IsTlsTrustFailure(exception), Is.True);
     }
 
     [Test]
-    public void LooksLikeACertificateFailure_RefusedConnection_IsNotACertificateProblem()
+    public void IsTlsTrustFailure_RefusedConnection_IsNotACertificateProblem()
     {
         // A firewall, a wrong port and a timeout must keep their own message rather than being blamed on
         // a certificate the administrator would then go looking for.
         var exception = new HttpRequestException("Connection refused.", new SocketException(111));
 
-        Assert.That(ScimCertificateDiagnosis.LooksLikeACertificateFailure(exception), Is.False);
+        Assert.That(TlsTrustFailure.IsTlsTrustFailure(exception), Is.False);
+    }
+
+    [Test]
+    public void ResolveSecureEndpoint_HttpsBaseUrl_IsReadThroughTheOutboundProxyAsTheConnectorConnects()
+    {
+        // Behind a TLS-inspecting proxy the certificate that refused the connection is the proxy's, which only a read
+        // through the proxy sees.
+        var endpoint = new ScimConnector().ResolveSecureEndpoint(Settings());
+
+        Assert.That(endpoint!.HandshakeFraming, Is.EqualTo(SecureHandshakeFraming.Https));
     }
 
     [Test]

@@ -17,5 +17,13 @@ public enum SecureHandshakeFraming
     /// Microsoft SQL Server's TDS 7.x framing: encryption is agreed in a PRELOGIN exchange, then the TLS handshake
     /// travels inside PRELOGIN packets. SQL Server drops a connection that opens with a bare TLS handshake instead.
     /// </summary>
-    TdsPreLogin = 1
+    TdsPreLogin = 1,
+
+    /// <summary>
+    /// HTTPS, reached as JIM's HTTP Connectors reach it: through the outbound proxy configured for the host
+    /// (<c>HTTPS_PROXY</c>, unless <c>NO_PROXY</c> excludes it), in an HTTP <c>CONNECT</c> tunnel, and directly where
+    /// no proxy applies. Behind a TLS-inspecting proxy, the certificate that refused a connection is the proxy's, and
+    /// only a read through the proxy sees it.
+    /// </summary>
+    Https = 2
 }

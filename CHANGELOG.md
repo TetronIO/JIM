@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 The LDAP Connector's **Delete Behaviour** and **Disable Attribute** settings are removed: a delete always deletes. To disable leavers instead, set the export Synchronisation Rule's Deprovisioning Action to **Disable**. (#2085)
 - 🔄 `Register-JIMIdentityProvider -Provider EntraId` signs you in through your browser, so it works in tenants whose Conditional Access blocks device code sign-in, as Microsoft recommends; add `-UseDeviceCode` on a computer with no browser. (#3021)
 
+### Fixed
+
+- 🐛 Behind an outbound proxy, the SCIM Connector now reads a service provider's certificate through the proxy, so **Fetch certificate** and a failed connection test show the certificate a TLS-inspecting proxy presents, ready to trust.
+
 ## [1.0.0] - 2026-11-20
 
 ### Added

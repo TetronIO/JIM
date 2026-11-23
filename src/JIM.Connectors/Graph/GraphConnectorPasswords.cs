@@ -5,6 +5,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using JIM.Connectors.Http;
+using JIM.Models.Exceptions;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
@@ -119,6 +120,10 @@ internal sealed class GraphConnectorPasswords
         {
             return PasswordSetResult.Failed(PasswordSetFailureReason.ConfigurationFault, $"No access token could be acquired from Microsoft Entra ID: {ex.Message}");
         }
+        catch (ServerCertificateRejectedException ex)
+        {
+            return PasswordSetResult.Failed(PasswordSetFailureReason.ConfigurationFault, ex.Message);
+        }
     }
 
     /// <summary>
@@ -183,7 +188,7 @@ internal sealed class GraphConnectorPasswords
             roles = GraphAccessToken.ReadRoles(token);
             directoryRoles = GraphAccessToken.ReadDirectoryRoles(token);
         }
-        catch (Exception ex) when (ex is HttpAuthenticationException or GraphRequestException or HttpRequestException or InvalidOperationException)
+        catch (Exception ex) when (ex is HttpAuthenticationException or GraphRequestException or HttpRequestException or InvalidOperationException or ServerCertificateRejectedException)
         {
             return new PasswordPreflightResult
             {

@@ -695,7 +695,7 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorImpor
     /// <returns>The rejection to report, or null when the certificate is not what refused the connection.</returns>
     private ServerCertificateRejectedException? DescribeCertificateRejection(List<ConnectedSystemSettingValue> settingValues, Exception exception, ILogger logger)
     {
-        if (!ScimCertificateDiagnosis.LooksLikeACertificateFailure(exception))
+        if (!TlsTrustFailure.IsTlsTrustFailure(exception))
             return null;
 
         // Nothing to explain when the administrator has already told JIM not to validate: a failure then
@@ -722,7 +722,7 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorImpor
         ILogger logger)
     {
         return ServerCertificateProbe.Probe(host, port, trustedCertificates, timeout, logger,
-            ScimCertificateDiagnosis.ServerDescription, ScimCertificateDiagnosis.SecureTransportName);
+            ScimCertificateDiagnosis.ServerDescription, ScimCertificateDiagnosis.SecureTransportName, SecureHandshakeFraming.Https);
     }
 
     #region IConnectorSecureEndpoint members
@@ -745,7 +745,8 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorImpor
             endpoint.Port,
             TimeSpan.FromSeconds(timeoutSeconds),
             ScimCertificateDiagnosis.ServerDescription,
-            ScimCertificateDiagnosis.SecureTransportName);
+            ScimCertificateDiagnosis.SecureTransportName,
+            SecureHandshakeFraming.Https);
     }
 
     #endregion

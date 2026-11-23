@@ -1,21 +1,15 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Security.Authentication;
 using JIM.Models.Connectors;
 using JIM.Models.Exceptions;
 
 namespace JIM.Connectors.SCIM;
 
 /// <summary>
-/// Decides whether a failed SCIM request failed because of the service provider's TLS certificate, and
-/// names the far end for the probe's remediation text.
-/// <para>
-/// <see cref="HttpClient"/> reports a refused certificate as "The SSL connection could not be
-/// established", which an administrator cannot tell from a firewall. Recognising it is what lets JIM
-/// show the certificate instead, so the administrator can decide to trust that specific certificate
-/// rather than reaching for the setting that turns validation off altogether.
-/// </para>
+/// Where the SCIM service provider's certificate is read from, and what the probe's remediation text calls the far
+/// end. Recognising that a request failed on the certificate at all is <see cref="Http.TlsTrustFailure"/>'s, shared
+/// with the other HTTP Connectors.
 /// </summary>
 internal static class ScimCertificateDiagnosis
 {
@@ -24,28 +18,6 @@ internal static class ScimCertificateDiagnosis
 
     /// <summary>The secure transport the probe names when nothing was presented.</summary>
     public const string SecureTransportName = "HTTPS";
-
-    /// <summary>
-    /// Whether the failure is a TLS trust failure rather than anything else.
-    /// </summary>
-    /// <remarks>
-    /// The chain is walked because the connector wraps transport failures in its own exception, and the
-    /// handshake failure itself arrives nested inside <see cref="HttpRequestException"/>. Only an
-    /// <see cref="AuthenticationException"/> counts: a refused connection, a timeout or an HTTP error
-    /// are different problems and must keep their own message.
-    /// </remarks>
-    public static bool LooksLikeACertificateFailure(Exception? exception)
-    {
-        while (exception != null)
-        {
-            if (exception is AuthenticationException)
-                return true;
-
-            exception = exception.InnerException;
-        }
-
-        return false;
-    }
 
     /// <summary>
     /// The host and port the probe should look at, from the Base URL the administrator configured.

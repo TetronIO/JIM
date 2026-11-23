@@ -38,12 +38,17 @@ internal sealed class GraphHttpClient : IDisposable
     private readonly IDisposable? _ownedCredential;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly Func<DateTimeOffset> _utcNow;
+    private readonly Func<Exception, Exception?>? _describeCertificateFailure;
     private int _throttledResponseCount;
 
     /// <param name="httpClient">Configured with the Connector's timeout, TLS policy and certificate validation; owned and disposed by this client.</param>
     /// <param name="ownedCredential">Disposed with this client: the certificate a client assertion signs with, where one is used.</param>
     /// <param name="delay">Wait seam, so retry behaviour is testable without real delays.</param>
     /// <param name="utcNow">Clock seam, used to resolve an HTTP-date <c>Retry-After</c>.</param>
+    /// <param name="describeCertificateFailure">
+    /// Turns a failure caused by a refused server certificate into the exception that shows it to the administrator,
+    /// or null where the certificate turns out not to be the problem. Asked only about TLS trust failures.
+    /// </param>
     public GraphHttpClient(
         HttpClient httpClient,
         GraphCloud cloud,
@@ -53,7 +58,8 @@ internal sealed class GraphHttpClient : IDisposable
         ILogger logger,
         IDisposable? ownedCredential = null,
         Func<TimeSpan, CancellationToken, Task>? delay = null,
-        Func<DateTimeOffset>? utcNow = null)
+        Func<DateTimeOffset>? utcNow = null,
+        Func<Exception, Exception?>? describeCertificateFailure = null)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(cloud);
@@ -71,6 +77,7 @@ internal sealed class GraphHttpClient : IDisposable
         _ownedCredential = ownedCredential;
         _delay = delay ?? ((duration, token) => Task.Delay(duration, token));
         _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
+        _describeCertificateFailure = describeCertificateFailure;
     }
 
     /// <summary>How many 429 responses this client has received, so a run can report sustained throttling.</summary>
@@ -111,7 +118,7 @@ internal sealed class GraphHttpClient : IDisposable
             // A fresh message per attempt: a sent message cannot be reused, and re-applying authentication is what
             // lets a refreshed token take effect on the retry.
             using var request = BuildRequest(method, requestUri, body, options);
-            await _authentication.ApplyAsync(request, cancellationToken);
+            await ApplyAuthenticationAsync(request, cancellationToken);
 
             HttpResponseMessage response;
             try
@@ -122,6 +129,7 @@ internal sealed class GraphHttpClient : IDisposable
             {
                 // Cancellation is not retryable, so the policy declines it and the original exception propagates.
                 cancellationToken.ThrowIfCancellationRequested();
+                ThrowIfCertificateRefused(ex);
 
                 var exceptionDecision = _retryPolicy.EvaluateException(ex, attempt);
                 if (!exceptionDecision.ShouldRetry)
@@ -303,9 +311,33 @@ internal sealed class GraphHttpClient : IDisposable
     public async Task<string> GetAccessTokenAsync(CancellationToken cancellationToken)
     {
         using var probe = new HttpRequestMessage(HttpMethod.Get, _cloud.ApiBaseUrl);
-        await _authentication.ApplyAsync(probe, cancellationToken);
+        await ApplyAuthenticationAsync(probe, cancellationToken);
         return probe.Headers.Authorization?.Parameter
                ?? throw new HttpAuthenticationException("No access token was issued.");
+    }
+
+    /// <summary>Applies the access token, acquiring one first where needed: the first contact with Entra ID's token service.</summary>
+    private async Task ApplyAuthenticationAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _authentication.ApplyAsync(request, cancellationToken);
+        }
+        catch (HttpAuthenticationException ex)
+        {
+            ThrowIfCertificateRefused(ex);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Replaces a failure caused by a refused server certificate with one that shows the certificate, so the
+    /// administrator can trust it rather than reading a transport error indistinguishable from a firewall.
+    /// </summary>
+    private void ThrowIfCertificateRefused(Exception failure)
+    {
+        if (_describeCertificateFailure != null && TlsTrustFailure.IsTlsTrustFailure(failure) && _describeCertificateFailure(failure) is { } rejection)
+            throw rejection;
     }
 
     public void Dispose()

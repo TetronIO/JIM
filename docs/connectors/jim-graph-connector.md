@@ -166,13 +166,33 @@ The **Cloud** setting reaches a tenant in the US Government L4 (GCC High), US Go
 - **The Connector needs internet access.** JIM must reach `login.microsoftonline.com` and `graph.microsoft.com` on HTTPS (port 443), or the hosts of the tenant's national cloud. Every other part of JIM works without internet access; this Connector cannot, since the tenant is a Microsoft cloud service.
 - **Prefer a certificate or a federated credential to a client secret.** A certificate's private key never leaves JIM; a federated credential needs no secret at all.
 - **Grant the least the Connected System needs.** Read permissions are enough for import only, the password permission and role only where JIM sets passwords, and the Source of Authority permissions only where you track switched objects.
-- **Traffic is encrypted.** Microsoft Graph is reached over TLS 1.2 or later. Where a proxy inspects TLS traffic, add its CA certificate to JIM's certificate store under **Admin > Certificates**.
+- **Traffic is encrypted.** Microsoft Graph is reached over TLS 1.2 or later.
+- **A proxy that inspects TLS traffic presents its own certificate.** It replaces Microsoft's certificates with ones its own certificate authority issues, which JIM does not trust until you say so. Testing the connection, a failed run and **Fetch certificate** on the Connected System's settings all show the certificate the proxy presents; trust its certificate authority with **Choose what to trust**, as for a [SCIM service provider's certificate](jim-scim-connector.md#when-a-connection-test-fails-on-the-certificate), or add it under **Admin > Certificates**. `Get-JIMConnectedSystemServerCertificate` and `Approve-JIMConnectedSystemServerCertificate` do the same from PowerShell.
+
+### Outbound proxy {#outbound-proxy}
+
+Where JIM must reach the internet through a proxy, give `jim.web` and `jim.worker` the standard `HTTPS_PROXY` variable, and list in `NO_PROXY` every host JIM reaches directly: your identity provider and your internal Connected Systems. The shipped compose files do not set them, so add them in your production overlay, the file you pass with `-f` alongside the others:
+
+```yaml
+services:
+  jim.web:
+    environment:
+      HTTPS_PROXY: http://proxy.example.com:3128
+      NO_PROXY: localhost,idp.example.com,.corp.example.com
+  jim.worker:
+    environment:
+      HTTPS_PROXY: http://proxy.example.com:3128
+      NO_PROXY: localhost,idp.example.com,.corp.example.com
+```
+
+JIM reads a server's certificate through the same proxy, so behind a TLS-inspecting proxy the certificate you are shown is the proxy's. A proxy that intercepts traffic without being configured needs neither variable.
 
 ## :material-wrench-outline: Troubleshooting
 
 | What you see | What to do |
 |--------------|------------|
 | Saving the settings names a missing permission | Add it under the app registration's **API permissions**, as an application permission, and grant admin consent. |
+| Saving the settings, or a run, shows a certificate JIM does not trust | A proxy is inspecting TLS traffic. Compare the thumbprint with the proxy's certificate authority, then trust it with **Choose what to trust**. See [Security Considerations](#security-considerations). |
 | `AADSTS7000215` | The **Client Secret** is not valid: supply the secret's **Value**, not its **Secret ID**. |
 | `AADSTS700027` | The certificate is not on the app registration: upload its public part under **Certificates & secrets**. Entra ID takes a few minutes to apply a certificate uploaded moments ago, so JIM asks again before reporting this: for up to three minutes during an import or export, and for about half a minute when testing the connection. Each wait is logged as a warning. If the refusal persists after that, try again a few minutes later before changing anything. |
 | `AADSTS700213`, `AADSTS70021` | No federated credential matches the managed identity: add one for the identity in **Managed Identity Client ID**. |
