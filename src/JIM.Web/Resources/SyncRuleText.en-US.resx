@@ -212,4 +212,10 @@
   <data name="ScopeDefaultImport" xml:space="preserve">
     <value>By default, all Connected System Objects of type {0} will be in scope of this Synchronization Rule. Use a filter to import only specific objects, e.g. only Active users, not Disabled.</value>
   </data>
+  <data name="PriorityNullTooltip" xml:space="preserve">
+    <value>When set, if this Synchronization Rule is connected and in scope but supplies no value, it asserts no value (no fall-through to a lower-priority contributor).</value>
+  </data>
+  <data name="SyncRuleDisabledTooltip" xml:space="preserve">
+    <value>This Synchronization Rule is disabled. It holds its position but never contributes during synchronization.</value>
+  </data>
 </root>

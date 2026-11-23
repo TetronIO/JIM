@@ -1577,4 +1577,43 @@
   <data name="CriterionUnsupported" xml:space="preserve">
     <value>Ce type d’attribut n’est pas pris en charge dans les critères de recherche.</value>
   </data>
+  <data name="PriorityNoContributors" xml:space="preserve">
+    <value>Cet attribut n’a aucun contributeur à l’importation, il n’a donc pas de priorité à gérer.</value>
+  </data>
+  <data name="PriorityColumn" xml:space="preserve">
+    <value>Priorité</value>
+  </data>
+  <data name="PriorityNullTooltip" xml:space="preserve">
+    <value>Lorsqu’elle est définie, si cette règle de synchronisation est connectée et dans le périmètre mais ne fournit aucune valeur, elle affirme l’absence de valeur (pas de repli vers un contributeur de priorité inférieure).</value>
+  </data>
+  <data name="ThisMapping" xml:space="preserve">
+    <value>(ce mappage)</value>
+  </data>
+  <data name="PendingMappingOnceSaved" xml:space="preserve">
+    <value>ce mappage, une fois enregistré</value>
+  </data>
+  <data name="DragToReorder" xml:space="preserve">
+    <value>Glisser pour réordonner</value>
+  </data>
+  <data name="SyncRuleDisabledTooltip" xml:space="preserve">
+    <value>Cette règle de synchronisation est désactivée. Elle conserve sa position mais ne contribue jamais pendant la synchronisation.</value>
+  </data>
+  <data name="UnsavedChanges" xml:space="preserve">
+    <value>Modifications non enregistrées</value>
+  </data>
+  <data name="SaveOrder" xml:space="preserve">
+    <value>Enregistrer l’ordre</value>
+  </data>
+  <data name="ResetLabel" xml:space="preserve">
+    <value>Réinitialiser</value>
+  </data>
+  <data name="AttributePriorityTitle" xml:space="preserve">
+    <value>Priorité des attributs</value>
+  </data>
+  <data name="PriorityOrderSaved" xml:space="preserve">
+    <value>Ordre de priorité des attributs enregistré.</value>
+  </data>
+  <data name="PriorityOrderFailed" xml:space="preserve">
+    <value>Échec de l’enregistrement de l’ordre de priorité des attributs : {0}</value>
+  </data>
 </root>

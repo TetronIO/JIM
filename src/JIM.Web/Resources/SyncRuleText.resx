@@ -2072,4 +2072,56 @@
     <value>This attribute type is not supported in search criteria.</value>
     <comment>Shown for an attribute type a criterion cannot test.</comment>
   </data>
+  <data name="PriorityNoContributors" xml:space="preserve">
+    <value>This attribute has no import contributors, so it has no priority to manage.</value>
+    <comment>Shown when an attribute has no contributors.</comment>
+  </data>
+  <data name="PriorityColumn" xml:space="preserve">
+    <value>Priority</value>
+    <comment>Column heading: the order of contributors.</comment>
+  </data>
+  <data name="PriorityNullTooltip" xml:space="preserve">
+    <value>When set, if this Synchronisation Rule is connected and in scope but supplies no value, it asserts no value (no fall-through to a lower-priority contributor).</value>
+    <comment>Tooltip on the Null is a value column heading.</comment>
+  </data>
+  <data name="ThisMapping" xml:space="preserve">
+    <value>(this mapping)</value>
+    <comment>Marks the mapping being edited in the priority list.</comment>
+  </data>
+  <data name="PendingMappingOnceSaved" xml:space="preserve">
+    <value>this mapping, once saved</value>
+    <comment>Shown on the synthetic row for a mapping not yet saved.</comment>
+  </data>
+  <data name="DragToReorder" xml:space="preserve">
+    <value>Drag to reorder</value>
+    <comment>Tooltip on the drag handle.</comment>
+  </data>
+  <data name="SyncRuleDisabledTooltip" xml:space="preserve">
+    <value>This Synchronisation Rule is disabled. It holds its position but never contributes during synchronisation.</value>
+    <comment>Tooltip on the Disabled chip of a contributor.</comment>
+  </data>
+  <data name="UnsavedChanges" xml:space="preserve">
+    <value>Unsaved changes</value>
+    <comment>Shown when the priority order has changed and is not saved.</comment>
+  </data>
+  <data name="SaveOrder" xml:space="preserve">
+    <value>Save order</value>
+    <comment>Button saving the priority order.</comment>
+  </data>
+  <data name="ResetLabel" xml:space="preserve">
+    <value>Reset</value>
+    <comment>Button reverting the priority order to the saved one.</comment>
+  </data>
+  <data name="AttributePriorityTitle" xml:space="preserve">
+    <value>Attribute Priority</value>
+    <comment>Title of the acknowledgement before a priority change is saved.</comment>
+  </data>
+  <data name="PriorityOrderSaved" xml:space="preserve">
+    <value>Attribute priority order saved.</value>
+    <comment>Snackbar after saving.</comment>
+  </data>
+  <data name="PriorityOrderFailed" xml:space="preserve">
+    <value>Failed to save attribute priority order: {0}</value>
+    <comment>Snackbar on failure. {0} is the error message.</comment>
+  </data>
 </root>
