@@ -614,4 +614,202 @@
   <data name="PexSelectedCount" xml:space="preserve">
     <value>{0} sélectionnés</value>
   </data>
+  <data name="UrefHandlingLabel" xml:space="preserve">
+    <value>Gestion des références non résolues :</value>
+  </data>
+  <data name="UrefChange" xml:space="preserve">
+    <value>Modifier</value>
+  </data>
+  <data name="UrefRecordedByRun" xml:space="preserve">
+    <value>Enregistré par l’exécution : {0}</value>
+  </data>
+  <data name="UrefLikelyCause" xml:space="preserve">
+    <value>Cause probable :</value>
+  </data>
+  <data name="UrefNextSteps" xml:space="preserve">
+    <value>Actions suivantes</value>
+  </data>
+  <data name="UrefIntroObject" xml:space="preserve">
+    <value>Ces valeurs de référence n’ont pas pu être liées à des objets de systèmes connectés dans {0} ; elles ne peuvent donc pas remonter vers le Metaverse tant qu’elles ne sont pas résolues. Chaque cause probable est évaluée au regard de la portée du conteneur actuelle.</value>
+  </data>
+  <data name="UrefThisConnectedSystem" xml:space="preserve">
+    <value>ce système connecté</value>
+  </data>
+  <data name="UrefObjectFallback" xml:space="preserve">
+    <value>objet</value>
+  </data>
+  <data name="UrefValuesOne" xml:space="preserve">
+    <value>{0} valeur de référence sur cet objet de type {1}</value>
+  </data>
+  <data name="UrefValuesOther" xml:space="preserve">
+    <value>{0} valeurs de référence sur cet objet de type {1}</value>
+  </data>
+  <data name="UrefSomeValues" xml:space="preserve">
+    <value>quelques valeurs de référence sur cet objet de type {0}</value>
+  </data>
+  <data name="UrefRunErrorSentence" xml:space="preserve">
+    <value>Cette exécution n’a pas pu lier {0} à des objets de systèmes connectés ; elles ne peuvent donc pas remonter vers le Metaverse tant qu’elles ne sont pas résolues.</value>
+  </data>
+  <data name="UrefUnresolvedOne" xml:space="preserve">
+    <value>{0} valeur de référence</value>
+  </data>
+  <data name="UrefUnresolvedOther" xml:space="preserve">
+    <value>{0} valeurs de référence</value>
+  </data>
+  <data name="UrefUnresolvedUnknown" xml:space="preserve">
+    <value>des valeurs de référence</value>
+  </data>
+  <data name="UrefRunLeft" xml:space="preserve">
+    <value>Cette exécution a laissé {0} sans résolution. Elles n’ont pas été comptées comme une erreur, car la gestion des références non résolues n’était pas réglée sur Erreur à ce moment-là.</value>
+  </data>
+  <data name="UrefRunLeftAlso" xml:space="preserve">
+    <value>Cette exécution a aussi laissé {0} sans résolution. Elles ne sont pas comptées comme l’erreur de cet élément, car l’erreur ci-dessus en est déjà une.</value>
+  </data>
+  <data name="UrefDeletedSince" xml:space="preserve">
+    <value>L’objet de système connecté a depuis été supprimé ; ses références ne peuvent donc plus être affichées, et aucune d’elles n’est encore en attente.</value>
+  </data>
+  <data name="UrefNoneNow" xml:space="preserve">
+    <value>Toutes ont depuis été résolues ou retirées de la source. Rien ne les concernant n’est encore en attente.</value>
+  </data>
+  <data name="UrefFewerOne" xml:space="preserve">
+    <value>{0} reste non résolue ; les autres ont depuis été résolues ou retirées de la source. Celles qui subsistent sont listées ci-dessous avec la cause probable de chacune, évaluée au regard de la portée du conteneur actuelle.</value>
+  </data>
+  <data name="UrefFewerOther" xml:space="preserve">
+    <value>{0} restent non résolues ; les autres ont depuis été résolues ou retirées de la source. Celles qui subsistent sont listées ci-dessous avec la cause probable de chacune, évaluée au regard de la portée du conteneur actuelle.</value>
+  </data>
+  <data name="UrefMore" xml:space="preserve">
+    <value>Des importations ultérieures ont laissé davantage de références non résolues : l’objet de système connecté en détient désormais {0}. Toutes sont listées ci-dessous avec la cause probable de chacune, évaluée au regard de la portée du conteneur actuelle.</value>
+  </data>
+  <data name="UrefAsTheyStand" xml:space="preserve">
+    <value>Elles sont listées ci-dessous telles qu’elles se présentent aujourd’hui sur l’objet de système connecté, avec la cause probable de chacune, évaluée au regard de la portée du conteneur actuelle.</value>
+  </data>
+  <data name="UrefSingular" xml:space="preserve">
+    <value>Référence non résolue</value>
+  </data>
+  <data name="UrefSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher un attribut ou une valeur</value>
+  </data>
+  <data name="UrefColumnLikelyCause" xml:space="preserve">
+    <value>Cause probable</value>
+  </data>
+  <data name="UrefColumnWhereToFix" xml:space="preserve">
+    <value>Où corriger</value>
+  </data>
+  <data name="UrefColumnNextStep" xml:space="preserve">
+    <value>Action suivante</value>
+  </data>
+  <data name="UrefNoSearchMatch" xml:space="preserve">
+    <value>Aucune référence non résolue ne correspond à « {0} »</value>
+  </data>
+  <data name="UrefAllResolved" xml:space="preserve">
+    <value>Toutes les références de cet objet ont été résolues</value>
+  </data>
+  <data name="UrefResolvedAfterOpen" xml:space="preserve">
+    <value>Elles ont été résolues après l’ouverture de cette page.</value>
+  </data>
+  <data name="UrefViewObject" xml:space="preserve">
+    <value>Afficher l’objet de système connecté</value>
+  </data>
+  <data name="UrefCauseNotFound" xml:space="preserve">
+    <value>Introuvable</value>
+  </data>
+  <data name="UrefCauseNotFoundInScope" xml:space="preserve">
+    <value>Introuvable dans le périmètre</value>
+  </data>
+  <data name="UrefCauseContainerNotInScope" xml:space="preserve">
+    <value>Conteneur hors périmètre</value>
+  </data>
+  <data name="UrefCauseContainerExcluded" xml:space="preserve">
+    <value>Conteneur exclu</value>
+  </data>
+  <data name="UrefCausePartitionNotSelected" xml:space="preserve">
+    <value>Partition non sélectionnée</value>
+  </data>
+  <data name="UrefCauseOutsideSystem" xml:space="preserve">
+    <value>En dehors de ce système connecté</value>
+  </data>
+  <data name="UrefCauseAmbiguousObjectType" xml:space="preserve">
+    <value>Type d’objet ambigu</value>
+  </data>
+  <data name="UrefFixSource" xml:space="preserve">
+    <value>Système source</value>
+  </data>
+  <data name="UrefActionReviewScope" xml:space="preserve">
+    <value>Examiner la portée du conteneur</value>
+  </data>
+  <data name="UrefActionViewSchema" xml:space="preserve">
+    <value>Voir le schéma</value>
+  </data>
+  <data name="UrefActionViewSettings" xml:space="preserve">
+    <value>Voir les paramètres</value>
+  </data>
+  <data name="UrefActionViewRunProfiles" xml:space="preserve">
+    <value>Voir les profils d’exécution</value>
+  </data>
+  <data name="UrefHandlingIgnore" xml:space="preserve">
+    <value>La gestion des références non résolues est réglée sur Ignorer, si bien que les exécutions ne les signalent pas.</value>
+  </data>
+  <data name="UrefHandlingSetTo" xml:space="preserve">
+    <value>La gestion des références non résolues est réglée sur {0}.</value>
+  </data>
+  <data name="UrefReferenceOne" xml:space="preserve">
+    <value>{0} référence</value>
+  </data>
+  <data name="UrefReferenceOther" xml:space="preserve">
+    <value>{0} références</value>
+  </data>
+  <data name="UrefObjectOne" xml:space="preserve">
+    <value>{0} objet de système connecté</value>
+  </data>
+  <data name="UrefObjectOther" xml:space="preserve">
+    <value>{0} objets de systèmes connectés</value>
+  </data>
+  <data name="UrefOnObjects" xml:space="preserve">
+    <value>{0} sur {1}</value>
+  </data>
+  <data name="UrefNotResolvedOne" xml:space="preserve">
+    <value>{0} n’a pas pu être résolue.</value>
+  </data>
+  <data name="UrefNotResolvedOther" xml:space="preserve">
+    <value>{0} n’ont pas pu être résolues.</value>
+  </data>
+  <data name="UrefSignpostTooltip" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="UrefOnObjectOne" xml:space="preserve">
+    <value>sur {0} objet</value>
+  </data>
+  <data name="UrefOnObjectOther" xml:space="preserve">
+    <value>sur {0} objets</value>
+  </data>
+  <data name="UrefBelowChanges" xml:space="preserve">
+    <value>Ci-dessous, les modifications qui les résoudraient, chaque cause probable étant évaluée au regard de la portée du conteneur actuelle.</value>
+  </data>
+  <data name="UrefWherePointsTitle" xml:space="preserve">
+    <value>Vers où elles pointent</value>
+  </data>
+  <data name="UrefFixInJim" xml:space="preserve">
+    <value>Corriger dans JIM</value>
+  </data>
+  <data name="UrefFixInSystem" xml:space="preserve">
+    <value>Corriger dans {0}</value>
+  </data>
+  <data name="UrefGroupCounts" xml:space="preserve">
+    <value>{0}, {1}</value>
+  </data>
+  <data name="UrefStepOne" xml:space="preserve">
+    <value>{0} action</value>
+  </data>
+  <data name="UrefStepOther" xml:space="preserve">
+    <value>{0} actions</value>
+  </data>
+  <data name="UrefShowFewer" xml:space="preserve">
+    <value>Afficher moins d’actions</value>
+  </data>
+  <data name="UrefShowAll" xml:space="preserve">
+    <value>Afficher les {0} actions</value>
+  </data>
+  <data name="UrefTooltipLikely" xml:space="preserve">
+    <value>Cause probable : {0}. {1} {2}</value>
+  </data>
 </root>

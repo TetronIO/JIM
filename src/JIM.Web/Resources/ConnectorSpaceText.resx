@@ -814,4 +814,268 @@
     <value>{0} selected</value>
     <comment>Filter text; {0} is the count of selected filters, always two or more</comment>
   </data>
+  <data name="UrefHandlingLabel" xml:space="preserve">
+    <value>Unresolved Reference Handling:</value>
+    <comment>Label before the handling setting</comment>
+  </data>
+  <data name="UrefChange" xml:space="preserve">
+    <value>Change</value>
+    <comment>Link to the settings</comment>
+  </data>
+  <data name="UrefRecordedByRun" xml:space="preserve">
+    <value>Recorded by the run: {0}</value>
+    <comment>{0} is the item's recorded message</comment>
+  </data>
+  <data name="UrefLikelyCause" xml:space="preserve">
+    <value>Likely cause:</value>
+    <comment>Label before the cause chips</comment>
+  </data>
+  <data name="UrefNextSteps" xml:space="preserve">
+    <value>Next steps</value>
+    <comment>Heading</comment>
+  </data>
+  <data name="UrefIntroObject" xml:space="preserve">
+    <value>These reference values could not be linked to Connected System Objects in {0}, so they cannot flow to the Metaverse until they resolve. Each likely cause is judged against the current Container Scope.</value>
+    <comment>Intro on an object's own page; {0} is the Connected System's name</comment>
+  </data>
+  <data name="UrefThisConnectedSystem" xml:space="preserve">
+    <value>this Connected System</value>
+    <comment>Used in the intro when the name is unknown</comment>
+  </data>
+  <data name="UrefObjectFallback" xml:space="preserve">
+    <value>object</value>
+    <comment>Used when the Object Type is not known</comment>
+  </data>
+  <data name="UrefValuesOne" xml:space="preserve">
+    <value>{0} reference value on this {1}</value>
+    <comment>{0} is the count; {1} is the Object Type</comment>
+  </data>
+  <data name="UrefValuesOther" xml:space="preserve">
+    <value>{0} reference values on this {1}</value>
+    <comment>{0} is the count; {1} is the Object Type</comment>
+  </data>
+  <data name="UrefSomeValues" xml:space="preserve">
+    <value>some reference values on this {0}</value>
+    <comment>{0} is the Object Type</comment>
+  </data>
+  <data name="UrefRunErrorSentence" xml:space="preserve">
+    <value>This run could not link {0} to Connected System Objects, so they cannot flow to the Metaverse until they resolve.</value>
+    <comment>{0} is the reference phrase</comment>
+  </data>
+  <data name="UrefUnresolvedOne" xml:space="preserve">
+    <value>{0} reference value</value>
+    <comment>Count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefUnresolvedOther" xml:space="preserve">
+    <value>{0} reference values</value>
+    <comment>Count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefUnresolvedUnknown" xml:space="preserve">
+    <value>reference values</value>
+    <comment>Used where the run's count was not recorded</comment>
+  </data>
+  <data name="UrefRunLeft" xml:space="preserve">
+    <value>This run left {0} unresolved. They were not counted as an error, because Unresolved Reference Handling was not set to Error at the time.</value>
+    <comment>{0} is the count phrase</comment>
+  </data>
+  <data name="UrefRunLeftAlso" xml:space="preserve">
+    <value>This run also left {0} unresolved. They are not counted as this item's error, because the error above already is.</value>
+    <comment>{0} is the count phrase</comment>
+  </data>
+  <data name="UrefDeletedSince" xml:space="preserve">
+    <value>The Connected System Object has since been deleted, so its references can no longer be shown, and none of them is still pending.</value>
+    <comment>Run item whose object was deleted</comment>
+  </data>
+  <data name="UrefNoneNow" xml:space="preserve">
+    <value>All of them have since resolved, or been removed from the source. Nothing about them is still pending.</value>
+    <comment>Run item: none remain</comment>
+  </data>
+  <data name="UrefFewerOne" xml:space="preserve">
+    <value>{0} is still unresolved; the others have since resolved, or been removed from the source. Those that remain are listed below with the likely cause of each, judged against the current Container Scope.</value>
+    <comment>Run item: fewer remain; {0} is the count, one</comment>
+  </data>
+  <data name="UrefFewerOther" xml:space="preserve">
+    <value>{0} are still unresolved; the others have since resolved, or been removed from the source. Those that remain are listed below with the likely cause of each, judged against the current Container Scope.</value>
+    <comment>Run item: fewer remain; {0} is the count, other</comment>
+  </data>
+  <data name="UrefMore" xml:space="preserve">
+    <value>Later imports have left more unresolved since: the Connected System Object holds {0} now. All of them are listed below with the likely cause of each, judged against the current Container Scope.</value>
+    <comment>Run item: more now; {0} is the count</comment>
+  </data>
+  <data name="UrefAsTheyStand" xml:space="preserve">
+    <value>They are listed below as they stand now on the Connected System Object, with the likely cause of each, judged against the current Container Scope.</value>
+    <comment>Run item: as they stand, or the count is not known</comment>
+  </data>
+  <data name="UrefSingular" xml:space="preserve">
+    <value>Unresolved Reference</value>
+    <comment>Grid item name, singular</comment>
+  </data>
+  <data name="UrefSearchPlaceholder" xml:space="preserve">
+    <value>Search attribute or value</value>
+    <comment>Grid search placeholder</comment>
+  </data>
+  <data name="UrefColumnLikelyCause" xml:space="preserve">
+    <value>Likely Cause</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="UrefColumnWhereToFix" xml:space="preserve">
+    <value>Where to Fix</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="UrefColumnNextStep" xml:space="preserve">
+    <value>Next Step</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="UrefNoSearchMatch" xml:space="preserve">
+    <value>No Unresolved References match "{0}"</value>
+    <comment>{0} is the search text</comment>
+  </data>
+  <data name="UrefAllResolved" xml:space="preserve">
+    <value>Every reference on this object has resolved</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="UrefResolvedAfterOpen" xml:space="preserve">
+    <value>They resolved after this page was opened.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="UrefViewObject" xml:space="preserve">
+    <value>View the Connected System Object</value>
+    <comment>Button</comment>
+  </data>
+  <data name="UrefCauseNotFound" xml:space="preserve">
+    <value>Not found</value>
+    <comment>Likely cause</comment>
+  </data>
+  <data name="UrefCauseNotFoundInScope" xml:space="preserve">
+    <value>Not found in scope</value>
+    <comment>Likely cause</comment>
+  </data>
+  <data name="UrefCauseContainerNotInScope" xml:space="preserve">
+    <value>Container not in scope</value>
+    <comment>Likely cause</comment>
+  </data>
+  <data name="UrefCauseContainerExcluded" xml:space="preserve">
+    <value>Container excluded</value>
+    <comment>Likely cause</comment>
+  </data>
+  <data name="UrefCausePartitionNotSelected" xml:space="preserve">
+    <value>Partition not selected</value>
+    <comment>Likely cause</comment>
+  </data>
+  <data name="UrefCauseOutsideSystem" xml:space="preserve">
+    <value>Outside this Connected System</value>
+    <comment>Likely cause</comment>
+  </data>
+  <data name="UrefCauseAmbiguousObjectType" xml:space="preserve">
+    <value>Ambiguous Object Type</value>
+    <comment>Likely cause</comment>
+  </data>
+  <data name="UrefFixSource" xml:space="preserve">
+    <value>Source system</value>
+    <comment>Where the fix lies, when it is the Connected System</comment>
+  </data>
+  <data name="UrefActionReviewScope" xml:space="preserve">
+    <value>Review Container Scope</value>
+    <comment>Link to the Connected System's scope</comment>
+  </data>
+  <data name="UrefActionViewSchema" xml:space="preserve">
+    <value>View Schema</value>
+    <comment>Link to the schema</comment>
+  </data>
+  <data name="UrefActionViewSettings" xml:space="preserve">
+    <value>View Settings</value>
+    <comment>Link to the settings</comment>
+  </data>
+  <data name="UrefActionViewRunProfiles" xml:space="preserve">
+    <value>View Run Profiles</value>
+    <comment>Link to the Run Profiles</comment>
+  </data>
+  <data name="UrefHandlingIgnore" xml:space="preserve">
+    <value>Unresolved Reference Handling is set to Ignore, so runs do not report them.</value>
+    <comment>Tooltip on the signpost</comment>
+  </data>
+  <data name="UrefHandlingSetTo" xml:space="preserve">
+    <value>Unresolved Reference Handling is set to {0}.</value>
+    <comment>Tooltip on the signpost; {0} is the setting</comment>
+  </data>
+  <data name="UrefReferenceOne" xml:space="preserve">
+    <value>{0} reference</value>
+    <comment>Count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefReferenceOther" xml:space="preserve">
+    <value>{0} references</value>
+    <comment>Count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefObjectOne" xml:space="preserve">
+    <value>{0} Connected System Object</value>
+    <comment>Count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefObjectOther" xml:space="preserve">
+    <value>{0} Connected System Objects</value>
+    <comment>Count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefOnObjects" xml:space="preserve">
+    <value>{0} on {1}</value>
+    <comment>Joins a reference count and an object count</comment>
+  </data>
+  <data name="UrefNotResolvedOne" xml:space="preserve">
+    <value>{0} could not be resolved.</value>
+    <comment>{0} is the references-on-objects phrase, one reference</comment>
+  </data>
+  <data name="UrefNotResolvedOther" xml:space="preserve">
+    <value>{0} could not be resolved.</value>
+    <comment>{0} is the references-on-objects phrase, several references</comment>
+  </data>
+  <data name="UrefSignpostTooltip" xml:space="preserve">
+    <value>{0} {1}</value>
+    <comment>Signpost tooltip: the sentence, then the handling sentence</comment>
+  </data>
+  <data name="UrefOnObjectOne" xml:space="preserve">
+    <value>on {0} object</value>
+    <comment>Object count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefOnObjectOther" xml:space="preserve">
+    <value>on {0} objects</value>
+    <comment>Object count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefBelowChanges" xml:space="preserve">
+    <value>Below are the changes that would resolve them, each likely cause judged against the current Container Scope.</value>
+    <comment>Where They Point, after the sentence</comment>
+  </data>
+  <data name="UrefWherePointsTitle" xml:space="preserve">
+    <value>Where They Point</value>
+    <comment>Panel heading</comment>
+  </data>
+  <data name="UrefFixInJim" xml:space="preserve">
+    <value>Fix in JIM</value>
+    <comment>Group heading</comment>
+  </data>
+  <data name="UrefFixInSystem" xml:space="preserve">
+    <value>Fix in {0}</value>
+    <comment>Group heading; {0} is the Connected System's name</comment>
+  </data>
+  <data name="UrefGroupCounts" xml:space="preserve">
+    <value>{0}, {1}</value>
+    <comment>Joins the reference count and the step count of a group</comment>
+  </data>
+  <data name="UrefStepOne" xml:space="preserve">
+    <value>{0} step</value>
+    <comment>Count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefStepOther" xml:space="preserve">
+    <value>{0} steps</value>
+    <comment>Count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefShowFewer" xml:space="preserve">
+    <value>Show fewer steps</value>
+    <comment>Link</comment>
+  </data>
+  <data name="UrefShowAll" xml:space="preserve">
+    <value>Show all {0} steps</value>
+    <comment>Link; {0} is the count</comment>
+  </data>
+  <data name="UrefTooltipLikely" xml:space="preserve">
+    <value>Likely cause: {0}. {1} {2}</value>
+    <comment>Tooltip; {0} is the cause, {1} the finding, {2} the remedy</comment>
+  </data>
 </root>
