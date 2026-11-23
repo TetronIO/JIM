@@ -1380,4 +1380,216 @@
     <value>{0} tasks across {1} steps</value>
     <comment>Header of a Schedule Execution with no step shown. {0} tasks, {1} steps.</comment>
   </data>
+  <data name="ScheduleExecTitle" xml:space="preserve">
+    <value>Schedule Execution</value>
+    <comment>Page title, its info title, and the breadcrumb while loading.</comment>
+  </data>
+  <data name="ScheduleExecTitleNamed" xml:space="preserve">
+    <value>Schedule Execution: {0}</value>
+    <comment>Page title once loaded. {0} is the Schedule's name.</comment>
+  </data>
+  <data name="ScheduleExecLabel" xml:space="preserve">
+    <value>Schedule Execution:</value>
+    <comment>Heading label before the Schedule's name.</comment>
+  </data>
+  <data name="ScheduleExecNotFoundName" xml:space="preserve">
+    <value>Not Found</value>
+    <comment>Shown in place of the Schedule's name when the execution does not exist.</comment>
+  </data>
+  <data name="ScheduleExecInfo" xml:space="preserve">
+    <value>One run of a Schedule: each of its steps, the Activity each step started, and how the run ended.</value>
+    <comment>Info popover on the page title. 'Activity' is the glossary term.</comment>
+  </data>
+  <data name="ScheduleExecSchedule" xml:space="preserve">
+    <value>Schedule:</value>
+    <comment>Field label: the Schedule that ran.</comment>
+  </data>
+  <data name="ScheduleExecQueuedLabel" xml:space="preserve">
+    <value>Queued:</value>
+    <comment>Field label: when the execution was queued.</comment>
+  </data>
+  <data name="ScheduleExecStartedLabel" xml:space="preserve">
+    <value>Started:</value>
+    <comment>Field label: when the execution started.</comment>
+  </data>
+  <data name="ScheduleExecCompletedLabel" xml:space="preserve">
+    <value>Completed:</value>
+    <comment>Field label: when the execution completed.</comment>
+  </data>
+  <data name="ScheduleExecDurationLabel" xml:space="preserve">
+    <value>Duration:</value>
+    <comment>Field label: how long the execution took.</comment>
+  </data>
+  <data name="ScheduleExecInitiatedLabel" xml:space="preserve">
+    <value>Initiated By:</value>
+    <comment>Field label: who started the execution.</comment>
+  </data>
+  <data name="ScheduleExecFailedNoMessage" xml:space="preserve">
+    <value>The execution failed. No error message was recorded; the step statuses below show where it stopped.</value>
+    <comment>Shown on a failed execution that recorded no message.</comment>
+  </data>
+  <data name="ScheduleExecCancelFailed" xml:space="preserve">
+    <value>Could not cancel the execution; it may have already completed.</value>
+    <comment>Warning notice when the cancel was refused.</comment>
+  </data>
+  <data name="ScheduleExecStepSingular" xml:space="preserve">
+    <value>Step</value>
+    <comment>Column heading and the noun in the toolbar count: one step.</comment>
+  </data>
+  <data name="ScheduleExecSearchSteps" xml:space="preserve">
+    <value>Search steps</value>
+    <comment>Placeholder of the search box above the steps.</comment>
+  </data>
+  <data name="ScheduleExecParallel" xml:space="preserve">
+    <value>Parallel</value>
+    <comment>Caption under a step that runs in parallel.</comment>
+  </data>
+  <data name="ScheduleExecParallelTooltip" xml:space="preserve">
+    <value>Parallel step; runs concurrently with the other steps at this position</value>
+    <comment>Tooltip on a parallel step's number.</comment>
+  </data>
+  <data name="ScheduleExecColActivity" xml:space="preserve">
+    <value>Activity</value>
+    <comment>Column heading: the Activity each step started.</comment>
+  </data>
+  <data name="ScheduleExecViewActivity" xml:space="preserve">
+    <value>View Activity</value>
+    <comment>Link to the Activity a step started.</comment>
+  </data>
+  <data name="ScheduleExecNoStepMatch" xml:space="preserve">
+    <value>No steps match "{0}"</value>
+    <comment>Empty state. {0} is the search text.</comment>
+  </data>
+  <data name="ScheduleExecNoSteps" xml:space="preserve">
+    <value>This execution has no steps to show</value>
+    <comment>Empty state when the execution has no steps.</comment>
+  </data>
+  <data name="ScheduleExecNoStepsHint" xml:space="preserve">
+    <value>Its Schedule has been deleted, so the step definitions are no longer available.</value>
+    <comment>Empty state hint.</comment>
+  </data>
+  <data name="ScheduleExecNotFound" xml:space="preserve">
+    <value>Schedule Execution not found.</value>
+    <comment>Warning shown when the execution does not exist.</comment>
+  </data>
+  <data name="ScheduleExecBackToOps" xml:space="preserve">
+    <value>Back to Operations</value>
+    <comment>Button back to the Operations page.</comment>
+  </data>
+  <data name="HealthStripTitle" xml:space="preserve">
+    <value>Service Health</value>
+    <comment>Heading of the service health strip on the Operations page.</comment>
+  </data>
+  <data name="HealthStripLive" xml:space="preserve">
+    <value>Updated live</value>
+    <comment>Header indicator: the page receives updates as they happen.</comment>
+  </data>
+  <data name="HealthStripReconnecting" xml:space="preserve">
+    <value>Reconnecting live updates</value>
+    <comment>Header indicator: live updates are reconnecting.</comment>
+  </data>
+  <data name="HealthStripLiveOn" xml:space="preserve">
+    <value>Database notifications reach open pages directly.</value>
+    <comment>Tooltip when live updates are connected.</comment>
+  </data>
+  <data name="HealthStripLiveOff" xml:space="preserve">
+    <value>The database notification listener is not connected; pages refresh on a timer meanwhile.</value>
+    <comment>Tooltip when live updates are not connected.</comment>
+  </data>
+  <data name="HealthStripShow" xml:space="preserve">
+    <value>Show services</value>
+    <comment>Tooltip and label of the button that unfolds the service cards.</comment>
+  </data>
+  <data name="HealthStripHide" xml:space="preserve">
+    <value>Hide services</value>
+    <comment>Tooltip and label of the button that folds the service cards.</comment>
+  </data>
+  <data name="HealthStripNext" xml:space="preserve">
+    <value>Next:</value>
+    <comment>Label before the next Schedule to run. A space follows it in the markup.</comment>
+  </data>
+  <data name="HealthStripNoSchedules" xml:space="preserve">
+    <value>No Schedules due</value>
+    <comment>Shown when no enabled Schedule is due to run.</comment>
+  </data>
+  <data name="HealthStripActivityNext" xml:space="preserve">
+    <value>{0} · Next: {1} {2}</value>
+    <comment>Tooltip on the activity line. {0} the activity, {1} the Schedule's name, {2} when it runs.</comment>
+  </data>
+  <data name="HealthStripActivityNone" xml:space="preserve">
+    <value>{0} · No Schedules due</value>
+    <comment>Tooltip on the activity line when no Schedule is due. {0} is the activity.</comment>
+  </data>
+  <data name="HealthStripDetails" xml:space="preserve">
+    <value>Details</value>
+    <comment>Tooltip and label of the button that opens a card's details.</comment>
+  </data>
+  <data name="HealthStripNeverReported" xml:space="preserve">
+    <value>This service has never reported, so there is no instance to identify.</value>
+    <comment>Shown in the details of a service that has never reported.</comment>
+  </data>
+  <data name="HealthStripHost" xml:space="preserve">
+    <value>Host</value>
+    <comment>Details label: the machine the service runs on.</comment>
+  </data>
+  <data name="HealthStripVersion" xml:space="preserve">
+    <value>Version</value>
+    <comment>Details label: the service's version.</comment>
+  </data>
+  <data name="HealthStripMemory" xml:space="preserve">
+    <value>Memory</value>
+    <comment>Details label: memory in use.</comment>
+  </data>
+  <data name="HealthStripInstance" xml:space="preserve">
+    <value>Instance</value>
+    <comment>Details label: the process's instance identifier.</comment>
+  </data>
+  <data name="HealthStripSkew" xml:space="preserve">
+    <value>differs from portal</value>
+    <comment>Chip: this service runs a different version from the web portal.</comment>
+  </data>
+  <data name="HealthStripSkewTooltip" xml:space="preserve">
+    <value>This service is running a different version from the web portal; upgrade them together.</value>
+    <comment>Tooltip on the version-skew chip.</comment>
+  </data>
+  <data name="HealthStripWhatHost" xml:space="preserve">
+    <value>host</value>
+    <comment>Lower-case noun used in a sentence: the host.</comment>
+  </data>
+  <data name="HealthStripWhatVersion" xml:space="preserve">
+    <value>version</value>
+    <comment>Lower-case noun used in a sentence: the version.</comment>
+  </data>
+  <data name="HealthStripWhatInstance" xml:space="preserve">
+    <value>instance</value>
+    <comment>Lower-case noun used in a sentence: the instance.</comment>
+  </data>
+  <data name="HealthStripCopyTooltip" xml:space="preserve">
+    <value>Copy the {0}</value>
+    <comment>Tooltip on a copy button. {0} is the lower-case noun.</comment>
+  </data>
+  <data name="HealthStripCopyAria" xml:space="preserve">
+    <value>Copy {0}</value>
+    <comment>Accessible name of a copy button. {0} is the lower-case noun.</comment>
+  </data>
+  <data name="HealthStripNoClipboard" xml:space="preserve">
+    <value>Clipboard access needs an HTTPS connection</value>
+    <comment>Tooltip on a copy button where the browser has no clipboard access.</comment>
+  </data>
+  <data name="HealthStripCopied" xml:space="preserve">
+    <value>{0} copied to the clipboard.</value>
+    <comment>Success notice. {0} is the capitalised noun.</comment>
+  </data>
+  <data name="HealthStripCopyFailed" xml:space="preserve">
+    <value>The {0} could not be copied. Select it and copy it by hand.</value>
+    <comment>Warning notice. {0} is the lower-case noun.</comment>
+  </data>
+  <data name="HealthStripStarted" xml:space="preserve">
+    <value>Started {0}</value>
+    <comment>Tooltip on the condition line: when the instance started. {0} is the date.</comment>
+  </data>
+  <data name="HealthStripConditionTitle" xml:space="preserve">
+    <value>{0}. {1}</value>
+    <comment>Tooltip on the condition line. {0} the condition, {1} when it started.</comment>
+  </data>
 </root>

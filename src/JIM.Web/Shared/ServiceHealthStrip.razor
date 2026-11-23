@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Operations
 @using JIM.Web.Models
 @implements IDisposable
@@ -30,7 +31,7 @@
 
 <MudPaper Outlined="true" Class="@($"pa-4 jim-service-health-strip {Class}".Trim())" data-collapsed="@(Collapsed ? "true" : "false")">
     <div class="jim-service-health-header">
-        <MudText Typo="Typo.h6" Class="jim-service-health-title">Service Health</MudText>
+        <MudText Typo="Typo.h6" Class="jim-service-health-title">@OperationsText.HealthStripTitle</MudText>
         <span class="jim-service-health-summary">@ServiceHealthDisplay.Summary(Report)</span>
         @* Collapsed, the cards are hidden and the next Schedule with them, so the header carries it instead (#2549). *@
         @if (Collapsed && SchedulerHealthy && ServiceHealthDisplay.NextScheduleHeaderPhrase(NextSchedule, Report.GeneratedAt, TimeZoneInfo.Local) is { } nextSchedulePhrase)
@@ -40,19 +41,19 @@
         <div class="jim-service-health-header-end">
             @* The relay is not a service of JIM's but it decides whether this page moves on its own; while it is
                reconnecting every live figure on the tabs below is on its polling fallback. *@
-            <MudTooltip Text="@(_realTimeAvailable ? "Database notifications reach open pages directly." : "The database notification listener is not connected; pages refresh on a timer meanwhile.")"
+            <MudTooltip Text="@(_realTimeAvailable ? OperationsText.HealthStripLiveOn : OperationsText.HealthStripLiveOff)"
                         Arrow="true" Placement="Placement.Top">
                 <span class="jim-service-health-live" data-testid="live-updates" data-connected="@_realTimeAvailable.ToString().ToLowerInvariant()">
                     <span class="@($"jim-status-dot jim-status-dot--{(_realTimeAvailable ? "ok" : "warn")}")"></span>
-                    @(_realTimeAvailable ? "Updated live" : "Reconnecting live updates")
+                    @(_realTimeAvailable ? OperationsText.HealthStripLive : OperationsText.HealthStripReconnecting)
                 </span>
             </MudTooltip>
             @* Collapsing hides the cards and never the header, so the summary still says whether anything is wrong:
                a collapsed panel cannot hide a failing service. The choice is remembered in this browser. *@
-            <MudTooltip Text="@(Collapsed ? "Show services" : "Hide services")" Arrow="true" Placement="Placement.Top">
+            <MudTooltip Text="@(Collapsed ? OperationsText.HealthStripShow : OperationsText.HealthStripHide)" Arrow="true" Placement="Placement.Top">
                 <MudIconButton Icon="@Icons.Material.Filled.ExpandMore" Size="Size.Small"
                                Class="@($"jim-service-health-collapse-toggle{(Collapsed ? string.Empty : " jim-service-health-collapse-toggle--open")}")"
-                               aria-label="@(Collapsed ? "Show services" : "Hide services")" aria-expanded="@(Collapsed ? "false" : "true")"
+                               aria-label="@(Collapsed ? OperationsText.HealthStripShow : OperationsText.HealthStripHide)" aria-expanded="@(Collapsed ? "false" : "true")"
                                OnClick="ToggleCollapsedAsync"
                                data-testid="service-health-collapse-toggle" />
             </MudTooltip>
@@ -80,7 +81,7 @@
                     @if (versionSkew)
                     {
                         <MudTooltip Text="@VersionSkewTooltip" Arrow="true" Placement="Placement.Top">
-                            <span class="jim-status-pill jim-status-pill--neutral jim-service-health-skew">differs from portal</span>
+                            <span class="jim-status-pill jim-status-pill--neutral jim-service-health-skew">@OperationsText.HealthStripSkew</span>
                         </MudTooltip>
                     }
                     <span class="@($"jim-status-pill jim-status-pill--{ServiceHealthDisplay.StatusModifier(service.Status)}")">
@@ -102,12 +103,12 @@
                         <span class="jim-service-health-muted" data-testid="service-health-next-schedule">
                             · @if (NextSchedule is { } next)
                             {
-                                <text>Next: </text><MudLink Href="/admin/operations?t=schedules">@next.Name</MudLink>
+                                <text>@OperationsText.HealthStripNext </text><MudLink Href="/admin/operations?t=schedules">@next.Name</MudLink>
                                 @($" {ServiceHealthDisplay.NextScheduleWhen(next.NextRunTime, asOf, TimeZoneInfo.Local)} ({ServiceHealthDisplay.NextScheduleCountdown(next.NextRunTime, asOf)})")
                             }
                             else
                             {
-                                <text>No Schedules due</text>
+                                <text>@OperationsText.HealthStripNoSchedules</text>
                             }
                         </span>
                     }
@@ -125,10 +126,10 @@
                    where the footer used to be, which is where the eye already went for host and version. *@
                 <div class="jim-service-health-condition-row">
                     <div class="jim-service-health-condition jim-one-line" title="@ConditionTitle(service, conditionLine)">@conditionLine</div>
-                    <MudTooltip Text="Details" Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="@OperationsText.HealthStripDetails" Arrow="true" Placement="Placement.Top">
                         <MudIconButton Icon="@Icons.Material.Filled.ExpandMore" Size="Size.Small"
                                        Class="@($"jim-service-health-details-toggle{(detailsOpen ? " jim-service-health-details-toggle--open" : string.Empty)}")"
-                                       aria-label="Details" aria-expanded="@(detailsOpen ? "true" : "false")"
+                                       aria-label="@OperationsText.HealthStripDetails" aria-expanded="@(detailsOpen ? "true" : "false")"
                                        OnClick="@(() => ToggleDetails(service.Service))"
                                        data-testid="service-health-details-toggle" />
                     </MudTooltip>
@@ -140,14 +141,14 @@
                     <MudCollapse Expanded="@detailsOpen">
                         @if (hostName == null && version == null)
                         {
-                            <div class="jim-service-health-details-empty">This service has never reported, so there is no instance to identify.</div>
+                            <div class="jim-service-health-details-empty">@OperationsText.HealthStripNeverReported</div>
                         }
                         else
                         {
                             <dl class="jim-service-health-details-list">
                                 @if (hostName != null)
                                 {
-                                    <dt>Host</dt>
+                                    <dt>@OperationsText.HealthStripHost</dt>
                                     <dd>
                                         <code class="jim-service-health-details-value" title="@hostName" data-testid="service-health-host">@hostName</code>
                                         @CopyButton("host", hostName)
@@ -156,13 +157,13 @@
                                 @if (version != null)
                                 {
                                     var versionText = $"v{version}";
-                                    <dt>Version</dt>
+                                    <dt>@OperationsText.HealthStripVersion</dt>
                                     <dd>
                                         <code class="jim-service-health-details-value" title="@versionText" data-testid="service-health-version">@versionText</code>
                                         @if (versionSkew)
                                         {
                                             <MudTooltip Text="@VersionSkewTooltip" Arrow="true" Placement="Placement.Top">
-                                                <span class="jim-status-pill jim-status-pill--neutral jim-service-health-skew">differs from portal</span>
+                                                <span class="jim-status-pill jim-status-pill--neutral jim-service-health-skew">@OperationsText.HealthStripSkew</span>
                                             </MudTooltip>
                                         }
                                         @CopyButton("version", versionText)
@@ -170,14 +171,14 @@
                                 }
                                 @if (memory != null)
                                 {
-                                    <dt>Memory</dt>
+                                    <dt>@OperationsText.HealthStripMemory</dt>
                                     <dd>
                                         <span class="jim-service-health-details-reading" data-testid="service-health-memory">@memory</span>
                                     </dd>
                                 }
                                 @if (instance != null)
                                 {
-                                    <dt>Instance</dt>
+                                    <dt>@OperationsText.HealthStripInstance</dt>
                                     <dd>
                                         <code class="jim-service-health-details-value" title="@instance" data-testid="service-health-instance">@instance</code>
                                         @CopyButton("instance", instance)
@@ -198,7 +199,7 @@
     /// The tooltip on the chip beside a version that differs from the web tier's. Exposed so the test asserts the
     /// words rather than re-typing them.
     /// </summary>
-    public const string VersionSkewTooltip = "This service is running a different version from the web portal; upgrade them together.";
+    public static string VersionSkewTooltip => OperationsText.HealthStripSkewTooltip;
 
     /// <summary>
     /// The report to show. The owner polls and re-renders with a fresh one; the strip never reads for itself.
@@ -221,8 +222,8 @@
             return activity;
 
         return NextSchedule is { } next
-            ? $"{activity} · Next: {next.Name} {ServiceHealthDisplay.NextScheduleWhen(next.NextRunTime, Report.GeneratedAt, TimeZoneInfo.Local)}"
-            : $"{activity} · No Schedules due";
+            ? string.Format(CultureInfo.CurrentCulture, OperationsText.HealthStripActivityNext, activity, next.Name, ServiceHealthDisplay.NextScheduleWhen(next.NextRunTime, Report.GeneratedAt, TimeZoneInfo.Local))
+            : string.Format(CultureInfo.CurrentCulture, OperationsText.HealthStripActivityNone, activity);
     }
 
     /// <summary>
@@ -310,9 +311,25 @@
         if (service.StartedAt is not { } startedAt)
             return conditionLine;
 
-        var started = $"Started {startedAt.ToLocalTime().ToFriendlyDate()}";
-        return conditionLine == null ? started : $"{conditionLine}. {started}";
+        var started = string.Format(CultureInfo.CurrentCulture, OperationsText.HealthStripStarted, startedAt.ToLocalTime().ToFriendlyDate());
+        return conditionLine == null ? started : string.Format(CultureInfo.CurrentCulture, OperationsText.HealthStripConditionTitle, conditionLine, started);
     }
+
+    /// <summary>The lower-case noun for a details value, as it reads inside a sentence.</summary>
+    private static string WhatLower(string what) => what switch
+    {
+        "host" => OperationsText.HealthStripWhatHost,
+        "version" => OperationsText.HealthStripWhatVersion,
+        _ => OperationsText.HealthStripWhatInstance
+    };
+
+    /// <summary>The capitalised noun for a details value, as it heads a sentence.</summary>
+    private static string WhatNoun(string what) => what switch
+    {
+        "host" => OperationsText.HealthStripHost,
+        "version" => OperationsText.HealthStripVersion,
+        _ => OperationsText.HealthStripInstance
+    };
 
     /// <summary>
     /// The copy control beside a details value. One fragment for the three rows so they cannot drift: same icon,
@@ -320,10 +337,10 @@
     /// </summary>
     private RenderFragment CopyButton(string what, string value) => __builder =>
     {
-        <MudTooltip Text="@(_clipboardAvailable ? $"Copy the {what}" : "Clipboard access needs an HTTPS connection")" Arrow="true" Placement="Placement.Top">
+        <MudTooltip Text="@(_clipboardAvailable ? string.Format(CultureInfo.CurrentCulture, OperationsText.HealthStripCopyTooltip, WhatLower(what)) : OperationsText.HealthStripNoClipboard)" Arrow="true" Placement="Placement.Top">
             <span>
                 <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Class="jim-service-health-copy"
-                               Disabled="@(!_clipboardAvailable)" aria-label="@($"Copy {what}")"
+                               Disabled="@(!_clipboardAvailable)" aria-label="@string.Format(CultureInfo.CurrentCulture, OperationsText.HealthStripCopyAria, WhatLower(what))"
                                OnClick="@(() => CopyAsync(what, value))" />
             </span>
         </MudTooltip>
@@ -346,11 +363,11 @@
             copied = false;
         }
 
-        var noun = char.ToUpperInvariant(what[0]) + what[1..];
+        var noun = WhatNoun(what);
         if (copied)
-            Snackbar.Add($"{noun} copied to the clipboard.", Severity.Success);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, OperationsText.HealthStripCopied, noun), Severity.Success);
         else
-            Snackbar.Add($"The {what} could not be copied. Select it and copy it by hand.", Severity.Warning);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, OperationsText.HealthStripCopyFailed, WhatLower(what)), Severity.Warning);
     }
 
     private void OnRealTimeAvailabilityChanged(bool available)

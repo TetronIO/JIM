@@ -1040,4 +1040,163 @@
   <data name="QueueTasksAcross" xml:space="preserve">
     <value>{0} tâches réparties sur {1} étapes</value>
   </data>
+  <data name="ScheduleExecTitle" xml:space="preserve">
+    <value>Exécution de planification</value>
+  </data>
+  <data name="ScheduleExecTitleNamed" xml:space="preserve">
+    <value>Exécution de planification : {0}</value>
+  </data>
+  <data name="ScheduleExecLabel" xml:space="preserve">
+    <value>Exécution de planification :</value>
+  </data>
+  <data name="ScheduleExecNotFoundName" xml:space="preserve">
+    <value>Introuvable</value>
+  </data>
+  <data name="ScheduleExecInfo" xml:space="preserve">
+    <value>Une exécution d’une planification : chacune de ses étapes, l’activité démarrée par chaque étape, et la façon dont l’exécution s’est terminée.</value>
+  </data>
+  <data name="ScheduleExecSchedule" xml:space="preserve">
+    <value>Planification :</value>
+  </data>
+  <data name="ScheduleExecQueuedLabel" xml:space="preserve">
+    <value>Mise en file :</value>
+  </data>
+  <data name="ScheduleExecStartedLabel" xml:space="preserve">
+    <value>Démarrage :</value>
+  </data>
+  <data name="ScheduleExecCompletedLabel" xml:space="preserve">
+    <value>Terminée :</value>
+  </data>
+  <data name="ScheduleExecDurationLabel" xml:space="preserve">
+    <value>Durée :</value>
+  </data>
+  <data name="ScheduleExecInitiatedLabel" xml:space="preserve">
+    <value>Initiée par :</value>
+  </data>
+  <data name="ScheduleExecFailedNoMessage" xml:space="preserve">
+    <value>L’exécution a échoué. Aucun message d’erreur n’a été enregistré ; les états des étapes ci-dessous indiquent où elle s’est arrêtée.</value>
+  </data>
+  <data name="ScheduleExecCancelFailed" xml:space="preserve">
+    <value>Impossible d’annuler l’exécution ; elle est peut-être déjà terminée.</value>
+  </data>
+  <data name="ScheduleExecStepSingular" xml:space="preserve">
+    <value>Étape</value>
+  </data>
+  <data name="ScheduleExecSearchSteps" xml:space="preserve">
+    <value>Rechercher des étapes</value>
+  </data>
+  <data name="ScheduleExecParallel" xml:space="preserve">
+    <value>Parallèle</value>
+  </data>
+  <data name="ScheduleExecParallelTooltip" xml:space="preserve">
+    <value>Étape parallèle ; s’exécute en même temps que les autres étapes à cette position</value>
+  </data>
+  <data name="ScheduleExecColActivity" xml:space="preserve">
+    <value>Activité</value>
+  </data>
+  <data name="ScheduleExecViewActivity" xml:space="preserve">
+    <value>Voir l’activité</value>
+  </data>
+  <data name="ScheduleExecNoStepMatch" xml:space="preserve">
+    <value>Aucune étape ne correspond à « {0} »</value>
+  </data>
+  <data name="ScheduleExecNoSteps" xml:space="preserve">
+    <value>Cette exécution ne comporte aucune étape à afficher</value>
+  </data>
+  <data name="ScheduleExecNoStepsHint" xml:space="preserve">
+    <value>Sa planification a été supprimée : les définitions des étapes ne sont plus disponibles.</value>
+  </data>
+  <data name="ScheduleExecNotFound" xml:space="preserve">
+    <value>Exécution de planification introuvable.</value>
+  </data>
+  <data name="ScheduleExecBackToOps" xml:space="preserve">
+    <value>Retour aux opérations</value>
+  </data>
+  <data name="HealthStripTitle" xml:space="preserve">
+    <value>État des services</value>
+  </data>
+  <data name="HealthStripLive" xml:space="preserve">
+    <value>Mis à jour en direct</value>
+  </data>
+  <data name="HealthStripReconnecting" xml:space="preserve">
+    <value>Reconnexion des mises à jour en direct</value>
+  </data>
+  <data name="HealthStripLiveOn" xml:space="preserve">
+    <value>Les notifications de la base de données atteignent directement les pages ouvertes.</value>
+  </data>
+  <data name="HealthStripLiveOff" xml:space="preserve">
+    <value>L’écouteur des notifications de la base de données n’est pas connecté ; les pages se rafraîchissent entre-temps à intervalles réguliers.</value>
+  </data>
+  <data name="HealthStripShow" xml:space="preserve">
+    <value>Afficher les services</value>
+  </data>
+  <data name="HealthStripHide" xml:space="preserve">
+    <value>Masquer les services</value>
+  </data>
+  <data name="HealthStripNext" xml:space="preserve">
+    <value>Prochaine :</value>
+  </data>
+  <data name="HealthStripNoSchedules" xml:space="preserve">
+    <value>Aucune planification à venir</value>
+  </data>
+  <data name="HealthStripActivityNext" xml:space="preserve">
+    <value>{0} · Prochaine : {1} {2}</value>
+  </data>
+  <data name="HealthStripActivityNone" xml:space="preserve">
+    <value>{0} · aucune planification à venir</value>
+  </data>
+  <data name="HealthStripDetails" xml:space="preserve">
+    <value>Détails</value>
+  </data>
+  <data name="HealthStripNeverReported" xml:space="preserve">
+    <value>Ce service n’a encore jamais signalé d’activité, il n’y a donc aucune instance à identifier.</value>
+  </data>
+  <data name="HealthStripHost" xml:space="preserve">
+    <value>Hôte</value>
+  </data>
+  <data name="HealthStripVersion" xml:space="preserve">
+    <value>Version</value>
+  </data>
+  <data name="HealthStripMemory" xml:space="preserve">
+    <value>Mémoire</value>
+  </data>
+  <data name="HealthStripInstance" xml:space="preserve">
+    <value>Instance</value>
+  </data>
+  <data name="HealthStripSkew" xml:space="preserve">
+    <value>diffère du portail</value>
+  </data>
+  <data name="HealthStripSkewTooltip" xml:space="preserve">
+    <value>Ce service s’exécute avec une autre version que le portail web ; mettez-les à niveau ensemble.</value>
+  </data>
+  <data name="HealthStripWhatHost" xml:space="preserve">
+    <value>hôte</value>
+  </data>
+  <data name="HealthStripWhatVersion" xml:space="preserve">
+    <value>version</value>
+  </data>
+  <data name="HealthStripWhatInstance" xml:space="preserve">
+    <value>instance</value>
+  </data>
+  <data name="HealthStripCopyTooltip" xml:space="preserve">
+    <value>Copier : {0}</value>
+  </data>
+  <data name="HealthStripCopyAria" xml:space="preserve">
+    <value>Copier {0}</value>
+  </data>
+  <data name="HealthStripNoClipboard" xml:space="preserve">
+    <value>L’accès au presse-papiers nécessite une connexion HTTPS</value>
+  </data>
+  <data name="HealthStripCopied" xml:space="preserve">
+    <value>{0} copié dans le presse-papiers.</value>
+  </data>
+  <data name="HealthStripCopyFailed" xml:space="preserve">
+    <value>Échec de la copie : {0}. Sélectionnez-le et copiez-le à la main.</value>
+  </data>
+  <data name="HealthStripStarted" xml:space="preserve">
+    <value>Démarré {0}</value>
+  </data>
+  <data name="HealthStripConditionTitle" xml:space="preserve">
+    <value>{0}. {1}</value>
+  </data>
 </root>
