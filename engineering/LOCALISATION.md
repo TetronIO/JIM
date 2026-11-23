@@ -112,7 +112,7 @@ JIM_UPDATE_LOCALISATION_BASELINE=1 dotnet test test/JIM.Web.Tests --filter HardC
 3. Add the language's word for every term to `glossary.json`.
 4. If the language has more than two plural forms (Polish, Russian, Arabic), extend `PluralRules` and add the extra keys before translating any counted string.
 5. Development builds offer it in the picker marked "(preview)"; check pages in it as it fills in.
-6. When the hard-coded text baseline is empty and a review pass is done, set `LanguageStage.Released`, add it to the Languages table in `docs/administration/portal-language.md`, and add a changelog entry. The first language released publishes that page from its draft, `engineering/localisation/portal-language-page-draft.md`.
+6. When the hard-coded text baseline is empty and a review pass is done, set `LanguageStage.Released`, add it to the Languages table in `docs/administration/portal-language.md`, and add a changelog entry. The page lists every released language.
 
 en-US is released the same way, once the baseline reaches zero: before then an American user would read "Synchronization Rules" in the menu and "Synchronisation" in every page body, which looks broken.
 

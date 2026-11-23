@@ -22,8 +22,8 @@ public static class UiLanguages
     public static readonly IReadOnlyList<UiLanguage> All =
     [
         Default,
-        new("en-US", "English (US)", LanguageStage.InProgress),
-        new("fr", "Français", LanguageStage.InProgress),
+        new("en-US", "English (US)", LanguageStage.Released),
+        new("fr", "Français", LanguageStage.Released),
         new("de", "Deutsch", LanguageStage.Planned)
     ];
 

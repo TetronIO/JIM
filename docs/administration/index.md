@@ -49,6 +49,12 @@ edges:
 
     How every list in the portal behaves: continuous scrolling instead of paging, object counts, search and sorting across the whole list, and links that open where you left off.
 
+-   **[Portal Language](portal-language.md)**
+
+    ---
+
+    Which languages the portal is shown in, how it chooses one for each person from their browser, and how anyone changes theirs from the user menu.
+
 -   **[Deployment](deployment.md)**
 
     ---
