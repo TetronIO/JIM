@@ -41,4 +41,10 @@
   <data name="ActivityEffectFullSyncSentence" xml:space="preserve">
     <value>Existing objects get {0} at the next Full Synchronization of {1}.</value>
   </data>
+  <data name="ActivityClearTrackedTooltip" xml:space="preserve">
+    <value>Objects joined at the moment of the clear, so the next Full Synchronization can tell who returned.</value>
+  </data>
+  <data name="ActivityStatCsosDisconnectedIncluding" xml:space="preserve">
+    <value>Connected System Objects Disconnected, including {0} that left an import Synchronization Rule's scope</value>
+  </data>
 </root>

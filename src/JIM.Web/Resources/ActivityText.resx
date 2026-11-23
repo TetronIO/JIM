@@ -386,4 +386,692 @@
     <value>The run's own result stays as it ended. These change as the work is delivered; each export item's Follow-up says why.</value>
     <comment>Note under the Follow-up summary panel</comment>
   </data>
+  <data name="ActivityTitleLabel" xml:space="preserve">
+    <value>Activity:</value>
+    <comment>Label before an Activity's title, in the page title and heading</comment>
+  </data>
+  <data name="ActivityPageTitle" xml:space="preserve">
+    <value>Activity</value>
+    <comment>Title of the page info popover on the Activity page</comment>
+  </data>
+  <data name="ActivityPageDescription" xml:space="preserve">
+    <value>An Activity records one thing JIM did: what started it, when, and how it ended. A Run Profile's Activity also lists what the run did to each object it touched.</value>
+    <comment>Page info text on the Activity page</comment>
+  </data>
+  <data name="ActivitySummaryHeading" xml:space="preserve">
+    <value>Summary</value>
+    <comment>Heading of the summary panel on an Activity</comment>
+  </data>
+  <data name="ActivityFieldId" xml:space="preserve">
+    <value>ID:</value>
+    <comment>Label of the Activity's identifier</comment>
+  </data>
+  <data name="ActivityFieldTarget" xml:space="preserve">
+    <value>Target:</value>
+    <comment>Label of what an Activity acted on</comment>
+  </data>
+  <data name="ActivityTargetHistoryRetentionCleanup" xml:space="preserve">
+    <value>History Retention Cleanup</value>
+    <comment>Name of the automatic history retention clean-up, when the Activity has no name</comment>
+  </data>
+  <data name="ActivityTargetAuthentication" xml:space="preserve">
+    <value>Authentication</value>
+    <comment>Name of the authentication target, when the Activity has no name</comment>
+  </data>
+  <data name="ActivityFieldWhen" xml:space="preserve">
+    <value>When:</value>
+    <comment>Label of an Activity's creation time</comment>
+  </data>
+  <data name="ActivityFieldInitiatedBy" xml:space="preserve">
+    <value>Initiated By:</value>
+    <comment>Label of who started an Activity</comment>
+  </data>
+  <data name="ActivityFieldStatus" xml:space="preserve">
+    <value>Status:</value>
+    <comment>Label of an Activity's status chip</comment>
+  </data>
+  <data name="ActivityTooltipExecutionTime" xml:space="preserve">
+    <value>How long the Worker spent running this Activity. It starts when the Worker picks the Activity up.</value>
+    <comment>Tooltip on the Execution Time label</comment>
+  </data>
+  <data name="ActivityFieldExecutionTime" xml:space="preserve">
+    <value>Execution Time:</value>
+    <comment>Label of how long the Worker spent running an Activity</comment>
+  </data>
+  <data name="ActivityTooltipTotalTime" xml:space="preserve">
+    <value>How long this Activity took from creation to completion. It includes any time spent queued before the Worker picked it up.</value>
+    <comment>Tooltip on the Total Activity Time label</comment>
+  </data>
+  <data name="ActivityFieldTotalTime" xml:space="preserve">
+    <value>Total Activity Time:</value>
+    <comment>Label of how long an Activity took from creation to completion</comment>
+  </data>
+  <data name="ActivityFieldParentActivity" xml:space="preserve">
+    <value>Parent Activity:</value>
+    <comment>Label of the Activity that spawned this one</comment>
+  </data>
+  <data name="ActivityNoName" xml:space="preserve">
+    <value>(no name)</value>
+    <comment>Shown in place of a name that is empty</comment>
+  </data>
+  <data name="ActivityParentActivityFallback" xml:space="preserve">
+    <value>Parent Activity</value>
+    <comment>Name of a parent Activity link when the parent is no longer available</comment>
+  </data>
+  <data name="ActivityFieldFollowUpTo" xml:space="preserve">
+    <value>Follow-up To:</value>
+    <comment>Label of the export item a follow-up Activity belongs to</comment>
+  </data>
+  <data name="ActivityExecutionItemFallback" xml:space="preserve">
+    <value>Execution item</value>
+    <comment>Type name of a Run Profile Execution Item when its run has no name</comment>
+  </data>
+  <data name="ActivityExportItemNoLongerRetained" xml:space="preserve">
+    <value>Export item no longer retained</value>
+    <comment>Shown when the export item a follow-up belonged to has been removed</comment>
+  </data>
+  <data name="ActivityFieldPreview" xml:space="preserve">
+    <value>Preview:</value>
+    <comment>Label of the preview an Activity was informed by</comment>
+  </data>
+  <data name="ActivityInformedByPreviewRun" xml:space="preserve">
+    <value>Informed by a preview run</value>
+    <comment>Shown on a change informed by a preview run</comment>
+  </data>
+  <data name="ActivityOpenPreview" xml:space="preserve">
+    <value>Open preview</value>
+    <comment>Link to the preview an Activity was informed by</comment>
+  </data>
+  <data name="ActivityInformedByRemovedPreview" xml:space="preserve">
+    <value>Informed by a preview that has since been removed under the history retention period.</value>
+    <comment>Shown on a change whose preview has since been removed by the retention clean-up</comment>
+  </data>
+  <data name="ActivityPreviewOutOfDate" xml:space="preserve">
+    <value>It was out of date when this change was made:</value>
+    <comment>Lead-in to a note that something overtook the preview</comment>
+  </data>
+  <data name="ActivityPreviewOvertaken" xml:space="preserve">
+    <value>{0} after the preview started.</value>
+    <comment>Says what overtook the preview; {0} is what changed, or the fallback</comment>
+  </data>
+  <data name="ActivityPreviewOvertakenFallback" xml:space="preserve">
+    <value>something changed</value>
+    <comment>Stands in for {0} in the overtaken note when what changed is not recorded</comment>
+  </data>
+  <data name="ActivityWentAheadWithoutPreview" xml:space="preserve">
+    <value>Went ahead without a preview</value>
+    <comment>Shown on a change that was made without a preview</comment>
+  </data>
+  <data name="ActivityFieldMessage" xml:space="preserve">
+    <value>Message:</value>
+    <comment>Label of an Activity's message</comment>
+  </data>
+  <data name="ActivityExchangeChangeHeading" xml:space="preserve">
+    <value>Exchange Change</value>
+    <comment>Heading of the panel for a queued Exchange change</comment>
+  </data>
+  <data name="ActivityExchangeChildActivitiesNote" xml:space="preserve">
+    <value>Each attempt that said something new, and the outcome, are recorded as Child Activities below.</value>
+    <comment>Note under the Exchange change panel; refers to the Child Activities table below</comment>
+  </data>
+  <data name="ActivityProgressHeading" xml:space="preserve">
+    <value>Progress</value>
+    <comment>Heading of the run progress panel</comment>
+  </data>
+  <data name="ActivityViewAffectedObjects" xml:space="preserve">
+    <value>View Affected Objects</value>
+    <comment>Button on a warning that opens the objects a run left unresolved</comment>
+  </data>
+  <data name="ActivityConfigurationChangeHeading" xml:space="preserve">
+    <value>Configuration Change</value>
+    <comment>Heading of a configuration change's history panel</comment>
+  </data>
+  <data name="ActivityNoSnapshotNotice" xml:space="preserve">
+    <value>No configuration snapshot was captured for this change, so what changed cannot be shown. This happens when the change was made before configuration change tracking was introduced, while it was disabled, or when the saved configuration was identical to the previous version.</value>
+    <comment>Notice on a configuration change with no captured snapshot</comment>
+  </data>
+  <data name="ActivityCleanupSummaryHeading" xml:space="preserve">
+    <value>Cleanup Summary</value>
+    <comment>Heading of the history retention clean-up summary</comment>
+  </data>
+  <data name="ActivityCleanupSummaryText" xml:space="preserve">
+    <value>Automated retention cleanup removed expired change history and activity records.</value>
+    <comment>Opening sentence of the history retention clean-up summary</comment>
+  </data>
+  <data name="ActivityRetentionConfiguredIn" xml:space="preserve">
+    <value>Retention periods can be configured in</value>
+    <comment>Lead-in to the Settings link on the clean-up summary; followed by the link and a full stop</comment>
+  </data>
+  <data name="ActivityLinkSettings" xml:space="preserve">
+    <value>Settings</value>
+    <comment>Link text to the portal's Settings page</comment>
+  </data>
+  <data name="ActivityCleanupTotalDeleted" xml:space="preserve">
+    <value>Total Deleted</value>
+    <comment>Label of the total count on the clean-up summary</comment>
+  </data>
+  <data name="ActivityCsoChangesTitle" xml:space="preserve">
+    <value>Connected System Object Changes</value>
+    <comment>Tooltip on the CSO Changes count</comment>
+  </data>
+  <data name="ActivityCsoChangesLabel" xml:space="preserve">
+    <value>CSO Changes</value>
+    <comment>Label of the Connected System Object changes count on the clean-up summary; CSO is the tight-header abbreviation</comment>
+  </data>
+  <data name="ActivityMvoChangesTitle" xml:space="preserve">
+    <value>Metaverse Object Changes</value>
+    <comment>Tooltip on the MVO Changes count</comment>
+  </data>
+  <data name="ActivityMvoChangesLabel" xml:space="preserve">
+    <value>MVO Changes</value>
+    <comment>Label of the Metaverse Object changes count on the clean-up summary; MVO is the tight-header abbreviation</comment>
+  </data>
+  <data name="ActivityFieldActivities" xml:space="preserve">
+    <value>Activities</value>
+    <comment>Label of the Activities count on the clean-up summary</comment>
+  </data>
+  <data name="ActivityOldestRecordDeleted" xml:space="preserve">
+    <value>Oldest Record Deleted</value>
+    <comment>Label of the oldest record removed by the clean-up</comment>
+  </data>
+  <data name="ActivityNewestRecordDeleted" xml:space="preserve">
+    <value>Newest Record Deleted</value>
+    <comment>Label of the newest record removed by the clean-up</comment>
+  </data>
+  <data name="ActivitySecurityEventDetailsHeading" xml:space="preserve">
+    <value>Security Event Details</value>
+    <comment>Heading of an authentication Activity's details</comment>
+  </data>
+  <data name="ActivitySecurityAggregatedDescription" xml:space="preserve">
+    <value>Failed authentication attempts matching the same API key prefix, client IP and reason within a 15-minute window are aggregated onto this Activity, with the attempt count updated in place.</value>
+    <comment>Description of an aggregated failed sign-in Activity</comment>
+  </data>
+  <data name="ActivitySecuritySignInDescription" xml:space="preserve">
+    <value>A successful interactive sign-in, recorded once per session establishment.</value>
+    <comment>Description of a successful sign-in Activity</comment>
+  </data>
+  <data name="ActivityFieldReason" xml:space="preserve">
+    <value>Reason:</value>
+    <comment>Label of a security event's reason</comment>
+  </data>
+  <data name="ActivityFieldApiKeyPrefix" xml:space="preserve">
+    <value>API Key Prefix:</value>
+    <comment>Label of the API key prefix in a security event</comment>
+  </data>
+  <data name="ActivityFieldClientIpAddress" xml:space="preserve">
+    <value>Client IP Address:</value>
+    <comment>Label of the client IP address in a security event</comment>
+  </data>
+  <data name="ActivityFieldAttemptCount" xml:space="preserve">
+    <value>Attempt Count:</value>
+    <comment>Label of how many failed attempts were aggregated</comment>
+  </data>
+  <data name="ActivityFieldWindowStart" xml:space="preserve">
+    <value>Window Start:</value>
+    <comment>Label of when an aggregation window started</comment>
+  </data>
+  <data name="ActivityFieldFirstSeen" xml:space="preserve">
+    <value>First Seen:</value>
+    <comment>Label of when a security event was first seen</comment>
+  </data>
+  <data name="ActivityFieldLastSeen" xml:space="preserve">
+    <value>Last Seen:</value>
+    <comment>Label of when a security event was last seen</comment>
+  </data>
+  <data name="ActivityScimRequestsHeading" xml:space="preserve">
+    <value>SCIM Requests</value>
+    <comment>Heading of an API key's SCIM request summary</comment>
+  </data>
+  <data name="ActivityScimRequestsDescription" xml:space="preserve">
+    <value>What this key's requests did to the Connected System's SCIM endpoint in one 15-minute window. Reads and searches are not counted; neither are requests refused for authentication, which are security events of their own.</value>
+    <comment>Description of the SCIM request summary</comment>
+  </data>
+  <data name="ActivityScimCreated" xml:space="preserve">
+    <value>Created</value>
+    <comment>Count of SCIM resources created in the window</comment>
+  </data>
+  <data name="ActivityScimUpdated" xml:space="preserve">
+    <value>Updated</value>
+    <comment>Count of SCIM resources updated in the window</comment>
+  </data>
+  <data name="ActivityScimDeleted" xml:space="preserve">
+    <value>Deleted</value>
+    <comment>Count of SCIM resources deleted in the window</comment>
+  </data>
+  <data name="ActivityScimRejected" xml:space="preserve">
+    <value>Rejected</value>
+    <comment>Count of SCIM requests rejected in the window</comment>
+  </data>
+  <data name="ActivityScimFirstRequest" xml:space="preserve">
+    <value>First Request:</value>
+    <comment>Label of when the first SCIM request in the window arrived</comment>
+  </data>
+  <data name="ActivityScimLatestRequest" xml:space="preserve">
+    <value>Latest Request:</value>
+    <comment>Label of when the latest SCIM request in the window arrived</comment>
+  </data>
+  <data name="ActivityClearSummaryHeading" xml:space="preserve">
+    <value>Clear Summary</value>
+    <comment>Heading of a Connected System clear's summary</comment>
+  </data>
+  <data name="ActivityClearSummaryDescription" xml:space="preserve">
+    <value>All connector space objects and Pending Exports were removed from this Connected System.</value>
+    <comment>Description of a Connected System clear's summary</comment>
+  </data>
+  <data name="ActivityClearTotalRemoved" xml:space="preserve">
+    <value>Total Removed</value>
+    <comment>Label of the total removed by a clear</comment>
+  </data>
+  <data name="ActivityClearCsosRemovedTitle" xml:space="preserve">
+    <value>Connected System Objects Removed</value>
+    <comment>Tooltip on the CSOs Removed count</comment>
+  </data>
+  <data name="ActivityClearCsosRemoved" xml:space="preserve">
+    <value>CSOs Removed</value>
+    <comment>Label of the Connected System Objects removed by a clear</comment>
+  </data>
+  <data name="ActivityClearPendingExportsRemoved" xml:space="preserve">
+    <value>Pending Exports Removed</value>
+    <comment>Label of the Pending Exports removed by a clear</comment>
+  </data>
+  <data name="ActivityClearTrackedForReconciliation" xml:space="preserve">
+    <value>Tracked for Reconciliation</value>
+    <comment>Label of the joins kept by a clear so the next Full Synchronisation can reconcile them</comment>
+  </data>
+  <data name="ActivityClearTrackedTooltip" xml:space="preserve">
+    <value>Objects joined at the moment of the clear, so the next Full Synchronisation can tell who returned.</value>
+    <comment>Tooltip on the Tracked for Reconciliation label</comment>
+  </data>
+  <data name="ActivitySafeguardsHeading" xml:space="preserve">
+    <value>Safeguards</value>
+    <comment>Heading of the run safeguards panel</comment>
+  </data>
+  <data name="ActivitySafeguardsFullImport" xml:space="preserve">
+    <value>This import does not count as a successful Full Import for the post-clear reconciliation gate.</value>
+    <comment>Safeguard note on a Full Import that withheld deletions after a clear</comment>
+  </data>
+  <data name="ActivitySafeguardsDeltaImport" xml:space="preserve">
+    <value>None of the deletions the Connected System reported were applied. Each Delta Import reports them again until a limit allows them, or a Delta Import Run Profile without the limit runs.</value>
+    <comment>Safeguard note on a Delta Import that withheld deletions</comment>
+  </data>
+  <data name="ActivityWithheldExports" xml:space="preserve">
+    <value>Withheld exports stay Pending until a run whose limit allows them, or an Export Run Profile without the limit, attempts them.</value>
+    <comment>Safeguard note on an export run that withheld changes</comment>
+  </data>
+  <data name="ActivityStatDeletionsWithheld" xml:space="preserve">
+    <value>Deletions withheld</value>
+    <comment>Label of deletions an import withheld</comment>
+  </data>
+  <data name="ActivityStatDetectedDeletionsWithheld" xml:space="preserve">
+    <value>Detected deletions withheld</value>
+    <comment>Label of detected deletions an import withheld</comment>
+  </data>
+  <data name="ActivityStatCreatesWithheld" xml:space="preserve">
+    <value>Creates Withheld</value>
+    <comment>Label of creates an export withheld</comment>
+  </data>
+  <data name="ActivityStatUpdatesWithheld" xml:space="preserve">
+    <value>Updates Withheld</value>
+    <comment>Label of updates an export withheld</comment>
+  </data>
+  <data name="ActivityStatDeletesWithheld" xml:space="preserve">
+    <value>Deletes Withheld</value>
+    <comment>Label of deletes an export withheld</comment>
+  </data>
+  <data name="ActivityPreviewResults" xml:space="preserve">
+    <value>Preview results</value>
+    <comment>Title of the panel showing a Configuration Change Preview's results</comment>
+  </data>
+  <data name="ActivityStatsHeading" xml:space="preserve">
+    <value>Stats</value>
+    <comment>Heading of the run statistics</comment>
+  </data>
+  <data name="ActivityStatMvoDeletedTitle" xml:space="preserve">
+    <value>Metaverse Objects Deleted</value>
+    <comment>Tooltip on the MVOs Deleted count</comment>
+  </data>
+  <data name="ActivityStatMvoDeleted" xml:space="preserve">
+    <value>MVOs Deleted</value>
+    <comment>Label of Metaverse Objects deleted by housekeeping</comment>
+  </data>
+  <data name="ActivityStatRecallPendingExports" xml:space="preserve">
+    <value>Recall Pending Exports</value>
+    <comment>Label of Pending Exports recalled by housekeeping</comment>
+  </data>
+  <data name="ActivityStatCsoAddedTitle" xml:space="preserve">
+    <value>Connected System Objects Added</value>
+    <comment>Tooltip on the CSOs Added count</comment>
+  </data>
+  <data name="ActivityStatCsoAdded" xml:space="preserve">
+    <value>CSOs Added</value>
+    <comment>Label of Connected System Objects added by an import</comment>
+  </data>
+  <data name="ActivityStatCsoUpdatedTitle" xml:space="preserve">
+    <value>Connected System Objects Updated</value>
+    <comment>Tooltip on the CSOs Updated count</comment>
+  </data>
+  <data name="ActivityStatCsoUpdated" xml:space="preserve">
+    <value>CSOs Updated</value>
+    <comment>Label of Connected System Objects updated by an import</comment>
+  </data>
+  <data name="ActivityStatCsoDeletionsDetectedTitle" xml:space="preserve">
+    <value>Connected System Object Deletions Detected</value>
+    <comment>Tooltip on the CSO Deletions Detected count</comment>
+  </data>
+  <data name="ActivityStatCsoDeletionsDetected" xml:space="preserve">
+    <value>CSO Deletions Detected</value>
+    <comment>Label of Connected System Object deletions detected by an import</comment>
+  </data>
+  <data name="ActivityStatCsoExportsConfirmedTitle" xml:space="preserve">
+    <value>Connected System Object Exports Confirmed</value>
+    <comment>Tooltip on the CSO Exports Confirmed count</comment>
+  </data>
+  <data name="ActivityStatCsoExportsConfirmed" xml:space="preserve">
+    <value>CSO Exports Confirmed</value>
+    <comment>Label of exports confirmed on Connected System Objects</comment>
+  </data>
+  <data name="ActivityStatExportsRetrying" xml:space="preserve">
+    <value>Exports Retrying</value>
+    <comment>Label of exports being retried</comment>
+  </data>
+  <data name="ActivityStatCsoExportsFailedTitle" xml:space="preserve">
+    <value>Connected System Object Exports Failed</value>
+    <comment>Tooltip on the CSO Exports Failed count</comment>
+  </data>
+  <data name="ActivityStatCsoExportsFailed" xml:space="preserve">
+    <value>CSO Exports Failed</value>
+    <comment>Label of exports that failed on Connected System Objects</comment>
+  </data>
+  <data name="ActivityStatCsosJoinedTitle" xml:space="preserve">
+    <value>Connected System Objects Joined</value>
+    <comment>Tooltip on the CSOs Joined count</comment>
+  </data>
+  <data name="ActivityStatCsosJoined" xml:space="preserve">
+    <value>CSOs Joined</value>
+    <comment>Label of Connected System Objects joined by a sync</comment>
+  </data>
+  <data name="ActivityStatMvosProjectedTitle" xml:space="preserve">
+    <value>Metaverse Objects Projected</value>
+    <comment>Tooltip on the MVOs Projected count</comment>
+  </data>
+  <data name="ActivityStatMvosProjected" xml:space="preserve">
+    <value>MVOs Projected</value>
+    <comment>Label of Metaverse Objects projected by a sync</comment>
+  </data>
+  <data name="ActivityStatMvosAttributeFlowTitle" xml:space="preserve">
+    <value>Metaverse Objects with Attribute Flow</value>
+    <comment>Tooltip on the MVOs with Attribute Flow count</comment>
+  </data>
+  <data name="ActivityStatMvosAttributeFlow" xml:space="preserve">
+    <value>MVOs with Attribute Flow</value>
+    <comment>Label of Metaverse Objects that took an Attribute Flow</comment>
+  </data>
+  <data name="ActivityStatValuesGenerated" xml:space="preserve">
+    <value>Values Generated</value>
+    <comment>Label of generated values</comment>
+  </data>
+  <data name="ActivityStatCsosProvisionedTitle" xml:space="preserve">
+    <value>Connected System Objects Provisioned</value>
+    <comment>Tooltip on the CSOs Provisioned count</comment>
+  </data>
+  <data name="ActivityStatCsosProvisioned" xml:space="preserve">
+    <value>CSOs Provisioned</value>
+    <comment>Label of Connected System Objects provisioned by an export evaluation</comment>
+  </data>
+  <data name="ActivityStatCsoPendingExportsTitle" xml:space="preserve">
+    <value>Connected System Object Pending Exports</value>
+    <comment>Tooltip on the CSO Pending Exports count</comment>
+  </data>
+  <data name="ActivityStatCsoPendingExports" xml:space="preserve">
+    <value>CSO Pending Exports</value>
+    <comment>Label of Pending Exports on Connected System Objects</comment>
+  </data>
+  <data name="ActivityStatCsosDisconnected" xml:space="preserve">
+    <value>CSOs Disconnected</value>
+    <comment>Label of Connected System Objects disconnected by a sync</comment>
+  </data>
+  <data name="ActivityStatCsosDeletedTitle" xml:space="preserve">
+    <value>Connected System Objects Deleted</value>
+    <comment>Tooltip on the CSOs Deleted count</comment>
+  </data>
+  <data name="ActivityStatCsosDeleted" xml:space="preserve">
+    <value>CSOs Deleted</value>
+    <comment>Label of Connected System Objects finalised as deleted by a sync</comment>
+  </data>
+  <data name="ActivityStatCsosDriftCorrectedTitle" xml:space="preserve">
+    <value>Connected System Objects Drift Corrected</value>
+    <comment>Tooltip on the CSOs Drift Corrected count</comment>
+  </data>
+  <data name="ActivityStatCsosDriftCorrected" xml:space="preserve">
+    <value>CSOs Drift Corrected</value>
+    <comment>Label of Connected System Objects whose drift was corrected</comment>
+  </data>
+  <data name="ActivityStatCsosExportedTitle" xml:space="preserve">
+    <value>Connected System Objects Exported</value>
+    <comment>Tooltip on the CSOs Exported count</comment>
+  </data>
+  <data name="ActivityStatCsosExported" xml:space="preserve">
+    <value>CSOs Exported</value>
+    <comment>Label of Connected System Objects exported</comment>
+  </data>
+  <data name="ActivityStatCsosDeprovisionedTitle" xml:space="preserve">
+    <value>Connected System Objects Deprovisioned</value>
+    <comment>Tooltip on the CSOs Deprovisioned count</comment>
+  </data>
+  <data name="ActivityStatCsosDeprovisioned" xml:space="preserve">
+    <value>CSOs Deprovisioned</value>
+    <comment>Label of Connected System Objects deprovisioned</comment>
+  </data>
+  <data name="ActivityStatValuesCorrected" xml:space="preserve">
+    <value>Values Corrected</value>
+    <comment>Label of generated values corrected after a collision</comment>
+  </data>
+  <data name="ActivityStatNeedsDecision" xml:space="preserve">
+    <value>Needs a Decision</value>
+    <comment>Label of generated values that need a person's decision</comment>
+  </data>
+  <data name="ActivityStatCsosUnchangedTitle" xml:space="preserve">
+    <value>Connected System Objects Unchanged</value>
+    <comment>Tooltip on the CSOs Unchanged count</comment>
+  </data>
+  <data name="ActivityStatCsosUnchanged" xml:space="preserve">
+    <value>CSOs Unchanged</value>
+    <comment>Label of Connected System Objects a run found unchanged</comment>
+  </data>
+  <data name="ActivityStatObjectTypes" xml:space="preserve">
+    <value>Object Types</value>
+    <comment>Label of the number of Object Types a run processed</comment>
+  </data>
+  <data name="ActivityStatErrors" xml:space="preserve">
+    <value>Errors</value>
+    <comment>Label of the number of errors a run recorded</comment>
+  </data>
+  <data name="ActivityDiscardedEntriesHeading" xml:space="preserve">
+    <value>Entries Discarded by Container Scope</value>
+    <comment>Heading of the panel listing entries discarded by a Container exclusion</comment>
+  </data>
+  <data name="ActivityDiscardedEntriesDescription" xml:space="preserve">
+    <value>A Connected System cannot be asked for a branch minus part of itself in one search, so JIM reads the entries an excluded Container covers and discards them. These entries were transferred and never imported. Where the number is large, moving the excluded branch outside the selected one removes the cost entirely.</value>
+    <comment>Description of the entries discarded by a Container exclusion</comment>
+  </data>
+  <data name="ActivityColumnExcludedContainer" xml:space="preserve">
+    <value>Excluded Container</value>
+    <comment>Column heading: the Container excluded from a Container Scope</comment>
+  </data>
+  <data name="ActivityColumnEntriesDiscarded" xml:space="preserve">
+    <value>Entries Discarded</value>
+    <comment>Column heading: how many entries an excluded Container discarded</comment>
+  </data>
+  <data name="ActivityContainerNoLongerInHierarchy" xml:space="preserve">
+    <value>Container no longer in the hierarchy</value>
+    <comment>Shown for an excluded Container that has since been removed</comment>
+  </data>
+  <data name="ActivityTotal" xml:space="preserve">
+    <value>Total</value>
+    <comment>Label of the total row of a table</comment>
+  </data>
+  <data name="ActivityDeletionResultsHeading" xml:space="preserve">
+    <value>Deletion Results</value>
+    <comment>Heading of the results of a housekeeping run</comment>
+  </data>
+  <data name="ActivityFilterByOutcomeType" xml:space="preserve">
+    <value>Filter by Outcome Type:</value>
+    <comment>Label above the outcome type filter chips</comment>
+  </data>
+  <data name="ActivityUnchangedChip" xml:space="preserve">
+    <value>Unchanged</value>
+    <comment>Informational chip counting objects a run found unchanged</comment>
+  </data>
+  <data name="ActivityFilterByExternalObjectType" xml:space="preserve">
+    <value>Filter by External Object Type:</value>
+    <comment>Label above the external object type filter chips</comment>
+  </data>
+  <data name="ActivityFilterByErrorType" xml:space="preserve">
+    <value>Filter by Error Type:</value>
+    <comment>Label above the error type filter chips</comment>
+  </data>
+  <data name="ActivityExecutionItemSingular" xml:space="preserve">
+    <value>Run Profile Execution Item</value>
+    <comment>Singular name of a Run Profile Execution Item, used in the grid's count</comment>
+  </data>
+  <data name="ActivityExecutionItemPlural" xml:space="preserve">
+    <value>Run Profile Execution Items</value>
+    <comment>Plural name of Run Profile Execution Items, used in the grid's count</comment>
+  </data>
+  <data name="ActivitySearchExecutionItems" xml:space="preserve">
+    <value>Search name or external ID</value>
+    <comment>Placeholder of the search box on the execution items grid</comment>
+  </data>
+  <data name="ActivityView" xml:space="preserve">
+    <value>View</value>
+    <comment>Button that opens an item or Activity</comment>
+  </data>
+  <data name="ActivityColumnExternalId" xml:space="preserve">
+    <value>External Id</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ActivityColumnDisplayName" xml:space="preserve">
+    <value>Display Name</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ActivityColumnExternalObjectType" xml:space="preserve">
+    <value>External Object Type</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ActivityColumnOutcomes" xml:space="preserve">
+    <value>Outcomes</value>
+    <comment>Column heading: the outcomes of an item</comment>
+  </data>
+  <data name="ActivityNoItemsMatchSearch" xml:space="preserve">
+    <value>No Run Profile Execution Items match "{0}"</value>
+    <comment>Empty state after a search; {0} is what was searched for</comment>
+  </data>
+  <data name="ActivitySearchTryAgain" xml:space="preserve">
+    <value>Try a different search term, or clear the search.</value>
+    <comment>Empty state secondary text after a search</comment>
+  </data>
+  <data name="ActivityClearSearch" xml:space="preserve">
+    <value>Clear Search</value>
+    <comment>Button that clears the search</comment>
+  </data>
+  <data name="ActivityNoItemsMatchFilters" xml:space="preserve">
+    <value>No Run Profile Execution Items match the current filters</value>
+    <comment>Empty state when chip filters match nothing</comment>
+  </data>
+  <data name="ActivityAdjustFilters" xml:space="preserve">
+    <value>Adjust or clear the filters above to see more items.</value>
+    <comment>Empty state secondary text when filters match nothing</comment>
+  </data>
+  <data name="ActivityClearFilters" xml:space="preserve">
+    <value>Clear Filters</value>
+    <comment>Button that clears the chip filters</comment>
+  </data>
+  <data name="ActivityNoItemsYet" xml:space="preserve">
+    <value>No Run Profile Execution Items yet</value>
+    <comment>Empty state while a run is still saving items</comment>
+  </data>
+  <data name="ActivityItemsAppearAsSaved" xml:space="preserve">
+    <value>Items appear here as the run saves them.</value>
+    <comment>Empty state secondary text while a run is in progress</comment>
+  </data>
+  <data name="ActivityNoItemsRecorded" xml:space="preserve">
+    <value>This Activity recorded no Run Profile Execution Items</value>
+    <comment>Empty state for a finished Activity with no items</comment>
+  </data>
+  <data name="ActivityItemsAppearForEveryObject" xml:space="preserve">
+    <value>Items appear here for every object the run added, updated, joined, projected, exported or failed on.</value>
+    <comment>Empty state secondary text for a finished Activity with no items</comment>
+  </data>
+  <data name="ActivityChildActivitiesHeading" xml:space="preserve">
+    <value>Child Activities</value>
+    <comment>Heading of the child Activities table</comment>
+  </data>
+  <data name="ActivityChildActivitySingular" xml:space="preserve">
+    <value>Child Activity</value>
+    <comment>Singular name of a child Activity, used in the grid's count</comment>
+  </data>
+  <data name="ActivitySearchChildActivities" xml:space="preserve">
+    <value>Search target, message or status</value>
+    <comment>Placeholder of the search box on the child Activities grid</comment>
+  </data>
+  <data name="ActivityColumnType" xml:space="preserve">
+    <value>Type</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ActivityColumnTarget" xml:space="preserve">
+    <value>Target</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ActivityColumnMessage" xml:space="preserve">
+    <value>Message</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ActivityColumnStatus" xml:space="preserve">
+    <value>Status</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ActivityColumnStarted" xml:space="preserve">
+    <value>Started</value>
+    <comment>Column heading: when an Activity started</comment>
+  </data>
+  <data name="ActivityColumnDuration" xml:space="preserve">
+    <value>Duration</value>
+    <comment>Column heading: how long an Activity took</comment>
+  </data>
+  <data name="ActivityNoChildActivitiesMatchSearch" xml:space="preserve">
+    <value>No Child Activities match "{0}"</value>
+    <comment>Empty state after a search of child Activities; {0} is what was searched for</comment>
+  </data>
+  <data name="ActivityHasNoChildActivities" xml:space="preserve">
+    <value>This Activity has no Child Activities</value>
+    <comment>Empty state for an Activity with no child Activities</comment>
+  </data>
+  <data name="ActivityChildActivitiesAppear" xml:space="preserve">
+    <value>Child Activities appear here when an operation spawns work of its own.</value>
+    <comment>Empty state secondary text for an Activity with no child Activities</comment>
+  </data>
+  <data name="ActivityBreadcrumbHome" xml:space="preserve">
+    <value>Home</value>
+    <comment>Breadcrumb link to the home page</comment>
+  </data>
+  <data name="ActivityBreadcrumbActivity" xml:space="preserve">
+    <value>Activity</value>
+    <comment>Breadcrumb link to the Activity list</comment>
+  </data>
+  <data name="ActivityBreadcrumbActivityDetail" xml:space="preserve">
+    <value>Activity Detail</value>
+    <comment>Breadcrumb for the current Activity page</comment>
+  </data>
+  <data name="ActivityBreadcrumbOperations" xml:space="preserve">
+    <value>Operations</value>
+    <comment>Breadcrumb link to the Operations page, when the Activity was opened from there</comment>
+  </data>
+  <data name="ActivityStatCsosDisconnectedTitle" xml:space="preserve">
+    <value>Connected System Objects Disconnected</value>
+    <comment>Tooltip on the CSOs Disconnected count</comment>
+  </data>
+  <data name="ActivityStatCsosDisconnectedIncluding" xml:space="preserve">
+    <value>Connected System Objects Disconnected, including {0} that left an import Synchronisation Rule's scope</value>
+    <comment>Tooltip on the CSOs Disconnected count when some left an import Synchronisation Rule's scope; {0} is the count, formatted for the culture</comment>
+  </data>
 </root>
