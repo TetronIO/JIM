@@ -44,4 +44,7 @@
   <data name="SkippedCredentialAttributes" xml:space="preserve">
     <value>Skipped {0}: credential attributes cannot be managed by JIM. Passwords are synchronized through JIM's dedicated password channel, not through Attribute Flow.</value>
   </data>
+  <data name="RefreshCancelled" xml:space="preserve">
+    <value>Hierarchy refresh canceled. Nothing was changed.</value>
+  </data>
 </root>

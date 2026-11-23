@@ -503,4 +503,274 @@
   <data name="ObjectTypesTab" xml:space="preserve">
     <value>Types d’objets</value>
   </data>
+  <data name="ValueOfTotal" xml:space="preserve">
+    <value>{0} sur {1}</value>
+  </data>
+  <data name="ContainersSelected" xml:space="preserve">
+    <value>Conteneurs sélectionnés</value>
+  </data>
+  <data name="PartitionsManagedOne" xml:space="preserve">
+    <value>partition gérée</value>
+  </data>
+  <data name="PartitionsManagedOther" xml:space="preserve">
+    <value>partitions gérées</value>
+  </data>
+  <data name="ContainersExcludedOne" xml:space="preserve">
+    <value>conteneur exclu</value>
+  </data>
+  <data name="ContainersExcludedOther" xml:space="preserve">
+    <value>conteneurs exclus</value>
+  </data>
+  <data name="RetrieveHierarchyIntro" xml:space="preserve">
+    <value>Récupérez la hiérarchie {0} du système connecté, pour pouvoir choisir celles que vous voulez gérer avec JIM.</value>
+  </data>
+  <data name="RetrieveHierarchy" xml:space="preserve">
+    <value>Récupérer la hiérarchie</value>
+  </data>
+  <data name="RetrievingHierarchy" xml:space="preserve">
+    <value>Récupération de la hiérarchie…</value>
+  </data>
+  <data name="HierarchyLastRetrieved" xml:space="preserve">
+    <value>Hiérarchie récupérée {0}</value>
+  </data>
+  <data name="HierarchyAsRetrievedFrom" xml:space="preserve">
+    <value>La hiérarchie telle que récupérée la dernière fois depuis {0}</value>
+  </data>
+  <data name="RefreshingHierarchyTitle" xml:space="preserve">
+    <value>Actualisation de la hiérarchie</value>
+  </data>
+  <data name="RefreshHierarchyInfo" xml:space="preserve">
+    <value>L’actualisation relit les partitions et les conteneurs et conserve vos sélections dans la mesure du possible : les éléments existants sont retrouvés par leur ID externe, de sorte que les éléments renommés ou déplacés gardent leur état de sélection. Les partitions et conteneurs qui n’existent plus dans le système connecté (UO supprimées, modifications d’autorisations) sont supprimés. Vérifiez que l’identité du système connecté dispose des autorisations nécessaires pour récupérer la hiérarchie.</value>
+  </data>
+  <data name="Refreshing" xml:space="preserve">
+    <value>Actualisation…</value>
+  </data>
+  <data name="RefreshButton" xml:space="preserve">
+    <value>Actualiser</value>
+  </data>
+  <data name="HierarchyRefreshedSummary" xml:space="preserve">
+    <value>Hiérarchie actualisée : {0}</value>
+  </data>
+  <data name="SelectedItemsRemoved" xml:space="preserve">
+    <value>Éléments sélectionnés supprimés</value>
+  </data>
+  <data name="RunProfilesDisabled" xml:space="preserve">
+    <value>Profils d’exécution désactivés</value>
+  </data>
+  <data name="PartitionsSelected" xml:space="preserve">
+    <value>Partitions sélectionnées</value>
+  </data>
+  <data name="CopyChanges" xml:space="preserve">
+    <value>Copier les modifications</value>
+  </data>
+  <data name="RunProfileHeader" xml:space="preserve">
+    <value>Profil d’exécution</value>
+  </data>
+  <data name="PartitionRemovedHeader" xml:space="preserve">
+    <value>Partition supprimée</value>
+  </data>
+  <data name="PartitionsSelectedExplain" xml:space="preserve">
+    <value>Un conteneur sélectionné a été déplacé dans chacune de ces partitions. Un conteneur n’est importé que lorsque sa partition est sélectionnée : JIM a donc sélectionné la partition pour le conserver dans le périmètre.</value>
+  </data>
+  <data name="PartitionNoun" xml:space="preserve">
+    <value>Partition</value>
+  </data>
+  <data name="ContainerNoun" xml:space="preserve">
+    <value>Conteneur</value>
+  </data>
+  <data name="ContainersMovedIn" xml:space="preserve">
+    <value>Conteneurs déplacés</value>
+  </data>
+  <data name="WasSelected" xml:space="preserve">
+    <value>Était sélectionné</value>
+  </data>
+  <data name="RemovedHeading" xml:space="preserve">
+    <value>Supprimés</value>
+  </data>
+  <data name="AddedHeading" xml:space="preserve">
+    <value>Ajoutés</value>
+  </data>
+  <data name="RenamedHeading" xml:space="preserve">
+    <value>Renommés</value>
+  </data>
+  <data name="OldName" xml:space="preserve">
+    <value>Ancien nom</value>
+  </data>
+  <data name="NewName" xml:space="preserve">
+    <value>Nouveau nom</value>
+  </data>
+  <data name="MovedHeading" xml:space="preserve">
+    <value>Déplacés</value>
+  </data>
+  <data name="OldParent" xml:space="preserve">
+    <value>Ancien parent</value>
+  </data>
+  <data name="NewParent" xml:space="preserve">
+    <value>Nouveau parent</value>
+  </data>
+  <data name="NoPartitionsSelectedLabel" xml:space="preserve">
+    <value>Aucune partition ni aucun conteneur n’a été sélectionné.</value>
+  </data>
+  <data name="NoPartitionsSelectedBody" xml:space="preserve">
+    <value>Vous devez sélectionner au moins une partition{0} avant de pouvoir configurer les règles de correspondance d’objets ou créer des profils d’exécution.</value>
+  </data>
+  <data name="AndContainerWithinPartition" xml:space="preserve">
+    <value> et au moins un conteneur dans cette partition</value>
+  </data>
+  <data name="ContainerScopeEditorLabel" xml:space="preserve">
+    <value>Éditeur de la portée du conteneur</value>
+  </data>
+  <data name="ScopeTextModeHelp" xml:space="preserve">
+    <value>Une instruction par ligne, dans l’ordre de la hiérarchie. Elle énonce l’ensemble de la portée du conteneur : un conteneur qu’elle ne nomme pas n’est pas géré.</value>
+  </data>
+  <data name="ScopeTreeModeHelp" xml:space="preserve">
+    <value>Cochez les conteneurs à gérer. Avancé exprime le même périmètre sous forme de texte, pour une hiérarchie trop grande pour être parcourue au clic.</value>
+  </data>
+  <data name="ContainerScopeLabel" xml:space="preserve">
+    <value>Portée du conteneur</value>
+  </data>
+  <data name="ScopeTextHelper" xml:space="preserve">
+    <value>include (ou +) ou exclude (ou -), un niveau facultatif, puis le chemin du conteneur. Les lignes vides et celles qui commencent par # sont ignorées.</value>
+  </data>
+  <data name="ScopeNotApplied" xml:space="preserve">
+    <value>Cette portée du conteneur n’a pas été appliquée.</value>
+  </data>
+  <data name="NothingChanged" xml:space="preserve">
+    <value>Rien n’a été modifié.</value>
+  </data>
+  <data name="ScopeErrorLine" xml:space="preserve">
+    <value>Ligne {0} : {1}</value>
+  </data>
+  <data name="ScopeApplyingExplain" xml:space="preserve">
+    <value>Appliquer modifie la sélection ; rien n’atteint le système connecté tant que vous n’avez pas enregistré.</value>
+  </data>
+  <data name="ManagePartition" xml:space="preserve">
+    <value>Gérer cette partition</value>
+  </data>
+  <data name="UnsavedChangesImports" xml:space="preserve">
+    <value>Modifications non enregistrées de ce que ce système connecté importe</value>
+  </data>
+  <data name="NoUnsavedChanges" xml:space="preserve">
+    <value>Aucune modification non enregistrée</value>
+  </data>
+  <data name="ScopePreviewStale" xml:space="preserve">
+    <value>La sélection a été modifiée depuis cet aperçu : elle ne décrit donc plus ce que l’enregistrement ferait. Relancez l’aperçu pour obtenir une réponse sur la sélection actuelle.</value>
+  </data>
+  <data name="ScopePreviewTitle" xml:space="preserve">
+    <value>Aperçu : partitions et conteneurs</value>
+  </data>
+  <data name="ScopeSimple" xml:space="preserve">
+    <value>Simple</value>
+  </data>
+  <data name="ScopeAdvanced" xml:space="preserve">
+    <value>Avancé</value>
+  </data>
+  <data name="ScopeAppliedSave" xml:space="preserve">
+    <value>Portée du conteneur appliquée. Enregistrez vos modifications pour les envoyer au système connecté.</value>
+  </data>
+  <data name="RefreshCancelled" xml:space="preserve">
+    <value>Actualisation de la hiérarchie annulée. Rien n’a été modifié.</value>
+  </data>
+  <data name="RefreshedDisabledOne" xml:space="preserve">
+    <value>Hiérarchie actualisée. {0} profil d’exécution ciblant une partition supprimée a été désactivé.</value>
+  </data>
+  <data name="RefreshedDisabledOther" xml:space="preserve">
+    <value>Hiérarchie actualisée. {0} profils d’exécution ciblant une partition supprimée ont été désactivés.</value>
+  </data>
+  <data name="RefreshedWithWarnings" xml:space="preserve">
+    <value>Hiérarchie actualisée avec des avertissements. Certains éléments sélectionnés ont été supprimés.</value>
+  </data>
+  <data name="RefreshedKeepInScope" xml:space="preserve">
+    <value>Hiérarchie actualisée : {0}, pour conserver dans le périmètre les conteneurs sélectionnés qui y ont été déplacés.</value>
+  </data>
+  <data name="RefreshedNoChanges" xml:space="preserve">
+    <value>Hiérarchie actualisée. Aucune modification détectée.</value>
+  </data>
+  <data name="RefreshFailed" xml:space="preserve">
+    <value>Échec de l’actualisation de la hiérarchie : {0}</value>
+  </data>
+  <data name="RetrieveFailed" xml:space="preserve">
+    <value>Échec de la récupération de la hiérarchie : {0}</value>
+  </data>
+  <data name="DiscardUnsavedTitle" xml:space="preserve">
+    <value>Abandonner les modifications non enregistrées ?</value>
+  </data>
+  <data name="DiscardUnsavedBody" xml:space="preserve">
+    <value>L’actualisation de la hiérarchie abandonne vos modifications non enregistrées de ce que ce système connecté importe.</value>
+  </data>
+  <data name="DiscardAndRefresh" xml:space="preserve">
+    <value>Abandonner et actualiser</value>
+  </data>
+  <data name="ClipboardTitle" xml:space="preserve">
+    <value>Résultats de l’actualisation de la hiérarchie</value>
+  </data>
+  <data name="ClipboardSummary" xml:space="preserve">
+    <value>Résumé : {0}</value>
+  </data>
+  <data name="ClipboardTotalPartitions" xml:space="preserve">
+    <value>Total des partitions : {0}</value>
+  </data>
+  <data name="ClipboardTotalContainers" xml:space="preserve">
+    <value>Total des conteneurs : {0}</value>
+  </data>
+  <data name="ClipboardRunProfilesDisabled" xml:space="preserve">
+    <value>PROFILS D’EXÉCUTION DÉSACTIVÉS :</value>
+  </data>
+  <data name="ClipboardRunProfile" xml:space="preserve">
+    <value>  {0} (partition {1})</value>
+  </data>
+  <data name="ClipboardPartitionsSelected" xml:space="preserve">
+    <value>PARTITIONS SÉLECTIONNÉES (un conteneur sélectionné y a été déplacé) :</value>
+  </data>
+  <data name="ClipboardPartitionSelectedLine" xml:space="preserve">
+    <value>  [Partition] {0} ({1}) : {2}</value>
+  </data>
+  <data name="ClipboardRemoved" xml:space="preserve">
+    <value>SUPPRIMÉS :</value>
+  </data>
+  <data name="ClipboardRemovedPartition" xml:space="preserve">
+    <value>  [Partition] {0} ({1}){2}</value>
+  </data>
+  <data name="ClipboardRemovedContainer" xml:space="preserve">
+    <value>  [Conteneur] {0} ({1}){2}</value>
+  </data>
+  <data name="ClipboardWasSelected" xml:space="preserve">
+    <value> - ÉTAIT SÉLECTIONNÉ !</value>
+  </data>
+  <data name="ClipboardAdded" xml:space="preserve">
+    <value>AJOUTÉS :</value>
+  </data>
+  <data name="ClipboardPartitionLine" xml:space="preserve">
+    <value>  [Partition] {0} ({1})</value>
+  </data>
+  <data name="ClipboardContainerLine" xml:space="preserve">
+    <value>  [Conteneur] {0} ({1})</value>
+  </data>
+  <data name="ClipboardRenamed" xml:space="preserve">
+    <value>RENOMMÉS :</value>
+  </data>
+  <data name="ClipboardRenamedPartition" xml:space="preserve">
+    <value>  [Partition] « {0} » -&gt; « {1} » ({2})</value>
+  </data>
+  <data name="ClipboardRenamedContainer" xml:space="preserve">
+    <value>  [Conteneur] « {0} » -&gt; « {1} » ({2})</value>
+  </data>
+  <data name="ClipboardMoved" xml:space="preserve">
+    <value>DÉPLACÉS :</value>
+  </data>
+  <data name="ClipboardMovedContainer" xml:space="preserve">
+    <value>  [Conteneur] {0} : {1} -&gt; {2}</value>
+  </data>
+  <data name="ClipboardRoot" xml:space="preserve">
+    <value>(racine)</value>
+  </data>
+  <data name="ChangesCopied" xml:space="preserve">
+    <value>Modifications copiées dans le presse-papiers</value>
+  </data>
+  <data name="ChangesCopyFailed" xml:space="preserve">
+    <value>Échec de la copie dans le presse-papiers. Copiez-les manuellement.</value>
+  </data>
+  <data name="HierarchySaved" xml:space="preserve">
+    <value>Vos modifications de hiérarchie ont été enregistrées.</value>
+  </data>
 </root>

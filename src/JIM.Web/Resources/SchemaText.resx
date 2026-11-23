@@ -666,4 +666,364 @@
     <value>Object Types</value>
     <comment>Tab heading: the object types discovery and selection tab.</comment>
   </data>
+  <data name="ValueOfTotal" xml:space="preserve">
+    <value>{0} of {1}</value>
+    <comment>A count of a total, for example '3 of 10'. {0} is the count, {1} the total.</comment>
+  </data>
+  <data name="ContainersSelected" xml:space="preserve">
+    <value>Containers selected</value>
+    <comment>Scope summary label.</comment>
+  </data>
+  <data name="PartitionsManagedOne" xml:space="preserve">
+    <value>Partition managed</value>
+    <comment>Scope summary label, one partition. Plural rule: one form.</comment>
+  </data>
+  <data name="PartitionsManagedOther" xml:space="preserve">
+    <value>Partitions managed</value>
+    <comment>Scope summary label, several partitions.</comment>
+  </data>
+  <data name="ContainersExcludedOne" xml:space="preserve">
+    <value>Container excluded</value>
+    <comment>Scope summary label, one Container excluded. Plural rule: one form.</comment>
+  </data>
+  <data name="ContainersExcludedOther" xml:space="preserve">
+    <value>Containers excluded</value>
+    <comment>Scope summary label, several Containers excluded.</comment>
+  </data>
+  <data name="RetrieveHierarchyIntro" xml:space="preserve">
+    <value>Retrieve the {0} hierarchy from the Connected System, to be able to select which ones you want to manage with JIM.</value>
+    <comment>Shown before any hierarchy is retrieved. {0} is the Connector's name for partitions and Containers, such as 'directory partition'.</comment>
+  </data>
+  <data name="RetrieveHierarchy" xml:space="preserve">
+    <value>Retrieve Hierarchy</value>
+    <comment>Button label.</comment>
+  </data>
+  <data name="RetrievingHierarchy" xml:space="preserve">
+    <value>Retrieving Hierarchy</value>
+    <comment>Button label while retrieving.</comment>
+  </data>
+  <data name="HierarchyLastRetrieved" xml:space="preserve">
+    <value>Hierarchy last retrieved {0}</value>
+    <comment>Scope hint. {0} is a relative time such as '2 hours ago'.</comment>
+  </data>
+  <data name="HierarchyAsRetrievedFrom" xml:space="preserve">
+    <value>The hierarchy as last retrieved from {0}</value>
+    <comment>Scope hint when no retrieval time is known. {0} is the Connected System's name.</comment>
+  </data>
+  <data name="RefreshingHierarchyTitle" xml:space="preserve">
+    <value>Refreshing the hierarchy</value>
+    <comment>Info popover title.</comment>
+  </data>
+  <data name="RefreshHierarchyInfo" xml:space="preserve">
+    <value>Refreshing reads the partitions and Containers again and preserves your selections where possible: existing ones are matched by their external ID, so renamed or moved items keep their selection state. Partitions and Containers that no longer exist in the Connected System (deleted OUs, permission changes) are removed. Make sure the Connected System identity has the permissions needed to retrieve the hierarchy.</value>
+    <comment>Info popover body on the Scope tab.</comment>
+  </data>
+  <data name="Refreshing" xml:space="preserve">
+    <value>Refreshing</value>
+    <comment>Button label while refreshing the hierarchy.</comment>
+  </data>
+  <data name="RefreshButton" xml:space="preserve">
+    <value>Refresh</value>
+    <comment>Button label.</comment>
+  </data>
+  <data name="HierarchyRefreshedSummary" xml:space="preserve">
+    <value>Hierarchy refreshed: {0}</value>
+    <comment>Result panel title. {0} is the change summary.</comment>
+  </data>
+  <data name="SelectedItemsRemoved" xml:space="preserve">
+    <value>Selected items removed</value>
+    <comment>Result chip.</comment>
+  </data>
+  <data name="RunProfilesDisabled" xml:space="preserve">
+    <value>Run Profiles disabled</value>
+    <comment>Result chip and heading.</comment>
+  </data>
+  <data name="PartitionsSelected" xml:space="preserve">
+    <value>Partitions selected</value>
+    <comment>Result chip and heading.</comment>
+  </data>
+  <data name="CopyChanges" xml:space="preserve">
+    <value>Copy Changes</value>
+    <comment>Button that copies the refresh changes.</comment>
+  </data>
+  <data name="RunProfileHeader" xml:space="preserve">
+    <value>Run Profile</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="PartitionRemovedHeader" xml:space="preserve">
+    <value>Partition removed</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="PartitionsSelectedExplain" xml:space="preserve">
+    <value>A selected Container moved into each of these partitions. A Container is only imported while its partition is selected, so JIM selected the partition to keep it in scope.</value>
+    <comment>Explains partitions selected because a Container moved into them.</comment>
+  </data>
+  <data name="PartitionNoun" xml:space="preserve">
+    <value>Partition</value>
+    <comment>A noun: the Connector's partition, shown in tables.</comment>
+  </data>
+  <data name="ContainerNoun" xml:space="preserve">
+    <value>Container</value>
+    <comment>A noun: a Container, shown in tables.</comment>
+  </data>
+  <data name="ContainersMovedIn" xml:space="preserve">
+    <value>Containers moved in</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="WasSelected" xml:space="preserve">
+    <value>Was Selected</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="RemovedHeading" xml:space="preserve">
+    <value>Removed</value>
+    <comment>Result heading.</comment>
+  </data>
+  <data name="AddedHeading" xml:space="preserve">
+    <value>Added</value>
+    <comment>Result heading.</comment>
+  </data>
+  <data name="RenamedHeading" xml:space="preserve">
+    <value>Renamed</value>
+    <comment>Result heading.</comment>
+  </data>
+  <data name="OldName" xml:space="preserve">
+    <value>Old Name</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="NewName" xml:space="preserve">
+    <value>New Name</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="MovedHeading" xml:space="preserve">
+    <value>Moved</value>
+    <comment>Result heading.</comment>
+  </data>
+  <data name="OldParent" xml:space="preserve">
+    <value>Old Parent</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="NewParent" xml:space="preserve">
+    <value>New Parent</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="NoPartitionsSelectedLabel" xml:space="preserve">
+    <value>No partitions or containers have been selected.</value>
+    <comment>Bold lead-in of the warning.</comment>
+  </data>
+  <data name="NoPartitionsSelectedBody" xml:space="preserve">
+    <value>You must select at least one partition{0} before you can configure Object Matching Rules or create Run Profiles.</value>
+    <comment>Warning body. {0} is the clause for containers, or nothing.</comment>
+  </data>
+  <data name="AndContainerWithinPartition" xml:space="preserve">
+    <value> and at least one container within that partition</value>
+    <comment>Clause added when the Connector has containers. Starts with a space.</comment>
+  </data>
+  <data name="ContainerScopeEditorLabel" xml:space="preserve">
+    <value>Container Scope editor</value>
+    <comment>Accessible name of the mode toggle.</comment>
+  </data>
+  <data name="ScopeTextModeHelp" xml:space="preserve">
+    <value>One statement per line, in hierarchy order. This states the whole of Container Scope: a Container it does not name is not managed.</value>
+    <comment>Helper under the mode toggle, in text mode.</comment>
+  </data>
+  <data name="ScopeTreeModeHelp" xml:space="preserve">
+    <value>Tick the Containers to manage. Advanced states the same scope as text, for a hierarchy too large to click through.</value>
+    <comment>Helper under the mode toggle, in tree mode.</comment>
+  </data>
+  <data name="ContainerScopeLabel" xml:space="preserve">
+    <value>Container Scope</value>
+    <comment>Text field label.</comment>
+  </data>
+  <data name="ScopeTextHelper" xml:space="preserve">
+    <value>include (or +) or exclude (or -), an optional one-level, then the Container's path. Blank lines and lines beginning with # are ignored.</value>
+    <comment>Helper text. The keywords include and exclude are typed by the administrator and are not translated.</comment>
+  </data>
+  <data name="ScopeNotApplied" xml:space="preserve">
+    <value>This Container Scope was not applied.</value>
+    <comment>Error alert lead-in.</comment>
+  </data>
+  <data name="NothingChanged" xml:space="preserve">
+    <value>Nothing has been changed.</value>
+    <comment>Error alert follow-up.</comment>
+  </data>
+  <data name="ScopeErrorLine" xml:space="preserve">
+    <value>Line {0}: {1}</value>
+    <comment>One scope problem. {0} is the line number, {1} the message.</comment>
+  </data>
+  <data name="ScopeApplyingExplain" xml:space="preserve">
+    <value>Applying edits the selection; nothing reaches the Connected System until you save.</value>
+    <comment>Helper beside the Apply button.</comment>
+  </data>
+  <data name="ManagePartition" xml:space="preserve">
+    <value>Manage this partition</value>
+    <comment>Switch label.</comment>
+  </data>
+  <data name="UnsavedChangesImports" xml:space="preserve">
+    <value>Unsaved changes to what this Connected System imports</value>
+    <comment>Pending-changes status.</comment>
+  </data>
+  <data name="NoUnsavedChanges" xml:space="preserve">
+    <value>No unsaved changes</value>
+    <comment>Saved-state status.</comment>
+  </data>
+  <data name="ScopePreviewStale" xml:space="preserve">
+    <value>The selection has been edited since this preview ran, so it no longer describes what saving would do. Preview again for an answer about the current selection.</value>
+    <comment>Warning shown when the selection changed after the preview ran.</comment>
+  </data>
+  <data name="ScopePreviewTitle" xml:space="preserve">
+    <value>Preview: Partitions and Containers</value>
+    <comment>Preview panel title.</comment>
+  </data>
+  <data name="ScopeSimple" xml:space="preserve">
+    <value>Simple</value>
+    <comment>Scope editor mode toggle: the tree.</comment>
+  </data>
+  <data name="ScopeAdvanced" xml:space="preserve">
+    <value>Advanced</value>
+    <comment>Scope editor mode toggle: the text.</comment>
+  </data>
+  <data name="ScopeAppliedSave" xml:space="preserve">
+    <value>Container Scope applied. Save your changes to send them to the Connected System.</value>
+    <comment>Success snackbar after applying the text.</comment>
+  </data>
+  <data name="RefreshCancelled" xml:space="preserve">
+    <value>Hierarchy refresh cancelled. Nothing was changed.</value>
+    <comment>Info snackbar.</comment>
+  </data>
+  <data name="RefreshedDisabledOne" xml:space="preserve">
+    <value>Hierarchy refreshed. Disabled {0} Run Profile that targeted a removed partition.</value>
+    <comment>Warning snackbar. Plural rule: one form.</comment>
+  </data>
+  <data name="RefreshedDisabledOther" xml:space="preserve">
+    <value>Hierarchy refreshed. Disabled {0} Run Profiles that targeted a removed partition.</value>
+    <comment>Warning snackbar. {0} is the count.</comment>
+  </data>
+  <data name="RefreshedWithWarnings" xml:space="preserve">
+    <value>Hierarchy refreshed with warnings. Some selected items were removed.</value>
+    <comment>Warning snackbar.</comment>
+  </data>
+  <data name="RefreshedKeepInScope" xml:space="preserve">
+    <value>Hierarchy refreshed: {0}, to keep in scope the selected Containers that moved into them.</value>
+    <comment>Info snackbar. {0} is the change summary.</comment>
+  </data>
+  <data name="RefreshedNoChanges" xml:space="preserve">
+    <value>Hierarchy refreshed. No changes detected.</value>
+    <comment>Info snackbar.</comment>
+  </data>
+  <data name="RefreshFailed" xml:space="preserve">
+    <value>Hierarchy refresh failed: {0}</value>
+    <comment>Error snackbar. {0} is the error.</comment>
+  </data>
+  <data name="RetrieveFailed" xml:space="preserve">
+    <value>Failed to retrieve hierarchy: {0}</value>
+    <comment>Error snackbar. {0} is the error.</comment>
+  </data>
+  <data name="DiscardUnsavedTitle" xml:space="preserve">
+    <value>Discard unsaved changes?</value>
+    <comment>Confirmation dialog title.</comment>
+  </data>
+  <data name="DiscardUnsavedBody" xml:space="preserve">
+    <value>Refreshing the hierarchy discards your unsaved changes to what this Connected System imports.</value>
+    <comment>Confirmation dialog body.</comment>
+  </data>
+  <data name="DiscardAndRefresh" xml:space="preserve">
+    <value>Discard and Refresh</value>
+    <comment>Confirm button.</comment>
+  </data>
+  <data name="ClipboardTitle" xml:space="preserve">
+    <value>Hierarchy Refresh Results</value>
+    <comment>Clipboard report: title.</comment>
+  </data>
+  <data name="ClipboardSummary" xml:space="preserve">
+    <value>Summary: {0}</value>
+    <comment>Clipboard report: summary line.</comment>
+  </data>
+  <data name="ClipboardTotalPartitions" xml:space="preserve">
+    <value>Total Partitions: {0}</value>
+    <comment>Clipboard report line.</comment>
+  </data>
+  <data name="ClipboardTotalContainers" xml:space="preserve">
+    <value>Total Containers: {0}</value>
+    <comment>Clipboard report line.</comment>
+  </data>
+  <data name="ClipboardRunProfilesDisabled" xml:space="preserve">
+    <value>RUN PROFILES DISABLED:</value>
+    <comment>Clipboard report heading.</comment>
+  </data>
+  <data name="ClipboardRunProfile" xml:space="preserve">
+    <value>  {0} (partition {1})</value>
+    <comment>Clipboard report line: Run Profile and partition.</comment>
+  </data>
+  <data name="ClipboardPartitionsSelected" xml:space="preserve">
+    <value>PARTITIONS SELECTED (a selected Container moved into each):</value>
+    <comment>Clipboard report heading.</comment>
+  </data>
+  <data name="ClipboardPartitionSelectedLine" xml:space="preserve">
+    <value>  [Partition] {0} ({1}): {2}</value>
+    <comment>Clipboard report line.</comment>
+  </data>
+  <data name="ClipboardRemoved" xml:space="preserve">
+    <value>REMOVED:</value>
+    <comment>Clipboard report heading.</comment>
+  </data>
+  <data name="ClipboardRemovedPartition" xml:space="preserve">
+    <value>  [Partition] {0} ({1}){2}</value>
+    <comment>Clipboard report line. {2} is the 'was selected' note.</comment>
+  </data>
+  <data name="ClipboardRemovedContainer" xml:space="preserve">
+    <value>  [Container] {0} ({1}){2}</value>
+    <comment>Clipboard report line. {2} is the 'was selected' note.</comment>
+  </data>
+  <data name="ClipboardWasSelected" xml:space="preserve">
+    <value> - WAS SELECTED!</value>
+    <comment>Clipboard report note on a removed selected item.</comment>
+  </data>
+  <data name="ClipboardAdded" xml:space="preserve">
+    <value>ADDED:</value>
+    <comment>Clipboard report heading.</comment>
+  </data>
+  <data name="ClipboardPartitionLine" xml:space="preserve">
+    <value>  [Partition] {0} ({1})</value>
+    <comment>Clipboard report line.</comment>
+  </data>
+  <data name="ClipboardContainerLine" xml:space="preserve">
+    <value>  [Container] {0} ({1})</value>
+    <comment>Clipboard report line.</comment>
+  </data>
+  <data name="ClipboardRenamed" xml:space="preserve">
+    <value>RENAMED:</value>
+    <comment>Clipboard report heading.</comment>
+  </data>
+  <data name="ClipboardRenamedPartition" xml:space="preserve">
+    <value>  [Partition] "{0}" -&gt; "{1}" ({2})</value>
+    <comment>Clipboard report line: old name, new name, external ID.</comment>
+  </data>
+  <data name="ClipboardRenamedContainer" xml:space="preserve">
+    <value>  [Container] "{0}" -&gt; "{1}" ({2})</value>
+    <comment>Clipboard report line: old name, new name, external ID.</comment>
+  </data>
+  <data name="ClipboardMoved" xml:space="preserve">
+    <value>MOVED:</value>
+    <comment>Clipboard report heading.</comment>
+  </data>
+  <data name="ClipboardMovedContainer" xml:space="preserve">
+    <value>  [Container] {0}: {1} -&gt; {2}</value>
+    <comment>Clipboard report line: name, old location, new location.</comment>
+  </data>
+  <data name="ClipboardRoot" xml:space="preserve">
+    <value>(root)</value>
+    <comment>Clipboard report: a location with no parent or partition.</comment>
+  </data>
+  <data name="ChangesCopied" xml:space="preserve">
+    <value>Changes copied to clipboard</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="ChangesCopyFailed" xml:space="preserve">
+    <value>Failed to copy to clipboard. Please copy manually.</value>
+    <comment>Warning snackbar.</comment>
+  </data>
+  <data name="HierarchySaved" xml:space="preserve">
+    <value>Your hierarchy changes have been saved.</value>
+    <comment>Success snackbar.</comment>
+  </data>
 </root>
