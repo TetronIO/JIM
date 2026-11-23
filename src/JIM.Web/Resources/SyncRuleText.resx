@@ -1796,4 +1796,120 @@
     <value>Matching rule is now case-insensitive. Remember to save the Synchronisation Rule.</value>
     <comment>Snackbar after switching a matching rule to case insensitive.</comment>
   </data>
+  <data name="PickerCount" xml:space="preserve">
+    <value>{0} of {1} selected</value>
+    <comment>Count of Containers selected. {0} and {1} are wrapped in bold markup.</comment>
+  </data>
+  <data name="PickerClear" xml:space="preserve">
+    <value>Clear</value>
+    <comment>Button clearing every selected Container.</comment>
+  </data>
+  <data name="PickerEmptyPartition" xml:space="preserve">
+    <value>This partition holds no Containers.</value>
+    <comment>Shown when a partition has no Containers.</comment>
+  </data>
+  <data name="PickerNoMatch" xml:space="preserve">
+    <value>No Container matches “{0}”.</value>
+    <comment>Shown when the filter matches nothing. {0} is the filter text.</comment>
+  </data>
+  <data name="PickerExpandAria" xml:space="preserve">
+    <value>Expand {0}</value>
+    <comment>Accessible name of the expand button. {0} is the Container name.</comment>
+  </data>
+  <data name="PickerCollapseAria" xml:space="preserve">
+    <value>Collapse {0}</value>
+    <comment>Accessible name of the collapse button. {0} is the Container name.</comment>
+  </data>
+  <data name="PickerManageAria" xml:space="preserve">
+    <value>Manage {0}</value>
+    <comment>Accessible name of a Container's tick box. {0} is the Container name.</comment>
+  </data>
+  <data name="PickerInclude" xml:space="preserve">
+    <value>Include</value>
+    <comment>Button giving back a Container that was excluded.</comment>
+  </data>
+  <data name="PickerIncludeTooltip" xml:space="preserve">
+    <value>Stop carving this Container out of {0}. Its objects are imported again, as are those in every Container beneath it.</value>
+    <comment>{0} is the Container that decided the state.</comment>
+  </data>
+  <data name="PickerExclude" xml:space="preserve">
+    <value>Exclude</value>
+    <comment>Button excluding a Container from a selection above it.</comment>
+  </data>
+  <data name="PickerExcludeTooltip" xml:space="preserve">
+    <value>Carve this Container out of {0}. Its objects are left unimported, as are those in every Container beneath it.</value>
+    <comment>{0} is the Container the selection covers.</comment>
+  </data>
+  <data name="PickerOneLevelTooltip" xml:space="preserve">
+    <value>Only the objects held directly in this Container are imported. Choose Whole subtree to import everything beneath it as well.</value>
+    <comment>Tooltip on a Container set to This level.</comment>
+  </data>
+  <data name="PickerSubtreeTooltip" xml:space="preserve">
+    <value>This Container and every Container beneath it are imported. Choose This level to import only the objects held directly in it.</value>
+    <comment>Tooltip on a Container set to Whole subtree.</comment>
+  </data>
+  <data name="PickerScopeAria" xml:space="preserve">
+    <value>Scope of {0}</value>
+    <comment>Accessible name of the scope control. {0} is the Container name.</comment>
+  </data>
+  <data name="PickerWholeSubtree" xml:space="preserve">
+    <value>Whole subtree</value>
+    <comment>Container scope option: the Container and everything beneath it.</comment>
+  </data>
+  <data name="PickerThisLevel" xml:space="preserve">
+    <value>This level</value>
+    <comment>Container scope option: only the Container's own objects.</comment>
+  </data>
+  <data name="PickerCountSameOne" xml:space="preserve">
+    <value>This Container holds {0:N0} object, counted in the Connected System when the hierarchy was last retrieved.</value>
+    <comment>Singular. {0} is the count.</comment>
+  </data>
+  <data name="PickerCountSameOther" xml:space="preserve">
+    <value>This Container holds {0:N0} objects, counted in the Connected System when the hierarchy was last retrieved.</value>
+    <comment>Plural. {0} is the count.</comment>
+  </data>
+  <data name="PickerOneLevelOne" xml:space="preserve">
+    <value>This Container holds {0:N0} object directly, which is what This level imports. Its whole branch holds {1:N0}.</value>
+    <comment>Singular. {0} is the direct count, {1} the subtree count.</comment>
+  </data>
+  <data name="PickerOneLevelOther" xml:space="preserve">
+    <value>This Container holds {0:N0} objects directly, which is what This level imports. Its whole branch holds {1:N0}.</value>
+    <comment>Plural. {0} is the direct count, {1} the subtree count.</comment>
+  </data>
+  <data name="PickerSubtreeLead" xml:space="preserve">
+    <value>This Container and everything beneath it hold {0:N0} objects, which is what This and below imports.</value>
+    <comment>{0} is the subtree count.</comment>
+  </data>
+  <data name="PickerSubtreeDirectOne" xml:space="preserve">
+    <value>{0:N0} object sits directly in it.</value>
+    <comment>Singular. {0} is the direct count.</comment>
+  </data>
+  <data name="PickerSubtreeDirectOther" xml:space="preserve">
+    <value>{0:N0} objects sit directly in it.</value>
+    <comment>Plural. {0} is the direct count.</comment>
+  </data>
+  <data name="PickerExcludedFrom" xml:space="preserve">
+    <value>Excluded from {0}</value>
+    <comment>Status of a Container excluded from a Container above. {0} is that Container.</comment>
+  </data>
+  <data name="PickerCoveredBy" xml:space="preserve">
+    <value>Covered by {0}</value>
+    <comment>Status of a Container covered by a Container above. {0} is that Container.</comment>
+  </data>
+  <data name="PickerExcludedBy" xml:space="preserve">
+    <value>Excluded by {0}</value>
+    <comment>Status of a Container excluded by an ancestor. {0} is that Container.</comment>
+  </data>
+  <data name="PickerChildContainersOne" xml:space="preserve">
+    <value>{0} Container</value>
+    <comment>Singular. {0} is the number of child Containers.</comment>
+  </data>
+  <data name="PickerChildContainersOther" xml:space="preserve">
+    <value>{0} Containers</value>
+    <comment>Plural. {0} is the number of child Containers.</comment>
+  </data>
+  <data name="PickerContainerAbove" xml:space="preserve">
+    <value>a Container above</value>
+    <comment>Stands in for the deciding Container when its name is not known.</comment>
+  </data>
 </root>

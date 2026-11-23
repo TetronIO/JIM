@@ -1370,4 +1370,91 @@
   <data name="MatchingRuleNowCaseInsensitive" xml:space="preserve">
     <value>La règle de correspondance est désormais insensible à la casse. Pensez à enregistrer la règle de synchronisation.</value>
   </data>
+  <data name="PickerCount" xml:space="preserve">
+    <value>{0} sur {1} sélectionnés</value>
+  </data>
+  <data name="PickerClear" xml:space="preserve">
+    <value>Effacer</value>
+  </data>
+  <data name="PickerEmptyPartition" xml:space="preserve">
+    <value>Cette partition ne contient aucun conteneur.</value>
+  </data>
+  <data name="PickerNoMatch" xml:space="preserve">
+    <value>Aucun conteneur ne correspond à « {0} ».</value>
+  </data>
+  <data name="PickerExpandAria" xml:space="preserve">
+    <value>Développer {0}</value>
+  </data>
+  <data name="PickerCollapseAria" xml:space="preserve">
+    <value>Réduire {0}</value>
+  </data>
+  <data name="PickerManageAria" xml:space="preserve">
+    <value>Gérer {0}</value>
+  </data>
+  <data name="PickerInclude" xml:space="preserve">
+    <value>Inclure</value>
+  </data>
+  <data name="PickerIncludeTooltip" xml:space="preserve">
+    <value>Ne plus exclure ce conteneur de {0}. Ses objets sont à nouveau importés, de même que ceux de chaque conteneur situé en dessous.</value>
+  </data>
+  <data name="PickerExclude" xml:space="preserve">
+    <value>Exclure</value>
+  </data>
+  <data name="PickerExcludeTooltip" xml:space="preserve">
+    <value>Exclure ce conteneur de {0}. Ses objets ne sont pas importés, de même que ceux de chaque conteneur situé en dessous.</value>
+  </data>
+  <data name="PickerOneLevelTooltip" xml:space="preserve">
+    <value>Seuls les objets contenus directement dans ce conteneur sont importés. Choisissez « Sous-arborescence complète » pour importer aussi tout ce qui se trouve en dessous.</value>
+  </data>
+  <data name="PickerSubtreeTooltip" xml:space="preserve">
+    <value>Ce conteneur et chaque conteneur situé en dessous sont importés. Choisissez « Ce niveau » pour n’importer que les objets contenus directement dans celui-ci.</value>
+  </data>
+  <data name="PickerScopeAria" xml:space="preserve">
+    <value>Portée de {0}</value>
+  </data>
+  <data name="PickerWholeSubtree" xml:space="preserve">
+    <value>Sous-arborescence complète</value>
+  </data>
+  <data name="PickerThisLevel" xml:space="preserve">
+    <value>Ce niveau</value>
+  </data>
+  <data name="PickerCountSameOne" xml:space="preserve">
+    <value>Ce conteneur contient {0:N0} objet, compté dans le système connecté lors de la dernière récupération de la hiérarchie.</value>
+  </data>
+  <data name="PickerCountSameOther" xml:space="preserve">
+    <value>Ce conteneur contient {0:N0} objets, comptés dans le système connecté lors de la dernière récupération de la hiérarchie.</value>
+  </data>
+  <data name="PickerOneLevelOne" xml:space="preserve">
+    <value>Ce conteneur contient directement {0:N0} objet, ce qu’importe Ce niveau. Toute sa branche en contient {1:N0}.</value>
+  </data>
+  <data name="PickerOneLevelOther" xml:space="preserve">
+    <value>Ce conteneur contient directement {0:N0} objets, ce qu’importe Ce niveau. Toute sa branche en contient {1:N0}.</value>
+  </data>
+  <data name="PickerSubtreeLead" xml:space="preserve">
+    <value>Ce conteneur et tout ce qui se trouve en dessous contiennent {0:N0} objets, ce qu’importe Ce niveau et en dessous.</value>
+  </data>
+  <data name="PickerSubtreeDirectOne" xml:space="preserve">
+    <value>{0:N0} objet s’y trouve directement.</value>
+  </data>
+  <data name="PickerSubtreeDirectOther" xml:space="preserve">
+    <value>{0:N0} objets s’y trouvent directement.</value>
+  </data>
+  <data name="PickerExcludedFrom" xml:space="preserve">
+    <value>Exclu de {0}</value>
+  </data>
+  <data name="PickerCoveredBy" xml:space="preserve">
+    <value>Couvert par {0}</value>
+  </data>
+  <data name="PickerExcludedBy" xml:space="preserve">
+    <value>Exclu par {0}</value>
+  </data>
+  <data name="PickerChildContainersOne" xml:space="preserve">
+    <value>{0} conteneur</value>
+  </data>
+  <data name="PickerChildContainersOther" xml:space="preserve">
+    <value>{0} conteneurs</value>
+  </data>
+  <data name="PickerContainerAbove" xml:space="preserve">
+    <value>un conteneur supérieur</value>
+  </data>
 </root>
