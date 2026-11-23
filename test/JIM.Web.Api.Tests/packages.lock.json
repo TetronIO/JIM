@@ -967,7 +967,7 @@
           "JIM.Data": "[1.0.0, )",
           "JIM.Models": "[1.0.0, )",
           "NUnit": "[4.6.1, )",
-          "Npgsql": "[10.0.3, )"
+          "Npgsql": "[10.0.4, )"
         }
       },
       "jim.utilities": {

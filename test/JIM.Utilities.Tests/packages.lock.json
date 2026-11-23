@@ -198,8 +198,8 @@
       },
       "Npgsql": {
         "type": "Transitive",
-        "resolved": "10.0.3",
-        "contentHash": "7nb5YzXuvWWJxB0J8DiyL3we+X4FOctZrt0fIBnucOIaIevFEEwGQVZKtiu9olXdlNAK1eNgqSral6r/jlhI4w==",
+        "resolved": "10.0.4",
+        "contentHash": "m2VCpcU9MKD8lLxTn+YaNIRWd+Gz3y/9wIaM+2ifDF24xZ2Kvvjx4CDB2BIgobr1Gj6a/gsdmfz1sQ+kmd7liw==",
         "dependencies": {
           "Microsoft.Extensions.Logging.Abstractions": "10.0.0"
         }
@@ -228,7 +228,7 @@
           "JIM.Data": "[1.0.0, )",
           "JIM.Models": "[1.0.0, )",
           "NUnit": "[4.6.1, )",
-          "Npgsql": "[10.0.3, )"
+          "Npgsql": "[10.0.4, )"
         }
       },
       "jim.utilities": {
