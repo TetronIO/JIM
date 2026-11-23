@@ -370,4 +370,164 @@
     <value>Connector Space</value>
     <comment>Breadcrumb</comment>
   </data>
+  <data name="CsoListPageTitle" xml:space="preserve">
+    <value>Connector Space: {0}</value>
+    <comment>Page title; {0} is the Connected System's name</comment>
+  </data>
+  <data name="CsoListHeadingLabel" xml:space="preserve">
+    <value>Connector Space:</value>
+    <comment>Page heading label, followed by the Connected System's name</comment>
+  </data>
+  <data name="CsoListPageInfo" xml:space="preserve">
+    <value>The Connector Space holds this Connected System's Connected System Objects. Inbound changes from the system are held here before being committed to the Metaverse. Outbound changes are held here ahead of synchronisation to the Connected System.</value>
+    <comment>Page info body</comment>
+  </data>
+  <data name="CsoListFilterStatus" xml:space="preserve">
+    <value>Filter by Status:</value>
+    <comment>Filter chip group label</comment>
+  </data>
+  <data name="CsoListFilterObjectType" xml:space="preserve">
+    <value>Filter by Object Type:</value>
+    <comment>Filter chip group label</comment>
+  </data>
+  <data name="CsoListFilterJoinType" xml:space="preserve">
+    <value>Filter by Join Type:</value>
+    <comment>Filter chip group label</comment>
+  </data>
+  <data name="CsoListFilterReferences" xml:space="preserve">
+    <value>Filter by References:</value>
+    <comment>Filter chip group label</comment>
+  </data>
+  <data name="CsoListUnresolved" xml:space="preserve">
+    <value>Unresolved</value>
+    <comment>Filter chip and column header: objects holding a reference that could not be linked</comment>
+  </data>
+  <data name="CsoListDeleteAll" xml:space="preserve">
+    <value>Delete All Objects</value>
+    <comment>Button</comment>
+  </data>
+  <data name="CsoListColumnsMenu" xml:space="preserve">
+    <value>Columns</value>
+    <comment>Menu button</comment>
+  </data>
+  <data name="CsoListShowColumns" xml:space="preserve">
+    <value>Show columns</value>
+    <comment>Menu heading</comment>
+  </data>
+  <data name="CsoListColumnsHint" xml:space="preserve">
+    <value>Remembered for {0} in this browser.</value>
+    <comment>{0} is the Connected System's name</comment>
+  </data>
+  <data name="CsoListExternalIdHeader" xml:space="preserve">
+    <value>External Id</value>
+    <comment>Column header before the attribute name is known</comment>
+  </data>
+  <data name="CsoListExternalIdHeaderNamed" xml:space="preserve">
+    <value>External Id ({0})</value>
+    <comment>Column header; {0} is the Connected System's anchor attribute</comment>
+  </data>
+  <data name="CsoListSecondaryExternalIdHeader" xml:space="preserve">
+    <value>Secondary External Id</value>
+    <comment>Column header before the attribute name is known</comment>
+  </data>
+  <data name="CsoListSecondaryExternalIdHeaderNamed" xml:space="preserve">
+    <value>Secondary External Id ({0})</value>
+    <comment>Column header; {0} is the secondary attribute</comment>
+  </data>
+  <data name="CsoListColumnDateJoined" xml:space="preserve">
+    <value>Date Joined</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="CsoListColumnState" xml:space="preserve">
+    <value>State</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="CsoListColumnJoinType" xml:space="preserve">
+    <value>Join Type</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="CsoListNoSearchMatch" xml:space="preserve">
+    <value>No Connected System Objects match "{0}"</value>
+    <comment>{0} is the search text</comment>
+  </data>
+  <data name="CsoListEveryReferenceResolved" xml:space="preserve">
+    <value>Every reference has resolved</value>
+    <comment>Empty state for the unresolved references filter</comment>
+  </data>
+  <data name="CsoListNoUnresolvedInSystem" xml:space="preserve">
+    <value>No Connected System Object in {0} holds a reference value that could not be linked.</value>
+    <comment>{0} is the Connected System's name</comment>
+  </data>
+  <data name="CsoListNoFilterMatch" xml:space="preserve">
+    <value>No Connected System Objects match the selected filters</value>
+    <comment>Empty state when filter chips match nothing</comment>
+  </data>
+  <data name="CsoListClearFilterHint" xml:space="preserve">
+    <value>Clear the filter chips above to browse the whole Connector Space.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="CsoListNoneYet" xml:space="preserve">
+    <value>No Connected System Objects yet</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="CsoListNoneYetHint" xml:space="preserve">
+    <value>Objects appear here once an import brings them in from the Connected System.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="CsoListClearTitle" xml:space="preserve">
+    <value>Clear Connector Space</value>
+    <comment>Dialog title and its confirming button</comment>
+  </data>
+  <data name="CsoListClearWarning" xml:space="preserve">
+    <value>This action will delete all Connected System Objects from JIM.</value>
+    <comment>Dialog warning</comment>
+  </data>
+  <data name="CsoListClearExplain1" xml:space="preserve">
+    <value>Clearing does not touch the external system. It discards the Connector Space objects, their Metaverse joins, and any Pending Exports to this Connected System; the Metaverse itself is not changed by the clear.</value>
+    <comment>Dialog paragraph</comment>
+  </data>
+  <data name="CsoListClearExplain2" xml:space="preserve">
+    <value>Run a Full Import to rebuild the Connector Space. At the first Full Synchronisation after that import completes successfully, Metaverse values contributed by objects that did not return are recalled automatically. Each Metaverse object's type Deletion Rule is then applied for objects that did not return, with its configured grace period.</value>
+    <comment>Dialog paragraph</comment>
+  </data>
+  <data name="CsoListClearExplain3" xml:space="preserve">
+    <value>Note: A Full Synchronisation run before then does nothing beyond ordinary synchronisation. The reconciliation refuses, leaving everything as it was, if far fewer objects return than were cleared; re-import the rest, or raise the allowed share in Service Settings, then run a Full Synchronisation again.</value>
+    <comment>Dialog paragraph</comment>
+  </data>
+  <data name="CsoListClearExplain4Lead" xml:space="preserve">
+    <value>Any Metaverse Object deletes will be executed via a task and may take some time to process. Check the</value>
+    <comment>Dialog paragraph, before the Operations link</comment>
+  </data>
+  <data name="CsoListOperationsLink" xml:space="preserve">
+    <value>Operations</value>
+    <comment>Link text in the dialog</comment>
+  </data>
+  <data name="CsoListClearExplain4Trail" xml:space="preserve">
+    <value>page or refresh this one to see progress.</value>
+    <comment>Dialog paragraph, after the Operations link</comment>
+  </data>
+  <data name="CsoListDeleteHistory" xml:space="preserve">
+    <value>Delete change history for cleared objects</value>
+    <comment>Checkbox label</comment>
+  </data>
+  <data name="CsoListDeleteHistoryHint" xml:space="preserve">
+    <value>When enabled, all change history records for the cleared Connected System Objects will also be deleted. This is recommended when clearing for re-import as the old history becomes irrelevant.</value>
+    <comment>Checkbox caption</comment>
+  </data>
+  <data name="CsoListTaskFailed" xml:space="preserve">
+    <value>Failed to create task.</value>
+    <comment>Snackbar, when no reason is given</comment>
+  </data>
+  <data name="CsoPluralName" xml:space="preserve">
+    <value>Connected System Objects</value>
+    <comment>Grid item name, plural</comment>
+  </data>
+  <data name="CsoListSearchPlaceholder" xml:space="preserve">
+    <value>Search external ID, secondary ID, or display name</value>
+    <comment>Grid search placeholder</comment>
+  </data>
+  <data name="CsoListQueuedForDeletion" xml:space="preserve">
+    <value>Connected System Objects queued for deletion.</value>
+    <comment>Snackbar</comment>
+  </data>
 </root>

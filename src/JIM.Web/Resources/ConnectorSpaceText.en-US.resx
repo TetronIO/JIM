@@ -20,4 +20,13 @@
   <data name="CsoFullSynchronisation" xml:space="preserve">
     <value>Full Synchronization</value>
   </data>
+  <data name="CsoListPageInfo" xml:space="preserve">
+    <value>The Connector Space holds this Connected System's Connected System Objects. Inbound changes from the system are held here before being committed to the Metaverse. Outbound changes are held here ahead of synchronization to the Connected System.</value>
+  </data>
+  <data name="CsoListClearExplain2" xml:space="preserve">
+    <value>Run a Full Import to rebuild the Connector Space. At the first Full Synchronization after that import completes successfully, Metaverse values contributed by objects that did not return are recalled automatically. Each Metaverse object's type Deletion Rule is then applied for objects that did not return, with its configured grace period.</value>
+  </data>
+  <data name="CsoListClearExplain3" xml:space="preserve">
+    <value>Note: A Full Synchronization run before then does nothing beyond ordinary synchronization. The reconciliation refuses, leaving everything as it was, if far fewer objects return than were cleared; re-import the rest, or raise the allowed share in Service Settings, then run a Full Synchronization again.</value>
+  </data>
 </root>

@@ -281,4 +281,124 @@
   <data name="CsoBreadcrumbConnectorSpace" xml:space="preserve">
     <value>Espace connecteur</value>
   </data>
+  <data name="CsoListPageTitle" xml:space="preserve">
+    <value>Espace connecteur : {0}</value>
+  </data>
+  <data name="CsoListHeadingLabel" xml:space="preserve">
+    <value>Espace connecteur :</value>
+  </data>
+  <data name="CsoListPageInfo" xml:space="preserve">
+    <value>L’espace connecteur contient les objets de systèmes connectés de ce système connecté. Les modifications entrantes du système y sont conservées avant d’être validées dans le Metaverse. Les modifications sortantes y sont conservées avant la synchronisation avec le système connecté.</value>
+  </data>
+  <data name="CsoListFilterStatus" xml:space="preserve">
+    <value>Filtrer par statut :</value>
+  </data>
+  <data name="CsoListFilterObjectType" xml:space="preserve">
+    <value>Filtrer par type d’objet :</value>
+  </data>
+  <data name="CsoListFilterJoinType" xml:space="preserve">
+    <value>Filtrer par type de jointure :</value>
+  </data>
+  <data name="CsoListFilterReferences" xml:space="preserve">
+    <value>Filtrer par références :</value>
+  </data>
+  <data name="CsoListUnresolved" xml:space="preserve">
+    <value>Non résolues</value>
+  </data>
+  <data name="CsoListDeleteAll" xml:space="preserve">
+    <value>Supprimer tous les objets</value>
+  </data>
+  <data name="CsoListColumnsMenu" xml:space="preserve">
+    <value>Colonnes</value>
+  </data>
+  <data name="CsoListShowColumns" xml:space="preserve">
+    <value>Afficher les colonnes</value>
+  </data>
+  <data name="CsoListColumnsHint" xml:space="preserve">
+    <value>Mémorisé pour {0} dans ce navigateur.</value>
+  </data>
+  <data name="CsoListExternalIdHeader" xml:space="preserve">
+    <value>ID externe</value>
+  </data>
+  <data name="CsoListExternalIdHeaderNamed" xml:space="preserve">
+    <value>ID externe ({0})</value>
+  </data>
+  <data name="CsoListSecondaryExternalIdHeader" xml:space="preserve">
+    <value>ID externe secondaire</value>
+  </data>
+  <data name="CsoListSecondaryExternalIdHeaderNamed" xml:space="preserve">
+    <value>ID externe secondaire ({0})</value>
+  </data>
+  <data name="CsoListColumnDateJoined" xml:space="preserve">
+    <value>Date de jointure</value>
+  </data>
+  <data name="CsoListColumnState" xml:space="preserve">
+    <value>État</value>
+  </data>
+  <data name="CsoListColumnJoinType" xml:space="preserve">
+    <value>Type de jointure</value>
+  </data>
+  <data name="CsoListNoSearchMatch" xml:space="preserve">
+    <value>Aucun objet de système connecté ne correspond à « {0} »</value>
+  </data>
+  <data name="CsoListEveryReferenceResolved" xml:space="preserve">
+    <value>Toutes les références ont été résolues</value>
+  </data>
+  <data name="CsoListNoUnresolvedInSystem" xml:space="preserve">
+    <value>Aucun objet de système connecté de {0} ne détient de valeur de référence qui n’a pas pu être liée.</value>
+  </data>
+  <data name="CsoListNoFilterMatch" xml:space="preserve">
+    <value>Aucun objet de système connecté ne correspond aux filtres sélectionnés</value>
+  </data>
+  <data name="CsoListClearFilterHint" xml:space="preserve">
+    <value>Effacez les filtres ci-dessus pour parcourir tout l’espace connecteur.</value>
+  </data>
+  <data name="CsoListNoneYet" xml:space="preserve">
+    <value>Aucun objet de système connecté pour le moment</value>
+  </data>
+  <data name="CsoListNoneYetHint" xml:space="preserve">
+    <value>Les objets apparaissent ici une fois qu’une importation les récupère depuis le système connecté.</value>
+  </data>
+  <data name="CsoListClearTitle" xml:space="preserve">
+    <value>Vider l’espace connecteur</value>
+  </data>
+  <data name="CsoListClearWarning" xml:space="preserve">
+    <value>Cette action supprime de JIM tous les objets de systèmes connectés.</value>
+  </data>
+  <data name="CsoListClearExplain1" xml:space="preserve">
+    <value>L’effacement ne touche pas au système externe. Il supprime les objets de l’espace connecteur, leurs jointures Metaverse et toutes les exportations en attente vers ce système connecté ; le Metaverse lui-même n’est pas modifié par l’effacement.</value>
+  </data>
+  <data name="CsoListClearExplain2" xml:space="preserve">
+    <value>Exécutez une importation complète pour reconstruire l’espace connecteur. Lors de la première synchronisation complète qui suit la réussite de cette importation, les valeurs Metaverse apportées par des objets qui ne sont pas revenus sont rappelées automatiquement. La règle de suppression du type de chaque objet Metaverse s’applique ensuite aux objets qui ne sont pas revenus, avec son délai de grâce configuré.</value>
+  </data>
+  <data name="CsoListClearExplain3" xml:space="preserve">
+    <value>Remarque : une exécution de synchronisation complète avant ce moment ne fait rien de plus qu’une synchronisation ordinaire. La réconciliation refuse, en laissant tout en l’état, si beaucoup moins d’objets reviennent que d’objets effacés ; réimportez le reste, ou augmentez la part autorisée dans les paramètres de service, puis exécutez à nouveau une synchronisation complète.</value>
+  </data>
+  <data name="CsoListClearExplain4Lead" xml:space="preserve">
+    <value>Les suppressions d’objets Metaverse seront exécutées via une tâche et peuvent prendre un certain temps. Consultez la page</value>
+  </data>
+  <data name="CsoListOperationsLink" xml:space="preserve">
+    <value>Opérations</value>
+  </data>
+  <data name="CsoListClearExplain4Trail" xml:space="preserve">
+    <value>ou actualisez celle-ci pour suivre la progression.</value>
+  </data>
+  <data name="CsoListDeleteHistory" xml:space="preserve">
+    <value>Supprimer l’historique des modifications des objets effacés</value>
+  </data>
+  <data name="CsoListDeleteHistoryHint" xml:space="preserve">
+    <value>Lorsque cette option est activée, tous les enregistrements d’historique des modifications des objets de systèmes connectés effacés seront également supprimés. Cela est recommandé lorsque l’on efface en vue d’une réimportation, car l’ancien historique n’a plus d’intérêt.</value>
+  </data>
+  <data name="CsoListTaskFailed" xml:space="preserve">
+    <value>Impossible de créer la tâche.</value>
+  </data>
+  <data name="CsoPluralName" xml:space="preserve">
+    <value>Objets de systèmes connectés</value>
+  </data>
+  <data name="CsoListSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher par ID externe, ID secondaire ou nom d’affichage</value>
+  </data>
+  <data name="CsoListQueuedForDeletion" xml:space="preserve">
+    <value>Les objets de systèmes connectés ont été mis en file d’attente pour suppression.</value>
+  </data>
 </root>
