@@ -2378,9 +2378,8 @@ public partial class ConnectedSystemServer
             return;
         }
 
-        activity.WarningMessage = "A deselected attribute is still read by: " +
-            string.Join("; ", deselectionWarnings.Select(reader => reader.Description)) +
-            ". It is no longer imported, so these read values that are never refreshed, and no value for objects imported from now on.";
+        activity.WarningMessageDetail = ActivityMessage.Create(nameof(ActivityMessages.DeselectedAttributeStillRead),
+            string.Join("; ", deselectionWarnings.Select(reader => reader.Description)));
         await Application.Activities.CompleteActivityWithWarningAsync(activity);
     }
 
@@ -7183,7 +7182,7 @@ public partial class ConnectedSystemServer
         Log.Error(ex, "{Caller}: could not build the change record for Connected System Object {CsoId}; " +
             "the object is errored on its Run Profile Execution Item and the run continues.", callerName, cso.Id);
         rpei.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
-        rpei.ErrorMessage = ex.Message;
+        ActivityMessage.SetError(rpei, ex);
         rpei.ErrorStackTrace = ex.ToString();
     }
 

@@ -561,4 +561,43 @@
   <data name="UnreadableSingleValue" xml:space="preserve">
     <value>Impossible de {0} une valeur de {1}{2} : {3} JIM a laissé {1} tel qu’il le détenait déjà. Corrigez la valeur dans le système connecté, puis exécutez de nouveau l’importation.</value>
   </data>
+  <data name="WorkerTaskAbandoned" xml:space="preserve">
+    <value>La tâche a été abandonnée à la suite d’un plantage ou d’un redémarrage du Worker. Elle était en cours lorsque le Worker a cessé de répondre. {0}Cela n’indique pas de problème d’intégrité des données : la prochaine exécution de synchronisation repartira de l’état actuel.</value>
+  </data>
+  <data name="NotQueued" xml:space="preserve">
+    <value>Impossible de la mettre en file d’attente : {0}</value>
+  </data>
+  <data name="CleanupFailed" xml:space="preserve">
+    <value>Échec du nettoyage : {0}</value>
+  </data>
+  <data name="ConfigurationChangeNotRecorded" xml:space="preserve">
+    <value>La modification a été enregistrée, mais JIM n’a pas pu consigner que la prochaine synchronisation de {0} doit traiter chaque objet {1} ; elle risque donc de ne pas atteindre les objets existants. Exécutez une synchronisation complète de {0} pour l’appliquer.</value>
+  </data>
+  <data name="StepNotRunEarlierStepStopped" xml:space="preserve">
+    <value>Non exécutée : une étape précédente a arrêté la planification.</value>
+  </data>
+  <data name="StepNotRunScheduleCouldNotStart" xml:space="preserve">
+    <value>Non exécutée : la planification n’a pas pu démarrer.</value>
+  </data>
+  <data name="StepNotRunExecutionCancelled" xml:space="preserve">
+    <value>Non exécutée : l’exécution de planification a été annulée.</value>
+  </data>
+  <data name="GeneratedValuesHeldBackOne" xml:space="preserve">
+    <value>JIM a retenu {0} valeur de l’attribut {1} jusqu’à ce que les valeurs construites à partir d’elle puissent être calculées. Elle attend {2}{3}.</value>
+  </data>
+  <data name="GeneratedValuesHeldBackOther" xml:space="preserve">
+    <value>JIM a retenu {0} valeurs de l’attribut {1} jusqu’à ce que les valeurs construites à partir d’elles puissent être calculées. Elles attendent {2}{3}.</value>
+  </data>
+  <data name="GeneratedValuesAndMore" xml:space="preserve">
+    <value> ; et d’autres</value>
+  </data>
+  <data name="UnreadableRecordsOne" xml:space="preserve">
+    <value>1 objet Metaverse a enregistré des modifications faites en dehors de la synchronisation qui n’ont pas pu être lues ; il n’a été examiné que pour la portée d’exportation, et ces modifications n’ont pas été remises aux systèmes connectés. Modifiez de nouveau l’objet concerné pour remettre ses valeurs.</value>
+  </data>
+  <data name="UnreadableRecordsOther" xml:space="preserve">
+    <value>{0} objets Metaverse ont enregistré des modifications faites en dehors de la synchronisation qui n’ont pas pu être lues ; ils n’ont été examinés que pour la portée d’exportation, et ces modifications n’ont pas été remises aux systèmes connectés. Modifiez de nouveau les objets concernés pour remettre leurs valeurs.</value>
+  </data>
+  <data name="DeselectedAttributeStillRead" xml:space="preserve">
+    <value>Un attribut désélectionné est encore lu par : {0}. Il n’est plus importé ; ces lecteurs lisent donc des valeurs qui ne sont jamais actualisées, et aucune valeur pour les objets importés désormais.</value>
+  </data>
 </root>

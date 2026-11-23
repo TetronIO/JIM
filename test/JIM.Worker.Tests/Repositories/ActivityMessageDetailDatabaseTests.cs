@@ -124,6 +124,30 @@ public class ActivityMessageDetailDatabaseTests
     }
 
     [Test]
+    public async Task UpdateActivityMessageAsync_Message_WritesTheEnglishAndTheMessageAsync()
+    {
+        // Arrange
+        await using var seed = NewContext();
+        var activityId = await SeedActivityAsync(seed);
+
+        // Act
+        await using (var context = NewContext())
+        {
+            var sync = (SyncRepository)new PostgresDataRepository(context).Sync;
+            await sync.UpdateActivityMessageAsync(new Activity { Id = activityId }, Sample(nameof(ActivityMessages.FailureWithCause), "Export", "cancelled"));
+        }
+
+        // Assert
+        await using var read = NewContext();
+        var stored = await read.Activities.AsNoTracking().SingleAsync(a => a.Id == activityId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Message, Is.EqualTo("Export --> cancelled"));
+            Assert.That(stored.MessageDetail?.ToEnglish(), Is.EqualTo("Export --> cancelled"));
+        }
+    }
+
+    [Test]
     public async Task ProgressWriter_WritesTheEnglishAndClearsTheDetailAsync()
     {
         // Arrange

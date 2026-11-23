@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using System.Data.Common;
 using JIM.Application.Servers.Preview;
 using JIM.Application.Services;
@@ -410,7 +413,7 @@ public partial class ConnectedSystemServer
     {
         try
         {
-            await Application.Activities.FailActivityWithErrorAsync(activity, failure.Message);
+            await Application.Activities.FailActivityWithErrorAsync(activity, ActivityMessage.Create(nameof(ActivityMessages.ConfigurationChangeNotRecorded), failure.ConnectedSystemName, failure.ObjectTypeName));
         }
         catch (Exception ex) when (ex is DbException or DbUpdateException or InvalidOperationException or TimeoutException)
         {

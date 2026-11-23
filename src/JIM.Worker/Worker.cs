@@ -1387,6 +1387,7 @@ public class Worker : BackgroundService
                         Id = TimeOrderedIds.New(),
                         ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError,
                         ErrorMessage = ex.Message,
+                        ErrorMessageDetailJson = ex.DetailOf() is { } detail && detail.ToEnglish() == ex.Message ? MessageJson.Serialise(detail) : null,
                         ErrorStackTrace = ex.StackTrace,
                         DisplayNameSnapshot = mvo.Name,
                         ObjectTypeSnapshot = mvo.Type?.Name

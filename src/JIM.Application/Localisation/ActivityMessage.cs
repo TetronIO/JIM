@@ -55,6 +55,30 @@ public static partial class ActivityMessage
         return Listed(parts) ?? Create(nameof(ActivityMessages.HierarchyNoChanges));
     }
 
+    /// <summary>
+    /// What went wrong, as an argument of a longer message: the message an exception carries where it says exactly what its
+    /// text says, else its text.
+    /// </summary>
+    public static MessageArgument CauseOf(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+
+        var detail = exception.DetailOf();
+        return detail is not null && detail.ToEnglish() == exception.Message ? detail : exception.Message;
+    }
+
+    /// <summary>
+    /// The message for the reason an Activity records when a Schedule step did not run, given the English it was stored as
+    /// (<see cref="JIM.Models.Scheduling.ScheduleStepNotRunReasons"/>); null for any other text, such as a step's progress.
+    /// </summary>
+    public static JimMessage? StepNotRunReason(string? english) => english switch
+    {
+        JIM.Models.Scheduling.ScheduleStepNotRunReasons.EarlierStepStoppedSchedule => Create(nameof(ActivityMessages.StepNotRunEarlierStepStopped)),
+        JIM.Models.Scheduling.ScheduleStepNotRunReasons.ScheduleCouldNotStart => Create(nameof(ActivityMessages.StepNotRunScheduleCouldNotStart)),
+        JIM.Models.Scheduling.ScheduleStepNotRunReasons.ExecutionCancelled => Create(nameof(ActivityMessages.StepNotRunExecutionCancelled)),
+        _ => null
+    };
+
     /// <summary>Two messages one after the other, separated by a space.</summary>
     public static JimMessage Spaced(JimMessage first, JimMessage second) =>
         Create(nameof(ActivityMessages.JoinedBySpace), first, second);

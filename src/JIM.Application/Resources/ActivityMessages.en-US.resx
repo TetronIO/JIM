@@ -77,4 +77,16 @@
   <data name="UnresolvableReferencesWarning" xml:space="preserve">
     <value>{0} reference value(s) could not be written because the referenced Metaverse Object has no Connected System Object in this Connected System. The referenced objects are out of scope for every Synchronization Rule into this system, or have not been provisioned yet; view the affected Pending Exports for details.</value>
   </data>
+  <data name="ConfigurationChangeNotRecorded" xml:space="preserve">
+    <value>The change was saved, but JIM could not record that the next synchronization of {0} must process every {1} object, so it may not reach the objects that already exist. Run a Full Synchronization of {0} to apply it.</value>
+  </data>
+  <data name="StepNotRunExecutionCancelled" xml:space="preserve">
+    <value>Not run: the Schedule Execution was canceled.</value>
+  </data>
+  <data name="UnreadableRecordsOne" xml:space="preserve">
+    <value>1 Metaverse Object recorded changes made outside synchronization that could not be read; it was reviewed for export scope only, and those changes were not delivered to Connected Systems. Edit the affected object again to deliver its values.</value>
+  </data>
+  <data name="UnreadableRecordsOther" xml:space="preserve">
+    <value>{0} Metaverse Objects recorded changes made outside synchronization that could not be read; they were reviewed for export scope only, and those changes were not delivered to Connected Systems. Edit the affected objects again to deliver their values.</value>
+  </data>
 </root>

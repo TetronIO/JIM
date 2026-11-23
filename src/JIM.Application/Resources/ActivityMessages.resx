@@ -743,4 +743,56 @@
     <value>Couldn't {0} a value of {1}{2}: {3} JIM left {1} as it already held it. Correct the value in the Connected System, then run the import again.</value>
     <comment>An error on an object. {0}: a verb (import or read), {1}: the attribute, {2}: the value in quotes (or nothing), {3}: why, as a sentence.</comment>
   </data>
+  <data name="WorkerTaskAbandoned" xml:space="preserve">
+    <value>Task was abandoned due to worker crash or restart. The task was in progress when the worker stopped responding. {0}This does not indicate a data integrity issue - the next sync run will process from the current state.</value>
+    <comment>Why a run failed. {0}: a sentence about memory, followed by a space, or nothing.</comment>
+  </data>
+  <data name="NotQueued" xml:space="preserve">
+    <value>Could not be queued: {0}</value>
+    <comment>Why a Schedule step did not start. {0}: the reason, as a sentence.</comment>
+  </data>
+  <data name="CleanupFailed" xml:space="preserve">
+    <value>Cleanup failed: {0}</value>
+    <comment>Why the history retention clean-up failed. {0}: what went wrong.</comment>
+  </data>
+  <data name="ConfigurationChangeNotRecorded" xml:space="preserve">
+    <value>The change was saved, but JIM could not record that the next synchronisation of {0} must process every {1} object, so it may not reach the objects that already exist. Run a Full Synchronisation of {0} to apply it.</value>
+    <comment>Why a configuration change's Activity failed. {0}: the Connected System, {1}: the Object Type.</comment>
+  </data>
+  <data name="StepNotRunEarlierStepStopped" xml:space="preserve">
+    <value>Not run: an earlier step stopped the Schedule.</value>
+    <comment>Why a Schedule step did not run.</comment>
+  </data>
+  <data name="StepNotRunScheduleCouldNotStart" xml:space="preserve">
+    <value>Not run: the Schedule could not start.</value>
+    <comment>Why a Schedule step did not run.</comment>
+  </data>
+  <data name="StepNotRunExecutionCancelled" xml:space="preserve">
+    <value>Not run: the Schedule Execution was cancelled.</value>
+    <comment>Why a Schedule step did not run.</comment>
+  </data>
+  <data name="GeneratedValuesHeldBackOne" xml:space="preserve">
+    <value>JIM held back {0} {1} value until the values built from it can be worked out. It waits for {2}{3}.</value>
+    <comment>A Warning on a synchronisation. {0}: a count, {1}: the attribute's name, {2}: what it waits for (a list), {3}: '; and more' or nothing.</comment>
+  </data>
+  <data name="GeneratedValuesHeldBackOther" xml:space="preserve">
+    <value>JIM held back {0} {1} values until the values built from them can be worked out. They wait for {2}{3}.</value>
+    <comment>A Warning on a synchronisation. {0}: a count, {1}: the attribute's name, {2}: what they wait for (a list), {3}: '; and more' or nothing.</comment>
+  </data>
+  <data name="GeneratedValuesAndMore" xml:space="preserve">
+    <value>; and more</value>
+    <comment>The end of a list inside a sentence. Keep the leading separator.</comment>
+  </data>
+  <data name="UnreadableRecordsOne" xml:space="preserve">
+    <value>1 Metaverse Object recorded changes made outside synchronisation that could not be read; it was reviewed for export scope only, and those changes were not delivered to Connected Systems. Edit the affected object again to deliver its values.</value>
+    <comment>A Warning on a synchronisation.</comment>
+  </data>
+  <data name="UnreadableRecordsOther" xml:space="preserve">
+    <value>{0} Metaverse Objects recorded changes made outside synchronisation that could not be read; they were reviewed for export scope only, and those changes were not delivered to Connected Systems. Edit the affected objects again to deliver their values.</value>
+    <comment>A Warning on a synchronisation. {0}: a count.</comment>
+  </data>
+  <data name="DeselectedAttributeStillRead" xml:space="preserve">
+    <value>A deselected attribute is still read by: {0}. It is no longer imported, so these read values that are never refreshed, and no value for objects imported from now on.</value>
+    <comment>A Warning on a Connected System schema change. {0}: what still reads the attribute (a list).</comment>
+  </data>
 </root>
