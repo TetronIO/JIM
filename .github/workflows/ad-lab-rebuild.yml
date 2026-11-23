@@ -436,6 +436,7 @@ jobs:
             !test/integration/results/README.md
             !test/integration/results/docker-stats-*
             !test/integration/results/docker-events-*
+            !test/integration/results/jim-web-tls/**
             test/integration/ad-lab-certs/*.pem
           if-no-files-found: warn
           retention-days: 30
