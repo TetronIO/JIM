@@ -1169,4 +1169,82 @@
   <data name="ClaimsIdpRoleClaimType" xml:space="preserve">
     <value>Type de revendication de rôle</value>
   </data>
+  <data name="AdminIntro" xml:space="preserve">
+    <value>Gérez la configuration du système, les opérations et la sécurité.</value>
+  </data>
+  <data name="AdminSectionOperations" xml:space="preserve">
+    <value>Opérations et supervision</value>
+  </data>
+  <data name="AdminSectionSyncConfig" xml:space="preserve">
+    <value>Configuration de la synchronisation</value>
+  </data>
+  <data name="AdminSectionData" xml:space="preserve">
+    <value>Gestion des données</value>
+  </data>
+  <data name="AdminSectionSecurity" xml:space="preserve">
+    <value>Sécurité et paramètres</value>
+  </data>
+  <data name="AdminTileOperations" xml:space="preserve">
+    <value>Opérations</value>
+  </data>
+  <data name="AdminTileOperationsDesc" xml:space="preserve">
+    <value>Gérez les opérations de synchronisation, les planifications, l’historique d’exécution et la remise des mots de passe.</value>
+  </data>
+  <data name="AdminOperationsAttention" xml:space="preserve">
+    <value>Un service JIM ne transmet pas son état ; ouvrez Opérations.</value>
+  </data>
+  <data name="AdminTileLogsDesc" xml:space="preserve">
+    <value>Consultez les journaux de l’application et de la synchronisation.</value>
+  </data>
+  <data name="AdminTilePendingDeletions" xml:space="preserve">
+    <value>Suppressions en attente</value>
+  </data>
+  <data name="AdminTilePendingDeletionsDesc" xml:space="preserve">
+    <value>Examinez les objets Metaverse en attente de suppression avant sa finalisation</value>
+  </data>
+  <data name="AdminTilePredefinedSearches" xml:space="preserve">
+    <value>Recherches prédéfinies</value>
+  </data>
+  <data name="AdminTilePredefinedSearchesDesc" xml:space="preserve">
+    <value>Créez et gérez les requêtes de recherche enregistrées.</value>
+  </data>
+  <data name="AdminTileExampleData" xml:space="preserve">
+    <value>Données d’exemple</value>
+  </data>
+  <data name="AdminTileExampleDataDesc" xml:space="preserve">
+    <value>Générez des données de test à partir de modèles.</value>
+  </data>
+  <data name="AdminTileDeletedObjects" xml:space="preserve">
+    <value>Objets supprimés</value>
+  </data>
+  <data name="AdminTileDeletedObjectsDesc" xml:space="preserve">
+    <value>Consultez l’historique des objets supprimés.</value>
+  </data>
+  <data name="AdminTileSettings" xml:space="preserve">
+    <value>Paramètres</value>
+  </data>
+  <data name="AdminTileSettingsDesc" xml:space="preserve">
+    <value>Configurez les paramètres de service.</value>
+  </data>
+  <data name="AdminTileDangerZone" xml:space="preserve">
+    <value>Zone dangereuse</value>
+  </data>
+  <data name="AdminTileDefineFlow" xml:space="preserve">
+    <value>Définissez comment les attributs circulent entre les systèmes.</value>
+  </data>
+  <data name="AdminTileConnectedSystemsDesc" xml:space="preserve">
+    <value>Configurez les connexions aux systèmes externes.</value>
+  </data>
+  <data name="AdminTileSchemaDesc" xml:space="preserve">
+    <value>Gérez les types d’objets et les attributs.</value>
+  </data>
+  <data name="AdminTileApiKeysDesc" xml:space="preserve">
+    <value>Gérez les clés d’authentification API.</value>
+  </data>
+  <data name="AdminTileCertificatesDesc" xml:space="preserve">
+    <value>Gérez les certificats approuvés.</value>
+  </data>
+  <data name="AdminTileFactoryResetDesc" xml:space="preserve">
+    <value>Effacez toutes les données et la configuration pour repartir de zéro.</value>
+  </data>
 </root>

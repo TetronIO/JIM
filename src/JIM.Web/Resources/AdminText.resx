@@ -1554,4 +1554,108 @@
     <value>Role claim type</value>
     <comment>Identity provider row label</comment>
   </data>
+  <data name="AdminIntro" xml:space="preserve">
+    <value>Manage system configuration, operations, and security.</value>
+    <comment>Introduction on the Administration landing page</comment>
+  </data>
+  <data name="AdminSectionOperations" xml:space="preserve">
+    <value>Operations &amp; Monitoring</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="AdminSectionSyncConfig" xml:space="preserve">
+    <value>Synchronisation Configuration</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="AdminSectionData" xml:space="preserve">
+    <value>Data Management</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="AdminSectionSecurity" xml:space="preserve">
+    <value>Security &amp; Settings</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="AdminTileOperations" xml:space="preserve">
+    <value>Operations</value>
+    <comment>Tile title</comment>
+  </data>
+  <data name="AdminTileOperationsDesc" xml:space="preserve">
+    <value>Manage sync operations, schedules, run history and password delivery</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminOperationsAttention" xml:space="preserve">
+    <value>A JIM service is not reporting; open Operations.</value>
+    <comment>Tooltip on the red dot of the Operations tile</comment>
+  </data>
+  <data name="AdminTileLogsDesc" xml:space="preserve">
+    <value>View application and synchronisation logs</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTilePendingDeletions" xml:space="preserve">
+    <value>Pending Deletions</value>
+    <comment>Tile title</comment>
+  </data>
+  <data name="AdminTilePendingDeletionsDesc" xml:space="preserve">
+    <value>Review Metaverse Objects awaiting deletion before it is finalised</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTilePredefinedSearches" xml:space="preserve">
+    <value>Predefined Searches</value>
+    <comment>Tile title</comment>
+  </data>
+  <data name="AdminTilePredefinedSearchesDesc" xml:space="preserve">
+    <value>Create and manage saved search queries</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileExampleData" xml:space="preserve">
+    <value>Example Data</value>
+    <comment>Tile title</comment>
+  </data>
+  <data name="AdminTileExampleDataDesc" xml:space="preserve">
+    <value>Generate test data from templates</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileDeletedObjects" xml:space="preserve">
+    <value>Deleted Objects</value>
+    <comment>Tile title</comment>
+  </data>
+  <data name="AdminTileDeletedObjectsDesc" xml:space="preserve">
+    <value>View the history of deleted objects</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileSettings" xml:space="preserve">
+    <value>Settings</value>
+    <comment>Tile title</comment>
+  </data>
+  <data name="AdminTileSettingsDesc" xml:space="preserve">
+    <value>Configure service settings</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileDangerZone" xml:space="preserve">
+    <value>Danger Zone</value>
+    <comment>Expander title</comment>
+  </data>
+  <data name="AdminTileDefineFlow" xml:space="preserve">
+    <value>Define how attributes flow between systems</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileConnectedSystemsDesc" xml:space="preserve">
+    <value>Configure external system connections</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileSchemaDesc" xml:space="preserve">
+    <value>Manage object types and attributes</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileApiKeysDesc" xml:space="preserve">
+    <value>Manage API authentication keys</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileCertificatesDesc" xml:space="preserve">
+    <value>Manage trusted certificates</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileFactoryResetDesc" xml:space="preserve">
+    <value>Wipe all data and configuration to start fresh</value>
+    <comment>Tile description</comment>
+  </data>
 </root>
