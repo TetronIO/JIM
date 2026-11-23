@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using System.Runtime.CompilerServices;
 using JIM.Application.Interfaces;
 using JIM.Application.Services;
@@ -83,10 +86,9 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
 
         if (stored.Schema.DescribesSameSchemaAs(proposal))
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                "The proposed schema selection matches the one this Connected System already has, so nothing " +
-                "would change and no impact is counted below.",
+                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaSameAsStored)),
                 nameof(ConnectedSystemObjectType.Selected)));
             return findings;
         }
@@ -383,22 +385,18 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
 
         if (change.ProposedSelected)
         {
-            yield return new PreviewValidationFinding(
+            yield return PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                $"Selecting {change.ObjectTypeName} brings its objects into scope for import on the next Import " +
-                "Run Profile.",
+                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaSelectingObjectType), change.ObjectTypeName),
                 nameof(ConnectedSystemObjectType.Selected));
             yield break;
         }
 
         // Warning rather than Blocking: taking a type out of management is a legitimate thing to do once nothing
         // manages it. What the administrator needs is to know it is a cascade, and when it happens.
-        yield return new PreviewValidationFinding(
+        yield return PreviewValidationFinding.Of(
             PreviewValidationSeverity.Warning,
-            $"Deselecting {change.ObjectTypeName} takes its objects out of management. The next Full Import no " +
-            "longer returns them, so the objects already imported become obsolete, and the following synchronisation " +
-            "disconnects them from their Metaverse Objects, which may leave those eligible for deletion. The Run " +
-            "Profile's deletion limits apply to them as to any other deleted object.",
+            JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaDeselectingObjectType), change.ObjectTypeName),
             nameof(ConnectedSystemObjectType.Selected));
     }
 
@@ -460,16 +458,7 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
                 return null;
 
             return OverlapWarning(
-                $"Deselecting {changedName} does not take its objects that also carry {otherName} out of management: " +
-                $"with {changedName} deselected, those entries resolve to {otherName}, so the import returns them as " +
-                $"{otherName} objects rather than as the {changedName} objects JIM holds. By default each import refuses " +
-                $"them, reports each as an Object Type Changed error and keeps it as {changedName} rather than " +
-                "obsoleting it, so the number of objects described as becoming obsolete overstates what happens to " +
-                "them. If the intent is to stop managing those objects, scope them out by container or partition " +
-                $"instead, because deselecting {changedName} changes their Object Type rather than removing them. If " +
-                $"they should become {otherName} objects, run a Full Import with Allow Object Type Changes enabled on " +
-                $"its Run Profile: JIM retires the {changedName} objects and imports them as new {otherName} objects, " +
-                $"in scope of the Synchronisation Rules for {otherName}.");
+                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaOverlapDeselectFallsToOther), changedName, otherName));
         }
 
         if (otherSelectedAfter)
@@ -479,11 +468,7 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
                 return null;
 
             return OverlapWarning(
-                $"Selecting {changedName} changes the Object Type of {otherName} objects that also carry " +
-                $"{changedName}: with both selected, those entries resolve to {changedName}, so the import returns " +
-                $"them as {changedName} objects rather than as the {otherName} objects JIM holds. By default each " +
-                $"import refuses them, reports each as an Object Type Changed error and keeps it as {otherName}. " +
-                MoveInstruction(from: otherName, to: changedName));
+                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaOverlapSelectTakesFromOther), changedName, otherName, MoveInstruction(from: otherName, to: changedName)));
         }
 
         // Selecting one type while deselecting the other: before, only the other could hold the entries carrying
@@ -493,21 +478,14 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
             return null;
 
         return OverlapWarning(
-            $"Selecting {changedName} while deselecting {otherName} changes the Object Type of {otherName} objects " +
-            $"that also carry {changedName}: those entries now resolve to {changedName}, so the import returns them as " +
-            $"{changedName} objects rather than as the {otherName} objects JIM holds. By default each import refuses " +
-            $"them, reports each as an Object Type Changed error and keeps it as {otherName} rather than obsoleting " +
-            $"it, so the number of {otherName} objects described as becoming obsolete overstates what happens to " +
-            "them. " + MoveInstruction(from: otherName, to: changedName));
+            JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaOverlapSelectAndDeselect), changedName, otherName, MoveInstruction(from: otherName, to: changedName)));
     }
 
-    private static string MoveInstruction(string from, string to) =>
-        "To move them, run a Full Import with Allow Object Type Changes enabled on its Run Profile: JIM retires the " +
-        $"{from} objects and imports them as new {to} objects, so a Synchronisation Rule for {to} needs to be ready to " +
-        "join them to the same Metaverse Objects.";
+    private static JimMessage MoveInstruction(string from, string to) =>
+        JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaMoveInstruction), from, to);
 
-    private static PreviewValidationFinding OverlapWarning(string message) =>
-        new(PreviewValidationSeverity.Warning, message, nameof(ConnectedSystemObjectType.Selected));
+    private static PreviewValidationFinding OverlapWarning(JimMessage message) =>
+        PreviewValidationFinding.Of(PreviewValidationSeverity.Warning, message, nameof(ConnectedSystemObjectType.Selected));
 
     /// <summary>
     /// Blocking for every Object Type the proposal would leave deselected while an enabled Synchronisation Rule is
@@ -528,9 +506,10 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
 
             if (boundRules.Count > 0)
             {
-                yield return new PreviewValidationFinding(
+                // The refusal's words are shared with the save, which owns them; shown as they are until that is converted.
+                yield return PreviewValidationFinding.Of(
                     PreviewValidationSeverity.Blocking,
-                    ObjectTypeDeselectionMessages.StillManaged(storedType.Name, boundRules),
+                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), ObjectTypeDeselectionMessages.StillManaged(storedType.Name, boundRules)),
                     nameof(ConnectedSystemObjectType.Selected));
             }
         }
@@ -546,23 +525,20 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
 
         foreach (var attributeId in change.AttributesDeselected)
         {
-            var attributeName = stored.AttributeName(change.ObjectTypeId, attributeId) ?? "This attribute";
+            MessageArgument attributeName = stored.AttributeName(change.ObjectTypeId, attributeId) ?? (MessageArgument)JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaThisAttribute));
 
             if (stored.IsAnchor(change.ObjectTypeId, attributeId))
             {
-                yield return new PreviewValidationFinding(
+                yield return PreviewValidationFinding.Of(
                     PreviewValidationSeverity.Blocking,
-                    $"{attributeName} is the External ID for {change.ObjectTypeName} and cannot be deselected. It " +
-                    "is what every imported object is matched to its Connected System Object by.",
+                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaAnchorCannotDeselect), attributeName, change.ObjectTypeName),
                     nameof(ConnectedSystemObjectTypeAttribute.Selected));
                 continue;
             }
 
-            yield return new PreviewValidationFinding(
+            yield return PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                $"Deselecting {attributeName} on {change.ObjectTypeName} stops it being imported. The values " +
-                "already held for it stay on the Connected System Objects and go on flowing, without ever being " +
-                "refreshed again.",
+                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaDeselectingAttribute), attributeName, change.ObjectTypeName),
                 nameof(ConnectedSystemObjectTypeAttribute.Selected));
 
             var readingRules = syncRules
@@ -573,10 +549,10 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
 
             if (readingRules.Count > 0)
             {
-                yield return new PreviewValidationFinding(
+                yield return PreviewValidationFinding.Of(
                     PreviewValidationSeverity.Warning,
-                    $"{Count(readingRules.Count, "Attribute Flow mapping")} read {attributeName} and will go on " +
-                    $"flowing its frozen values: {string.Join(", ", readingRules)}.",
+                    JimMessage.Counted(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaFlowMappingsReadOne), readingRules.Count,
+                        readingRules.Count, attributeName, string.Join(", ", readingRules)),
                     nameof(ConnectedSystemObjectTypeAttribute.Selected));
             }
         }
@@ -587,14 +563,11 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
         if (!change.ObsoletionChanged)
             yield break;
 
-        yield return new PreviewValidationFinding(
+        yield return PreviewValidationFinding.Of(
             PreviewValidationSeverity.Warning,
             change.ProposedRemoveContributedAttributesOnObsoletion
-                ? $"Obsoleting a {change.ObjectTypeName} object will now withdraw the Metaverse values it " +
-                  "contributed. Where another Connected System still contributes the attribute it is handed over; " +
-                  "where none does, it is cleared."
-                : $"Obsoleting a {change.ObjectTypeName} object will now leave the Metaverse values it contributed " +
-                  "in place. They stop tracking anything from that point, and nothing reports them as stale.",
+                ? JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaObsoletionWithdraws), change.ObjectTypeName)
+                : JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaObsoletionLeavesInPlace), change.ObjectTypeName),
             nameof(ConnectedSystemObjectType.RemoveContributedAttributesOnObsoletion));
     }
 
@@ -605,9 +578,6 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
     private static bool ReadsAttribute(SyncRule rule, int attributeId) =>
         rule.AttributeFlowRules.Any(mapping =>
             mapping.Sources.Any(source => source.ConnectedSystemAttributeId == attributeId));
-
-    private static string Count(int count, string noun) =>
-        count == 1 ? $"1 {noun}" : $"{count} {noun}s";
 
     #endregion
 

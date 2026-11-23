@@ -293,4 +293,46 @@
   <data name="AttributeFlowNoSource" xml:space="preserve">
     <value>Un mappage de flux d’attributs proposé n’a aucune source ; il n’a donc aucune valeur à écrire.</value>
   </data>
+  <data name="SchemaSameAsStored" xml:space="preserve">
+    <value>La sélection de schéma proposée est identique à celle que ce système connecté possède déjà ; rien ne changerait donc et aucun impact n’est compté ci-dessous.</value>
+  </data>
+  <data name="SchemaSelectingObjectType" xml:space="preserve">
+    <value>La sélection de {0} fait entrer ses objets dans le périmètre d’importation lors du prochain profil d’exécution d’importation.</value>
+  </data>
+  <data name="SchemaDeselectingObjectType" xml:space="preserve">
+    <value>La désélection de {0} retire ses objets de la gestion. La prochaine importation complète ne les renvoie plus ; les objets déjà importés deviennent donc obsolètes, et la synchronisation suivante les déconnecte de leurs objets Metaverse, qui peuvent alors devenir éligibles à la suppression. Les limites de suppression du profil d’exécution s’appliquent à eux comme à tout autre objet supprimé.</value>
+  </data>
+  <data name="SchemaOverlapDeselectFallsToOther" xml:space="preserve">
+    <value>La désélection de {0} ne retire pas de la gestion ses objets qui portent aussi {1} : une fois {0} désélectionné, ces entrées sont résolues en {1} ; l’importation les renvoie donc comme des objets {1} plutôt que comme les objets {0} que JIM détient. Par défaut, chaque importation les refuse, signale chacun comme une erreur « Type d’objet modifié » et le conserve comme {0} au lieu de le rendre obsolète ; le nombre d’objets décrits comme devenant obsolètes surestime donc ce qui leur arrive. Si l’objectif est de cesser de gérer ces objets, limitez leur périmètre par conteneur ou par partition, car la désélection de {0} change leur type d’objet au lieu de les supprimer. S’ils doivent devenir des objets {1}, exécutez une importation complète avec « Autoriser les changements de type d’objet » activé sur son profil d’exécution : JIM retire les objets {0} et les importe comme de nouveaux objets {1}, dans le périmètre des règles de synchronisation de {1}.</value>
+  </data>
+  <data name="SchemaOverlapSelectTakesFromOther" xml:space="preserve">
+    <value>La sélection de {0} change le type d’objet des objets {1} qui portent aussi {0} : une fois les deux sélectionnés, ces entrées sont résolues en {0} ; l’importation les renvoie donc comme des objets {0} plutôt que comme les objets {1} que JIM détient. Par défaut, chaque importation les refuse, signale chacun comme une erreur « Type d’objet modifié » et le conserve comme {1}. {2}</value>
+  </data>
+  <data name="SchemaOverlapSelectAndDeselect" xml:space="preserve">
+    <value>La sélection de {0} accompagnée de la désélection de {1} change le type d’objet des objets {1} qui portent aussi {0} : ces entrées sont désormais résolues en {0} ; l’importation les renvoie donc comme des objets {0} plutôt que comme les objets {1} que JIM détient. Par défaut, chaque importation les refuse, signale chacun comme une erreur « Type d’objet modifié » et le conserve comme {1} au lieu de le rendre obsolète ; le nombre d’objets {1} décrits comme devenant obsolètes surestime donc ce qui leur arrive. {2}</value>
+  </data>
+  <data name="SchemaMoveInstruction" xml:space="preserve">
+    <value>Pour les déplacer, exécutez une importation complète avec « Autoriser les changements de type d’objet » activé sur son profil d’exécution : JIM retire les objets {0} et les importe comme de nouveaux objets {1} ; une règle de synchronisation pour {1} doit donc être prête à les joindre aux mêmes objets Metaverse.</value>
+  </data>
+  <data name="SchemaThisAttribute" xml:space="preserve">
+    <value>Cet attribut</value>
+  </data>
+  <data name="SchemaAnchorCannotDeselect" xml:space="preserve">
+    <value>{0} est l’identifiant externe de {1} et ne peut pas être désélectionné. C’est ce qui permet de faire correspondre chaque objet importé à son objet de système connecté.</value>
+  </data>
+  <data name="SchemaDeselectingAttribute" xml:space="preserve">
+    <value>La désélection de {0} sur {1} en arrête l’importation. Les valeurs déjà détenues pour cet attribut restent sur les objets de système connecté et continuent de circuler, sans jamais être actualisées.</value>
+  </data>
+  <data name="SchemaFlowMappingsReadOne" xml:space="preserve">
+    <value>{0} mappage de flux d’attributs lit {1} et continuera de faire circuler ses valeurs figées : {2}.</value>
+  </data>
+  <data name="SchemaFlowMappingsReadOther" xml:space="preserve">
+    <value>{0} mappages de flux d’attributs lisent {1} et continueront de faire circuler leurs valeurs figées : {2}.</value>
+  </data>
+  <data name="SchemaObsoletionWithdraws" xml:space="preserve">
+    <value>Rendre obsolète un objet {0} retirera désormais les valeurs Metaverse qu’il a apportées. Lorsqu’un autre système connecté apporte encore l’attribut, celui-ci lui est transmis ; lorsqu’aucun ne l’apporte, il est effacé.</value>
+  </data>
+  <data name="SchemaObsoletionLeavesInPlace" xml:space="preserve">
+    <value>Rendre obsolète un objet {0} laissera désormais en place les valeurs Metaverse qu’il a apportées. Elles ne suivent plus rien à partir de ce moment, et rien ne les signale comme périmées.</value>
+  </data>
 </root>

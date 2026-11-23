@@ -143,4 +143,13 @@
   <data name="AttributeFlowWritesMetaverseOnExport" xml:space="preserve">
     <value>A proposed Attribute Flow mapping writes a Metaverse Attribute, but an export Synchronization Rule flows out to a Connected System, so the mapping would write nothing.</value>
   </data>
+  <data name="SchemaDeselectingObjectType" xml:space="preserve">
+    <value>Deselecting {0} takes its objects out of management. The next Full Import no longer returns them, so the objects already imported become obsolete, and the following synchronization disconnects them from their Metaverse Objects, which may leave those eligible for deletion. The Run Profile's deletion limits apply to them as to any other deleted object.</value>
+  </data>
+  <data name="SchemaOverlapDeselectFallsToOther" xml:space="preserve">
+    <value>Deselecting {0} does not take its objects that also carry {1} out of management: with {0} deselected, those entries resolve to {1}, so the import returns them as {1} objects rather than as the {0} objects JIM holds. By default each import refuses them, reports each as an Object Type Changed error and keeps it as {0} rather than obsoleting it, so the number of objects described as becoming obsolete overstates what happens to them. If the intent is to stop managing those objects, scope them out by container or partition instead, because deselecting {0} changes their Object Type rather than removing them. If they should become {1} objects, run a Full Import with Allow Object Type Changes enabled on its Run Profile: JIM retires the {0} objects and imports them as new {1} objects, in scope of the Synchronization Rules for {1}.</value>
+  </data>
+  <data name="SchemaMoveInstruction" xml:space="preserve">
+    <value>To move them, run a Full Import with Allow Object Type Changes enabled on its Run Profile: JIM retires the {0} objects and imports them as new {1} objects, so a Synchronization Rule for {1} needs to be ready to join them to the same Metaverse Objects.</value>
+  </data>
 </root>

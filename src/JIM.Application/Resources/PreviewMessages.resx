@@ -339,4 +339,59 @@
   <data name="AttributeFlowNoSource" xml:space="preserve">
     <value>A proposed Attribute Flow mapping has no source, so there is no value for it to write.</value>
   </data>
+  <data name="SchemaSameAsStored" xml:space="preserve">
+    <value>The proposed schema selection matches the one this Connected System already has, so nothing would change and no impact is counted below.</value>
+  </data>
+  <data name="SchemaSelectingObjectType" xml:space="preserve">
+    <value>Selecting {0} brings its objects into scope for import on the next Import Run Profile.</value>
+    <comment>{0} is a Connected System Object Type name.</comment>
+  </data>
+  <data name="SchemaDeselectingObjectType" xml:space="preserve">
+    <value>Deselecting {0} takes its objects out of management. The next Full Import no longer returns them, so the objects already imported become obsolete, and the following synchronisation disconnects them from their Metaverse Objects, which may leave those eligible for deletion. The Run Profile's deletion limits apply to them as to any other deleted object.</value>
+    <comment>{0} is a Connected System Object Type name.</comment>
+  </data>
+  <data name="SchemaOverlapDeselectFallsToOther" xml:space="preserve">
+    <value>Deselecting {0} does not take its objects that also carry {1} out of management: with {0} deselected, those entries resolve to {1}, so the import returns them as {1} objects rather than as the {0} objects JIM holds. By default each import refuses them, reports each as an Object Type Changed error and keeps it as {0} rather than obsoleting it, so the number of objects described as becoming obsolete overstates what happens to them. If the intent is to stop managing those objects, scope them out by container or partition instead, because deselecting {0} changes their Object Type rather than removing them. If they should become {1} objects, run a Full Import with Allow Object Type Changes enabled on its Run Profile: JIM retires the {0} objects and imports them as new {1} objects, in scope of the Synchronisation Rules for {1}.</value>
+    <comment>{0} is the Object Type being deselected; {1} is another Object Type whose entries it overlaps. "Object Type Changed" is the name of an import error; "Allow Object Type Changes" is the name of a Run Profile setting.</comment>
+  </data>
+  <data name="SchemaOverlapSelectTakesFromOther" xml:space="preserve">
+    <value>Selecting {0} changes the Object Type of {1} objects that also carry {0}: with both selected, those entries resolve to {0}, so the import returns them as {0} objects rather than as the {1} objects JIM holds. By default each import refuses them, reports each as an Object Type Changed error and keeps it as {1}. {2}</value>
+    <comment>{0} is the Object Type being selected; {1} is another Object Type; {2} is the SchemaMoveInstruction text.</comment>
+  </data>
+  <data name="SchemaOverlapSelectAndDeselect" xml:space="preserve">
+    <value>Selecting {0} while deselecting {1} changes the Object Type of {1} objects that also carry {0}: those entries now resolve to {0}, so the import returns them as {0} objects rather than as the {1} objects JIM holds. By default each import refuses them, reports each as an Object Type Changed error and keeps it as {1} rather than obsoleting it, so the number of {1} objects described as becoming obsolete overstates what happens to them. {2}</value>
+    <comment>{0} is the Object Type being selected; {1} the one being deselected; {2} is the SchemaMoveInstruction text.</comment>
+  </data>
+  <data name="SchemaMoveInstruction" xml:space="preserve">
+    <value>To move them, run a Full Import with Allow Object Type Changes enabled on its Run Profile: JIM retires the {0} objects and imports them as new {1} objects, so a Synchronisation Rule for {1} needs to be ready to join them to the same Metaverse Objects.</value>
+    <comment>{0} is the Object Type the objects leave; {1} the one they move to.</comment>
+  </data>
+  <data name="SchemaThisAttribute" xml:space="preserve">
+    <value>This attribute</value>
+    <comment>Stands in for an attribute's name, at the start of a sentence, where it cannot be found.</comment>
+  </data>
+  <data name="SchemaAnchorCannotDeselect" xml:space="preserve">
+    <value>{0} is the External ID for {1} and cannot be deselected. It is what every imported object is matched to its Connected System Object by.</value>
+    <comment>{0} is an attribute name; {1} an Object Type name.</comment>
+  </data>
+  <data name="SchemaDeselectingAttribute" xml:space="preserve">
+    <value>Deselecting {0} on {1} stops it being imported. The values already held for it stay on the Connected System Objects and go on flowing, without ever being refreshed again.</value>
+    <comment>{0} is an attribute name; {1} an Object Type name.</comment>
+  </data>
+  <data name="SchemaFlowMappingsReadOne" xml:space="preserve">
+    <value>{0} Attribute Flow mapping read {1} and will go on flowing its frozen values: {2}.</value>
+    <comment>{0} is the count (1); {1} is an attribute name; {2} is a comma-separated list of Synchronisation Rule names.</comment>
+  </data>
+  <data name="SchemaFlowMappingsReadOther" xml:space="preserve">
+    <value>{0} Attribute Flow mappings read {1} and will go on flowing its frozen values: {2}.</value>
+    <comment>{0} is the count; {1} is an attribute name; {2} is a comma-separated list of Synchronisation Rule names.</comment>
+  </data>
+  <data name="SchemaObsoletionWithdraws" xml:space="preserve">
+    <value>Obsoleting a {0} object will now withdraw the Metaverse values it contributed. Where another Connected System still contributes the attribute it is handed over; where none does, it is cleared.</value>
+    <comment>{0} is an Object Type name.</comment>
+  </data>
+  <data name="SchemaObsoletionLeavesInPlace" xml:space="preserve">
+    <value>Obsoleting a {0} object will now leave the Metaverse values it contributed in place. They stop tracking anything from that point, and nothing reports them as stale.</value>
+    <comment>{0} is an Object Type name.</comment>
+  </data>
 </root>
