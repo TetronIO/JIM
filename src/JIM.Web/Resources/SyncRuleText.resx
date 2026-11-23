@@ -1389,4 +1389,76 @@
     <value>the Connected System</value>
     <comment>Stands in for the Connected System name when it is not known.</comment>
   </data>
+  <data name="TestThisScope" xml:space="preserve">
+    <value>Test this scope</value>
+    <comment>Heading of the scope test panel.</comment>
+  </data>
+  <data name="ScopeIntroMetaverse" xml:space="preserve">
+    <value>Give each attribute the criteria compare a value, or load them from a Metaverse Object, and see whether it would be in scope, criterion by criterion. Choose a time to run as of to see how relative dates such as "30 days ago" resolve then. The criteria are tested as they stand here, before they are saved.</value>
+    <comment>Intro of the scope test, for an export rule.</comment>
+  </data>
+  <data name="ScopeIntroConnectedSystem" xml:space="preserve">
+    <value>Give each attribute the criteria compare a value, or load them from a Connected System Object, and see whether it would be in scope, criterion by criterion. Choose a time to run as of to see how relative dates such as "30 days ago" resolve then. The criteria are tested as they stand here, before they are saved.</value>
+    <comment>Intro of the scope test, for an import rule.</comment>
+  </data>
+  <data name="ColumnAttribute" xml:space="preserve">
+    <value>Attribute</value>
+    <comment>Table heading: the attribute a test value is given for.</comment>
+  </data>
+  <data name="ConnectionsLabel" xml:space="preserve">
+    <value>Connections</value>
+    <comment>Heading above the connection criteria ticks.</comment>
+  </data>
+  <data name="HasConnection" xml:space="preserve">
+    <value>Has {0}</value>
+    <comment>Checkbox label for a connection criterion. {0} is the description of the connection.</comment>
+  </data>
+  <data name="RunTestButton" xml:space="preserve">
+    <value>Run test</value>
+    <comment>Button running the scope test.</comment>
+  </data>
+  <data name="AsOfUtc" xml:space="preserve">
+    <value>As of {0} UTC</value>
+    <comment>Caption giving the time the test ran as of. {0} is the date and time.</comment>
+  </data>
+  <data name="NextChangeUndetermined" xml:space="preserve">
+    <value>A criterion cannot be evaluated, so a Synchronisation would fail this object until the criterion is corrected.</value>
+    <comment>Shown when a criterion cannot be evaluated.</comment>
+  </data>
+  <data name="NextChangeStaysInScope" xml:space="preserve">
+    <value>Stays in scope as time passes, while these values stay the same.</value>
+    <comment>Shown when the object stays in scope.</comment>
+  </data>
+  <data name="NextChangeStaysOutOfScope" xml:space="preserve">
+    <value>Stays out of scope as time passes, while these values stay the same.</value>
+    <comment>Shown when the object stays out of scope.</comment>
+  </data>
+  <data name="NextChangeEnters" xml:space="preserve">
+    <value>Enters scope at {0} UTC, while these values stay the same.</value>
+    <comment>Shown when the object will come into scope. {0} is the date and time.</comment>
+  </data>
+  <data name="NextChangeLeaves" xml:space="preserve">
+    <value>Leaves scope at {0} UTC, while these values stay the same.</value>
+    <comment>Shown when the object will leave scope. {0} is the date and time.</comment>
+  </data>
+  <data name="SaveAsTestCase" xml:space="preserve">
+    <value>Save as test case</value>
+    <comment>Button saving the test as a configuration test case.</comment>
+  </data>
+  <data name="TestCaseScopeTitle" xml:space="preserve">
+    <value>Scope, run against the criteria as saved</value>
+    <comment>Kind of a test case, shown in its dialog.</comment>
+  </data>
+  <data name="FindAnObjectType" xml:space="preserve">
+    <value>Find a {0}</value>
+    <comment>Label of the object picker when no Connected System is named. {0} is the object type name.</comment>
+  </data>
+  <data name="MetaverseObjectFallback" xml:space="preserve">
+    <value>Metaverse Object</value>
+    <comment>Stands in for the Metaverse Object Type name when there is none.</comment>
+  </data>
+  <data name="ConnectedSystemObjectFallback" xml:space="preserve">
+    <value>Connected System Object</value>
+    <comment>Stands in for the Connected System Object Type name when there is none.</comment>
+  </data>
 </root>

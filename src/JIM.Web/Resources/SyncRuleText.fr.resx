@@ -1061,4 +1061,58 @@
   <data name="TheConnectedSystem" xml:space="preserve">
     <value>le système connecté</value>
   </data>
+  <data name="TestThisScope" xml:space="preserve">
+    <value>Tester ce périmètre</value>
+  </data>
+  <data name="ScopeIntroMetaverse" xml:space="preserve">
+    <value>Donnez une valeur à chaque attribut que les critères comparent, ou chargez-les depuis un objet Metaverse, puis voyez s’il serait dans le périmètre, critère par critère. Choisissez une date d’exécution pour voir comment les dates relatives, comme « il y a 30 jours », se résolvent alors. Les critères sont testés tels qu’ils sont ici, avant d’être enregistrés.</value>
+  </data>
+  <data name="ScopeIntroConnectedSystem" xml:space="preserve">
+    <value>Donnez une valeur à chaque attribut que les critères comparent, ou chargez-les depuis un objet de système connecté, puis voyez s’il serait dans le périmètre, critère par critère. Choisissez une date d’exécution pour voir comment les dates relatives, comme « il y a 30 jours », se résolvent alors. Les critères sont testés tels qu’ils sont ici, avant d’être enregistrés.</value>
+  </data>
+  <data name="ColumnAttribute" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="ConnectionsLabel" xml:space="preserve">
+    <value>Connexions</value>
+  </data>
+  <data name="HasConnection" xml:space="preserve">
+    <value>Possède {0}</value>
+  </data>
+  <data name="RunTestButton" xml:space="preserve">
+    <value>Exécuter le test</value>
+  </data>
+  <data name="AsOfUtc" xml:space="preserve">
+    <value>Au {0} UTC</value>
+  </data>
+  <data name="NextChangeUndetermined" xml:space="preserve">
+    <value>Un critère ne peut pas être évalué : une synchronisation échouerait donc pour cet objet tant que le critère n’est pas corrigé.</value>
+  </data>
+  <data name="NextChangeStaysInScope" xml:space="preserve">
+    <value>Reste dans le périmètre au fil du temps, tant que ces valeurs restent les mêmes.</value>
+  </data>
+  <data name="NextChangeStaysOutOfScope" xml:space="preserve">
+    <value>Reste hors du périmètre au fil du temps, tant que ces valeurs restent les mêmes.</value>
+  </data>
+  <data name="NextChangeEnters" xml:space="preserve">
+    <value>Entre dans le périmètre le {0} UTC, tant que ces valeurs restent les mêmes.</value>
+  </data>
+  <data name="NextChangeLeaves" xml:space="preserve">
+    <value>Sort du périmètre le {0} UTC, tant que ces valeurs restent les mêmes.</value>
+  </data>
+  <data name="SaveAsTestCase" xml:space="preserve">
+    <value>Enregistrer comme cas de test</value>
+  </data>
+  <data name="TestCaseScopeTitle" xml:space="preserve">
+    <value>Périmètre, exécuté sur les critères enregistrés</value>
+  </data>
+  <data name="FindAnObjectType" xml:space="preserve">
+    <value>Rechercher un {0}</value>
+  </data>
+  <data name="MetaverseObjectFallback" xml:space="preserve">
+    <value>objet Metaverse</value>
+  </data>
+  <data name="ConnectedSystemObjectFallback" xml:space="preserve">
+    <value>objet de système connecté</value>
+  </data>
 </root>

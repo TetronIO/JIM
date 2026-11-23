@@ -167,4 +167,7 @@
   <data name="LookupCheckbox" xml:space="preserve">
     <value>Also find the Metaverse Object a synchronization would join</value>
   </data>
+  <data name="NextChangeUndetermined" xml:space="preserve">
+    <value>A criterion cannot be evaluated, so a Synchronization would fail this object until the criterion is corrected.</value>
+  </data>
 </root>
