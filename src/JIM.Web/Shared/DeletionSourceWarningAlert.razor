@@ -11,27 +11,23 @@
     var several = SystemNames.Count > 1;
     <MudAlert Severity="Severity.Warning" Class="mt-4" data-testid="jim-deletion-source-warning">
         <MudText Typo="Typo.body1"><strong>@(several
-            ? $"{SystemNames.Count} projecting systems are not authoritative sources"
-            : $"{names} can project {ObjectTypeName} objects but is not an authoritative source")</strong></MudText>
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DsWarnHeadingMany, SystemNames.Count)
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DsWarnHeadingSingle, names, ObjectTypeName))</strong></MudText>
         <MudText Typo="Typo.body2" Class="mt-2">
-            @names @(several ? "have" : "has") a Synchronisation Rule that projects @ObjectTypeName objects to the
-            Metaverse, but @(several ? "they are" : "it is") not selected above:
+            @string.Format(System.Globalization.CultureInfo.CurrentCulture, several ? ConnectedSystemText.DsWarnBodyMany : ConnectedSystemText.DsWarnBodySingle, names, ObjectTypeName)
         </MudText>
         <ul class="mt-1 mb-0 pl-5">
-            <li><MudText Typo="Typo.body2"><strong>Never deleted:</strong> a @ObjectTypeName projected by @names that no
-                selected source also holds will never be deleted automatically, nor will its target accounts.</MudText></li>
-            <li><MudText Typo="Typo.body2"><strong>Deleted while still present:</strong> a @ObjectTypeName that leaves
-                every selected source is deleted even if @names still @(several ? "hold" : "holds") it.</MudText></li>
+            <li><MudText Typo="Typo.body2"><strong>@ConnectedSystemText.DsWarnNeverLabel</strong> @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DsWarnNeverBody, ObjectTypeName, names)</MudText></li>
+            <li><MudText Typo="Typo.body2"><strong>@ConnectedSystemText.DsWarnDeletedLabel</strong> @string.Format(System.Globalization.CultureInfo.CurrentCulture, several ? ConnectedSystemText.DsWarnDeletedBodyMany : ConnectedSystemText.DsWarnDeletedBodySingle, ObjectTypeName, names)</MudText></li>
         </ul>
         @if (NoGracePeriod)
         {
             <MudText Typo="Typo.body2" Class="mt-2" data-testid="jim-deletion-source-no-grace">
-                No grace period is set, so that deletion would happen immediately.
+                @ConnectedSystemText.DsWarnNoGrace
             </MudText>
         }
         <MudText Typo="Typo.body2" Class="mt-2">
-            Select @(several ? "them as authoritative sources" : "it as an authoritative source"), or turn projection off
-            if @(several ? "they" : "it") should only contribute attributes. Saving is not blocked.
+            @(several ? ConnectedSystemText.DsWarnSelectMany : ConnectedSystemText.DsWarnSelectSingle)
         </MudText>
     </MudAlert>
 }

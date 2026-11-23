@@ -135,7 +135,7 @@
         ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailLimitReason, exportActivity.TargetName, limitsText)
         : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailLimitChanged, exportActivity.TargetName);
     var withheldQuantity = totalWithheld == 1
-        ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailWithheldOne, changeNoun)
+        ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailWithheldSingle, changeNoun)
         : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailWithheldMany, totalWithheld.ToString("N0", System.Globalization.CultureInfo.CurrentCulture), changeNoun);
 
     <MudAlert Severity="Severity.Warning" Class="mt-2 mb-6">
@@ -225,7 +225,7 @@
 @if (_connectedSystem != null && _obsoleteConnectedSystemObjectCount > 0)
 {
     var obsoleteText = _obsoleteConnectedSystemObjectCount == 1
-        ? ConnectedSystemText.DetailObsoleteOne
+        ? ConnectedSystemText.DetailObsoleteSingle
         : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailObsoleteMany, _obsoleteConnectedSystemObjectCount.ToString("N0", System.Globalization.CultureInfo.CurrentCulture));
     <MudAlert Severity="Severity.Info" Class="mt-2 mb-6">
         <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Justify="Justify.SpaceBetween" Class="flex-grow-1">
@@ -281,8 +281,8 @@
         (false, null) => string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailDriftManyUndated, driftCountText),
     };
     var driftGuidance = driftClass == ConfigurationChangeClass.Destructive
-        ? (driftCount == 1 ? ConnectedSystemText.DetailDriftGuidanceDestructiveOne : ConnectedSystemText.DetailDriftGuidanceDestructiveMany)
-        : (driftCount == 1 ? ConnectedSystemText.DetailDriftGuidanceOne : ConnectedSystemText.DetailDriftGuidanceMany);
+        ? (driftCount == 1 ? ConnectedSystemText.DetailDriftGuidanceDestructiveSingle : ConnectedSystemText.DetailDriftGuidanceDestructiveMany)
+        : (driftCount == 1 ? ConnectedSystemText.DetailDriftGuidanceSingle : ConnectedSystemText.DetailDriftGuidanceMany);
     var driftSeverity = driftClass == ConfigurationChangeClass.Destructive ? Severity.Error : Severity.Warning;
     <MudAlert Severity="@driftSeverity"
               Class="mt-2 mb-6" data-testid="jim-configuration-drift-notice">

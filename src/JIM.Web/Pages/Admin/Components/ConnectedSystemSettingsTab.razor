@@ -67,8 +67,8 @@
                                 var groupCardinality = ConnectorSettingValidator.GetGroupCardinality(
                                     ConnectorSettingValidator.GetApplicableGroupMembers(ConnectedSystem.SettingValues, requiredGroup));
                                 var groupCaption = groupCardinality == ConnectorSettingRequiredGroupCardinality.ExactlyOne
-                                    ? "Provide a value for exactly one of the following settings:"
-                                    : "Provide a value for at least one of the following settings:";
+                                    ? ConnectedSystemText.SettingsTabGroupExactly
+                                    : ConnectedSystemText.SettingsTabGroupAtLeast;
                                 <MudPaper Outlined="true" Class="@groupSpacingClass">
                                     <MudText Typo="Typo.h6">@requiredGroup</MudText>
                                     @if (groupSatisfied)
@@ -156,8 +156,8 @@
         @* Only show the Import Behaviour panel if the connector supports full or delta import *@
         @if (ConnectedSystem.ConnectorDefinition is { } connectorDefinition && (connectorDefinition.SupportsFullImport || connectorDefinition.SupportsDeltaImport))
         {
-            <MudExpansionPanel Expanded="@GetCategoryExpanded("Import Behaviour")"
-                               ExpandedChanged="@(expanded => OnCategoryExpandedChanged("Import Behaviour", expanded))">
+            <MudExpansionPanel Expanded="@GetCategoryExpanded("import-behaviour")"
+                               ExpandedChanged="@(expanded => OnCategoryExpandedChanged("import-behaviour", expanded))">
                 <TitleContent>
                     <MudText Typo="Typo.h5">@ConnectedSystemText.SettingsTabImportBehaviour</MudText>
                 </TitleContent>
@@ -180,8 +180,8 @@
 
         @if (ConnectedSystem.ConnectorDefinition is { SupportsExport: true, SupportsParallelExport: true })
         {
-            <MudExpansionPanel Expanded="@GetCategoryExpanded("Export Performance")"
-                               ExpandedChanged="@(expanded => OnCategoryExpandedChanged("Export Performance", expanded))">
+            <MudExpansionPanel Expanded="@GetCategoryExpanded("export-performance")"
+                               ExpandedChanged="@(expanded => OnCategoryExpandedChanged("export-performance", expanded))">
                 <TitleContent>
                     <MudText Typo="Typo.h5">@ConnectedSystemText.SettingsTabExportPerformance</MudText>
                 </TitleContent>

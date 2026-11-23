@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Preview;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -40,9 +41,9 @@ public sealed record ConnectedSystemPreviewState(
     /// </summary>
     public string StaleReason => Staleness switch
     {
-        { DataChangedAt: not null, ConfigurationChangedAt: not null } => "Data and configuration have changed",
-        { ConfigurationChangedAt: not null } => "Configuration has changed",
-        _ => "Data has changed"
+        { DataChangedAt: not null, ConfigurationChangedAt: not null } => ConnectedSystemText.PreviewStaleBoth,
+        { ConfigurationChangedAt: not null } => ConnectedSystemText.PreviewStaleConfig,
+        _ => ConnectedSystemText.PreviewStaleData
     };
 
     /// <summary>

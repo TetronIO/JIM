@@ -13,12 +13,12 @@
 
     <MudForm @bind-IsValid="@IsDetailsFormValid" @bind-Errors="@DetailsFormErrors">
         <PrefilledFormValidator />
-        <MudTextField T="string" Label="Connector" @bind-Value="ConnectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
-        <MudTextField T="string" Label="Name" @bind-Value="ConnectedSystem.Name" Required="true" RequiredError="A name is required" Immediate="true" Variant="Variant.Outlined" Class="mt-5" />
-        <MudTextField T="string" Label="Description" Required="false" @bind-Value="ConnectedSystem.Description" Lines="5" MaxLines="10" Sizing="InputSizing.Auto" Variant="Variant.Outlined" Class="mt-5" />
+        <MudTextField T="string" Label="@ConnectedSystemText.CsCreateConnector" @bind-Value="ConnectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
+        <MudTextField T="string" Label="@CommonText.FieldName" @bind-Value="ConnectedSystem.Name" Required="true" RequiredError="@ConnectedSystemText.ScimKeyNameRequired" Immediate="true" Variant="Variant.Outlined" Class="mt-5" />
+        <MudTextField T="string" Label="@CommonText.FieldDescription" Required="false" @bind-Value="ConnectedSystem.Description" Lines="5" MaxLines="10" Sizing="InputSizing.Auto" Variant="Variant.Outlined" Class="mt-5" />
     </MudForm>
     @* mt-3 (+ the input control's own 4px bottom margin) gives a 16px gap, matching the panel's pa-4 padding below the button so it sits symmetrically inside the panel *@
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-3" OnClick="HandleValidDetailsSubmitAsync" DropShadow="false">Save Changes</MudButton>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-3" OnClick="HandleValidDetailsSubmitAsync" DropShadow="false">@CommonText.SaveChanges</MudButton>
 </MudPaper>
 
 @code {
@@ -61,7 +61,7 @@
         // touched, not just this tab's fields; a cosmetic edit shows nothing at all.
         var preflight = await jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(ConnectedSystem);
         if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
-                "Connected System", ConnectedSystem.Name))
+                ConnectedSystemText.ConnectedSystemTerm, ConnectedSystem.Name))
             return;
 
         // offer an optional reason for the configuration change history; cancelling aborts the save
@@ -71,6 +71,6 @@
 
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user, changeReason);
-        Snackbar.Add("Your details changes have been saved.", Severity.Success);
+        Snackbar.Add(ConnectedSystemText.CsDetailsSaved, Severity.Success);
     }
 }

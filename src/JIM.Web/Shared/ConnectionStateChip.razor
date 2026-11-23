@@ -51,15 +51,15 @@
     {
         return state switch
         {
-            ConnectedSystemObjectConnectionState.InSync => "In sync",
-            ConnectedSystemObjectConnectionState.UpdatePending => "Update pending",
-            ConnectedSystemObjectConnectionState.ProvisioningExportPending => "Pending export",
-            ConnectedSystemObjectConnectionState.ProvisioningAwaitingConfirmation => "Awaiting confirmation",
-            ConnectedSystemObjectConnectionState.ExportNotConfirmed => "Export not confirmed",
-            ConnectedSystemObjectConnectionState.ExportFailed => "Export failed",
-            ConnectedSystemObjectConnectionState.DeletePending => "Delete pending",
-            ConnectedSystemObjectConnectionState.DisablePending => "Disable pending",
-            ConnectedSystemObjectConnectionState.Obsolete => "Obsolete",
+            ConnectedSystemObjectConnectionState.InSync => ConnectedSystemText.ConnStateInSync,
+            ConnectedSystemObjectConnectionState.UpdatePending => ConnectedSystemText.ConnStateUpdatePending,
+            ConnectedSystemObjectConnectionState.ProvisioningExportPending => ConnectedSystemText.ConnStateProvisioningExportPending,
+            ConnectedSystemObjectConnectionState.ProvisioningAwaitingConfirmation => ConnectedSystemText.ConnStateProvisioningAwaitingConfirmation,
+            ConnectedSystemObjectConnectionState.ExportNotConfirmed => ConnectedSystemText.ConnStateExportNotConfirmed,
+            ConnectedSystemObjectConnectionState.ExportFailed => ConnectedSystemText.ConnStateExportFailed,
+            ConnectedSystemObjectConnectionState.DeletePending => ConnectedSystemText.ConnStateDeletePending,
+            ConnectedSystemObjectConnectionState.DisablePending => ConnectedSystemText.ConnStateDisablePending,
+            ConnectedSystemObjectConnectionState.Obsolete => ConnectedSystemText.ConnStateObsolete,
             _ => state.ToString()
         };
     }

@@ -578,7 +578,7 @@
     <value>The last export withheld {0}:</value>
     <comment>Start of the notice that an export withheld changes; {0} is the quantity phrase. The reason in bold follows it</comment>
   </data>
-  <data name="DetailWithheldOne" xml:space="preserve">
+  <data name="DetailWithheldSingle" xml:space="preserve">
     <value>the 1 pending {0}</value>
     <comment>Quantity phrase for one withheld change; {0} is the noun, singular</comment>
   </data>
@@ -678,7 +678,7 @@
     <value>An import of this Connected System began saving what it read on {0} UTC and did not finish, so the Connector Space holds only part of it. Full and Delta Synchronisation of this Connected System will not run until it is whole again.</value>
     <comment>Notice when an import stopped part-way; {0} is the date and time it began saving</comment>
   </data>
-  <data name="DetailObsoleteOne" xml:space="preserve">
+  <data name="DetailObsoleteSingle" xml:space="preserve">
     <value>1 Connected System Object is obsolete. It was not returned by the last Full Import, so the next Synchronisation Run Profile on this system will disconnect it from their Metaverse Objects and delete it.</value>
     <comment>Notice for one obsolete Connected System Object</comment>
   </data>
@@ -714,7 +714,7 @@
     <value>{0} configuration changes have been made since the last Full Synchronisation.</value>
     <comment>Configuration drift lead for several changes, with no Full Synchronisation yet; {0} is the count</comment>
   </data>
-  <data name="DetailDriftGuidanceDestructiveOne" xml:space="preserve">
+  <data name="DetailDriftGuidanceDestructiveSingle" xml:space="preserve">
     <value>It is destructive and can cascade deletions or mass deprovisioning the moment it is applied. Review it before running a Full Synchronisation.</value>
     <comment>Guidance after one destructive configuration change</comment>
   </data>
@@ -722,7 +722,7 @@
     <value>At least one of them is destructive and can cascade deletions or mass deprovisioning the moment it is applied. Review them before running a Full Synchronisation.</value>
     <comment>Guidance after several configuration changes, at least one destructive</comment>
   </data>
-  <data name="DetailDriftGuidanceOne" xml:space="preserve">
+  <data name="DetailDriftGuidanceSingle" xml:space="preserve">
     <value>Run a Full Synchronisation for it to take effect.</value>
     <comment>Guidance after one non-destructive configuration change</comment>
   </data>
@@ -2133,5 +2133,317 @@
   <data name="FullSyncObjectPreviewFailed" xml:space="preserve">
     <value>The Sync Preview failed: {0}</value>
     <comment>Snackbar when a one-object preview fails; {0} is the reason</comment>
+  </data>
+  <data name="DsWarnHeadingMany" xml:space="preserve">
+    <value>{0} projecting systems are not authoritative sources</value>
+    <comment>Heading when several Connected Systems project the object type without being authoritative; {0} is their number</comment>
+  </data>
+  <data name="DsWarnHeadingSingle" xml:space="preserve">
+    <value>{0} can project {1} objects but is not an authoritative source</value>
+    <comment>Heading when one Connected System projects the object type without being authoritative; {0} is its name, {1} the object type</comment>
+  </data>
+  <data name="DsWarnBodySingle" xml:space="preserve">
+    <value>{0} has a Synchronisation Rule that projects {1} objects to the Metaverse, but it is not selected above:</value>
+    <comment>Introduction for one projecting system; {0} is its name, {1} the object type</comment>
+  </data>
+  <data name="DsWarnBodyMany" xml:space="preserve">
+    <value>{0} have a Synchronisation Rule that projects {1} objects to the Metaverse, but they are not selected above:</value>
+    <comment>Introduction for several projecting systems; {0} is their names, {1} the object type</comment>
+  </data>
+  <data name="DsWarnNeverLabel" xml:space="preserve">
+    <value>Never deleted:</value>
+    <comment>Bold lead of the first consequence</comment>
+  </data>
+  <data name="DsWarnNeverBody" xml:space="preserve">
+    <value>a {0} projected by {1} that no selected source also holds will never be deleted automatically, nor will its target accounts.</value>
+    <comment>First consequence; {0} is the object type, {1} the projecting systems</comment>
+  </data>
+  <data name="DsWarnDeletedLabel" xml:space="preserve">
+    <value>Deleted while still present:</value>
+    <comment>Bold lead of the second consequence</comment>
+  </data>
+  <data name="DsWarnDeletedBodySingle" xml:space="preserve">
+    <value>a {0} that leaves every selected source is deleted even if {1} still holds it.</value>
+    <comment>Second consequence for one projecting system; {0} is the object type, {1} its name</comment>
+  </data>
+  <data name="DsWarnDeletedBodyMany" xml:space="preserve">
+    <value>a {0} that leaves every selected source is deleted even if {1} still hold it.</value>
+    <comment>Second consequence for several projecting systems; {0} is the object type, {1} their names</comment>
+  </data>
+  <data name="DsWarnNoGrace" xml:space="preserve">
+    <value>No grace period is set, so that deletion would happen immediately.</value>
+    <comment>Shown when the grace period is zero</comment>
+  </data>
+  <data name="DsWarnSelectSingle" xml:space="preserve">
+    <value>Select it as an authoritative source, or turn projection off if it should only contribute attributes. Saving is not blocked.</value>
+    <comment>Closing advice for one projecting system</comment>
+  </data>
+  <data name="DsWarnSelectMany" xml:space="preserve">
+    <value>Select them as authoritative sources, or turn projection off if they should only contribute attributes. Saving is not blocked.</value>
+    <comment>Closing advice for several projecting systems</comment>
+  </data>
+  <data name="DsDefaultServerTerm" xml:space="preserve">
+    <value>directory servers</value>
+    <comment>What servers are called when the Connector names none</comment>
+  </data>
+  <data name="DsDiscovering" xml:space="preserve">
+    <value>Discovering {0}...</value>
+    <comment>Text beside the spinner while servers are discovered; {0} is what the Connector calls them</comment>
+  </data>
+  <data name="DsTitle" xml:space="preserve">
+    <value>Discover {0}</value>
+    <comment>Dialog title before the forest is known; {0} is the servers' name in title case</comment>
+  </data>
+  <data name="DsTitleInForest" xml:space="preserve">
+    <value>{0} in {1}</value>
+    <comment>Dialog title once the forest is known; {0} is the title, {1} the forest's name</comment>
+  </data>
+  <data name="DsNoneInForest" xml:space="preserve">
+    <value>JIM did not find any {0} in the {1} forest.</value>
+    <comment>Shown when discovery found nothing in a named forest</comment>
+  </data>
+  <data name="DsNoneInDirectory" xml:space="preserve">
+    <value>JIM did not find any {0} in this directory.</value>
+    <comment>Shown when discovery found nothing and the forest is not named</comment>
+  </data>
+  <data name="DsColumnSite" xml:space="preserve">
+    <value>Site</value>
+    <comment>Column heading for the directory site of a server</comment>
+  </data>
+  <data name="DsColumnVersion" xml:space="preserve">
+    <value>Version</value>
+    <comment>Column heading for the version of a server</comment>
+  </data>
+  <data name="DsSelect" xml:space="preserve">
+    <value>Select</value>
+    <comment>Button that chooses a discovered server</comment>
+  </data>
+  <data name="CsCreatePageTitle" xml:space="preserve">
+    <value>Create a Connected System</value>
+    <comment>Browser page title of the create page</comment>
+  </data>
+  <data name="CsCreateTitleLabel" xml:space="preserve">
+    <value>Connected Systems:</value>
+    <comment>Label before "New" in the create page heading</comment>
+  </data>
+  <data name="CsCreateNew" xml:space="preserve">
+    <value>New</value>
+    <comment>Last breadcrumb and heading word of the create page</comment>
+  </data>
+  <data name="CsCreateInfoTitle" xml:space="preserve">
+    <value>New Connected System</value>
+    <comment>Title of the create page's info popover</comment>
+  </data>
+  <data name="CsCreateInfoBody" xml:space="preserve">
+    <value>Provide some basic details here, and then we'll move on to configuring the Connected System.</value>
+    <comment>Info popover text of the create page</comment>
+  </data>
+  <data name="CsCreateConnector" xml:space="preserve">
+    <value>Connector</value>
+    <comment>Label of the Connector field</comment>
+  </data>
+  <data name="CsCreateConnectorPlaceholder" xml:space="preserve">
+    <value>Please select a connector...</value>
+    <comment>Placeholder of the Connector field</comment>
+  </data>
+  <data name="ScimReqTitle" xml:space="preserve">
+    <value>SCIM Requests</value>
+    <comment>Heading of the SCIM requests panel when there are none</comment>
+  </data>
+  <data name="ScimReqTitleCount" xml:space="preserve">
+    <value>SCIM Requests ({0})</value>
+    <comment>Heading of the SCIM requests panel; {0} is the number of requests</comment>
+  </data>
+  <data name="ScimReqNoPoint" xml:space="preserve">
+    <value>The import behind this change recorded no point it read up to, so the requests it read cannot be shown.</value>
+    <comment>Shown when the import behind a change recorded no point it read to</comment>
+  </data>
+  <data name="ScimReqNoNew" xml:space="preserve">
+    <value>The import behind this change read no new requests: it started and finished at change {0}. The requests that made this resource were read by an earlier import.</value>
+    <comment>Shown when the import read no new requests; {0} is the change number</comment>
+  </data>
+  <data name="ScimReqRangeCleared" xml:space="preserve">
+    <value>No requests to this resource fall in what its import read (changes {0} to {1}). They were read by an earlier import, or the history that recorded them has been cleared.</value>
+    <comment>Shown when no requests fall in the range the import read; {0} and {1} are change numbers</comment>
+  </data>
+  <data name="ScimReqUpToCleared" xml:space="preserve">
+    <value>No requests to this resource fall in what its import read (changes up to {0}). The history that recorded them has been cleared.</value>
+    <comment>Shown when no requests fall in what the import read and no earlier point is known; {0} is the change number</comment>
+  </data>
+  <data name="ScimReqColWhen" xml:space="preserve">
+    <value>When</value>
+    <comment>Column heading for when a request was made</comment>
+  </data>
+  <data name="ScimReqColRequest" xml:space="preserve">
+    <value>Request</value>
+    <comment>Column heading for the kind of request</comment>
+  </data>
+  <data name="ScimReqColAttributes" xml:space="preserve">
+    <value>Attributes</value>
+    <comment>Column heading for the attributes a request changed</comment>
+  </data>
+  <data name="ScimReqColKey" xml:space="preserve">
+    <value>Key</value>
+    <comment>Column heading for the API key that made a request</comment>
+  </data>
+  <data name="ScimReqColFrom" xml:space="preserve">
+    <value>From</value>
+    <comment>Column heading for the address a request came from</comment>
+  </data>
+  <data name="ScimReqIgnoredTooltip" xml:space="preserve">
+    <value>Sent by the identity provider but not kept, because this Connected System's SCIM definitions do not declare them.</value>
+    <comment>Tooltip on attributes a request sent that JIM ignored</comment>
+  </data>
+  <data name="ScimReqIgnored" xml:space="preserve">
+    <value>ignored: {0}</value>
+    <comment>Attributes a request sent that were ignored; {0} is their list</comment>
+  </data>
+  <data name="ScimReqDeletedKey" xml:space="preserve">
+    <value>Deleted key</value>
+    <comment>Shown in place of the key's name once the key has been deleted</comment>
+  </data>
+  <data name="FileBrowserEmpty" xml:space="preserve">
+    <value>No files or directories found</value>
+    <comment>Shown in the file browser when a folder is empty</comment>
+  </data>
+  <data name="FileBrowserSelected" xml:space="preserve">
+    <value>Selected: {0}</value>
+    <comment>Shows the file the administrator picked; {0} is its path</comment>
+  </data>
+  <data name="FileBrowserFilename" xml:space="preserve">
+    <value>Filename</value>
+    <comment>Label of the filename field when exporting to a new file</comment>
+  </data>
+  <data name="FileBrowserFilenamePlaceholder" xml:space="preserve">
+    <value>Enter filename (e.g., export.csv)</value>
+    <comment>Placeholder of the filename field</comment>
+  </data>
+  <data name="FileBrowserWillCreate" xml:space="preserve">
+    <value>File will be created in: {0}</value>
+    <comment>Helper text of the filename field; {0} is the folder</comment>
+  </data>
+  <data name="FileBrowserLoadFailed" xml:space="preserve">
+    <value>Failed to load directory.</value>
+    <comment>Shown when a folder cannot be read</comment>
+  </data>
+  <data name="ConnStateInSync" xml:space="preserve">
+    <value>In sync</value>
+    <comment>Label of the connection state chip: in sync</comment>
+  </data>
+  <data name="ConnStateUpdatePending" xml:space="preserve">
+    <value>Update pending</value>
+    <comment>Label of the connection state chip: an update is in flight</comment>
+  </data>
+  <data name="ConnStateProvisioningExportPending" xml:space="preserve">
+    <value>Pending export</value>
+    <comment>Label of the connection state chip: a provisioning export is pending</comment>
+  </data>
+  <data name="ConnStateProvisioningAwaitingConfirmation" xml:space="preserve">
+    <value>Awaiting confirmation</value>
+    <comment>Label of the connection state chip: a provisioned object awaits confirmation</comment>
+  </data>
+  <data name="ConnStateExportNotConfirmed" xml:space="preserve">
+    <value>Export not confirmed</value>
+    <comment>Label of the connection state chip: an export was not confirmed</comment>
+  </data>
+  <data name="ConnStateExportFailed" xml:space="preserve">
+    <value>Export failed</value>
+    <comment>Label of the connection state chip: an export failed</comment>
+  </data>
+  <data name="ConnStateDeletePending" xml:space="preserve">
+    <value>Delete pending</value>
+    <comment>Label of the connection state chip: a delete is pending</comment>
+  </data>
+  <data name="ConnStateDisablePending" xml:space="preserve">
+    <value>Disable pending</value>
+    <comment>Label of the connection state chip: a disable is pending</comment>
+  </data>
+  <data name="ConnStateObsolete" xml:space="preserve">
+    <value>Obsolete</value>
+    <comment>Label of the connection state chip: the object is obsolete</comment>
+  </data>
+  <data name="ConnDefinedChip" xml:space="preserve">
+    <value>Connector-defined</value>
+    <comment>Marker beside an attribute the Connector made up</comment>
+  </data>
+  <data name="ConnDefinedByConnector" xml:space="preserve">
+    <value>Defined by the Connector, not by the Connected System's own schema.</value>
+    <comment>Tooltip sentence when the Connector's name is not known</comment>
+  </data>
+  <data name="ConnDefinedByNamed" xml:space="preserve">
+    <value>Defined by the {0}, not by the Connected System's own schema.</value>
+    <comment>Tooltip sentence naming the Connector; {0} is its name</comment>
+  </data>
+  <data name="ConnWrittenThrough" xml:space="preserve">
+    <value>Written to the Connected System through {0}.</value>
+    <comment>Tooltip sentence naming the attribute a Connector-defined attribute is written through; {0} is that attribute</comment>
+  </data>
+  <data name="TrustedForLabel" xml:space="preserve">
+    <value>Trusted for</value>
+    <comment>Caption above the two Trusted for tick boxes</comment>
+  </data>
+  <data name="TrustedForConnectors" xml:space="preserve">
+    <value>Connectors: the servers Connected Systems connect to (LDAPS, HTTPS, SQL Server)</value>
+    <comment>Tick box: the certificate is trusted for connections JIM makes</comment>
+  </data>
+  <data name="TrustedForSignIn" xml:space="preserve">
+    <value>Sign-in: your identity provider (AD FS, Keycloak and the like)</value>
+    <comment>Tick box: the certificate is trusted for sign-in</comment>
+  </data>
+  <data name="TrustedForChooseMessage" xml:space="preserve">
+    <value>Choose at least one.</value>
+    <comment>Shown when neither tick box is ticked</comment>
+  </data>
+  <data name="DsReviewTitle" xml:space="preserve">
+    <value>Review before saving</value>
+    <comment>Title of the confirmation shown before saving a Synchronisation Rule that newly projects into a Metaverse Object Type</comment>
+  </data>
+  <data name="DsJoinOnlyNote" xml:space="preserve">
+    <value>Join-only Synchronisation Rules (projection off) never show this; leaving those out of the authoritative sources is the normal way to add a system that only contributes attributes.</value>
+    <comment>Note under the confirmation explaining when the warning does not appear</comment>
+  </data>
+  <data name="DsSaveRule" xml:space="preserve">
+    <value>Save Synchronisation Rule</value>
+    <comment>Confirm button of the Synchronisation Rule save warning</comment>
+  </data>
+  <data name="DsOpenDeletionRules" xml:space="preserve">
+    <value>Open {0}'s Deletion Rules</value>
+    <comment>Link to the Deletion Rules of the Metaverse Object Type; {0} is its name</comment>
+  </data>
+  <data name="CsDetailsSaved" xml:space="preserve">
+    <value>Your details changes have been saved.</value>
+    <comment>Snackbar after the Connected System's details are saved</comment>
+  </data>
+  <data name="PreviewStaleBoth" xml:space="preserve">
+    <value>Data and configuration have changed</value>
+    <comment>Why a preview is out of date when both the data and the configuration changed since it ran</comment>
+  </data>
+  <data name="PreviewStaleConfig" xml:space="preserve">
+    <value>Configuration has changed</value>
+    <comment>Why a preview is out of date when the configuration changed since it ran</comment>
+  </data>
+  <data name="PreviewStaleData" xml:space="preserve">
+    <value>Data has changed</value>
+    <comment>Why a preview is out of date when the data changed since it ran</comment>
+  </data>
+  <data name="DetectedFactsHeading" xml:space="preserve">
+    <value>Properties</value>
+    <comment>Heading of the strip of facts a Connector detected about its target</comment>
+  </data>
+  <data name="DetectedFactsInfo" xml:space="preserve">
+    <value>Information the Connector detected about the target system during a previous connection, shown for reference. Nothing here can be changed, and reading it never opens a new connection.</value>
+    <comment>Info popover text of the facts strip</comment>
+  </data>
+  <data name="DetectedFactsEmpty" xml:space="preserve">
+    <value>Nothing detected yet; facts appear after the first successful connection.</value>
+    <comment>Shown when a Connector can detect facts but has not connected yet</comment>
+  </data>
+  <data name="SettingsTabGroupExactly" xml:space="preserve">
+    <value>Provide a value for exactly one of the following settings:</value>
+    <comment>Caption of a required group that needs exactly one value</comment>
+  </data>
+  <data name="SettingsTabGroupAtLeast" xml:space="preserve">
+    <value>Provide a value for at least one of the following settings:</value>
+    <comment>Caption of a required group that needs at least one value</comment>
   </data>
 </root>

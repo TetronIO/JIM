@@ -437,7 +437,7 @@
   <data name="DetailWithheldLead" xml:space="preserve">
     <value>La dernière exportation a retenu {0} :</value>
   </data>
-  <data name="DetailWithheldOne" xml:space="preserve">
+  <data name="DetailWithheldSingle" xml:space="preserve">
     <value>{0} en attente</value>
   </data>
   <data name="DetailWithheldMany" xml:space="preserve">
@@ -510,9 +510,9 @@
     <value>Une importation s’est arrêtée en cours de route.</value>
   </data>
   <data name="DetailImportIncompleteDetail" xml:space="preserve">
-    <value>Une importation de ce système connecté a commencé à enregistrer ce qu’elle avait lu le {0} UTC et ne s’est pas achevée ; l’espace connecteur ne contient donc qu’une partie des données. Les synchronisations complète et delta de ce système connecté ne s’exécuteront pas tant qu’il ne sera pas complet.</value>
+    <value>Une importation de ce système connecté a commencé à enregistrer ce qu’elle avait lu le {0} UTC et ne s’est pas achevée ; l’espace connecteur ne contient donc qu’une partie des données. La synchronisation complète et la synchronisation delta de ce système connecté ne s’exécuteront pas tant qu’il ne sera pas complet.</value>
   </data>
-  <data name="DetailObsoleteOne" xml:space="preserve">
+  <data name="DetailObsoleteSingle" xml:space="preserve">
     <value>1 objet de système connecté est obsolète. Il n’a pas été renvoyé par la dernière importation complète ; le prochain profil d’exécution de synchronisation de ce système le déconnectera de ses objets Metaverse et le supprimera.</value>
   </data>
   <data name="DetailObsoleteMany" xml:space="preserve">
@@ -539,13 +539,13 @@
   <data name="DetailDriftManyUndated" xml:space="preserve">
     <value>{0} modifications de configuration ont été effectuées depuis la dernière synchronisation complète.</value>
   </data>
-  <data name="DetailDriftGuidanceDestructiveOne" xml:space="preserve">
+  <data name="DetailDriftGuidanceDestructiveSingle" xml:space="preserve">
     <value>Il est destructif et peut entraîner en cascade des suppressions ou un déprovisionnement massif dès son application. Examinez-le avant d’exécuter une synchronisation complète.</value>
   </data>
   <data name="DetailDriftGuidanceDestructiveMany" xml:space="preserve">
     <value>Au moins l’une d’elles est destructive et peut entraîner en cascade des suppressions ou un déprovisionnement massif dès son application. Examinez-les avant d’exécuter une synchronisation complète.</value>
   </data>
-  <data name="DetailDriftGuidanceOne" xml:space="preserve">
+  <data name="DetailDriftGuidanceSingle" xml:space="preserve">
     <value>Exécutez une synchronisation complète pour qu’elle prenne effet.</value>
   </data>
   <data name="DetailDriftGuidanceMany" xml:space="preserve">
@@ -1603,5 +1603,239 @@
   </data>
   <data name="FullSyncObjectPreviewFailed" xml:space="preserve">
     <value>L’aperçu de synchronisation a échoué : {0}</value>
+  </data>
+  <data name="DsWarnHeadingMany" xml:space="preserve">
+    <value>{0} systèmes projecteurs ne sont pas des sources faisant autorité</value>
+  </data>
+  <data name="DsWarnHeadingSingle" xml:space="preserve">
+    <value>{0} peut projeter des objets de type {1}, mais n’est pas une source faisant autorité</value>
+  </data>
+  <data name="DsWarnBodySingle" xml:space="preserve">
+    <value>{0} a une règle de synchronisation qui projette les objets {1} vers le Metaverse, mais elle n’est pas sélectionnée ci-dessus :</value>
+  </data>
+  <data name="DsWarnBodyMany" xml:space="preserve">
+    <value>{0} ont une règle de synchronisation qui projette les objets {1} vers le Metaverse, mais elles ne sont pas sélectionnées ci-dessus :</value>
+  </data>
+  <data name="DsWarnNeverLabel" xml:space="preserve">
+    <value>Jamais supprimés :</value>
+  </data>
+  <data name="DsWarnNeverBody" xml:space="preserve">
+    <value>un objet {0} projeté par {1} que nulle autre source sélectionnée ne détient ne sera jamais supprimé automatiquement, pas plus que ses comptes cibles.</value>
+  </data>
+  <data name="DsWarnDeletedLabel" xml:space="preserve">
+    <value>Supprimés alors qu’ils sont encore présents :</value>
+  </data>
+  <data name="DsWarnDeletedBodySingle" xml:space="preserve">
+    <value>un objet {0} qui quitte toutes les sources sélectionnées est supprimé même si {1} en dispose encore.</value>
+  </data>
+  <data name="DsWarnDeletedBodyMany" xml:space="preserve">
+    <value>un objet {0} qui quitte toutes les sources sélectionnées est supprimé même si {1} en disposent encore.</value>
+  </data>
+  <data name="DsWarnNoGrace" xml:space="preserve">
+    <value>Aucun délai de grâce n’est défini : cette suppression aurait donc lieu immédiatement.</value>
+  </data>
+  <data name="DsWarnSelectSingle" xml:space="preserve">
+    <value>Sélectionnez-le comme source faisant autorité, ou désactivez la projection s’il ne doit apporter que des attributs. L’enregistrement n’est pas bloqué.</value>
+  </data>
+  <data name="DsWarnSelectMany" xml:space="preserve">
+    <value>Sélectionnez-les comme sources faisant autorité, ou désactivez la projection s’ils ne doivent apporter que des attributs. L’enregistrement n’est pas bloqué.</value>
+  </data>
+  <data name="DsDefaultServerTerm" xml:space="preserve">
+    <value>serveurs d’annuaire</value>
+  </data>
+  <data name="DsDiscovering" xml:space="preserve">
+    <value>Recherche de {0}…</value>
+  </data>
+  <data name="DsTitle" xml:space="preserve">
+    <value>Découvrir {0}</value>
+  </data>
+  <data name="DsTitleInForest" xml:space="preserve">
+    <value>{0} dans {1}</value>
+  </data>
+  <data name="DsNoneInForest" xml:space="preserve">
+    <value>JIM n’a trouvé aucun {0} dans la forêt {1}.</value>
+  </data>
+  <data name="DsNoneInDirectory" xml:space="preserve">
+    <value>JIM n’a trouvé aucun {0} dans cet annuaire.</value>
+  </data>
+  <data name="DsColumnSite" xml:space="preserve">
+    <value>Site</value>
+  </data>
+  <data name="DsColumnVersion" xml:space="preserve">
+    <value>Version</value>
+  </data>
+  <data name="DsSelect" xml:space="preserve">
+    <value>Sélectionner</value>
+  </data>
+  <data name="CsCreatePageTitle" xml:space="preserve">
+    <value>Créer un système connecté</value>
+  </data>
+  <data name="CsCreateTitleLabel" xml:space="preserve">
+    <value>Systèmes connectés :</value>
+  </data>
+  <data name="CsCreateNew" xml:space="preserve">
+    <value>Nouveau</value>
+  </data>
+  <data name="CsCreateInfoTitle" xml:space="preserve">
+    <value>Nouveau système connecté</value>
+  </data>
+  <data name="CsCreateInfoBody" xml:space="preserve">
+    <value>Renseignez ici quelques informations de base, puis nous passerons à la configuration du système connecté.</value>
+  </data>
+  <data name="CsCreateConnector" xml:space="preserve">
+    <value>Connecteur</value>
+  </data>
+  <data name="CsCreateConnectorPlaceholder" xml:space="preserve">
+    <value>Veuillez sélectionner un connecteur…</value>
+  </data>
+  <data name="ScimReqTitle" xml:space="preserve">
+    <value>Requêtes SCIM</value>
+  </data>
+  <data name="ScimReqTitleCount" xml:space="preserve">
+    <value>Requêtes SCIM ({0})</value>
+  </data>
+  <data name="ScimReqNoPoint" xml:space="preserve">
+    <value>L’importation à l’origine de ce changement n’a enregistré aucun point jusqu’auquel elle a lu, si bien que les requêtes qu’elle a lues ne peuvent pas être affichées.</value>
+  </data>
+  <data name="ScimReqNoNew" xml:space="preserve">
+    <value>L’importation à l’origine de ce changement n’a lu aucune nouvelle requête : elle a débuté et s’est achevée au changement {0}. Les requêtes qui ont créé cette ressource ont été lues par une importation antérieure.</value>
+  </data>
+  <data name="ScimReqRangeCleared" xml:space="preserve">
+    <value>Aucune requête adressée à cette ressource ne figure dans ce que son importation a lu (changements {0} à {1}). Elles ont été lues par une importation antérieure, ou l’historique qui les enregistrait a été effacé.</value>
+  </data>
+  <data name="ScimReqUpToCleared" xml:space="preserve">
+    <value>Aucune requête adressée à cette ressource ne figure dans ce que son importation a lu (changements jusqu’à {0}). L’historique qui les enregistrait a été effacé.</value>
+  </data>
+  <data name="ScimReqColWhen" xml:space="preserve">
+    <value>Quand</value>
+  </data>
+  <data name="ScimReqColRequest" xml:space="preserve">
+    <value>Requête</value>
+  </data>
+  <data name="ScimReqColAttributes" xml:space="preserve">
+    <value>Attributs</value>
+  </data>
+  <data name="ScimReqColKey" xml:space="preserve">
+    <value>Clé</value>
+  </data>
+  <data name="ScimReqColFrom" xml:space="preserve">
+    <value>Origine</value>
+  </data>
+  <data name="ScimReqIgnoredTooltip" xml:space="preserve">
+    <value>Envoyé par le fournisseur d’identité mais non conservé, car les définitions SCIM de ce système connecté ne les déclarent pas.</value>
+  </data>
+  <data name="ScimReqIgnored" xml:space="preserve">
+    <value>ignoré : {0}</value>
+  </data>
+  <data name="ScimReqDeletedKey" xml:space="preserve">
+    <value>Clé supprimée</value>
+  </data>
+  <data name="FileBrowserEmpty" xml:space="preserve">
+    <value>Aucun fichier ni dossier trouvé</value>
+  </data>
+  <data name="FileBrowserSelected" xml:space="preserve">
+    <value>Sélectionné : {0}</value>
+  </data>
+  <data name="FileBrowserFilename" xml:space="preserve">
+    <value>Nom de fichier</value>
+  </data>
+  <data name="FileBrowserFilenamePlaceholder" xml:space="preserve">
+    <value>Saisissez un nom de fichier (par exemple export.csv)</value>
+  </data>
+  <data name="FileBrowserWillCreate" xml:space="preserve">
+    <value>Le fichier sera créé dans : {0}</value>
+  </data>
+  <data name="FileBrowserLoadFailed" xml:space="preserve">
+    <value>Échec du chargement du dossier.</value>
+  </data>
+  <data name="ConnStateInSync" xml:space="preserve">
+    <value>Synchronisé</value>
+  </data>
+  <data name="ConnStateUpdatePending" xml:space="preserve">
+    <value>Mise à jour en attente</value>
+  </data>
+  <data name="ConnStateProvisioningExportPending" xml:space="preserve">
+    <value>Exportation en attente</value>
+  </data>
+  <data name="ConnStateProvisioningAwaitingConfirmation" xml:space="preserve">
+    <value>En attente de confirmation</value>
+  </data>
+  <data name="ConnStateExportNotConfirmed" xml:space="preserve">
+    <value>Exportation non confirmée</value>
+  </data>
+  <data name="ConnStateExportFailed" xml:space="preserve">
+    <value>Échec de l’exportation</value>
+  </data>
+  <data name="ConnStateDeletePending" xml:space="preserve">
+    <value>Suppression en attente</value>
+  </data>
+  <data name="ConnStateDisablePending" xml:space="preserve">
+    <value>Désactivation en attente</value>
+  </data>
+  <data name="ConnStateObsolete" xml:space="preserve">
+    <value>Obsolète</value>
+  </data>
+  <data name="ConnDefinedChip" xml:space="preserve">
+    <value>Défini par le connecteur</value>
+  </data>
+  <data name="ConnDefinedByConnector" xml:space="preserve">
+    <value>Défini par le connecteur, et non par le schéma propre au système connecté.</value>
+  </data>
+  <data name="ConnDefinedByNamed" xml:space="preserve">
+    <value>Défini par {0}, et non par le schéma propre au système connecté.</value>
+  </data>
+  <data name="ConnWrittenThrough" xml:space="preserve">
+    <value>Écrit dans le système connecté via {0}.</value>
+  </data>
+  <data name="TrustedForLabel" xml:space="preserve">
+    <value>Approuvé pour</value>
+  </data>
+  <data name="TrustedForConnectors" xml:space="preserve">
+    <value>Connecteurs : les serveurs auxquels les systèmes connectés se connectent (LDAPS, HTTPS, SQL Server)</value>
+  </data>
+  <data name="TrustedForSignIn" xml:space="preserve">
+    <value>Connexion : votre fournisseur d’identité (AD FS, Keycloak et équivalents)</value>
+  </data>
+  <data name="TrustedForChooseMessage" xml:space="preserve">
+    <value>Choisissez au moins une option.</value>
+  </data>
+  <data name="DsReviewTitle" xml:space="preserve">
+    <value>Vérifier avant d’enregistrer</value>
+  </data>
+  <data name="DsJoinOnlyNote" xml:space="preserve">
+    <value>Les règles de synchronisation de jointure seule (projection désactivée) n’affichent jamais cet avertissement ; les laisser en dehors des sources faisant autorité est la façon normale d’ajouter un système qui n’apporte que des attributs.</value>
+  </data>
+  <data name="DsSaveRule" xml:space="preserve">
+    <value>Enregistrer la règle de synchronisation</value>
+  </data>
+  <data name="DsOpenDeletionRules" xml:space="preserve">
+    <value>Ouvrir les règles de suppression de {0}</value>
+  </data>
+  <data name="CsDetailsSaved" xml:space="preserve">
+    <value>Vos modifications de détails ont été enregistrées.</value>
+  </data>
+  <data name="PreviewStaleBoth" xml:space="preserve">
+    <value>Les données et la configuration ont changé</value>
+  </data>
+  <data name="PreviewStaleConfig" xml:space="preserve">
+    <value>La configuration a changé</value>
+  </data>
+  <data name="PreviewStaleData" xml:space="preserve">
+    <value>Les données ont changé</value>
+  </data>
+  <data name="DetectedFactsHeading" xml:space="preserve">
+    <value>Propriétés</value>
+  </data>
+  <data name="DetectedFactsInfo" xml:space="preserve">
+    <value>Informations détectées par le connecteur sur le système cible lors d’une connexion précédente, affichées à titre de référence. Rien ici ne peut être modifié, et leur lecture n’ouvre jamais de nouvelle connexion.</value>
+  </data>
+  <data name="DetectedFactsEmpty" xml:space="preserve">
+    <value>Rien n’a encore été détecté ; les informations apparaissent après la première connexion réussie.</value>
+  </data>
+  <data name="SettingsTabGroupExactly" xml:space="preserve">
+    <value>Renseignez une valeur pour exactement un des paramètres suivants :</value>
+  </data>
+  <data name="SettingsTabGroupAtLeast" xml:space="preserve">
+    <value>Renseignez une valeur pour au moins un des paramètres suivants :</value>
   </data>
 </root>

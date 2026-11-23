@@ -12,7 +12,7 @@
 {
     <MudTooltip Arrow="true" Placement="Placement.Top">
         <ChildContent>
-            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text" Class="@Class">Connector-defined</MudChip>
+            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text" Class="@Class">@ConnectedSystemText.ConnDefinedChip</MudChip>
         </ChildContent>
         <TooltipContent>
             <TooltipText Text="@Explanation(Attribute, ConnectorName)" />
@@ -51,8 +51,8 @@
         var sentences = new List<string>
         {
             string.IsNullOrWhiteSpace(connectorName)
-                ? "Defined by the Connector, not by the Connected System's own schema."
-                : $"Defined by the {connectorName}, not by the Connected System's own schema."
+                ? ConnectedSystemText.ConnDefinedByConnector
+                : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.ConnDefinedByNamed, connectorName)
         };
 
         if (!string.IsNullOrWhiteSpace(attribute.Description))
@@ -62,7 +62,7 @@
         }
 
         if (!string.IsNullOrWhiteSpace(attribute.SourceAttributeName))
-            sentences.Add($"Written to the Connected System through {attribute.SourceAttributeName}.");
+            sentences.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.ConnWrittenThrough, attribute.SourceAttributeName));
 
         return string.Join(" ", sentences);
     }

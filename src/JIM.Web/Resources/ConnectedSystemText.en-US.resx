@@ -41,7 +41,7 @@
   <data name="DetailImportIncompleteDetail" xml:space="preserve">
     <value>An import of this Connected System began saving what it read on {0} UTC and did not finish, so the Connector Space holds only part of it. Full and Delta Synchronization of this Connected System will not run until it is whole again.</value>
   </data>
-  <data name="DetailObsoleteOne" xml:space="preserve">
+  <data name="DetailObsoleteSingle" xml:space="preserve">
     <value>1 Connected System Object is obsolete. It was not returned by the last Full Import, so the next Synchronization Run Profile on this system will disconnect it from their Metaverse Objects and delete it.</value>
   </data>
   <data name="DetailObsoleteMany" xml:space="preserve">
@@ -65,13 +65,13 @@
   <data name="DetailDriftManyUndated" xml:space="preserve">
     <value>{0} configuration changes have been made since the last Full Synchronization.</value>
   </data>
-  <data name="DetailDriftGuidanceDestructiveOne" xml:space="preserve">
+  <data name="DetailDriftGuidanceDestructiveSingle" xml:space="preserve">
     <value>It is destructive and can cascade deletions or mass deprovisioning the moment it is applied. Review it before running a Full Synchronization.</value>
   </data>
   <data name="DetailDriftGuidanceDestructiveMany" xml:space="preserve">
     <value>At least one of them is destructive and can cascade deletions or mass deprovisioning the moment it is applied. Review them before running a Full Synchronization.</value>
   </data>
-  <data name="DetailDriftGuidanceOne" xml:space="preserve">
+  <data name="DetailDriftGuidanceSingle" xml:space="preserve">
     <value>Run a Full Synchronization for it to take effect.</value>
   </data>
   <data name="DetailDriftGuidanceMany" xml:space="preserve">
@@ -157,5 +157,20 @@
   </data>
   <data name="FullSyncRunProfileName" xml:space="preserve">
     <value>Full Synchronization</value>
+  </data>
+  <data name="DsWarnBodySingle" xml:space="preserve">
+    <value>{0} has a Synchronization Rule that projects {1} objects to the Metaverse, but it is not selected above:</value>
+  </data>
+  <data name="DsWarnBodyMany" xml:space="preserve">
+    <value>{0} have a Synchronization Rule that projects {1} objects to the Metaverse, but they are not selected above:</value>
+  </data>
+  <data name="DsJoinOnlyNote" xml:space="preserve">
+    <value>Join-only Synchronization Rules (projection off) never show this; leaving those out of the authoritative sources is the normal way to add a system that only contributes attributes.</value>
+  </data>
+  <data name="DsSaveRule" xml:space="preserve">
+    <value>Save Synchronization Rule</value>
+  </data>
+  <data name="CertReasonUnrecognised" xml:space="preserve">
+    <value>Refused for an unrecognized reason</value>
   </data>
 </root>
