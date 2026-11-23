@@ -1518,4 +1518,108 @@
     <value>Switched to Simple Mode. Matching rules set on {0} object types.</value>
     <comment>Success snackbar. {0} is the count.</comment>
   </data>
+  <data name="DataFlowIntro" xml:space="preserve">
+    <value>Every attribute data flow configured across all Connected Systems, in both directions. Use it to answer "where does this attribute's value come from, and what writes it out?" without opening each Synchronisation Rule.</value>
+    <comment>Intro on the system-wide Data Flow page.</comment>
+  </data>
+  <data name="DataFlowDirectionLabel" xml:space="preserve">
+    <value>Direction</value>
+    <comment>Filter label.</comment>
+  </data>
+  <data name="DataFlowMetaverseObjectType" xml:space="preserve">
+    <value>Metaverse Object Type</value>
+    <comment>Filter label and column heading.</comment>
+  </data>
+  <data name="DataFlowMetaverseAttribute" xml:space="preserve">
+    <value>Metaverse Attribute</value>
+    <comment>Filter label and column heading.</comment>
+  </data>
+  <data name="MultipleContributorsTooltip" xml:space="preserve">
+    <value>Show only Inbound flows whose Metaverse Attribute is fed by more than one Synchronisation Rule. This is a normal arrangement; it is simply where the priority order decides which value wins.</value>
+    <comment>Tooltip on the Multiple contributors switch.</comment>
+  </data>
+  <data name="MultipleContributors" xml:space="preserve">
+    <value>Multiple contributors</value>
+    <comment>Switch label.</comment>
+  </data>
+  <data name="SearchScopeText" xml:space="preserve">
+    <value>Search matches Synchronisation Rules, Connected Systems, object types, attribute names on either side, and expression text. The attribute filters cannot match a flow whose relevant side is an expression, because an expression's attribute references live in its text; search finds those.</value>
+    <comment>Helper under the filters: what the search matches.</comment>
+  </data>
+  <data name="DataFlowSingular" xml:space="preserve">
+    <value>Data Flow</value>
+    <comment>Noun in the grid's row count.</comment>
+  </data>
+  <data name="DataFlowPlural" xml:space="preserve">
+    <value>Data Flows</value>
+    <comment>Noun in the grid's row count.</comment>
+  </data>
+  <data name="SearchDataFlows" xml:space="preserve">
+    <value>Search data flows</value>
+    <comment>Search box placeholder.</comment>
+  </data>
+  <data name="DataFlowCsObjectType" xml:space="preserve">
+    <value>Connected System Object Type</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="DataFlowCsAttribute" xml:space="preserve">
+    <value>Connected System Attribute</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="DirectionTooltip" xml:space="preserve">
+    <value>{0}: the value moves this way</value>
+    <comment>Tooltip on the direction arrow. {0} is Inbound or Outbound.</comment>
+  </data>
+  <data name="DataFlowPriority" xml:space="preserve">
+    <value>Priority</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="PriorityColumnTooltip" xml:space="preserve">
+    <value>Where an Inbound flow sits in the order of everything contributing to the same Metaverse Attribute, 1 being highest. It only decides anything where more than one Synchronisation Rule contributes, which is what the emphasised rows are.</value>
+    <comment>Tooltip on the Priority column heading.</comment>
+  </data>
+  <data name="NullIsValueTooltip" xml:space="preserve">
+    <value>This contribution asserts 'no value' authoritatively, so an empty value here wins rather than falling through to the next contributor.</value>
+    <comment>Tooltip on the Null is a value chip.</comment>
+  </data>
+  <data name="DataFlowNullIsValue" xml:space="preserve">
+    <value>Null is a value</value>
+    <comment>Column heading and chip for the null-is-value option.</comment>
+  </data>
+  <data name="DriftCorrectionTooltip" xml:space="preserve">
+    <value>Drift Correction is on for this rule: a value changed in the Connected System is corrected back to the Metaverse's value.</value>
+    <comment>Tooltip on the Enforce State chip.</comment>
+  </data>
+  <data name="DataFlowEnforceState" xml:space="preserve">
+    <value>Enforce State</value>
+    <comment>Column heading and chip for the enforce-state option.</comment>
+  </data>
+  <data name="DisabledRuleTooltip" xml:space="preserve">
+    <value>This Synchronisation Rule is disabled, so this flow is configured but moves no data.</value>
+    <comment>Tooltip on the Disabled chip.</comment>
+  </data>
+  <data name="DataFlowNoMatchSearch" xml:space="preserve">
+    <value>No data flows match "{0}"</value>
+    <comment>Empty state heading. {0} is the search text.</comment>
+  </data>
+  <data name="DataFlowNoMatchFilters" xml:space="preserve">
+    <value>No data flows match these filters</value>
+    <comment>Empty state heading.</comment>
+  </data>
+  <data name="DataFlowClearFilter" xml:space="preserve">
+    <value>Clear one of the filters above to widen the list.</value>
+    <comment>Empty state detail.</comment>
+  </data>
+  <data name="DataFlowNoneConfigured" xml:space="preserve">
+    <value>No data flows are configured</value>
+    <comment>Empty state heading.</comment>
+  </data>
+  <data name="DataFlowNoneHint" xml:space="preserve">
+    <value>Add Attribute Flows to a Synchronisation Rule and they will appear here.</value>
+    <comment>Empty state detail.</comment>
+  </data>
+  <data name="DataFlowOptions" xml:space="preserve">
+    <value>Options</value>
+    <comment>Column heading when no direction is chosen.</comment>
+  </data>
 </root>

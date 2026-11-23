@@ -101,4 +101,22 @@
   <data name="SwitchedToAdvancedOther" xml:space="preserve">
     <value>Switched to Advanced Mode. Matching rules copied to {0} Synchronization Rules.</value>
   </data>
+  <data name="DataFlowIntro" xml:space="preserve">
+    <value>Every attribute data flow configured across all Connected Systems, in both directions. Use it to answer "where does this attribute's value come from, and what writes it out?" without opening each Synchronization Rule.</value>
+  </data>
+  <data name="MultipleContributorsTooltip" xml:space="preserve">
+    <value>Show only Inbound flows whose Metaverse Attribute is fed by more than one Synchronization Rule. This is a normal arrangement; it is simply where the priority order decides which value wins.</value>
+  </data>
+  <data name="SearchScopeText" xml:space="preserve">
+    <value>Search matches Synchronization Rules, Connected Systems, object types, attribute names on either side, and expression text. The attribute filters cannot match a flow whose relevant side is an expression, because an expression's attribute references live in its text; search finds those.</value>
+  </data>
+  <data name="PriorityColumnTooltip" xml:space="preserve">
+    <value>Where an Inbound flow sits in the order of everything contributing to the same Metaverse Attribute, 1 being highest. It only decides anything where more than one Synchronization Rule contributes, which is what the emphasized rows are.</value>
+  </data>
+  <data name="DisabledRuleTooltip" xml:space="preserve">
+    <value>This Synchronization Rule is disabled, so this flow is configured but moves no data.</value>
+  </data>
+  <data name="DataFlowNoneHint" xml:space="preserve">
+    <value>Add Attribute Flows to a Synchronization Rule and they will appear here.</value>
+  </data>
 </root>

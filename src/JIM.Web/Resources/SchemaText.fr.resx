@@ -1142,4 +1142,82 @@
   <data name="SwitchedToSimpleOther" xml:space="preserve">
     <value>Passage en mode simple. Règles de correspondance définies sur {0} types d’objets.</value>
   </data>
+  <data name="DataFlowIntro" xml:space="preserve">
+    <value>Chaque flux de données d’attribut configuré dans tous les systèmes connectés, dans les deux sens. Utilisez-le pour répondre à « d’où vient la valeur de cet attribut, et qu’est-ce qui l’écrit ? » sans ouvrir chaque règle de synchronisation.</value>
+  </data>
+  <data name="DataFlowDirectionLabel" xml:space="preserve">
+    <value>Sens</value>
+  </data>
+  <data name="DataFlowMetaverseObjectType" xml:space="preserve">
+    <value>Type d’objet Metaverse</value>
+  </data>
+  <data name="DataFlowMetaverseAttribute" xml:space="preserve">
+    <value>Attribut Metaverse</value>
+  </data>
+  <data name="MultipleContributorsTooltip" xml:space="preserve">
+    <value>Affiche uniquement les flux entrants dont l’attribut Metaverse est alimenté par plus d’une règle de synchronisation. C’est une configuration normale : c’est simplement le cas où l’ordre de priorité détermine la valeur retenue.</value>
+  </data>
+  <data name="MultipleContributors" xml:space="preserve">
+    <value>Plusieurs contributeurs</value>
+  </data>
+  <data name="SearchScopeText" xml:space="preserve">
+    <value>La recherche porte sur les règles de synchronisation, les systèmes connectés, les types d’objets, les noms d’attributs des deux côtés et le texte des expressions. Les filtres d’attributs ne peuvent pas retrouver un flux dont le côté concerné est une expression, car les références d’attributs d’une expression se trouvent dans son texte ; la recherche, elle, les trouve.</value>
+  </data>
+  <data name="DataFlowSingular" xml:space="preserve">
+    <value>flux de données</value>
+  </data>
+  <data name="DataFlowPlural" xml:space="preserve">
+    <value>flux de données</value>
+  </data>
+  <data name="SearchDataFlows" xml:space="preserve">
+    <value>Rechercher des flux de données</value>
+  </data>
+  <data name="DataFlowCsObjectType" xml:space="preserve">
+    <value>Type d’objet de système connecté</value>
+  </data>
+  <data name="DataFlowCsAttribute" xml:space="preserve">
+    <value>Attribut de système connecté</value>
+  </data>
+  <data name="DirectionTooltip" xml:space="preserve">
+    <value>{0} : la valeur circule dans ce sens</value>
+  </data>
+  <data name="DataFlowPriority" xml:space="preserve">
+    <value>Priorité</value>
+  </data>
+  <data name="PriorityColumnTooltip" xml:space="preserve">
+    <value>Position d’un flux entrant dans l’ordre de toutes les contributions au même attribut Metaverse, 1 étant la plus élevée. Elle ne décide de quelque chose que lorsque plusieurs règles de synchronisation contribuent, ce que signalent les lignes en surbrillance.</value>
+  </data>
+  <data name="NullIsValueTooltip" xml:space="preserve">
+    <value>Cette contribution affirme de façon définitive « aucune valeur » : une valeur vide l’emporte donc au lieu de passer au contributeur suivant.</value>
+  </data>
+  <data name="DataFlowNullIsValue" xml:space="preserve">
+    <value>Null est une valeur</value>
+  </data>
+  <data name="DriftCorrectionTooltip" xml:space="preserve">
+    <value>La correction de dérive est activée pour cette règle : une valeur modifiée dans le système connecté est ramenée à la valeur du Metaverse.</value>
+  </data>
+  <data name="DataFlowEnforceState" xml:space="preserve">
+    <value>Appliquer l’état</value>
+  </data>
+  <data name="DisabledRuleTooltip" xml:space="preserve">
+    <value>Cette règle de synchronisation est désactivée : ce flux est configuré, mais il ne transfère aucune donnée.</value>
+  </data>
+  <data name="DataFlowNoMatchSearch" xml:space="preserve">
+    <value>Aucun flux de données ne correspond à « {0} »</value>
+  </data>
+  <data name="DataFlowNoMatchFilters" xml:space="preserve">
+    <value>Aucun flux de données ne correspond à ces filtres</value>
+  </data>
+  <data name="DataFlowClearFilter" xml:space="preserve">
+    <value>Effacez l’un des filtres ci-dessus pour élargir la liste.</value>
+  </data>
+  <data name="DataFlowNoneConfigured" xml:space="preserve">
+    <value>Aucun flux de données n’est configuré</value>
+  </data>
+  <data name="DataFlowNoneHint" xml:space="preserve">
+    <value>Ajoutez des flux d’attributs à une règle de synchronisation et ils apparaîtront ici.</value>
+  </data>
+  <data name="DataFlowOptions" xml:space="preserve">
+    <value>Options</value>
+  </data>
 </root>
