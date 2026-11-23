@@ -918,4 +918,248 @@
     <value>A generated value can only target a Text or Number attribute; "{0}" is not supported.</value>
     <comment>Reason a target is disabled; {0} is the data type</comment>
   </data>
+  <data name="StartAgainReading" xml:space="preserve">
+    <value>Reading the current counter...</value>
+    <comment>Shown while the counter loads</comment>
+  </data>
+  <data name="StartAgainBusy" xml:space="preserve">
+    <value>Starting again...</value>
+    <comment>Shown while the restart runs</comment>
+  </data>
+  <data name="StartAgainLeading" xml:space="preserve">
+    <value>Metaverse Objects that already have a value for {0} keep it; only Metaverse Objects without one are given a new value.</value>
+    <comment>{0} is the attribute name</comment>
+  </data>
+  <data name="StartAgainCounterLine" xml:space="preserve">
+    <value>Counter returns to {0} from {1}</value>
+    <comment>{0} is the configured start; {1} is the current next number; both are set in code elements</comment>
+  </data>
+  <data name="StartAgainForgottenOne" xml:space="preserve">
+    <value>{0} retired value will be forgotten and can be issued again.</value>
+    <comment>{0} is the formatted count</comment>
+  </data>
+  <data name="StartAgainForgottenOther" xml:space="preserve">
+    <value>{0} retired values will be forgotten and can be issued again.</value>
+    <comment>{0} is the formatted count</comment>
+  </data>
+  <data name="StartAgainViewRetired" xml:space="preserve">
+    <value>View retired values</value>
+    <comment>Link to the retired values list</comment>
+  </data>
+  <data name="StartAgainAlert" xml:space="preserve">
+    <value>Numbers can be issued again once forgotten, but a number still held by a Metaverse Object is skipped when the counter reaches it. No existing value changes and nothing is exported.</value>
+    <comment>Info alert</comment>
+  </data>
+  <data name="StartAgainTitle" xml:space="preserve">
+    <value>Start {0} again?</value>
+    <comment>Dialog title; {0} is the attribute name</comment>
+  </data>
+  <data name="ExportValuesOne" xml:space="preserve">
+    <value>{0} generated value</value>
+    <comment>Count of values rejected in the run: one</comment>
+  </data>
+  <data name="ExportValuesOther" xml:space="preserve">
+    <value>{0} generated values</value>
+    <comment>Count of values rejected in the run: more than one</comment>
+  </data>
+  <data name="ExportRejected" xml:space="preserve">
+    <value>rejected {0} as already in use{1}.</value>
+    <comment>Follows the Connected System chip; {0} the values; {1} the clauses</comment>
+  </data>
+  <data name="ExportCorrectedOnlyOne" xml:space="preserve">
+    <value>; JIM corrected it, and the next synchronisation will export the new value</value>
+    <comment>Clause: one value corrected, none held</comment>
+  </data>
+  <data name="ExportCorrectedOnlyOther" xml:space="preserve">
+    <value>; JIM corrected them, and the next synchronisation will export the new values</value>
+    <comment>Clause: several values corrected, none held</comment>
+  </data>
+  <data name="ExportCorrectedWithHeldOne" xml:space="preserve">
+    <value>: JIM corrected {0}, and the next synchronisation will export the new value</value>
+    <comment>Clause: some corrected and some held; {0} the count corrected; one value</comment>
+  </data>
+  <data name="ExportCorrectedWithHeldOther" xml:space="preserve">
+    <value>: JIM corrected {0}, and the next synchronisation will export the new values</value>
+    <comment>Clause: some corrected and some held; {0} the count corrected; several values</comment>
+  </data>
+  <data name="ExportHeldOnlyOne" xml:space="preserve">
+    <value>, and it needs a decision before JIM exports it</value>
+    <comment>Clause: one value held, none corrected</comment>
+  </data>
+  <data name="ExportHeldOnlyOther" xml:space="preserve">
+    <value>, and they need a decision before JIM exports them</value>
+    <comment>Clause: several values held, none corrected</comment>
+  </data>
+  <data name="ExportHeldAfterOne" xml:space="preserve">
+    <value>; {0} needs a decision</value>
+    <comment>Clause after a correction; {0} the count held; one</comment>
+  </data>
+  <data name="ExportHeldAfterOther" xml:space="preserve">
+    <value>; {0} need a decision</value>
+    <comment>Clause after a correction; {0} the count held; several</comment>
+  </data>
+  <data name="ExportChipNeedsOne" xml:space="preserve">
+    <value>{0} needs a decision</value>
+    <comment>Pill; {0} the count held; one</comment>
+  </data>
+  <data name="ExportChipNeedsOther" xml:space="preserve">
+    <value>{0} need a decision</value>
+    <comment>Pill; {0} the count held; several</comment>
+  </data>
+  <data name="ExportChipCorrectedOne" xml:space="preserve">
+    <value>{0} corrected</value>
+    <comment>Pill; {0} the count corrected; one</comment>
+  </data>
+  <data name="ExportChipCorrectedOther" xml:space="preserve">
+    <value>{0} corrected</value>
+    <comment>Pill; {0} the count corrected; several</comment>
+  </data>
+  <data name="SeparatorLabel" xml:space="preserve">
+    <value>Separator</value>
+    <comment>Select label</comment>
+  </data>
+  <data name="SeparatorDot" xml:space="preserve">
+    <value>Dot .</value>
+    <comment>Separator option: a dot</comment>
+  </data>
+  <data name="SeparatorHyphen" xml:space="preserve">
+    <value>Hyphen -</value>
+    <comment>Separator option: a hyphen</comment>
+  </data>
+  <data name="SeparatorUnderscore" xml:space="preserve">
+    <value>Underscore _</value>
+    <comment>Separator option: an underscore</comment>
+  </data>
+  <data name="SeparatorCustom" xml:space="preserve">
+    <value>Custom…</value>
+    <comment>Separator option: a custom value</comment>
+  </data>
+  <data name="SeparatorCustomLabel" xml:space="preserve">
+    <value>Custom separator</value>
+    <comment>Label of the custom separator field</comment>
+  </data>
+  <data name="SeparatorCustomHint" xml:space="preserve">
+    <value>One to three characters; no spaces, no @</value>
+    <comment>Helper text under the custom separator field</comment>
+  </data>
+  <data name="AvailabilityHeading" xml:space="preserve">
+    <value>Checked for availability in</value>
+    <comment>Heading of the panel</comment>
+  </data>
+  <data name="AvailabilityColumnExported" xml:space="preserve">
+    <value>Exported as</value>
+    <comment>Table column heading</comment>
+  </data>
+  <data name="AvailabilityColumnChecked" xml:space="preserve">
+    <value>Checked</value>
+    <comment>Table column heading</comment>
+  </data>
+  <data name="AvailabilityColumnReports" xml:space="preserve">
+    <value>Reports collisions</value>
+    <comment>Table column heading</comment>
+  </data>
+  <data name="AvailabilityColumnInclude" xml:space="preserve">
+    <value>Include</value>
+    <comment>Table column heading: the switch that excludes a system</comment>
+  </data>
+  <data name="AvailabilityCollisionNote" xml:space="preserve">
+    <value>A collision here is an ordinary export error.</value>
+    <comment>Note under 'No' in Reports collisions</comment>
+  </data>
+  <data name="AvailabilityIncludeAria" xml:space="preserve">
+    <value>Check {0} for availability</value>
+    <comment>Accessible name of the Include switch; {0} is the Connected System's name</comment>
+  </data>
+  <data name="AttentionCountOne" xml:space="preserve">
+    <value>{0} generated value needs a decision.</value>
+    <comment>Tooltip of the attention chip; {0} the count</comment>
+  </data>
+  <data name="AttentionCountOther" xml:space="preserve">
+    <value>{0} generated values need a decision.</value>
+    <comment>Tooltip of the attention chip; {0} the count</comment>
+  </data>
+  <data name="AttentionExplain" xml:space="preserve">
+    <value>A target rejected each as already in use and JIM could not safely correct it, so its export is held. Open Generated Values to allow the rename or try again.</value>
+    <comment>Second sentence of the tooltip</comment>
+  </data>
+  <data name="WhyRenameAllowed" xml:space="preserve">
+    <value>Rename allowed</value>
+    <comment>Chip: an allowed rename</comment>
+  </data>
+  <data name="WhyRenameAllowedBy" xml:space="preserve">
+    <value> by {0}</value>
+    <comment>{0} is who allowed it; follows the chip</comment>
+  </data>
+  <data name="WhyRenameAllowedSecondary" xml:space="preserve">
+    <value>The next export run picks the next free value.</value>
+    <comment>Second line of an allowed rename</comment>
+  </data>
+  <data name="BannerNeedsDecision" xml:space="preserve">
+    <value>{0} needs a decision</value>
+    <comment>Metaverse Object banner; {0} the attribute name</comment>
+  </data>
+  <data name="BannerWillRename" xml:space="preserve">
+    <value>{0} will be renamed at the next export</value>
+    <comment>Metaverse Object banner for an allowed rename; {0} the attribute name</comment>
+  </data>
+  <data name="BannerAllowRename" xml:space="preserve">
+    <value>Allow the rename…</value>
+    <comment>Button in the Metaverse Object banner</comment>
+  </data>
+  <data name="SkipAheadConfirm" xml:space="preserve">
+    <value>Save and skip ahead</value>
+    <comment>Confirming button</comment>
+  </data>
+  <data name="SkipAheadTitle" xml:space="preserve">
+    <value>Skip ahead to {0}?</value>
+    <comment>Dialog title; {0} the new start</comment>
+  </data>
+  <data name="SkipAheadLeading" xml:space="preserve">
+    <value>"Start at" is now higher than the next number ({0}). Saving moves the counter to {1}; numbers {2} to {3} will never be assigned.</value>
+    <comment>{0} current next number; {1} the new start; {2} the current next number again; {3} the number before the new start</comment>
+  </data>
+  <data name="SkipAheadReasons" xml:space="preserve">
+    <value>Reasons why you might do this include using it to reserve a range for another system, or to continue a sequence issued elsewhere before JIM. Lowering "Start at" below the counter has no effect.</value>
+    <comment>Second paragraph</comment>
+  </data>
+  <data name="CollisionSwitchLabel" xml:space="preserve">
+    <value>Let JIM correct a value a target rejects as already in use</value>
+    <comment>Switch label</comment>
+  </data>
+  <data name="CollisionUnavailable" xml:space="preserve">
+    <value>Not available: none of the systems this value is exported to can report that a value is already in use, so a collision is recorded as an export error.</value>
+    <comment>Shown when no system reports collisions</comment>
+  </data>
+  <data name="CollisionHelp" xml:space="preserve">
+    <value>While no other system holds the value, JIM chooses the next free one and exports it again. Once another system holds it, JIM holds the export for your decision instead of renaming that account.</value>
+    <comment>Help text under the switch</comment>
+  </data>
+  <data name="BuiltFromHeading" xml:space="preserve">
+    <value>Built from generated value</value>
+    <comment>Heading of the built-from block</comment>
+  </data>
+  <data name="BuiltFromNotInEffect" xml:space="preserve">
+    <value>Not in effect</value>
+    <comment>Chip while Collision Remediation is off</comment>
+  </data>
+  <data name="BuiltColumnValue" xml:space="preserve">
+    <value>Value</value>
+    <comment>Table column heading</comment>
+  </data>
+  <data name="BuiltColumnExportedTo" xml:space="preserve">
+    <value>Exported to</value>
+    <comment>Table column heading</comment>
+  </data>
+  <data name="BuiltColumnBeforeIssuing" xml:space="preserve">
+    <value>Before issuing</value>
+    <comment>Table column heading</comment>
+  </data>
+  <data name="BuiltColumnRefuses" xml:space="preserve">
+    <value>If a target refuses it</value>
+    <comment>Table column heading</comment>
+  </data>
+  <data name="BuiltValueEvaluationFailed" xml:space="preserve">
+    <value>The expression could not be evaluated.</value>
+    <comment>Error shown for a built value that fails</comment>
+  </data>
 </root>

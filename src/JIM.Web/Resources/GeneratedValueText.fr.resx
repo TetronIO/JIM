@@ -710,4 +710,187 @@
   <data name="TargetUnsupported" xml:space="preserve">
     <value>Une valeur générée ne peut cibler qu’un attribut Texte ou Nombre ; « {0} » n’est pas pris en charge.</value>
   </data>
+  <data name="StartAgainReading" xml:space="preserve">
+    <value>Lecture du compteur actuel...</value>
+  </data>
+  <data name="StartAgainBusy" xml:space="preserve">
+    <value>Recommencement...</value>
+  </data>
+  <data name="StartAgainLeading" xml:space="preserve">
+    <value>Les objets Metaverse qui ont déjà une valeur pour {0} la conservent ; seuls les objets Metaverse sans valeur en reçoivent une nouvelle.</value>
+  </data>
+  <data name="StartAgainCounterLine" xml:space="preserve">
+    <value>Le compteur revient à {0} depuis {1}</value>
+  </data>
+  <data name="StartAgainForgottenOne" xml:space="preserve">
+    <value>{0} valeur retirée sera oubliée et pourra de nouveau être attribuée.</value>
+  </data>
+  <data name="StartAgainForgottenOther" xml:space="preserve">
+    <value>{0} valeurs retirées seront oubliées et pourront de nouveau être attribuées.</value>
+  </data>
+  <data name="StartAgainViewRetired" xml:space="preserve">
+    <value>Voir les valeurs retirées</value>
+  </data>
+  <data name="StartAgainAlert" xml:space="preserve">
+    <value>Les numéros peuvent être de nouveau attribués une fois oubliés, mais un numéro encore détenu par un objet Metaverse est ignoré lorsque le compteur l’atteint. Aucune valeur existante ne change et rien n’est exporté.</value>
+  </data>
+  <data name="StartAgainTitle" xml:space="preserve">
+    <value>Recommencer {0} ?</value>
+  </data>
+  <data name="ExportValuesOne" xml:space="preserve">
+    <value>{0} valeur générée</value>
+  </data>
+  <data name="ExportValuesOther" xml:space="preserve">
+    <value>{0} valeurs générées</value>
+  </data>
+  <data name="ExportRejected" xml:space="preserve">
+    <value>a refusé {0} car déjà en usage{1}.</value>
+  </data>
+  <data name="ExportCorrectedOnlyOne" xml:space="preserve">
+    <value>; JIM l’a corrigée, et la prochaine synchronisation exportera la nouvelle valeur</value>
+  </data>
+  <data name="ExportCorrectedOnlyOther" xml:space="preserve">
+    <value>; JIM les a corrigées, et la prochaine synchronisation exportera les nouvelles valeurs</value>
+  </data>
+  <data name="ExportCorrectedWithHeldOne" xml:space="preserve">
+    <value>: JIM en a corrigé {0}, et la prochaine synchronisation exportera la nouvelle valeur</value>
+  </data>
+  <data name="ExportCorrectedWithHeldOther" xml:space="preserve">
+    <value>: JIM en a corrigé {0}, et la prochaine synchronisation exportera les nouvelles valeurs</value>
+  </data>
+  <data name="ExportHeldOnlyOne" xml:space="preserve">
+    <value>, et elle nécessite une décision avant que JIM ne l’exporte</value>
+  </data>
+  <data name="ExportHeldOnlyOther" xml:space="preserve">
+    <value>, et elles nécessitent une décision avant que JIM ne les exporte</value>
+  </data>
+  <data name="ExportHeldAfterOne" xml:space="preserve">
+    <value>; {0} nécessite une décision</value>
+  </data>
+  <data name="ExportHeldAfterOther" xml:space="preserve">
+    <value>; {0} nécessitent une décision</value>
+  </data>
+  <data name="ExportChipNeedsOne" xml:space="preserve">
+    <value>{0} nécessite une décision</value>
+  </data>
+  <data name="ExportChipNeedsOther" xml:space="preserve">
+    <value>{0} nécessitent une décision</value>
+  </data>
+  <data name="ExportChipCorrectedOne" xml:space="preserve">
+    <value>{0} corrigée</value>
+  </data>
+  <data name="ExportChipCorrectedOther" xml:space="preserve">
+    <value>{0} corrigées</value>
+  </data>
+  <data name="SeparatorLabel" xml:space="preserve">
+    <value>Séparateur</value>
+  </data>
+  <data name="SeparatorDot" xml:space="preserve">
+    <value>Point .</value>
+  </data>
+  <data name="SeparatorHyphen" xml:space="preserve">
+    <value>Trait d’union -</value>
+  </data>
+  <data name="SeparatorUnderscore" xml:space="preserve">
+    <value>Tiret bas _</value>
+  </data>
+  <data name="SeparatorCustom" xml:space="preserve">
+    <value>Personnalisé…</value>
+  </data>
+  <data name="SeparatorCustomLabel" xml:space="preserve">
+    <value>Séparateur personnalisé</value>
+  </data>
+  <data name="SeparatorCustomHint" xml:space="preserve">
+    <value>Un à trois caractères ; pas d’espaces, pas de @</value>
+  </data>
+  <data name="AvailabilityHeading" xml:space="preserve">
+    <value>Vérifié pour la disponibilité dans</value>
+  </data>
+  <data name="AvailabilityColumnExported" xml:space="preserve">
+    <value>Exporté comme</value>
+  </data>
+  <data name="AvailabilityColumnChecked" xml:space="preserve">
+    <value>Vérifié</value>
+  </data>
+  <data name="AvailabilityColumnReports" xml:space="preserve">
+    <value>Signale les collisions</value>
+  </data>
+  <data name="AvailabilityColumnInclude" xml:space="preserve">
+    <value>Inclure</value>
+  </data>
+  <data name="AvailabilityCollisionNote" xml:space="preserve">
+    <value>Une collision ici est une erreur d’export ordinaire.</value>
+  </data>
+  <data name="AvailabilityIncludeAria" xml:space="preserve">
+    <value>Vérifier {0} pour la disponibilité</value>
+  </data>
+  <data name="AttentionCountOne" xml:space="preserve">
+    <value>{0} valeur générée nécessite une décision.</value>
+  </data>
+  <data name="AttentionCountOther" xml:space="preserve">
+    <value>{0} valeurs générées nécessitent une décision.</value>
+  </data>
+  <data name="AttentionExplain" xml:space="preserve">
+    <value>Une cible a refusé chacune comme déjà en usage, et JIM n’a pas pu la corriger en toute sécurité : son exportation est suspendue. Ouvrez les valeurs générées pour autoriser le renommage ou réessayer.</value>
+  </data>
+  <data name="WhyRenameAllowed" xml:space="preserve">
+    <value>Renommage autorisé</value>
+  </data>
+  <data name="WhyRenameAllowedBy" xml:space="preserve">
+    <value> par {0}</value>
+  </data>
+  <data name="WhyRenameAllowedSecondary" xml:space="preserve">
+    <value>La prochaine exécution d’export choisit la prochaine valeur libre.</value>
+  </data>
+  <data name="BannerNeedsDecision" xml:space="preserve">
+    <value>{0} nécessite une décision</value>
+  </data>
+  <data name="BannerWillRename" xml:space="preserve">
+    <value>{0} sera renommé lors de la prochaine exportation</value>
+  </data>
+  <data name="BannerAllowRename" xml:space="preserve">
+    <value>Autoriser le renommage…</value>
+  </data>
+  <data name="SkipAheadConfirm" xml:space="preserve">
+    <value>Enregistrer et avancer</value>
+  </data>
+  <data name="SkipAheadTitle" xml:space="preserve">
+    <value>Avancer jusqu’à {0} ?</value>
+  </data>
+  <data name="SkipAheadLeading" xml:space="preserve">
+    <value>« Commencer à » est désormais supérieur au prochain numéro ({0}). L’enregistrement déplace le compteur à {1} ; les numéros de {2} à {3} ne seront jamais attribués.</value>
+  </data>
+  <data name="SkipAheadReasons" xml:space="preserve">
+    <value>Les raisons de le faire peuvent être de réserver une plage pour un autre système, ou de poursuivre une séquence attribuée ailleurs avant JIM. Abaisser « Commencer à » sous le compteur n’a aucun effet.</value>
+  </data>
+  <data name="CollisionSwitchLabel" xml:space="preserve">
+    <value>Laisser JIM corriger une valeur qu’une cible refuse comme déjà en usage</value>
+  </data>
+  <data name="CollisionUnavailable" xml:space="preserve">
+    <value>Non disponible : aucun des systèmes vers lesquels cette valeur est exportée ne peut signaler qu’une valeur est déjà en usage ; une collision est donc enregistrée comme erreur d’export.</value>
+  </data>
+  <data name="CollisionHelp" xml:space="preserve">
+    <value>Tant qu’aucun autre système ne détient la valeur, JIM en choisit une nouvelle libre et l’exporte de nouveau. Dès qu’un autre système la détient, JIM suspend l’exportation pour votre décision au lieu de renommer ce compte.</value>
+  </data>
+  <data name="BuiltFromHeading" xml:space="preserve">
+    <value>Construit à partir d’une valeur générée</value>
+  </data>
+  <data name="BuiltFromNotInEffect" xml:space="preserve">
+    <value>Sans effet</value>
+  </data>
+  <data name="BuiltColumnValue" xml:space="preserve">
+    <value>Valeur</value>
+  </data>
+  <data name="BuiltColumnExportedTo" xml:space="preserve">
+    <value>Exportée vers</value>
+  </data>
+  <data name="BuiltColumnBeforeIssuing" xml:space="preserve">
+    <value>Avant l’attribution</value>
+  </data>
+  <data name="BuiltColumnRefuses" xml:space="preserve">
+    <value>Si une cible la refuse</value>
+  </data>
+  <data name="BuiltValueEvaluationFailed" xml:space="preserve">
+    <value>L’expression n’a pas pu être évaluée.</value>
+  </data>
 </root>

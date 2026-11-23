@@ -1,3 +1,5 @@
+@using System.Globalization
+@using System.Net
 @using JIM.Application
 @using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
@@ -14,17 +16,16 @@
    typed-confirmation rule. *@
 
 <ConsequenceConfirmationDialog Loading="@(_currentNext == null)"
-                               LoadingText="Reading the current counter..."
+                               LoadingText="@GeneratedValueText.StartAgainReading"
                                ConfirmationPhrase="@AttributeName"
-                               ConfirmButtonText="Start again"
+                               ConfirmButtonText="@GeneratedValueText.StartAgainLabel"
                                ConfirmButtonColour="Color.Warning"
-                               BusyText="Starting again..."
+                               BusyText="@GeneratedValueText.StartAgainBusy"
                                DisableConfirm="@_isNoOp"
                                OnConfirmAsync="RestartAsync">
     <LeadingContent>
         <MudText Typo="Typo.body1">
-            Metaverse Objects that already have a value for @AttributeName keep it; only Metaverse Objects without
-            one are given a new value.
+            @string.Format(CultureInfo.CurrentCulture, GeneratedValueText.StartAgainLeading, AttributeName)
         </MudText>
         @if (_isNoOp)
         {
@@ -33,21 +34,22 @@
         else if (_currentNext is { } currentNext)
         {
             <MudText Typo="Typo.body1" Class="mt-2">
-                Counter returns to <code class="jim-code-inline">@ConfiguredStartFormatted</code> from <code class="jim-code-inline">@GeneratedValuePreviewHelpers.FormatSequenceIdentifier(currentNext, FixedWidth)</code>
+                @CounterLine(currentNext)
             </MudText>
         }
         @if (_retiredValueCount > 0)
         {
             <MudText Typo="Typo.body1" Class="mt-2" data-testid="jim-start-again-forgotten">
-                @GeneratedValuePreviewHelpers.DescribeRetiredValueCount(_retiredValueCount) will be forgotten and can be issued again.
-                <MudLink Typo="Typo.body1" OnClick="ViewRetiredValuesAsync" data-testid="jim-start-again-view-retired">View retired values</MudLink>
+                @string.Format(CultureInfo.CurrentCulture,
+                    PluralRules.Choose(_retiredValueCount, GeneratedValueText.StartAgainForgottenOne, GeneratedValueText.StartAgainForgottenOther),
+                    _retiredValueCount.ToString("N0", CultureInfo.CurrentCulture))
+                <MudLink Typo="Typo.body1" OnClick="ViewRetiredValuesAsync" data-testid="jim-start-again-view-retired">@GeneratedValueText.StartAgainViewRetired</MudLink>
             </MudText>
         }
     </LeadingContent>
     <AdditionalContent>
         <MudAlert Severity="Severity.Info" Dense="true">
-            Numbers can be issued again once forgotten, but a number still held by a Metaverse Object is skipped
-            when the counter reaches it. No existing value changes and nothing is exported.
+            @GeneratedValueText.StartAgainAlert
         </MudAlert>
     </AdditionalContent>
 </ConsequenceConfirmationDialog>
@@ -106,6 +108,16 @@
         _isNoOp = GeneratedValuePreviewHelpers.IsStartAgainNoOp(_currentNext.Value, ConfiguredStart, _retiredValueCount);
     }
 
+    /// <summary>
+    /// "Counter returns to X from Y", with both numbers set in code elements. Built as markup from encoded parts, since
+    /// the numbers are formatted for display rather than typed by the administrator.
+    /// </summary>
+    private MarkupString CounterLine(long currentNext) => new(string.Format(
+        CultureInfo.CurrentCulture,
+        GeneratedValueText.StartAgainCounterLine,
+        $"<code class=\"jim-code-inline\">{WebUtility.HtmlEncode(ConfiguredStartFormatted)}</code>",
+        $"<code class=\"jim-code-inline\">{WebUtility.HtmlEncode(GeneratedValuePreviewHelpers.FormatSequenceIdentifier(currentNext, FixedWidth))}</code>"));
+
     private Task ViewRetiredValuesAsync() =>
         RetiredGeneratedValuesDialog.ShowAsync(
             DialogService, AttributeName, MetaverseAttributeId, ConnectedSystemObjectTypeAttributeId, _retiredValueCount);
@@ -146,7 +158,8 @@
             { x => x.ConnectedSystemObjectTypeAttributeId, connectedSystemObjectTypeAttributeId }
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
-        var dialog = await dialogService.ShowAsync<GeneratedValueStartAgainDialog>($"Start {attributeName} again?", parameters, options);
+        var title = string.Format(CultureInfo.CurrentCulture, GeneratedValueText.StartAgainTitle, attributeName);
+        var dialog = await dialogService.ShowAsync<GeneratedValueStartAgainDialog>(title, parameters, options);
         var result = await dialog.Result;
         return result is { Canceled: false, Data: true };
     }

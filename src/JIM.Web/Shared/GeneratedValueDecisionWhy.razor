@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Transactional
 @using JIM.Models.Transactional.DTOs
 @using JIM.Web.Models
@@ -14,10 +15,10 @@
 @if (Decision.Status == GeneratedValueDecisionStatus.RenameAllowed)
 {
     <span class="@(OneLine ? "jim-one-line" : null)" title="@(OneLine ? RenameAllowedText : null)" data-testid="generated-value-why-rename-allowed">
-        <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="ma-0">Rename allowed</MudChip>
+        <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="ma-0">@GeneratedValueText.WhyRenameAllowed</MudChip>
         @if (!string.IsNullOrWhiteSpace(Decision.RenameAllowedBy))
         {
-            <span> by @Decision.RenameAllowedBy</span>
+            <span>@string.Format(CultureInfo.CurrentCulture, GeneratedValueText.WhyRenameAllowedBy, Decision.RenameAllowedBy)</span>
         }
         @if (Decision.RenameAllowedAt is { } allowedAt)
         {
@@ -73,12 +74,16 @@ else
     [Parameter]
     public bool OneLine { get; set; }
 
-    private const string RenameAllowedSecondary = "The next export run picks the next free value.";
+    private static string RenameAllowedSecondary => GeneratedValueText.WhyRenameAllowedSecondary;
 
     private string FullText =>
         string.Concat(GeneratedValueDecisionDisplay.Why(Decision).Select(p => p.Text))
         + (GeneratedValueDecisionDisplay.WhySecondary(Decision) is { } secondary ? $" {secondary}" : string.Empty);
 
     private string RenameAllowedText =>
-        $"Rename allowed{(string.IsNullOrWhiteSpace(Decision.RenameAllowedBy) ? string.Empty : $" by {Decision.RenameAllowedBy}")}. {RenameAllowedSecondary}";
+        GeneratedValueText.WhyRenameAllowed
+        + (string.IsNullOrWhiteSpace(Decision.RenameAllowedBy)
+            ? string.Empty
+            : string.Format(CultureInfo.CurrentCulture, GeneratedValueText.WhyRenameAllowedBy, Decision.RenameAllowedBy))
+        + ". " + RenameAllowedSecondary;
 }

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="SwitchNotCheckedOtherRule" xml:space="preserve">
+    <value>Not checked before {0} is issued, because it is built on {1}, a different Synchronization Rule.{2} If a target refuses it, {3}</value>
+  </data>
+  <data name="AvailabilityPanelHelper" xml:space="preserve">
+    <value>Every Connected System this value is exported to. Where it is exported unchanged, JIM checks its own records of that system before choosing a value and, where the Connector supports it, also probes the target: it asks the target directly whether the value is already in use, which catches accounts JIM doesn't import. This list updates itself as export Synchronization Rules change.</value>
+  </data>
+  <data name="AvailabilityNoParticipants" xml:space="preserve">
+    <value>No export Synchronization Rule sends this value to a Connected System yet, so JIM checks only the values it has already generated.</value>
+  </data>
+  <data name="SyncProbeBuiltBefore" xml:space="preserve">
+    <value>This preview checks JIM's own records only. When the synchronization runs, JIM also probes {0} for the {1} built from {2}. If {3} already has an account using </value>
+  </data>
+  <data name="SyncProbeBuiltAfter" xml:space="preserve">
+    <value> (one JIM doesn't import), the synchronization will generate a different {0} instead.</value>
+  </data>
+  <data name="SyncProbeBefore" xml:space="preserve">
+    <value>This preview checks JIM's own records only. When the synchronization runs, JIM also probes {0}. If {1} already has an account using </value>
+  </data>
+  <data name="SyncProbeAfter" xml:space="preserve">
+    <value> (one JIM doesn't import), the synchronization will generate a different value instead.</value>
+  </data>
+  <data name="PreviewExistingNoValueOne" xml:space="preserve">
+    <value>{0} existing Metaverse Object has no {1} and would receive one at the next synchronization.</value>
+  </data>
+  <data name="PreviewExistingNoValueOther" xml:space="preserve">
+    <value>{0} existing Metaverse Objects have no {1} and would receive one at the next synchronization.</value>
+  </data>
+  <data name="ExportCorrectedOnlyOne" xml:space="preserve">
+    <value>; JIM corrected it, and the next synchronization will export the new value</value>
+  </data>
+  <data name="ExportCorrectedOnlyOther" xml:space="preserve">
+    <value>; JIM corrected them, and the next synchronization will export the new values</value>
+  </data>
+  <data name="ExportCorrectedWithHeldOne" xml:space="preserve">
+    <value>: JIM corrected {0}, and the next synchronization will export the new value</value>
+  </data>
+  <data name="ExportCorrectedWithHeldOther" xml:space="preserve">
+    <value>: JIM corrected {0}, and the next synchronization will export the new values</value>
+  </data>
+</root>

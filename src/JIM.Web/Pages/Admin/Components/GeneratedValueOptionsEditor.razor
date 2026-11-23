@@ -216,13 +216,13 @@
     }
 
     @* ─── Checked for availability in (#242, release 3): where the value is exported and how each target is checked ─── *@
-    <SettingsSection Title="@GeneratedValueText.CheckedForAvailabilityTitle"Summary="@AttributeFlowSectionSummaries.Availability(_participants)">
-        <GeneratedValueAvailabilityPanel Participants="_participants" Generation="generation" OnChanged="OnExclusionsChangedAsync" ShowHeading="false" />
+    <SettingsSection Title="@GeneratedValueText.CheckedForAvailabilityTitle" Summary="@AttributeFlowSectionSummaries.Availability(_participants)">
+        <GeneratedValueAvailabilityPanel Participants="_participants" Generation="generation" OnChanged="OnExclusionsChangedAsync" ShowHeading="@false" />
     </SettingsSection>
 
     @* ─── Collision Remediation (#242, release 4): what JIM does when a target rejects the value as already in use ─── *@
-    <SettingsSection Title="@GeneratedValueText.CollisionRemediationTitle"Summary="@AttributeFlowSectionSummaries.CollisionRemediation(generation, _participants)">
-        <CollisionRemediationSwitch Generation="generation" Participants="_participants" OnChanged="NotifyChangedAsync" ShowHeading="false" />
+    <SettingsSection Title="@GeneratedValueText.CollisionRemediationTitle" Summary="@AttributeFlowSectionSummaries.CollisionRemediation(generation, _participants)">
+        <CollisionRemediationSwitch Generation="generation" Participants="_participants" OnChanged="NotifyChangedAsync" ShowHeading="@false" />
     </SettingsSection>
 
     @* ─── Advanced: attempt limit ─── *@
