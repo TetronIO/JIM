@@ -184,7 +184,7 @@
   </data>
   <data name="WatermarkColumnLabel" xml:space="preserve">
     <value>Watermark column</value>
-    <comment>Field label: the watermark column of a related table.</comment>
+    <comment>Field label.</comment>
   </data>
   <data name="WatermarkColumnHelper" xml:space="preserve">
     <value>Delta Import Mode is Watermark Column: the last-modified column on this table, so an added or removed value is seen.</value>
@@ -297,5 +297,157 @@
   <data name="SettingCopied" xml:space="preserve">
     <value>{0} copied to the clipboard.</value>
     <comment>Confirmation after copying the JSON. {0} is the setting's name.</comment>
+  </data>
+  <data name="CardProblemsOne" xml:space="preserve">
+    <value>1 problem</value>
+    <comment>Problem marker on a collapsed card. Plural rule: one form.</comment>
+  </data>
+  <data name="CardProblemsOther" xml:space="preserve">
+    <value>{0} problems</value>
+    <comment>Problem marker on a collapsed card. {0} is the count.</comment>
+  </data>
+  <data name="SelectHelp" xml:space="preserve">
+    <value>An Object Type read from a statement can be imported, but JIM cannot export to it.</value>
+    <comment>Helper under the SELECT statement field.</comment>
+  </data>
+  <data name="NameHelp" xml:space="preserve">
+    <value>What JIM calls this Object Type.</value>
+    <comment>Helper under the Name field.</comment>
+  </data>
+  <data name="TableOrView" xml:space="preserve">
+    <value>Table or view</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="ReadFromTableInstead" xml:space="preserve">
+    <value>Read from a table or view instead</value>
+    <comment>Button: switch the source to a table.</comment>
+  </data>
+  <data name="ReadFromSelectInstead" xml:space="preserve">
+    <value>Read from a SELECT statement instead</value>
+    <comment>Button: switch the source to a statement.</comment>
+  </data>
+  <data name="AnchorHeading" xml:space="preserve">
+    <value>Anchor</value>
+    <comment>Section heading.</comment>
+  </data>
+  <data name="AnchorHelp" xml:space="preserve">
+    <value>The column or columns whose values identify a row, in key order.</value>
+    <comment>Section helper.</comment>
+  </data>
+  <data name="PrimaryKeyAnchorSuggestion" xml:space="preserve">
+    <value>The table's primary key is {0}, which identifies each row.</value>
+    <comment>Suggestion. {0} is the primary key's columns (code).</comment>
+  </data>
+  <data name="UsePrimaryKey" xml:space="preserve">
+    <value>Use the primary key</value>
+    <comment>Suggestion action.</comment>
+  </data>
+  <data name="ReferencesHeading" xml:space="preserve">
+    <value>References to other Object Types</value>
+    <comment>Section heading.</comment>
+  </data>
+  <data name="ReferencesHelp" xml:space="preserve">
+    <value>Columns whose values hold another object's anchor, such as a manager.</value>
+    <comment>Section helper.</comment>
+  </data>
+  <data name="MultiValuedHeading" xml:space="preserve">
+    <value>Multi-valued attributes</value>
+    <comment>Section heading.</comment>
+  </data>
+  <data name="MultiValuedHelp" xml:space="preserve">
+    <value>Child tables holding one row per value, such as phone numbers or group members.</value>
+    <comment>Section helper.</comment>
+  </data>
+  <data name="DeltaImportHeading" xml:space="preserve">
+    <value>Delta Import</value>
+    <comment>Section heading.</comment>
+  </data>
+  <data name="WatermarkModeHelp" xml:space="preserve">
+    <value>Delta Import Mode is Watermark Column: a Delta Import reads the rows whose watermark has moved on since the last import.</value>
+    <comment>Section helper for the watermark mode.</comment>
+  </data>
+  <data name="WatermarkColumnHelp" xml:space="preserve">
+    <value>A last-modified timestamp or row version on the source.</value>
+    <comment>Helper under the watermark column.</comment>
+  </data>
+  <data name="ChangeLogModeHelp" xml:space="preserve">
+    <value>Delta Import Mode is Change-Log Table: a Delta Import reads a table recording each change, deletions included.</value>
+    <comment>Section helper for the change-log mode.</comment>
+  </data>
+  <data name="AddChangeLogTable" xml:space="preserve">
+    <value>Add change-log table</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="ChangeLogSchema" xml:space="preserve">
+    <value>Change-log schema</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="ChangeLogTable" xml:space="preserve">
+    <value>Change-log table</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="SequenceColumn" xml:space="preserve">
+    <value>Sequence column</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="SequenceColumnHelp" xml:space="preserve">
+    <value>Orders the changes: a sequence number or timestamp.</value>
+    <comment>Helper.</comment>
+  </data>
+  <data name="ChangeTypeColumn" xml:space="preserve">
+    <value>Change type column</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="ChangeTypeColumnHelp" xml:space="preserve">
+    <value>Says whether a row records a creation, an update or a deletion.</value>
+    <comment>Helper.</comment>
+  </data>
+  <data name="CreatedWhen" xml:space="preserve">
+    <value>Created when</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="CreatedWhenHelp" xml:space="preserve">
+    <value>Values meaning created, separated by commas.</value>
+    <comment>Helper.</comment>
+  </data>
+  <data name="UpdatedWhen" xml:space="preserve">
+    <value>Updated when</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="UpdatedWhenHelp" xml:space="preserve">
+    <value>Values meaning updated.</value>
+    <comment>Helper.</comment>
+  </data>
+  <data name="DeletedWhen" xml:space="preserve">
+    <value>Deleted when</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="DeletedWhenHelp" xml:space="preserve">
+    <value>Values meaning deleted.</value>
+    <comment>Helper.</comment>
+  </data>
+  <data name="RemoveChangeLogTable" xml:space="preserve">
+    <value>Remove change-log table</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="OtherColumnsOne" xml:space="preserve">
+    <value>The other column is discovered and typed automatically on the Schema tab.</value>
+    <comment>Footer. Plural rule: one form.</comment>
+  </data>
+  <data name="OtherColumnsOther" xml:space="preserve">
+    <value>The other {0} columns are discovered and typed automatically on the Schema tab.</value>
+    <comment>Footer. {0} is the count.</comment>
+  </data>
+  <data name="RemoveObjectTypeButton" xml:space="preserve">
+    <value>Remove Object Type</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="StatementColumnsUnreadable" xml:space="preserve">
+    <value>The statement's columns could not be read, so type their names: {0}</value>
+    <comment>Shown when a statement's columns cannot be read. {0} is the reason.</comment>
+  </data>
+  <data name="TableOrViewNotVisible" xml:space="preserve">
+    <value>The database account cannot see a table or view of that name. Check the name, the schema, and the account's permissions.</value>
+    <comment>Shown when no table or view of the chosen name is visible.</comment>
   </data>
 </root>

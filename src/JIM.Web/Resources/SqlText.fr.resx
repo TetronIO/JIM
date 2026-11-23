@@ -227,4 +227,118 @@
   <data name="SettingCopied" xml:space="preserve">
     <value>{0} copié dans le presse-papiers.</value>
   </data>
+  <data name="CardProblemsOne" xml:space="preserve">
+    <value>1 problème</value>
+  </data>
+  <data name="CardProblemsOther" xml:space="preserve">
+    <value>{0} problèmes</value>
+  </data>
+  <data name="SelectHelp" xml:space="preserve">
+    <value>Un type d’objet lu depuis une instruction peut être importé, mais JIM ne peut pas exporter vers lui.</value>
+  </data>
+  <data name="NameHelp" xml:space="preserve">
+    <value>Le nom que JIM donne à ce type d’objet.</value>
+  </data>
+  <data name="TableOrView" xml:space="preserve">
+    <value>Table ou vue</value>
+  </data>
+  <data name="ReadFromTableInstead" xml:space="preserve">
+    <value>Lire plutôt depuis une table ou une vue</value>
+  </data>
+  <data name="ReadFromSelectInstead" xml:space="preserve">
+    <value>Lire plutôt depuis une instruction SELECT</value>
+  </data>
+  <data name="AnchorHeading" xml:space="preserve">
+    <value>Ancre</value>
+  </data>
+  <data name="AnchorHelp" xml:space="preserve">
+    <value>La ou les colonnes dont les valeurs identifient une ligne, dans l’ordre de la clé.</value>
+  </data>
+  <data name="PrimaryKeyAnchorSuggestion" xml:space="preserve">
+    <value>La clé primaire de la table est {0}, qui identifie chaque ligne.</value>
+  </data>
+  <data name="UsePrimaryKey" xml:space="preserve">
+    <value>Utiliser la clé primaire</value>
+  </data>
+  <data name="ReferencesHeading" xml:space="preserve">
+    <value>Références à d’autres types d’objets</value>
+  </data>
+  <data name="ReferencesHelp" xml:space="preserve">
+    <value>Colonnes dont les valeurs contiennent l’ancre d’un autre objet, par exemple un responsable.</value>
+  </data>
+  <data name="MultiValuedHeading" xml:space="preserve">
+    <value>Attributs multivalués</value>
+  </data>
+  <data name="MultiValuedHelp" xml:space="preserve">
+    <value>Tables enfants contenant une ligne par valeur, par exemple des numéros de téléphone ou des membres de groupe.</value>
+  </data>
+  <data name="DeltaImportHeading" xml:space="preserve">
+    <value>Importation delta</value>
+  </data>
+  <data name="WatermarkModeHelp" xml:space="preserve">
+    <value>Le mode d’importation delta est « Colonne de marque de progression » : une importation delta lit les lignes dont la marque de progression a avancé depuis la dernière importation.</value>
+  </data>
+  <data name="WatermarkColumnHelp" xml:space="preserve">
+    <value>Un horodatage de dernière modification ou une version de ligne dans la source.</value>
+  </data>
+  <data name="ChangeLogModeHelp" xml:space="preserve">
+    <value>Le mode d’importation delta est « Table de journal des modifications » : une importation delta lit une table qui enregistre chaque modification, suppressions comprises.</value>
+  </data>
+  <data name="AddChangeLogTable" xml:space="preserve">
+    <value>Ajouter une table de journal des modifications</value>
+  </data>
+  <data name="ChangeLogSchema" xml:space="preserve">
+    <value>Schéma du journal des modifications</value>
+  </data>
+  <data name="ChangeLogTable" xml:space="preserve">
+    <value>Table du journal des modifications</value>
+  </data>
+  <data name="SequenceColumn" xml:space="preserve">
+    <value>Colonne de séquence</value>
+  </data>
+  <data name="SequenceColumnHelp" xml:space="preserve">
+    <value>Ordonne les modifications : un numéro de séquence ou un horodatage.</value>
+  </data>
+  <data name="ChangeTypeColumn" xml:space="preserve">
+    <value>Colonne du type de modification</value>
+  </data>
+  <data name="ChangeTypeColumnHelp" xml:space="preserve">
+    <value>Indique si une ligne enregistre une création, une mise à jour ou une suppression.</value>
+  </data>
+  <data name="CreatedWhen" xml:space="preserve">
+    <value>Créée lorsque</value>
+  </data>
+  <data name="CreatedWhenHelp" xml:space="preserve">
+    <value>Valeurs signifiant création, séparées par des virgules.</value>
+  </data>
+  <data name="UpdatedWhen" xml:space="preserve">
+    <value>Mise à jour lorsque</value>
+  </data>
+  <data name="UpdatedWhenHelp" xml:space="preserve">
+    <value>Valeurs signifiant mise à jour.</value>
+  </data>
+  <data name="DeletedWhen" xml:space="preserve">
+    <value>Supprimée lorsque</value>
+  </data>
+  <data name="DeletedWhenHelp" xml:space="preserve">
+    <value>Valeurs signifiant suppression.</value>
+  </data>
+  <data name="RemoveChangeLogTable" xml:space="preserve">
+    <value>Supprimer la table de journal des modifications</value>
+  </data>
+  <data name="OtherColumnsOne" xml:space="preserve">
+    <value>L’autre colonne est découverte et typée automatiquement dans l’onglet Schéma.</value>
+  </data>
+  <data name="OtherColumnsOther" xml:space="preserve">
+    <value>Les {0} autres colonnes sont découvertes et typées automatiquement dans l’onglet Schéma.</value>
+  </data>
+  <data name="RemoveObjectTypeButton" xml:space="preserve">
+    <value>Supprimer le type d’objet</value>
+  </data>
+  <data name="StatementColumnsUnreadable" xml:space="preserve">
+    <value>Impossible de lire les colonnes de l’instruction ; saisissez donc leurs noms : {0}</value>
+  </data>
+  <data name="TableOrViewNotVisible" xml:space="preserve">
+    <value>Le compte de base de données ne voit aucune table ni aucune vue de ce nom. Vérifiez le nom, le schéma et les autorisations du compte.</value>
+  </data>
 </root>
