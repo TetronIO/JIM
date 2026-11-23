@@ -1461,4 +1461,113 @@
     <value>Connected System Object</value>
     <comment>Stands in for the Connected System Object Type name when there is none.</comment>
   </data>
+  <data name="NameRequired" xml:space="preserve">
+    <value>A name is required</value>
+    <comment>Error under the Name field when it is empty.</comment>
+  </data>
+  <data name="SelectConnectedSystem" xml:space="preserve">
+    <value>Please select a Connected System...</value>
+    <comment>Placeholder of the Connected System field.</comment>
+  </data>
+  <data name="SelectDirection" xml:space="preserve">
+    <value>Please select an Attribute Flow direction...</value>
+    <comment>Placeholder of the direction field.</comment>
+  </data>
+  <data name="DirectionImportName" xml:space="preserve">
+    <value>Import</value>
+    <comment>Direction name as shown in the direction list.</comment>
+  </data>
+  <data name="DirectionExportName" xml:space="preserve">
+    <value>Export</value>
+    <comment>Direction name as shown in the direction list.</comment>
+  </data>
+  <data name="NotSupportedByConnector" xml:space="preserve">
+    <value> (not supported by Connector)</value>
+    <comment>Appended to a direction the Connector cannot do. Leading space is intentional.</comment>
+  </data>
+  <data name="ExportsToConnectedSystem" xml:space="preserve">
+    <value>Exports to the Connected System</value>
+    <comment>Tooltip on the arrow between the object types, for an export rule.</comment>
+  </data>
+  <data name="ImportsToMetaverse" xml:space="preserve">
+    <value>Imports to the Metaverse</value>
+    <comment>Tooltip on the arrow between the object types, for an import rule.</comment>
+  </data>
+  <data name="ProjectToMetaverseLabel" xml:space="preserve">
+    <value>Project {0} to the Metaverse?</value>
+    <comment>Switch label. {0} is the plural name of the Metaverse Object Type, or the word objects.</comment>
+  </data>
+  <data name="ObjectsFallback" xml:space="preserve">
+    <value>objects</value>
+    <comment>Stands in for the Object Type's plural name before one is chosen. Lower case.</comment>
+  </data>
+  <data name="ProjectHelp" xml:space="preserve">
+    <value>By default, objects imported from this Connected System will not result in a Metaverse Object being projected if no match is found. Enabling this option causes the object to be projected to the Metaverse, allowing it to be managed within JIM and synchronised to other Connected Systems. You would typically enable this for a source system, i.e. a HR system.</value>
+    <comment>Explains the project switch.</comment>
+  </data>
+  <data name="ProvisioningHeading" xml:space="preserve">
+    <value>Provisioning</value>
+    <comment>Heading of the provisioning group on an export rule.</comment>
+  </data>
+  <data name="ProvisionToConnectedSystemLabel" xml:space="preserve">
+    <value>Provision {0} to the Connected System?</value>
+    <comment>Switch label. {0} is the plural name of the Connected System Object Type, or the word objects.</comment>
+  </data>
+  <data name="ProvisionHelp" xml:space="preserve">
+    <value>By default, Metaverse Objects scoped to this Synchronisation Rule will not be created (provisioned) in the Connected Systems. Enabling this option will cause the Metaverse Object to be created in the Connected System. You would typically enable this option for a destination system.</value>
+    <comment>Explains the provisioning switch.</comment>
+  </data>
+  <data name="DeprovisioningHeading" xml:space="preserve">
+    <value>Deprovisioning</value>
+    <comment>Heading of the deprovisioning group on an export rule.</comment>
+  </data>
+  <data name="DeprovisionDisconnect" xml:space="preserve">
+    <value>Disconnect</value>
+    <comment>Deprovisioning action: break the join and leave the object in place.</comment>
+  </data>
+  <data name="DeprovisionDisconnectHelp" xml:space="preserve">
+    <value>When a Metaverse Object leaves this Synchronisation Rule's scope or is deleted, JIM breaks the join and leaves the object in place in the Connected System.</value>
+  </data>
+  <data name="DeprovisionDisable" xml:space="preserve">
+    <value>Disable</value>
+    <comment>Deprovisioning action: disable the object in the Connected System.</comment>
+  </data>
+  <data name="DeprovisionDisableHelp" xml:space="preserve">
+    <value>When a Metaverse Object leaves this Synchronisation Rule's scope or is deleted, JIM disables the corresponding object in the Connected System, then breaks the join and leaves it in place.</value>
+  </data>
+  <data name="DeprovisionDisableUnsupported" xml:space="preserve">
+    <value> {0} cannot disable an account.</value>
+    <comment>Appended when the Connector cannot disable an account. {0} is the Connector name. Leading space is intentional.</comment>
+  </data>
+  <data name="DeprovisionDelete" xml:space="preserve">
+    <value>Delete</value>
+    <comment>Deprovisioning action: delete the object from the Connected System.</comment>
+  </data>
+  <data name="DeprovisionDeleteHelp" xml:space="preserve">
+    <value>When a Metaverse Object leaves this Synchronisation Rule's scope or is deleted, JIM deletes the corresponding object from the Connected System.</value>
+  </data>
+  <data name="EnabledQuestion" xml:space="preserve">
+    <value>Enabled?</value>
+    <comment>Switch label on a rule.</comment>
+  </data>
+  <data name="RuleEnabledHelp" xml:space="preserve">
+    <value>Synchronisation Rules are not evaluated when disabled. Use this to prepare a rule in advance of it being needed, or to temporarily stop a rule from being evaluated. Where another Attribute Flow also contributes an attribute, its value takes over at the next synchronisation; values only this rule contributed stay in place until it is re-enabled or deleted.</value>
+    <comment>Explains the enabled switch.</comment>
+  </data>
+  <data name="AdvancedOptions" xml:space="preserve">
+    <value>Advanced Options</value>
+    <comment>Heading of the advanced options panel.</comment>
+  </data>
+  <data name="EnforceStateLabel" xml:space="preserve">
+    <value>Enforce State (Auto-correct drift)</value>
+    <comment>Switch label.</comment>
+  </data>
+  <data name="EnforceStateHelp" xml:space="preserve">
+    <value>Enables drift detection and automatic correction. When a target system attribute differs from what this export rule dictates, JIM creates a corrective Pending Export to restore the authoritative value. Disable only where you need to allow temporary manual overrides in the target system (e.g. emergency access scenarios).</value>
+    <comment>Explains the enforce state switch.</comment>
+  </data>
+  <data name="ConnectedSystemObjectTypeLabel" xml:space="preserve">
+    <value>Connected System Object Type</value>
+    <comment>Label of the Connected System Object Type field.</comment>
+  </data>
 </root>

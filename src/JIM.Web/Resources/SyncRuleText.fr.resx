@@ -1115,4 +1115,88 @@
   <data name="ConnectedSystemObjectFallback" xml:space="preserve">
     <value>objet de système connecté</value>
   </data>
+  <data name="NameRequired" xml:space="preserve">
+    <value>Un nom est requis</value>
+  </data>
+  <data name="SelectConnectedSystem" xml:space="preserve">
+    <value>Sélectionnez un système connecté…</value>
+  </data>
+  <data name="SelectDirection" xml:space="preserve">
+    <value>Sélectionnez un sens pour le flux d’attributs…</value>
+  </data>
+  <data name="DirectionImportName" xml:space="preserve">
+    <value>Importation</value>
+  </data>
+  <data name="DirectionExportName" xml:space="preserve">
+    <value>Exportation</value>
+  </data>
+  <data name="NotSupportedByConnector" xml:space="preserve">
+    <value> (non pris en charge par le connecteur)</value>
+  </data>
+  <data name="ExportsToConnectedSystem" xml:space="preserve">
+    <value>Exporte vers le système connecté</value>
+  </data>
+  <data name="ImportsToMetaverse" xml:space="preserve">
+    <value>Importe vers le Metaverse</value>
+  </data>
+  <data name="ProjectToMetaverseLabel" xml:space="preserve">
+    <value>Projeter {0} vers le Metaverse ?</value>
+  </data>
+  <data name="ObjectsFallback" xml:space="preserve">
+    <value>objets</value>
+  </data>
+  <data name="ProjectHelp" xml:space="preserve">
+    <value>Par défaut, les objets importés depuis ce système connecté n’entraînent pas la projection d’un objet Metaverse si aucune correspondance n’est trouvée. Activer cette option projette l’objet dans le Metaverse, ce qui permet de le gérer dans JIM et de le synchroniser avec d’autres systèmes connectés. Vous l’activerez généralement pour un système source, par exemple un système RH.</value>
+  </data>
+  <data name="ProvisioningHeading" xml:space="preserve">
+    <value>Provisionnement</value>
+  </data>
+  <data name="ProvisionToConnectedSystemLabel" xml:space="preserve">
+    <value>Provisionner {0} vers le système connecté ?</value>
+  </data>
+  <data name="ProvisionHelp" xml:space="preserve">
+    <value>Par défaut, les objets Metaverse délimités par cette règle de synchronisation ne sont pas créés (provisionnés) dans les systèmes connectés. Activer cette option créera l’objet Metaverse dans le système connecté. Vous l’activerez généralement pour un système de destination.</value>
+  </data>
+  <data name="DeprovisioningHeading" xml:space="preserve">
+    <value>Déprovisionnement</value>
+  </data>
+  <data name="DeprovisionDisconnect" xml:space="preserve">
+    <value>Déconnecter</value>
+  </data>
+  <data name="DeprovisionDisconnectHelp" xml:space="preserve">
+    <value>Lorsqu’un objet Metaverse quitte le périmètre de cette règle de synchronisation ou est supprimé, JIM rompt la jointure et laisse l’objet en place dans le système connecté.</value>
+  </data>
+  <data name="DeprovisionDisable" xml:space="preserve">
+    <value>Désactiver</value>
+  </data>
+  <data name="DeprovisionDisableHelp" xml:space="preserve">
+    <value>Lorsqu’un objet Metaverse quitte le périmètre de cette règle de synchronisation ou est supprimé, JIM désactive l’objet correspondant dans le système connecté, puis rompt la jointure et le laisse en place.</value>
+  </data>
+  <data name="DeprovisionDisableUnsupported" xml:space="preserve">
+    <value> {0} ne peut pas désactiver de compte.</value>
+  </data>
+  <data name="DeprovisionDelete" xml:space="preserve">
+    <value>Supprimer</value>
+  </data>
+  <data name="DeprovisionDeleteHelp" xml:space="preserve">
+    <value>Lorsqu’un objet Metaverse quitte le périmètre de cette règle de synchronisation ou est supprimé, JIM supprime l’objet correspondant du système connecté.</value>
+  </data>
+  <data name="EnabledQuestion" xml:space="preserve">
+    <value>Activé ?</value>
+  </data>
+  <data name="RuleEnabledHelp" xml:space="preserve">
+    <value>Les règles de synchronisation ne sont pas évaluées lorsqu’elles sont désactivées. Utilisez cette option pour préparer une règle avant qu’elle ne soit nécessaire, ou pour interrompre temporairement son évaluation. Lorsqu’un autre flux d’attributs contribue aussi à un attribut, sa valeur prend le relais lors de la synchronisation suivante ; les valeurs que cette seule règle contribuait restent en place jusqu’à sa réactivation ou sa suppression.</value>
+  </data>
+  <data name="AdvancedOptions" xml:space="preserve">
+    <value>Options avancées</value>
+  </data>
+  <data name="EnforceStateLabel" xml:space="preserve">
+    <value>Appliquer l’état (correction automatique de la dérive)</value>
+  </data>
+  <data name="EnforceStateHelp" xml:space="preserve">
+    <value>Active la détection de dérive et la correction automatique. Lorsqu’un attribut du système cible diffère de ce que cette règle d’exportation impose, JIM crée une exportation en attente corrective pour rétablir la valeur faisant autorité. Désactivez-la uniquement lorsque vous devez autoriser des modifications manuelles temporaires dans le système cible (par exemple, des scénarios d’accès d’urgence).</value>
+  </data>
+  <data name="ConnectedSystemObjectTypeLabel" xml:space="preserve">
+    <value>Type d’objets de système connecté</value>
+  </data>
 </root>

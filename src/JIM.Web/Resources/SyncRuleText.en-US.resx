@@ -170,4 +170,22 @@
   <data name="NextChangeUndetermined" xml:space="preserve">
     <value>A criterion cannot be evaluated, so a Synchronization would fail this object until the criterion is corrected.</value>
   </data>
+  <data name="ProjectHelp" xml:space="preserve">
+    <value>By default, objects imported from this Connected System will not result in a Metaverse Object being projected if no match is found. Enabling this option causes the object to be projected to the Metaverse, allowing it to be managed within JIM and synchronized to other Connected Systems. You would typically enable this for a source system, i.e. a HR system.</value>
+  </data>
+  <data name="ProvisionHelp" xml:space="preserve">
+    <value>By default, Metaverse Objects scoped to this Synchronization Rule will not be created (provisioned) in the Connected Systems. Enabling this option will cause the Metaverse Object to be created in the Connected System. You would typically enable this option for a destination system.</value>
+  </data>
+  <data name="DeprovisionDisconnectHelp" xml:space="preserve">
+    <value>When a Metaverse Object leaves this Synchronization Rule's scope or is deleted, JIM breaks the join and leaves the object in place in the Connected System.</value>
+  </data>
+  <data name="DeprovisionDisableHelp" xml:space="preserve">
+    <value>When a Metaverse Object leaves this Synchronization Rule's scope or is deleted, JIM disables the corresponding object in the Connected System, then breaks the join and leaves it in place.</value>
+  </data>
+  <data name="DeprovisionDeleteHelp" xml:space="preserve">
+    <value>When a Metaverse Object leaves this Synchronization Rule's scope or is deleted, JIM deletes the corresponding object from the Connected System.</value>
+  </data>
+  <data name="RuleEnabledHelp" xml:space="preserve">
+    <value>Synchronization Rules are not evaluated when disabled. Use this to prepare a rule in advance of it being needed, or to temporarily stop a rule from being evaluated. Where another Attribute Flow also contributes an attribute, its value takes over at the next synchronization; values only this rule contributed stay in place until it is re-enabled or deleted.</value>
+  </data>
 </root>
