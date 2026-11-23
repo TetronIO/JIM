@@ -1103,4 +1103,289 @@
   <data name="ActivityListDescription" xml:space="preserve">
     <value>Surveillez toutes les activités du système. Affichez les opérations lancées par des utilisateurs ou par des processus automatisés, y compris les synchronisations, les modifications de configuration et les événements système.</value>
   </data>
+  <data name="ActivityItemPageTitlePrefix" xml:space="preserve">
+    <value>Détails de l’élément :</value>
+  </data>
+  <data name="ActivityItemPageTitle" xml:space="preserve">
+    <value>Élément d’exécution</value>
+  </data>
+  <data name="ActivityItemPageDescription" xml:space="preserve">
+    <value>Ce qu’une exécution de profil a fait à un objet : ce qui s’est passé, ce que cela a entraîné et l’erreur éventuellement rencontrée.</value>
+  </data>
+  <data name="ActivityItemTabOverview" xml:space="preserve">
+    <value>Vue d’ensemble</value>
+  </data>
+  <data name="ActivityItemExecutionSummary" xml:space="preserve">
+    <value>Résumé de l’exécution</value>
+  </data>
+  <data name="ActivityFieldConnectedSystem" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="ActivityFieldActivity" xml:space="preserve">
+    <value>Activité</value>
+  </data>
+  <data name="ActivityFieldRunProfile" xml:space="preserve">
+    <value>Profil d’exécution</value>
+  </data>
+  <data name="ActivityFieldExecuted" xml:space="preserve">
+    <value>Exécution</value>
+  </data>
+  <data name="ActivityViewObject" xml:space="preserve">
+    <value>Voir l’objet</value>
+  </data>
+  <data name="ActivityDeletedMarker" xml:space="preserve">
+    <value>(supprimé)</value>
+  </data>
+  <data name="ActivityObjectFallback" xml:space="preserve">
+    <value>Objet</value>
+  </data>
+  <data name="ActivityRejectedWithId" xml:space="preserve">
+    <value>Rejeté : {0}</value>
+  </data>
+  <data name="ActivityPendingRemovalWithId" xml:space="preserve">
+    <value>Suppression en attente : {0}</value>
+  </data>
+  <data name="ActivityDeletedWithId" xml:space="preserve">
+    <value>Supprimé : {0}</value>
+  </data>
+  <data name="ActivityCsoDeleted" xml:space="preserve">
+    <value>L’objet de système connecté a été supprimé.</value>
+  </data>
+  <data name="ActivityFieldSource" xml:space="preserve">
+    <value>Source</value>
+  </data>
+  <data name="ActivityItemDeletionAlert" xml:space="preserve">
+    <value>L’objet de système connecté a été détecté comme supprimé du système source et marqué pour suppression. Lorsqu’un profil d’exécution de synchronisation complète ou delta est exécuté, JIM déconnecte cet objet du Metaverse et évalue la règle de suppression pour son type d’objet Metaverse.</value>
+  </data>
+  <data name="ActivityItemCausalityHeading" xml:space="preserve">
+    <value>Causalité</value>
+  </data>
+  <data name="ActivityItemCausalityDescription" xml:space="preserve">
+    <value>Ce qui s’est passé pendant le traitement et les conséquences en aval.</value>
+  </data>
+  <data name="ActivityItemDeletionRuleAtTime" xml:space="preserve">
+    <value>Règle de suppression en vigueur à ce moment-là</value>
+  </data>
+  <data name="ActivityItemErrorDetails" xml:space="preserve">
+    <value>Détails de l’erreur</value>
+  </data>
+  <data name="ActivityItemAttributeChangesHeading" xml:space="preserve">
+    <value>Modifications d’attributs</value>
+  </data>
+  <data name="ActivityItemAttributeChangeSingular" xml:space="preserve">
+    <value>Modification d’attribut</value>
+  </data>
+  <data name="ActivityItemSearchAttributes" xml:space="preserve">
+    <value>Rechercher un attribut ou une valeur</value>
+  </data>
+  <data name="ActivityColumnAttribute" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="ActivityColumnChange" xml:space="preserve">
+    <value>Modification</value>
+  </data>
+  <data name="ActivityColumnValue" xml:space="preserve">
+    <value>Valeur</value>
+  </data>
+  <data name="ActivityNoAttributeChangesMatch" xml:space="preserve">
+    <value>Aucune modification d’attribut ne correspond à « {0} »</value>
+  </data>
+  <data name="ActivityNoAttributeChangesRecorded" xml:space="preserve">
+    <value>Aucune modification d’attribut n’a été enregistrée</value>
+  </data>
+  <data name="ActivityNoAttributeChangesDetail" xml:space="preserve">
+    <value>Cette opération n’a modifié aucune valeur d’attribut sur l’objet.</value>
+  </data>
+  <data name="ActivityItemNoChangesRequired" xml:space="preserve">
+    <value>Aucune modification requise</value>
+  </data>
+  <data name="ActivityItemAlreadyUpToDate" xml:space="preserve">
+    <value>L’objet était déjà à jour ; aucune modification d’attribut n’était nécessaire.</value>
+  </data>
+  <data name="ActivityItemTabPendingExport" xml:space="preserve">
+    <value>Exportation en attente</value>
+  </data>
+  <data name="ActivityBreadcrumbItemDetails" xml:space="preserve">
+    <value>Détail de l’élément</value>
+  </data>
+  <data name="ActivityNoChangeReasonMvoNoAttributeChanges" xml:space="preserve">
+    <value>Aucune modification d’attribut pour l’objet Metaverse</value>
+  </data>
+  <data name="ActivityNoChangeReasonCsoAlreadyCurrent" xml:space="preserve">
+    <value>Objet de système connecté déjà à jour</value>
+  </data>
+  <data name="ActivityItemTitleAdded" xml:space="preserve">
+    <value>{0} ajouté à l’espace connecteur</value>
+  </data>
+  <data name="ActivityItemTitleUpdated" xml:space="preserve">
+    <value>{0} mis à jour</value>
+  </data>
+  <data name="ActivityItemTitleMetaverseDeleted" xml:space="preserve">
+    <value>{0} Metaverse supprimé</value>
+  </data>
+  <data name="ActivityItemTitleSourceDeletionProcessed" xml:space="preserve">
+    <value>Suppression à la source traitée</value>
+  </data>
+  <data name="ActivityItemTitleDeletionDetected" xml:space="preserve">
+    <value>{0} : suppression détectée</value>
+  </data>
+  <data name="ActivityItemTitleProjected" xml:space="preserve">
+    <value>{0} projeté vers le Metaverse</value>
+  </data>
+  <data name="ActivityItemTitleJoined" xml:space="preserve">
+    <value>{0} rattaché au Metaverse {1}</value>
+  </data>
+  <data name="ActivityItemTitleAttributeFlow" xml:space="preserve">
+    <value>Attributs de {0} transmis au Metaverse {1}</value>
+  </data>
+  <data name="ActivityItemTitleDisconnected" xml:space="preserve">
+    <value>{0} déconnecté du Metaverse</value>
+  </data>
+  <data name="ActivityItemTitleExported" xml:space="preserve">
+    <value>{0} exporté</value>
+  </data>
+  <data name="ActivityItemTitleDeprovisioned" xml:space="preserve">
+    <value>{0} déprovisionné</value>
+  </data>
+  <data name="ActivityItemTitleNoChanges" xml:space="preserve">
+    <value>Aucune modification</value>
+  </data>
+  <data name="ActivityItemTitleExportReview" xml:space="preserve">
+    <value>Examen d’exportation : {0}</value>
+  </data>
+  <data name="ActivityItemTitleSynchronisationComplete" xml:space="preserve">
+    <value>Synchronisation terminée</value>
+  </data>
+  <data name="ActivityFieldConnectedSystemObject" xml:space="preserve">
+    <value>Objet de système connecté</value>
+  </data>
+  <data name="ActivityFieldMetaverseObject" xml:space="preserve">
+    <value>Objet Metaverse</value>
+  </data>
+  <data name="ActivityFieldExternalIdFromSource" xml:space="preserve">
+    <value>Identifiant externe (depuis les données source)</value>
+  </data>
+  <data name="ActivityFieldExternalId" xml:space="preserve">
+    <value>Identifiant externe</value>
+  </data>
+  <data name="ActivityItemErrorMetaverseObject" xml:space="preserve">
+    <value>Une erreur s’est produite lors de la synchronisation de l’objet Metaverse.</value>
+  </data>
+  <data name="ActivityItemErrorConnectedSystemObject" xml:space="preserve">
+    <value>Une erreur s’est produite lors de la synchronisation de l’objet de système connecté.</value>
+  </data>
+  <data name="ActivityItemUnresolvedAppend" xml:space="preserve">
+    <value>{0} {1} n’a pas pu être lié à des objets de systèmes connectés.</value>
+  </data>
+  <data name="ActivityObjectLowercase" xml:space="preserve">
+    <value>objet</value>
+  </data>
+  <data name="ActivityItemImportedAdded" xml:space="preserve">
+    <value>a été ajouté à l’espace connecteur</value>
+  </data>
+  <data name="ActivityItemImportedUpdated" xml:space="preserve">
+    <value>a été mis à jour</value>
+  </data>
+  <data name="ActivityItemImportedDefault" xml:space="preserve">
+    <value>a été importé</value>
+  </data>
+  <data name="ActivityItemUnresolvedSentence" xml:space="preserve">
+    <value>L’objet {0} {1}, mais {2} n’a pas pu être lié à des objets de systèmes connectés.</value>
+  </data>
+  <data name="ActivityItemReferencesCount" xml:space="preserve">
+    <value>{0} de ses références</value>
+  </data>
+  <data name="ActivityItemSomeReferences" xml:space="preserve">
+    <value>Certaines de ses références</value>
+  </data>
+  <data name="ActivityItemStatusAdded" xml:space="preserve">
+    <value>Un nouvel objet de système connecté a été importé et ajouté à l’espace connecteur.</value>
+  </data>
+  <data name="ActivityItemStatusUpdated" xml:space="preserve">
+    <value>L’objet de système connecté a été mis à jour avec de nouvelles valeurs d’attributs.</value>
+  </data>
+  <data name="ActivityItemStatusHousekeepingDeleted" xml:space="preserve">
+    <value>Le délai de grâce de suppression de l’objet Metaverse a expiré, et le processus de nettoyage l’a supprimé du Metaverse.</value>
+  </data>
+  <data name="ActivityItemStatusSyncDeleted" xml:space="preserve">
+    <value>L’objet de système connecté a été retiré de l’espace connecteur après confirmation de la suppression dans le système source.</value>
+  </data>
+  <data name="ActivityItemStatusDeletionDetected" xml:space="preserve">
+    <value>L’objet de système connecté a été détecté comme supprimé du système source et marqué pour suppression.</value>
+  </data>
+  <data name="ActivityItemStatusProjected" xml:space="preserve">
+    <value>Un nouvel objet Metaverse a été créé par projection à partir de l’objet de système connecté.</value>
+  </data>
+  <data name="ActivityItemStatusJoined" xml:space="preserve">
+    <value>L’objet de système connecté a été rattaché à un objet Metaverse existant.</value>
+  </data>
+  <data name="ActivityItemStatusAttributeFlow" xml:space="preserve">
+    <value>Des attributs ont été transmis entre l’objet de système connecté et le Metaverse.</value>
+  </data>
+  <data name="ActivityItemStatusDisconnected" xml:space="preserve">
+    <value>L’objet de système connecté a été déconnecté du Metaverse. Les règles de jointure et de suppression du Metaverse ont été évaluées.</value>
+  </data>
+  <data name="ActivityItemStatusExported" xml:space="preserve">
+    <value>L’objet de système connecté a été exporté vers le système cible.</value>
+  </data>
+  <data name="ActivityItemStatusDeprovisioned" xml:space="preserve">
+    <value>L’objet de système connecté a été déprovisionné du système cible.</value>
+  </data>
+  <data name="ActivityItemStatusNoChange" xml:space="preserve">
+    <value>L’objet de système connecté était déjà à jour.</value>
+  </data>
+  <data name="ActivityItemStatusExportScopeReview" xml:space="preserve">
+    <value>Cet objet Metaverse a été examiné au regard des règles de synchronisation d’exportation pendant cette synchronisation, parce qu’une règle d’exportation a changé ou que l’objet a été créé ou modifié en dehors de la synchronisation. Les résultats ci-dessous montrent ce que cet examen a fait : son approvisionnement, son déprovisionnement ou la transmission de valeurs modifiées en dehors de la synchronisation.</value>
+  </data>
+  <data name="ActivityItemStatusDefault" xml:space="preserve">
+    <value>La synchronisation de l’objet de système connecté est terminée.</value>
+  </data>
+  <data name="ActivityOperationTextAdded" xml:space="preserve">
+    <value>Objet de système connecté ajouté</value>
+  </data>
+  <data name="ActivityOperationTextUpdated" xml:space="preserve">
+    <value>Objet de système connecté mis à jour</value>
+  </data>
+  <data name="ActivityOperationTextMetaverseDeleted" xml:space="preserve">
+    <value>Objet Metaverse supprimé</value>
+  </data>
+  <data name="ActivityOperationTextDeletionProcessed" xml:space="preserve">
+    <value>Suppression traitée</value>
+  </data>
+  <data name="ActivityOperationTextDeletionDetected" xml:space="preserve">
+    <value>Suppression détectée</value>
+  </data>
+  <data name="ActivityOperationTextProjected" xml:space="preserve">
+    <value>Projeté</value>
+  </data>
+  <data name="ActivityOperationTextJoined" xml:space="preserve">
+    <value>Rattaché</value>
+  </data>
+  <data name="ActivityOperationTextAttributeFlow" xml:space="preserve">
+    <value>Flux d’attributs</value>
+  </data>
+  <data name="ActivityOperationTextDisconnected" xml:space="preserve">
+    <value>Déconnecté</value>
+  </data>
+  <data name="ActivityOperationTextExported" xml:space="preserve">
+    <value>Exporté</value>
+  </data>
+  <data name="ActivityOperationTextDeprovisioned" xml:space="preserve">
+    <value>Déprovisionné</value>
+  </data>
+  <data name="ActivityOperationTextNoChange" xml:space="preserve">
+    <value>Aucune modification</value>
+  </data>
+  <data name="ActivityOperationTextExportReview" xml:space="preserve">
+    <value>Examen d’exportation</value>
+  </data>
+  <data name="ActivityUnknown" xml:space="preserve">
+    <value>Inconnu</value>
+  </data>
+  <data name="ActivityItemAttributesModifiedImport" xml:space="preserve">
+    <value>Les attributs de l’objet de système connecté suivants ont été modifiés pendant cette importation.</value>
+  </data>
+  <data name="ActivityItemAttributesModifiedSync" xml:space="preserve">
+    <value>Les attributs de l’objet Metaverse suivants ont été modifiés pendant cette synchronisation.</value>
+  </data>
 </root>

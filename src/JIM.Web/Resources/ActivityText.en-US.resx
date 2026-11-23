@@ -62,4 +62,25 @@
   <data name="ActivityListDescription" xml:space="preserve">
     <value>Monitor all activity across the system. View operations initiated by users or automated processes, including synchronizations, configuration changes, and system events.</value>
   </data>
+  <data name="ActivityItemDeletionAlert" xml:space="preserve">
+    <value>The Connected System Object has been detected as deleted from the source system and marked for removal. When a Full Synchronization or Delta Synchronization Run Profile is executed, JIM will disconnect this object from the metaverse and evaluate the Deletion Rule for its Metaverse Object Type.</value>
+  </data>
+  <data name="ActivityItemTitleSynchronisationComplete" xml:space="preserve">
+    <value>Synchronization Complete</value>
+  </data>
+  <data name="ActivityItemErrorMetaverseObject" xml:space="preserve">
+    <value>An error occurred while synchronizing the Metaverse Object.</value>
+  </data>
+  <data name="ActivityItemErrorConnectedSystemObject" xml:space="preserve">
+    <value>An error occurred while synchronizing the Connected System Object.</value>
+  </data>
+  <data name="ActivityItemStatusExportScopeReview" xml:space="preserve">
+    <value>This Metaverse Object was reviewed against the export Synchronization Rules during this synchronization, because an export rule changed or the object was created or changed outside synchronization. The outcomes below show what the review did: provisioned it, deprovisioned it, or delivered values changed outside synchronization.</value>
+  </data>
+  <data name="ActivityItemStatusDefault" xml:space="preserve">
+    <value>Synchronization completed for the Connected System Object.</value>
+  </data>
+  <data name="ActivityItemAttributesModifiedSync" xml:space="preserve">
+    <value>The following Metaverse Object attributes were modified during this synchronization operation.</value>
+  </data>
 </root>

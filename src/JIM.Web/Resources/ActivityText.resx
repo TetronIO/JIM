@@ -1466,4 +1466,384 @@
     <value>Monitor all activity across the system. View operations initiated by users or automated processes, including synchronisations, configuration changes, and system events.</value>
     <comment>Page info text on the Activity list</comment>
   </data>
+  <data name="ActivityItemPageTitlePrefix" xml:space="preserve">
+    <value>Item Details:</value>
+    <comment>Page title prefix for an execution item</comment>
+  </data>
+  <data name="ActivityItemPageTitle" xml:space="preserve">
+    <value>Execution Item</value>
+    <comment>Title of the page info popover on an execution item page</comment>
+  </data>
+  <data name="ActivityItemPageDescription" xml:space="preserve">
+    <value>What one Run Profile run did to one object: what happened, what it went on to cause, and any error it met.</value>
+    <comment>Page info text on an execution item page</comment>
+  </data>
+  <data name="ActivityItemTabOverview" xml:space="preserve">
+    <value>Overview</value>
+    <comment>Tab on an execution item page showing its own story</comment>
+  </data>
+  <data name="ActivityItemExecutionSummary" xml:space="preserve">
+    <value>Execution Summary</value>
+    <comment>Heading of the execution item summary</comment>
+  </data>
+  <data name="ActivityFieldConnectedSystem" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Label of the Connected System an execution ran against</comment>
+  </data>
+  <data name="ActivityFieldActivity" xml:space="preserve">
+    <value>Activity</value>
+    <comment>Label of the Activity a housekeeping item belongs to</comment>
+  </data>
+  <data name="ActivityFieldRunProfile" xml:space="preserve">
+    <value>Run Profile</value>
+    <comment>Label of the Run Profile an execution ran</comment>
+  </data>
+  <data name="ActivityFieldExecuted" xml:space="preserve">
+    <value>Executed</value>
+    <comment>Label of when an execution ran</comment>
+  </data>
+  <data name="ActivityViewObject" xml:space="preserve">
+    <value>View Object</value>
+    <comment>Link to the Connected System Object an item acted on</comment>
+  </data>
+  <data name="ActivityDeletedMarker" xml:space="preserve">
+    <value>(deleted)</value>
+    <comment>Shown after the name of an object that has since been deleted</comment>
+  </data>
+  <data name="ActivityObjectFallback" xml:space="preserve">
+    <value>Object</value>
+    <comment>Type name shown for a Metaverse Object with no type recorded</comment>
+  </data>
+  <data name="ActivityRejectedWithId" xml:space="preserve">
+    <value>Rejected: {0}</value>
+    <comment>Shown for a rejected export; {0} is the external id</comment>
+  </data>
+  <data name="ActivityPendingRemovalWithId" xml:space="preserve">
+    <value>Pending Removal: {0}</value>
+    <comment>Shown for an object detected as deleted and awaiting removal; {0} is the external id</comment>
+  </data>
+  <data name="ActivityDeletedWithId" xml:space="preserve">
+    <value>Deleted: {0}</value>
+    <comment>Shown for an object that has been deleted; {0} is the external id</comment>
+  </data>
+  <data name="ActivityCsoDeleted" xml:space="preserve">
+    <value>The Connected System Object has been deleted.</value>
+    <comment>Shown when an item's Connected System Object no longer exists</comment>
+  </data>
+  <data name="ActivityFieldSource" xml:space="preserve">
+    <value>Source</value>
+    <comment>Label of where a Connector read an object from</comment>
+  </data>
+  <data name="ActivityItemDeletionAlert" xml:space="preserve">
+    <value>The Connected System Object has been detected as deleted from the source system and marked for removal. When a Full Synchronisation or Delta Synchronisation Run Profile is executed, JIM will disconnect this object from the metaverse and evaluate the Deletion Rule for its Metaverse Object Type.</value>
+    <comment>Info notice on a deleted object awaiting removal, explaining what the next synchronisation does</comment>
+  </data>
+  <data name="ActivityItemCausalityHeading" xml:space="preserve">
+    <value>Causality</value>
+    <comment>Heading of the causality section on an execution item</comment>
+  </data>
+  <data name="ActivityItemCausalityDescription" xml:space="preserve">
+    <value>What happened during processing and the downstream consequences.</value>
+    <comment>Description under the causality heading</comment>
+  </data>
+  <data name="ActivityItemDeletionRuleAtTime" xml:space="preserve">
+    <value>Deletion Rule in force at the time</value>
+    <comment>Expansion panel with the Deletion Rule as it was when the decision was made</comment>
+  </data>
+  <data name="ActivityItemErrorDetails" xml:space="preserve">
+    <value>Error Details</value>
+    <comment>Heading of an execution item's error section</comment>
+  </data>
+  <data name="ActivityItemAttributeChangesHeading" xml:space="preserve">
+    <value>Attribute Changes</value>
+    <comment>Heading of the attribute changes section, and its grid's plural name</comment>
+  </data>
+  <data name="ActivityItemAttributeChangeSingular" xml:space="preserve">
+    <value>Attribute Change</value>
+    <comment>Singular name of an attribute change, used in the grid's count</comment>
+  </data>
+  <data name="ActivityItemSearchAttributes" xml:space="preserve">
+    <value>Search attribute or value</value>
+    <comment>Placeholder of the search box on the attribute changes grid</comment>
+  </data>
+  <data name="ActivityColumnAttribute" xml:space="preserve">
+    <value>Attribute</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ActivityColumnChange" xml:space="preserve">
+    <value>Change</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ActivityColumnValue" xml:space="preserve">
+    <value>Value</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ActivityNoAttributeChangesMatch" xml:space="preserve">
+    <value>No Attribute Changes match "{0}"</value>
+    <comment>Empty state after a search of attribute changes; {0} is what was searched for</comment>
+  </data>
+  <data name="ActivityNoAttributeChangesRecorded" xml:space="preserve">
+    <value>No Attribute Changes were recorded</value>
+    <comment>Empty state when an operation recorded no attribute changes</comment>
+  </data>
+  <data name="ActivityNoAttributeChangesDetail" xml:space="preserve">
+    <value>This operation changed no attribute values on the object.</value>
+    <comment>Empty state secondary text when an operation recorded no attribute changes</comment>
+  </data>
+  <data name="ActivityItemNoChangesRequired" xml:space="preserve">
+    <value>No Changes Required</value>
+    <comment>Heading of the alert on an item that needed no attribute changes</comment>
+  </data>
+  <data name="ActivityItemAlreadyUpToDate" xml:space="preserve">
+    <value>The object was already up to date with no attribute changes needed.</value>
+    <comment>Shown on an item whose object needed no attribute changes and has no recorded reason</comment>
+  </data>
+  <data name="ActivityItemTabPendingExport" xml:space="preserve">
+    <value>Pending Export</value>
+    <comment>Tab on an execution item page showing the Pending Export it created or failed on</comment>
+  </data>
+  <data name="ActivityBreadcrumbItemDetails" xml:space="preserve">
+    <value>Item Details</value>
+    <comment>Breadcrumb for the current execution item page</comment>
+  </data>
+  <data name="ActivityNoChangeReasonMvoNoAttributeChanges" xml:space="preserve">
+    <value>Mvo No Attribute Changes</value>
+    <comment>Why an item needed no change: the Metaverse Object had no attribute changes</comment>
+  </data>
+  <data name="ActivityNoChangeReasonCsoAlreadyCurrent" xml:space="preserve">
+    <value>Cso Already Current</value>
+    <comment>Why an item needed no change: the Connected System Object was already current</comment>
+  </data>
+  <data name="ActivityItemTitleAdded" xml:space="preserve">
+    <value>{0} Added to Connector Space</value>
+    <comment>Page heading for an import that added an object; {0} is the object type name</comment>
+  </data>
+  <data name="ActivityItemTitleUpdated" xml:space="preserve">
+    <value>{0} Updated</value>
+    <comment>Page heading for an import that updated an object; {0} is the object type name</comment>
+  </data>
+  <data name="ActivityItemTitleMetaverseDeleted" xml:space="preserve">
+    <value>Metaverse {0} Deleted</value>
+    <comment>Page heading for a housekeeping deletion; {0} is the Metaverse Object Type name</comment>
+  </data>
+  <data name="ActivityItemTitleSourceDeletionProcessed" xml:space="preserve">
+    <value>Source Deletion Processed</value>
+    <comment>Page heading for a sync that processed a source deletion</comment>
+  </data>
+  <data name="ActivityItemTitleDeletionDetected" xml:space="preserve">
+    <value>{0} Deletion Detected</value>
+    <comment>Page heading for an import that detected a deletion; {0} is the object type name</comment>
+  </data>
+  <data name="ActivityItemTitleProjected" xml:space="preserve">
+    <value>Projected {0} to the Metaverse</value>
+    <comment>Page heading for a projection; {0} is the object type name</comment>
+  </data>
+  <data name="ActivityItemTitleJoined" xml:space="preserve">
+    <value>Joined {0} to Metaverse {1}</value>
+    <comment>Page heading for a join; {0} object type name, {1} Metaverse Object Type name</comment>
+  </data>
+  <data name="ActivityItemTitleAttributeFlow" xml:space="preserve">
+    <value>{0} Attributes Flowed to Metaverse {1}</value>
+    <comment>Page heading for attribute flow; {0} object type name, {1} Metaverse Object Type name</comment>
+  </data>
+  <data name="ActivityItemTitleDisconnected" xml:space="preserve">
+    <value>Disconnected {0} from Metaverse</value>
+    <comment>Page heading for a disconnection; {0} is the object type name</comment>
+  </data>
+  <data name="ActivityItemTitleExported" xml:space="preserve">
+    <value>{0} Exported</value>
+    <comment>Page heading for an export; {0} is the object type name</comment>
+  </data>
+  <data name="ActivityItemTitleDeprovisioned" xml:space="preserve">
+    <value>{0} Deprovisioned</value>
+    <comment>Page heading for a deprovision; {0} is the object type name</comment>
+  </data>
+  <data name="ActivityItemTitleNoChanges" xml:space="preserve">
+    <value>No Changes</value>
+    <comment>Page heading for an item that changed nothing</comment>
+  </data>
+  <data name="ActivityItemTitleExportReview" xml:space="preserve">
+    <value>{0} Export Review</value>
+    <comment>Page heading for an export scope review; {0} is the object type name</comment>
+  </data>
+  <data name="ActivityItemTitleSynchronisationComplete" xml:space="preserve">
+    <value>Synchronisation Complete</value>
+    <comment>Page heading for a sync item with no more specific outcome</comment>
+  </data>
+  <data name="ActivityFieldConnectedSystemObject" xml:space="preserve">
+    <value>Connected System Object</value>
+    <comment>Label of the object an item acted on, when it still exists</comment>
+  </data>
+  <data name="ActivityFieldMetaverseObject" xml:space="preserve">
+    <value>Metaverse Object</value>
+    <comment>Label of the object an item acted on, when it is a Metaverse Object</comment>
+  </data>
+  <data name="ActivityFieldExternalIdFromSource" xml:space="preserve">
+    <value>External ID (from source data)</value>
+    <comment>Label of a rejected object's external id</comment>
+  </data>
+  <data name="ActivityFieldExternalId" xml:space="preserve">
+    <value>External ID</value>
+    <comment>Label of an object's external id</comment>
+  </data>
+  <data name="ActivityItemErrorMetaverseObject" xml:space="preserve">
+    <value>An error occurred while synchronising the Metaverse Object.</value>
+    <comment>Summary of an item that failed on a Metaverse Object</comment>
+  </data>
+  <data name="ActivityItemErrorConnectedSystemObject" xml:space="preserve">
+    <value>An error occurred while synchronising the Connected System Object.</value>
+    <comment>Summary of an item that failed on a Connected System Object</comment>
+  </data>
+  <data name="ActivityItemUnresolvedAppend" xml:space="preserve">
+    <value>{0} {1} could not be linked to Connected System Objects.</value>
+    <comment>Appended to a summary; {0} is the description, {1} the count clause</comment>
+  </data>
+  <data name="ActivityObjectLowercase" xml:space="preserve">
+    <value>object</value>
+    <comment>Stands in for the object type name in a sentence where none is known</comment>
+  </data>
+  <data name="ActivityItemImportedAdded" xml:space="preserve">
+    <value>was added to the Connector Space</value>
+    <comment>Clause of an unresolved-reference summary: the object was added</comment>
+  </data>
+  <data name="ActivityItemImportedUpdated" xml:space="preserve">
+    <value>was updated</value>
+    <comment>Clause of an unresolved-reference summary: the object was updated</comment>
+  </data>
+  <data name="ActivityItemImportedDefault" xml:space="preserve">
+    <value>was imported</value>
+    <comment>Clause of an unresolved-reference summary: the object was imported</comment>
+  </data>
+  <data name="ActivityItemUnresolvedSentence" xml:space="preserve">
+    <value>The {0} {1}, but {2} could not be linked to Connected System Objects.</value>
+    <comment>Summary of an import whose unresolved references are its error; {0} type name, {1} what happened, {2} the count clause</comment>
+  </data>
+  <data name="ActivityItemReferencesCount" xml:space="preserve">
+    <value>{0} of its references</value>
+    <comment>Count clause in a summary; {0} is the count</comment>
+  </data>
+  <data name="ActivityItemSomeReferences" xml:space="preserve">
+    <value>Some of its references</value>
+    <comment>Count clause for an item recorded before counts were kept</comment>
+  </data>
+  <data name="ActivityItemStatusAdded" xml:space="preserve">
+    <value>A new Connected System Object was imported and added to the connector space.</value>
+    <comment>Summary of an item that added an object</comment>
+  </data>
+  <data name="ActivityItemStatusUpdated" xml:space="preserve">
+    <value>The Connected System Object was updated with new attribute values.</value>
+    <comment>Summary of an item that updated an object</comment>
+  </data>
+  <data name="ActivityItemStatusHousekeepingDeleted" xml:space="preserve">
+    <value>The Metaverse Object's deletion grace period expired and the housekeeping process deleted it from the metaverse.</value>
+    <comment>Summary of a housekeeping deletion</comment>
+  </data>
+  <data name="ActivityItemStatusSyncDeleted" xml:space="preserve">
+    <value>The Connected System Object was removed from the connector space after the source system deletion was confirmed.</value>
+    <comment>Summary of a sync that removed an object after its source deletion was confirmed</comment>
+  </data>
+  <data name="ActivityItemStatusDeletionDetected" xml:space="preserve">
+    <value>The Connected System Object was detected as deleted from the source system and marked for removal.</value>
+    <comment>Summary of an import that detected a deletion</comment>
+  </data>
+  <data name="ActivityItemStatusProjected" xml:space="preserve">
+    <value>A new Metaverse Object was created via projection from the Connected System Object.</value>
+    <comment>Summary of a projection</comment>
+  </data>
+  <data name="ActivityItemStatusJoined" xml:space="preserve">
+    <value>The Connected System Object was joined to an existing Metaverse Object.</value>
+    <comment>Summary of a join</comment>
+  </data>
+  <data name="ActivityItemStatusAttributeFlow" xml:space="preserve">
+    <value>Attributes were flowed between the Connected System Object and metaverse.</value>
+    <comment>Summary of attribute flow</comment>
+  </data>
+  <data name="ActivityItemStatusDisconnected" xml:space="preserve">
+    <value>The Connected System Object was disconnected from the metaverse. Join and metaverse deletion rules were evaluated.</value>
+    <comment>Summary of a disconnection</comment>
+  </data>
+  <data name="ActivityItemStatusExported" xml:space="preserve">
+    <value>The Connected System Object was exported to the target system.</value>
+    <comment>Summary of an export</comment>
+  </data>
+  <data name="ActivityItemStatusDeprovisioned" xml:space="preserve">
+    <value>The Connected System Object was deprovisioned from the target system.</value>
+    <comment>Summary of a deprovision</comment>
+  </data>
+  <data name="ActivityItemStatusNoChange" xml:space="preserve">
+    <value>The Connected System Object was already up to date.</value>
+    <comment>Summary of an item that needed no change</comment>
+  </data>
+  <data name="ActivityItemStatusExportScopeReview" xml:space="preserve">
+    <value>This Metaverse Object was reviewed against the export Synchronisation Rules during this synchronisation, because an export rule changed or the object was created or changed outside synchronisation. The outcomes below show what the review did: provisioned it, deprovisioned it, or delivered values changed outside synchronisation.</value>
+    <comment>Summary of an export scope review</comment>
+  </data>
+  <data name="ActivityItemStatusDefault" xml:space="preserve">
+    <value>Synchronisation completed for the Connected System Object.</value>
+    <comment>Summary of a sync item with no more specific outcome</comment>
+  </data>
+  <data name="ActivityOperationTextAdded" xml:space="preserve">
+    <value>Connected System Object Added</value>
+    <comment>Operation name shown on an item that added an object</comment>
+  </data>
+  <data name="ActivityOperationTextUpdated" xml:space="preserve">
+    <value>Connected System Object Updated</value>
+    <comment>Operation name shown on an item that updated an object</comment>
+  </data>
+  <data name="ActivityOperationTextMetaverseDeleted" xml:space="preserve">
+    <value>Metaverse Object Deleted</value>
+    <comment>Operation name shown on a housekeeping deletion</comment>
+  </data>
+  <data name="ActivityOperationTextDeletionProcessed" xml:space="preserve">
+    <value>Deletion Processed</value>
+    <comment>Operation name shown on a sync that processed a source deletion</comment>
+  </data>
+  <data name="ActivityOperationTextDeletionDetected" xml:space="preserve">
+    <value>Deletion Detected</value>
+    <comment>Operation name shown on an import that detected a deletion</comment>
+  </data>
+  <data name="ActivityOperationTextProjected" xml:space="preserve">
+    <value>Projected</value>
+    <comment>Operation name</comment>
+  </data>
+  <data name="ActivityOperationTextJoined" xml:space="preserve">
+    <value>Joined</value>
+    <comment>Operation name</comment>
+  </data>
+  <data name="ActivityOperationTextAttributeFlow" xml:space="preserve">
+    <value>Attribute Flow</value>
+    <comment>Operation name</comment>
+  </data>
+  <data name="ActivityOperationTextDisconnected" xml:space="preserve">
+    <value>Disconnected</value>
+    <comment>Operation name</comment>
+  </data>
+  <data name="ActivityOperationTextExported" xml:space="preserve">
+    <value>Exported</value>
+    <comment>Operation name</comment>
+  </data>
+  <data name="ActivityOperationTextDeprovisioned" xml:space="preserve">
+    <value>Deprovisioned</value>
+    <comment>Operation name</comment>
+  </data>
+  <data name="ActivityOperationTextNoChange" xml:space="preserve">
+    <value>No Change</value>
+    <comment>Operation name shown on an item that changed nothing</comment>
+  </data>
+  <data name="ActivityOperationTextExportReview" xml:space="preserve">
+    <value>Export Review</value>
+    <comment>Operation name shown on an export scope review</comment>
+  </data>
+  <data name="ActivityUnknown" xml:space="preserve">
+    <value>Unknown</value>
+    <comment>Shown for an operation whose kind is not recorded</comment>
+  </data>
+  <data name="ActivityItemAttributesModifiedImport" xml:space="preserve">
+    <value>The following Connected System Object attributes were modified during this import operation.</value>
+    <comment>Description of the attribute changes section for an import</comment>
+  </data>
+  <data name="ActivityItemAttributesModifiedSync" xml:space="preserve">
+    <value>The following Metaverse Object attributes were modified during this synchronisation operation.</value>
+    <comment>Description of the attribute changes section for a sync or export</comment>
+  </data>
 </root>
