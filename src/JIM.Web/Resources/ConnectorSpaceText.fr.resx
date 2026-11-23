@@ -524,4 +524,94 @@
   <data name="PexUnknown" xml:space="preserve">
     <value>Inconnu</value>
   </data>
+  <data name="PexListPageTitle" xml:space="preserve">
+    <value>Exportations en attente : {0}</value>
+  </data>
+  <data name="PexListHeadingLabel" xml:space="preserve">
+    <value>Exportations en attente :</value>
+  </data>
+  <data name="PexListPageInfo" xml:space="preserve">
+    <value>Les exportations en attente sont des modifications qui doivent être appliquées au système connecté. Elles sont créées lorsque des objets Metaverse changent et doivent être synchronisées vers ce système cible.</value>
+  </data>
+  <data name="PexFilterStatus" xml:space="preserve">
+    <value>Filtrer par statut</value>
+  </data>
+  <data name="PexStatusPending" xml:space="preserve">
+    <value>En attente</value>
+  </data>
+  <data name="PexStatusExecuting" xml:space="preserve">
+    <value>En cours d’exécution</value>
+  </data>
+  <data name="PexStatusExportNotConfirmed" xml:space="preserve">
+    <value>Exportation non confirmée</value>
+  </data>
+  <data name="PexStatusExported" xml:space="preserve">
+    <value>Exportée</value>
+  </data>
+  <data name="PexStatusParked" xml:space="preserve">
+    <value>Suspendue</value>
+  </data>
+  <data name="PexFilterChangeType" xml:space="preserve">
+    <value>Filtrer par type de modification</value>
+  </data>
+  <data name="PexChangeTypeUpdate" xml:space="preserve">
+    <value>Mise à jour</value>
+  </data>
+  <data name="PexFailingOnly" xml:space="preserve">
+    <value>En échec uniquement</value>
+  </data>
+  <data name="PexColumnSourceMvo" xml:space="preserve">
+    <value>Objet Metaverse source</value>
+  </data>
+  <data name="PexColumnTargetCso" xml:space="preserve">
+    <value>Objet de système connecté cible</value>
+  </data>
+  <data name="PexColumnChanges" xml:space="preserve">
+    <value>Modifications</value>
+  </data>
+  <data name="PexListSearch" xml:space="preserve">
+    <value>Rechercher une cible, un objet Metaverse source ou des erreurs</value>
+  </data>
+  <data name="PexNewObjectShort" xml:space="preserve">
+    <value>Nouvel objet</value>
+  </data>
+  <data name="PexUnresolvedTooltip" xml:space="preserve">
+    <value>Cette exportation a été écrite sans ces références ; elles sont réessayées automatiquement dès que leurs cibles existent. La page de détail explique chacune d’elles.</value>
+  </data>
+  <data name="PexFailingSinceTooltip" xml:space="preserve">
+    <value>{0}. JIM la retente à chaque exécution d’exportation.</value>
+  </data>
+  <data name="PexNoSearchMatch" xml:space="preserve">
+    <value>Aucune exportation en attente ne correspond à « {0} »</value>
+  </data>
+  <data name="PexNoneFailing" xml:space="preserve">
+    <value>Aucune exportation en attente n’est en échec</value>
+  </data>
+  <data name="PexNoneFailingHint" xml:space="preserve">
+    <value>La dernière tentative de chaque exportation en attente a réussi, ou elle n’a pas encore été tentée.</value>
+  </data>
+  <data name="PexShowAll" xml:space="preserve">
+    <value>Tout afficher</value>
+  </data>
+  <data name="PexNoFilterMatch" xml:space="preserve">
+    <value>Aucune exportation en attente ne correspond aux filtres</value>
+  </data>
+  <data name="PexNoFilterMatchHint" xml:space="preserve">
+    <value>Essayez d’autres filtres, ou effacez-les.</value>
+  </data>
+  <data name="PexClearFilters" xml:space="preserve">
+    <value>Effacer les filtres</value>
+  </data>
+  <data name="PexNoneYet" xml:space="preserve">
+    <value>Aucune exportation en attente</value>
+  </data>
+  <data name="PexNoneYetHint" xml:space="preserve">
+    <value>Les modifications en attente d’écriture dans ce système connecté apparaissent ici.</value>
+  </data>
+  <data name="PexAll" xml:space="preserve">
+    <value>Tous</value>
+  </data>
+  <data name="PexSelectedCount" xml:space="preserve">
+    <value>{0} sélectionnés</value>
+  </data>
 </root>

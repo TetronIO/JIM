@@ -32,4 +32,7 @@
   <data name="PexExplainNotInSystem" xml:space="preserve">
     <value>The referenced object has no Connected System Object in this Connected System. It is out of scope for every Synchronization Rule into this system, or has not been provisioned. The reference cannot be written until it is.</value>
   </data>
+  <data name="PexListPageInfo" xml:space="preserve">
+    <value>Pending Exports are changes that need to be applied to the Connected System. These are created when Metaverse Objects change and need to be synchronized to this target system.</value>
+  </data>
 </root>
