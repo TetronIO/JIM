@@ -1,6 +1,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Utilities
+@using JIM.Web.Models
 @using JIM.Web.Services
 @inject IJimApplicationFactory JimFactory
 @inject IDialogService DialogService
@@ -18,16 +19,16 @@
         else if (_candidates.Count == 0)
         {
             <MudAlert Severity="Severity.Info">
-                Every custom attribute is already bound to @MetaverseObjectTypeName. Create a new attribute to add one.
+                @string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.AddBindingAllBound, MetaverseObjectTypeName)
             </MudAlert>
         }
         else
         {
             <MudStack Spacing="3">
                 <SearchField @bind-Value="_search" DebounceInterval="200"
-                             Placeholder="Search attributes" Margin="Margin.None" />
+                             Placeholder="@SyncRuleText.AddBindingSearchPlaceholder" Margin="Margin.None" />
 
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">Not yet on this Object Type</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@SyncRuleText.AddBindingNotYetOnType</MudText>
                 <MudList T="int" SelectionMode="SelectionMode.MultiSelection" @bind-SelectedValues="_selectedIds" Dense="true">
                     @foreach (var candidate in Filtered())
                     {
@@ -36,7 +37,7 @@
                                 <span>@candidate.Name</span>
                                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
                                          Color="@Helpers.GetAttributeTypeChipColour(candidate.Type)">
-                                    @candidate.Type.ToString().SplitOnCapitalLetters()
+                                    @AttributeFlowSectionSummaries.DataTypeName(candidate.Type)
                                 </MudChip>
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@WhereUsed(candidate)</MudText>
                             </div>
@@ -45,13 +46,13 @@
                 </MudList>
 
                 <MudAlert Severity="Severity.Info" Dense="true">
-                    Need one that doesn't exist yet? Create a new attribute and bind it in one step from the Schema Attributes list.
+                    @SyncRuleText.AddBindingCreateHint
                 </MudAlert>
             </MudStack>
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Cancel">@CommonText.Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled"
                    Disabled="@(!_selectedIds.Any())" OnClick="AddAsync">
             @AddButtonText()
@@ -101,7 +102,9 @@
     private string WhereUsed(MetaverseAttributeHeader attribute)
     {
         var names = attribute.MetaverseObjectTypes?.Select(t => t.Value).ToList() ?? new List<string>();
-        return names.Count == 0 ? "Not assigned" : $"on {string.Join(", ", names)}";
+        return names.Count == 0
+            ? SyncRuleText.AddBindingNotAssigned
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.AddBindingOn, string.Join(SyncRuleText.ListSeparator, names));
     }
 
     private string AddButtonText()
@@ -109,15 +112,15 @@
         var count = _selectedIds.Count;
         return count switch
         {
-            0 => "Add attributes",
-            1 => "Add 1 attribute",
-            _ => $"Add {count} attributes"
+            0 => SyncRuleText.AddBindingButtonNone,
+            1 => SyncRuleText.AddBindingButtonOne,
+            _ => string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.AddBindingButtonOther, count)
         };
     }
 
     private async Task AddAsync()
     {
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Add");
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, CommonText.Add);
         if (cancelled)
             return;
 
@@ -128,11 +131,11 @@
             foreach (var attributeId in _selectedIds)
                 await jim.Metaverse.BindAttributeToObjectTypeAsync(attributeId, MetaverseObjectTypeId, user, changeReason);
 
-            Snackbar.Add($"Added {_selectedIds.Count} attribute(s) to {MetaverseObjectTypeName}.", Severity.Success);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.AddBindingAdded, _selectedIds.Count, MetaverseObjectTypeName), Severity.Success);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Snackbar.Add($"Failed to add attributes: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.AddBindingFailed, ex.Message), Severity.Error);
             return;
         }
 
@@ -153,7 +156,7 @@
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
         var dialog = await dialogService.ShowAsync<AddAttributeBindingDialog>(
-            $"Add Attributes to \"{metaverseObjectTypeName}\"", parameters, options);
+            string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.AddBindingTitle, metaverseObjectTypeName), parameters, options);
         var result = await dialog.Result;
         return result is { Canceled: false, Data: true };
     }

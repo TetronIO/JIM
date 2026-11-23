@@ -16,16 +16,16 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Deleted Objects</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Deleted Objects
-    <PageInfo Title="Deleted Objects" DocsPage="configuration/deleted-objects.md">
-        When objects are deleted, their change history is preserved here for audit and compliance purposes. Click <strong>View</strong> to see the full history of changes made to an object before it was deleted.
+<PageTitle>@ConnectorSpaceText.DeletedObjectsPageTitle</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@ConnectorSpaceText.DeletedObjectsPageTitle
+    <PageInfo Title="@ConnectorSpaceText.DeletedObjectsPageTitle" DocsPage="configuration/deleted-objects.md">
+        @ConnectorSpaceText.DeletedInfoLead <strong>@ConnectorSpaceText.DeletedView</strong> @ConnectorSpaceText.DeletedInfoTrail
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 <NavigableMudTabs TabPanelsClass="pa-0 mt-4" Class="mt-2" @bind-ActivePanelIndex="_activeTabIndex">
-    <MudTabPanel Text="Deleted Connected System Objects">
+    <MudTabPanel Text="@ConnectorSpaceText.DeletedCsoTab">
         <MudPaper Class="pa-5" Outlined="true">
             <!-- Query criteria, applied by the Search button. The free-text External ID search lives in the
                  grid's own search box below, where it filters live as the reader types. -->
@@ -33,7 +33,7 @@
                 <MudItem xs="12" sm="6" md="4">
                     <MudSelect T="int?"
                                @bind-Value="_csoFilterConnectedSystemId"
-                               Label="Connected System"
+                               Label="@ConnectorSpaceText.DeletedConnectedSystem"
                                Variant="Variant.Outlined"
                                Dense="true"
                                Clearable="true">
@@ -48,20 +48,20 @@
                 </MudItem>
                 <MudItem xs="6" sm="3" md="4">
                     <MudDatePicker @bind-Date="_csoFromDate"
-                                   Label="From Date"
+                                   Label="@ConnectorSpaceText.DeletedFromDate"
                                    Variant="Variant.Outlined"
                                    Clearable="true" />
                 </MudItem>
                 <MudItem xs="6" sm="3" md="4">
                     <MudDatePicker @bind-Date="_csoToDate"
-                                   Label="To Date"
+                                   Label="@ConnectorSpaceText.DeletedToDate"
                                    Variant="Variant.Outlined"
                                    Clearable="true" />
                 </MudItem>
             </MudGrid>
             <div class="d-flex align-center gap-3 mt-4">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchCsosAsync" DropShadow="false">
-                    Search
+                    @CommonText.Search
                 </MudButton>
             </div>
         </MudPaper>
@@ -77,9 +77,9 @@
                              DefaultSortDescending="true"
                              LoadWindow="LoadCsoWindowAsync"
                              RowClicked="ViewCsoHistoryAsync"
-                             SingularName="Deleted Connected System Object"
-                             PluralName="Deleted Connected System Objects"
-                             SearchPlaceholder="Search External ID">
+                             SingularName="@ConnectorSpaceText.DeletedCsoSingular"
+                             PluralName="@ConnectorSpaceText.DeletedCsoPlural"
+                             SearchPlaceholder="@ConnectorSpaceText.DeletedSearchExternalId">
             <Columns>
                 <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate></HeaderTemplate>
@@ -91,22 +91,22 @@
                                        Size="Size.Small"
                                        Color="Color.Primary"
                                        OnClick="() => ViewCsoHistoryAsync(context.Item)">
-                                View
+                                @ConnectorSpaceText.DeletedView
                             </MudButton>
                         </span>
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">External ID</MudText>
+                        <MudText Typo="Typo.button">@ConnectorSpaceText.DeletedColumnExternalId</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
-                        <span class="jim-text-code">@(context.Item.DeletedObjectExternalId ?? "N/A")</span>
+                        <span class="jim-text-code">@(context.Item.DeletedObjectExternalId ?? ConnectorSpaceText.DeletedNotAvailable)</span>
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Display Name</MudText>
+                        <MudText Typo="Typo.button">@ConnectorSpaceText.DeletedColumnDisplayName</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         @* Names what the object is and where it lives beneath its name, so the type is no
@@ -117,11 +117,11 @@
                 </TemplateColumn>
                 <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Connected System</MudText>
+                        <MudText Typo="Typo.button">@ConnectorSpaceText.DeletedConnectedSystem</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         @{
-                            var csName = GetConnectedSystemName(context.Item.ConnectedSystemId) ?? $"ID: {context.Item.ConnectedSystemId}";
+                            var csName = GetConnectedSystemName(context.Item.ConnectedSystemId) ?? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.DeletedConnectedSystemIdFallback, context.Item.ConnectedSystemId);
                         }
                         <span @onclick:stopPropagation="true">
                             <MudLink Href="@($"/admin/connected-systems/{context.Item.ConnectedSystemId}")">@csName</MudLink>
@@ -130,7 +130,7 @@
                 </TemplateColumn>
                 <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Deleted</MudText>
+                        <MudText Typo="Typo.button">@ConnectorSpaceText.DeletedColumnDeleted</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         <MudTooltip Text="@context.Item.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -146,30 +146,30 @@
                 @if (!string.IsNullOrWhiteSpace(grid.SearchText))
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                     PrimaryText="@($"No deleted Connected System Objects match \"{grid.SearchText}\"")"
-                                     SecondaryText="Try a different search term, or clear the search."
-                                     ActionText="Clear Search"
+                                     PrimaryText="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.DeletedCsoNoSearchMatch, grid.SearchText)"
+                                     SecondaryText="@CommonText.TrySearchAgain"
+                                     ActionText="@CommonText.ClearSearch"
                                      OnAction="@(() => grid.ClearSearchAsync())" />
                 }
                 else if (CsoAppliedCriteriaActive)
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                     PrimaryText="No deleted Connected System Objects match your query"
-                                     SecondaryText="Adjust the criteria above and search again, or clear them to see all deletions."
-                                     ActionText="Clear Criteria"
+                                     PrimaryText="@ConnectorSpaceText.DeletedCsoNoQueryMatch"
+                                     SecondaryText="@ConnectorSpaceText.DeletedAdjustCriteria"
+                                     ActionText="@ConnectorSpaceText.DeletedClearCriteria"
                                      OnAction="ClearCsoCriteriaAsync" />
                 }
                 else
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.AutoDelete"
-                                     PrimaryText="No Connected System Object deletions recorded yet"
-                                     SecondaryText="When Connected System Objects are deleted, their change history is preserved here." />
+                                     PrimaryText="@ConnectorSpaceText.DeletedCsoNoneRecorded"
+                                     SecondaryText="@ConnectorSpaceText.DeletedCsoNoneRecordedHint" />
                 }
             </EmptyContent>
         </VirtualisedDataGrid>
     </MudTabPanel>
 
-    <MudTabPanel Text="Deleted Metaverse Objects">
+    <MudTabPanel Text="@ConnectorSpaceText.DeletedMvoTab">
         <MudPaper Class="pa-5" Outlined="true">
             <!-- Query criteria, applied by the Search button. The free-text Display Name search lives in the
                  grid's own search box below, where it filters live as the reader types. -->
@@ -177,7 +177,7 @@
                 <MudItem xs="12" sm="6" md="4">
                     <MudSelect T="int?"
                                @bind-Value="_mvoFilterObjectTypeId"
-                               Label="Object Type"
+                               Label="@ConnectorSpaceText.DeletedObjectType"
                                Variant="Variant.Outlined"
                                Dense="true"
                                Clearable="true">
@@ -192,20 +192,20 @@
                 </MudItem>
                 <MudItem xs="6" sm="3" md="4">
                     <MudDatePicker @bind-Date="_mvoFromDate"
-                                   Label="From Date"
+                                   Label="@ConnectorSpaceText.DeletedFromDate"
                                    Variant="Variant.Outlined"
                                    Clearable="true" />
                 </MudItem>
                 <MudItem xs="6" sm="3" md="4">
                     <MudDatePicker @bind-Date="_mvoToDate"
-                                   Label="To Date"
+                                   Label="@ConnectorSpaceText.DeletedToDate"
                                    Variant="Variant.Outlined"
                                    Clearable="true" />
                 </MudItem>
             </MudGrid>
             <div class="d-flex align-center gap-3 mt-4">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SearchMvosAsync" DropShadow="false">
-                    Search
+                    @CommonText.Search
                 </MudButton>
             </div>
         </MudPaper>
@@ -219,9 +219,9 @@
                              DefaultSortDescending="true"
                              LoadWindow="LoadMvoWindowAsync"
                              RowClicked="ViewMvoHistoryAsync"
-                             SingularName="Deleted Metaverse Object"
-                             PluralName="Deleted Metaverse Objects"
-                             SearchPlaceholder="Search Display Name">
+                             SingularName="@ConnectorSpaceText.DeletedMvoSingular"
+                             PluralName="@ConnectorSpaceText.DeletedMvoPlural"
+                             SearchPlaceholder="@ConnectorSpaceText.DeletedSearchDisplayName">
             <Columns>
                 <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate></HeaderTemplate>
@@ -233,14 +233,14 @@
                                        Size="Size.Small"
                                        Color="Color.Primary"
                                        OnClick="() => ViewMvoHistoryAsync(context.Item)">
-                                View
+                                @ConnectorSpaceText.DeletedView
                             </MudButton>
                         </span>
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Display Name</MudText>
+                        <MudText Typo="Typo.button">@ConnectorSpaceText.DeletedColumnDisplayName</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         @* Names the object's type beneath its name, so the type is no longer a separate
@@ -251,7 +251,7 @@
                 </TemplateColumn>
                 <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Deleted</MudText>
+                        <MudText Typo="Typo.button">@ConnectorSpaceText.DeletedColumnDeleted</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         <MudTooltip Text="@context.Item.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -261,7 +261,7 @@
                 </TemplateColumn>
                 <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Deleted By</MudText>
+                        <MudText Typo="Typo.button">@ConnectorSpaceText.DeletedColumnDeletedBy</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         @* Drawn as Initiated By is everywhere else (#2066); the row opens the deleted object, so a
@@ -280,24 +280,24 @@
                 @if (!string.IsNullOrWhiteSpace(grid.SearchText))
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                     PrimaryText="@($"No deleted Metaverse Objects match \"{grid.SearchText}\"")"
-                                     SecondaryText="Try a different search term, or clear the search."
-                                     ActionText="Clear Search"
+                                     PrimaryText="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.DeletedMvoNoSearchMatch, grid.SearchText)"
+                                     SecondaryText="@CommonText.TrySearchAgain"
+                                     ActionText="@CommonText.ClearSearch"
                                      OnAction="@(() => grid.ClearSearchAsync())" />
                 }
                 else if (MvoAppliedCriteriaActive)
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                     PrimaryText="No deleted Metaverse Objects match your query"
-                                     SecondaryText="Adjust the criteria above and search again, or clear them to see all deletions."
-                                     ActionText="Clear Criteria"
+                                     PrimaryText="@ConnectorSpaceText.DeletedMvoNoQueryMatch"
+                                     SecondaryText="@ConnectorSpaceText.DeletedAdjustCriteria"
+                                     ActionText="@ConnectorSpaceText.DeletedClearCriteria"
                                      OnAction="ClearMvoCriteriaAsync" />
                 }
                 else
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.AutoDelete"
-                                     PrimaryText="No Metaverse Object deletions recorded yet"
-                                     SecondaryText="When Metaverse Objects are deleted, their change history is preserved here." />
+                                     PrimaryText="@ConnectorSpaceText.DeletedMvoNoneRecorded"
+                                     SecondaryText="@ConnectorSpaceText.DeletedMvoNoneRecordedHint" />
                 }
             </EmptyContent>
         </VirtualisedDataGrid>
@@ -309,7 +309,7 @@
     <TitleContent>
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-3" />
-            Change History: @(_selectedCsoChange?.DeletedObjectExternalId ?? "Deleted Connected System Object")
+            @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.DeletedHistoryTitle, _selectedCsoChange?.DeletedObjectExternalId ?? ConnectorSpaceText.DeletedCsoSingular)
         </MudText>
     </TitleContent>
     <DialogContent>
@@ -325,13 +325,13 @@
         {
             @* Only reachable once the history load has completed and returned nothing. *@
             <TableEmptyState Icon="@Icons.Material.Filled.HistoryToggleOff"
-                             PrimaryText="No change history available"
-                             SecondaryText="No changes were recorded for this Connected System Object before it was deleted." />
+                             PrimaryText="@ConnectorSpaceText.DeletedNoHistory"
+                             SecondaryText="@ConnectorSpaceText.DeletedCsoNoHistoryHint" />
         }
     </DialogContent>
     <DialogActions>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
-            OnClick="() => _csoHistoryDialogVisible = false">Close</MudButton>
+            OnClick="() => _csoHistoryDialogVisible = false">@CommonText.Close</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -340,7 +340,7 @@
     <TitleContent>
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-3" />
-            Change History: @(_selectedMvoChange?.DeletedObjectDisplayName ?? "Deleted Metaverse Object")
+            @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.DeletedHistoryTitle, _selectedMvoChange?.DeletedObjectDisplayName ?? ConnectorSpaceText.DeletedMvoSingular)
         </MudText>
     </TitleContent>
     <DialogContent>
@@ -356,13 +356,13 @@
         {
             @* Only reachable once the history load has completed and returned nothing. *@
             <TableEmptyState Icon="@Icons.Material.Filled.HistoryToggleOff"
-                             PrimaryText="No change history available"
-                             SecondaryText="No changes were recorded for this Metaverse Object before it was deleted." />
+                             PrimaryText="@ConnectorSpaceText.DeletedNoHistory"
+                             SecondaryText="@ConnectorSpaceText.DeletedMvoNoHistoryHint" />
         }
     </DialogContent>
     <DialogActions>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
-            OnClick="() => _mvoHistoryDialogVisible = false">Close</MudButton>
+            OnClick="() => _mvoHistoryDialogVisible = false">@CommonText.Close</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -388,9 +388,9 @@
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new()
     {
-        new("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new("Administration", href: "/admin"),
-        new("Deleted Objects", href: null, disabled: true)
+        new(ConnectorSpaceText.DeletedHomeBreadcrumb, href: "/", icon: Icons.Material.Filled.Home),
+        new(ConnectorSpaceText.DeletedAdministrationBreadcrumb, href: "/admin"),
+        new(ConnectorSpaceText.DeletedObjectsPageTitle, href: null, disabled: true)
     };
 
     private readonly DialogOptions _historyDialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Large };
@@ -478,7 +478,7 @@
 
         if (change == null)
         {
-            Snackbar.Add("No deletion record was found for that Connected System Object.", Severity.Info);
+            Snackbar.Add(ConnectorSpaceText.DeletedCsoNotFound, Severity.Info);
             return;
         }
 
@@ -500,7 +500,7 @@
 
         if (change == null)
         {
-            Snackbar.Add("No deletion record was found for that Metaverse Object.", Severity.Info);
+            Snackbar.Add(ConnectorSpaceText.DeletedMvoNotFound, Severity.Info);
             return;
         }
 

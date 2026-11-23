@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DriftNeverFullySynchronised" xml:space="preserve">
+    <value>{0} has never completed a Full Synchronization, so its configuration has never been applied in full.</value>
+  </data>
+  <data name="DriftDestructiveSince" xml:space="preserve">
+    <value>{0} since the last Full Synchronization ({1}), including a destructive change. Review before running a Full Synchronization.</value>
+  </data>
+  <data name="DriftDestructiveSinceNoDate" xml:space="preserve">
+    <value>{0} since the last Full Synchronization, including a destructive change. Review before running a Full Synchronization.</value>
+  </data>
+  <data name="DriftApplySinceOne" xml:space="preserve">
+    <value>{0} since the last Full Synchronization ({1}). Run a Full Synchronization to apply it.</value>
+  </data>
+  <data name="DriftApplySinceOther" xml:space="preserve">
+    <value>{0} since the last Full Synchronization ({1}). Run a Full Synchronization to apply them.</value>
+  </data>
+  <data name="DriftApplySinceNoDateOne" xml:space="preserve">
+    <value>{0} since the last Full Synchronization. Run a Full Synchronization to apply it.</value>
+  </data>
+  <data name="DriftApplySinceNoDateOther" xml:space="preserve">
+    <value>{0} since the last Full Synchronization. Run a Full Synchronization to apply them.</value>
+  </data>
+  <data name="DriftAwaitingOneChangeOneType" xml:space="preserve">
+    <value>1 saved change awaits the next synchronization of {0}, which processes every {1} object.</value>
+  </data>
+  <data name="DriftAwaitingOneChangeSeveralTypes" xml:space="preserve">
+    <value>1 saved change awaits the next synchronization of {0}, which processes every object of {1} and {2}.</value>
+  </data>
+  <data name="DriftAwaitingManyChangesOneType" xml:space="preserve">
+    <value>{0} saved changes await the next synchronization of {1}, which processes every {2} object.</value>
+  </data>
+  <data name="DriftAwaitingManyChangesSeveralTypes" xml:space="preserve">
+    <value>{0} saved changes await the next synchronization of {1}, which processes every object of {2} and {3}.</value>
+  </data>
+</root>

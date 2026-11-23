@@ -1,0 +1,2855 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="OvertakenAndJoin" xml:space="preserve">
+    <value>, and </value>
+    <comment>Joins two clauses in the sentence saying what overtook a preview.</comment>
+  </data>
+  <data name="PreviewValueFromContributor" xml:space="preserve">
+    <value>from {0}</value>
+    <comment>After a value, the Connected System it came from. {0} is the system name.</comment>
+  </data>
+  <data name="PreviewValueTooltip" xml:space="preserve">
+    <value>{0} (from {1})</value>
+    <comment>Tooltip on a value: {0} is the value, {1} the Connected System it came from.</comment>
+  </data>
+  <data name="PreviewChip" xml:space="preserve">
+    <value>Preview</value>
+    <comment>Badge marking a Preview-tier feature.</comment>
+  </data>
+  <data name="PreviewDataSetSizeTitle" xml:space="preserve">
+    <value>How much detail should this preview keep?</value>
+    <comment>Dialog title asking how much of a preview to keep.</comment>
+  </data>
+  <data name="ExpressionDoesNotParse" xml:space="preserve">
+    <value>The expression does not parse.</value>
+    <comment>Shown under an expression field when it cannot be read.</comment>
+  </data>
+  <data name="ExpressionFunctionNamesCaseSensitive" xml:space="preserve">
+    <value> Function names are case-sensitive: did you mean {0}?</value>
+    <comment>Appended to an expression error. Leading space is intentional. {0} is the correct function name.</comment>
+  </data>
+  <data name="TryItHeading" xml:space="preserve">
+    <value>Try it</value>
+    <comment>Heading of the pane where an Attribute Flow or Generated Value can be tried out.</comment>
+  </data>
+  <data name="AttributeFlowTitle" xml:space="preserve">
+    <value>Attribute Flow</value>
+    <comment>Heading of the Attribute Flow section of a Synchronisation Rule.</comment>
+  </data>
+  <data name="AddAttributeFlowButton" xml:space="preserve">
+    <value>Add Attribute Flow</value>
+    <comment>Button, and dialog title, for adding an Attribute Flow.</comment>
+  </data>
+  <data name="EditAttributeFlowTitle" xml:space="preserve">
+    <value>Edit Attribute Flow</value>
+    <comment>Dialog title when editing an Attribute Flow.</comment>
+  </data>
+  <data name="MappingTypeLabel" xml:space="preserve">
+    <value>Mapping Type:</value>
+    <comment>Filter label above the mapping type chips.</comment>
+  </data>
+  <data name="DataTypeLabel" xml:space="preserve">
+    <value>Data Type:</value>
+    <comment>Filter label above the data type chips.</comment>
+  </data>
+  <data name="PluralityLabel" xml:space="preserve">
+    <value>Plurality:</value>
+    <comment>Filter label above the plurality chips.</comment>
+  </data>
+  <data name="PluralitySingleValued" xml:space="preserve">
+    <value>Single-Valued</value>
+    <comment>Plurality of an attribute that holds one value.</comment>
+  </data>
+  <data name="PluralityMultiValued" xml:space="preserve">
+    <value>Multi-Valued</value>
+    <comment>Plurality of an attribute that holds several values.</comment>
+  </data>
+  <data name="MappingTypeAttributeMapping" xml:space="preserve">
+    <value>Attribute Mapping</value>
+    <comment>Mapping type: copies an attribute.</comment>
+  </data>
+  <data name="MappingTypeExpressionMapping" xml:space="preserve">
+    <value>Expression Mapping</value>
+    <comment>Mapping type: computes a value with an expression.</comment>
+  </data>
+  <data name="MappingTypeDerived" xml:space="preserve">
+    <value>Derived</value>
+    <comment>Mapping type: an import Expression that reads the Metaverse Object.</comment>
+  </data>
+  <data name="MappingTypeGeneratedMapping" xml:space="preserve">
+    <value>Generated Mapping</value>
+    <comment>Mapping type: a Generated Value.</comment>
+  </data>
+  <data name="MappingTypeAdvancedMapping" xml:space="preserve">
+    <value>Advanced Mapping</value>
+    <comment>Mapping type: an advanced mapping.</comment>
+  </data>
+  <data name="NotSet" xml:space="preserve">
+    <value>Not Set</value>
+    <comment>Shown where a mapping type or data type has not been chosen.</comment>
+  </data>
+  <data name="DataTypeText" xml:space="preserve">
+    <value>Text</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeNumber" xml:space="preserve">
+    <value>Number</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeDateTime" xml:space="preserve">
+    <value>Date Time</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeBinary" xml:space="preserve">
+    <value>Binary</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeReference" xml:space="preserve">
+    <value>Reference</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeGuid" xml:space="preserve">
+    <value>Guid</value>
+    <comment>Attribute data type: a globally unique identifier.</comment>
+  </data>
+  <data name="DataTypeBoolean" xml:space="preserve">
+    <value>Boolean</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeLongNumber" xml:space="preserve">
+    <value>Long Number</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="TypeGenerated" xml:space="preserve">
+    <value>Generated</value>
+    <comment>Type column chip for a Generated Value mapping.</comment>
+  </data>
+  <data name="SourcesTitle" xml:space="preserve">
+    <value>Sources</value>
+    <comment>Title of the list of sources a flow joins.</comment>
+  </data>
+  <data name="ColumnSource" xml:space="preserve">
+    <value>Source</value>
+    <comment>Grid column heading.</comment>
+  </data>
+  <data name="ColumnTarget" xml:space="preserve">
+    <value>Target</value>
+    <comment>Grid column heading.</comment>
+  </data>
+  <data name="ColumnUpdated" xml:space="preserve">
+    <value>Updated</value>
+    <comment>Grid column heading: when an item was last updated.</comment>
+  </data>
+  <data name="SingularAttributeFlow" xml:space="preserve">
+    <value>Attribute Flow</value>
+    <comment>Noun in the grid count, for one Attribute Flow.</comment>
+  </data>
+  <data name="PluralAttributeFlows" xml:space="preserve">
+    <value>Attribute Flows</value>
+    <comment>Noun in the grid count, for several Attribute Flows.</comment>
+  </data>
+  <data name="SearchAttributeFlowsPlaceholder" xml:space="preserve">
+    <value>Search by attribute or expression</value>
+    <comment>Placeholder of the Attribute Flow search box.</comment>
+  </data>
+  <data name="ChipDisabled" xml:space="preserve">
+    <value>Disabled</value>
+    <comment>Chip on a disabled Attribute Flow.</comment>
+  </data>
+  <data name="InitialExportOnlyChip" xml:space="preserve">
+    <value>Initial Export Only</value>
+    <comment>Chip on an Attribute Flow that exports only when JIM creates the object.</comment>
+  </data>
+  <data name="InitialExportOnlyTooltip" xml:space="preserve">
+    <value>Initial Export Only: flows when JIM creates the object, then the attribute becomes unmanaged</value>
+    <comment>Tooltip on the Initial Export Only chip.</comment>
+  </data>
+  <data name="SetOnCreationOnlyChip" xml:space="preserve">
+    <value>Set on creation only</value>
+    <comment>Chip on an attribute that can be written only when the object is created.</comment>
+  </data>
+  <data name="NoAttributeFlowsMatchSearch" xml:space="preserve">
+    <value>No Attribute Flows match "{0}"</value>
+    <comment>Empty grid when the search matched nothing. {0} is the search text.</comment>
+  </data>
+  <data name="NoAttributeFlowsMatchSearchHint" xml:space="preserve">
+    <value>Try a different search term, or clear the search.</value>
+  </data>
+  <data name="NoAttributeFlowsMatchFilters" xml:space="preserve">
+    <value>No Attribute Flows match these filters</value>
+    <comment>Empty grid when the chip filters match nothing.</comment>
+  </data>
+  <data name="NoAttributeFlowsMatchFiltersHint" xml:space="preserve">
+    <value>Clear a Mapping Type, Data Type or Plurality filter above to widen the list.</value>
+  </data>
+  <data name="NoAttributeFlowsYet" xml:space="preserve">
+    <value>No Attribute Flows defined yet</value>
+    <comment>Empty grid when a Synchronisation Rule has no Attribute Flows.</comment>
+  </data>
+  <data name="NoAttributeFlowsYetHint" xml:space="preserve">
+    <value>Use the Add Attribute Flow button to say which attribute values this Synchronisation Rule moves.</value>
+  </data>
+  <data name="RetiredCount" xml:space="preserve">
+    <value>{0:N0} retired</value>
+    <comment>Count of retired values on a row. {0} is the number.</comment>
+  </data>
+  <data name="ViewRetiredValuesAria" xml:space="preserve">
+    <value>view retired values</value>
+    <comment>Accessible name of the retired values button.</comment>
+  </data>
+  <data name="StartAgain" xml:space="preserve">
+    <value>Start again…</value>
+    <comment>Tooltip of the button that starts a generated sequence again.</comment>
+  </data>
+  <data name="StartAgainAria" xml:space="preserve">
+    <value>start again</value>
+    <comment>Accessible name of the start again button.</comment>
+  </data>
+  <data name="EditAria" xml:space="preserve">
+    <value>edit</value>
+    <comment>Accessible name of an edit icon button.</comment>
+  </data>
+  <data name="DeleteAria" xml:space="preserve">
+    <value>delete</value>
+    <comment>Accessible name of a delete icon button.</comment>
+  </data>
+  <data name="SourceTypeLabel" xml:space="preserve">
+    <value>Source Type</value>
+    <comment>Label of the Source Type field.</comment>
+  </data>
+  <data name="SelectSourceType" xml:space="preserve">
+    <value>Please select the type of source for this Attribute Flow</value>
+    <comment>Placeholder of the Source Type field.</comment>
+  </data>
+  <data name="SourceTypeAttribute" xml:space="preserve">
+    <value>Attribute</value>
+    <comment>Source type option.</comment>
+  </data>
+  <data name="SourceTypeAttributeHelp" xml:space="preserve">
+    <value>Copies a value from a source attribute</value>
+    <comment>Help under the Attribute source type option.</comment>
+  </data>
+  <data name="SourceTypeExpression" xml:space="preserve">
+    <value>Expression</value>
+    <comment>Source type option.</comment>
+  </data>
+  <data name="SourceTypeExpressionHelp" xml:space="preserve">
+    <value>Computes a value using an expression</value>
+    <comment>Help under the Expression source type option.</comment>
+  </data>
+  <data name="SourceTypeGenerated" xml:space="preserve">
+    <value>Generated Value</value>
+    <comment>Source type option.</comment>
+  </data>
+  <data name="SourceTypeGeneratedHelp" xml:space="preserve">
+    <value>Generates a unique, persistent value</value>
+    <comment>Help under the Generated Value source type option.</comment>
+  </data>
+  <data name="AssignValueTo" xml:space="preserve">
+    <value>Assign the value to</value>
+    <comment>Label of the target attribute field.</comment>
+  </data>
+  <data name="SelectTargetMetaverseAttribute" xml:space="preserve">
+    <value>Please select the target Metaverse attribute</value>
+    <comment>Placeholder of the target Metaverse attribute field.</comment>
+  </data>
+  <data name="SelectTargetConnectedSystemAttribute" xml:space="preserve">
+    <value>Please select the target Connected System attribute</value>
+    <comment>Placeholder of the target Connected System attribute field.</comment>
+  </data>
+  <data name="ReadOnlyTargetReason" xml:space="preserve">
+    <value>This Connected System reports this attribute as read-only.</value>
+    <comment>Shown beside a target attribute that is read-only.</comment>
+  </data>
+  <data name="Suggested" xml:space="preserve">
+    <value>Suggested</value>
+    <comment>Chip on the attribute JIM suggests.</comment>
+  </data>
+  <data name="ChosenByExchangeRecipients" xml:space="preserve">
+    <value>Chosen by Exchange recipients</value>
+    <comment>Helper text when the Exchange recipients panel chose the target.</comment>
+  </data>
+  <data name="ConnectedSystemAttributeLabel" xml:space="preserve">
+    <value>Connected System Attribute</value>
+    <comment>Label of the source Connected System attribute field.</comment>
+  </data>
+  <data name="SelectSourceConnectedSystemAttribute" xml:space="preserve">
+    <value>Please select the source Connected System attribute</value>
+    <comment>Placeholder of the source Connected System attribute field.</comment>
+  </data>
+  <data name="MetaverseAttributeLabel" xml:space="preserve">
+    <value>Metaverse Attribute</value>
+    <comment>Label of the source Metaverse attribute field.</comment>
+  </data>
+  <data name="SelectSourceMetaverseAttribute" xml:space="preserve">
+    <value>Please select the source Metaverse attribute</value>
+    <comment>Placeholder of the source Metaverse attribute field.</comment>
+  </data>
+  <data name="AttributeTypeAndPlurality" xml:space="preserve">
+    <value>({0} : {1})</value>
+    <comment>Data type and plurality beside an attribute in a list. {0} is the data type, {1} the plurality.</comment>
+  </data>
+  <data name="ExpressionPlaceholderExport" xml:space="preserve">
+    <value>e.g. IIF(mv["Active"] == true, Upper(mv["Display Name"]), null)</value>
+    <comment>Example Expression shown as a placeholder in the export direction.</comment>
+  </data>
+  <data name="ExpressionPlaceholderImport" xml:space="preserve">
+    <value>e.g. IIF(mv["Active"] == true, Upper(cs["Name"]), null)</value>
+    <comment>Example Expression shown as a placeholder in the import direction.</comment>
+  </data>
+  <data name="MissingInputBehaviourTitle" xml:space="preserve">
+    <value>Missing Input Behaviour</value>
+    <comment>Heading of the Missing Input Behaviour section.</comment>
+  </data>
+  <data name="AttentionFailsWholeObject" xml:space="preserve">
+    <value>Fails the whole object</value>
+    <comment>Attention badge on a section heading.</comment>
+  </data>
+  <data name="MissingInputIntro" xml:space="preserve">
+    <value>What to do when an attribute this Expression reads has no value on the object being synchronised.</value>
+  </data>
+  <data name="MissingInputEvaluateAnyway" xml:space="preserve">
+    <value>Evaluate anyway</value>
+    <comment>Missing Input Behaviour option, and its summary.</comment>
+  </data>
+  <data name="MissingInputEvaluateAnywayHint" xml:space="preserve">
+    <value>Run the Expression without the input. For an Expression that handles a missing value itself. The default.</value>
+  </data>
+  <data name="MissingInputContributeNoValue" xml:space="preserve">
+    <value>Contribute no value</value>
+    <comment>Missing Input Behaviour option, and its summary.</comment>
+  </data>
+  <data name="MissingInputContributeNoValueHint" xml:space="preserve">
+    <value>Contribute nothing, so a lower-priority contributor can still win the attribute. No error.</value>
+  </data>
+  <data name="MissingInputWait" xml:space="preserve">
+    <value>Wait until every input has a value</value>
+    <comment>Missing Input Behaviour summary for a Generated Value.</comment>
+  </data>
+  <data name="MissingInputFailMapping" xml:space="preserve">
+    <value>Fail this mapping</value>
+    <comment>Missing Input Behaviour option, and its summary.</comment>
+  </data>
+  <data name="MissingInputFailMappingHint" xml:space="preserve">
+    <value>Record an error against the object; other Attribute Flows still run and the target keeps its value.</value>
+  </data>
+  <data name="MissingInputFailObject" xml:space="preserve">
+    <value>Fail the object</value>
+    <comment>Missing Input Behaviour option, and its summary.</comment>
+  </data>
+  <data name="MissingInputFailObjectHint" xml:space="preserve">
+    <value>Run no Attribute Flow on this Synchronisation Rule for the object. For identity-critical output.</value>
+  </data>
+  <data name="MissingInputFailObjectWarning" xml:space="preserve">
+    <value>While this is set, an object missing any attribute this Expression reads will not synchronise at all: none of its attributes flow, and it is reported as an error on every run until the missing value is supplied.</value>
+    <comment>Warning shown when the Fail the object behaviour is chosen.</comment>
+  </data>
+  <data name="StandardMappingsGuidance" xml:space="preserve">
+    <value>Standard Mappings are guidance only; any attribute can be chosen, and they never affect what synchronisation flows.</value>
+  </data>
+  <data name="UseSuggestion" xml:space="preserve">
+    <value>Use {0}</value>
+    <comment>Button applying a Standard Mapping suggestion. {0} is the attribute name.</comment>
+  </data>
+  <data name="MoreThanOneRuleContributes" xml:space="preserve">
+    <value>More than one Synchronisation Rule contributes {0}. Its priority order decides which value wins.</value>
+    <comment>{0} is the Metaverse Attribute name.</comment>
+  </data>
+  <data name="AttributeHasContributors" xml:space="preserve">
+    <value>{0} already has contributors. This mapping is added at the lowest priority and will not win resolution until it is promoted.</value>
+    <comment>{0} is the Metaverse Attribute name.</comment>
+  </data>
+  <data name="ManagePriorityOnObjectType" xml:space="preserve">
+    <value>Manage priority on the {0} Object Type page</value>
+    <comment>Link text. {0} is the Metaverse Object Type name, or the fallback Metaverse.</comment>
+  </data>
+  <data name="MetaverseFallbackName" xml:space="preserve">
+    <value>Metaverse</value>
+    <comment>Stands in for the Metaverse Object Type name where there is none.</comment>
+  </data>
+  <data name="ValueHandlingTitle" xml:space="preserve">
+    <value>Value handling</value>
+    <comment>Heading of the value handling section.</comment>
+  </data>
+  <data name="AttentionBlankClears" xml:space="preserve">
+    <value>A blank clears the value</value>
+    <comment>Attention badge on the value handling heading.</comment>
+  </data>
+  <data name="NullIsValueLabel" xml:space="preserve">
+    <value>Null is a value</value>
+    <comment>Checkbox label, and a summary part.</comment>
+  </data>
+  <data name="NullIsValueHelp" xml:space="preserve">
+    <value>When this Synchronisation Rule applies to a Connected System Object that is joined to a Metaverse Object, but contributes no value, treat that as an authoritative "no value": clear the Metaverse Object attribute value rather than falling back to a lower-priority contributor. A rule that results in no opinion (rule disabled, Connected System Object not joined, or out of scope) is skipped regardless.</value>
+    <comment>Explains Null is a value.</comment>
+  </data>
+  <data name="NullIsValueWarning" xml:space="preserve">
+    <value>Wherever this Synchronisation Rule wins priority, a blank in the Connected System now clears the Metaverse Object attribute value rather than leaving it alone. A truncated or empty import therefore clears the attribute across every object this rule covers.</value>
+    <comment>Warning shown while Null is a value is on.</comment>
+  </data>
+  <data name="ValueProcessingTitle" xml:space="preserve">
+    <value>Value processing</value>
+    <comment>Subtitle above the inbound value processing options.</comment>
+  </data>
+  <data name="ValueProcessingHelp" xml:space="preserve">
+    <value>Apply transforms to the imported text value before it flows to the Metaverse. By default, whitespace-only and empty values are treated as no value (they do not flow, and clear any existing value).</value>
+  </data>
+  <data name="TreatWhitespaceAsNoValue" xml:space="preserve">
+    <value>Treat whitespace as no value</value>
+    <comment>Checkbox label, and a summary part.</comment>
+  </data>
+  <data name="TrimWhitespace" xml:space="preserve">
+    <value>Trim leading and trailing whitespace</value>
+    <comment>Checkbox label.</comment>
+  </data>
+  <data name="TrimWhitespaceShort" xml:space="preserve">
+    <value>Trim whitespace</value>
+    <comment>Summary part for the trim option.</comment>
+  </data>
+  <data name="CollapseWhitespaceTooltip" xml:space="preserve">
+    <value>Reduces runs of consecutive whitespace inside the value to a single space; for example 'John···Smith' becomes 'John Smith' (each · is a space).</value>
+    <comment>Tooltip on the collapse option.</comment>
+  </data>
+  <data name="CollapseInternalWhitespace" xml:space="preserve">
+    <value>Collapse internal whitespace</value>
+    <comment>Checkbox label, and a summary part.</comment>
+  </data>
+  <data name="CaseNormalisationLabel" xml:space="preserve">
+    <value>Case normalisation</value>
+    <comment>Label of the case normalisation field.</comment>
+  </data>
+  <data name="CaseUpper" xml:space="preserve">
+    <value>Upper case</value>
+    <comment>Case normalisation option, and its summary.</comment>
+  </data>
+  <data name="CaseLower" xml:space="preserve">
+    <value>Lower case</value>
+    <comment>Case normalisation option, and its summary.</comment>
+  </data>
+  <data name="CaseTitle" xml:space="preserve">
+    <value>Title case</value>
+    <comment>Case normalisation option, and its summary.</comment>
+  </data>
+  <data name="InitialExportOnlyLabel" xml:space="preserve">
+    <value>Initial Export Only</value>
+    <comment>Checkbox label.</comment>
+  </data>
+  <data name="InitialExportOnlyHelp" xml:space="preserve">
+    <value>Only flow this attribute when JIM creates the object in the Connected System. Once provisioned, the attribute becomes unmanaged: Metaverse changes are not exported and Drift Correction leaves it alone, allowing the Connected System to own the value. Objects that join to pre-existing Connected System objects never receive the value.</value>
+    <comment>Explains Initial Export Only.</comment>
+  </data>
+  <data name="EnabledHelp" xml:space="preserve">
+    <value>A disabled Attribute Flow is skipped by synchronisation until it is re-enabled. Where another Attribute Flow also contributes the attribute, its value takes over at the next synchronisation; values only this flow contributed stay in place.</value>
+    <comment>Explains the Enabled option.</comment>
+  </data>
+  <data name="EnabledHelpShort" xml:space="preserve">
+    <value>A disabled Attribute Flow is skipped by synchronisation until it is re-enabled.</value>
+    <comment>Short form of the Enabled explanation.</comment>
+  </data>
+  <data name="UniqueSequence" xml:space="preserve">
+    <value>Always add a sequence number</value>
+    <comment>Uniqueness token summary for a Sequence.</comment>
+  </data>
+  <data name="UniqueRandom" xml:space="preserve">
+    <value>Always add a random token</value>
+    <comment>Uniqueness token summary for a Random value.</comment>
+  </data>
+  <data name="UniqueIfTaken" xml:space="preserve">
+    <value>Add a number only if taken</value>
+    <comment>Uniqueness token summary when a number is added only on a clash.</comment>
+  </data>
+  <data name="AvailabilityLoading" xml:space="preserve">
+    <value>Loading</value>
+    <comment>Availability of a Generated Value while the Connected Systems load.</comment>
+  </data>
+  <data name="AvailabilityNotExported" xml:space="preserve">
+    <value>Not exported to any Connected System</value>
+    <comment>Availability of a Generated Value with no Connected System.</comment>
+  </data>
+  <data name="CheckedInOne" xml:space="preserve">
+    <value>Checked in {0} Connected System</value>
+    <comment>Singular. {0} is the number of Connected Systems.</comment>
+  </data>
+  <data name="CheckedInOther" xml:space="preserve">
+    <value>Checked in {0} Connected Systems</value>
+    <comment>Plural. {0} is the number of Connected Systems.</comment>
+  </data>
+  <data name="AvailabilityExcluded" xml:space="preserve">
+    <value>{0}, {1} excluded</value>
+    <comment>{0} is the checked summary, {1} the number excluded.</comment>
+  </data>
+  <data name="NotAvailable" xml:space="preserve">
+    <value>Not available</value>
+    <comment>Summary value when a setting cannot apply.</comment>
+  </data>
+  <data name="SwitchOn" xml:space="preserve">
+    <value>On</value>
+    <comment>Summary value for a switch that is on.</comment>
+  </data>
+  <data name="SwitchOff" xml:space="preserve">
+    <value>Off</value>
+    <comment>Summary value for a switch that is off.</comment>
+  </data>
+  <data name="NullIsNotAValue" xml:space="preserve">
+    <value>Null is not a value</value>
+    <comment>Summary when Null is a value is off and no processing applies.</comment>
+  </data>
+  <data name="ListSeparator" xml:space="preserve">
+    <value>, </value>
+    <comment>Separates items in a list of settings.</comment>
+  </data>
+  <data name="PluralitySingleValuedWords" xml:space="preserve">
+    <value>Single Valued</value>
+    <comment>Plurality beside an attribute in a list: an attribute that holds one value.</comment>
+  </data>
+  <data name="PluralityMultiValuedWords" xml:space="preserve">
+    <value>Multi Valued</value>
+    <comment>Plurality beside an attribute in a list: an attribute that holds several values.</comment>
+  </data>
+  <data name="ExpressionLabel" xml:space="preserve">
+    <value>Expression</value>
+    <comment>Label of the Expression field.</comment>
+  </data>
+  <data name="UpdateAttributeFlowButton" xml:space="preserve">
+    <value>Update Attribute Flow</value>
+    <comment>Button saving an edited Attribute Flow.</comment>
+  </data>
+  <data name="ViewRetiredValuesWithCount" xml:space="preserve">
+    <value>View retired values ({0:N0})</value>
+    <comment>Button tooltip with the number of retired values. {0} is the number.</comment>
+  </data>
+  <data name="ViewRetiredValues" xml:space="preserve">
+    <value>View retired values</value>
+    <comment>Button tooltip when no values are retired.</comment>
+  </data>
+  <data name="RetiredChipTooltipOne" xml:space="preserve">
+    <value>{0:N0} value of {1} will never be issued again.</value>
+    <comment>Singular. {0} is the count, {1} the attribute name.</comment>
+  </data>
+  <data name="RetiredChipTooltipOther" xml:space="preserve">
+    <value>{0:N0} values of {1} will never be issued again.</value>
+    <comment>Plural. {0} is the count, {1} the attribute name.</comment>
+  </data>
+  <data name="PasswordDeliveryNote" xml:space="preserve">
+    <value>Password delivery leaves Enabled and Password never expires to this Attribute Flow. Initial Passwords and synchronised passwords do not change them.</value>
+    <comment>Note on a userAccountControl Attribute Flow where passwords are delivered.</comment>
+  </data>
+  <data name="MvaToSvaIndicatorTooltip" xml:space="preserve">
+    <value>This mapping flows a Multi-Valued source to a Single-Valued target. Any object with more than one value will not flow this attribute and will be recorded as an error; a single value flows normally.</value>
+    <comment>Tooltip on the Multi-Valued to Single-Valued indicator.</comment>
+  </data>
+  <data name="DisabledMappingDescription" xml:space="preserve">
+    <value>This Attribute Flow is disabled and skipped by synchronisation until it is re-enabled.</value>
+    <comment>Tooltip on the Disabled chip.</comment>
+  </data>
+  <data name="SentenceAndSentence" xml:space="preserve">
+    <value>{0} {1}</value>
+    <comment>Joins two sentences. Each placeholder is a whole sentence.</comment>
+  </data>
+  <data name="StandardMappingImportOne" xml:space="preserve">
+    <value>In {0}, {1} corresponds to the Metaverse Attribute {2}.</value>
+    <comment>Standard Mapping sentence, one target. {0} is the standard, {1} the source, {2} the target.</comment>
+  </data>
+  <data name="StandardMappingImportOther" xml:space="preserve">
+    <value>In {0}, {1} corresponds to the Metaverse Attributes {2}.</value>
+    <comment>Standard Mapping sentence, several targets. {0} is the standard, {1} the source, {2} the targets.</comment>
+  </data>
+  <data name="StandardMappingExport" xml:space="preserve">
+    <value>In {0}, {1} corresponds to {2} in this Connected System.</value>
+    <comment>Standard Mapping sentence on export. {0} is the standard, {1} the Metaverse Attribute, {2} the targets.</comment>
+  </data>
+  <data name="ListAnd" xml:space="preserve">
+    <value> and </value>
+    <comment>Joins the last two items of a list. Spaces are intentional.</comment>
+  </data>
+  <data name="UnavailableAlsoTypeMismatch" xml:space="preserve">
+    <value>It also corresponds to {0}, which holds a different data type, so the value cannot flow to it directly. An Expression source can convert it.</value>
+    <comment>{0} is the target attribute name.</comment>
+  </data>
+  <data name="UnavailableAlsoAlreadyTargeted" xml:space="preserve">
+    <value>It also corresponds to {0}, which another Attribute Flow on this Synchronisation Rule already targets.</value>
+    <comment>{0} is the target attribute name.</comment>
+  </data>
+  <data name="UnavailableAlsoReadOnly" xml:space="preserve">
+    <value>It also corresponds to {0}, which this Connected System reports as read-only, so no Attribute Flow can write to it.</value>
+    <comment>{0} is the target attribute name.</comment>
+  </data>
+  <data name="UnavailableAlsoOther" xml:space="preserve">
+    <value>It also corresponds to {0}, which is not available as a target.</value>
+    <comment>{0} is the target attribute name.</comment>
+  </data>
+  <data name="UnavailableFirstTypeMismatch" xml:space="preserve">
+    <value>In {0}, {1} corresponds to {2}, which holds a different data type, so the value cannot flow to it directly. An Expression source can convert it.</value>
+    <comment>{0} is the standard, {1} the source, {2} the target.</comment>
+  </data>
+  <data name="UnavailableFirstAlreadyTargeted" xml:space="preserve">
+    <value>In {0}, {1} corresponds to {2}, which another Attribute Flow on this Synchronisation Rule already targets.</value>
+    <comment>{0} is the standard, {1} the source, {2} the target.</comment>
+  </data>
+  <data name="UnavailableFirstReadOnly" xml:space="preserve">
+    <value>In {0}, {1} corresponds to {2}, which this Connected System reports as read-only, so no Attribute Flow can write to it.</value>
+    <comment>{0} is the standard, {1} the source, {2} the target.</comment>
+  </data>
+  <data name="UnavailableFirstOther" xml:space="preserve">
+    <value>In {0}, {1} corresponds to {2}, which is not available as a target.</value>
+    <comment>{0} is the standard, {1} the source, {2} the target.</comment>
+  </data>
+  <data name="AttributeLabelWithType" xml:space="preserve">
+    <value>{0} ({1} : {2})</value>
+    <comment>Attribute name with its data type and plurality, in a select. {0} name, {1} data type, {2} plurality.</comment>
+  </data>
+  <data name="MvaToSvaWarningImport" xml:space="preserve">
+    <value>{0} is Multi-Valued but {1} is Single-Valued. If a synchronised object has more than one value, no value will flow for this attribute and an error will be recorded against that object (a single value flows normally). To always flow a value, target a Multi-Valued attribute or use an Expression to select one.</value>
+    <comment>Warning on an import mapping from a Multi-Valued source to a Single-Valued target. {0} is the source and {1} the target, each in code formatting.</comment>
+  </data>
+  <data name="MvaToSvaWarningExport" xml:space="preserve">
+    <value>{0} is Multi-Valued but {1} is Single-Valued. If an object has more than one value, no value will be exported for this attribute and an error will be recorded against that object (a single value exports normally). To always export a value, target a Multi-Valued attribute or use an Expression to select one.</value>
+    <comment>Warning on an export mapping from a Multi-Valued source to a Single-Valued target. {0} is the source and {1} the target, each in code formatting.</comment>
+  </data>
+  <data name="DisableAttributeFlowQuestion" xml:space="preserve">
+    <value>Disable Attribute Flow?</value>
+    <comment>Title of the confirmation before disabling an Attribute Flow.</comment>
+  </data>
+  <data name="SaveAttributeFlowQuestion" xml:space="preserve">
+    <value>Save Attribute Flow?</value>
+    <comment>Title of the confirmation before saving an Attribute Flow that others depend on.</comment>
+  </data>
+  <data name="RemoveAttributeFlowQuestion" xml:space="preserve">
+    <value>Remove Attribute Flow?</value>
+    <comment>Title of the confirmation before removing an Attribute Flow that others depend on.</comment>
+  </data>
+  <data name="DisableFlowTo" xml:space="preserve">
+    <value>disable the Attribute Flow to {0}</value>
+    <comment>Confirmation sentence fragment, lower case, after 'Do you want to'. {0} is the target attribute.</comment>
+  </data>
+  <data name="ChangeFlowTo" xml:space="preserve">
+    <value>change the Attribute Flow to {0}</value>
+    <comment>Confirmation sentence fragment, lower case. {0} is the target attribute.</comment>
+  </data>
+  <data name="RemoveFlowTo" xml:space="preserve">
+    <value>remove the Attribute Flow to {0}</value>
+    <comment>Confirmation sentence fragment, lower case. {0} is the target attribute.</comment>
+  </data>
+  <data name="DisableButton" xml:space="preserve">
+    <value>Disable</value>
+    <comment>Button confirming a disable.</comment>
+  </data>
+  <data name="RemoveButton" xml:space="preserve">
+    <value>Remove</value>
+    <comment>Button confirming a removal.</comment>
+  </data>
+  <data name="RemoveConfirmButton" xml:space="preserve">
+    <value>Remove!</value>
+    <comment>Button confirming the removal of an Attribute Flow.</comment>
+  </data>
+  <data name="ThisAttribute" xml:space="preserve">
+    <value>this attribute</value>
+    <comment>Stands in for an attribute name when there is none. Lower case, mid-sentence.</comment>
+  </data>
+  <data name="TheAttribute" xml:space="preserve">
+    <value>the attribute</value>
+    <comment>Stands in for an attribute name when there is none. Lower case, mid-sentence.</comment>
+  </data>
+  <data name="ConfirmRemoveMapping" xml:space="preserve">
+    <value>Are you sure you want to remove this Attribute Mapping?</value>
+    <comment>Confirmation before removing an Attribute Flow that contributes no values.</comment>
+  </data>
+  <data name="WarningTitle" xml:space="preserve">
+    <value>Warning</value>
+    <comment>Title of a warning message box.</comment>
+  </data>
+  <data name="ChooseAttributeToTry" xml:space="preserve">
+    <value>Choose the attribute to assign the value to, then try it here.</value>
+    <comment>Shown in the Try it pane before a target attribute is chosen.</comment>
+  </data>
+  <data name="InitialPasswordHeading" xml:space="preserve">
+    <value>Initial Password</value>
+    <comment>Heading of the Initial Password section of a Synchronisation Rule.</comment>
+  </data>
+  <data name="InitialPasswordConnectorCannotSet" xml:space="preserve">
+    <value>The {0} cannot set passwords, so JIM cannot give the Connected System Objects this Synchronisation Rule provisions an initial password.</value>
+    <comment>Shown when the Connector cannot set passwords. {0} is the Connector name, for example LDAP Connector.</comment>
+  </data>
+  <data name="UnknownConnectorLabel" xml:space="preserve">
+    <value>Connected System's Connector</value>
+    <comment>Stands in for the Connector name when it could not be resolved.</comment>
+  </data>
+  <data name="ParkedWaitingOne" xml:space="preserve">
+    <value>{0:N0} Connected System Object is waiting on a change to these settings</value>
+    <comment>Singular. {0} is the number of parked objects.</comment>
+  </data>
+  <data name="ParkedWaitingOther" xml:space="preserve">
+    <value>{0:N0} Connected System Objects are waiting on a change to these settings</value>
+    <comment>Plural. {0} is the number of parked objects.</comment>
+  </data>
+  <data name="ParkedExplanation" xml:space="preserve">
+    <value>The Connected System refused the password these settings produced, so JIM has stopped trying: the same settings produce another password it refuses for the same reason. Correct them below and save, and the Connected System Objects are attempted again by the Password Delivery Service within seconds.</value>
+    <comment>Explains why accounts are parked.</comment>
+  </data>
+  <data name="ParkedNoReason" xml:space="preserve">
+    <value>The target refused the password without saying why.</value>
+    <comment>Shown in place of a rejection message the target did not send.</comment>
+  </data>
+  <data name="ParkedFirstSeen" xml:space="preserve">
+    <value>First seen {0}</value>
+    <comment>{0} is a relative time, for example 2 hours ago.</comment>
+  </data>
+  <data name="ReleaseOnSaveOne" xml:space="preserve">
+    <value>Saving will release {0:N0} parked Connected System Object</value>
+    <comment>Singular. {0} is the number of objects that saving will release.</comment>
+  </data>
+  <data name="ReleaseOnSaveOther" xml:space="preserve">
+    <value>Saving will release {0:N0} parked Connected System Objects</value>
+    <comment>Plural. {0} is the number of objects that saving will release.</comment>
+  </data>
+  <data name="ReleaseOnSaveDetail" xml:space="preserve">
+    <value>They will be attempted again with these settings by the Password Delivery Service within seconds. Nothing is generated now: each password is generated at the moment it is set.</value>
+  </data>
+  <data name="SetInitialPasswordQuestion" xml:space="preserve">
+    <value>Set an initial password on the Connected System Objects this Synchronisation Rule provisions?</value>
+    <comment>Switch label.</comment>
+  </data>
+  <data name="SetInitialPasswordHelp" xml:space="preserve">
+    <value>A newly provisioned Connected System Object has no password and cannot be signed in to. Enabling this has JIM set one through the Connected System's password channel, straight after the object is created. By default JIM generates a different password for each one and stores none of them.</value>
+    <comment>Explains the initial password switch.</comment>
+  </data>
+  <data name="PasswordSettingsHeading" xml:space="preserve">
+    <value>Password Settings</value>
+    <comment>Heading of the password settings.</comment>
+  </data>
+  <data name="InitialPasswordSourceFollow" xml:space="preserve">
+    <value>Follow the Connected System</value>
+    <comment>Option: the settings follow the password policy discovered on the Connected System.</comment>
+  </data>
+  <data name="InitialPasswordSourceFollowHelp" xml:space="preserve">
+    <value>The settings are derived from the password policy discovered on the Connected System, and re-derived whenever that policy is read again. Nothing to configure, and nothing to keep in step by hand.</value>
+  </data>
+  <data name="InitialPasswordSourceCustom" xml:space="preserve">
+    <value>Custom</value>
+    <comment>Option: the settings are the ones saved here.</comment>
+  </data>
+  <data name="InitialPasswordSourceCustomHelp" xml:space="preserve">
+    <value>Exactly the settings saved here. JIM will not change them because the Connected System published something different, but it will still tell you when they cannot satisfy it.</value>
+  </data>
+  <data name="InitialPasswordSourceStatic" xml:space="preserve">
+    <value>One password for every Connected System Object</value>
+    <comment>Option: one password shared by every object.</comment>
+  </data>
+  <data name="NotRecommended" xml:space="preserve">
+    <value>Not recommended</value>
+    <comment>Chip beside the one password option.</comment>
+  </data>
+  <data name="InitialPasswordSourceStaticHelp" xml:space="preserve">
+    <value>One password you choose, set on every Connected System Object this Synchronisation Rule provisions, so you can tell a new starter what it is.</value>
+  </data>
+  <data name="NoDiscoveredPolicy" xml:space="preserve">
+    <value>JIM has not discovered a password policy on this Connected System, either because the Connector cannot read one or because the schema has not been imported since the capability was added. JIM's own defaults apply until it does.</value>
+    <comment>Shown when no password policy has been discovered.</comment>
+  </data>
+  <data name="PasswordStyleLabel" xml:space="preserve">
+    <value>Style</value>
+    <comment>Label of the password style field.</comment>
+  </data>
+  <data name="PasswordStyleRandom" xml:space="preserve">
+    <value>Random characters (t7Rm#qK4vHx2Ndbf)</value>
+    <comment>Password style option, with an example.</comment>
+  </data>
+  <data name="PasswordStyleWords" xml:space="preserve">
+    <value>Words (Brown-Chicken-Ladder-47)</value>
+    <comment>Password style option, with an example.</comment>
+  </data>
+  <data name="PasswordStylePronounceable" xml:space="preserve">
+    <value>Pronounceable (tovanic-hupelo-92)</value>
+    <comment>Password style option, with an example.</comment>
+  </data>
+  <data name="PasswordLengthLabel" xml:space="preserve">
+    <value>Length</value>
+    <comment>Label of the password length field.</comment>
+  </data>
+  <data name="MinimumUppercaseLabel" xml:space="preserve">
+    <value>Minimum uppercase</value>
+    <comment>Label of a password policy field.</comment>
+  </data>
+  <data name="MinimumLowercaseLabel" xml:space="preserve">
+    <value>Minimum lowercase</value>
+    <comment>Label of a password policy field.</comment>
+  </data>
+  <data name="MinimumDigitsLabel" xml:space="preserve">
+    <value>Minimum digits</value>
+    <comment>Label of a password policy field.</comment>
+  </data>
+  <data name="MinimumSymbolsLabel" xml:space="preserve">
+    <value>Minimum symbols</value>
+    <comment>Label of a password policy field.</comment>
+  </data>
+  <data name="NumberOfWordsLabel" xml:space="preserve">
+    <value>Number of words</value>
+    <comment>Label of the word count field.</comment>
+  </data>
+  <data name="SeparatorLabel" xml:space="preserve">
+    <value>Separator</value>
+    <comment>Label of the word separator field.</comment>
+  </data>
+  <data name="SeparatorHyphen" xml:space="preserve">
+    <value>Hyphen</value>
+    <comment>Word separator option.</comment>
+  </data>
+  <data name="SeparatorFullStop" xml:space="preserve">
+    <value>Full stop</value>
+    <comment>Word separator option.</comment>
+  </data>
+  <data name="SeparatorUnderscore" xml:space="preserve">
+    <value>Underscore</value>
+    <comment>Word separator option.</comment>
+  </data>
+  <data name="SeparatorDigit" xml:space="preserve">
+    <value>Digit</value>
+    <comment>Word separator option.</comment>
+  </data>
+  <data name="SeparatorRandomSymbol" xml:space="preserve">
+    <value>Random symbol</value>
+    <comment>Word separator option.</comment>
+  </data>
+  <data name="CapitalisationLabel" xml:space="preserve">
+    <value>Capitalisation</value>
+    <comment>Label of the word capitalisation field.</comment>
+  </data>
+  <data name="CapitalisationLowercase" xml:space="preserve">
+    <value>Lowercase</value>
+    <comment>Word capitalisation option.</comment>
+  </data>
+  <data name="CapitalisationEachWord" xml:space="preserve">
+    <value>Each word</value>
+    <comment>Word capitalisation option.</comment>
+  </data>
+  <data name="CapitalisationUppercase" xml:space="preserve">
+    <value>Uppercase</value>
+    <comment>Word capitalisation option.</comment>
+  </data>
+  <data name="CapitalisationFirstWordOnly" xml:space="preserve">
+    <value>First word only</value>
+    <comment>Word capitalisation option.</comment>
+  </data>
+  <data name="CapitalisationRandomWord" xml:space="preserve">
+    <value>One random word</value>
+    <comment>Word capitalisation option.</comment>
+  </data>
+  <data name="AppendedDigitsLabel" xml:space="preserve">
+    <value>Appended digits</value>
+    <comment>Label of the appended digits field.</comment>
+  </data>
+  <data name="AppendSymbolLabel" xml:space="preserve">
+    <value>Append a symbol</value>
+    <comment>Switch label.</comment>
+  </data>
+  <data name="PermittedSymbolsLabel" xml:space="preserve">
+    <value>Permitted symbols</value>
+    <comment>Label of the permitted symbols field.</comment>
+  </data>
+  <data name="PermittedSymbolsHelp" xml:space="preserve">
+    <value>The symbols JIM may use. Narrow this where something downstream of the Connected System cannot cope with a particular character.</value>
+  </data>
+  <data name="LeaveOutConfusedLabel" xml:space="preserve">
+    <value>Leave out easily confused characters</value>
+    <comment>Switch label.</comment>
+  </data>
+  <data name="LeaveOutConfusedHelp" xml:space="preserve">
+    <value>Excludes {0}, which are hard to tell apart when a password is read out or copied by hand. An initial password is transcribed far more often than a permanent one.</value>
+    <comment>{0} is the list of ambiguous characters.</comment>
+  </data>
+  <data name="StaticNotRecommended" xml:space="preserve">
+    <value>This option is not recommended</value>
+    <comment>Heading of the warning on the one password option.</comment>
+  </data>
+  <data name="StaticWarningBody" xml:space="preserve">
+    <value>Every Connected System Object this Synchronisation Rule provisions shares this password until its owner changes it, so anybody who learns of this can sign in as any new starter who has not. Note: the password is stored encrypted and cannot be shown to you again.</value>
+    <comment>Warning body on the one password option.</comment>
+  </data>
+  <data name="PasswordLabel" xml:space="preserve">
+    <value>Password</value>
+    <comment>Label of the password field.</comment>
+  </data>
+  <data name="ConfirmPasswordLabel" xml:space="preserve">
+    <value>Confirm password</value>
+    <comment>Label of the confirmation field.</comment>
+  </data>
+  <data name="ShowOrHidePassword" xml:space="preserve">
+    <value>Show or hide the password</value>
+    <comment>Accessible name of the reveal button.</comment>
+  </data>
+  <data name="PasswordsDoNotMatch" xml:space="preserve">
+    <value>The two passwords do not match.</value>
+    <comment>Error under the confirmation field.</comment>
+  </data>
+  <data name="StaticPasswordSetAt" xml:space="preserve">
+    <value>A password is set, last changed {0}. Leave these fields blank to keep it.</value>
+    <comment>{0} is a relative time, for example 2 hours ago.</comment>
+  </data>
+  <data name="StaticPasswordSet" xml:space="preserve">
+    <value>A password is set. Leave these fields blank to keep it.</value>
+  </data>
+  <data name="StaticPasswordNotSet" xml:space="preserve">
+    <value>No password has been set. Until one is, the accounts this Synchronisation Rule provisions are held for an administrator rather than given a password nobody knows.</value>
+  </data>
+  <data name="StaticPasswordUsable" xml:space="preserve">
+    <value>This password is {0} characters and covers {1} of the character categories this Connected System counts.</value>
+    <comment>{0} is the length, {1} the number of categories covered.</comment>
+  </data>
+  <data name="StaticPasswordUnusable" xml:space="preserve">
+    <value>This password cannot be used:</value>
+    <comment>Shown above the reasons a password is refused.</comment>
+  </data>
+  <data name="GeneratedPasswordGuarantee" xml:space="preserve">
+    <value>Every generated password will be at least {0} characters, cover {1} of the four character categories, and carry at least {2:F1} bits of entropy.</value>
+    <comment>{0} length, {1} categories, {2} entropy in bits.</comment>
+  </data>
+  <data name="SettingsCannotBeUsed" xml:space="preserve">
+    <value>These settings cannot be used:</value>
+    <comment>Shown above the reasons the settings are refused.</comment>
+  </data>
+  <data name="AfterPasswordSetLabel" xml:space="preserve">
+    <value>After the password is set</value>
+    <comment>Label of the expiry behaviour field.</comment>
+  </data>
+  <data name="ExpiryRequireChange" xml:space="preserve">
+    <value>Require a change at the next sign-in</value>
+    <comment>Expiry option.</comment>
+  </data>
+  <data name="ExpiryAccordingToTarget" xml:space="preserve">
+    <value>Age according to the Connected System's own policy</value>
+    <comment>Expiry option.</comment>
+  </data>
+  <data name="ExpiryNeverExpires" xml:space="preserve">
+    <value>Never expires</value>
+    <comment>Expiry option.</comment>
+  </data>
+  <data name="ExpiryOnlyWhatConnectorApplies" xml:space="preserve">
+    <value>Only what the {0} can apply is offered. Where a particular target cannot honour the choice, JIM records what it applied instead rather than assuming the request was met.</value>
+    <comment>{0} is the Connector name, for example LDAP Connector.</comment>
+  </data>
+  <data name="ExpiryUacNote" xml:space="preserve">
+    <value>Applies only where no export has written &lt;code&gt;userAccountControl&lt;/code&gt;. Where one has, the Attribute Flow decides Password never expires. Requiring a change at the next sign-in always applies.</value>
+    <comment>Markup: a code element is intentional.</comment>
+  </data>
+  <data name="StaticExpiryNote" xml:space="preserve">
+    <value>Requiring a change at the next sign-in is what ends a Connected System Object's share of the one password above. Any other choice leaves every Connected System Object this rule provisions on it until somebody changes it by hand.</value>
+  </data>
+  <data name="RequireChangeMayBeIgnored" xml:space="preserve">
+    <value>If this rule's &lt;code&gt;userAccountControl&lt;/code&gt; Attribute Flow sets Password never expires, Active Directory ignores Require a change at the next sign-in.</value>
+    <comment>Markup: a code element is intentional.</comment>
+  </data>
+  <data name="RequireChangeMayBeIgnoredStatic" xml:space="preserve">
+    <value> Every Connected System Object this rule provisions would then keep the one shared password above.</value>
+    <comment>Appended for the one password option. Leading space is intentional.</comment>
+  </data>
+  <data name="EnableAccountLabel" xml:space="preserve">
+    <value>Enable the Connected System Object once the password is set</value>
+    <comment>Switch label.</comment>
+  </data>
+  <data name="EnableAccountNote" xml:space="preserve">
+    <value>Applies only where no export has written the Connected System Object's enabled state, such as &lt;code&gt;userAccountControl&lt;/code&gt;, by the time the password is delivered; where one has, the Attribute Flow decides. Off leaves the Connected System Object as it was created. Also applies, with Password never expires, when a password change already waiting for the person is delivered as the Connected System Object's first password instead of the Initial Password.</value>
+    <comment>Markup: a code element is intentional.</comment>
+  </data>
+  <data name="SyncRulesTitle" xml:space="preserve">
+    <value>Synchronisation Rules</value>
+    <comment>Page title, heading, breadcrumb and info title for the Synchronisation Rule list. Plural.</comment>
+  </data>
+  <data name="SyncRulesIntro" xml:space="preserve">
+    <value>Synchronisation Rules are used to define the flow of information between JIM and Connected Systems.</value>
+    <comment>Info popover on the Synchronisation Rule list.</comment>
+  </data>
+  <data name="CreateConnectedSystemFirst" xml:space="preserve">
+    <value>Please create a {0} first.</value>
+    <comment>Alert when there are no Connected Systems. {0} is a link whose text is ConnectedSystemTerm.</comment>
+  </data>
+  <data name="ConnectedSystemTerm" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Singular noun. Used as a link, a filter label and a column heading.</comment>
+  </data>
+  <data name="DirectionLabel" xml:space="preserve">
+    <value>Direction</value>
+    <comment>Label of the direction filter, and the Direction column heading.</comment>
+  </data>
+  <data name="DirectionInbound" xml:space="preserve">
+    <value>Inbound</value>
+    <comment>Direction: from a Connected System into the Metaverse.</comment>
+  </data>
+  <data name="DirectionOutbound" xml:space="preserve">
+    <value>Outbound</value>
+    <comment>Direction: from the Metaverse into a Connected System.</comment>
+  </data>
+  <data name="ActionLabel" xml:space="preserve">
+    <value>Action</value>
+    <comment>Label of the action filter.</comment>
+  </data>
+  <data name="ActionProjects" xml:space="preserve">
+    <value>Projects</value>
+    <comment>Action type: projects new objects to the Metaverse. A verb in the third person, as a chip.</comment>
+  </data>
+  <data name="ActionProvisions" xml:space="preserve">
+    <value>Provisions</value>
+    <comment>Action type: provisions new objects into the Connected System. A verb in the third person, as a chip.</comment>
+  </data>
+  <data name="ActionFlowOnly" xml:space="preserve">
+    <value>Flow Only</value>
+    <comment>Action type: only flows attributes, neither projects nor provisions.</comment>
+  </data>
+  <data name="SingularSyncRule" xml:space="preserve">
+    <value>Synchronisation Rule</value>
+    <comment>Singular noun, in the grid count.</comment>
+  </data>
+  <data name="PluralSyncRules" xml:space="preserve">
+    <value>Synchronisation Rules</value>
+    <comment>Plural noun, in the grid count.</comment>
+  </data>
+  <data name="CreateSyncRuleButton" xml:space="preserve">
+    <value>Create Synchronisation Rule</value>
+    <comment>Button on the Synchronisation Rule list.</comment>
+  </data>
+  <data name="ObjectMappingColumn" xml:space="preserve">
+    <value>Object Mapping</value>
+    <comment>Grid column heading: the object types a rule maps between.</comment>
+  </data>
+  <data name="ConnectedSystemObjectTypeTooltip" xml:space="preserve">
+    <value>Connected System Object Type</value>
+    <comment>Tooltip on the Connected System Object Type chip.</comment>
+  </data>
+  <data name="MetaverseObjectTypeTooltip" xml:space="preserve">
+    <value>Metaverse Object Type</value>
+    <comment>Tooltip on the Metaverse Object Type chip.</comment>
+  </data>
+  <data name="ProjectsTooltip" xml:space="preserve">
+    <value>Projects new objects to the Metaverse</value>
+    <comment>Tooltip on the Projects chip.</comment>
+  </data>
+  <data name="ProvisionsTooltip" xml:space="preserve">
+    <value>Provisions new objects to the Connected System</value>
+    <comment>Tooltip on the Provisions chip.</comment>
+  </data>
+  <data name="ColumnAttention" xml:space="preserve">
+    <value>Attention</value>
+    <comment>Grid column heading for items needing attention.</comment>
+  </data>
+  <data name="NoRulesMatchSearch" xml:space="preserve">
+    <value>No Synchronisation Rules match "{0}"</value>
+    <comment>Empty grid when the search matched nothing. {0} is the search text.</comment>
+  </data>
+  <data name="NoRulesMatchSearchHint" xml:space="preserve">
+    <value>Try a different search term, or clear the search.</value>
+  </data>
+  <data name="NoRulesMatchFilters" xml:space="preserve">
+    <value>No Synchronisation Rules match the current filters</value>
+    <comment>Empty grid when the filters match nothing.</comment>
+  </data>
+  <data name="NoRulesMatchFiltersHint" xml:space="preserve">
+    <value>Adjust or clear the filters above to see more results.</value>
+  </data>
+  <data name="NoRulesYet" xml:space="preserve">
+    <value>No Synchronisation Rules yet</value>
+    <comment>Empty grid when there are no Synchronisation Rules.</comment>
+  </data>
+  <data name="NoRulesYetHint" xml:space="preserve">
+    <value>Use the Create Synchronisation Rule button to define your first flow.</value>
+  </data>
+  <data name="BreadcrumbHome" xml:space="preserve">
+    <value>Home</value>
+    <comment>Breadcrumb: the home page.</comment>
+  </data>
+  <data name="BreadcrumbAdministration" xml:space="preserve">
+    <value>Administration</value>
+    <comment>Breadcrumb: the administration index.</comment>
+  </data>
+  <data name="SelectedCount" xml:space="preserve">
+    <value>{0} selected</value>
+    <comment>Summary of a multi-select with several values chosen. {0} is the count.</comment>
+  </data>
+  <data name="SyncRuleTitle" xml:space="preserve">
+    <value>Synchronisation Rule: {0}</value>
+    <comment>Page title and heading. {0} is the rule's name, or New.</comment>
+  </data>
+  <data name="SyncRuleLabel" xml:space="preserve">
+    <value>Synchronisation Rule:</value>
+    <comment>Heading prefix before the rule's name.</comment>
+  </data>
+  <data name="SyncRuleInfo" xml:space="preserve">
+    <value>A Synchronisation Rule says how objects of one type flow between a Connected System and the Metaverse: which objects are in scope, how they match, and which attributes flow.</value>
+    <comment>Info popover on the Synchronisation Rule page.</comment>
+  </data>
+  <data name="LoadingSyncRule" xml:space="preserve">
+    <value>Loading Synchronisation Rule...</value>
+    <comment>Shown while the rule loads.</comment>
+  </data>
+  <data name="TabDetails" xml:space="preserve">
+    <value>Details</value>
+    <comment>Tab heading.</comment>
+  </data>
+  <data name="TabMatching" xml:space="preserve">
+    <value>Matching</value>
+    <comment>Tab heading: how objects are matched.</comment>
+  </data>
+  <data name="TabScope" xml:space="preserve">
+    <value>Scope</value>
+    <comment>Tab heading: which objects are in scope.</comment>
+  </data>
+  <data name="TabPasswords" xml:space="preserve">
+    <value>Passwords</value>
+    <comment>Tab heading: initial passwords.</comment>
+  </data>
+  <data name="TabTests" xml:space="preserve">
+    <value>Tests</value>
+    <comment>Tab heading: configuration test cases.</comment>
+  </data>
+  <data name="TabChanges" xml:space="preserve">
+    <value>Changes</value>
+    <comment>Tab heading: the configuration change history.</comment>
+  </data>
+  <data name="TabDangerZone" xml:space="preserve">
+    <value>Danger Zone</value>
+    <comment>Tab heading for deletion.</comment>
+  </data>
+  <data name="DangerDeleteText" xml:space="preserve">
+    <value>Deleting this Synchronisation Rule is permanent and cannot be undone. All configuration and Attribute Flow mappings will be lost. If this rule contributed Metaverse attribute values, you will choose whether they are recalled or kept.</value>
+    <comment>Warning in the Danger Zone.</comment>
+  </data>
+  <data name="DeleteSyncRuleButton" xml:space="preserve">
+    <value>Delete Synchronisation Rule</value>
+    <comment>Button deleting the rule.</comment>
+  </data>
+  <data name="IssuesHeading" xml:space="preserve">
+    <value>There are issues:</value>
+    <comment>Heading of the validation issues list.</comment>
+  </data>
+  <data name="UpdateSyncRuleButton" xml:space="preserve">
+    <value>Update Synchronisation Rule</value>
+    <comment>Button saving an existing rule.</comment>
+  </data>
+  <data name="PreviewDeprovisioningButton" xml:space="preserve">
+    <value>Preview Deprovisioning Impact</value>
+    <comment>Button previewing the deprovisioning toggles.</comment>
+  </data>
+  <data name="PreviewScopeButton" xml:space="preserve">
+    <value>Preview Scope Impact</value>
+    <comment>Button previewing a Scoping Criteria edit.</comment>
+  </data>
+  <data name="PreviewAttributeFlowButton" xml:space="preserve">
+    <value>Preview Attribute Flow Impact</value>
+    <comment>Button previewing an Attribute Flow edit.</comment>
+  </data>
+  <data name="PreviewBehaviourButton" xml:space="preserve">
+    <value>Preview Behaviour Impact</value>
+    <comment>Button previewing the behaviour toggles.</comment>
+  </data>
+  <data name="StaleDeprovisioning" xml:space="preserve">
+    <value>The Deprovisioning Action or Out-of-Scope Action has been edited since this preview ran, so it no longer describes what saving would do. Preview again for an answer about the current settings.</value>
+    <comment>Warning above a stale deprovisioning preview.</comment>
+  </data>
+  <data name="PreviewTitleDeprovisioning" xml:space="preserve">
+    <value>Preview: Deprovisioning Impact</value>
+    <comment>Title of the deprovisioning preview panel.</comment>
+  </data>
+  <data name="StaleScope" xml:space="preserve">
+    <value>The Scoping Criteria have been edited since this preview ran, so it no longer describes what saving would do. Preview again for an answer about the current criteria.</value>
+    <comment>Warning above a stale scope preview.</comment>
+  </data>
+  <data name="PreviewTitleScope" xml:space="preserve">
+    <value>Preview: Scope Impact</value>
+    <comment>Title of the scope preview panel.</comment>
+  </data>
+  <data name="StaleBehaviour" xml:space="preserve">
+    <value>The behaviour toggles have been edited since this preview ran, so it no longer describes what saving would do. Preview again for an answer about the current settings.</value>
+    <comment>Warning above a stale behaviour preview.</comment>
+  </data>
+  <data name="PreviewTitleBehaviour" xml:space="preserve">
+    <value>Preview: Behaviour Impact</value>
+    <comment>Title of the behaviour preview panel.</comment>
+  </data>
+  <data name="StaleAttributeFlow" xml:space="preserve">
+    <value>The Attribute Flow has been edited since this preview ran, so it no longer describes what saving would do. Preview again for an answer about the current mappings.</value>
+    <comment>Warning above a stale Attribute Flow preview.</comment>
+  </data>
+  <data name="PreviewTitleAttributeFlow" xml:space="preserve">
+    <value>Preview: Attribute Flow Impact</value>
+    <comment>Title of the Attribute Flow preview panel.</comment>
+  </data>
+  <data name="NewLabel" xml:space="preserve">
+    <value>New</value>
+    <comment>The name of a rule not yet saved, in the title and breadcrumb.</comment>
+  </data>
+  <data name="PreviewStartFailed" xml:space="preserve">
+    <value>Failed to start the preview: {0}</value>
+    <comment>Snackbar. {0} is the error message.</comment>
+  </data>
+  <data name="DisableSyncRuleQuestion" xml:space="preserve">
+    <value>Disable Synchronisation Rule?</value>
+    <comment>Title of the confirmation before disabling a rule.</comment>
+  </data>
+  <data name="DisableSyncRuleChange" xml:space="preserve">
+    <value>disable this Synchronisation Rule</value>
+    <comment>Confirmation sentence fragment, lower case, after 'Do you want to'.</comment>
+  </data>
+  <data name="SyncRuleCreated" xml:space="preserve">
+    <value>Synchronisation Rule created.</value>
+    <comment>Snackbar after creating a rule.</comment>
+  </data>
+  <data name="ChangesSaved" xml:space="preserve">
+    <value>Changes saved.</value>
+    <comment>Snackbar after saving a rule.</comment>
+  </data>
+  <data name="SaveProblem" xml:space="preserve">
+    <value>There was a problem saving your changes. Please check the details and try again.</value>
+    <comment>Snackbar when a save fails.</comment>
+  </data>
+  <data name="SequenceSkippedAhead" xml:space="preserve">
+    <value>{0}: the counter skipped ahead from {1} to {2}. Numbers in between will never be assigned.</value>
+    <comment>Snackbar after a Start again or a raised start. {0} attribute, {1} from, {2} to.</comment>
+  </data>
+  <data name="DeleteSyncRuleQuestion" xml:space="preserve">
+    <value>Are you sure you want to delete this Synchronisation Rule?</value>
+    <comment>Confirmation before deleting a rule with nothing else at stake.</comment>
+  </data>
+  <data name="DeleteConfirmButton" xml:space="preserve">
+    <value>Delete!</value>
+    <comment>Button confirming the deletion of a rule.</comment>
+  </data>
+  <data name="DeleteSyncRuleTitle" xml:space="preserve">
+    <value>Delete Synchronisation Rule?</value>
+    <comment>Title of the confirmation before deleting a rule that others depend on.</comment>
+  </data>
+  <data name="DeleteSyncRuleChange" xml:space="preserve">
+    <value>delete this Synchronisation Rule</value>
+    <comment>Confirmation sentence fragment, lower case.</comment>
+  </data>
+  <data name="SyncRuleDeletionQueued" xml:space="preserve">
+    <value>Synchronisation Rule deletion queued: recalling values from {0:N0} Metaverse Object(s).</value>
+    <comment>Snackbar when a deletion waits for a recall. {0} is the number of objects.</comment>
+  </data>
+  <data name="ViewActivityAction" xml:space="preserve">
+    <value>View Activity</value>
+    <comment>Snackbar action opening the Activity.</comment>
+  </data>
+  <data name="MatchOnLabel" xml:space="preserve">
+    <value>Match on</value>
+    <comment>Label of the source kind toggle, and its accessible name.</comment>
+  </data>
+  <data name="HelperEveryValue" xml:space="preserve">
+    <value>Every value it holds is looked up</value>
+    <comment>Helper text under the Connected System Attribute field.</comment>
+  </data>
+  <data name="ExpressionPlaceholderMatching" xml:space="preserve">
+    <value>e.g. "E" + Trim(cs["employeeId"])</value>
+    <comment>Example expression shown as a placeholder.</comment>
+  </data>
+  <data name="ExpressionHelperMatching" xml:space="preserve">
+    <value>Reads the Connected System Object only, as cs["attributeName"]. Its result is converted to the Metaverse attribute's type.</value>
+    <comment>Helper text under the expression field.</comment>
+  </data>
+  <data name="EqualsLabel" xml:space="preserve">
+    <value>equals</value>
+    <comment>Word between the source and the Metaverse attribute.</comment>
+  </data>
+  <data name="HelperMvCompared" xml:space="preserve">
+    <value>The Metaverse attribute the value is compared with</value>
+    <comment>Helper text under the Metaverse Attribute field.</comment>
+  </data>
+  <data name="MatchableTypeLabel" xml:space="preserve">
+    <value>({0})</value>
+    <comment>A Metaverse attribute's data type, in a select. {0} is the type.</comment>
+  </data>
+  <data name="UnmatchableTypeLabel" xml:space="preserve">
+    <value>({0}, cannot be matched on)</value>
+    <comment>A Metaverse attribute's data type, when it cannot be matched on. {0} is the type.</comment>
+  </data>
+  <data name="MetaverseObjectTypeLabel" xml:space="preserve">
+    <value>Metaverse Object Type</value>
+    <comment>Label of the Metaverse Object Type field.</comment>
+  </data>
+  <data name="HelperMvType" xml:space="preserve">
+    <value>The type of Metaverse Object this rule searches</value>
+    <comment>Helper text under the Metaverse Object Type field.</comment>
+  </data>
+  <data name="CaseSensitiveLabel" xml:space="preserve">
+    <value>Case sensitive</value>
+    <comment>Checkbox label.</comment>
+  </data>
+  <data name="CaseSensitiveHelp" xml:space="preserve">
+    <value>Follows the source: on when the source attribute's values are case-exact, otherwise off, so "John" matches "JOHN". Turn it on only when this system treats identifiers differing only in case as different objects.</value>
+    <comment>Explains the case sensitive option.</comment>
+  </data>
+  <data name="TryItIntro" xml:space="preserve">
+    <value>Give each attribute the rule reads a value, or load them from an object, and see what it would match on and which Metaverse Object a synchronisation would join, worked out exactly as a synchronisation would. Tick No value to see what happens to an object that holds none.</value>
+    <comment>Explains the Try it pane.</comment>
+  </data>
+  <data name="SampleValues" xml:space="preserve">
+    <value>Sample values</value>
+    <comment>Option: values typed in by hand.</comment>
+  </data>
+  <data name="FromAnObject" xml:space="preserve">
+    <value>From an object</value>
+    <comment>Option: values loaded from a Connected System Object.</comment>
+  </data>
+  <data name="ValuesFromAria" xml:space="preserve">
+    <value>Where the values come from</value>
+    <comment>Accessible name of the values source toggle.</comment>
+  </data>
+  <data name="SourceKindAttributeTooltip" xml:space="preserve">
+    <value>Match on the values a Connected System attribute holds</value>
+    <comment>Tooltip on the Attribute source kind.</comment>
+  </data>
+  <data name="SourceKindExpressionTooltip" xml:space="preserve">
+    <value>Match on a value worked out from the Connected System Object, for identifiers that differ in format between systems</value>
+    <comment>Tooltip on the Expression source kind.</comment>
+  </data>
+  <data name="TryItColumnInput" xml:space="preserve">
+    <value>Input</value>
+    <comment>Table heading: the attribute a test value is given for.</comment>
+  </data>
+  <data name="TryItColumnValue" xml:space="preserve">
+    <value>Value</value>
+    <comment>Table heading: the test value.</comment>
+  </data>
+  <data name="TryItColumnNoValue" xml:space="preserve">
+    <value>No value</value>
+    <comment>Table heading: ticked to test an object with no value.</comment>
+  </data>
+  <data name="PluralitySingleValuedLower" xml:space="preserve">
+    <value>single-valued</value>
+    <comment>Plurality shown beside an attribute in lower case, in a table.</comment>
+  </data>
+  <data name="PluralityMultiValuedLower" xml:space="preserve">
+    <value>multi-valued</value>
+    <comment>Plurality shown beside an attribute in lower case, in a table.</comment>
+  </data>
+  <data name="HasNoValueAria" xml:space="preserve">
+    <value>{0} has no value</value>
+    <comment>Accessible name of the No value checkbox. {0} is the accessor, for example cs["name"].</comment>
+  </data>
+  <data name="LookupCheckbox" xml:space="preserve">
+    <value>Also find the Metaverse Object a synchronisation would join</value>
+    <comment>Checkbox label.</comment>
+  </data>
+  <data name="WouldMatchOn" xml:space="preserve">
+    <value>Would match on</value>
+    <comment>Caption above the values a test would match on.</comment>
+  </data>
+  <data name="TypeWithValue" xml:space="preserve">
+    <value>Type: {0}</value>
+    <comment>Caption showing the data type. {0} is the data type name.</comment>
+  </data>
+  <data name="NoValueToMatch" xml:space="preserve">
+    <value>No value to match on, so this rule would be skipped for an object like this and the next rule tried.</value>
+    <comment>Shown when the test has no value to match on.</comment>
+  </data>
+  <data name="TestFailureMessage" xml:space="preserve">
+    <value>An object like this would stop with an Object Matching Rule Failed error, neither joined nor projected: {0}</value>
+    <comment>Shown when the test fails. {0} is the failure message.</comment>
+  </data>
+  <data name="InTheMetaverse" xml:space="preserve">
+    <value>In the Metaverse</value>
+    <comment>Caption above the lookup result.</comment>
+  </data>
+  <data name="LookupWouldJoin" xml:space="preserve">
+    <value>Would join</value>
+    <comment>Lookup outcome: the object would join this Metaverse Object.</comment>
+  </data>
+  <data name="LookupAlreadyJoined" xml:space="preserve">
+    <value>Already joined</value>
+    <comment>Lookup outcome: the object is already joined.</comment>
+  </data>
+  <data name="LookupJoinedToAnother" xml:space="preserve">
+    <value>Joined to another</value>
+    <comment>Lookup outcome: the object is joined to a different Metaverse Object.</comment>
+  </data>
+  <data name="LookupNoMatch" xml:space="preserve">
+    <value>No match</value>
+    <comment>Lookup outcome: no Metaverse Object matches.</comment>
+  </data>
+  <data name="LookupAmbiguous" xml:space="preserve">
+    <value>Ambiguous</value>
+    <comment>Lookup outcome: more than one Metaverse Object matches.</comment>
+  </data>
+  <data name="FindObjectInSystem" xml:space="preserve">
+    <value>Find a {0} in {1}</value>
+    <comment>Label of the object picker. {0} is the object type name, {1} the Connected System name.</comment>
+  </data>
+  <data name="TheConnectedSystem" xml:space="preserve">
+    <value>the Connected System</value>
+    <comment>Stands in for the Connected System name when it is not known.</comment>
+  </data>
+  <data name="TestThisScope" xml:space="preserve">
+    <value>Test this scope</value>
+    <comment>Heading of the scope test panel.</comment>
+  </data>
+  <data name="ScopeIntroMetaverse" xml:space="preserve">
+    <value>Give each attribute the criteria compare a value, or load them from a Metaverse Object, and see whether it would be in scope, criterion by criterion. Choose a time to run as of to see how relative dates such as "30 days ago" resolve then. The criteria are tested as they stand here, before they are saved.</value>
+    <comment>Intro of the scope test, for an export rule.</comment>
+  </data>
+  <data name="ScopeIntroConnectedSystem" xml:space="preserve">
+    <value>Give each attribute the criteria compare a value, or load them from a Connected System Object, and see whether it would be in scope, criterion by criterion. Choose a time to run as of to see how relative dates such as "30 days ago" resolve then. The criteria are tested as they stand here, before they are saved.</value>
+    <comment>Intro of the scope test, for an import rule.</comment>
+  </data>
+  <data name="ColumnAttribute" xml:space="preserve">
+    <value>Attribute</value>
+    <comment>Table heading: the attribute a test value is given for.</comment>
+  </data>
+  <data name="ConnectionsLabel" xml:space="preserve">
+    <value>Connections</value>
+    <comment>Heading above the connection criteria ticks.</comment>
+  </data>
+  <data name="HasConnection" xml:space="preserve">
+    <value>Has {0}</value>
+    <comment>Checkbox label for a connection criterion. {0} is the description of the connection.</comment>
+  </data>
+  <data name="RunTestButton" xml:space="preserve">
+    <value>Run test</value>
+    <comment>Button running the scope test.</comment>
+  </data>
+  <data name="AsOfUtc" xml:space="preserve">
+    <value>As of {0} UTC</value>
+    <comment>Caption giving the time the test ran as of. {0} is the date and time.</comment>
+  </data>
+  <data name="NextChangeUndetermined" xml:space="preserve">
+    <value>A criterion cannot be evaluated, so a Synchronisation would fail this object until the criterion is corrected.</value>
+    <comment>Shown when a criterion cannot be evaluated.</comment>
+  </data>
+  <data name="NextChangeStaysInScope" xml:space="preserve">
+    <value>Stays in scope as time passes, while these values stay the same.</value>
+    <comment>Shown when the object stays in scope.</comment>
+  </data>
+  <data name="NextChangeStaysOutOfScope" xml:space="preserve">
+    <value>Stays out of scope as time passes, while these values stay the same.</value>
+    <comment>Shown when the object stays out of scope.</comment>
+  </data>
+  <data name="NextChangeEnters" xml:space="preserve">
+    <value>Enters scope at {0} UTC, while these values stay the same.</value>
+    <comment>Shown when the object will come into scope. {0} is the date and time.</comment>
+  </data>
+  <data name="NextChangeLeaves" xml:space="preserve">
+    <value>Leaves scope at {0} UTC, while these values stay the same.</value>
+    <comment>Shown when the object will leave scope. {0} is the date and time.</comment>
+  </data>
+  <data name="SaveAsTestCase" xml:space="preserve">
+    <value>Save as test case</value>
+    <comment>Button saving the test as a configuration test case.</comment>
+  </data>
+  <data name="TestCaseScopeTitle" xml:space="preserve">
+    <value>Scope, run against the criteria as saved</value>
+    <comment>Kind of a test case, shown in its dialog.</comment>
+  </data>
+  <data name="FindAnObjectType" xml:space="preserve">
+    <value>Find a {0}</value>
+    <comment>Label of the object picker when no Connected System is named. {0} is the object type name.</comment>
+  </data>
+  <data name="MetaverseObjectFallback" xml:space="preserve">
+    <value>Metaverse Object</value>
+    <comment>Stands in for the Metaverse Object Type name when there is none.</comment>
+  </data>
+  <data name="ConnectedSystemObjectFallback" xml:space="preserve">
+    <value>Connected System Object</value>
+    <comment>Stands in for the Connected System Object Type name when there is none.</comment>
+  </data>
+  <data name="NameRequired" xml:space="preserve">
+    <value>A name is required</value>
+    <comment>Error under the Name field when it is empty.</comment>
+  </data>
+  <data name="SelectConnectedSystem" xml:space="preserve">
+    <value>Please select a Connected System...</value>
+    <comment>Placeholder of the Connected System field.</comment>
+  </data>
+  <data name="SelectDirection" xml:space="preserve">
+    <value>Please select an Attribute Flow direction...</value>
+    <comment>Placeholder of the direction field.</comment>
+  </data>
+  <data name="DirectionImportName" xml:space="preserve">
+    <value>Import</value>
+    <comment>Direction name as shown in the direction list.</comment>
+  </data>
+  <data name="DirectionExportName" xml:space="preserve">
+    <value>Export</value>
+    <comment>Direction name as shown in the direction list.</comment>
+  </data>
+  <data name="NotSupportedByConnector" xml:space="preserve">
+    <value> (not supported by Connector)</value>
+    <comment>Appended to a direction the Connector cannot do. Leading space is intentional.</comment>
+  </data>
+  <data name="ExportsToConnectedSystem" xml:space="preserve">
+    <value>Exports to the Connected System</value>
+    <comment>Tooltip on the arrow between the object types, for an export rule.</comment>
+  </data>
+  <data name="ImportsToMetaverse" xml:space="preserve">
+    <value>Imports to the Metaverse</value>
+    <comment>Tooltip on the arrow between the object types, for an import rule.</comment>
+  </data>
+  <data name="ProjectToMetaverseLabel" xml:space="preserve">
+    <value>Project {0} to the Metaverse?</value>
+    <comment>Switch label. {0} is the plural name of the Metaverse Object Type, or the word objects.</comment>
+  </data>
+  <data name="ObjectsFallback" xml:space="preserve">
+    <value>objects</value>
+    <comment>Stands in for the Object Type's plural name before one is chosen. Lower case.</comment>
+  </data>
+  <data name="ProjectHelp" xml:space="preserve">
+    <value>By default, objects imported from this Connected System will not result in a Metaverse Object being projected if no match is found. Enabling this option causes the object to be projected to the Metaverse, allowing it to be managed within JIM and synchronised to other Connected Systems. You would typically enable this for a source system, i.e. a HR system.</value>
+    <comment>Explains the project switch.</comment>
+  </data>
+  <data name="ProvisioningHeading" xml:space="preserve">
+    <value>Provisioning</value>
+    <comment>Heading of the provisioning group on an export rule.</comment>
+  </data>
+  <data name="ProvisionToConnectedSystemLabel" xml:space="preserve">
+    <value>Provision {0} to the Connected System?</value>
+    <comment>Switch label. {0} is the plural name of the Connected System Object Type, or the word objects.</comment>
+  </data>
+  <data name="ProvisionHelp" xml:space="preserve">
+    <value>By default, Metaverse Objects scoped to this Synchronisation Rule will not be created (provisioned) in the Connected Systems. Enabling this option will cause the Metaverse Object to be created in the Connected System. You would typically enable this option for a destination system.</value>
+    <comment>Explains the provisioning switch.</comment>
+  </data>
+  <data name="DeprovisioningHeading" xml:space="preserve">
+    <value>Deprovisioning</value>
+    <comment>Heading of the deprovisioning group on an export rule.</comment>
+  </data>
+  <data name="DeprovisionDisconnect" xml:space="preserve">
+    <value>Disconnect</value>
+    <comment>Deprovisioning action: break the join and leave the object in place.</comment>
+  </data>
+  <data name="DeprovisionDisconnectHelp" xml:space="preserve">
+    <value>When a Metaverse Object leaves this Synchronisation Rule's scope or is deleted, JIM breaks the join and leaves the object in place in the Connected System.</value>
+  </data>
+  <data name="DeprovisionDisable" xml:space="preserve">
+    <value>Disable</value>
+    <comment>Deprovisioning action: disable the object in the Connected System.</comment>
+  </data>
+  <data name="DeprovisionDisableHelp" xml:space="preserve">
+    <value>When a Metaverse Object leaves this Synchronisation Rule's scope or is deleted, JIM disables the corresponding object in the Connected System, then breaks the join and leaves it in place.</value>
+  </data>
+  <data name="DeprovisionDisableUnsupported" xml:space="preserve">
+    <value> {0} cannot disable an account.</value>
+    <comment>Appended when the Connector cannot disable an account. {0} is the Connector name. Leading space is intentional.</comment>
+  </data>
+  <data name="DeprovisionDelete" xml:space="preserve">
+    <value>Delete</value>
+    <comment>Deprovisioning action: delete the object from the Connected System.</comment>
+  </data>
+  <data name="DeprovisionDeleteHelp" xml:space="preserve">
+    <value>When a Metaverse Object leaves this Synchronisation Rule's scope or is deleted, JIM deletes the corresponding object from the Connected System.</value>
+  </data>
+  <data name="EnabledQuestion" xml:space="preserve">
+    <value>Enabled?</value>
+    <comment>Switch label on a rule.</comment>
+  </data>
+  <data name="RuleEnabledHelp" xml:space="preserve">
+    <value>Synchronisation Rules are not evaluated when disabled. Use this to prepare a rule in advance of it being needed, or to temporarily stop a rule from being evaluated. Where another Attribute Flow also contributes an attribute, its value takes over at the next synchronisation; values only this rule contributed stay in place until it is re-enabled or deleted.</value>
+    <comment>Explains the enabled switch.</comment>
+  </data>
+  <data name="AdvancedOptions" xml:space="preserve">
+    <value>Advanced Options</value>
+    <comment>Heading of the advanced options panel.</comment>
+  </data>
+  <data name="EnforceStateLabel" xml:space="preserve">
+    <value>Enforce State (Auto-correct drift)</value>
+    <comment>Switch label.</comment>
+  </data>
+  <data name="EnforceStateHelp" xml:space="preserve">
+    <value>Enables drift detection and automatic correction. When a target system attribute differs from what this export rule dictates, JIM creates a corrective Pending Export to restore the authoritative value. Disable only where you need to allow temporary manual overrides in the target system (e.g. emergency access scenarios).</value>
+    <comment>Explains the enforce state switch.</comment>
+  </data>
+  <data name="ConnectedSystemObjectTypeLabel" xml:space="preserve">
+    <value>Connected System Object Type</value>
+    <comment>Label of the Connected System Object Type field.</comment>
+  </data>
+  <data name="EditTestCaseTitle" xml:space="preserve">
+    <value>Edit test case</value>
+    <comment>Dialog title when editing a configuration test case.</comment>
+  </data>
+  <data name="SaveTestCaseTitle" xml:space="preserve">
+    <value>Save test case</value>
+    <comment>Dialog title when saving a new configuration test case.</comment>
+  </data>
+  <data name="TestCasePersonalData" xml:space="preserve">
+    <value>Test inputs are saved as configuration, unencrypted. If you copied them from a real object, replace any personal data with made-up values before you save.</value>
+    <comment>Warning on a test case dialog.</comment>
+  </data>
+  <data name="TestCaseNameHelp" xml:space="preserve">
+    <value>What the case checks, in your own words. It is recorded in Configuration History, so keep values out of it.</value>
+    <comment>Helper text under the test case name.</comment>
+  </data>
+  <data name="InputsHeading" xml:space="preserve">
+    <value>Inputs</value>
+    <comment>Heading of the test case inputs.</comment>
+  </data>
+  <data name="NoAttributesReadWithConnections" xml:space="preserve">
+    <value>What this case tests reads no attributes, only the connections below.</value>
+    <comment>Shown when the case reads no attributes but has connections.</comment>
+  </data>
+  <data name="NoAttributesReadAtAll" xml:space="preserve">
+    <value>What this case tests reads no attributes, so it gives the same result for every object.</value>
+    <comment>Shown when the case reads no attributes and has no connections.</comment>
+  </data>
+  <data name="NoLongerRead" xml:space="preserve">
+    <value>No longer read: {0}</value>
+    <comment>An input the configuration no longer reads, with its saved values. {0} is the values.</comment>
+  </data>
+  <data name="RemoveInputTooltip" xml:space="preserve">
+    <value>Remove this input</value>
+    <comment>Tooltip on the button removing an input.</comment>
+  </data>
+  <data name="RemoveInputAria" xml:space="preserve">
+    <value>Remove {0}</value>
+    <comment>Accessible name of the button removing an input. {0} is the attribute name.</comment>
+  </data>
+  <data name="ResultLabel" xml:space="preserve">
+    <value>Result</value>
+    <comment>Label of the expected result field.</comment>
+  </data>
+  <data name="AddValueLabel" xml:space="preserve">
+    <value>Add a value</value>
+    <comment>Label of the field adding an expected value.</comment>
+  </data>
+  <data name="AddValueHelp" xml:space="preserve">
+    <value>Press Enter to add. A date can be written as 2026-03-02; each value is compared as the type the configuration gives.</value>
+    <comment>Helper text under the add value field.</comment>
+  </data>
+  <data name="AddValueAria" xml:space="preserve">
+    <value>Add value</value>
+    <comment>Accessible name of the add value button.</comment>
+  </data>
+  <data name="InOrderLabel" xml:space="preserve">
+    <value>In this order</value>
+    <comment>Checkbox: the expected values must come in this order.</comment>
+  </data>
+  <data name="TestCaseSaved" xml:space="preserve">
+    <value>Saved test case '{0}'.</value>
+    <comment>Snackbar after saving. {0} is the test case name.</comment>
+  </data>
+  <data name="ExpectsHeading" xml:space="preserve">
+    <value>Expects</value>
+    <comment>Heading of the expected result of a test case.</comment>
+  </data>
+  <data name="TestCasesHeading" xml:space="preserve">
+    <value>Test cases</value>
+    <comment>Heading of the test cases panel.</comment>
+  </data>
+  <data name="RunAllButton" xml:space="preserve">
+    <value>Run all</value>
+    <comment>Button running every test case.</comment>
+  </data>
+  <data name="NewTestCaseMenu" xml:space="preserve">
+    <value>New test case</value>
+    <comment>Menu button to add a test case.</comment>
+  </data>
+  <data name="TestCasesIntroConnectedSystem" xml:space="preserve">
+    <value>Each case gives an Object Matching Rule inputs and says what match values it should give. Runs test the rules as saved.</value>
+    <comment>Intro of the Object Matching tab.</comment>
+  </data>
+  <data name="TestCasesIntroRule" xml:space="preserve">
+    <value>Each case gives this Synchronisation Rule's Scope, an Attribute Flow or an Object Matching Rule inputs, and says what it should give. Runs test the rule as saved: save edits on the other tabs first.</value>
+    <comment>Intro of the Tests tab.</comment>
+  </data>
+  <data name="NoTestCasesYet" xml:space="preserve">
+    <value>No test cases yet</value>
+    <comment>Empty state of the test cases panel.</comment>
+  </data>
+  <data name="NoTestCasesYetConnectedSystem" xml:space="preserve">
+    <value>Save one from an Object Matching Rule's Try it, or create one here.</value>
+  </data>
+  <data name="NoTestCasesYetRule" xml:space="preserve">
+    <value>Save one from a tester on the Scope, Matching or Attribute Flow tab, or create one here.</value>
+  </data>
+  <data name="TestsColumn" xml:space="preserve">
+    <value>Tests</value>
+    <comment>Table heading: what a test case covers.</comment>
+  </data>
+  <data name="TestStatusPassed" xml:space="preserve">
+    <value>Passed</value>
+    <comment>Status of a test case that passed.</comment>
+  </data>
+  <data name="TestStatusFailed" xml:space="preserve">
+    <value>Failed</value>
+    <comment>Status of a test case that failed.</comment>
+  </data>
+  <data name="TestStatusNeedsReview" xml:space="preserve">
+    <value>Needs review</value>
+    <comment>Status of a test case whose configuration needs review.</comment>
+  </data>
+  <data name="TestStatusError" xml:space="preserve">
+    <value>Error</value>
+    <comment>Status of a test case that could not run.</comment>
+  </data>
+  <data name="RanAsOfNowTooltip" xml:space="preserve">
+    <value>This configuration reads the clock and the case has no run-as-of time, so it ran as of now and can give a different result tomorrow.</value>
+    <comment>Tooltip on the clock icon.</comment>
+  </data>
+  <data name="NotRun" xml:space="preserve">
+    <value>Not run</value>
+    <comment>A test case that has not run yet.</comment>
+  </data>
+  <data name="RunTooltip" xml:space="preserve">
+    <value>Run</value>
+    <comment>Tooltip on the run button.</comment>
+  </data>
+  <data name="RunNamedAria" xml:space="preserve">
+    <value>Run {0}</value>
+    <comment>Accessible name of the run button. {0} is the test case name.</comment>
+  </data>
+  <data name="EditNamedAria" xml:space="preserve">
+    <value>Edit {0}</value>
+    <comment>Accessible name of the edit button. {0} is the test case name.</comment>
+  </data>
+  <data name="DeleteNamedAria" xml:space="preserve">
+    <value>Delete {0}</value>
+    <comment>Accessible name of the delete button. {0} is the test case name.</comment>
+  </data>
+  <data name="CoverageScope" xml:space="preserve">
+    <value>Scope</value>
+    <comment>Coverage of a test case: the Scope.</comment>
+  </data>
+  <data name="DeleteTestCaseTitle" xml:space="preserve">
+    <value>Delete test case?</value>
+    <comment>Title of the confirmation before deleting a test case.</comment>
+  </data>
+  <data name="DeleteTestCaseQuestion" xml:space="preserve">
+    <value>Delete the test case '{0}'? Nothing it tests changes.</value>
+    <comment>Confirmation before deleting. {0} is the test case name.</comment>
+  </data>
+  <data name="TestCaseDeleted" xml:space="preserve">
+    <value>Deleted test case '{0}'.</value>
+    <comment>Snackbar after deleting. {0} is the test case name.</comment>
+  </data>
+  <data name="ObjectMatchingRulesHeading" xml:space="preserve">
+    <value>Object Matching Rules</value>
+    <comment>Heading of the matching tab.</comment>
+  </data>
+  <data name="MatchingRulesSpecific" xml:space="preserve">
+    <value>Matching rules are specific to this Synchronisation Rule.</value>
+    <comment>Tooltip on the Advanced Mode chip.</comment>
+  </data>
+  <data name="AdvancedMode" xml:space="preserve">
+    <value>Advanced Mode</value>
+    <comment>Object matching mode: rules defined per Synchronisation Rule.</comment>
+  </data>
+  <data name="SimpleModeExplanation" xml:space="preserve">
+    <value>This Connected System uses &lt;strong&gt;Simple Mode&lt;/strong&gt; for object matching. In Simple Mode, matching rules are defined once on the Connected System (per object type) and shared by every Synchronisation Rule that targets this system, so you do not have to repeat the same matching logic on each rule. As a result, this rule cannot define its own matching rules here.</value>
+    <comment>Markup: strong is intentional.</comment>
+  </data>
+  <data name="SwitchToAdvancedMode" xml:space="preserve">
+    <value>Switch the Connected System to &lt;strong&gt;Advanced Mode&lt;/strong&gt; if you need matching logic that is specific to an individual Synchronisation Rule.</value>
+    <comment>Markup: strong is intentional.</comment>
+  </data>
+  <data name="ConfigureMatchingRules" xml:space="preserve">
+    <value>Configure Matching Rules</value>
+    <comment>Link to the Connected System's Matching tab.</comment>
+  </data>
+  <data name="MatchingImportHelp" xml:space="preserve">
+    <value>Define rules to match Connected System Objects to Metaverse Objects. Use immutable attributes (e.g., employeeID, objectGUID). Multiple rules can be ordered; the first match wins. Objects are Joined when matched, Disconnected when not.</value>
+    <comment>Explains matching on an import rule.</comment>
+  </data>
+  <data name="MatchingExportHelp" xml:space="preserve">
+    <value>Define rules to match Metaverse Objects to Connected System Objects. Use immutable attributes (e.g., employeeID, objectGUID). Multiple rules can be ordered; the first match wins.</value>
+    <comment>Explains matching on an export rule.</comment>
+  </data>
+  <data name="AddMatchingRule" xml:space="preserve">
+    <value>Add Matching Rule</value>
+    <comment>Button, and dialog title, for adding an object matching rule.</comment>
+  </data>
+  <data name="MatchOnOverline" xml:space="preserve">
+    <value>MATCH ON:</value>
+    <comment>Caption on an object matching rule card.</comment>
+  </data>
+  <data name="MatchOnAttribute" xml:space="preserve">
+    <value>ATTRIBUTE</value>
+    <comment>What an object matching rule matches on: a Connected System attribute.</comment>
+  </data>
+  <data name="MatchOnExpression" xml:space="preserve">
+    <value>EXPRESSION</value>
+    <comment>What an object matching rule matches on: an expression.</comment>
+  </data>
+  <data name="PositionOverline" xml:space="preserve">
+    <value>POSITION: {0}</value>
+    <comment>Caption giving an object matching rule's order. {0} is the position, from 1.</comment>
+  </data>
+  <data name="MatchingCaseSensitive" xml:space="preserve">
+    <value>Case Sensitive</value>
+    <comment>Switch label on an object matching rule card.</comment>
+  </data>
+  <data name="RemoveMatchingRuleQuestion" xml:space="preserve">
+    <value>Are you sure you want to remove this Matching Rule?</value>
+    <comment>Confirmation before removing an object matching rule.</comment>
+  </data>
+  <data name="MatchingRuleNowCaseSensitive" xml:space="preserve">
+    <value>Matching rule is now case-sensitive. Remember to save the Synchronisation Rule.</value>
+    <comment>Snackbar after switching a matching rule to case sensitive.</comment>
+  </data>
+  <data name="MatchingRuleNowCaseInsensitive" xml:space="preserve">
+    <value>Matching rule is now case-insensitive. Remember to save the Synchronisation Rule.</value>
+    <comment>Snackbar after switching a matching rule to case insensitive.</comment>
+  </data>
+  <data name="PickerCount" xml:space="preserve">
+    <value>{0} of {1} selected</value>
+    <comment>Count of Containers selected. {0} and {1} are wrapped in bold markup.</comment>
+  </data>
+  <data name="PickerClear" xml:space="preserve">
+    <value>Clear</value>
+    <comment>Button clearing every selected Container.</comment>
+  </data>
+  <data name="PickerEmptyPartition" xml:space="preserve">
+    <value>This partition holds no Containers.</value>
+    <comment>Shown when a partition has no Containers.</comment>
+  </data>
+  <data name="PickerNoMatch" xml:space="preserve">
+    <value>No Container matches “{0}”.</value>
+    <comment>Shown when the filter matches nothing. {0} is the filter text.</comment>
+  </data>
+  <data name="PickerExpandAria" xml:space="preserve">
+    <value>Expand {0}</value>
+    <comment>Accessible name of the expand button. {0} is the Container name.</comment>
+  </data>
+  <data name="PickerCollapseAria" xml:space="preserve">
+    <value>Collapse {0}</value>
+    <comment>Accessible name of the collapse button. {0} is the Container name.</comment>
+  </data>
+  <data name="PickerManageAria" xml:space="preserve">
+    <value>Manage {0}</value>
+    <comment>Accessible name of a Container's tick box. {0} is the Container name.</comment>
+  </data>
+  <data name="PickerInclude" xml:space="preserve">
+    <value>Include</value>
+    <comment>Button giving back a Container that was excluded.</comment>
+  </data>
+  <data name="PickerIncludeTooltip" xml:space="preserve">
+    <value>Stop carving this Container out of {0}. Its objects are imported again, as are those in every Container beneath it.</value>
+    <comment>{0} is the Container that decided the state.</comment>
+  </data>
+  <data name="PickerExclude" xml:space="preserve">
+    <value>Exclude</value>
+    <comment>Button excluding a Container from a selection above it.</comment>
+  </data>
+  <data name="PickerExcludeTooltip" xml:space="preserve">
+    <value>Carve this Container out of {0}. Its objects are left unimported, as are those in every Container beneath it.</value>
+    <comment>{0} is the Container the selection covers.</comment>
+  </data>
+  <data name="PickerOneLevelTooltip" xml:space="preserve">
+    <value>Only the objects held directly in this Container are imported. Choose Whole subtree to import everything beneath it as well.</value>
+    <comment>Tooltip on a Container set to This level.</comment>
+  </data>
+  <data name="PickerSubtreeTooltip" xml:space="preserve">
+    <value>This Container and every Container beneath it are imported. Choose This level to import only the objects held directly in it.</value>
+    <comment>Tooltip on a Container set to Whole subtree.</comment>
+  </data>
+  <data name="PickerScopeAria" xml:space="preserve">
+    <value>Scope of {0}</value>
+    <comment>Accessible name of the scope control. {0} is the Container name.</comment>
+  </data>
+  <data name="PickerWholeSubtree" xml:space="preserve">
+    <value>Whole subtree</value>
+    <comment>Container scope option: the Container and everything beneath it.</comment>
+  </data>
+  <data name="PickerThisLevel" xml:space="preserve">
+    <value>This level</value>
+    <comment>Container scope option: only the Container's own objects.</comment>
+  </data>
+  <data name="PickerCountSameOne" xml:space="preserve">
+    <value>This Container holds {0:N0} object, counted in the Connected System when the hierarchy was last retrieved.</value>
+    <comment>Singular. {0} is the count.</comment>
+  </data>
+  <data name="PickerCountSameOther" xml:space="preserve">
+    <value>This Container holds {0:N0} objects, counted in the Connected System when the hierarchy was last retrieved.</value>
+    <comment>Plural. {0} is the count.</comment>
+  </data>
+  <data name="PickerOneLevelOne" xml:space="preserve">
+    <value>This Container holds {0:N0} object directly, which is what This level imports. Its whole branch holds {1:N0}.</value>
+    <comment>Singular. {0} is the direct count, {1} the subtree count.</comment>
+  </data>
+  <data name="PickerOneLevelOther" xml:space="preserve">
+    <value>This Container holds {0:N0} objects directly, which is what This level imports. Its whole branch holds {1:N0}.</value>
+    <comment>Plural. {0} is the direct count, {1} the subtree count.</comment>
+  </data>
+  <data name="PickerSubtreeLead" xml:space="preserve">
+    <value>This Container and everything beneath it hold {0:N0} objects, which is what This and below imports.</value>
+    <comment>{0} is the subtree count.</comment>
+  </data>
+  <data name="PickerSubtreeDirectOne" xml:space="preserve">
+    <value>{0:N0} object sits directly in it.</value>
+    <comment>Singular. {0} is the direct count.</comment>
+  </data>
+  <data name="PickerSubtreeDirectOther" xml:space="preserve">
+    <value>{0:N0} objects sit directly in it.</value>
+    <comment>Plural. {0} is the direct count.</comment>
+  </data>
+  <data name="PickerExcludedFrom" xml:space="preserve">
+    <value>Excluded from {0}</value>
+    <comment>Status of a Container excluded from a Container above. {0} is that Container.</comment>
+  </data>
+  <data name="PickerCoveredBy" xml:space="preserve">
+    <value>Covered by {0}</value>
+    <comment>Status of a Container covered by a Container above. {0} is that Container.</comment>
+  </data>
+  <data name="PickerExcludedBy" xml:space="preserve">
+    <value>Excluded by {0}</value>
+    <comment>Status of a Container excluded by an ancestor. {0} is that Container.</comment>
+  </data>
+  <data name="PickerChildContainersOne" xml:space="preserve">
+    <value>{0} Container</value>
+    <comment>Singular. {0} is the number of child Containers.</comment>
+  </data>
+  <data name="PickerChildContainersOther" xml:space="preserve">
+    <value>{0} Containers</value>
+    <comment>Plural. {0} is the number of child Containers.</comment>
+  </data>
+  <data name="PickerContainerAbove" xml:space="preserve">
+    <value>a Container above</value>
+    <comment>Stands in for the deciding Container when its name is not known.</comment>
+  </data>
+  <data name="ScopeChooseFirst" xml:space="preserve">
+    <value>Choose the Connected System, direction and object types on the &lt;strong&gt;Details&lt;/strong&gt; tab first; scoping then applies to objects of those types.</value>
+    <comment>Markup: strong is intentional.</comment>
+  </data>
+  <data name="ScopingHeading" xml:space="preserve">
+    <value>Scoping</value>
+    <comment>Heading of the scoping section.</comment>
+  </data>
+  <data name="ScopeDefaultExport" xml:space="preserve">
+    <value>By default, all Metaverse Objects of type {0} will be in scope of this Synchronisation Rule, though to have it apply to a subset of those objects, use a filter. i.e. you might only want this rule to apply to Staff, not Contractors.</value>
+    <comment>{0} is the object type name in code formatting.</comment>
+  </data>
+  <data name="ScopeDefaultImport" xml:space="preserve">
+    <value>By default, all Connected System Objects of type {0} will be in scope of this Synchronisation Rule. Use a filter to import only specific objects, e.g. only Active users, not Disabled.</value>
+    <comment>{0} is the object type name in code formatting.</comment>
+  </data>
+  <data name="ScopeAllObjects" xml:space="preserve">
+    <value>All Objects</value>
+    <comment>Option: every object of the type is in scope.</comment>
+  </data>
+  <data name="ScopeFiltered" xml:space="preserve">
+    <value>Filtered</value>
+    <comment>Option: only the objects a filter selects are in scope.</comment>
+  </data>
+  <data name="ScopeFallOutLabel" xml:space="preserve">
+    <value>When objects fall out of scope</value>
+    <comment>Label of the out of scope action field.</comment>
+  </data>
+  <data name="ScopeDisconnectOption" xml:space="preserve">
+    <value>Disconnect from Metaverse</value>
+    <comment>Out of scope action: disconnect from the Metaverse Object.</comment>
+  </data>
+  <data name="ScopeRemainJoined" xml:space="preserve">
+    <value>Remain joined (stop Attribute Flow)</value>
+    <comment>Out of scope action: stay joined, stop the Attribute Flow.</comment>
+  </data>
+  <data name="ScopeDisconnectExplanation" xml:space="preserve">
+    <value>Objects that fall out of scope will be disconnected from their Metaverse Object. Whether attributes contributed by this Connected System are also recalled depends on the Connected System object type's "Remove contributed attributes on obsoletion" setting, the Metaverse Object Type's deletion grace period, and whether the Metaverse Object is slated for immediate deletion. If this was the last connector, the Metaverse Object Type's deletion rule may also fire.</value>
+    <comment>Explains the disconnect option.</comment>
+  </data>
+  <data name="ScopeRemainJoinedExplanation" xml:space="preserve">
+    <value>Objects that fall out of scope will remain joined but Attribute Flow will stop. Use this for "once managed, always managed" scenarios.</value>
+    <comment>Explains the remain joined option.</comment>
+  </data>
+  <data name="ScopeAddCriteriaGroup" xml:space="preserve">
+    <value>Add Criteria Group</value>
+    <comment>Button, and dialog title, for adding a criteria group.</comment>
+  </data>
+  <data name="ScopeChooseGroupType" xml:space="preserve">
+    <value>Please choose a group type</value>
+    <comment>Label of the group type field.</comment>
+  </data>
+  <data name="ScopeAddGroup" xml:space="preserve">
+    <value>Add Group</value>
+    <comment>Button adding the criteria group.</comment>
+  </data>
+  <data name="CriterionPattern" xml:space="preserve">
+    <value>Pattern</value>
+    <comment>Label of a pattern criterion's value.</comment>
+  </data>
+  <data name="CriterionPatternHelp" xml:space="preserve">
+    <value>A .NET regular expression, matched anywhere in the value unless anchored with ^ and $.</value>
+    <comment>Helper text under the pattern field.</comment>
+  </data>
+  <data name="CriterionCaseSensitive" xml:space="preserve">
+    <value>Case-sensitive</value>
+    <comment>Checkbox label on a text criterion.</comment>
+  </data>
+  <data name="CriterionTextValue" xml:space="preserve">
+    <value>Text Value</value>
+    <comment>Label of a text criterion's value.</comment>
+  </data>
+  <data name="CriterionGuidValue" xml:space="preserve">
+    <value>Guid Value</value>
+    <comment>Label of a GUID criterion's value.</comment>
+  </data>
+  <data name="CriterionNumberValue" xml:space="preserve">
+    <value>Number Value</value>
+    <comment>Label of a number criterion's value.</comment>
+  </data>
+  <data name="CriterionLongNumberValue" xml:space="preserve">
+    <value>Long Number Value</value>
+    <comment>Label of a long number criterion's value.</comment>
+  </data>
+  <data name="CriterionDecimalValue" xml:space="preserve">
+    <value>Decimal Value</value>
+    <comment>Label of a decimal criterion's value.</comment>
+  </data>
+  <data name="CriterionAbsoluteDate" xml:space="preserve">
+    <value>Absolute date</value>
+    <comment>Date criterion mode: a fixed date.</comment>
+  </data>
+  <data name="CriterionRelativeToNow" xml:space="preserve">
+    <value>Relative to now</value>
+    <comment>Date criterion mode: a period before or after now.</comment>
+  </data>
+  <data name="CriterionDateValue" xml:space="preserve">
+    <value>Date Value</value>
+    <comment>Label of an absolute date criterion's value.</comment>
+  </data>
+  <data name="CriterionCount" xml:space="preserve">
+    <value>Count</value>
+    <comment>Label of the count in a relative date.</comment>
+  </data>
+  <data name="CriterionUnit" xml:space="preserve">
+    <value>Unit</value>
+    <comment>Label of the unit in a relative date.</comment>
+  </data>
+  <data name="UnitHours" xml:space="preserve">
+    <value>Hours</value>
+    <comment>Relative date unit.</comment>
+  </data>
+  <data name="UnitDays" xml:space="preserve">
+    <value>Days</value>
+    <comment>Relative date unit.</comment>
+  </data>
+  <data name="UnitWeeks" xml:space="preserve">
+    <value>Weeks</value>
+    <comment>Relative date unit.</comment>
+  </data>
+  <data name="UnitMonths" xml:space="preserve">
+    <value>Months</value>
+    <comment>Relative date unit.</comment>
+  </data>
+  <data name="UnitYears" xml:space="preserve">
+    <value>Years</value>
+    <comment>Relative date unit.</comment>
+  </data>
+  <data name="CriterionDirection" xml:space="preserve">
+    <value>Direction</value>
+    <comment>Label of the direction in a relative date.</comment>
+  </data>
+  <data name="CriterionAgo" xml:space="preserve">
+    <value>Ago</value>
+    <comment>Relative date direction: in the past.</comment>
+  </data>
+  <data name="CriterionFromNow" xml:space="preserve">
+    <value>From now</value>
+    <comment>Relative date direction: in the future.</comment>
+  </data>
+  <data name="CriterionRelativePreview" xml:space="preserve">
+    <value>Matches against {0}, re-evaluated on each run. Days and coarser units are rounded to midnight UTC; Hours is exact.</value>
+    <comment>{0} is the resolved relative date.</comment>
+  </data>
+  <data name="CriterionBooleanValue" xml:space="preserve">
+    <value>Boolean Value</value>
+    <comment>Label of a boolean criterion's value.</comment>
+  </data>
+  <data name="CriterionBooleanState" xml:space="preserve">
+    <value>: {0}</value>
+    <comment>Text beside a tri-state boolean checkbox. {0} is the state. Leading colon is intentional.</comment>
+  </data>
+  <data name="CriterionNull" xml:space="preserve">
+    <value>Null</value>
+    <comment>A boolean criterion with no value chosen.</comment>
+  </data>
+  <data name="CriterionUnsupported" xml:space="preserve">
+    <value>This attribute type is not supported in search criteria.</value>
+    <comment>Shown for an attribute type a criterion cannot test.</comment>
+  </data>
+  <data name="PriorityNoContributors" xml:space="preserve">
+    <value>This attribute has no import contributors, so it has no priority to manage.</value>
+    <comment>Shown when an attribute has no contributors.</comment>
+  </data>
+  <data name="PriorityColumn" xml:space="preserve">
+    <value>Priority</value>
+    <comment>Column heading: the order of contributors.</comment>
+  </data>
+  <data name="PriorityNullTooltip" xml:space="preserve">
+    <value>When set, if this Synchronisation Rule is connected and in scope but supplies no value, it asserts no value (no fall-through to a lower-priority contributor).</value>
+    <comment>Tooltip on the Null is a value column heading.</comment>
+  </data>
+  <data name="ThisMapping" xml:space="preserve">
+    <value>(this mapping)</value>
+    <comment>Marks the mapping being edited in the priority list.</comment>
+  </data>
+  <data name="PendingMappingOnceSaved" xml:space="preserve">
+    <value>this mapping, once saved</value>
+    <comment>Shown on the synthetic row for a mapping not yet saved.</comment>
+  </data>
+  <data name="DragToReorder" xml:space="preserve">
+    <value>Drag to reorder</value>
+    <comment>Tooltip on the drag handle.</comment>
+  </data>
+  <data name="SyncRuleDisabledTooltip" xml:space="preserve">
+    <value>This Synchronisation Rule is disabled. It holds its position but never contributes during synchronisation.</value>
+    <comment>Tooltip on the Disabled chip of a contributor.</comment>
+  </data>
+  <data name="UnsavedChanges" xml:space="preserve">
+    <value>Unsaved changes</value>
+    <comment>Shown when the priority order has changed and is not saved.</comment>
+  </data>
+  <data name="SaveOrder" xml:space="preserve">
+    <value>Save order</value>
+    <comment>Button saving the priority order.</comment>
+  </data>
+  <data name="ResetLabel" xml:space="preserve">
+    <value>Reset</value>
+    <comment>Button reverting the priority order to the saved one.</comment>
+  </data>
+  <data name="AttributePriorityTitle" xml:space="preserve">
+    <value>Attribute Priority</value>
+    <comment>Title of the acknowledgement before a priority change is saved.</comment>
+  </data>
+  <data name="PriorityOrderSaved" xml:space="preserve">
+    <value>Attribute priority order saved.</value>
+    <comment>Snackbar after saving.</comment>
+  </data>
+  <data name="PriorityOrderFailed" xml:space="preserve">
+    <value>Failed to save attribute priority order: {0}</value>
+    <comment>Snackbar on failure. {0} is the error message.</comment>
+  </data>
+  <data name="GateTitleOne" xml:space="preserve">
+    <value>This change stops a configuration test case passing</value>
+    <comment>Dialog title when one test case stops passing. Singular.</comment>
+  </data>
+  <data name="GateTitleOther" xml:space="preserve">
+    <value>This change stops {0} configuration test cases passing</value>
+    <comment>Dialog title when several test cases stop passing. {0} is the count.</comment>
+  </data>
+  <data name="GateNothingSavedOne" xml:space="preserve">
+    <value>Nothing has been saved. This case passed before the change, and does not with it.</value>
+    <comment>Explains the refusal. Singular.</comment>
+  </data>
+  <data name="GateNothingSavedOther" xml:space="preserve">
+    <value>Nothing has been saved. These cases passed before the change, and do not with it.</value>
+    <comment>Explains the refusal. Plural.</comment>
+  </data>
+  <data name="GateTestCase" xml:space="preserve">
+    <value>Test case</value>
+    <comment>Table heading: the test case.</comment>
+  </data>
+  <data name="GateWithChange" xml:space="preserve">
+    <value>With this change</value>
+    <comment>Table heading: what the test case gives with the change.</comment>
+  </data>
+  <data name="GateNowFails" xml:space="preserve">
+    <value>Now fails</value>
+    <comment>Status of a test case that fails with the change.</comment>
+  </data>
+  <data name="GateNeedsReview" xml:space="preserve">
+    <value>Now needs review</value>
+    <comment>Status of a test case that needs review with the change.</comment>
+  </data>
+  <data name="GateCouldNotRun" xml:space="preserve">
+    <value>Could not run</value>
+    <comment>Status of a test case that could not run with the change.</comment>
+  </data>
+  <data name="GatePasses" xml:space="preserve">
+    <value>Passes</value>
+    <comment>Status of a test case that still passes with the change.</comment>
+  </data>
+  <data name="GateRecordedNote" xml:space="preserve">
+    <value>Accepting or saving anyway is recorded with the change in Configuration History, naming each case.</value>
+    <comment>Note at the foot of the dialog.</comment>
+  </data>
+  <data name="GateKeepEditing" xml:space="preserve">
+    <value>Keep editing</value>
+    <comment>Button leaving the edit unsaved on the page.</comment>
+  </data>
+  <data name="GateAcceptOne" xml:space="preserve">
+    <value>Accept new result</value>
+    <comment>Button accepting the new result. Singular.</comment>
+  </data>
+  <data name="GateAcceptOther" xml:space="preserve">
+    <value>Accept new results</value>
+    <comment>Button accepting the new results. Plural.</comment>
+  </data>
+  <data name="GateSaveAnyway" xml:space="preserve">
+    <value>Save anyway</value>
+    <comment>Button saving despite the failing test cases.</comment>
+  </data>
+  <data name="CoverageObjectMatchingRuleOn" xml:space="preserve">
+    <value>Object Matching Rule on {0}</value>
+    <comment>Coverage of a test case: an Object Matching Rule on a Metaverse Attribute. {0} is the attribute name.</comment>
+  </data>
+  <data name="CoverageObjectMatchingRuleId" xml:space="preserve">
+    <value>Object Matching Rule {0}</value>
+    <comment>Coverage of a test case when the rule's target is not known. {0} is the rule's id.</comment>
+  </data>
+  <data name="CoverageGeneratedValueId" xml:space="preserve">
+    <value>Generated Value {0}</value>
+    <comment>Coverage of a test case when the target is not known. {0} is the mapping's id.</comment>
+  </data>
+  <data name="CoverageAttributeFlowId" xml:space="preserve">
+    <value>Attribute Flow {0}</value>
+    <comment>Coverage of a test case when the target is not known. {0} is the mapping's id.</comment>
+  </data>
+  <data name="CoverageGeneratedValueFor" xml:space="preserve">
+    <value>Generated Value for {0}</value>
+    <comment>Coverage of a Generated Value test case. {0} is the target attribute.</comment>
+  </data>
+  <data name="CoverageAttributeFlowTo" xml:space="preserve">
+    <value>Attribute Flow to {0}</value>
+    <comment>Coverage of an Attribute Flow test case. {0} is the target attribute.</comment>
+  </data>
+  <data name="QuotedText" xml:space="preserve">
+    <value>'{0}'</value>
+    <comment>Puts a value or a name in quotation marks. {0} is the text.</comment>
+  </data>
+  <data name="ExpectationValuesInOrder" xml:space="preserve">
+    <value>{0}, in this order</value>
+    <comment>Expected values that must come in order. {0} is the list of values.</comment>
+  </data>
+  <data name="ExpectationTheseValues" xml:space="preserve">
+    <value>These values</value>
+    <comment>Label of the expectation: the case expects these values.</comment>
+  </data>
+  <data name="ExpectNoValue" xml:space="preserve">
+    <value>No value</value>
+    <comment>Expectation: no value.</comment>
+  </data>
+  <data name="ExpectError" xml:space="preserve">
+    <value>An error</value>
+    <comment>Expectation: an error.</comment>
+  </data>
+  <data name="ExpectAnyValue" xml:space="preserve">
+    <value>Any value</value>
+    <comment>Expectation: any value.</comment>
+  </data>
+  <data name="ExpectInScope" xml:space="preserve">
+    <value>In scope</value>
+    <comment>Expectation: the object is in scope.</comment>
+  </data>
+  <data name="ExpectOutOfScope" xml:space="preserve">
+    <value>Out of scope</value>
+    <comment>Expectation: the object is out of scope.</comment>
+  </data>
+  <data name="AcceptBlockedOne" xml:space="preserve">
+    <value>{0} cannot take its new result as expected: edit the case, or save anyway.</value>
+    <comment>Shown when one test case cannot accept its new result. {0} is the case name.</comment>
+  </data>
+  <data name="AcceptBlockedOther" xml:space="preserve">
+    <value>{0} cannot take their new results as expected: edit the cases, or save anyway.</value>
+    <comment>Shown when several test cases cannot accept their new results. {0} is the list of case names.</comment>
+  </data>
+  <data name="RemoveBindingHasValue" xml:space="preserve">
+    <value>{0:N0} {1} object(s) have a value</value>
+    <comment>Alert: objects of the type hold a value for the attribute. {0} is the count, {1} the Metaverse Object Type name.</comment>
+  </data>
+  <data name="RemoveBindingViewObjects" xml:space="preserve">
+    <value>View the object(s) with a value</value>
+    <comment>Link to the objects holding a value.</comment>
+  </data>
+  <data name="RemoveBindingClearFirst" xml:space="preserve">
+    <value>Clear these values first, then remove the binding.</value>
+    <comment>Shown when values block removing the binding.</comment>
+  </data>
+  <data name="RemoveBindingReadBy" xml:space="preserve">
+    <value>{0:N0} configuration item(s) read this attribute on {1}</value>
+    <comment>Alert: configuration reads the attribute. {0} is the count, {1} the Metaverse Object Type name.</comment>
+  </data>
+  <data name="RemoveBindingChangeFirst" xml:space="preserve">
+    <value>Change or remove each one first, then remove the binding.</value>
+    <comment>Shown when configuration blocks removing the binding.</comment>
+  </data>
+  <data name="RemoveBindingSafe" xml:space="preserve">
+    <value>No {0} has a value for this attribute. Safe to remove; no object data will be lost.</value>
+    <comment>Shown when removing the binding is safe. {0} is the Metaverse Object Type name.</comment>
+  </data>
+  <data name="RemoveBindingCascadeTitle" xml:space="preserve">
+    <value>These {0} reference(s) will also be removed</value>
+    <comment>Warning: references removed with the binding. {0} is the count.</comment>
+  </data>
+  <data name="RemoveBindingTypeToConfirm" xml:space="preserve">
+    <value>Type {0} to confirm</value>
+    <comment>Asks for the attribute name to be typed. {0} is the attribute name in bold markup.</comment>
+  </data>
+  <data name="RemoveBindingWithReferences" xml:space="preserve">
+    <value>Remove binding + {0} reference(s)</value>
+    <comment>Button removing the binding and its references. {0} is the count.</comment>
+  </data>
+  <data name="RemoveBindingButton" xml:space="preserve">
+    <value>Remove binding</value>
+    <comment>Button removing the binding.</comment>
+  </data>
+  <data name="RemoveBindingFailed" xml:space="preserve">
+    <value>The binding could not be removed; it may now hold stored values, or configuration may now read it. Refresh and try again.</value>
+    <comment>Snackbar when the binding was not removed.</comment>
+  </data>
+  <data name="RemoveBindingRemoved" xml:space="preserve">
+    <value>Removed "{0}" from {1}.</value>
+    <comment>Snackbar after removing the binding. {0} is the attribute, {1} the Metaverse Object Type.</comment>
+  </data>
+  <data name="RemoveBindingError" xml:space="preserve">
+    <value>Failed to remove binding: {0}</value>
+    <comment>Snackbar on failure. {0} is the error message.</comment>
+  </data>
+  <data name="RemoveBindingTitle" xml:space="preserve">
+    <value>Remove "{0}" from {1}</value>
+    <comment>Dialog title. {0} is the attribute, {1} the Metaverse Object Type.</comment>
+  </data>
+  <data name="ContributedBreakdown" xml:space="preserve">
+    <value>{0}: {1:N0} value(s) on {2:N0} Metaverse Object(s)</value>
+    <comment>A line per attribute: its name, the values held, and the objects holding them.</comment>
+  </data>
+  <data name="ContributedRecall" xml:space="preserve">
+    <value>Recall the attribute values (recommended)</value>
+    <comment>Option: the values are recalled. Recommended.</comment>
+  </data>
+  <data name="ContributedKeep" xml:space="preserve">
+    <value>Keep the attribute values</value>
+    <comment>Option: the values are kept, unmanaged.</comment>
+  </data>
+  <data name="ContributedRuleImpact" xml:space="preserve">
+    <value>This rule contributed the current values of {0:N0} attribute value(s) across {1:N0} Metaverse Objects.</value>
+    <comment>Impact of deleting a rule. {0} is the number of values, {1} the number of objects.</comment>
+  </data>
+  <data name="ContributedRuleRecallHelp" xml:space="preserve">
+    <value>JIM queues a recall operation. Where another Attribute Flow also contributes an attribute, its value takes over; otherwise the value is removed and any resulting changes are staged for export. Progress can be monitored from the Operations page.</value>
+    <comment>Explains the recall, when a rule is deleted.</comment>
+  </data>
+  <data name="ContributedKeepHelp" xml:space="preserve">
+    <value>The values remain in place with no record of where they came from. JIM will never recall them; a new inbound Attribute Flow, or manual or automated removal, would be needed to change them later.</value>
+    <comment>Explains the keep option.</comment>
+  </data>
+  <data name="ContributedRuleKeepWarning" xml:space="preserve">
+    <value>Kept values become permanently unmanaged. This cannot be reversed once the rule is deleted.</value>
+    <comment>Warning shown when keep is chosen for a rule deletion.</comment>
+  </data>
+  <data name="ContributedFlowImpact" xml:space="preserve">
+    <value>This Attribute Flow contributed the current values of {0} on {1:N0} Metaverse Objects.</value>
+    <comment>Impact of removing an Attribute Flow. {0} is the attribute, {1} the number of objects.</comment>
+  </data>
+  <data name="ContributedFlowRecallHelp" xml:space="preserve">
+    <value>The values are recalled at the next synchronisation of the contributing Connected System, Delta or Full, with any other contributing Attribute Flow taking over.</value>
+    <comment>Explains the recall, when an Attribute Flow is removed.</comment>
+  </data>
+  <data name="ContributedFlowKeepWarning" xml:space="preserve">
+    <value>Kept values become permanently unmanaged. This cannot be reversed once the mapping is removed.</value>
+    <comment>Warning shown when keep is chosen for an Attribute Flow removal.</comment>
+  </data>
+  <data name="ContributedFlowInfo" xml:space="preserve">
+    <value>Your choice takes effect when you save the Synchronisation Rule.</value>
+    <comment>Info under the choice for an Attribute Flow removal.</comment>
+  </data>
+  <data name="ContributedRemoveMapping" xml:space="preserve">
+    <value>Remove Attribute Mapping</value>
+    <comment>Dialog title and confirm button for removing an Attribute Flow.</comment>
+  </data>
+  <data name="ListOr" xml:space="preserve">
+    <value> or </value>
+    <comment>Joins the last two items of a list with 'or'. Spaces are intentional.</comment>
+  </data>
+  <data name="DerivedChipStep" xml:space="preserve">
+    <value>Derived · step {0}</value>
+    <comment>Chip label of a derived flow with a step. {0} is the step number.</comment>
+  </data>
+  <data name="DerivedChipPlain" xml:space="preserve">
+    <value>Derived</value>
+    <comment>Chip label of a derived flow that has no step (it is on a loop).</comment>
+  </data>
+  <data name="DerivedReads" xml:space="preserve">
+    <value>Reads {0} from the Metaverse.</value>
+    <comment>Tooltip sentence. {0} is the list of attributes read.</comment>
+  </data>
+  <data name="DerivedRunsInStep" xml:space="preserve">
+    <value>Runs in step {0} of {1}, after {2}.</value>
+    <comment>Tooltip sentence. {0} step, {1} step count, {2} the resolved phrase.</comment>
+  </data>
+  <data name="DerivedNoStep" xml:space="preserve">
+    <value>{0} It has no step because it is part of a loop of Attribute Flows that read each other.</value>
+    <comment>Tooltip sentence for a flow on a loop. {0} is the reads sentence.</comment>
+  </data>
+  <data name="DerivedResolvedOne" xml:space="preserve">
+    <value>{0} is resolved</value>
+    <comment>One attribute is resolved. {0} is its name.</comment>
+  </data>
+  <data name="DerivedResolvedOther" xml:space="preserve">
+    <value>{0} are resolved</value>
+    <comment>Several attributes are resolved. {0} is the list of names.</comment>
+  </data>
+  <data name="DerivedCycleLink" xml:space="preserve">
+    <value>{0}, from {1} ({2})</value>
+    <comment>One link of a loop. {0} the attribute, {1} the attribute read, {2} where it is defined.</comment>
+  </data>
+  <data name="DerivedCycleThisFlow" xml:space="preserve">
+    <value>this flow, {0}</value>
+    <comment>Where a loop link is defined when it is the flow being edited. {0} is the rule name.</comment>
+  </data>
+  <data name="DerivedReadsVia" xml:space="preserve">
+    <value>{0} (via {1})</value>
+    <comment>A dependant's indirect input. {0} the first attribute, {1} the chain.</comment>
+  </data>
+  <data name="DependantsSingleFlowSingleInput" xml:space="preserve">
+    <value>After you {0}, nothing else contributes {1}. This Derived Attribute Flow reads it, so it will have no input:</value>
+    <comment>Sentence above the dependants list: one dependant, one lost attribute. {0} is the change, {1} the attribute.</comment>
+  </data>
+  <data name="DependantsSingleFlowManyInputs" xml:space="preserve">
+    <value>After you {0}, nothing else contributes {1}. This Derived Attribute Flow reads them, so it will have no input:</value>
+    <comment>Sentence above the dependants list: one dependant, several lost attributes.</comment>
+  </data>
+  <data name="DependantsManyFlowsSingleInput" xml:space="preserve">
+    <value>After you {0}, nothing else contributes {1}. These Derived Attribute Flows read it, so they will have no input:</value>
+    <comment>Sentence above the dependants list: several dependants, one lost attribute.</comment>
+  </data>
+  <data name="DependantsManyFlowsManyInputs" xml:space="preserve">
+    <value>After you {0}, nothing else contributes {1}. These Derived Attribute Flows read them, so they will have no input:</value>
+    <comment>Sentence above the dependants list: several dependants, several lost attributes.</comment>
+  </data>
+  <data name="DerivedPanelHeading" xml:space="preserve">
+    <value>Derived Attribute Flow</value>
+    <comment>Heading of the derived flow panel.</comment>
+  </data>
+  <data name="DerivedStepOf" xml:space="preserve">
+    <value>step {0} of {1}</value>
+    <comment>Chip in the derived flow panel. {0} the step, {1} the step count.</comment>
+  </data>
+  <data name="DerivedReadsLabel" xml:space="preserve">
+    <value>Reads</value>
+    <comment>Label before the attributes a derived flow reads.</comment>
+  </data>
+  <data name="DerivedFromMetaverse" xml:space="preserve">
+    <value>from the Metaverse.</value>
+    <comment>End of the reads sentence when the flow has no step.</comment>
+  </data>
+  <data name="DerivedRunsAfterOwnSyncNamed" xml:space="preserve">
+    <value>from the Metaverse. JIM runs it after {0}, in {1}'s own synchronisation.</value>
+    <comment>{0} is the resolved phrase, {1} the Connected System name.</comment>
+  </data>
+  <data name="DerivedRunsAfterOwnSyncFallback" xml:space="preserve">
+    <value>from the Metaverse. JIM runs it after {0}, in this Connected System's own synchronisation.</value>
+    <comment>{0} is the resolved phrase. Used when the Connected System's name is not known.</comment>
+  </data>
+  <data name="DerivedSequencingNamed" xml:space="preserve">
+    <value>When another Connected System changes {0}, JIM marks this object so {1}'s next synchronisation picks it up. Synchronise the source first for the value to be right in the same cycle.</value>
+    <comment>{0} is the list of attributes, {1} the Connected System name.</comment>
+  </data>
+  <data name="DerivedSequencingFallback" xml:space="preserve">
+    <value>When another Connected System changes {0}, JIM marks this object so this Connected System's next synchronisation picks it up. Synchronise the source first for the value to be right in the same cycle.</value>
+    <comment>{0} is the list of attributes. Used when the Connected System's name is not known.</comment>
+  </data>
+  <data name="DerivedCanStillSave" xml:space="preserve">
+    <value>You can still save it.</value>
+    <comment>Shown under the warnings of a derived flow.</comment>
+  </data>
+  <data name="DerivedLoopHeading" xml:space="preserve">
+    <value>&lt;strong&gt;This Attribute Flow cannot be saved because it creates a loop.&lt;/strong&gt;</value>
+    <comment>Markup: strong is intentional. Opens the loop error.</comment>
+  </data>
+  <data name="DerivedLoopExplain" xml:space="preserve">
+    <value>Each attribute below is worked out from the one before it, so none can be calculated first:</value>
+    <comment>Explains a loop, above its links.</comment>
+  </data>
+  <data name="DerivedLoopChange" xml:space="preserve">
+    <value>Change one of these expressions so it stops reading the next attribute in the loop.</value>
+    <comment>Tells the administrator how to break a loop.</comment>
+  </data>
+  <data name="ScopingNoCriteria" xml:space="preserve">
+    <value>In scope: no scoping criteria.</value>
+    <comment>Shown when a rule has no scoping criteria, so every object is in scope.</comment>
+  </data>
+  <data name="ScopingAnyOfGroups" xml:space="preserve">
+    <value>Any one of these groups</value>
+    <comment>Heading above the top-level groups, which are alternatives.</comment>
+  </data>
+  <data name="ScopingExpressionReadAria" xml:space="preserve">
+    <value>Attributes the expression read</value>
+    <comment>Accessible name of the list of attributes an expression read.</comment>
+  </data>
+  <data name="ScopingHeldHidden" xml:space="preserve">
+    <value>held a hidden value</value>
+    <comment>What an expression input held, when the value is hidden.</comment>
+  </data>
+  <data name="ScopingHeldNone" xml:space="preserve">
+    <value>held no value</value>
+    <comment>What an expression input held, when it held none.</comment>
+  </data>
+  <data name="ScopingHeld" xml:space="preserve">
+    <value>held {0}</value>
+    <comment>What an expression input held. {0} is the quoted values.</comment>
+  </data>
+  <data name="ScopingHeldMore" xml:space="preserve">
+    <value>held {0} and {1} more</value>
+    <comment>What an expression input held, when some values are not listed. {0} is the listed values, {1} the number not listed.</comment>
+  </data>
+  <data name="ScopingNotInScope" xml:space="preserve">
+    <value>Not in scope</value>
+    <comment>Outcome: the object is not in scope.</comment>
+  </data>
+  <data name="ScopingCannotEvaluate" xml:space="preserve">
+    <value>Cannot be evaluated</value>
+    <comment>Outcome: the rule cannot be evaluated.</comment>
+  </data>
+  <data name="ScopingMet" xml:space="preserve">
+    <value>Met</value>
+    <comment>Criterion outcome: met.</comment>
+  </data>
+  <data name="ScopingNotMet" xml:space="preserve">
+    <value>Not met</value>
+    <comment>Criterion outcome: not met.</comment>
+  </data>
+  <data name="ScopingNoValueNotMet" xml:space="preserve">
+    <value>No value, so not met</value>
+    <comment>Criterion outcome: no value, so not met.</comment>
+  </data>
+  <data name="ScopingReferencesNone" xml:space="preserve">
+    <value>References no attribute</value>
+    <comment>Criterion outcome: it references no attribute.</comment>
+  </data>
+  <data name="ScopingInvalid" xml:space="preserve">
+    <value>Invalid; cannot be evaluated</value>
+    <comment>Criterion outcome: the criterion is invalid.</comment>
+  </data>
+  <data name="AddBindingAllBound" xml:space="preserve">
+    <value>Every custom attribute is already bound to {0}. Create a new attribute to add one.</value>
+    <comment>Shown when there is nothing to add. {0} is the Metaverse Object Type name.</comment>
+  </data>
+  <data name="AddBindingSearchPlaceholder" xml:space="preserve">
+    <value>Search attributes</value>
+    <comment>Placeholder of the attribute search box.</comment>
+  </data>
+  <data name="AddBindingNotYetOnType" xml:space="preserve">
+    <value>Not yet on this Object Type</value>
+    <comment>Heading of the list of attributes that can be added.</comment>
+  </data>
+  <data name="AddBindingNotAssigned" xml:space="preserve">
+    <value>Not assigned</value>
+    <comment>Shown beside an attribute that is on no Object Type.</comment>
+  </data>
+  <data name="AddBindingOn" xml:space="preserve">
+    <value>on {0}</value>
+    <comment>Shown beside an attribute on Object Types. {0} is the list of Object Types.</comment>
+  </data>
+  <data name="AddBindingCreateHint" xml:space="preserve">
+    <value>Need one that doesn't exist yet? Create a new attribute and bind it in one step from the Schema Attributes list.</value>
+    <comment>Hint at the foot of the dialog.</comment>
+  </data>
+  <data name="AddBindingButtonNone" xml:space="preserve">
+    <value>Add attributes</value>
+    <comment>Confirm button when nothing is selected.</comment>
+  </data>
+  <data name="AddBindingButtonOne" xml:space="preserve">
+    <value>Add 1 attribute</value>
+    <comment>Confirm button when one attribute is selected.</comment>
+  </data>
+  <data name="AddBindingButtonOther" xml:space="preserve">
+    <value>Add {0} attributes</value>
+    <comment>Confirm button when several are selected. {0} is the count.</comment>
+  </data>
+  <data name="AddBindingAdded" xml:space="preserve">
+    <value>Added {0} attribute(s) to {1}.</value>
+    <comment>Snackbar after adding. {0} is the count, {1} the Metaverse Object Type.</comment>
+  </data>
+  <data name="AddBindingFailed" xml:space="preserve">
+    <value>Failed to add attributes: {0}</value>
+    <comment>Snackbar on failure. {0} is the error message.</comment>
+  </data>
+  <data name="AddBindingTitle" xml:space="preserve">
+    <value>Add Attributes to "{0}"</value>
+    <comment>Dialog title. {0} is the Metaverse Object Type name.</comment>
+  </data>
+  <data name="ExRecipHeading" xml:space="preserve">
+    <value>Exchange recipients</value>
+    <comment>Heading of the Exchange recipients panel.</comment>
+  </data>
+  <data name="ExRecipNotSetUp" xml:space="preserve">
+    <value>Objects this rule provisions are not Exchange recipients.</value>
+    <comment>Shown before the recipients are set up.</comment>
+  </data>
+  <data name="ExRecipNotSetUpHelp" xml:space="preserve">
+    <value>Declare what each one should be in Exchange: a mailbox, a shared, room or equipment mailbox, a mail user, a mail contact or a mail-enabled group. Its Connected System manages Exchange recipients.</value>
+    <comment>Explains what recipient types are.</comment>
+  </data>
+  <data name="ExRecipSetUp" xml:space="preserve">
+    <value>Set up recipients</value>
+    <comment>Button starting the Exchange recipients set up.</comment>
+  </data>
+  <data name="ExRecipAttributeColumn" xml:space="preserve">
+    <value>Exchange attribute</value>
+    <comment>Table heading: the Exchange attribute.</comment>
+  </data>
+  <data name="ExRecipSetByColumn" xml:space="preserve">
+    <value>Set by</value>
+    <comment>Table heading: the Attribute Flow that sets the attribute.</comment>
+  </data>
+  <data name="ExRecipSet" xml:space="preserve">
+    <value>Set</value>
+    <comment>Row action: add an Attribute Flow to the attribute.</comment>
+  </data>
+  <data name="ExRecipOwnFlows" xml:space="preserve">
+    <value>These are this rule's own Attribute Flows, also listed below.</value>
+    <comment>Note beside the stop button.</comment>
+  </data>
+  <data name="ExRecipStop" xml:space="preserve">
+    <value>Stop provisioning recipients</value>
+    <comment>Button removing every Attribute Flow to an Exchange attribute.</comment>
+  </data>
+  <data name="IdentityAwaitingChip" xml:space="preserve">
+    <value>Awaiting synchronisation</value>
+    <comment>Chip on an import rule whose saved changes await the next synchronisation.</comment>
+  </data>
+  <data name="IdentityAwaitingOne" xml:space="preserve">
+    <value>1 saved change reaches existing objects at the next synchronisation of {0}, which processes every {1}.</value>
+    <comment>Tooltip. {0} is the Connected System name, {1} the object phrase. Singular.</comment>
+  </data>
+  <data name="IdentityAwaitingOther" xml:space="preserve">
+    <value>{0:N0} saved changes reach existing objects at the next synchronisation of {1}, which processes every {2}.</value>
+    <comment>Tooltip. {0} is the count, {1} the Connected System name, {2} the object phrase. Plural.</comment>
+  </data>
+  <data name="IdentityObjectOfType" xml:space="preserve">
+    <value>{0} object</value>
+    <comment>The object phrase when the Connected System Object Type is known. {0} is the type name.</comment>
+  </data>
+  <data name="IdentityObjectGeneric" xml:space="preserve">
+    <value>object</value>
+    <comment>The object phrase when the type name is not known.</comment>
+  </data>
+  <data name="IdentityIn" xml:space="preserve">
+    <value>in</value>
+    <comment>Word between the Synchronisation Rule's type and its Connected System.</comment>
+  </data>
+  <data name="InsertAttributeButton" xml:space="preserve">
+    <value>Insert attribute</value>
+    <comment>Button opening the menu of attributes to insert into an expression.</comment>
+  </data>
+  <data name="InsertAttributeFilter" xml:space="preserve">
+    <value>Filter attributes</value>
+    <comment>Placeholder of the filter box in the insert attribute menu.</comment>
+  </data>
+  <data name="InsertAttributeFromMetaverse" xml:space="preserve">
+    <value>From the Metaverse · mv[...]</value>
+    <comment>Group heading in the insert attribute menu.</comment>
+  </data>
+  <data name="InsertAttributeFromSystem" xml:space="preserve">
+    <value>From {0} · cs[...]</value>
+    <comment>Group heading in the insert attribute menu. {0} is the Connected System name.</comment>
+  </data>
+  <data name="InsertAttributeNoMatch" xml:space="preserve">
+    <value>No attributes match "{0}".</value>
+    <comment>Shown when the filter matches nothing. {0} is the filter text.</comment>
+  </data>
+  <data name="InsertAttributeReferenceReason" xml:space="preserve">
+    <value>Reference, not supported yet</value>
+    <comment>Why a Reference attribute cannot be inserted: shown beside it.</comment>
+  </data>
+  <data name="InsertAttributeReferenceExplain" xml:space="preserve">
+    <value>Reference attributes cannot be read by a Derived Attribute Flow yet.</value>
+    <comment>Explanation on hover of a Reference attribute.</comment>
+  </data>
+  <data name="InsertAttributeTargetReason" xml:space="preserve">
+    <value>this flow's target</value>
+    <comment>Why the flow's own target cannot be inserted: shown beside it.</comment>
+  </data>
+  <data name="InsertAttributeSelfExplain" xml:space="preserve">
+    <value>Reading {0} here would make {0} depend on itself.</value>
+    <comment>Explanation on hover of the flow's own target. {0} is the attribute name.</comment>
+  </data>
+  <data name="InsertAttributeFromSystemFallback" xml:space="preserve">
+    <value>the Connected System</value>
+    <comment>Fills the {0} of the Connected System group heading when the system has no name. Reads 'From the Connected System · cs[...]'.</comment>
+  </data>
+  <data name="PreviewSizeRowsOne" xml:space="preserve">
+    <value>about {0:N0} object-level row</value>
+    <comment>Fills the {0} of the size sentence when the estimate is one row. Reads 'This preview would produce about 1 object-level row'.</comment>
+  </data>
+  <data name="PreviewSizeRowsOther" xml:space="preserve">
+    <value>about {0:N0} object-level rows</value>
+    <comment>Fills the {0} of the size sentence for any other count of rows.</comment>
+  </data>
+  <data name="PreviewSizeSentence" xml:space="preserve">
+    <value>This preview would produce {0} (roughly {1} of preview data).</value>
+    <comment>The size sentence. {0} is the row phrase, {1} the storage estimate.</comment>
+  </data>
+  <data name="PreviewSizeStorageGigabytes" xml:space="preserve">
+    <value>{0:N1} GB</value>
+    <comment>Storage estimate, in gigabytes.</comment>
+  </data>
+  <data name="PreviewSizeStorageMegabytes" xml:space="preserve">
+    <value>{0:N0} MB</value>
+    <comment>Storage estimate, in megabytes.</comment>
+  </data>
+  <data name="PreviewSizeRunsIn" xml:space="preserve">
+    <value>It runs in the background and changes nothing; expect it to take about {0}.</value>
+    <comment>Duration sentence. {0} is the time estimate.</comment>
+  </data>
+  <data name="PreviewSizeExactCounts" xml:space="preserve">
+    <value>The summary counts are exact either way. The choice is how much of it you can drill into, and how much storage the preview uses until it ages out under the retention period.</value>
+    <comment>Explains that the summary is exact whichever option is chosen.</comment>
+  </data>
+  <data name="PreviewSizeCappedTitle" xml:space="preserve">
+    <value>Keep a sample of each group (recommended)</value>
+    <comment>Radio option: keep a capped sample per summary group.</comment>
+  </data>
+  <data name="PreviewSizeCappedHelp" xml:space="preserve">
+    <value>Up to {0:N0} rows per summary group. Groups showing a sample are labelled as such.</value>
+    <comment>Help under the sample option. {0} is the cap per group.</comment>
+  </data>
+  <data name="PreviewSizeFullTitle" xml:space="preserve">
+    <value>Keep every row</value>
+    <comment>Radio option: keep every affected object.</comment>
+  </data>
+  <data name="PreviewSizeFullHelp" xml:space="preserve">
+    <value>Every affected object is drillable. Takes longer and uses the storage above.</value>
+    <comment>Help under the keep-every-row option.</comment>
+  </data>
+  <data name="PreviewSizeRunButton" xml:space="preserve">
+    <value>Run preview</value>
+    <comment>Confirming button of the preview size dialog.</comment>
+  </data>
+  <data name="ExprTestIntro" xml:space="preserve">
+    <value>Supply a sample value for each attribute the Expression reads and see what it produces as you type. Leave an input empty to see what the Expression does when the object has no value for it.</value>
+    <comment>Introduces the expression test's sample value boxes.</comment>
+  </data>
+  <data name="ExprTestNoAttributes" xml:space="preserve">
+    <value>This Expression reads no attributes, so it produces the same value for every object.</value>
+    <comment>Shown when the expression reads no attributes.</comment>
+  </data>
+  <data name="ExprTestOutput" xml:space="preserve">
+    <value>Output</value>
+    <comment>Caption heading the expression test's output.</comment>
+  </data>
+  <data name="ExprTestNoValue" xml:space="preserve">
+    <value>The Expression returned no value. JIM treats that as an authoritative "no value" from this contribution, resolved by Attribute Priority and "Null is a value".</value>
+    <comment>Explains an expression that returned no value.</comment>
+  </data>
+  <data name="ExprTestResultType" xml:space="preserve">
+    <value>Type: {0}</value>
+    <comment>The result type of the expression test. {0} is the type name.</comment>
+  </data>
+  <data name="ExprTestPosition" xml:space="preserve">
+    <value>Position {0}</value>
+    <comment>Where a parse error sits in the expression. {0} is the position.</comment>
+  </data>
+  <data name="ExprTestCouldNotParse" xml:space="preserve">
+    <value>The Expression could not be parsed.</value>
+    <comment>Shown when an expression fails to parse and the evaluator gives no message of its own.</comment>
+  </data>
+  <data name="TestInputAddValue" xml:space="preserve">
+    <value>Add value</value>
+    <comment>Button adding the typed value to a multi-valued test input.</comment>
+  </data>
+  <data name="TestInputPlaceholderDateTime" xml:space="preserve">
+    <value>2026-03-15 or 2026-03-15T10:30:00Z</value>
+    <comment>Placeholder for a Date Time test input: the two accepted formats.</comment>
+  </data>
+  <data name="TestInputPlaceholderWholeNumber" xml:space="preserve">
+    <value>A whole number</value>
+    <comment>Placeholder for a Number or Long Number test input.</comment>
+  </data>
+  <data name="TestInputPlaceholderDecimal" xml:space="preserve">
+    <value>A number, such as 12.5</value>
+    <comment>Placeholder for a Decimal test input.</comment>
+  </data>
+  <data name="TestInputPlaceholderGuid" xml:space="preserve">
+    <value>A GUID</value>
+    <comment>Placeholder for a GUID test input.</comment>
+  </data>
+  <data name="TestInputPlaceholderReference" xml:space="preserve">
+    <value>The id of the object it refers to</value>
+    <comment>Placeholder for a Reference test input.</comment>
+  </data>
+  <data name="TestInputPlaceholderBinary" xml:space="preserve">
+    <value>Base64</value>
+    <comment>Placeholder for a Binary test input: the encoding it takes.</comment>
+  </data>
+  <data name="TestObjectSearchPlaceholder" xml:space="preserve">
+    <value>Search by name</value>
+    <comment>Placeholder of the box that finds an object to load test values from.</comment>
+  </data>
+  <data name="TestObjectLoadAria" xml:space="preserve">
+    <value>Load values from {0}</value>
+    <comment>Accessible name of a found object's button. {0} is the object's name.</comment>
+  </data>
+  <data name="TestObjectNoMatch" xml:space="preserve">
+    <value>No objects match.</value>
+    <comment>Shown when a search for an object to load values from finds nothing.</comment>
+  </data>
+  <data name="TestObjectLoadedFrom" xml:space="preserve">
+    <value>Values loaded from {0}. Change any of them to try a variation.</value>
+    <comment>Shown once values are loaded from an object. {0} is the object's name, in bold.</comment>
+  </data>
+  <data name="DependentFlowsColumnFlow" xml:space="preserve">
+    <value>Derived Attribute Flow</value>
+    <comment>Column heading: the Metaverse-Derived Attribute Flow that depends on the change.</comment>
+  </data>
+  <data name="DependentFlowsColumnRule" xml:space="preserve">
+    <value>Synchronisation Rule</value>
+    <comment>Column heading: the Synchronisation Rule that owns the dependent flow.</comment>
+  </data>
+  <data name="DependentFlowsColumnReads" xml:space="preserve">
+    <value>Reads</value>
+    <comment>Column heading: the inputs the dependent flow would lose.</comment>
+  </data>
+  <data name="DependentFlowsAfterwards" xml:space="preserve">
+    <value>Each one then follows its Missing Input Behaviour at the next synchronisation. Values already on Metaverse Objects stay until then.</value>
+    <comment>Explains what happens to the dependent flows after the change.</comment>
+  </data>
+  <data name="TestCaseTargetFallback" xml:space="preserve">
+    <value>its target</value>
+    <comment>Fills the target in a test case name when the Attribute Flow has no target name.</comment>
+  </data>
+  <data name="TestCaseGeneratedBaseName" xml:space="preserve">
+    <value>Generated Value base for {0}</value>
+    <comment>Name of a saved test case for a Generated Value's base. {0} is the target attribute.</comment>
+  </data>
+  <data name="TestCaseAttributeFlowName" xml:space="preserve">
+    <value>Attribute Flow to {0}</value>
+    <comment>Name of a saved test case for an Attribute Flow. {0} is the target attribute.</comment>
+  </data>
+  <data name="TestCaseInScopeName" xml:space="preserve">
+    <value>In scope</value>
+    <comment>Name of a saved Scope test case whose expectation is in scope.</comment>
+  </data>
+  <data name="TestCaseOutOfScopeName" xml:space="preserve">
+    <value>Out of scope</value>
+    <comment>Name of a saved Scope test case whose expectation is out of scope.</comment>
+  </data>
+  <data name="InitialPasswordIssuePrefix" xml:space="preserve">
+    <value>Initial Password: {0}</value>
+    <comment>Prefixes each problem with the initial-password settings in the save bar's list. {0} is the problem, written by the application layer.</comment>
+  </data>
+  <data name="InsertFunctionButton" xml:space="preserve">
+    <value>Insert function</value>
+    <comment>Button opening the menu of functions to insert into an expression.</comment>
+  </data>
+  <data name="InsertFunctionFilter" xml:space="preserve">
+    <value>Filter functions</value>
+    <comment>Placeholder of the filter box in the insert function menu.</comment>
+  </data>
+  <data name="InsertFunctionNoMatch" xml:space="preserve">
+    <value>No functions match "{0}".</value>
+    <comment>Shown when the filter matches no function. {0} is the filter text.</comment>
+  </data>
+  <data name="MissingInputHeading" xml:space="preserve">
+    <value>If an input has no value</value>
+    <comment>Caption heading the test's table of what happens when an input has no value.</comment>
+  </data>
+  <data name="MissingInputChangeLink" xml:space="preserve">
+    <value>Change</value>
+    <comment>Link beside the Missing Input Behaviour that opens the setting.</comment>
+  </data>
+  <data name="ExpressionSuggestionsLabel" xml:space="preserve">
+    <value>Suggestions</value>
+    <comment>Accessible name of the list of suggested attributes and functions beneath an expression.</comment>
+  </data>
+  <data name="ExpressionKeyHint" xml:space="preserve">
+    <value>↑↓ to choose · Enter or Tab to insert · Esc to close</value>
+    <comment>Keyboard hint shown beneath the expression suggestions.</comment>
+  </data>
+</root>

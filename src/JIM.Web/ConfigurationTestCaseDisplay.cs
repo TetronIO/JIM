@@ -1,10 +1,12 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Web.Models;
+using JIM.Web.Resources;
 
 namespace JIM.Web;
 
@@ -45,24 +47,27 @@ public static class ConfigurationTestCaseDisplay
         switch (testCase.Kind)
         {
             case ConfigurationTestCaseKind.Scope:
-                return "Scope";
+                return SyncRuleText.CoverageScope;
 
             case ConfigurationTestCaseKind.ObjectMatchingRule:
             {
                 var rule = matchingRules.FirstOrDefault(r => r.Id == testCase.ObjectMatchingRuleId)
                            ?? syncRule?.ObjectMatchingRules.FirstOrDefault(r => r.Id == testCase.ObjectMatchingRuleId);
                 return rule?.TargetMetaverseAttribute?.Name is { } target
-                    ? $"Object Matching Rule on {target}"
-                    : $"Object Matching Rule {testCase.ObjectMatchingRuleId}";
+                    ? string.Format(CultureInfo.CurrentCulture, SyncRuleText.CoverageObjectMatchingRuleOn, target)
+                    : string.Format(CultureInfo.CurrentCulture, SyncRuleText.CoverageObjectMatchingRuleId, testCase.ObjectMatchingRuleId);
             }
 
             default:
             {
+                var generated = testCase.Kind == ConfigurationTestCaseKind.GeneratedValue;
                 var mapping = syncRule?.AttributeFlowRules.FirstOrDefault(m => m.Id == testCase.SyncRuleMappingId);
                 var target = mapping?.TargetMetaverseAttribute?.Name ?? mapping?.TargetConnectedSystemAttribute?.Name;
                 if (target == null)
-                    return $"{(testCase.Kind == ConfigurationTestCaseKind.GeneratedValue ? "Generated Value" : "Attribute Flow")} {testCase.SyncRuleMappingId}";
-                return testCase.Kind == ConfigurationTestCaseKind.GeneratedValue ? $"Generated Value for {target}" : $"Attribute Flow to {target}";
+                    return string.Format(CultureInfo.CurrentCulture,
+                        generated ? SyncRuleText.CoverageGeneratedValueId : SyncRuleText.CoverageAttributeFlowId, testCase.SyncRuleMappingId);
+                return string.Format(CultureInfo.CurrentCulture,
+                    generated ? SyncRuleText.CoverageGeneratedValueFor : SyncRuleText.CoverageAttributeFlowTo, target);
             }
         }
     }
@@ -75,14 +80,22 @@ public static class ConfigurationTestCaseDisplay
         ArgumentNullException.ThrowIfNull(expectation);
         return expectation.Kind switch
         {
-            ConfigurationTestExpectationKind.Values =>
-                string.Join(", ", expectation.Values.Select(value => $"'{value}'")) + (expectation.InOrder ? ", in this order" : string.Empty),
-            ConfigurationTestExpectationKind.NoValue => "No value",
-            ConfigurationTestExpectationKind.Error => "An error",
-            ConfigurationTestExpectationKind.AnyValue => "Any value",
-            ConfigurationTestExpectationKind.InScope => "In scope",
-            _ => "Out of scope"
+            ConfigurationTestExpectationKind.Values => ValuesDescription(expectation),
+            ConfigurationTestExpectationKind.NoValue => SyncRuleText.ExpectNoValue,
+            ConfigurationTestExpectationKind.Error => SyncRuleText.ExpectError,
+            ConfigurationTestExpectationKind.AnyValue => SyncRuleText.ExpectAnyValue,
+            ConfigurationTestExpectationKind.InScope => SyncRuleText.ExpectInScope,
+            _ => SyncRuleText.ExpectOutOfScope
         };
+    }
+
+    private static string ValuesDescription(ConfigurationTestExpectation expectation)
+    {
+        var values = string.Join(SyncRuleText.ListSeparator,
+            expectation.Values.Select(value => string.Format(CultureInfo.CurrentCulture, SyncRuleText.QuotedText, value)));
+        return expectation.InOrder
+            ? string.Format(CultureInfo.CurrentCulture, SyncRuleText.ExpectationValuesInOrder, values)
+            : values;
     }
 
     /// <summary>
@@ -91,12 +104,14 @@ public static class ConfigurationTestCaseDisplay
     /// </summary>
     public static string? AcceptBlockedReason(IReadOnlyList<ConfigurationTestRegression> regressions)
     {
-        var blocked = regressions.Where(r => !r.CanAccept).Select(r => $"'{r.TestCase.Name}'").ToList();
+        var blocked = regressions.Where(r => !r.CanAccept)
+            .Select(r => string.Format(CultureInfo.CurrentCulture, SyncRuleText.QuotedText, r.TestCase.Name))
+            .ToList();
         if (blocked.Count == 0)
             return null;
         return blocked.Count == 1
-            ? $"{blocked[0]} cannot take its new result as expected: edit the case, or save anyway."
-            : $"{string.Join(", ", blocked)} cannot take their new results as expected: edit the cases, or save anyway.";
+            ? string.Format(CultureInfo.CurrentCulture, SyncRuleText.AcceptBlockedOne, blocked[0])
+            : string.Format(CultureInfo.CurrentCulture, SyncRuleText.AcceptBlockedOther, string.Join(SyncRuleText.ListSeparator, blocked));
     }
 
     /// <summary>
@@ -104,7 +119,7 @@ public static class ConfigurationTestCaseDisplay
     /// </summary>
     public static string ExpectationLabel(ConfigurationTestExpectationKind kind) => kind switch
     {
-        ConfigurationTestExpectationKind.Values => "These values",
+        ConfigurationTestExpectationKind.Values => SyncRuleText.ExpectationTheseValues,
         _ => DescribeExpectation(new ConfigurationTestExpectation(kind))
     };
 

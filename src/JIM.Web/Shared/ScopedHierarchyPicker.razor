@@ -14,11 +14,12 @@
            appear to do nothing. *@
         <SearchField Value="@_filter" ValueChanged="FilterChanged" Class="jim-picker-filter" Margin="Margin.None" />
         <span class="jim-picker-count" data-testid="jim-picker-count">
-            <strong>@_selectedCount</strong> of <strong>@_totalCount</strong> selected
+            @((MarkupString)string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PickerCount,
+                $"<strong>{_selectedCount}</strong>", $"<strong>{_totalCount}</strong>"))
         </span>
         <MudButton Variant="Variant.Text" Size="Size.Small" Disabled="@(_selectedCount == 0)"
                    OnClick="ClearSelectionAsync" data-testid="jim-picker-clear">
-            Clear
+            @SyncRuleText.PickerClear
         </MudButton>
     </div>
 
@@ -28,11 +29,11 @@
         <div class="jim-picker-empty">
             @if (string.IsNullOrWhiteSpace(_filter))
             {
-                <MudText Typo="Typo.body2">This partition holds no Containers.</MudText>
+                <MudText Typo="Typo.body2">@SyncRuleText.PickerEmptyPartition</MudText>
             }
             else
             {
-                <MudText Typo="Typo.body2">No Container matches &ldquo;@_filter&rdquo;.</MudText>
+                <MudText Typo="Typo.body2">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PickerNoMatch, _filter)</MudText>
             }
         </div>
     }
@@ -53,7 +54,9 @@
                         {
                             <MudIconButton Icon="@(IsExpanded(container) ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)"
                                            Size="Size.Small" OnClick="@(() => ToggleExpanded(container))"
-                                           aria-label="@(IsExpanded(container) ? $"Collapse {container.Name}" : $"Expand {container.Name}")" />
+                                           aria-label="@(IsExpanded(container)
+                                               ? string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PickerCollapseAria, container.Name)
+                                               : string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PickerExpandAria, container.Name))" />
                         }
                     </span>
 
@@ -64,7 +67,7 @@
                     <MudCheckBox T="bool" Value="@container.Selected" Dense="true"
                                  Disabled="@(container.Included || container.Excluded)"
                                  ValueChanged="@(_ => ToggleSelectedAsync(container))"
-                                 aria-label="@($"Manage {container.Name}")" />
+                                 aria-label="@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PickerManageAria, container.Name)" />
 
                     @* The Container's own name leads; its Distinguished Name is one hover away rather than printed
                        on every row, where it restates the ancestry the indentation already draws. A Connector that
@@ -86,13 +89,13 @@
                                and undoing it should not require discovering a hover. *@
                             <MudTooltip Arrow="true" Placement="Placement.Top">
                                 <TooltipContent>
-                                    <TooltipText Text="@($"Stop carving this Container out of {DecidingContainerName(container)}. Its objects are imported again, as are those in every Container beneath it.")" />
+                                    <TooltipText Text="@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PickerIncludeTooltip, DecidingContainerName(container))" />
                                 </TooltipContent>
                                 <ChildContent>
                                     <MudButton Variant="Variant.Text" Size="Size.Small" Class="jim-picker-action"
                                                data-testid="jim-picker-include"
                                                OnClick="@(() => ToggleExcludedAsync(container))">
-                                        Include
+                                        @SyncRuleText.PickerInclude
                                     </MudButton>
                                 </ChildContent>
                             </MudTooltip>
@@ -105,13 +108,13 @@
                                OUs would otherwise carry two hundred buttons at rest. *@
                             <MudTooltip Arrow="true" Placement="Placement.Top">
                                 <TooltipContent>
-                                    <TooltipText Text="@($"Carve this Container out of {DecidingContainerName(container)}. Its objects are left unimported, as are those in every Container beneath it.")" />
+                                    <TooltipText Text="@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PickerExcludeTooltip, DecidingContainerName(container))" />
                                 </TooltipContent>
                                 <ChildContent>
                                     <MudButton Variant="Variant.Text" Size="Size.Small" Class="jim-picker-action"
                                                data-testid="jim-picker-exclude"
                                                OnClick="@(() => ToggleExcludedAsync(container))">
-                                        Exclude
+                                        @SyncRuleText.PickerExclude
                                     </MudButton>
                                 </ChildContent>
                             </MudTooltip>
@@ -121,14 +124,14 @@
                             <MudTooltip Arrow="true" Placement="Placement.Top">
                                 <TooltipContent>
                                     <TooltipText Text="@(isOneLevel
-                                                           ? "Only the objects held directly in this Container are imported. Choose Whole subtree to import everything beneath it as well."
-                                                           : "This Container and every Container beneath it are imported. Choose This level to import only the objects held directly in it.")" />
+                                                           ? SyncRuleText.PickerOneLevelTooltip
+                                                           : SyncRuleText.PickerSubtreeTooltip)" />
                                 </TooltipContent>
                                 <ChildContent>
                                     @* A setting, not an action, so a segmented control rather than a button group: it
                                        stays neutral down a long list and leaves the checkbox as the row's accent. *@
                                     <SegmentedToggle TValue="ConnectedSystemContainerScope" Options="ScopeOptions" Dense="true"
-                                                     AriaLabel="@($"Scope of {container.Name}")"
+                                                     AriaLabel="@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PickerScopeAria, container.Name)"
                                                      Value="@(isOneLevel ? ConnectedSystemContainerScope.OneLevel : ConnectedSystemContainerScope.Subtree)"
                                                      ValueChanged="@(scope => SetScopeAsync(container, scope))" />
                                 </ChildContent>
@@ -166,21 +169,23 @@
                     <span class="jim-picker-meta">
                         @if (container.Excluded)
                         {
-                            <span class="jim-picker-meta-excluded" data-testid="jim-picker-excluded">Excluded from @DecidingContainerName(container)</span>
+                            <span class="jim-picker-meta-excluded" data-testid="jim-picker-excluded">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PickerExcludedFrom, DecidingContainerName(container))</span>
                         }
                         else if (container.Included)
                         {
-                            <span data-testid="jim-picker-covered">Covered by @DecidingContainerName(container)</span>
+                            <span data-testid="jim-picker-covered">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PickerCoveredBy, DecidingContainerName(container))</span>
                         }
                         else if (container.ExcludedByAncestor)
                         {
-                            <span data-testid="jim-picker-excluded-by-ancestor">Excluded by @DecidingContainerName(container)</span>
+                            <span data-testid="jim-picker-excluded-by-ancestor">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PickerExcludedBy, DecidingContainerName(container))</span>
                         }
                         else if (container.ChildContainers.Count > 0)
                         {
                             @* Says whether narrowing this Container to This level would release one Container or
                                thirty, which is the decision the row is asking about. *@
-                            <span>@container.ChildContainers.Count @(container.ChildContainers.Count == 1 ? "Container" : "Containers")</span>
+                            <span>@string.Format(System.Globalization.CultureInfo.CurrentCulture,
+                                PluralRules.Choose(container.ChildContainers.Count, SyncRuleText.PickerChildContainersOne, SyncRuleText.PickerChildContainersOther),
+                                container.ChildContainers.Count)</span>
                         }
                     </span>
                 </div>
@@ -345,7 +350,7 @@
     /// portal never offers but a hierarchy refresh or another surface can leave behind.
     /// </remarks>
     private static string DecidingContainerName(ConnectedSystemContainer container) =>
-        ContainerSelectionEditor.DecidingAncestor(container)?.Name ?? "a Container above";
+        ContainerSelectionEditor.DecidingAncestor(container)?.Name ?? SyncRuleText.PickerContainerAbove;
 
     /// <summary>
     /// What the object count on a row means, said in terms of the Container Scope the row is currently set to.
@@ -358,14 +363,20 @@
     /// </remarks>
     internal static string CountExplanation(int directCount, int subtreeCount, bool isOneLevel)
     {
-        var objects = directCount == 1 ? "1 object" : $"{directCount:N0} objects";
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
 
         if (directCount == subtreeCount)
-            return $"This Container holds {objects}, counted in the Connected System when the hierarchy was last retrieved.";
+            return string.Format(culture,
+                PluralRules.Choose(directCount, SyncRuleText.PickerCountSameOne, SyncRuleText.PickerCountSameOther), directCount);
 
-        return isOneLevel
-            ? $"This Container holds {objects} directly, which is what This level imports. Its whole branch holds {subtreeCount:N0}."
-            : $"This Container and everything beneath it hold {subtreeCount:N0} objects, which is what This and below imports. {objects} sit directly in it.";
+        if (isOneLevel)
+            return string.Format(culture,
+                PluralRules.Choose(directCount, SyncRuleText.PickerOneLevelOne, SyncRuleText.PickerOneLevelOther), directCount, subtreeCount);
+
+        var lead = string.Format(culture, SyncRuleText.PickerSubtreeLead, subtreeCount);
+        var direct = string.Format(culture,
+            PluralRules.Choose(directCount, SyncRuleText.PickerSubtreeDirectOne, SyncRuleText.PickerSubtreeDirectOther), directCount);
+        return string.Format(culture, SyncRuleText.SentenceAndSentence, lead, direct);
     }
 
     private static string RowClass(ConnectedSystemContainer container)
@@ -385,9 +396,9 @@
         return classes;
     }
 
-    private static readonly IReadOnlyList<SegmentedToggleOption<ConnectedSystemContainerScope>> ScopeOptions =
+    private static IReadOnlyList<SegmentedToggleOption<ConnectedSystemContainerScope>> ScopeOptions =>
     [
-        new(ConnectedSystemContainerScope.Subtree, "Whole subtree", "jim-picker-scope-subtree"),
-        new(ConnectedSystemContainerScope.OneLevel, "This level", "jim-picker-scope-onelevel")
+        new(ConnectedSystemContainerScope.Subtree, SyncRuleText.PickerWholeSubtree, "jim-picker-scope-subtree"),
+        new(ConnectedSystemContainerScope.OneLevel, SyncRuleText.PickerThisLevel, "jim-picker-scope-onelevel")
     ];
 }

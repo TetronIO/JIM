@@ -3,6 +3,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 namespace JIM.Models.Activities;
 
@@ -111,6 +112,27 @@ public class Activity
 
     public string? ErrorMessage { get; set; }
 
+    /// <summary>
+    /// The error as a <see cref="JimMessage"/>, stored as JSON so the portal can show it in the reader's language
+    /// (#3039); null for an error recorded as English only. Set it through <see cref="ErrorMessageDetail"/>.
+    /// </summary>
+    public string? ErrorMessageDetailJson { get; set; }
+
+    /// <summary>
+    /// The error as a message. Setting it also sets <see cref="ErrorMessage"/> to its British English, which the REST
+    /// API and logs keep reading.
+    /// </summary>
+    [NotMapped]
+    public JimMessage? ErrorMessageDetail
+    {
+        get => MessageJson.Deserialise(ErrorMessageDetailJson);
+        set
+        {
+            ErrorMessageDetailJson = MessageJson.Serialise(value);
+            ErrorMessage = value?.ToEnglish();
+        }
+    }
+
     public string? ErrorStackTrace { get; set; }
 
     /// <summary>
@@ -133,6 +155,24 @@ public class Activity
     public string? WarningMessage { get; set; }
 
     /// <summary>
+    /// The warning as a <see cref="JimMessage"/> (#3039); null for one recorded as English only. Set it through
+    /// <see cref="WarningMessageDetail"/>.
+    /// </summary>
+    public string? WarningMessageDetailJson { get; set; }
+
+    /// <summary>The warning as a message; setting it also sets <see cref="WarningMessage"/> to its British English.</summary>
+    [NotMapped]
+    public JimMessage? WarningMessageDetail
+    {
+        get => MessageJson.Deserialise(WarningMessageDetailJson);
+        set
+        {
+            WarningMessageDetailJson = MessageJson.Serialise(value);
+            WarningMessage = value?.ToEnglish();
+        }
+    }
+
+    /// <summary>
     /// When the activity is complete, a value for how long the activity took to complete should be stored here.
     /// This may be a noticeably smaller value than the total activity time, as some activities take a while before
     /// they are executed, i.e. those processed by JIM.Service which
@@ -151,6 +191,24 @@ public class Activity
     /// Enables the user to be kept abreast of what is going on as part of this Activity.
     /// </summary>
     public string? Message { get; set; }
+
+    /// <summary>
+    /// The progress narration as a <see cref="JimMessage"/> (#3039); null for one recorded as English only. Set it
+    /// through <see cref="MessageDetail"/>.
+    /// </summary>
+    public string? MessageDetailJson { get; set; }
+
+    /// <summary>The narration as a message; setting it also sets <see cref="Message"/> to its British English.</summary>
+    [NotMapped]
+    public JimMessage? MessageDetail
+    {
+        get => MessageJson.Deserialise(MessageDetailJson);
+        set
+        {
+            MessageDetailJson = MessageJson.Serialise(value);
+            Message = value?.ToEnglish();
+        }
+    }
 
     public ActivityTargetType TargetType { get; init; } = ActivityTargetType.NotSet;
 

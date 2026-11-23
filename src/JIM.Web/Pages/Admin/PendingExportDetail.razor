@@ -14,17 +14,17 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Pending Export Detail</PageTitle>
+<PageTitle>@ConnectorSpaceText.PexPageTitle</PageTitle>
 
 @if (_pendingExport != null)
 {
     <MudText Typo="Typo.h3">
-        <span>Pending Export:</span>
+        <span>@ConnectorSpaceText.PexHeadingLabel</span>
         <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(_pendingExport.ChangeType)" Class="ml-2">
             @_pendingExport.ChangeType
         </MudChip>
-        <PageInfo Title="Pending Export" DocsPage="configuration/connected-systems.md#pending-exports" Term="Term.PendingExport">
-            A Pending Export is a change JIM has queued for a Connected System and not yet confirmed: the object it applies to, the attribute changes it carries, and how its attempts have gone.
+        <PageInfo Title="@ConnectorSpaceText.PexTerm" DocsPage="configuration/connected-systems.md#pending-exports" Term="Term.PendingExport">
+            @ConnectorSpaceText.PexPageInfo
         </PageInfo>
     </MudText>
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
@@ -34,18 +34,18 @@
             <MudCard Outlined="true" Elevation="0">
                 <MudCardHeader>
                     <CardHeaderContent>
-                        <MudText Typo="Typo.h6">Details</MudText>
+                        <MudText Typo="Typo.h6">@ConnectorSpaceText.PexCardDetails</MudText>
                     </CardHeaderContent>
                 </MudCardHeader>
                 <MudCardContent>
                     <MudSimpleTable Hover="true" Dense="true" Elevation="0" Class="jim-detail-table">
                         <tbody>
                             <tr>
-                                <td><strong>ID</strong></td>
+                                <td><strong>@ConnectorSpaceText.PexLabelId</strong></td>
                                 <td>@_pendingExport.Id</td>
                             </tr>
                             <tr>
-                                <td><strong>Status</strong></td>
+                                <td><strong>@CommonText.ColumnStatus</strong></td>
                                 <td>
                                     <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(_pendingExport.Status)">
                                         @_pendingExport.Status.ToString().SplitOnCapitalLetters()
@@ -53,7 +53,7 @@
                                 </td>
                             </tr>
                             <tr>
-                                <td><strong>Change Type</strong></td>
+                                <td><strong>@ConnectorSpaceText.CsoColumnChangeType</strong></td>
                                 <td>
                                     <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(_pendingExport.ChangeType)">
                                         @_pendingExport.ChangeType
@@ -61,7 +61,7 @@
                                 </td>
                             </tr>
                             <tr>
-                                <td><strong>Connected System</strong></td>
+                                <td><strong>@ConnectorSpaceText.DeletedConnectedSystem</strong></td>
                                 <td>
                                     <MudLink Typo="Typo.body1" Href="@Utilities.GetConnectedSystemHref(_connectedSystemHeader!)">
                                         @_pendingExport.ConnectedSystem.Name
@@ -69,7 +69,7 @@
                                 </td>
                             </tr>
                             <tr>
-                                <td><strong>Created</strong></td>
+                                <td><strong>@CommonText.ColumnCreated</strong></td>
                                 <td>
                                     <MudTooltip Text="@_pendingExport.CreatedAt.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                                         <MudText>@_pendingExport.CreatedAt.ToLocalTime().ToRelativeTime()</MudText>
@@ -77,15 +77,15 @@
                                 </td>
                             </tr>
                             <tr>
-                                <td><strong>Has Unresolved References</strong></td>
+                                <td><strong>@ConnectorSpaceText.PexLabelHasUnresolved</strong></td>
                                 <td>
                                     @if (_pendingExport.HasUnresolvedReferences)
                                     {
-                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Yes</MudChip>
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">@CommonText.Yes</MudChip>
                                     }
                                     else
                                     {
-                                        <MudText Typo="Typo.body1">No</MudText>
+                                        <MudText Typo="Typo.body1">@CommonText.No</MudText>
                                     }
                                 </td>
                             </tr>
@@ -99,14 +99,14 @@
             <MudCard Outlined="true" Elevation="0">
                 <MudCardHeader>
                     <CardHeaderContent>
-                        <MudText Typo="Typo.h6">Related Objects</MudText>
+                        <MudText Typo="Typo.h6">@ConnectorSpaceText.PexCardRelated</MudText>
                     </CardHeaderContent>
                 </MudCardHeader>
                 <MudCardContent>
                     <MudSimpleTable Hover="true" Dense="true" Elevation="0" Class="jim-detail-table">
                         <tbody>
                             <tr>
-                                <td><strong>Target</strong></td>
+                                <td><strong>@ConnectorSpaceText.PexLabelTarget</strong></td>
                                 <td>
                                     @if (_pendingExport.ConnectedSystemObject != null)
                                     {
@@ -127,12 +127,12 @@
                                     }
                                     else
                                     {
-                                        <span class="mud-text-secondary">New object (will be created)</span>
+                                        <span class="mud-text-secondary">@ConnectorSpaceText.PexNewObject</span>
                                     }
                                 </td>
                             </tr>
                             <tr>
-                                <td><strong>Source</strong></td>
+                                <td><strong>@ConnectorSpaceText.PexLabelSource</strong></td>
                                 <td>
                                     @if (_pendingExport.SourceMetaverseObject != null)
                                     {
@@ -178,22 +178,22 @@
         {
             <MudItem xs="12">
                 <MudAlert Severity="Severity.Error" Class="mt-0" Style="align-items: flex-start;">
-                    <MudText Typo="Typo.h6" Class="mb-3" Style="line-height: 1.5rem;">Error Information</MudText>
+                    <MudText Typo="Typo.h6" Class="mb-3" Style="line-height: 1.5rem;">@ConnectorSpaceText.PexErrorInformation</MudText>
                     <MudSimpleTable Hover="true" Dense="true" Elevation="0" Style="background: transparent;">
                         <tbody>
                             <tr>
-                                <td style="width: 200px;"><strong>Failed Attempts</strong></td>
+                                <td style="width: 200px;"><strong>@ConnectorSpaceText.PexLabelFailedAttempts</strong></td>
                                 <td>
                                     <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
                                         @_pendingExport.ErrorCount
                                     </MudChip>
-                                    <span class="mud-text-secondary">JIM attempts it again at every export run.</span>
+                                    <span class="mud-text-secondary">@ConnectorSpaceText.PexAttemptsAgain</span>
                                 </td>
                             </tr>
                             @if (_pendingExport.FailingSince is { } failingSince)
                             {
                                 <tr>
-                                    <td><strong>Failing Since</strong></td>
+                                    <td><strong>@ConnectorSpaceText.PexLabelFailingSince</strong></td>
                                     <td>
                                         <MudTooltip Text="@failingSince.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                                             <span>@failingSince.ToLocalTime().ToRelativeTime()</span>
@@ -202,13 +202,13 @@
                                 </tr>
                             }
                             <tr>
-                                <td><strong>Last Attempted</strong></td>
+                                <td><strong>@ConnectorSpaceText.PexLabelLastAttempted</strong></td>
                                 <td>@(_pendingExport.LastAttemptedAt?.ToFriendlyDate() ?? "-")</td>
                             </tr>
                             @if (!string.IsNullOrEmpty(_pendingExport.LastErrorMessage))
                             {
                                 <tr>
-                                    <td><strong>Error Message</strong></td>
+                                    <td><strong>@ConnectorSpaceText.PexLabelErrorMessage</strong></td>
                                     <td>
                                         <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0;">@_pendingExport.LastErrorMessage</pre>
                                     </td>
@@ -217,7 +217,7 @@
                             @if (!string.IsNullOrEmpty(_pendingExport.LastErrorStackTrace))
                             {
                                 <tr>
-                                    <td><strong>Stack Trace</strong></td>
+                                    <td><strong>@ConnectorSpaceText.PexLabelStackTrace</strong></td>
                                     <td>
                                         <CollapsibleStackTrace StackTrace="@_pendingExport.LastErrorStackTrace" />
                                     </td>
@@ -241,20 +241,19 @@
                 <MudCard Outlined="true" Elevation="0">
                     <MudCardHeader>
                         <CardHeaderContent>
-                            <MudText Typo="Typo.h6">Unresolved References</MudText>
+                            <MudText Typo="Typo.h6">@ConnectorSpaceText.PexUnresolvedTitle</MudText>
                         </CardHeaderContent>
                     </MudCardHeader>
                     <MudCardContent>
                         <MudText Typo="Typo.body1" Class="mb-3">
-                            These reference values have not been written to the Connected System yet. Everything else on this Pending Export is written
-                            as soon as it can be; each reference is written when the object it refers to can be addressed in this Connected System.
+                            @ConnectorSpaceText.PexUnresolvedIntro
                         </MudText>
                         <MudSimpleTable Hover="true" Dense="true" Elevation="0">
                             <thead>
                                 <tr>
-                                    <th>Attribute</th>
-                                    <th>Referenced Object</th>
-                                    <th>Reason</th>
+                                    <th>@ConnectorSpaceText.CsoColumnAttribute</th>
+                                    <th>@ConnectorSpaceText.PexColumnReferencedObject</th>
+                                    <th>@ConnectorSpaceText.PexColumnReason</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -301,19 +300,19 @@
                                 RowClassFunc="@((group, _) => group.TotalCount > 1 ? "jim-attr-row-mva" : string.Empty)"
                                 Class="mt-5">
                     <ToolBarExtras>
-                        <MudText Typo="Typo.h6">Attribute Changes</MudText>
+                        <MudText Typo="Typo.h6">@ConnectorSpaceText.PexAttributeChanges</MudText>
                         @* Bare number: the title beside it already names the objects (JIM.Web/CLAUDE.md
                            convention). It counts the changes; the table's own count on the right counts the rows,
                            which are attributes, and a multi-valued attribute is one row carrying many changes. *@
                         <TableObjectCount Count="@_attributeChangeTotalCounts.Values.Sum()" Class="ml-2" />
                     </ToolBarExtras>
                     <HeaderContent>
-                        <MudTh Class="jim-attr-header-name"><VirtualisedSortHeader Title="Attribute" Name="attribute" /></MudTh>
-                        <MudTh><MudText Typo="Typo.button">Change Type</MudText></MudTh>
-                        <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
-                        <MudTh><MudText Typo="Typo.button">Attribute Flow</MudText></MudTh>
-                        <MudTh><MudText Typo="Typo.button">Value from</MudText></MudTh>
-                        <MudTh Class="jim-attr-header-value"><MudText Typo="Typo.button">Value</MudText></MudTh>
+                        <MudTh Class="jim-attr-header-name"><VirtualisedSortHeader Title="@ConnectorSpaceText.CsoColumnAttribute" Name="attribute" /></MudTh>
+                        <MudTh><MudText Typo="Typo.button">@ConnectorSpaceText.CsoColumnChangeType</MudText></MudTh>
+                        <MudTh><MudText Typo="Typo.button">@CommonText.ColumnStatus</MudText></MudTh>
+                        <MudTh><MudText Typo="Typo.button">@ConnectorSpaceText.PexColumnAttributeFlow</MudText></MudTh>
+                        <MudTh><MudText Typo="Typo.button">@ConnectorSpaceText.PexColumnValueFrom</MudText></MudTh>
+                        <MudTh Class="jim-attr-header-value"><MudText Typo="Typo.button">@ConnectorSpaceText.CsoColumnValue</MudText></MudTh>
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd Class="jim-attr-name">
@@ -326,7 +325,7 @@
                             }
                             else
                             {
-                                <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.TotalCount.ToString("N0") changes</MudText>
+                                <MudText Typo="Typo.body1" Class="mud-text-secondary">@string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(context.TotalCount, ConnectorSpaceText.PexChangesOne, ConnectorSpaceText.PexChangesOther), context.TotalCount.ToString("N0"))</MudText>
                             }
                         </MudTd>
                         <MudTd>
@@ -341,7 +340,7 @@
                             @{ var flow = GetAttributeFlow(context.Values); }
                             @if (flow.Several)
                             {
-                                <MudText Class="mud-text-secondary">Several</MudText>
+                                <MudText Class="mud-text-secondary">@ConnectorSpaceText.PexSeveral</MudText>
                             }
                             else if (!string.IsNullOrEmpty(flow.SyncRuleName))
                             {
@@ -417,15 +416,15 @@
             else
             {
                 <MudPaper Outlined="true" Class="pa-4">
-                    <MudText Typo="Typo.h6" Class="mb-2">Attribute Changes (0)</MudText>
+                    <MudText Typo="Typo.h6" Class="mb-2">@ConnectorSpaceText.PexAttributeChangesZero</MudText>
                     <MudText Class="mud-text-secondary">
                         @if (_pendingExport.ChangeType == PendingExportChangeType.Delete)
                         {
-                            <text>No attribute changes (object will be deleted).</text>
+                            <text>@ConnectorSpaceText.PexNoChangesDelete</text>
                         }
                         else
                         {
-                            <text>No attribute changes recorded.</text>
+                            <text>@ConnectorSpaceText.PexNoChanges</text>
                         }
                     </MudText>
                 </MudPaper>
@@ -440,14 +439,11 @@ else if (_notFound)
        change simply reached its Connected System. Name the likely reasons rather than leave the
        reader wondering whether they have hit a bug. *@
     <MudAlert Severity="Severity.Info">
-        This Pending Export is no longer queued. It has either been exported to the Connected System,
-        or been superseded by a later change to the same Connected System Object. Pending Exports are
-        removed once they are no longer waiting to be applied, so links to an individual one stop
-        resolving after its export runs.
+        @ConnectorSpaceText.PexNotFound
     </MudAlert>
     <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.ArrowBack"
                Href="@($"/admin/connected-systems/{ConnectedSystemId}/pending-exports")" Class="mt-4">
-        Back to List
+        @ConnectorSpaceText.PexBackToList
     </MudButton>
 }
 else
@@ -514,12 +510,12 @@ else
             _notFound = true;
             _breadcrumbs = new List<BreadcrumbItem>
             {
-                new("Home", href: "/", icon: Icons.Material.Filled.Home),
-                new("Administration", href: "/admin"),
-                new("Connected Systems", href: "/admin/connected-systems/"),
+                new(ConnectorSpaceText.DeletedHomeBreadcrumb, href: "/", icon: Icons.Material.Filled.Home),
+                new(ConnectorSpaceText.DeletedAdministrationBreadcrumb, href: "/admin"),
+                new(ConnectorSpaceText.CsoBreadcrumbConnectedSystems, href: "/admin/connected-systems/"),
                 new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
-                new("Pending Exports", href: $"/admin/connected-systems/{ConnectedSystemId}/pending-exports"),
-                new("Not Found", href: null, disabled: true)
+                new(ConnectorSpaceText.CsoPendingExportsTitle, href: $"/admin/connected-systems/{ConnectedSystemId}/pending-exports"),
+                new(ConnectorSpaceText.PexBreadcrumbNotFound, href: null, disabled: true)
             };
             return;
         }
@@ -533,10 +529,10 @@ else
 
         _breadcrumbs = new List<BreadcrumbItem>
         {
-            new("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new("Connected Systems", href: "/admin/connected-systems/"),
+            new(ConnectorSpaceText.DeletedHomeBreadcrumb, href: "/", icon: Icons.Material.Filled.Home),
+            new(ConnectorSpaceText.CsoBreadcrumbConnectedSystems, href: "/admin/connected-systems/"),
             new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
-            new("Pending Exports", href: $"/admin/connected-systems/{ConnectedSystemId}/pending-exports"),
+            new(ConnectorSpaceText.CsoPendingExportsTitle, href: $"/admin/connected-systems/{ConnectedSystemId}/pending-exports"),
             new(_pendingExport.ChangeType.ToString(), href: null, disabled: true)
         };
     }
@@ -544,7 +540,7 @@ else
     private string GetCsoDisplayName()
     {
         if (_pendingExport?.ConnectedSystemObject == null)
-            return "Unknown";
+            return ConnectorSpaceText.PexUnknown;
 
         return _pendingExport.ConnectedSystemObject.NameOrId
             ?? _pendingExport.ConnectedSystemObject.Id.ToString();
@@ -553,7 +549,7 @@ else
     private string GetMvoDisplayName()
     {
         if (_pendingExport?.SourceMetaverseObject == null)
-            return _pendingExport?.SourceMetaverseObjectId?.ToString() ?? "Unknown";
+            return _pendingExport?.SourceMetaverseObjectId?.ToString() ?? ConnectorSpaceText.PexUnknown;
 
         // Use the built-in DisplayName property which looks up the displayname attribute
         return _pendingExport.SourceMetaverseObject.NameOrId
@@ -575,9 +571,9 @@ else
 
     private static string GetUnresolvedReferenceReasonLabel(UnresolvedReferenceReason reason) => reason switch
     {
-        UnresolvedReferenceReason.Resolvable => "Resolvable on next export",
-        UnresolvedReferenceReason.AwaitingAnchor => "Awaiting anchor",
-        UnresolvedReferenceReason.NotInTargetSystem => "Not in this Connected System",
+        UnresolvedReferenceReason.Resolvable => ConnectorSpaceText.PexReasonResolvable,
+        UnresolvedReferenceReason.AwaitingAnchor => ConnectorSpaceText.PexReasonAwaitingAnchor,
+        UnresolvedReferenceReason.NotInTargetSystem => ConnectorSpaceText.PexReasonNotInSystem,
         _ => reason.ToString()
     };
 
@@ -591,9 +587,9 @@ else
 
     private static string GetUnresolvedReferenceExplanation(UnresolvedReferenceReason reason) => reason switch
     {
-        UnresolvedReferenceReason.Resolvable => "The referenced object now has an anchor in this Connected System. The reference is written on the next export run.",
-        UnresolvedReferenceReason.AwaitingAnchor => "The referenced object exists in this Connected System but does not carry an anchor yet. Its own export has not been executed or confirmed. The reference is written once it has.",
-        UnresolvedReferenceReason.NotInTargetSystem => "The referenced object has no Connected System Object in this Connected System. It is out of scope for every Synchronisation Rule into this system, or has not been provisioned. The reference cannot be written until it is.",
+        UnresolvedReferenceReason.Resolvable => ConnectorSpaceText.PexExplainResolvable,
+        UnresolvedReferenceReason.AwaitingAnchor => ConnectorSpaceText.PexExplainAwaitingAnchor,
+        UnresolvedReferenceReason.NotInTargetSystem => ConnectorSpaceText.PexExplainNotInSystem,
         _ => string.Empty
     };
 
@@ -655,7 +651,7 @@ else
             return new List<AttributeChangeGroup>();
 
         return _pendingExport.AttributeValueChanges
-            .GroupBy(v => v.Attribute?.Name ?? $"Attribute {v.AttributeId}")
+            .GroupBy(v => v.Attribute?.Name ?? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.CsoAttributeFallback, v.AttributeId))
             .Select(g => new AttributeChangeGroup(
                 g.Key,
                 g.ToList(),

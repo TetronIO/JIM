@@ -441,8 +441,9 @@ public partial class SyncRepository
         var transaction = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
 
         // A narrow statement of its own rather than the bulk field update (RpeiBulkColumns): it writes the one column the
-        // bulk update leaves out on purpose, and the three error columns only where the report carries an error, which
-        // then holds the item's error slot (the three are always written together).
+        // bulk update leaves out on purpose, and the error columns only where the report carries an error, which then
+        // holds the item's error slot (they are always written together; the report's error is English only, so the
+        // message detail is cleared and the portal shows the English).
         foreach (var chunk in reports.Chunk(ReferenceSweepWriteChunkSize))
         {
             await using var command = new NpgsqlCommand("""
@@ -450,7 +451,8 @@ public partial class SyncRepository
                 SET "UnresolvedReferenceCount" = r.unresolved_count,
                     "ErrorType" = CASE WHEN r.error_type IS NULL THEN item."ErrorType" ELSE r.error_type END,
                     "ErrorMessage" = CASE WHEN r.error_type IS NULL THEN item."ErrorMessage" ELSE r.error_message END,
-                    "ErrorStackTrace" = CASE WHEN r.error_type IS NULL THEN item."ErrorStackTrace" ELSE NULL END
+                    "ErrorStackTrace" = CASE WHEN r.error_type IS NULL THEN item."ErrorStackTrace" ELSE NULL END,
+                    "ErrorMessageDetailJson" = CASE WHEN r.error_type IS NULL THEN item."ErrorMessageDetailJson" ELSE NULL END
                 FROM unnest(@itemIds, @counts, @errorTypes, @errorMessages) AS r(item_id, unresolved_count, error_type, error_message)
                 WHERE item."Id" = r.item_id
                 """, connection, transaction) { CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds };

@@ -15,38 +15,35 @@
 <MudDialog>
     <DialogContent>
         <MudText Typo="Typo.body1">
-            This preview would produce about @EstimatedDeltaRows.ToString("N0") object-level rows
-            (roughly @ApproximateStorage of preview data).
+            @RowsSentence
             @if (EstimatedDuration is { } duration)
             {
-                <span>It runs in the background and changes nothing; expect it to take about @Approximately(duration).</span>
+                <span>@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PreviewSizeRunsIn, Approximately(duration))</span>
             }
         </MudText>
         <MudText Typo="Typo.body1" Class="mt-3">
-            The summary counts are exact either way. The choice is how much of it you can drill into, and how much
-            storage the preview uses until it ages out under the retention period.
+            @SyncRuleText.PreviewSizeExactCounts
         </MudText>
 
         <MudRadioGroup T="ConfigurationChangePreviewDeltaPersistence" @bind-Value="_choice" Class="mt-4">
             <MudRadio T="ConfigurationChangePreviewDeltaPersistence" Value="@ConfigurationChangePreviewDeltaPersistence.Capped" Dense="false">
-                <MudText Typo="Typo.body1">Keep a sample of each group (recommended)</MudText>
+                <MudText Typo="Typo.body1">@SyncRuleText.PreviewSizeCappedTitle</MudText>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                    Up to @ConfigurationChangePreviewServer.MaximumDeltasPerGroup.ToString("N0") rows per summary
-                    group. Groups showing a sample are labelled as such.
+                    @string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PreviewSizeCappedHelp, ConfigurationChangePreviewServer.MaximumDeltasPerGroup)
                 </MudText>
             </MudRadio>
             <MudRadio T="ConfigurationChangePreviewDeltaPersistence" Value="@ConfigurationChangePreviewDeltaPersistence.Full" Dense="false">
-                <MudText Typo="Typo.body1">Keep every row</MudText>
+                <MudText Typo="Typo.body1">@SyncRuleText.PreviewSizeFullTitle</MudText>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                    Every affected object is drillable. Takes longer and uses the storage above.
+                    @SyncRuleText.PreviewSizeFullHelp
                 </MudText>
             </MudRadio>
         </MudRadioGroup>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Cancel">@CommonText.Cancel</MudButton>
         <MudButton data-testid="jim-preview-size-confirm" Color="Color.Primary" Variant="Variant.Filled" OnClick="Confirm">
-            Run preview
+            @SyncRuleText.PreviewSizeRunButton
         </MudButton>
     </DialogActions>
 </MudDialog>
@@ -76,14 +73,27 @@
 
     private ConfigurationChangePreviewDeltaPersistence _choice = ConfigurationChangePreviewDeltaPersistence.Capped;
 
+    private string RowsSentence
+    {
+        get
+        {
+            var culture = System.Globalization.CultureInfo.CurrentCulture;
+            var rows = string.Format(culture,
+                JIM.Web.Localisation.PluralRules.Choose(culture, EstimatedDeltaRows, SyncRuleText.PreviewSizeRowsOne, SyncRuleText.PreviewSizeRowsOther),
+                EstimatedDeltaRows);
+            return string.Format(culture, SyncRuleText.PreviewSizeSentence, rows, ApproximateStorage);
+        }
+    }
+
     private string ApproximateStorage
     {
         get
         {
+            var culture = System.Globalization.CultureInfo.CurrentCulture;
             var megabytes = (double)EstimatedDeltaRows * ApproximateBytesPerDeltaRow / (1024 * 1024);
             return megabytes >= 1024
-                ? $"{megabytes / 1024:N1} GB"
-                : $"{megabytes:N0} MB";
+                ? string.Format(culture, SyncRuleText.PreviewSizeStorageGigabytes, megabytes / 1024)
+                : string.Format(culture, SyncRuleText.PreviewSizeStorageMegabytes, megabytes);
         }
     }
 

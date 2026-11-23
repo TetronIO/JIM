@@ -21,22 +21,22 @@
                 @if (_impact.BlockedByValues)
                 {
                     <MudAlert Severity="Severity.Error">
-                        <MudText Typo="Typo.subtitle2">@_impact.ObjectsWithValues.ToString("N0") @_impact.MetaverseObjectTypeName object(s) have a value</MudText>
+                        <MudText Typo="Typo.subtitle2">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.RemoveBindingHasValue, _impact.ObjectsWithValues, _impact.MetaverseObjectTypeName)</MudText>
                         @if (!string.IsNullOrEmpty(_impact.MetaverseObjectTypePluralName))
                         {
                             <MudLink Href="@Utilities.GetMetaverseObjectHasAttributeSearchHref(_impact.MetaverseObjectTypePluralName, _impact.AttributeName)" Class="mt-1 d-inline-flex align-center">
-                                <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="mr-1" />View the object(s) with a value
+                                <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="mr-1" />@SyncRuleText.RemoveBindingViewObjects
                             </MudLink>
                         }
                     </MudAlert>
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        Clear these values first, then remove the binding.
+                        @SyncRuleText.RemoveBindingClearFirst
                     </MudText>
                 }
                 @if (_impact.BlockedByReaders)
                 {
                     <MudAlert Severity="Severity.Error">
-                        <MudText Typo="Typo.subtitle2">@_impact.Readers.Count.ToString("N0") configuration item(s) read this attribute on @_impact.MetaverseObjectTypeName</MudText>
+                        <MudText Typo="Typo.subtitle2">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.RemoveBindingReadBy, _impact.Readers.Count, _impact.MetaverseObjectTypeName)</MudText>
                         <MudList T="string" Dense="true" Class="mt-1">
                             @foreach (var reader in _impact.Readers)
                             {
@@ -47,19 +47,19 @@
                         </MudList>
                     </MudAlert>
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        Change or remove each one first, then remove the binding.
+                        @SyncRuleText.RemoveBindingChangeFirst
                     </MudText>
                 }
                 @if (!_impact.BlockedByValues && !_impact.BlockedByReaders)
                 {
                     <MudAlert Severity="Severity.Success" Dense="true">
-                        No @_impact.MetaverseObjectTypeName has a value for this attribute. Safe to remove; no object data will be lost.
+                        @string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.RemoveBindingSafe, _impact.MetaverseObjectTypeName)
                     </MudAlert>
 
                     @if (_cascadeReferences.Count > 0)
                     {
                         <MudAlert Severity="Severity.Warning">
-                            <MudText Typo="Typo.subtitle2">These @_cascadeReferences.Count reference(s) will also be removed</MudText>
+                            <MudText Typo="Typo.subtitle2">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.RemoveBindingCascadeTitle, _cascadeReferences.Count)</MudText>
                             <MudList T="string" Dense="true" Class="mt-1">
                                 @foreach (var reference in _cascadeReferences)
                                 {
@@ -71,7 +71,7 @@
                         </MudAlert>
 
                         <div>
-                            <MudText Typo="Typo.body2" Class="mb-1">Type <b>@_impact.AttributeName</b> to confirm</MudText>
+                            <MudText Typo="Typo.body2" Class="mb-1">@((MarkupString)string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.RemoveBindingTypeToConfirm, "<b>" + System.Net.WebUtility.HtmlEncode(_impact.AttributeName) + "</b>"))</MudText>
                             <MudTextField @bind-Value="_confirmText" Variant="Variant.Outlined" Immediate="true"
                                           Placeholder="@_impact.AttributeName" AutoFocus="true"
                                           Adornment="Adornment.End"
@@ -83,7 +83,7 @@
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Cancel">@CommonText.Cancel</MudButton>
         <MudButton Color="Color.Error" Variant="Variant.Filled"
                    Disabled="@(!CanRemove())" OnClick="RemoveAsync">
             @RemoveButtonText()
@@ -129,12 +129,12 @@
 
     private string RemoveButtonText() =>
         _cascadeReferences.Count > 0 && _impact is { BlockedByValues: false, BlockedByReaders: false }
-            ? $"Remove binding + {_cascadeReferences.Count} reference(s)"
-            : "Remove binding";
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.RemoveBindingWithReferences, _cascadeReferences.Count)
+            : SyncRuleText.RemoveBindingButton;
 
     private async Task RemoveAsync()
     {
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Remove");
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, SyncRuleText.RemoveButton);
         if (cancelled)
             return;
 
@@ -145,14 +145,15 @@
             var impact = await jim.Metaverse.UnassignAttributeFromObjectTypeAsync(AttributeId, MetaverseObjectTypeId, user, changeReason);
             if (!impact.Unassigned)
             {
-                Snackbar.Add("The binding could not be removed; it may now hold stored values, or configuration may now read it. Refresh and try again.", Severity.Warning);
+                Snackbar.Add(SyncRuleText.RemoveBindingFailed, Severity.Warning);
                 return;
             }
-            Snackbar.Add($"Removed \"{impact.AttributeName}\" from {impact.MetaverseObjectTypeName}.", Severity.Success);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.RemoveBindingRemoved,
+                impact.AttributeName, impact.MetaverseObjectTypeName), Severity.Success);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Snackbar.Add($"Failed to remove binding: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.RemoveBindingError, ex.Message), Severity.Error);
             return;
         }
 
@@ -174,7 +175,8 @@
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
         var dialog = await dialogService.ShowAsync<RemoveAttributeBindingDialog>(
-            $"Remove \"{attributeName}\" from {metaverseObjectTypeName}", parameters, options);
+            string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.RemoveBindingTitle, attributeName, metaverseObjectTypeName),
+            parameters, options);
         var result = await dialog.Result;
         return result is { Canceled: false, Data: true };
     }

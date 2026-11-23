@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DriftThisConnectedSystem" xml:space="preserve">
+    <value>Ce système connecté</value>
+  </data>
+  <data name="DriftThisConnectedSystemMidSentence" xml:space="preserve">
+    <value>ce système connecté</value>
+  </data>
+  <data name="DriftNeverFullySynchronised" xml:space="preserve">
+    <value>{0} n’a jamais terminé de synchronisation complète ; sa configuration n’a donc jamais été appliquée en totalité.</value>
+  </data>
+  <data name="DriftChangesOne" xml:space="preserve">
+    <value>{0} modification de configuration</value>
+  </data>
+  <data name="DriftChangesOther" xml:space="preserve">
+    <value>{0} modifications de configuration</value>
+  </data>
+  <data name="DriftDestructiveSince" xml:space="preserve">
+    <value>{0} depuis la dernière synchronisation complète ({1}), dont une modification destructrice. Vérifiez avant d’exécuter une synchronisation complète.</value>
+  </data>
+  <data name="DriftDestructiveSinceNoDate" xml:space="preserve">
+    <value>{0} depuis la dernière synchronisation complète, dont une modification destructrice. Vérifiez avant d’exécuter une synchronisation complète.</value>
+  </data>
+  <data name="DriftApplySinceOne" xml:space="preserve">
+    <value>{0} depuis la dernière synchronisation complète ({1}). Exécutez une synchronisation complète pour l’appliquer.</value>
+  </data>
+  <data name="DriftApplySinceOther" xml:space="preserve">
+    <value>{0} depuis la dernière synchronisation complète ({1}). Exécutez une synchronisation complète pour les appliquer.</value>
+  </data>
+  <data name="DriftApplySinceNoDateOne" xml:space="preserve">
+    <value>{0} depuis la dernière synchronisation complète. Exécutez une synchronisation complète pour l’appliquer.</value>
+  </data>
+  <data name="DriftApplySinceNoDateOther" xml:space="preserve">
+    <value>{0} depuis la dernière synchronisation complète. Exécutez une synchronisation complète pour les appliquer.</value>
+  </data>
+  <data name="DriftAwaitingOneChangeOneType" xml:space="preserve">
+    <value>1 modification enregistrée attend la prochaine synchronisation de {0}, qui traite chaque objet {1}.</value>
+  </data>
+  <data name="DriftAwaitingOneChangeSeveralTypes" xml:space="preserve">
+    <value>1 modification enregistrée attend la prochaine synchronisation de {0}, qui traite chaque objet de type {1} et {2}.</value>
+  </data>
+  <data name="DriftAwaitingManyChangesOneType" xml:space="preserve">
+    <value>{0} modifications enregistrées attendent la prochaine synchronisation de {1}, qui traite chaque objet {2}.</value>
+  </data>
+  <data name="DriftAwaitingManyChangesSeveralTypes" xml:space="preserve">
+    <value>{0} modifications enregistrées attendent la prochaine synchronisation de {1}, qui traite chaque objet de type {2} et {3}.</value>
+  </data>
+  <data name="TrustDialogIntro" xml:space="preserve">
+    <value>Votre fournisseur d’identité, {0}, a présenté cette chaîne. JIM approuvera le certificat que vous choisissez pour la connexion, jusqu’à ce que vous le retiriez de {1}. Vérifiez son empreinte par rapport à celle que publie votre autorité de certification avant de continuer.</value>
+  </data>
+  <data name="TrustDialogTrustedCertificatesLink" xml:space="preserve">
+    <value>Certificats approuvés</value>
+  </data>
+  <data name="TrustDialogRecommended" xml:space="preserve">
+    <value>Recommandé</value>
+  </data>
+  <data name="TrustDialogUnsentIssuer" xml:space="preserve">
+    <value>{0} n’a pas envoyé {1}, qui a émis le sommet de cette chaîne. Le téléverser depuis votre autorité de certification, approuvé pour la connexion, dure plus longtemps que tout ce qui figure ici.</value>
+  </data>
+  <data name="TrustDialogThumbprintToCheck" xml:space="preserve">
+    <value>Empreinte à vérifier</value>
+  </data>
+  <data name="TrustDialogChangeReason" xml:space="preserve">
+    <value>Motif de la modification</value>
+  </data>
+  <data name="TrustDialogChangeReasonHelper" xml:space="preserve">
+    <value>Consigné dans l’activité avec votre nom.</value>
+  </data>
+  <data name="TrustDialogChangeReasonDefault" xml:space="preserve">
+    <value>Rétablissement de la connexion via {0}.</value>
+  </data>
+  <data name="TrustDialogTrusting" xml:space="preserve">
+    <value>Approbation en cours</value>
+  </data>
+  <data name="TrustDialogTrustForSignIn" xml:space="preserve">
+    <value>Approuver pour la connexion</value>
+  </data>
+  <data name="TrustDialogTitleFailed" xml:space="preserve">
+    <value>JIM n’a pas pu approuver ce certificat</value>
+  </data>
+  <data name="TrustDialogTitleConfirm" xml:space="preserve">
+    <value>Approuver {0} pour la connexion ?</value>
+  </data>
+  <data name="TrustDialogThisCertificate" xml:space="preserve">
+    <value>ce certificat</value>
+  </data>
+  <data name="TrustDialogFailureMessage" xml:space="preserve">
+    <value>JIM n’a pas pu approuver ce certificat.</value>
+  </data>
+  <data name="TrustDialogOpenTitle" xml:space="preserve">
+    <value>Approuver un certificat pour la connexion ?</value>
+  </data>
+  <data name="TrustDialogDurabilityServer" xml:space="preserve">
+    <value>Le certificat propre à ce fournisseur d’identité. Il faudra l’approuver de nouveau lors de son renouvellement, le {0}.</value>
+  </data>
+  <data name="TrustDialogDurabilityAuthority" xml:space="preserve">
+    <value>Couvre tous les certificats émis par cette autorité de certification, jusqu’à l’expiration de son propre certificat le {0}.</value>
+  </data>
+  <data name="OutOfDateCause" xml:space="preserve">
+    <value>{0} depuis le début de cet aperçu : {1}{2}.</value>
+  </data>
+  <data name="OutOfDateWhen" xml:space="preserve">
+    <value> ({0})</value>
+  </data>
+  <data name="OutOfDateExplanation" xml:space="preserve">
+    <value>L’aperçu ne décrit peut-être plus ce que ferait l’exécution. Générez un nouvel aperçu pour une réponse à jour, ou exécutez quand même ; l’activité de l’exécution consigne que l’aperçu qui l’a motivée était périmé.</value>
+  </data>
+  <data name="OutOfDateRunAnyway" xml:space="preserve">
+    <value>Exécuter quand même</value>
+  </data>
+  <data name="OutOfDatePreviewAgain" xml:space="preserve">
+    <value>Générer un nouvel aperçu</value>
+  </data>
+  <data name="CsvErrorTitle" xml:space="preserve">
+    <value>Erreur d’analyse du CSV</value>
+  </data>
+  <data name="CsvErrorRow" xml:space="preserve">
+    <value>Ligne :</value>
+  </data>
+  <data name="CsvErrorColumn" xml:space="preserve">
+    <value>Colonne :</value>
+  </data>
+  <data name="CsvErrorRawData" xml:space="preserve">
+    <value>Données brutes :</value>
+  </data>
+  <data name="CsvErrorSuggestion" xml:space="preserve">
+    <value>Suggestion :</value>
+  </data>
+  <data name="CsvErrorOk" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="ChangeReasonDescription" xml:space="preserve">
+    <value>Décrivez éventuellement pourquoi vous effectuez cette modification. Le motif est consigné avec la modification dans l’historique des modifications de configuration.</value>
+  </data>
+  <data name="ChangeReasonLabel" xml:space="preserve">
+    <value>Motif (facultatif)</value>
+  </data>
+  <data name="ChangeReasonDialogTitle" xml:space="preserve">
+    <value>Motif de la modification</value>
+  </data>
+  <data name="AuditCreated" xml:space="preserve">
+    <value>Créé</value>
+  </data>
+  <data name="AuditUpdated" xml:space="preserve">
+    <value>Mis à jour</value>
+  </data>
+  <data name="AuditBy" xml:space="preserve">
+    <value>par</value>
+  </data>
+  <data name="ObjectCountOf" xml:space="preserve">
+    <value>{0} sur {1}</value>
+  </data>
+  <data name="ObjectCountOfNoun" xml:space="preserve">
+    <value>{0} sur {1} {2}</value>
+  </data>
+  <data name="RunAsOfDateLabel" xml:space="preserve">
+    <value>Exécuter à la date du (UTC)</value>
+  </data>
+  <data name="RunAsOfNow" xml:space="preserve">
+    <value>Maintenant</value>
+  </data>
+  <data name="RunAsOfTimeLabel" xml:space="preserve">
+    <value>Heure (UTC)</value>
+  </data>
+  <data name="InfoAbout" xml:space="preserve">
+    <value>À propos de {0}</value>
+  </data>
+  <data name="InfoDocumentation" xml:space="preserve">
+    <value>Documentation</value>
+  </data>
+  <data name="InfoGlossary" xml:space="preserve">
+    <value>Glossaire</value>
+  </data>
+  <data name="CopyTextExplanation" xml:space="preserve">
+    <value>Votre navigateur n’a pas autorisé JIM à copier ceci dans le presse-papiers. Le texte est sélectionné ci-dessous ; appuyez sur Ctrl+C (Cmd+C sur Mac) pour le copier.</value>
+  </data>
+  <data name="CopyTextAriaLabel" xml:space="preserve">
+    <value>Texte à copier</value>
+  </data>
+  <data name="CopyTextDone" xml:space="preserve">
+    <value>Terminé</value>
+  </data>
+  <data name="ConsequenceTypeToConfirm" xml:space="preserve">
+    <value>Saisissez {0} pour confirmer</value>
+  </data>
+  <data name="ConsequenceEvaluating" xml:space="preserve">
+    <value>Évaluation de l’impact...</value>
+  </data>
+  <data name="ConsequenceWorking" xml:space="preserve">
+    <value>Traitement en cours...</value>
+  </data>
+  <data name="DensityNormal" xml:space="preserve">
+    <value>Espacement normal des lignes</value>
+  </data>
+  <data name="DensityCompact" xml:space="preserve">
+    <value>Espacement compact des lignes</value>
+  </data>
+  <data name="StackTraceShow" xml:space="preserve">
+    <value>Afficher la trace de la pile</value>
+  </data>
+  <data name="StackTraceHide" xml:space="preserve">
+    <value>Masquer la trace de la pile</value>
+  </data>
+  <data name="OverflowMore" xml:space="preserve">
+    <value>+{0} de plus</value>
+  </data>
+  <data name="GridLoading" xml:space="preserve">
+    <value>Chargement…</value>
+  </data>
+  <data name="GridSearching" xml:space="preserve">
+    <value>Recherche…</value>
+  </data>
+  <data name="GridSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher...</value>
+  </data>
+  <data name="TechnicalDetails" xml:space="preserve">
+    <value>Détails techniques</value>
+  </data>
+  <data name="UnhandledErrorTitle" xml:space="preserve">
+    <value>Un problème est survenu</value>
+  </data>
+  <data name="UnhandledErrorSubtitle" xml:space="preserve">
+    <value>Ce n’était pas prévu. Un engrenage a déraillé !</value>
+  </data>
+  <data name="UnhandledErrorLabel" xml:space="preserve">
+    <value>Erreur</value>
+  </data>
+  <data name="UnhandledErrorMessage" xml:space="preserve">
+    <value>Message</value>
+  </data>
+  <data name="UnhandledErrorTryAgain" xml:space="preserve">
+    <value>Réessayer</value>
+  </data>
+  <data name="UnhandledErrorGoToDashboard" xml:space="preserve">
+    <value>Aller au tableau de bord</value>
+  </data>
+  <data name="NotAuthorisedTitle" xml:space="preserve">
+    <value>Accès refusé</value>
+  </data>
+  <data name="NotAuthorisedSubtitle" xml:space="preserve">
+    <value>Oups ! Il semble que vous n’ayez pas la clé de cette porte.</value>
+  </data>
+  <data name="NotAuthorisedNoPermission" xml:space="preserve">
+    <value>Vous êtes connecté, mais vous n’avez pas l’autorisation d’accéder à cette page.</value>
+  </data>
+  <data name="NotAuthorisedUserLabel" xml:space="preserve">
+    <value>Utilisateur</value>
+  </data>
+  <data name="NotAuthorisedRolesLabel" xml:space="preserve">
+    <value>Vos rôles</value>
+  </data>
+  <data name="NotAuthorisedRolesNone" xml:space="preserve">
+    <value>(aucun)</value>
+  </data>
+  <data name="NotAuthorisedAdminNote" xml:space="preserve">
+    <value>Note pour l’administrateur :</value>
+  </data>
+  <data name="NotAuthorisedMissingRoleNote" xml:space="preserve">
+    <value>Cet utilisateur est authentifié et existe dans JIM, mais n’a pas le rôle requis pour cette page. Vérifiez les attributions de rôle de l’utilisateur.</value>
+  </data>
+  <data name="NotAuthorisedNotFound" xml:space="preserve">
+    <value>Vous avez été authentifié, mais votre compte est introuvable dans JIM.</value>
+  </data>
+  <data name="NotAuthorisedTokenNameLabel" xml:space="preserve">
+    <value>Nom du jeton</value>
+  </data>
+  <data name="NotAuthorisedClaimTypeLabel" xml:space="preserve">
+    <value>Type de revendication</value>
+  </data>
+  <data name="NotAuthorisedClaimValueLabel" xml:space="preserve">
+    <value>Valeur de revendication</value>
+  </data>
+  <data name="NotAuthorisedUnmappedClaimNote" xml:space="preserve">
+    <value>Impossible de faire correspondre cette revendication à un utilisateur Metaverse. Vérifiez que l’utilisateur existe dans JIM et possède une valeur pour l’attribut SSO {0}.</value>
+  </data>
+  <data name="NotAuthorisedGoToHome" xml:space="preserve">
+    <value>Aller à l’accueil</value>
+  </data>
+</root>

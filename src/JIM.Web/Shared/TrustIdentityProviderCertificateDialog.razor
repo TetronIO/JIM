@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Security
 @using JIM.Web.Authentication
 @using JIM.Web.Models
@@ -24,10 +25,12 @@
         {
             case Step.Confirm:
                 <MudStack Spacing="4">
+                    @* The sentence has a link in it, so it is formatted around a marker and split there; the words stay in one resource. *@
+                    @{
+                        var intro = string.Format(CultureInfo.CurrentCulture, SharedText.TrustDialogIntro, Status.Host, "\u0001").Split('\u0001');
+                    }
                     <MudText Typo="Typo.body1">
-                        Your identity provider, @Status.Host, presented this chain. JIM will trust the certificate you
-                        choose for sign-in, until you remove it from <MudLink Href="/admin/certificates">Trusted Certificates</MudLink>.
-                        Check its thumbprint against the one your certificate authority publishes before you continue.
+                        @intro[0]<MudLink Href="/admin/certificates">@SharedText.TrustDialogTrustedCertificatesLink</MudLink>@intro[1]
                     </MudText>
 
                     @if (_options.Count > 1)
@@ -41,7 +44,7 @@
                                             @option.CommonName
                                             @if (option.Thumbprint == Status.SuggestedCertificate?.Thumbprint)
                                             {
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text" Class="ml-1">Recommended</MudChip>
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text" Class="ml-1">@SharedText.TrustDialogRecommended</MudChip>
                                             }
                                         </div>
                                         <div class="jim-trust-option-note">@DescribeDurability(option)</div>
@@ -54,19 +57,18 @@
                     @if (Status.UnsentIssuer != null)
                     {
                         <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                            @Status.Host did not send @CertificateDisplay.FormatDistinguishedName(Status.UnsentIssuer), which issued the top of this chain.
-                            Uploading it from your certificate authority, trusted for sign-in, lasts longer than anything here.
+                            @string.Format(CultureInfo.CurrentCulture, SharedText.TrustDialogUnsentIssuer, Status.Host, CertificateDisplay.FormatDistinguishedName(Status.UnsentIssuer))
                         </MudText>
                     }
 
                     <div class="jim-trust-compare">
-                        <div class="jim-trust-compare-label">Thumbprint to check</div>
+                        <div class="jim-trust-compare-label">@SharedText.TrustDialogThumbprintToCheck</div>
                         <div class="jim-trust-compare-value">@CertificateDisplay.FormatThumbprint(_selectedThumbprint)</div>
                     </div>
 
-                    <MudTextField @bind-Value="_changeReason" Label="Change reason" Variant="Variant.Outlined"
+                    <MudTextField @bind-Value="_changeReason" Label="@SharedText.TrustDialogChangeReason" Variant="Variant.Outlined"
                                   Lines="2" MaxLines="6" Sizing="InputSizing.Auto"
-                                  HelperText="Recorded on the Activity alongside your name." />
+                                  HelperText="@SharedText.TrustDialogChangeReasonHelper" />
                 </MudStack>
                 break;
 
@@ -76,18 +78,18 @@
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel" DropShadow="false">@(_step == Step.Failed ? "Close" : "Cancel")</MudButton>
+        <MudButton OnClick="Cancel" DropShadow="false">@(_step == Step.Failed ? CommonText.Close : CommonText.Cancel)</MudButton>
         @if (_step == Step.Confirm)
         {
             <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false" Disabled="_busy" OnClick="TrustAsync">
                 @if (_busy)
                 {
                     <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                    <span class="ms-2">Trusting</span>
+                    <span class="ms-2">@SharedText.TrustDialogTrusting</span>
                 }
                 else
                 {
-                    <text>Trust for sign-in</text>
+                    <text>@SharedText.TrustDialogTrustForSignIn</text>
                 }
             </MudButton>
         }
@@ -121,16 +123,18 @@
         // Highest first: a certificate authority outlasts the certificates it issues, so it is offered first and selected.
         _options = Enumerable.Reverse(Status.PresentedChain).ToList();
         _selectedThumbprint = Status.SuggestedCertificate?.Thumbprint ?? _options.FirstOrDefault()?.Thumbprint;
-        _changeReason = $"Restoring sign-in through {Status.Host}.";
+        _changeReason = string.Format(CultureInfo.CurrentCulture, SharedText.TrustDialogChangeReasonDefault, Status.Host);
     }
 
     private string Title => _step == Step.Failed
-        ? "JIM could not trust this certificate"
-        : $"Trust {_options.FirstOrDefault(o => o.Thumbprint == _selectedThumbprint)?.CommonName ?? "this certificate"} for sign-in?";
+        ? SharedText.TrustDialogTitleFailed
+        : string.Format(CultureInfo.CurrentCulture, SharedText.TrustDialogTitleConfirm,
+            _options.FirstOrDefault(o => o.Thumbprint == _selectedThumbprint)?.CommonName ?? SharedText.TrustDialogThisCertificate);
 
-    private static string DescribeDurability(IdentityProviderCertificate option) => option.IsServerCertificate
-        ? $"This identity provider's own certificate. Needs trusting again when it is renewed, on {option.ValidTo:d MMM yyyy}."
-        : $"Covers every certificate this certificate authority issues, until its own certificate expires on {option.ValidTo:d MMM yyyy}.";
+    private static string DescribeDurability(IdentityProviderCertificate option) => string.Format(
+        CultureInfo.CurrentCulture,
+        option.IsServerCertificate ? SharedText.TrustDialogDurabilityServer : SharedText.TrustDialogDurabilityAuthority,
+        option.ValidTo.ToString("d MMM yyyy", CultureInfo.CurrentCulture));
 
     private async Task TrustAsync()
     {
@@ -153,7 +157,7 @@
                 return;
             }
 
-            _failureMessage = result.Message ?? "JIM could not trust this certificate.";
+            _failureMessage = result.Message ?? SharedText.TrustDialogFailureMessage;
             _step = Step.Failed;
             MudDialog.StateHasChanged();
         }
@@ -173,7 +177,7 @@
         var parameters = new DialogParameters<TrustIdentityProviderCertificateDialog> { { x => x.Status, status } };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
 
-        var dialog = await dialogService.ShowAsync<TrustIdentityProviderCertificateDialog>("Trust a certificate for sign-in?", parameters, options);
+        var dialog = await dialogService.ShowAsync<TrustIdentityProviderCertificateDialog>(SharedText.TrustDialogOpenTitle, parameters, options);
         var result = await dialog.Result;
         return result is null or { Canceled: true } ? null : result.Data as string;
     }

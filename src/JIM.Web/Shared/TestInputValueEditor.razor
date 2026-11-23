@@ -21,15 +21,15 @@
         <MudTextField T="string" Label="@Label" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
                       Placeholder="@Placeholder(Type)" Value="@State.Pending" ValueChanged="@(v => State.Pending = v)"
                       OnKeyDown="AddOnEnterAsync" />
-        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => ChangeAsync(State.AddPending))">Add value</MudButton>
+        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => ChangeAsync(State.AddPending))">@SyncRuleText.TestInputAddValue</MudButton>
     </MudStack>
 }
 else if (Type == AttributeDataType.Boolean)
 {
     <MudSelect T="string" Label="@Label" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true"
                Value="@State.Values.FirstOrDefault()" ValueChanged="@(v => ChangeAsync(() => State.SetSingle(v)))">
-        <MudSelectItem T="string" Value="@("True")">True</MudSelectItem>
-        <MudSelectItem T="string" Value="@("False")">False</MudSelectItem>
+        <MudSelectItem T="string" Value="@("True")">@CommonText.True</MudSelectItem>
+        <MudSelectItem T="string" Value="@("False")">@CommonText.False</MudSelectItem>
     </MudSelect>
 }
 else
@@ -84,12 +84,12 @@ else
 
     private static string? Placeholder(AttributeDataType type) => type switch
     {
-        AttributeDataType.DateTime => "2026-03-15 or 2026-03-15T10:30:00Z",
-        AttributeDataType.Number or AttributeDataType.LongNumber => "A whole number",
-        AttributeDataType.Decimal => "A number, such as 12.5",
-        AttributeDataType.Guid => "A GUID",
-        AttributeDataType.Reference => "The id of the object it refers to",
-        AttributeDataType.Binary => "Base64",
+        AttributeDataType.DateTime => SyncRuleText.TestInputPlaceholderDateTime,
+        AttributeDataType.Number or AttributeDataType.LongNumber => SyncRuleText.TestInputPlaceholderWholeNumber,
+        AttributeDataType.Decimal => SyncRuleText.TestInputPlaceholderDecimal,
+        AttributeDataType.Guid => SyncRuleText.TestInputPlaceholderGuid,
+        AttributeDataType.Reference => SyncRuleText.TestInputPlaceholderReference,
+        AttributeDataType.Binary => SyncRuleText.TestInputPlaceholderBinary,
         _ => null
     };
 }

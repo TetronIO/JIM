@@ -37,7 +37,7 @@ else if (Value.Attribute.Type == AttributeDataType.Boolean && Value.BoolValue.Ha
 }
 else if (Value.Attribute.Type == AttributeDataType.Binary && Value.ByteValue != null)
 {
-    <span class="mud-text-secondary">[Binary: @Value.ByteValue.Length bytes]</span>
+    <span class="mud-text-secondary">@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.CavBinary, Value.ByteValue.Length)</span>
 }
 else if (Value.Attribute.Type == AttributeDataType.Text)
 {

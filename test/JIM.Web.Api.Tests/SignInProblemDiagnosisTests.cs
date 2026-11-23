@@ -2,8 +2,10 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System;
+using System.Globalization;
 using System.Linq;
 using System.Security.Claims;
+using JIM.Models.Localisation;
 using JIM.Web.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -183,6 +185,32 @@ public class SignInProblemDiagnosisTests
         {
             Assert.That(reports, Has.Count.EqualTo(2));
             Assert.That(reports.Select(r => r.Fix), Has.All.Contains("requestedAccessTokenVersion"));
+        }
+    }
+
+    [Test]
+    public void DiagnoseAccessToken_ViewerReadingFrench_RecordsEnglishAndCarriesTextThatRendersInFrench()
+    {
+        // The report is stored and read back through the REST API, which is English whatever the language of the
+        // person whose request produced it; the portal renders the carried text in its reader's language instead.
+        var previous = CultureInfo.CurrentUICulture;
+        CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr");
+        try
+        {
+            var reports = SignInProblemDiagnosis.DiagnoseAccessToken(Token(Authority), ["api://jim"], [Authority]);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(reports[0].Received, Is.EqualTo("(none)"));
+                Assert.That(reports[0].Description, Does.Contain("is not for JIM's API"));
+                Assert.That(reports[0].Text, Is.Not.Null);
+                Assert.That(reports[0].Text!.Received.ToCurrentLanguage(), Is.EqualTo("(aucun)"));
+                Assert.That(reports[0].Text!.Fix.ToCurrentLanguage(), Is.Not.EqualTo(reports[0].Fix));
+            }
+        }
+        finally
+        {
+            CultureInfo.CurrentUICulture = previous;
         }
     }
 

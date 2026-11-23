@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Web.Resources;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
@@ -27,7 +29,9 @@ public static partial class SignInProblemDiagnosis
     /// <summary>The page that explains a portal sign-in a setting stopped.</summary>
     public const string ProblemPagePath = "/sign-in-problem";
 
-    private const string None = "(none)";
+    internal const string Catalogue = "JIM.Web:SignInText";
+
+    private static JimMessage None => Message(nameof(SignInText.ProblemNone));
 
     /// <summary>
     /// Diagnoses a failed portal sign-in: an ID token for another audience or from another issuer, or an error the
@@ -42,17 +46,17 @@ public static partial class SignInProblemDiagnosis
         {
             null => null,
             AggregateException aggregate => aggregate.InnerExceptions.Select(e => DiagnosePortalFailure(e, options)).FirstOrDefault(r => r != null),
-            SecurityTokenInvalidAudienceException audience => new SignInProblemReport(
+            SecurityTokenInvalidAudienceException audience => Report(
                 SignInProblemSource.Portal,
                 Constants.Config.SsoClientId,
-                "The identity provider issued an ID token for another client, so JIM refused it.",
-                options.ClientId ?? None,
+                Message(nameof(SignInText.ProblemWrongAudienceDescription)),
+                ValueOrNone(options.ClientId),
                 ValueOrNone(audience.InvalidAudience),
-                $"Set {Constants.Config.SsoClientId} to the client ID the identity provider registered for JIM's portal."),
-            SecurityTokenInvalidIssuerException issuer => new SignInProblemReport(
+                Message(nameof(SignInText.ProblemWrongAudienceFix), Constants.Config.SsoClientId)),
+            SecurityTokenInvalidIssuerException issuer => Report(
                 SignInProblemSource.Portal,
                 Constants.Config.SsoValidIssuers,
-                "The ID token came from an issuer JIM does not accept.",
+                Message(nameof(SignInText.ProblemWrongIssuerDescription)),
                 JoinOrNone(PortalIssuers(options)),
                 ValueOrNone(issuer.InvalidIssuer),
                 IssuerFix),
@@ -162,24 +166,23 @@ public static partial class SignInProblemDiagnosis
         var reports = new List<SignInProblemReport>();
         if (expectedAudiences.Count > 0 && !tokenAudiences.Intersect(expectedAudiences, StringComparer.Ordinal).Any())
         {
-            reports.Add(new SignInProblemReport(
+            reports.Add(Report(
                 SignInProblemSource.Api,
                 Constants.Config.SsoApiScope,
-                "An access token the identity provider issued was refused because it is not for JIM's API.",
+                Message(nameof(SignInText.ProblemApiWrongAudienceDescription)),
                 JoinOrNone(expectedAudiences),
                 JoinOrNone(tokenAudiences),
                 entraIdVersion1
                     ? EntraIdVersion1Fix
-                    : $"JIM expects the audience {Constants.Config.SsoApiScope} names when it is an api:// URI, and otherwise the portal's " +
-                      $"client ID, {Constants.Config.SsoClientId}. Change that setting, or have the identity provider issue the audience JIM expects."));
+                    : Message(nameof(SignInText.ProblemApiWrongAudienceFix), Constants.Config.SsoApiScope, Constants.Config.SsoClientId)));
         }
 
         if (acceptedIssuers.Count > 0 && !acceptedIssuers.Contains(token.Issuer, StringComparer.Ordinal))
         {
-            reports.Add(new SignInProblemReport(
+            reports.Add(Report(
                 SignInProblemSource.Api,
                 Constants.Config.SsoValidIssuers,
-                "An access token came from an issuer JIM does not accept.",
+                Message(nameof(SignInText.ProblemApiWrongIssuerDescription)),
                 JoinOrNone(acceptedIssuers),
                 ValueOrNone(token.Issuer),
                 entraIdVersion1 ? EntraIdVersion1Fix : IssuerFix));
@@ -196,50 +199,45 @@ public static partial class SignInProblemDiagnosis
     {
         ArgumentNullException.ThrowIfNull(claims);
 
-        return new SignInProblemReport(
+        return Report(
             source,
             Constants.Config.SsoClaimType,
-            $"JIM could not tell who signed in, because the sign-in carried no '{claimType}' claim.",
-            claimType,
+            Message(nameof(SignInText.ProblemMissingClaimDescription), claimType),
+            Value(claimType),
             JoinOrNone(claims.Select(c => c.Type).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList()),
-            $"Set {Constants.Config.SsoClaimType} to a claim the identity provider issues for everyone, or have it issue '{claimType}'.");
+            Message(nameof(SignInText.ProblemMissingClaimFix), Constants.Config.SsoClaimType, claimType));
     }
 
     private const string EntraIdVersion1IssuerPrefix = "https://sts.windows.net/";
 
-    private const string EntraIdVersion1Fix =
-        "Microsoft Entra ID issued a version 1 access token. Set requestedAccessTokenVersion to 2 in the app registration's manifest " +
-        "(Register-JIMIdentityProvider -Provider EntraId does), so its tokens carry the client ID as their audience and come from the " +
-        "tenant's version 2 issuer, which is what JIM accepts.";
+    private static JimMessage EntraIdVersion1Fix => Message(nameof(SignInText.ProblemEntraVersion1Fix));
 
-    private static string IssuerFix =>
-        $"If that issuer is your identity provider's, add it to {Constants.Config.SsoValidIssuers} along with those listed; " +
-        $"otherwise check that {Constants.Config.SsoAuthority} names the identity provider people sign in with.";
+    private static JimMessage IssuerFix =>
+        Message(nameof(SignInText.ProblemIssuerFix), Constants.Config.SsoValidIssuers, Constants.Config.SsoAuthority);
 
     private static SignInProblemReport? DiagnoseProtocolError(string? error, OpenIdConnectOptions options) => error switch
     {
-        "invalid_client" => new SignInProblemReport(
+        "invalid_client" => Report(
             SignInProblemSource.Portal,
             Constants.Config.SsoSecret,
-            "The identity provider did not accept JIM's portal client.",
-            $"the identity provider to accept client '{options.ClientId}' and its secret",
-            error,
-            $"Check that {Constants.Config.SsoClientId} names the portal's client, and that {Constants.Config.SsoSecret} holds its current " +
-            "secret. Register-JIMIdentityProvider -ResetClientSecret makes a new one."),
-        "unauthorized_client" => new SignInProblemReport(
+            Message(nameof(SignInText.ProblemInvalidClientDescription)),
+            Message(nameof(SignInText.ProblemInvalidClientExpected), options.ClientId),
+            Value(error),
+            Message(nameof(SignInText.ProblemInvalidClientFix), Constants.Config.SsoClientId, Constants.Config.SsoSecret)),
+        "unauthorized_client" => Report(
             SignInProblemSource.Portal,
             Constants.Config.SsoClientId,
-            "The identity provider does not let JIM's portal client sign people in this way.",
-            $"client '{options.ClientId}' to sign people in with an authorisation code",
-            error,
-            $"Check that {Constants.Config.SsoClientId} names the portal's client, and that the identity provider lets it use the authorisation code flow."),
-        "invalid_scope" or "invalid_resource" => new SignInProblemReport(
+            Message(nameof(SignInText.ProblemUnauthorizedClientDescription)),
+            Message(nameof(SignInText.ProblemUnauthorizedClientExpected), options.ClientId),
+            Value(error),
+            Message(nameof(SignInText.ProblemUnauthorizedClientFix), Constants.Config.SsoClientId)),
+        "invalid_scope" or "invalid_resource" => Report(
             SignInProblemSource.Portal,
             Constants.Config.SsoApiScope,
-            "The identity provider refused the scopes JIM asked for.",
-            string.Join(' ', options.Scope),
-            error,
-            $"Set {Constants.Config.SsoApiScope} to a scope the identity provider grants JIM's portal client, or leave it empty."),
+            Message(nameof(SignInText.ProblemInvalidScopeDescription)),
+            Value(string.Join(' ', options.Scope)),
+            Value(error),
+            Message(nameof(SignInText.ProblemInvalidScopeFix), Constants.Config.SsoApiScope)),
         _ => null
     };
 
@@ -266,11 +264,22 @@ public static partial class SignInProblemDiagnosis
     private static List<string> NonEmpty(IEnumerable<string?> values) =>
         values.Where(v => !string.IsNullOrEmpty(v)).Select(v => v!).Distinct(StringComparer.Ordinal).ToList();
 
-    private static string ValueOrNone(string? value) => string.IsNullOrEmpty(value) ? None : value;
+    private static JimMessage ValueOrNone(string? value) => string.IsNullOrEmpty(value) ? None : Value(value);
 
-    private static string JoinOrNone(IEnumerable<string> values)
-    {
-        var joined = string.Join(", ", values);
-        return joined.Length == 0 ? None : joined;
-    }
+    private static JimMessage JoinOrNone(IEnumerable<string> values) => ValueOrNone(string.Join(", ", values));
+
+    private static JimMessage Message(string key, params MessageArgument[] arguments) => JimMessage.Create(Catalogue, key, arguments);
+
+    internal static JimMessage Value(string value) => Message(nameof(SignInText.ProblemValue), value);
+
+    /// <summary>
+    /// A report holding its texts in English, rendered now, for the REST API and the log, and as messages for the portal,
+    /// which renders them in its reader's language. Never in the language of the request that met the failure (#3030).
+    /// </summary>
+    private static SignInProblemReport Report(SignInProblemSource source, string setting, JimMessage description, JimMessage expected,
+        JimMessage received, JimMessage fix) =>
+        new(source, setting, description.ToEnglish(), expected.ToEnglish(), received.ToEnglish(), fix.ToEnglish())
+        {
+            Text = new SignInProblemText(description, expected, received, fix)
+        };
 }

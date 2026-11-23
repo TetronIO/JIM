@@ -22,13 +22,13 @@
                          StateKey="@AttributeName"
                          DefaultSortBy="@SourceOrderSort"
                          LoadWindow="LoadChangeWindowAsync"
-                         SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
-                         SingularName="Change"
-                         PluralName="Changes">
+                         SearchPlaceholder="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.ImvSearch, AttributeName.ToLower())"
+                         SingularName="@ConnectorSpaceText.CsoChangeSingular"
+                         PluralName="@ConnectorSpaceText.CsoChangePlural">
         <Columns>
-            <TemplateColumn Title="Change Type" Sortable="false">
+            <TemplateColumn Title="@ConnectorSpaceText.CsoColumnChangeType" Sortable="false">
                 <HeaderTemplate>
-                    <MudText Typo="Typo.button">Change Type</MudText>
+                    <MudText Typo="Typo.button">@ConnectorSpaceText.CsoColumnChangeType</MudText>
                 </HeaderTemplate>
                 <CellTemplate>
                     <MudChip T="string" Variant="Variant.Text" Color="GetChangeTypeColor(context.Item.ChangeType)">
@@ -36,9 +36,9 @@
                     </MudChip>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Status" Sortable="false">
+            <TemplateColumn Title="@CommonText.ColumnStatus" Sortable="false">
                 <HeaderTemplate>
-                    <MudText Typo="Typo.button">Status</MudText>
+                    <MudText Typo="Typo.button">@CommonText.ColumnStatus</MudText>
                 </HeaderTemplate>
                 <CellTemplate>
                     <MudChip T="string" Variant="Variant.Text" Color="GetStatusColor(context.Item.Status)">
@@ -46,9 +46,9 @@
                     </MudChip>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Attribute Flow" Sortable="false">
+            <TemplateColumn Title="@ConnectorSpaceText.PexColumnAttributeFlow" Sortable="false">
                 <HeaderTemplate>
-                    <MudText Typo="Typo.button">Attribute Flow</MudText>
+                    <MudText Typo="Typo.button">@ConnectorSpaceText.PexColumnAttributeFlow</MudText>
                 </HeaderTemplate>
                 <CellTemplate>
                     @* Values queued for one multi-valued attribute can each carry their own staging
@@ -65,9 +65,9 @@
                     }
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Value" Sortable="false">
+            <TemplateColumn Title="@ConnectorSpaceText.CsoColumnValue" Sortable="false">
                 <HeaderTemplate>
-                    <MudText Typo="Typo.button">Value</MudText>
+                    <MudText Typo="Typo.button">@ConnectorSpaceText.CsoColumnValue</MudText>
                 </HeaderTemplate>
                 <CellTemplate>
                     <TextValueDisplay Value="@GetValueText(context.Item)" />
@@ -78,16 +78,16 @@
             @if (!string.IsNullOrWhiteSpace(grid.SearchText))
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                 PrimaryText="@($"No changes match \"{grid.SearchText}\"")"
-                                 SecondaryText="Try a different search term, or clear the search."
-                                 ActionText="Clear Search"
+                                 PrimaryText="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.PmvNoMatch, grid.SearchText)"
+                                 SecondaryText="@CommonText.TrySearchAgain"
+                                 ActionText="@CommonText.ClearSearch"
                                  OnAction="@(() => grid.ClearSearchAsync())" />
             }
             else
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.PublishedWithChanges"
-                                 PrimaryText="No changes are queued for this attribute"
-                                 SecondaryText="Changes appear here while the Pending Export is waiting to be exported, and are cleared once the Connected System confirms them." />
+                                 PrimaryText="@ConnectorSpaceText.PmvNone"
+                                 SecondaryText="@ConnectorSpaceText.PmvNoneHint" />
             }
         </EmptyContent>
     </VirtualisedDataGrid>

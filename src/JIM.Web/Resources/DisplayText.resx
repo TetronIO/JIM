@@ -1,0 +1,627 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AttributeSideMetaverse" xml:space="preserve">
+    <value>Metaverse</value>
+    <comment>Which side of the Metaverse an attribute belongs to, in an attribute chip tooltip.</comment>
+  </data>
+  <data name="AttributeSideConnectedSystem" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Which side of the Metaverse an attribute belongs to, in an attribute chip tooltip.</comment>
+  </data>
+  <data name="AttributeSingleValued" xml:space="preserve">
+    <value>Single-Valued</value>
+    <comment>Attribute plurality.</comment>
+  </data>
+  <data name="AttributeMultiValued" xml:space="preserve">
+    <value>Multi-Valued</value>
+    <comment>Attribute plurality.</comment>
+  </data>
+  <data name="AttributeDescription" xml:space="preserve">
+    <value>{0}: {1}, {2}</value>
+    <comment>Attribute chip tooltip. {0} is the side (Metaverse or Connected System), {1} the data type, {2} Single-Valued or Multi-Valued.</comment>
+  </data>
+  <data name="DayToday" xml:space="preserve">
+    <value>Today</value>
+    <comment>Heading for entries made today.</comment>
+  </data>
+  <data name="DayYesterday" xml:space="preserve">
+    <value>Yesterday</value>
+    <comment>Heading for entries made yesterday.</comment>
+  </data>
+  <data name="DurationDayOne" xml:space="preserve">
+    <value>{0} day</value>
+    <comment>A duration, abbreviated. {0} is a whole number.</comment>
+  </data>
+  <data name="DurationDayOther" xml:space="preserve">
+    <value>{0} days</value>
+    <comment>A duration, abbreviated. {0} is a whole number.</comment>
+  </data>
+  <data name="DurationHourOne" xml:space="preserve">
+    <value>{0} hr</value>
+    <comment>A duration, abbreviated. {0} is a whole number.</comment>
+  </data>
+  <data name="DurationHourOther" xml:space="preserve">
+    <value>{0} hrs</value>
+    <comment>A duration, abbreviated. {0} is a whole number.</comment>
+  </data>
+  <data name="DurationMinute" xml:space="preserve">
+    <value>{0} min</value>
+    <comment>A duration, abbreviated.</comment>
+  </data>
+  <data name="DurationSecond" xml:space="preserve">
+    <value>{0} sec</value>
+    <comment>A duration, abbreviated.</comment>
+  </data>
+  <data name="DurationMillisecond" xml:space="preserve">
+    <value>{0} ms</value>
+    <comment>A duration, abbreviated.</comment>
+  </data>
+  <data name="DurationApproxDayOne" xml:space="preserve">
+    <value>~{0} day</value>
+    <comment>An approximate duration; the tilde means about.</comment>
+  </data>
+  <data name="DurationApproxDayOther" xml:space="preserve">
+    <value>~{0} days</value>
+    <comment>An approximate duration; the tilde means about.</comment>
+  </data>
+  <data name="DurationApproxHourOne" xml:space="preserve">
+    <value>~{0} hr</value>
+    <comment>An approximate duration; the tilde means about.</comment>
+  </data>
+  <data name="DurationApproxHourOther" xml:space="preserve">
+    <value>~{0} hrs</value>
+    <comment>An approximate duration; the tilde means about.</comment>
+  </data>
+  <data name="DurationApproxMinute" xml:space="preserve">
+    <value>~{0} min</value>
+    <comment>An approximate duration; the tilde means about.</comment>
+  </data>
+  <data name="DurationApproxSecond" xml:space="preserve">
+    <value>~{0} sec</value>
+    <comment>An approximate duration; the tilde means about.</comment>
+  </data>
+  <data name="ErrorHeadingNoError" xml:space="preserve">
+    <value>No Error</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingImportRejected" xml:space="preserve">
+    <value>Import Rejected</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingAttributeNotImported" xml:space="preserve">
+    <value>Attribute Not Imported</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingReferenceUnresolved" xml:space="preserve">
+    <value>Reference Unresolved</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingImportVerification" xml:space="preserve">
+    <value>Import Verification</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingImportFellBack" xml:space="preserve">
+    <value>Import Fell Back</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingSynchronisationFailed" xml:space="preserve">
+    <value>Synchronisation Failed</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingExpressionNotEvaluated" xml:space="preserve">
+    <value>Expression Not Evaluated</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingDatesMerged" xml:space="preserve">
+    <value>Dates Merged</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingCredentialNotExported" xml:space="preserve">
+    <value>Credential Not Exported</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingExportRulesOverlap" xml:space="preserve">
+    <value>Export Rules Overlap</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingExportPending" xml:space="preserve">
+    <value>Export Pending</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingExportFailed" xml:space="preserve">
+    <value>Export Failed</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingExportRefused" xml:space="preserve">
+    <value>Export Refused</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingValueAlreadyInUse" xml:space="preserve">
+    <value>Value Already in Use</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingPasswordRequired" xml:space="preserve">
+    <value>Password Required</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingAccessDenied" xml:space="preserve">
+    <value>Access Denied</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingExportRejected" xml:space="preserve">
+    <value>Export Rejected</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingPlaceholderMemberRejected" xml:space="preserve">
+    <value>Placeholder Member Rejected</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingDependencyNotYetExported" xml:space="preserve">
+    <value>Dependency Not Yet Exported</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingChangedSinceLastImport" xml:space="preserve">
+    <value>Changed Since Last Import</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingNoFreeValueFound" xml:space="preserve">
+    <value>No Free Value Found</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingSequenceWidthExceeded" xml:space="preserve">
+    <value>Sequence Width Exceeded</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingNeedsADecision" xml:space="preserve">
+    <value>Needs a Decision</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorHeadingOperationFailed" xml:space="preserve">
+    <value>Operation Failed</value>
+    <comment>Heading above a Run Profile Execution Item's error, naming the phase or condition it belongs to.</comment>
+  </data>
+  <data name="ErrorChipNeedsADecision" xml:space="preserve">
+    <value>Needs a decision</value>
+    <comment>Label on an execution item's error chip and error filter.</comment>
+  </data>
+  <data name="ActivityTargetScimRequests" xml:space="preserve">
+    <value>SCIM Requests</value>
+    <comment>An Activity target type's name.</comment>
+  </data>
+  <data name="ExternalIdStatusRejected" xml:space="preserve">
+    <value>This object was not created due to an import error. The external ID shown is from the source data.</value>
+  </data>
+  <data name="ExternalIdStatusPendingRemoval" xml:space="preserve">
+    <value>This object has been detected as deleted from the source system. It is pending removal during the next synchronisation.</value>
+  </data>
+  <data name="ExternalIdStatusDeleted" xml:space="preserve">
+    <value>This object has been deleted. The external ID shown is preserved from when this operation was recorded.</value>
+  </data>
+  <data name="ExternalIdStatusOther" xml:space="preserve">
+    <value>The external ID shown is preserved from when this operation was recorded.</value>
+  </data>
+  <data name="OperationAdded" xml:space="preserve">
+    <value>A new Connected System Object was discovered in the source system and added to the connector space.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationUpdated" xml:space="preserve">
+    <value>An existing Connected System Object was updated with changed attribute values from the source system.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationDeletedImport" xml:space="preserve">
+    <value>The object was detected as deleted from the source system. It is now pending removal during the next synchronisation.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationDeletedSync" xml:space="preserve">
+    <value>The deletion of this object has been processed during synchronisation. Associated metaverse links and data have been updated.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationProjected" xml:space="preserve">
+    <value>A new Metaverse Object was created because no existing match was found. The Connected System Object's attributes were projected into the metaverse.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationJoined" xml:space="preserve">
+    <value>The Connected System Object was matched to an existing Metaverse Object using the configured join rules.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationAttributeFlow" xml:space="preserve">
+    <value>Attribute values were flowed from the Connected System Object to the Metaverse Object according to the Synchronisation Rule mappings.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationDisconnected" xml:space="preserve">
+    <value>The Connected System Object was disconnected from its Metaverse Object. Attribute Flow has stopped.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationDisconnectedOutOfScope" xml:space="preserve">
+    <value>The object fell out of scope of the import Synchronisation Rule scoping criteria and was disconnected from the metaverse.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationOutOfScopeRetainJoin" xml:space="preserve">
+    <value>The object fell out of scope but the join was retained. Attribute Flow has stopped, but the link is preserved for future re-scoping.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationDriftCorrection" xml:space="preserve">
+    <value>Drift was detected: the target system's values differed from the expected metaverse values. A corrective Pending Export was created to restore the expected state.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationExported" xml:space="preserve">
+    <value>The pending attribute changes were successfully exported to the target Connected System.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationDeprovisioned" xml:space="preserve">
+    <value>The object was deleted from the target Connected System as part of deprovisioning.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationPendingExport" xml:space="preserve">
+    <value>A Pending Export is staged and waiting for the next export run to apply changes to the target system.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationPendingExportConfirmed" xml:space="preserve">
+    <value>The Pending Export was confirmed during the confirming import. The exported values matched the imported values.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationCreated" xml:space="preserve">
+    <value>The Metaverse Object was created directly (e.g. via data generation or the admin interface) rather than through synchronisation.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationExportScopeReview" xml:space="preserve">
+    <value>This Metaverse Object was reviewed against the export Synchronisation Rules, because an export rule changed or the object was created or changed outside synchronisation. It was provisioned or deprovisioned as the rules now require, or had values changed outside synchronisation delivered to its accounts.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationNoChange" xml:space="preserve">
+    <value>The object was evaluated but no changes were necessary. The existing values already match the expected state.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="OperationOther" xml:space="preserve">
+    <value>An operation was performed on this object.</value>
+    <comment>Tooltip explaining what an operation on an object means.</comment>
+  </data>
+  <data name="WritabilityWritable" xml:space="preserve">
+    <value>Writable</value>
+    <comment>Attribute writability label.</comment>
+  </data>
+  <data name="WritabilityReadOnly" xml:space="preserve">
+    <value>Read-Only</value>
+    <comment>Attribute writability label.</comment>
+  </data>
+  <data name="WritabilityWritableOnCreate" xml:space="preserve">
+    <value>Set on creation only</value>
+    <comment>Attribute writability label.</comment>
+  </data>
+  <data name="WritabilityWritableDescription" xml:space="preserve">
+    <value>The Connected System accepts writes to this attribute, so an export Attribute Flow can keep it up to date.</value>
+  </data>
+  <data name="WritabilityReadOnlyDescription" xml:space="preserve">
+    <value>The Connected System will not accept writes to this attribute. It can be imported, but no export Attribute Flow may target it.</value>
+  </data>
+  <data name="WritabilityWritableOnCreateDescription" xml:space="preserve">
+    <value>The Connected System accepts a value for this attribute only when the object is created. An export Attribute Flow may target it: the value is sent with the Create Pending Export, and JIM never sends it again, because changing it would break the link to the object.</value>
+  </data>
+  <data name="RunTypeResultsImport" xml:space="preserve">
+    <value>Import Results</value>
+    <comment>Title of the results section for an import run.</comment>
+  </data>
+  <data name="RunTypeResultsSynchronisation" xml:space="preserve">
+    <value>Synchronisation Results</value>
+    <comment>Title of the results section for a synchronisation run.</comment>
+  </data>
+  <data name="RunTypeResultsExport" xml:space="preserve">
+    <value>Export Results</value>
+    <comment>Title of the results section for an export run.</comment>
+  </data>
+  <data name="RunTypeResultsOther" xml:space="preserve">
+    <value>Results</value>
+    <comment>Title of the results section when the run type is unknown.</comment>
+  </data>
+  <data name="ObjectInSystem" xml:space="preserve">
+    <value>{0} in {1}</value>
+    <comment>{0} is an object type or an object's name, {1} the Connected System it lives in.</comment>
+  </data>
+  <data name="ObjectTypeNameInSystem" xml:space="preserve">
+    <value>{0} {1} in {2}</value>
+    <comment>A Connected System Object in running text. {0} is its type, {1} its name, {2} the Connected System.</comment>
+  </data>
+  <data name="ObjectInSystemOnly" xml:space="preserve">
+    <value>in {0}</value>
+    <comment>{0} is the Connected System an object lives in.</comment>
+  </data>
+  <data name="ObjectConnectedSystemObjectNamed" xml:space="preserve">
+    <value>Connected System Object {0}</value>
+    <comment>{0} is the object's name.</comment>
+  </data>
+  <data name="ObjectConnectedSystemObjectNoun" xml:space="preserve">
+    <value>Connected System Object</value>
+    <comment>Stands in for an object whose type is unknown.</comment>
+  </data>
+  <data name="ObjectMetaverseObjectNamed" xml:space="preserve">
+    <value>Metaverse Object {0}</value>
+    <comment>{0} is the object's name.</comment>
+  </data>
+  <data name="ObjectMetaverseObjectNoun" xml:space="preserve">
+    <value>Metaverse Object</value>
+    <comment>Stands in for an object whose type is unknown.</comment>
+  </data>
+  <data name="ObjectTypeInMetaverse" xml:space="preserve">
+    <value>{0} in the Metaverse</value>
+    <comment>{0} is a Metaverse Object Type's name.</comment>
+  </data>
+  <data name="ObjectInMetaverse" xml:space="preserve">
+    <value>in the Metaverse</value>
+  </data>
+  <data name="TermMetaverseName" xml:space="preserve">
+    <value>Metaverse</value>
+    <comment>A JIM term's display name in a term hint popover.</comment>
+  </data>
+  <data name="TermMetaverseText" xml:space="preserve">
+    <value>The central, authoritative repository within JIM. The Metaverse holds one Metaverse Object for each real-world thing JIM manages, aggregated from every Connected System via Synchronisation Rules.</value>
+    <comment>A JIM term's definition in a term hint popover. The English is held verbatim in step with the documentation glossary.</comment>
+  </data>
+  <data name="TermConnectorSpaceName" xml:space="preserve">
+    <value>Connector Space</value>
+    <comment>A JIM term's display name in a term hint popover.</comment>
+  </data>
+  <data name="TermConnectorSpaceText" xml:space="preserve">
+    <value>The staging area where Connected System Objects reside before and after synchronisation. The Connector Space acts as a buffer between external systems and the Metaverse, ensuring that changes are validated before they are applied.</value>
+    <comment>A JIM term's definition in a term hint popover. The English is held verbatim in step with the documentation glossary.</comment>
+  </data>
+  <data name="TermProjectionName" xml:space="preserve">
+    <value>Projection</value>
+    <comment>A JIM term's display name in a term hint popover.</comment>
+  </data>
+  <data name="TermProjectionText" xml:space="preserve">
+    <value>Creating a new Metaverse Object when no existing one matches an incoming Connected System Object. Projection is enabled per Synchronisation Rule.</value>
+    <comment>A JIM term's definition in a term hint popover. The English is held verbatim in step with the documentation glossary.</comment>
+  </data>
+  <data name="TermJoinName" xml:space="preserve">
+    <value>Join</value>
+    <comment>A JIM term's display name in a term hint popover.</comment>
+  </data>
+  <data name="TermJoinText" xml:space="preserve">
+    <value>Linking a Connected System Object to an existing Metaverse Object. A Join happens when an Object Matching Rule finds that an incoming Connected System Object corresponds to one that already exists.</value>
+    <comment>A JIM term's definition in a term hint popover. The English is held verbatim in step with the documentation glossary.</comment>
+  </data>
+  <data name="TermAttributeFlowName" xml:space="preserve">
+    <value>Attribute Flow</value>
+    <comment>A JIM term's display name in a term hint popover.</comment>
+  </data>
+  <data name="TermAttributeFlowText" xml:space="preserve">
+    <value>A rule that maps an attribute between a Connected System Object and a Metaverse Object. Attribute Flows define how data moves during synchronisation, including any transformations applied via expressions.</value>
+    <comment>A JIM term's definition in a term hint popover. The English is held verbatim in step with the documentation glossary.</comment>
+  </data>
+  <data name="TermPendingExportName" xml:space="preserve">
+    <value>Pending Export</value>
+    <comment>A JIM term's display name in a term hint popover.</comment>
+  </data>
+  <data name="TermPendingExportText" xml:space="preserve">
+    <value>A queued change waiting to be sent to a target system. Pending Exports are created during synchronisation and held until an export Run Profile is executed, at which point they are applied to the Connected System.</value>
+    <comment>A JIM term's definition in a term hint popover. The English is held verbatim in step with the documentation glossary.</comment>
+  </data>
+  <data name="TermObjectMatchingRuleName" xml:space="preserve">
+    <value>Object Matching Rule</value>
+    <comment>A JIM term's display name in a term hint popover.</comment>
+  </data>
+  <data name="TermObjectMatchingRuleText" xml:space="preserve">
+    <value>A rule that decides whether an incoming Connected System Object corresponds to an existing Metaverse Object. Import matching joins a Connected System Object to a Metaverse Object; export matching joins a Metaverse Object being provisioned to an account that already exists in the target system, rather than creating a duplicate.</value>
+    <comment>A JIM term's definition in a term hint popover. The English is held verbatim in step with the documentation glossary.</comment>
+  </data>
+  <data name="TermScopingName" xml:space="preserve">
+    <value>Scoping</value>
+    <comment>A JIM term's display name in a term hint popover.</comment>
+  </data>
+  <data name="TermScopingText" xml:space="preserve">
+    <value>The Scoping Criteria that decide which objects a Synchronisation Rule applies to. While an object is outside them, the rule flows nothing for it; when a joined object leaves them, the rule's Out-of-Scope Action (import rules) or Deprovisioning Action (export rules) decides what happens next.</value>
+    <comment>A JIM term's definition in a term hint popover. The English is held verbatim in step with the documentation glossary.</comment>
+  </data>
+  <data name="TermContainerScopeName" xml:space="preserve">
+    <value>Container Scope</value>
+    <comment>A JIM term's display name in a term hint popover.</comment>
+  </data>
+  <data name="TermContainerScopeText" xml:space="preserve">
+    <value>How far beneath a selected Container objects are imported from: the whole subtree beneath it (the default), or only the objects held directly within it.</value>
+    <comment>A JIM term's definition in a term hint popover. The English is held verbatim in step with the documentation glossary.</comment>
+  </data>
+  <data name="TermAttributePriorityName" xml:space="preserve">
+    <value>Attribute Priority</value>
+    <comment>A JIM term's display name in a term hint popover.</comment>
+  </data>
+  <data name="TermAttributePriorityText" xml:space="preserve">
+    <value>The deterministic precedence that decides which Connected System's value wins when several contribute the same Metaverse Object attribute. Each contributing inbound Synchronisation Rule holds a priority for the attribute, and the highest-priority contributor that has a value sets it, so the result never depends on the order synchronisations happen to run in.</value>
+    <comment>A JIM term's definition in a term hint popover. The English is held verbatim in step with the documentation glossary.</comment>
+  </data>
+  <data name="SiblingConnectedSystems" xml:space="preserve">
+    <value>Connected Systems</value>
+    <comment>Option of the toggle that switches between Connected Systems and Connectors.</comment>
+  </data>
+  <data name="SiblingConnectors" xml:space="preserve">
+    <value>Connectors</value>
+    <comment>Option of the toggle that switches between Connected Systems and Connectors.</comment>
+  </data>
+  <data name="SiblingTemplates" xml:space="preserve">
+    <value>Templates</value>
+    <comment>Option of the toggle that switches between Example Data templates and Data Sets.</comment>
+  </data>
+  <data name="SiblingDataSets" xml:space="preserve">
+    <value>Data Sets</value>
+    <comment>Option of the toggle that switches between Example Data templates and Data Sets.</comment>
+  </data>
+  <data name="PasswordChangeStatusWaiting" xml:space="preserve">
+    <value>Waiting</value>
+    <comment>Status of a queued password change.</comment>
+  </data>
+  <data name="PasswordChangeStatusDelivering" xml:space="preserve">
+    <value>Delivering</value>
+    <comment>Status of a queued password change.</comment>
+  </data>
+  <data name="PasswordChangeStatusParked" xml:space="preserve">
+    <value>Parked</value>
+    <comment>Status of a queued password change that stopped retrying.</comment>
+  </data>
+  <data name="PasswordChangeStatusExpired" xml:space="preserve">
+    <value>Expired</value>
+    <comment>Status of a queued password change.</comment>
+  </data>
+  <data name="PasswordChangeStatusCancelled" xml:space="preserve">
+    <value>Cancelled</value>
+    <comment>Status of a queued password change.</comment>
+  </data>
+  <data name="PasswordChangeCancelledByAdministrator" xml:space="preserve">
+    <value>Cancelled by an administrator</value>
+  </data>
+  <data name="PasswordChangeCancelledBy" xml:space="preserve">
+    <value>Cancelled by {0}</value>
+    <comment>{0} is the name of the person who cancelled it.</comment>
+  </data>
+  <data name="PasswordChangeHeld" xml:space="preserve">
+    <value>Waiting for Password Synchronisation to be switched on for this Connected System</value>
+  </data>
+  <data name="PasswordChangeHeldAfterAttempt" xml:space="preserve">
+    <value>Waiting for Password Synchronisation to be switched on for this Connected System. Last attempt: {0}</value>
+    <comment>{0} is the reason the last attempt failed.</comment>
+  </data>
+  <data name="PasswordChangeLastAttemptTargetMessage" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>{0} is a failure reason, {1} the message the target system returned.</comment>
+  </data>
+  <data name="PasswordChangeInitial" xml:space="preserve">
+    <value>Initial password for a newly provisioned Connected System Object</value>
+  </data>
+  <data name="PasswordFailureTransient" xml:space="preserve">
+    <value>Target unavailable</value>
+  </data>
+  <data name="PasswordFailureConfigurationFault" xml:space="preserve">
+    <value>Configuration fault</value>
+  </data>
+  <data name="PasswordFailurePolicyRejection" xml:space="preserve">
+    <value>Policy rejection</value>
+  </data>
+  <data name="PasswordFailureTargetObjectNotFound" xml:space="preserve">
+    <value>Connected System Object not found</value>
+  </data>
+  <data name="PasswordFailureUnsupportedOperation" xml:space="preserve">
+    <value>Unsupported operation</value>
+  </data>
+  <data name="PasswordOriginSet" xml:space="preserve">
+    <value>Set</value>
+    <comment>Kind chip: a password an administrator set.</comment>
+  </data>
+  <data name="PasswordOriginInitial" xml:space="preserve">
+    <value>Initial</value>
+    <comment>Kind chip: the first password of a provisioned object.</comment>
+  </data>
+  <data name="PasswordOriginPropagated" xml:space="preserve">
+    <value>Propagated</value>
+    <comment>Kind chip: a password JIM propagated.</comment>
+  </data>
+  <data name="PasswordFirstPasswordLabel" xml:space="preserve">
+    <value>First password</value>
+  </data>
+  <data name="PasswordFirstPasswordTooltip" xml:space="preserve">
+    <value>This change is also the first password of a Connected System Object JIM provisioned while it was waiting. Delivering it applies the provisioning Synchronisation Rule's Initial Password settings for enabling the Connected System Object and for whether its password never expires. Cancelling it leaves that Connected System Object without a password from JIM.</value>
+  </data>
+  <data name="PasswordCancelThisMetaverseObject" xml:space="preserve">
+    <value>this Metaverse Object</value>
+    <comment>Stands in for a person's name in the cancel question.</comment>
+  </data>
+  <data name="PasswordCancelQuestion" xml:space="preserve">
+    <value>Stop delivering {0}'s password change to {1}?</value>
+    <comment>{0} is the person's name, {1} the Connected System.</comment>
+  </data>
+  <data name="PasswordCancelFirstPasswordConsequence" xml:space="preserve">
+    <value>{0} It is the first password of a Connected System Object JIM provisioned there, so cancelling it leaves that Connected System Object without a password from JIM, and it is not enabled as its Synchronisation Rule's Initial Password asks, until a password is set on it.</value>
+    <comment>{0} is the cancel question.</comment>
+  </data>
+  <data name="PasswordCancelOrdinaryConsequence" xml:space="preserve">
+    <value>{0} Their password stays as it was on that system until a new change is synchronised.</value>
+    <comment>{0} is the cancel question.</comment>
+  </data>
+  <data name="TemplateAttributeChooseAttribute" xml:space="preserve">
+    <value>Choose a Metaverse Attribute to generate values for.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateAttributePopulationRange" xml:space="preserve">
+    <value>The percentage of objects given a value must be between 1 and 100.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateAttributeNumberRange" xml:space="preserve">
+    <value>Maximum must be greater than Minimum.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateAttributeDateRange" xml:space="preserve">
+    <value>The latest date must be after the earliest date.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateAttributeChooseReferenceTypes" xml:space="preserve">
+    <value>Choose at least one Metaverse Object Type for the references to point at.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateAttributeFewestReferencesNegative" xml:space="preserve">
+    <value>The fewest references cannot be negative.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateAttributeMostReferences" xml:space="preserve">
+    <value>The most references must be more than the fewest.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateAttributeManagerDepthRequired" xml:space="preserve">
+    <value>Set the manager depth: the percentage of Users who manage other Users.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateAttributeManagerDepthRange" xml:space="preserve">
+    <value>The manager depth must be between 1 and 99.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateAttributeBooleanPercentage" xml:space="preserve">
+    <value>The percentage of objects given true must be between 0 and 100.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateAttributeChooseDataSets" xml:space="preserve">
+    <value>Choose at least one Example Data Set to pick values from.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateAttributeEnterPattern" xml:space="preserve">
+    <value>Enter the pattern values are built from.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateAttributeEnterExpression" xml:space="preserve">
+    <value>Enter the expression that builds each value.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateAttributeAddWeightedValue" xml:space="preserve">
+    <value>Add at least one value to pick from.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateAttributeWeightedValueText" xml:space="preserve">
+    <value>Every weighted value needs some text.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateAttributeWeightedValueWeight" xml:space="preserve">
+    <value>Every weighted value needs a weight greater than 0.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateAttributeChooseConditionAttribute" xml:space="preserve">
+    <value>Choose the attribute for the condition, or turn the condition off.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateChangedSincePageLoaded" xml:space="preserve">
+    <value>This Data Generation Template has changed since the page was loaded. Reload the page and make the change again.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+  <data name="TemplateNoLongerExists" xml:space="preserve">
+    <value>This Data Generation Template no longer exists.</value>
+    <comment>Message shown when saving a Data Generation Template attribute or template is refused.</comment>
+  </data>
+</root>

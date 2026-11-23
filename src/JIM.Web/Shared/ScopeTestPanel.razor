@@ -15,15 +15,13 @@
    schema, or loaded from a real object, evaluated by the scoping evaluation synchronisation runs, as of a chosen
    instant, with when the outcome would next change. *@
 <MudPaper Class="pa-4 mt-6" Outlined="true">
-    <MudText Typo="Typo.h6">Test this scope</MudText>
+    <MudText Typo="Typo.h6">@SyncRuleText.TestThisScope</MudText>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 mb-3">
-        Give each attribute the criteria compare a value, or load them from @(Exporting ? "a Metaverse Object" : "a Connected System Object"),
-        and see whether it would be in scope, criterion by criterion. Choose a time to run as of to see how relative dates
-        such as "30 days ago" resolve then. The criteria are tested as they stand here, before they are saved.
+        @(Exporting ? SyncRuleText.ScopeIntroMetaverse : SyncRuleText.ScopeIntroConnectedSystem)
     </MudText>
 
-    <SegmentedToggle TValue="bool" Options="_valueSourceOptions" Value="_fromObject" ValueChanged="SetFromObject"
-                     AriaLabel="Where the values come from" Dense="true" />
+    <SegmentedToggle TValue="bool" Options="ValueSourceOptions" Value="_fromObject" ValueChanged="SetFromObject"
+                     AriaLabel="@SyncRuleText.ValuesFromAria" Dense="true" />
 
     @if (_fromObject)
     {
@@ -33,7 +31,7 @@
 
     <MudSimpleTable Dense="true" Outlined="true" Class="mt-3" Style="overflow-x: auto">
         <thead>
-            <tr><th>Attribute</th><th>Type</th><th>Value</th><th>No value</th></tr>
+            <tr><th>@SyncRuleText.ColumnAttribute</th><th>@CommonText.ColumnType</th><th>@SyncRuleText.TryItColumnValue</th><th>@SyncRuleText.TryItColumnNoValue</th></tr>
         </thead>
         <tbody>
             @foreach (var input in _inputs)
@@ -44,14 +42,14 @@
                     <td>
                         <AttributeChip Kind="@(Exporting ? AttributeChipKind.Metaverse : AttributeChipKind.ConnectedSystem)" Name="@descriptor.AttributeName" />
                     </td>
-                    <td class="mud-text-secondary">@descriptor.Type · @(descriptor.Plurality == AttributePlurality.MultiValued ? "multi-valued" : "single-valued")</td>
+                    <td class="mud-text-secondary">@AttributeFlowSectionSummaries.DataTypeName(descriptor.Type) · @(descriptor.Plurality == AttributePlurality.MultiValued ? SyncRuleText.PluralityMultiValuedLower : SyncRuleText.PluralitySingleValuedLower)</td>
                     <td style="min-width: 16rem">
                         <TestInputValueEditor Label="@descriptor.AttributeName" Type="descriptor.Type" Plurality="descriptor.Plurality"
                                               State="state" OnChanged="ClearResult" />
                     </td>
                     <td>
                         <MudCheckBox T="bool" Value="state.NoValue" ValueChanged="@(v => SetNoValue(state, v))" Dense="true"
-                                     aria-label="@($"{descriptor.AttributeName} has no value")" />
+                                     aria-label="@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.HasNoValueAria, descriptor.AttributeName)" />
                     </td>
                 </tr>
             }
@@ -61,20 +59,20 @@
     @if (_connections.Count > 0)
     {
         @* A connection criterion (#2021) tests the identity's joins, which a sample states rather than holds *@
-        <MudText Typo="Typo.button" Class="mud-text-secondary d-block mt-4">Connections</MudText>
+        <MudText Typo="Typo.button" Class="mud-text-secondary d-block mt-4">@SyncRuleText.ConnectionsLabel</MudText>
         <div class="d-flex flex-column" data-testid="jim-scope-test-connections">
             @foreach (var connection in _connections)
             {
                 var typeId = connection.ConnectedObjectTypeId;
                 <MudCheckBox T="bool" @key="typeId" Value="_connected.Contains(typeId)" ValueChanged="@(v => SetConnected(typeId, v))" Dense="true"
-                             Label="@($"Has {connection.Description}")" data-testid="jim-scope-test-connection" />
+                             Label="@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.HasConnection, connection.Description)" data-testid="jim-scope-test-connection" />
             }
         </div>
     }
 
     <RunAsOfPicker Value="_asOf" ValueChanged="SetAsOf" Class="mt-3" />
 
-    <MudButton Variant="Variant.Filled" Size="Size.Small" Class="mt-3" OnClick="RunTest">Run test</MudButton>
+    <MudButton Variant="Variant.Filled" Size="Size.Small" Class="mt-3" OnClick="RunTest">@SyncRuleText.RunTestButton</MudButton>
 
     @if (_result is { Explanation: null } inputProblem)
     {
@@ -89,13 +87,13 @@
     @if (_result is { Explanation: { } explanation } tested)
     {
         <div class="mt-3" data-testid="jim-scope-test-result">
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">As of @explanation.EvaluatedAt.ToFriendlyDate() UTC</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.AsOfUtc, explanation.EvaluatedAt.ToFriendlyDate())</MudText>
             <ScopingExplanationView Explanation="explanation" />
             <MudText Typo="Typo.body2" Class="mt-2" data-testid="jim-scope-test-next-change">@DescribeNextChange(tested, explanation)</MudText>
             @if (Draft is { } draft)
             {
                 <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Outlined.FactCheck" Class="mt-2"
-                           OnClick="@(() => SaveAsTestCaseAsync(draft))" data-testid="jim-scope-test-save-as-case">Save as test case</MudButton>
+                           OnClick="@(() => SaveAsTestCaseAsync(draft))" data-testid="jim-scope-test-save-as-case">@SyncRuleText.SaveAsTestCase</MudButton>
             }
         </div>
     }
@@ -108,10 +106,10 @@
     [Parameter, EditorRequired]
     public SyncRule SyncRule { get; set; } = null!;
 
-    private static readonly IReadOnlyList<SegmentedToggleOption<bool>> _valueSourceOptions =
+    private static IReadOnlyList<SegmentedToggleOption<bool>> ValueSourceOptions =>
     [
-        new(false, "Sample values"),
-        new(true, "From an object")
+        new(false, SyncRuleText.SampleValues),
+        new(true, SyncRuleText.FromAnObject)
     ];
 
     private IReadOnlyList<AttributeSampleDescriptor> _inputs = [];
@@ -137,8 +135,11 @@
     private ObjectChipKind ObjectKind => Exporting ? ObjectChipKind.MetaverseObject : ObjectChipKind.ConnectedSystemObject;
 
     private string ObjectSearchLabel => Exporting
-        ? $"Find a {SyncRule.MetaverseObjectType?.Name ?? "Metaverse Object"}"
-        : $"Find a {SyncRule.ConnectedSystemObjectType?.Name ?? "Connected System Object"} in {SyncRule.ConnectedSystem?.Name ?? "the Connected System"}";
+        ? string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.FindAnObjectType,
+            SyncRule.MetaverseObjectType?.Name ?? SyncRuleText.MetaverseObjectFallback)
+        : string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.FindObjectInSystem,
+            SyncRule.ConnectedSystemObjectType?.Name ?? SyncRuleText.ConnectedSystemObjectFallback,
+            SyncRule.ConnectedSystem?.Name ?? SyncRuleText.TheConnectedSystem);
 
     protected override void OnParametersSet()
     {
@@ -230,7 +231,7 @@
     }
 
     private async Task SaveAsTestCaseAsync(ConfigurationTestCase draft) =>
-        await ConfigurationTestCaseDialog.ShowAsync(DialogService, draft, "Scope, run against the criteria as saved",
+        await ConfigurationTestCaseDialog.ShowAsync(DialogService, draft, SyncRuleText.TestCaseScopeTitle,
             _inputs.Select(input => new ConfigurationTestCaseDisplay.InputSlot(null, input.AttributeName, input.Type, input.Plurality)).ToList(),
             _connections);
 
@@ -239,11 +240,13 @@
         if (tested.NextChange is not { } change)
         {
             return explanation.Outcome == ScopingRuleOutcome.Undetermined
-                ? "A criterion cannot be evaluated, so a Synchronisation would fail this object until the criterion is corrected."
-                : $"Stays {(explanation.Outcome == ScopingRuleOutcome.InScope ? "in scope" : "out of scope")} as time passes, while these values stay the same.";
+                ? SyncRuleText.NextChangeUndetermined
+                : explanation.Outcome == ScopingRuleOutcome.InScope
+                    ? SyncRuleText.NextChangeStaysInScope
+                    : SyncRuleText.NextChangeStaysOutOfScope;
         }
 
-        var verb = change.Outcome == ScopingRuleOutcome.InScope ? "Enters scope" : "Leaves scope";
-        return $"{verb} at {change.AtUtc.ToFriendlyDate()} UTC, while these values stay the same.";
+        var template = change.Outcome == ScopingRuleOutcome.InScope ? SyncRuleText.NextChangeEnters : SyncRuleText.NextChangeLeaves;
+        return string.Format(System.Globalization.CultureInfo.CurrentCulture, template, change.AtUtc.ToFriendlyDate());
     }
 }
