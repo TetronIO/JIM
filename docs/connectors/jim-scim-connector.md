@@ -212,7 +212,7 @@ Reading the certificate again at the moment you confirm is what makes a change d
 
 **You do not have to wait for a failure.** **Fetch certificate** on the Connected System's settings reads and shows what the provider is presenting before anything has been saved, so configuring a new system is not a cycle of save, fail, come back. Fetching stores nothing; trusting is still the separate, confirmed step.
 
-**Behind an outbound proxy (`HTTPS_PROXY`), JIM reads the certificate through the proxy**, as the connection itself goes, so a TLS-inspecting proxy's own certificate is what you are shown.
+**Behind an [outbound proxy](jim-graph-connector.md#outbound-proxy), JIM reads the certificate through the proxy**, as the connection itself goes, so a TLS-inspecting proxy's own certificate is what you are shown.
 
 Note what trusting the certificate does and does not cover. JIM's store answers one question, "do we trust the issuer", so it waives an unknown certificate authority and nothing else. An expired certificate is not a trust gap and is still refused; a certificate issued for a different name is an interception signal, so connect using a name the certificate carries rather than adding it to the store. JIM offers the action only where trusting genuinely fixes the failure, so it does not appear in those cases.
 

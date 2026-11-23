@@ -167,7 +167,25 @@ The **Cloud** setting reaches a tenant in the US Government L4 (GCC High), US Go
 - **Prefer a certificate or a federated credential to a client secret.** A certificate's private key never leaves JIM; a federated credential needs no secret at all.
 - **Grant the least the Connected System needs.** Read permissions are enough for import only, the password permission and role only where JIM sets passwords, and the Source of Authority permissions only where you track switched objects.
 - **Traffic is encrypted.** Microsoft Graph is reached over TLS 1.2 or later.
-- **A proxy that inspects TLS traffic presents its own certificate.** JIM reaches Entra ID through the outbound proxy set by the standard `HTTPS_PROXY` and `NO_PROXY` environment variables on the `jim.web` and `jim.worker` containers. A TLS-inspecting proxy replaces Microsoft's certificates with ones its own certificate authority issues, which JIM does not trust until you say so. Testing the connection, a failed run and **Fetch certificate** on the Connected System's settings all show the certificate the proxy presents; trust its certificate authority with **Choose what to trust**, as for a [SCIM service provider's certificate](jim-scim-connector.md#when-a-connection-test-fails-on-the-certificate), or add it under **Admin > Certificates**. `Get-JIMConnectedSystemServerCertificate` and `Approve-JIMConnectedSystemServerCertificate` do the same from PowerShell.
+- **A proxy that inspects TLS traffic presents its own certificate.** It replaces Microsoft's certificates with ones its own certificate authority issues, which JIM does not trust until you say so. Testing the connection, a failed run and **Fetch certificate** on the Connected System's settings all show the certificate the proxy presents; trust its certificate authority with **Choose what to trust**, as for a [SCIM service provider's certificate](jim-scim-connector.md#when-a-connection-test-fails-on-the-certificate), or add it under **Admin > Certificates**. `Get-JIMConnectedSystemServerCertificate` and `Approve-JIMConnectedSystemServerCertificate` do the same from PowerShell.
+
+### Outbound proxy {#outbound-proxy}
+
+Where JIM must reach the internet through a proxy, give `jim.web` and `jim.worker` the standard `HTTPS_PROXY` variable, and list in `NO_PROXY` every host JIM reaches directly: your identity provider and your internal Connected Systems. The shipped compose files do not set them, so add them in your production overlay, the file you pass with `-f` alongside the others:
+
+```yaml
+services:
+  jim.web:
+    environment:
+      HTTPS_PROXY: http://proxy.example.com:3128
+      NO_PROXY: localhost,idp.example.com,.corp.example.com
+  jim.worker:
+    environment:
+      HTTPS_PROXY: http://proxy.example.com:3128
+      NO_PROXY: localhost,idp.example.com,.corp.example.com
+```
+
+JIM reads a server's certificate through the same proxy, so behind a TLS-inspecting proxy the certificate you are shown is the proxy's. A proxy that intercepts traffic without being configured needs neither variable.
 
 ## :material-wrench-outline: Troubleshooting
 
