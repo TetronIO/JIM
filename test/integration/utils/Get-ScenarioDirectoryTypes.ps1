@@ -164,9 +164,9 @@ function Test-ScenarioIsDirectoryAgnostic {
     # 027 (the tested tutorial, which uses the File Connector only), 028 (SCIM Connector against
     # Keycloak), 029 (JIM provisioning its own SCIM endpoint), 033 (initial administrator provisioning,
     # which uses two File Connector systems only), 036 (Entra ID as a target, from a File Connector source) and 037
-    # (Entra ID as a source, which uses no other system) accept -DirectoryConfig for runner compatibility but never read it (all but 011 explicitly discard it with
+    # (Entra ID as a source, which uses no other system) and 039 (Entra ID at scale, from a File Connector source) accept -DirectoryConfig for runner compatibility but never read it (all but 011 explicitly discard it with
     # `$null = $DirectoryConfig`); their results are identical on every directory type.
-    return $ScenarioNumber -in 11, 15, 16, 27, 28, 29, 33, 36, 37
+    return $ScenarioNumber -in 11, 15, 16, 27, 28, 29, 33, 36, 37, 39
 }
 
 function Test-ScenarioRunsOnItsOwn {
@@ -181,7 +181,8 @@ function Test-ScenarioRunsOnItsOwn {
         failure never turns the LDAP result red or the reverse: ad-lab.yml runs each after the sweep (-Scenario 31,
         -Scenario 35, -Scenario 36, -Scenario 37), and the sweep does not run them too. Each still runs by itself on
         request. Scenarios 036 and 037 also need the test tenant's credentials, which only the lab's runner holds, so
-        Pre-Release (which sweeps) must never reach them either.
+        Pre-Release (which sweeps) must never reach them either. Scenario 039 (the Entra ID Connector at scale, #3053)
+        needs the same credentials and takes hours, so it runs only when asked for by number.
     #>
     [CmdletBinding()]
     [OutputType([bool])]
@@ -191,5 +192,5 @@ function Test-ScenarioRunsOnItsOwn {
         [Nullable[int]]$ScenarioNumber
     )
 
-    return $ScenarioNumber -in 31, 35, 36, 37
+    return $ScenarioNumber -in 31, 35, 36, 37, 39
 }

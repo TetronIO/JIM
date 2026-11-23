@@ -189,6 +189,10 @@ Describe 'Test-ScenarioIsDirectoryAgnostic' {
         Test-ScenarioIsDirectoryAgnostic -ScenarioNumber 37 | Should -Be $true
     }
 
+    It 'is true for Scenario 039 (Entra ID at scale, from a File Connector source)' {
+        Test-ScenarioIsDirectoryAgnostic -ScenarioNumber 39 | Should -Be $true
+    }
+
     It 'is false for a scenario that does use a directory' {
         Test-ScenarioIsDirectoryAgnostic -ScenarioNumber 1 | Should -Be $false
     }
@@ -219,8 +223,12 @@ Describe 'Test-ScenarioRunsOnItsOwn' {
         Test-ScenarioRunsOnItsOwn -ScenarioNumber 37 | Should -BeTrue
     }
 
+    It 'keeps Scenario 039 (Entra ID at scale) out of the sweep: a run takes hours, and only runs on request' {
+        Test-ScenarioRunsOnItsOwn -ScenarioNumber 39 | Should -BeTrue
+    }
+
     It 'leaves every other scenario in the sweep, Scenario 030 (AD FS trust) included' {
-        foreach ($number in (1..40 | Where-Object { $_ -notin 31, 35, 36, 37 })) {
+        foreach ($number in (1..40 | Where-Object { $_ -notin 31, 35, 36, 37, 39 })) {
             Test-ScenarioRunsOnItsOwn -ScenarioNumber $number | Should -BeFalse -Because "Scenario $number is part of -Scenario All"
         }
         Test-ScenarioRunsOnItsOwn -ScenarioNumber $null | Should -BeFalse
