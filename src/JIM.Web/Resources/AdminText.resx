@@ -1110,4 +1110,172 @@
     <value>API Key not found. It may have been deleted.</value>
     <comment>Warning alert when the key does not exist</comment>
   </data>
+  <data name="FactoryResetTitle" xml:space="preserve">
+    <value>Factory Reset</value>
+    <comment>Page title, heading, breadcrumb, PageInfo title and the reset button label</comment>
+  </data>
+  <data name="FactoryResetConfirmTitle" xml:space="preserve">
+    <value>Confirm factory reset</value>
+    <comment>Confirmation dialog title</comment>
+  </data>
+  <data name="FactoryResetPageInfo" xml:space="preserve">
+    <value>Wipe all data and configuration to return JIM to a fresh state.</value>
+    <comment>Page information popover</comment>
+  </data>
+  <data name="FactoryResetWhatItDoes" xml:space="preserve">
+    <value>What a factory reset does</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="FactoryResetBackupFirst" xml:space="preserve">
+    <value>Take a database backup before continuing.</value>
+    <comment>Bold lead of the warning; the markup supplies the bold</comment>
+  </data>
+  <data name="FactoryResetDeletesPermanently" xml:space="preserve">
+    <value> This operation permanently deletes data and </value>
+    <comment>Continues the warning after the bold lead; the leading and trailing spaces are significant</comment>
+  </data>
+  <data name="FactoryResetCannotBeUndone" xml:space="preserve">
+    <value>cannot be undone</value>
+    <comment>Bold phrase in the warnings</comment>
+  </data>
+  <data name="FactoryResetBackupOnly" xml:space="preserve">
+    <value>; if anything is wrong, a backup is the only way to recover.</value>
+    <comment>Ends the warning after the bold phrase</comment>
+  </data>
+  <data name="FactoryResetRemoves" xml:space="preserve">
+    <value>Permanently removes:</value>
+    <comment>Heading of the list of what a reset deletes</comment>
+  </data>
+  <data name="FactoryResetRemovesConnectedSystems" xml:space="preserve">
+    <value>All Connected Systems and their Connector Space objects</value>
+    <comment>List item</comment>
+  </data>
+  <data name="FactoryResetRemovesSynchronisation" xml:space="preserve">
+    <value>All Synchronisation Rules, Schedules, Run Profiles and Pending Exports</value>
+    <comment>List item</comment>
+  </data>
+  <data name="FactoryResetRemovesMetaverse" xml:space="preserve">
+    <value>All Metaverse Objects and their change history</value>
+    <comment>List item</comment>
+  </data>
+  <data name="FactoryResetRemovesActivities" xml:space="preserve">
+    <value>All Activities and all custom configuration (object types, attributes, roles, connectors, searches, example data)</value>
+    <comment>List item</comment>
+  </data>
+  <data name="FactoryResetRemovesKeys" xml:space="preserve">
+    <value>API keys (except the infrastructure key) and trusted certificates</value>
+    <comment>List item</comment>
+  </data>
+  <data name="FactoryResetPreserves" xml:space="preserve">
+    <value>Preserves:</value>
+    <comment>Heading of the list of what a reset keeps</comment>
+  </data>
+  <data name="FactoryResetPreservesSchema" xml:space="preserve">
+    <value>The database schema and built-in configuration</value>
+    <comment>List item</comment>
+  </data>
+  <data name="FactoryResetPreservesKey" xml:space="preserve">
+    <value>The infrastructure API key and service settings</value>
+    <comment>List item</comment>
+  </data>
+  <data name="FactoryResetAdminUsers" xml:space="preserve">
+    <value>Administrator users</value>
+    <comment>Bold lead of a list item</comment>
+  </data>
+  <data name="FactoryResetAdminUsersUnless" xml:space="preserve">
+    <value> (unless you choose to remove them below)</value>
+    <comment>Continues the list item after the bold lead</comment>
+  </data>
+  <data name="FactoryResetRecordWritten" xml:space="preserve">
+    <value>A record of this reset is written to the Activity log, and </value>
+    <comment>Start of the closing paragraph</comment>
+  </data>
+  <data name="FactoryResetSignedOut" xml:space="preserve">
+    <value>every signed-in user (including you) is signed out</value>
+    <comment>Bold phrase in the closing paragraph</comment>
+  </data>
+  <data name="FactoryResetAuthenticateAgain" xml:space="preserve">
+    <value> and must authenticate again.</value>
+    <comment>End of the closing paragraph</comment>
+  </data>
+  <data name="FactoryResetAlsoDeleteAdmins" xml:space="preserve">
+    <value>Also delete administrator users</value>
+    <comment>Check box label</comment>
+  </data>
+  <data name="FactoryResetAdminCaption" xml:space="preserve">
+    <value>Leaves a true brand-new install. Only use this if you intend to hand the system over or start completely fresh.</value>
+    <comment>Caption under the check box</comment>
+  </data>
+  <data name="FactoryResetLockoutIntro" xml:space="preserve">
+    <value>After this, the only ways to regain administrative access are:</value>
+    <comment>Warning alert introduction</comment>
+  </data>
+  <data name="FactoryResetLockoutApiKeyPrefix" xml:space="preserve">
+    <value>the </value>
+    <comment>Warning alert list item; the words before the bold key</comment>
+  </data>
+  <data name="FactoryResetLockoutApiKey" xml:space="preserve">
+    <value>infrastructure API key</value>
+    <comment>Bold part of the warning alert list item</comment>
+  </data>
+  <data name="FactoryResetLockoutApiKeySuffix" xml:space="preserve">
+    <value> (REST API / PowerShell module), and </value>
+    <comment>Warning alert list item; the words after the bold key</comment>
+  </data>
+  <data name="FactoryResetLockoutAdminPrefix" xml:space="preserve">
+    <value>the </value>
+    <comment>Warning alert list item; the words before the bold key, with the French elision</comment>
+  </data>
+  <data name="FactoryResetLockoutAdminKey" xml:space="preserve">
+    <value>default administrator</value>
+    <comment>Bold part of the warning alert list item</comment>
+  </data>
+  <data name="FactoryResetLockoutAdminSuffix" xml:space="preserve">
+    <value>, recreated when they next sign in via SSO (requires the initial administrator to be configured in the .env file).</value>
+    <comment>Warning alert list item; the words after the bold key</comment>
+  </data>
+  <data name="FactoryResetLockoutNeither" xml:space="preserve">
+    <value>If neither is available, you will be locked out of the portal.</value>
+    <comment>Warning alert closing sentence</comment>
+  </data>
+  <data name="FactoryResetAcknowledge" xml:space="preserve">
+    <value>I understand the administrator lockout risk and want to proceed</value>
+    <comment>Check box label</comment>
+  </data>
+  <data name="FactoryResetConfirmLabel" xml:space="preserve">
+    <value>Type RESET to confirm</value>
+    <comment>Label of the confirmation field; RESET is the word the code requires, so it is not translated</comment>
+  </data>
+  <data name="FactoryResetInProgress" xml:space="preserve">
+    <value>Resetting...</value>
+    <comment>Button text while the reset runs</comment>
+  </data>
+  <data name="FactoryResetAdminsRemoved" xml:space="preserve">
+    <value>Administrators WILL be removed. The portal may be inaccessible afterwards.</value>
+    <comment>Confirmation dialog text when administrators are removed</comment>
+  </data>
+  <data name="FactoryResetAdminsPreserved" xml:space="preserve">
+    <value>Administrators will be preserved.</value>
+    <comment>Confirmation dialog text when administrators are kept</comment>
+  </data>
+  <data name="FactoryResetWipeWarning" xml:space="preserve">
+    <value>This permanently wipes all data and configuration and </value>
+    <comment>Start of the confirmation warning</comment>
+  </data>
+  <data name="FactoryResetWipeWarningEnd" xml:space="preserve">
+    <value>. Make sure you have a database backup.</value>
+    <comment>End of the confirmation warning</comment>
+  </data>
+  <data name="FactoryResetWipeButton" xml:space="preserve">
+    <value>Wipe everything</value>
+    <comment>Confirm button in the confirmation dialog</comment>
+  </data>
+  <data name="FactoryResetRefused" xml:space="preserve">
+    <value>Reset refused: {0}</value>
+    <comment>Snackbar; {0} is the reason</comment>
+  </data>
+  <data name="FactoryResetComplete" xml:space="preserve">
+    <value>Factory reset complete. You will be signed out.</value>
+    <comment>Snackbar</comment>
+  </data>
 </root>

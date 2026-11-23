@@ -20,4 +20,7 @@
   <data name="SettingsEmptyNoneHint" xml:space="preserve">
     <value>Service Settings are seeded when JIM starts; if none are listed, the service has not finished initializing.</value>
   </data>
+  <data name="FactoryResetRemovesSynchronisation" xml:space="preserve">
+    <value>All Synchronization Rules, Schedules, Run Profiles and Pending Exports</value>
+  </data>
 </root>
