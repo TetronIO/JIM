@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="OvertakenAndJoin" xml:space="preserve">
+    <value>, and </value>
+    <comment>Joins two clauses in the sentence saying what overtook a preview.</comment>
+  </data>
+  <data name="PreviewValueFromContributor" xml:space="preserve">
+    <value>from {0}</value>
+    <comment>After a value, the Connected System it came from. {0} is the system name.</comment>
+  </data>
+  <data name="PreviewValueTooltip" xml:space="preserve">
+    <value>{0} (from {1})</value>
+    <comment>Tooltip on a value: {0} is the value, {1} the Connected System it came from.</comment>
+  </data>
+  <data name="PreviewChip" xml:space="preserve">
+    <value>Preview</value>
+    <comment>Badge marking a Preview-tier feature.</comment>
+  </data>
+  <data name="PreviewDataSetSizeTitle" xml:space="preserve">
+    <value>How much detail should this preview keep?</value>
+    <comment>Dialog title asking how much of a preview to keep.</comment>
+  </data>
+  <data name="ExpressionDoesNotParse" xml:space="preserve">
+    <value>The expression does not parse.</value>
+    <comment>Shown under an expression field when it cannot be read.</comment>
+  </data>
+  <data name="ExpressionFunctionNamesCaseSensitive" xml:space="preserve">
+    <value> Function names are case-sensitive: did you mean {0}?</value>
+    <comment>Appended to an expression error. Leading space is intentional. {0} is the correct function name.</comment>
+  </data>
+  <data name="TryItHeading" xml:space="preserve">
+    <value>Try it</value>
+    <comment>Heading of the pane where an Attribute Flow or Generated Value can be tried out.</comment>
+  </data>
+</root>

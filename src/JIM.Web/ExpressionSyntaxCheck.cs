@@ -1,11 +1,13 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using System.Text.RegularExpressions;
 using JIM.Application.Expressions;
 using JIM.Application.Servers;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
+using JIM.Web.Resources;
 
 namespace JIM.Web;
 
@@ -30,14 +32,14 @@ public static partial class ExpressionSyntaxCheck
         if (result.IsValid)
             return null;
 
-        var message = result.ErrorMessage ?? "The expression does not parse.";
+        var message = result.ErrorMessage ?? SyncRuleText.ExpressionDoesNotParse;
 
         // Function names are case-sensitive, and the commonest unknown function is a real one in the wrong case.
         var unknown = UnknownIdentifier().Match(message);
         if (unknown.Success && ExpressionFunctionCatalogue.All.FirstOrDefault(f =>
                 string.Equals(f.Name, unknown.Groups["name"].Value, StringComparison.OrdinalIgnoreCase)) is { } function)
         {
-            message += $" Function names are case-sensitive: did you mean {function.Name}?";
+            message += string.Format(CultureInfo.CurrentCulture, SyncRuleText.ExpressionFunctionNamesCaseSensitive, function.Name);
         }
 
         return message;
