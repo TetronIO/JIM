@@ -1846,4 +1846,180 @@
     <value>The following Metaverse Object attributes were modified during this synchronisation operation.</value>
     <comment>Description of the attribute changes section for a sync or export</comment>
   </data>
+  <data name="ActivityHistoryNone" xml:space="preserve">
+    <value>No change history available.</value>
+    <comment>Shown when an object has no change history</comment>
+  </data>
+  <data name="ActivityHistorySearch" xml:space="preserve">
+    <value>Search</value>
+    <comment>Label of the search box on the change history</comment>
+  </data>
+  <data name="ActivityHistoryChangeType" xml:space="preserve">
+    <value>Change type</value>
+    <comment>Label of the change type filter</comment>
+  </data>
+  <data name="ActivityHistoryAllChanges" xml:space="preserve">
+    <value>All Changes</value>
+    <comment>Change type filter item that shows every change</comment>
+  </data>
+  <data name="ActivityChangeSet" xml:space="preserve">
+    <value>Set</value>
+    <comment>Change type: a value was set</comment>
+  </data>
+  <data name="ActivityChangeUpdated" xml:space="preserve">
+    <value>Updated</value>
+    <comment>Change type: a value was updated</comment>
+  </data>
+  <data name="ActivityChangeRemoved" xml:space="preserve">
+    <value>Removed</value>
+    <comment>Change type: a value was removed</comment>
+  </data>
+  <data name="ActivityChangeAdd" xml:space="preserve">
+    <value>Add</value>
+    <comment>Change type: a value was added</comment>
+  </data>
+  <data name="ActivityChangeRemove" xml:space="preserve">
+    <value>Remove</value>
+    <comment>Change type: a value was removed from a multi-valued attribute</comment>
+  </data>
+  <data name="ActivityValueRetired" xml:space="preserve">
+    <value>Value retired</value>
+    <comment>Heading of a retired generated value</comment>
+  </data>
+  <data name="ActivityGeneratedValue" xml:space="preserve">
+    <value>generated value</value>
+    <comment>Lower-case words in a sentence about a retired generated value</comment>
+  </data>
+  <data name="ActivityRetired" xml:space="preserve">
+    <value>retired</value>
+    <comment>Lower-case word in a sentence about a retired generated value</comment>
+  </data>
+  <data name="ActivityNone" xml:space="preserve">
+    <value>(none)</value>
+    <comment>Shown for a reference value with no name</comment>
+  </data>
+  <data name="ActivityMoreChanges" xml:space="preserve">
+    <value>+{0} more</value>
+    <comment>Shows how many further changes a card holds; {0} is the count</comment>
+  </data>
+  <data name="ActivityObjectDeletedNoValues" xml:space="preserve">
+    <value>Object was deleted. Final attribute values were not captured.</value>
+    <comment>Shown on a deletion whose final attribute values were not recorded</comment>
+  </data>
+  <data name="ActivityHistoryMechanism" xml:space="preserve">
+    <value>Mechanism</value>
+    <comment>Label of how a change was made, in the change details dialog</comment>
+  </data>
+  <data name="ActivityHistorySummary" xml:space="preserve">
+    <value>Summary</value>
+    <comment>Expansion panel heading summarising a change's attributes</comment>
+  </data>
+  <data name="ActivityHistorySearchChanges" xml:space="preserve">
+    <value>Search changes...</value>
+    <comment>Placeholder of the search box in the change details dialog</comment>
+  </data>
+  <data name="ActivityHistoryChangeSingular" xml:space="preserve">
+    <value>Change</value>
+    <comment>Singular name of a change, used in the grid's count</comment>
+  </data>
+  <data name="ActivityHistoryChangesPlural" xml:space="preserve">
+    <value>Changes</value>
+    <comment>Plural name of changes, used in the grid's count</comment>
+  </data>
+  <data name="ActivityHistoryAllAttributes" xml:space="preserve">
+    <value>All Attributes</value>
+    <comment>Attribute filter item that shows every attribute</comment>
+  </data>
+  <data name="ActivityColumnSource" xml:space="preserve">
+    <value>Source</value>
+    <comment>Column heading: where a value came from</comment>
+  </data>
+  <data name="ActivityColumnPlurality" xml:space="preserve">
+    <value>Plurality</value>
+    <comment>Column heading: whether an attribute holds one value or several</comment>
+  </data>
+  <data name="ActivityMultiValued" xml:space="preserve">
+    <value>Multi-Valued</value>
+    <comment>Attribute kind shown in the change details: holds several values</comment>
+  </data>
+  <data name="ActivitySingleValued" xml:space="preserve">
+    <value>Single-Valued</value>
+    <comment>Attribute kind shown in the change details: holds one value</comment>
+  </data>
+  <data name="ActivityNoChangesMatch" xml:space="preserve">
+    <value>No changes match the current filters</value>
+    <comment>Empty state in the change details when the filters match nothing</comment>
+  </data>
+  <data name="ActivityNoChangesMatchDetail" xml:space="preserve">
+    <value>Try a different search term, or widen the attribute and change type filters.</value>
+    <comment>Empty state secondary text in the change details</comment>
+  </data>
+  <data name="ActivityNothingToShowChanges" xml:space="preserve">
+    <value>There is nothing to show for these attribute changes</value>
+    <comment>Empty state in the change details with no attribute changes</comment>
+  </data>
+  <data name="ActivityNoAttributeChangesOperation" xml:space="preserve">
+    <value>No attribute changes were recorded for this operation.</value>
+    <comment>Shown in the change details when an operation recorded no attribute changes</comment>
+  </data>
+  <data name="ActivityTimeJustNow" xml:space="preserve">
+    <value>Just now</value>
+    <comment>Relative time of a change made in the last minute</comment>
+  </data>
+  <data name="ActivityTimeMinutesAgo" xml:space="preserve">
+    <value>{0}m ago</value>
+    <comment>Relative time in minutes; {0} is the count</comment>
+  </data>
+  <data name="ActivityTimeHoursAgo" xml:space="preserve">
+    <value>{0}h ago</value>
+    <comment>Relative time in hours; {0} is the count</comment>
+  </data>
+  <data name="ActivityTimeDaysAgo" xml:space="preserve">
+    <value>{0}d ago</value>
+    <comment>Relative time in days; {0} is the count</comment>
+  </data>
+  <data name="ActivityTimeWeeksAgo" xml:space="preserve">
+    <value>{0}w ago</value>
+    <comment>Relative time in weeks; {0} is the count</comment>
+  </data>
+  <data name="ActivityTimeMonthsAgo" xml:space="preserve">
+    <value>{0}mo ago</value>
+    <comment>Relative time in months; {0} is the count</comment>
+  </data>
+  <data name="ActivityTimeYearsAgo" xml:space="preserve">
+    <value>{0}y ago</value>
+    <comment>Relative time in years; {0} is the count</comment>
+  </data>
+  <data name="ActivityNameDeleted" xml:space="preserve">
+    <value>{0} (deleted)</value>
+    <comment>A name followed by a marker that it has since been deleted; {0} is the name</comment>
+  </data>
+  <data name="ActivityMechanismVia" xml:space="preserve">
+    <value>via</value>
+    <comment>Joins a change's mechanism to the Synchronisation Rule that made it</comment>
+  </data>
+  <data name="ActivityMechanismSynchronisation" xml:space="preserve">
+    <value>Synchronisation</value>
+    <comment>Mechanism of a change made by a synchronisation whose rule and system are not known</comment>
+  </data>
+  <data name="ActivityMechanismDirectEdit" xml:space="preserve">
+    <value>Direct Edit</value>
+    <comment>Mechanism of a change made directly by a person</comment>
+  </data>
+  <data name="ActivityMechanismWorkflow" xml:space="preserve">
+    <value>Workflow</value>
+    <comment>Mechanism of a change made by a workflow</comment>
+  </data>
+  <data name="ActivityMechanismGroupRule" xml:space="preserve">
+    <value>Group Rule</value>
+    <comment>Mechanism of a change made by a group membership rule</comment>
+  </data>
+  <data name="ActivityMechanismImport" xml:space="preserve">
+    <value>Import</value>
+    <comment>Mechanism of a change made by an import, when no run profile name is recorded</comment>
+  </data>
+  <data name="ActivityMechanismExport" xml:space="preserve">
+    <value>Export</value>
+    <comment>Mechanism of a change made by an export, when no run profile name is recorded</comment>
+  </data>
 </root>

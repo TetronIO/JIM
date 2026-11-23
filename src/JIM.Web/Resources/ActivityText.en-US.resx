@@ -83,4 +83,7 @@
   <data name="ActivityItemAttributesModifiedSync" xml:space="preserve">
     <value>The following Metaverse Object attributes were modified during this synchronization operation.</value>
   </data>
+  <data name="ActivityMechanismSynchronisation" xml:space="preserve">
+    <value>Synchronization</value>
+  </data>
 </root>

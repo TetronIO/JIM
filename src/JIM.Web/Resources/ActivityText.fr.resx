@@ -1388,4 +1388,136 @@
   <data name="ActivityItemAttributesModifiedSync" xml:space="preserve">
     <value>Les attributs de l’objet Metaverse suivants ont été modifiés pendant cette synchronisation.</value>
   </data>
+  <data name="ActivityHistoryNone" xml:space="preserve">
+    <value>Aucun historique de modifications disponible.</value>
+  </data>
+  <data name="ActivityHistorySearch" xml:space="preserve">
+    <value>Rechercher</value>
+  </data>
+  <data name="ActivityHistoryChangeType" xml:space="preserve">
+    <value>Type de modification</value>
+  </data>
+  <data name="ActivityHistoryAllChanges" xml:space="preserve">
+    <value>Toutes les modifications</value>
+  </data>
+  <data name="ActivityChangeSet" xml:space="preserve">
+    <value>Définie</value>
+  </data>
+  <data name="ActivityChangeUpdated" xml:space="preserve">
+    <value>Mise à jour</value>
+  </data>
+  <data name="ActivityChangeRemoved" xml:space="preserve">
+    <value>Supprimée</value>
+  </data>
+  <data name="ActivityChangeAdd" xml:space="preserve">
+    <value>Ajout</value>
+  </data>
+  <data name="ActivityChangeRemove" xml:space="preserve">
+    <value>Suppression</value>
+  </data>
+  <data name="ActivityValueRetired" xml:space="preserve">
+    <value>Valeur retirée</value>
+  </data>
+  <data name="ActivityGeneratedValue" xml:space="preserve">
+    <value>valeur générée</value>
+  </data>
+  <data name="ActivityRetired" xml:space="preserve">
+    <value>retirée</value>
+  </data>
+  <data name="ActivityNone" xml:space="preserve">
+    <value>(aucun)</value>
+  </data>
+  <data name="ActivityMoreChanges" xml:space="preserve">
+    <value>+{0} de plus</value>
+  </data>
+  <data name="ActivityObjectDeletedNoValues" xml:space="preserve">
+    <value>L’objet a été supprimé. Les valeurs finales des attributs n’ont pas été capturées.</value>
+  </data>
+  <data name="ActivityHistoryMechanism" xml:space="preserve">
+    <value>Mécanisme</value>
+  </data>
+  <data name="ActivityHistorySummary" xml:space="preserve">
+    <value>Résumé</value>
+  </data>
+  <data name="ActivityHistorySearchChanges" xml:space="preserve">
+    <value>Rechercher des modifications…</value>
+  </data>
+  <data name="ActivityHistoryChangeSingular" xml:space="preserve">
+    <value>Modification</value>
+  </data>
+  <data name="ActivityHistoryChangesPlural" xml:space="preserve">
+    <value>Modifications</value>
+  </data>
+  <data name="ActivityHistoryAllAttributes" xml:space="preserve">
+    <value>Tous les attributs</value>
+  </data>
+  <data name="ActivityColumnSource" xml:space="preserve">
+    <value>Source</value>
+  </data>
+  <data name="ActivityColumnPlurality" xml:space="preserve">
+    <value>Pluralité</value>
+  </data>
+  <data name="ActivityMultiValued" xml:space="preserve">
+    <value>Multivaluée</value>
+  </data>
+  <data name="ActivitySingleValued" xml:space="preserve">
+    <value>Monovaluée</value>
+  </data>
+  <data name="ActivityNoChangesMatch" xml:space="preserve">
+    <value>Aucune modification ne correspond aux filtres actuels</value>
+  </data>
+  <data name="ActivityNoChangesMatchDetail" xml:space="preserve">
+    <value>Essayez un autre terme de recherche, ou élargissez les filtres d’attribut et de type de modification.</value>
+  </data>
+  <data name="ActivityNothingToShowChanges" xml:space="preserve">
+    <value>Il n’y a rien à afficher pour ces modifications d’attributs</value>
+  </data>
+  <data name="ActivityNoAttributeChangesOperation" xml:space="preserve">
+    <value>Aucune modification d’attribut n’a été enregistrée pour cette opération.</value>
+  </data>
+  <data name="ActivityTimeJustNow" xml:space="preserve">
+    <value>À l’instant</value>
+  </data>
+  <data name="ActivityTimeMinutesAgo" xml:space="preserve">
+    <value>il y a {0} min</value>
+  </data>
+  <data name="ActivityTimeHoursAgo" xml:space="preserve">
+    <value>il y a {0} h</value>
+  </data>
+  <data name="ActivityTimeDaysAgo" xml:space="preserve">
+    <value>il y a {0} j</value>
+  </data>
+  <data name="ActivityTimeWeeksAgo" xml:space="preserve">
+    <value>il y a {0} sem.</value>
+  </data>
+  <data name="ActivityTimeMonthsAgo" xml:space="preserve">
+    <value>il y a {0} mois</value>
+  </data>
+  <data name="ActivityTimeYearsAgo" xml:space="preserve">
+    <value>il y a {0} ans</value>
+  </data>
+  <data name="ActivityNameDeleted" xml:space="preserve">
+    <value>{0} (supprimé)</value>
+  </data>
+  <data name="ActivityMechanismVia" xml:space="preserve">
+    <value>via</value>
+  </data>
+  <data name="ActivityMechanismSynchronisation" xml:space="preserve">
+    <value>Synchronisation</value>
+  </data>
+  <data name="ActivityMechanismDirectEdit" xml:space="preserve">
+    <value>Modification directe</value>
+  </data>
+  <data name="ActivityMechanismWorkflow" xml:space="preserve">
+    <value>Flux de travail</value>
+  </data>
+  <data name="ActivityMechanismGroupRule" xml:space="preserve">
+    <value>Règle de groupe</value>
+  </data>
+  <data name="ActivityMechanismImport" xml:space="preserve">
+    <value>Importation</value>
+  </data>
+  <data name="ActivityMechanismExport" xml:space="preserve">
+    <value>Exportation</value>
+  </data>
 </root>
