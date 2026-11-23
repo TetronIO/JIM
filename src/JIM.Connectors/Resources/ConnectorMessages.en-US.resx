@@ -32,4 +32,10 @@
   <data name="SqlDocColumnReferenceUnknown" xml:space="preserve">
     <value>Object Type '{0}' says column '{1}' references object type '{2}', which this document does not declare. A reference can only point at an object type JIM also synchronizes.</value>
   </data>
+  <data name="PfSetByHand" xml:space="preserve">
+    <value>Set the password requirements on the Synchronization Rule to match the target's policy by hand, and expect a rejection to be how a mismatch shows up.</value>
+  </data>
+  <data name="PfGraphNoRole" xml:space="preserve">
+    <value>The app holds the permission, but its token shows no directory role that resets passwords. Graph also needs the app to hold User Administrator across the tenant: run Register-JIMEntraIdConnector -PasswordManagement, or assign it in the Entra admin centre. A role assigned in the last hour can be missing from the token until it is renewed.</value>
+  </data>
 </root>

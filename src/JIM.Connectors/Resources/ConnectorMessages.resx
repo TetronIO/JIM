@@ -484,4 +484,224 @@
     <value>Object Type '{0}' has a 'select' containing a semicolon. It must be a single statement, with no terminator.</value>
     <comment>{0} is an Object Type's name as written in the document.</comment>
   </data>
+  <data name="PfEncrypted" xml:space="preserve">
+    <value>The connection is encrypted, so passwords are protected in transit.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfEnableSecureConnection" xml:space="preserve">
+    <value>Enable the 'Use Secure Connection' setting on this Connected System, and set the port to the one the directory serves LDAPS on.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. 'Use Secure Connection' is the LDAP Connector's setting.</comment>
+  </data>
+  <data name="PfAdRefusesUnencrypted" xml:space="preserve">
+    <value>Active Directory refuses to accept a password over a connection that is neither encrypted nor signed and sealed, so a password set is likely to be rejected until this is addressed.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfNotEncrypted" xml:space="preserve">
+    <value>The connection is not encrypted. Passwords would be sent where anyone on the network path can read them.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfMechanismAd" xml:space="preserve">
+    <value>JIM would set passwords by writing the '{0}' attribute, which is how Active Directory accepts them.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is an LDAP attribute name.</comment>
+  </data>
+  <data name="PfMechanismPasswordModify" xml:space="preserve">
+    <value>JIM would set passwords using the LDAP Password Modify extended operation, which this directory advertises support for.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfMechanismUnsupported" xml:space="preserve">
+    <value>This directory does not advertise the LDAP Password Modify extended operation, which is the only mechanism JIM will use to set a password on a directory that is not Active Directory.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfMechanismLooksFor" xml:space="preserve">
+    <value>JIM looks for the extended operation '{0}' on the directory's rootDSE.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is an object identifier.</comment>
+  </data>
+  <data name="PfMechanismNoDirectWrite" xml:space="preserve">
+    <value>JIM will not write a password attribute directly instead, because a directory stores a directly written value exactly as given rather than hashing it, which would leave cleartext passwords in the directory.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfRightsNotCheckable" xml:space="preserve">
+    <value>JIM cannot check whether the account it connects as is allowed to reset passwords on this directory.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfRightsNotCheckableDetail" xml:space="preserve">
+    <value>This directory publishes no way for a client to ask what it is allowed to do, so the account's rights have to be confirmed at the directory itself.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfRightsNoContainers" xml:space="preserve">
+    <value>JIM cannot check whether the account it connects as is allowed to reset passwords, because it does not yet know where it would be provisioning.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfRightsSelectContainers" xml:space="preserve">
+    <value>Select the containers to manage on the Scope tab, then check again.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. The Scope tab is the Connected System's tab of that name.</comment>
+  </data>
+  <data name="PfRightsFinding" xml:space="preserve">
+    <value>{0} {1}: {2}</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is an outcome (a nested message); {1} is a container's distinguished name; {2} is the finding's detail, in its own words.</comment>
+  </data>
+  <data name="PfOutcomeAllowed" xml:space="preserve">
+    <value>Allowed in</value>
+    <comment>Completes a line naming a container; the container follows.</comment>
+  </data>
+  <data name="PfOutcomeDenied" xml:space="preserve">
+    <value>Not allowed in</value>
+    <comment>Completes a line naming a container; the container follows.</comment>
+  </data>
+  <data name="PfOutcomeUnknown" xml:space="preserve">
+    <value>Could not tell for</value>
+    <comment>Completes a line naming a container; the container follows.</comment>
+  </data>
+  <data name="PfRightsCheckedFirst" xml:space="preserve">
+    <value>JIM checked the first {0} of this Connected System's {1} managed containers.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} and {1} are counts.</comment>
+  </data>
+  <data name="PfRightsDenied" xml:space="preserve">
+    <value>The account JIM connects as cannot reset passwords everywhere it would be provisioning.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfRightsUnconfirmed" xml:space="preserve">
+    <value>JIM could not confirm everywhere that the account it connects as is allowed to reset passwords.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfRightsAllowed" xml:space="preserve">
+    <value>The account JIM connects as can reset passwords everywhere it would be provisioning.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfPolicyNounDomain" xml:space="preserve">
+    <value>the domain password policy</value>
+    <comment>Completes: JIM could not read ... Feminine in French.</comment>
+  </data>
+  <data name="PfPolicyNounDirectory" xml:space="preserve">
+    <value>the directory's password policy</value>
+    <comment>Completes: JIM could not read ... Feminine in French.</comment>
+  </data>
+  <data name="PfPolicyUnreadable" xml:space="preserve">
+    <value>JIM could not read {0}, so it cannot pre-fill the password generator from it.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is a policy noun (a nested message), feminine in French.</comment>
+  </data>
+  <data name="PfPolicyRead" xml:space="preserve">
+    <value>JIM read {0} and can pre-fill the password generator from it.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is a policy noun (a nested message), feminine in French.</comment>
+  </data>
+  <data name="PfPolicyRemedyActiveDirectory" xml:space="preserve">
+    <value>Check that the account JIM connects as can read the domain root object.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfPolicyRemedyOpenLdap" xml:space="preserve">
+    <value>Check that the account JIM connects as can read the policy entry the ppolicy overlay applies by default.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfPolicyRemedyDirectoryServer389" xml:space="preserve">
+    <value>Check that the account JIM connects as can read the password attributes on cn=config.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfPolicyRemedyOther" xml:space="preserve">
+    <value>Check that the account JIM connects as can read where this directory holds its password policy.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfPolicyNotPublished" xml:space="preserve">
+    <value>This directory does not publish a password policy that a client can read, so JIM cannot pre-fill the password generator from it.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfPolicyConfigNotReadable" xml:space="preserve">
+    <value>JIM could not read the directory's password policy: the account it connects as cannot read the server configuration that holds it.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfConfigRemedyOpenLdap" xml:space="preserve">
+    <value>Grant the account JIM connects as read access to the ppolicy overlay configuration under cn=config and to the policy entry it names, then check again.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfConfigRemedyDirectoryServer389" xml:space="preserve">
+    <value>Grant the account JIM connects as read access to the password attributes on cn=config, then check again.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfConfigRemedyOther" xml:space="preserve">
+    <value>Grant the account JIM connects as read access to the server configuration that holds the password policy, then check again.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfPolicyNoneConfigured" xml:space="preserve">
+    <value>JIM read the directory's password policy configuration: no policy is configured, so no rules apply to a generated password.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfMinimumLength" xml:space="preserve">
+    <value>Minimum length: {0}.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is a number of characters.</comment>
+  </data>
+  <data name="PfComplexityRequired" xml:space="preserve">
+    <value>Complexity is required: a password must use at least {0} of the 5 character categories.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is a number.</comment>
+  </data>
+  <data name="PfComplexityNotRequired" xml:space="preserve">
+    <value>Complexity is not required.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfPpolicyNotLoaded" xml:space="preserve">
+    <value>The directory does not advertise the password policy control, so the ppolicy overlay is not loaded.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfSetByHand" xml:space="preserve">
+    <value>Set the password requirements on the Synchronisation Rule to match the target's policy by hand, and expect a rejection to be how a mismatch shows up.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfFgppPresent" xml:space="preserve">
+    <value>This domain has Fine-Grained Password Policies, which apply stricter rules to some accounts. What JIM read is a floor, not the whole story.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfOverridePresent" xml:space="preserve">
+    <value>Some objects in this directory are governed by a password policy other than the one JIM read, which may be stricter. What JIM read is a floor, not the whole story.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfFgppUnknown" xml:space="preserve">
+    <value>JIM could not establish whether this domain has Fine-Grained Password Policies, which would apply stricter rules to some accounts. Treat what it read as a floor.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfOverrideUnknown" xml:space="preserve">
+    <value>JIM could not establish whether some objects in this directory are governed by a password policy other than the one it read, which could be stricter. Treat what it read as a floor.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfFurtherChecks" xml:space="preserve">
+    <value>The directory applies further checks JIM cannot see, so a password satisfying everything above can still be refused.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfGraphNoToken" xml:space="preserve">
+    <value>No access token could be acquired from Microsoft Entra ID: {0}</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is the error in its own words.</comment>
+  </data>
+  <data name="PfGraphHttps" xml:space="preserve">
+    <value>Microsoft Graph is reached over HTTPS, with TLS 1.2 or later.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfNotChecked" xml:space="preserve">
+    <value>Not checked: no connection.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfGraphPolicySame" xml:space="preserve">
+    <value>Microsoft Entra ID's password rules are the same in every tenant.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfGraphToken" xml:space="preserve">
+    <value>An access token was acquired from Microsoft Entra ID.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfGraphMechanism" xml:space="preserve">
+    <value>Passwords are set through Microsoft Graph, on the user's passwordProfile.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfGraphPolicySameBanned" xml:space="preserve">
+    <value>Microsoft Entra ID's password rules are the same in every tenant; its banned password list cannot be read.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
+  <data name="PfGraphLacksPermission" xml:space="preserve">
+    <value>The app registration lacks the {0} application permission. Grant it with admin consent.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is a Microsoft Graph permission name.</comment>
+  </data>
+  <data name="PfGraphHoldsRole" xml:space="preserve">
+    <value>The app holds the permission and the {0} directory role across the tenant.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab. {0} is a Microsoft Entra directory role name.</comment>
+  </data>
+  <data name="PfGraphNoRole" xml:space="preserve">
+    <value>The app holds the permission, but its token shows no directory role that resets passwords. Graph also needs the app to hold User Administrator across the tenant: run Register-JIMEntraIdConnector -PasswordManagement, or assign it in the Entra admin centre. A role assigned in the last hour can be missing from the token until it is renewed.</value>
+    <comment>A line of the password preflight report shown on the Connected System's Passwords tab.</comment>
+  </data>
 </root>

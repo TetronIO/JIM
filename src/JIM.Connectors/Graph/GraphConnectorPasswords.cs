@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Connectors.Resources;
+using JIM.Models.Localisation;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -190,11 +192,12 @@ internal sealed class GraphConnectorPasswords
                 TargetDescription = "Microsoft Entra ID",
                 Checks =
                 [
-                    PasswordPreflightCheckResult.Failed(PasswordPreflightCheck.Connection, $"No access token could be acquired from Microsoft Entra ID: {ex.Message}"),
-                    PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Encryption, "Microsoft Graph is reached over HTTPS, with TLS 1.2 or later."),
-                    PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.PasswordMechanism, "Not checked: no connection."),
-                    PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.ResetRights, "Not checked: no connection."),
-                    PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.PolicyDiscovery, "Microsoft Entra ID's password rules are the same in every tenant.")
+                    PasswordPreflightCheckResult.Failed(PasswordPreflightCheck.Connection,
+                        Pf(nameof(ConnectorMessages.PfGraphNoToken), ex is HttpAuthenticationException { Detail: { } detail } ? detail : (MessageArgument)ex.Message)),
+                    PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Encryption, Pf(nameof(ConnectorMessages.PfGraphHttps))),
+                    PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.PasswordMechanism, Pf(nameof(ConnectorMessages.PfNotChecked))),
+                    PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.ResetRights, Pf(nameof(ConnectorMessages.PfNotChecked))),
+                    PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.PolicyDiscovery, Pf(nameof(ConnectorMessages.PfGraphPolicySame)))
                 ]
             };
         }
@@ -204,11 +207,11 @@ internal sealed class GraphConnectorPasswords
             TargetDescription = "Microsoft Entra ID",
             Checks =
             [
-                PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Connection, "An access token was acquired from Microsoft Entra ID."),
-                PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Encryption, "Microsoft Graph is reached over HTTPS, with TLS 1.2 or later."),
-                PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.PasswordMechanism, "Passwords are set through Microsoft Graph, on the user's passwordProfile."),
+                PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Connection, Pf(nameof(ConnectorMessages.PfGraphToken))),
+                PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Encryption, Pf(nameof(ConnectorMessages.PfGraphHttps))),
+                PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.PasswordMechanism, Pf(nameof(ConnectorMessages.PfGraphMechanism))),
                 ResetRights(roles, directoryRoles),
-                PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.PolicyDiscovery, "Microsoft Entra ID's password rules are the same in every tenant; its banned password list cannot be read.")
+                PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.PolicyDiscovery, Pf(nameof(ConnectorMessages.PfGraphPolicySameBanned)))
             ]
         };
     }
@@ -218,16 +221,16 @@ internal sealed class GraphConnectorPasswords
         if (!GraphPermissions.CanWritePasswordProfiles(roles))
         {
             return PasswordPreflightCheckResult.Failed(PasswordPreflightCheck.ResetRights,
-                $"The app registration lacks the {GraphPermissions.UserPasswordProfileReadWrite} application permission. Grant it with admin consent.");
+                Pf(nameof(ConnectorMessages.PfGraphLacksPermission), GraphPermissions.UserPasswordProfileReadWrite));
         }
 
         var role = directoryRoles.Select(r => GraphPermissions.PasswordAdministratorRoles.GetValueOrDefault(r)).FirstOrDefault(name => name != null);
         if (role != null)
-            return PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.ResetRights, $"The app holds the permission and the {role} directory role across the tenant.");
+            return PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.ResetRights, Pf(nameof(ConnectorMessages.PfGraphHoldsRole), role));
 
-        return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.ResetRights,
-            "The app holds the permission, but its token shows no directory role that resets passwords. Graph also needs the app to hold User Administrator " +
-            "across the tenant: run Register-JIMEntraIdConnector -PasswordManagement, or assign it in the Entra admin centre. A role assigned in the last hour " +
-            "can be missing from the token until it is renewed.");
+        return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.ResetRights, Pf(nameof(ConnectorMessages.PfGraphNoRole)));
     }
+
+    private static JimMessage Pf(string key, params MessageArgument[] arguments) =>
+        JimMessage.Create(ConnectorMessageCatalogues.Connectors, key, arguments);
 }

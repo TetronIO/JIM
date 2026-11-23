@@ -368,4 +368,169 @@
   <data name="SqlDocSelectSemicolon" xml:space="preserve">
     <value>Le type d’objet « {0} » a un « select » qui contient un point-virgule. Il doit s’agir d’une seule instruction, sans terminateur.</value>
   </data>
+  <data name="PfEncrypted" xml:space="preserve">
+    <value>La connexion est chiffrée : les mots de passe sont donc protégés pendant leur transport.</value>
+  </data>
+  <data name="PfEnableSecureConnection" xml:space="preserve">
+    <value>Activez le paramètre « Utiliser une connexion sécurisée » de ce système connecté, et définissez le port sur celui sur lequel l’annuaire sert LDAPS.</value>
+  </data>
+  <data name="PfAdRefusesUnencrypted" xml:space="preserve">
+    <value>Active Directory refuse d’accepter un mot de passe sur une connexion qui n’est ni chiffrée ni signée et scellée : la définition d’un mot de passe sera probablement rejetée tant que ce point n’est pas traité.</value>
+  </data>
+  <data name="PfNotEncrypted" xml:space="preserve">
+    <value>La connexion n’est pas chiffrée. Les mots de passe seraient envoyés là où toute personne présente sur le chemin réseau peut les lire.</value>
+  </data>
+  <data name="PfMechanismAd" xml:space="preserve">
+    <value>JIM définirait les mots de passe en écrivant l’attribut « {0} », ce qui est la manière dont Active Directory les accepte.</value>
+  </data>
+  <data name="PfMechanismPasswordModify" xml:space="preserve">
+    <value>JIM définirait les mots de passe à l’aide de l’opération étendue LDAP Password Modify, dont cet annuaire annonce la prise en charge.</value>
+  </data>
+  <data name="PfMechanismUnsupported" xml:space="preserve">
+    <value>Cet annuaire n’annonce pas l’opération étendue LDAP Password Modify, qui est le seul mécanisme que JIM utilisera pour définir un mot de passe sur un annuaire autre qu’Active Directory.</value>
+  </data>
+  <data name="PfMechanismLooksFor" xml:space="preserve">
+    <value>JIM recherche l’opération étendue « {0} » sur le rootDSE de l’annuaire.</value>
+  </data>
+  <data name="PfMechanismNoDirectWrite" xml:space="preserve">
+    <value>JIM n’écrira pas non plus directement un attribut de mot de passe, car un annuaire stocke une valeur écrite directement exactement telle qu’elle est fournie, sans la hacher, ce qui laisserait des mots de passe en clair dans l’annuaire.</value>
+  </data>
+  <data name="PfRightsNotCheckable" xml:space="preserve">
+    <value>JIM ne peut pas vérifier si le compte avec lequel il se connecte est autorisé à réinitialiser les mots de passe sur cet annuaire.</value>
+  </data>
+  <data name="PfRightsNotCheckableDetail" xml:space="preserve">
+    <value>Cet annuaire ne publie aucun moyen pour un client de demander ce qu’il est autorisé à faire : les droits du compte doivent donc être confirmés sur l’annuaire lui-même.</value>
+  </data>
+  <data name="PfRightsNoContainers" xml:space="preserve">
+    <value>JIM ne peut pas vérifier si le compte avec lequel il se connecte est autorisé à réinitialiser les mots de passe, car il ne sait pas encore où il provisionnerait.</value>
+  </data>
+  <data name="PfRightsSelectContainers" xml:space="preserve">
+    <value>Sélectionnez les conteneurs à gérer sous l’onglet Périmètre, puis vérifiez de nouveau.</value>
+  </data>
+  <data name="PfRightsFinding" xml:space="preserve">
+    <value>{0} {1} : {2}</value>
+  </data>
+  <data name="PfOutcomeAllowed" xml:space="preserve">
+    <value>Autorisé dans</value>
+  </data>
+  <data name="PfOutcomeDenied" xml:space="preserve">
+    <value>Non autorisé dans</value>
+  </data>
+  <data name="PfOutcomeUnknown" xml:space="preserve">
+    <value>Impossible de déterminer pour</value>
+  </data>
+  <data name="PfRightsCheckedFirst" xml:space="preserve">
+    <value>JIM a vérifié les {0} premiers des {1} conteneurs gérés de ce système connecté.</value>
+  </data>
+  <data name="PfRightsDenied" xml:space="preserve">
+    <value>Le compte avec lequel JIM se connecte ne peut pas réinitialiser les mots de passe partout où il provisionnerait.</value>
+  </data>
+  <data name="PfRightsUnconfirmed" xml:space="preserve">
+    <value>JIM n’a pas pu confirmer partout que le compte avec lequel il se connecte est autorisé à réinitialiser les mots de passe.</value>
+  </data>
+  <data name="PfRightsAllowed" xml:space="preserve">
+    <value>Le compte avec lequel JIM se connecte peut réinitialiser les mots de passe partout où il provisionnerait.</value>
+  </data>
+  <data name="PfPolicyNounDomain" xml:space="preserve">
+    <value>la stratégie de mots de passe du domaine</value>
+  </data>
+  <data name="PfPolicyNounDirectory" xml:space="preserve">
+    <value>la stratégie de mots de passe de l’annuaire</value>
+  </data>
+  <data name="PfPolicyUnreadable" xml:space="preserve">
+    <value>JIM n’a pas pu lire {0} ; il ne peut donc pas préremplir le générateur de mots de passe à partir de celle-ci.</value>
+  </data>
+  <data name="PfPolicyRead" xml:space="preserve">
+    <value>JIM a lu {0} et peut préremplir le générateur de mots de passe à partir de celle-ci.</value>
+  </data>
+  <data name="PfPolicyRemedyActiveDirectory" xml:space="preserve">
+    <value>Vérifiez que le compte avec lequel JIM se connecte peut lire l’objet racine du domaine.</value>
+  </data>
+  <data name="PfPolicyRemedyOpenLdap" xml:space="preserve">
+    <value>Vérifiez que le compte avec lequel JIM se connecte peut lire l’entrée de stratégie que la surcouche ppolicy applique par défaut.</value>
+  </data>
+  <data name="PfPolicyRemedyDirectoryServer389" xml:space="preserve">
+    <value>Vérifiez que le compte avec lequel JIM se connecte peut lire les attributs de mot de passe sur cn=config.</value>
+  </data>
+  <data name="PfPolicyRemedyOther" xml:space="preserve">
+    <value>Vérifiez que le compte avec lequel JIM se connecte peut lire l’emplacement où cet annuaire conserve sa stratégie de mots de passe.</value>
+  </data>
+  <data name="PfPolicyNotPublished" xml:space="preserve">
+    <value>Cet annuaire ne publie pas de stratégie de mots de passe qu’un client puisse lire : JIM ne peut donc pas préremplir le générateur de mots de passe à partir de celle-ci.</value>
+  </data>
+  <data name="PfPolicyConfigNotReadable" xml:space="preserve">
+    <value>JIM n’a pas pu lire la stratégie de mots de passe de l’annuaire : le compte avec lequel il se connecte ne peut pas lire la configuration du serveur qui la contient.</value>
+  </data>
+  <data name="PfConfigRemedyOpenLdap" xml:space="preserve">
+    <value>Accordez au compte avec lequel JIM se connecte un accès en lecture à la configuration de la surcouche ppolicy sous cn=config et à l’entrée de stratégie qu’elle désigne, puis vérifiez de nouveau.</value>
+  </data>
+  <data name="PfConfigRemedyDirectoryServer389" xml:space="preserve">
+    <value>Accordez au compte avec lequel JIM se connecte un accès en lecture aux attributs de mot de passe sur cn=config, puis vérifiez de nouveau.</value>
+  </data>
+  <data name="PfConfigRemedyOther" xml:space="preserve">
+    <value>Accordez au compte avec lequel JIM se connecte un accès en lecture à la configuration du serveur qui contient la stratégie de mots de passe, puis vérifiez de nouveau.</value>
+  </data>
+  <data name="PfPolicyNoneConfigured" xml:space="preserve">
+    <value>JIM a lu la configuration de la stratégie de mots de passe de l’annuaire : aucune stratégie n’est configurée, donc aucune règle ne s’applique à un mot de passe généré.</value>
+  </data>
+  <data name="PfMinimumLength" xml:space="preserve">
+    <value>Longueur minimale : {0}.</value>
+  </data>
+  <data name="PfComplexityRequired" xml:space="preserve">
+    <value>La complexité est exigée : un mot de passe doit utiliser au moins {0} des 5 catégories de caractères.</value>
+  </data>
+  <data name="PfComplexityNotRequired" xml:space="preserve">
+    <value>La complexité n’est pas exigée.</value>
+  </data>
+  <data name="PfPpolicyNotLoaded" xml:space="preserve">
+    <value>L’annuaire n’annonce pas le contrôle de stratégie de mots de passe : la surcouche ppolicy n’est donc pas chargée.</value>
+  </data>
+  <data name="PfSetByHand" xml:space="preserve">
+    <value>Définissez à la main les exigences de mot de passe de la règle de synchronisation pour qu’elles correspondent à la stratégie de la cible, et attendez-vous à ce qu’un écart se manifeste par un rejet.</value>
+  </data>
+  <data name="PfFgppPresent" xml:space="preserve">
+    <value>Ce domaine possède des stratégies de mots de passe affinées (Fine-Grained Password Policies), qui appliquent des règles plus strictes à certains comptes. Ce que JIM a lu n’est qu’un minimum, pas la réalité complète.</value>
+  </data>
+  <data name="PfOverridePresent" xml:space="preserve">
+    <value>Certains objets de cet annuaire sont régis par une stratégie de mots de passe autre que celle que JIM a lue, qui peut être plus stricte. Ce que JIM a lu n’est qu’un minimum, pas la réalité complète.</value>
+  </data>
+  <data name="PfFgppUnknown" xml:space="preserve">
+    <value>JIM n’a pas pu établir si ce domaine possède des stratégies de mots de passe affinées (Fine-Grained Password Policies), qui appliqueraient des règles plus strictes à certains comptes. Considérez ce qu’il a lu comme un minimum.</value>
+  </data>
+  <data name="PfOverrideUnknown" xml:space="preserve">
+    <value>JIM n’a pas pu établir si certains objets de cet annuaire sont régis par une stratégie de mots de passe autre que celle qu’il a lue, qui pourrait être plus stricte. Considérez ce qu’il a lu comme un minimum.</value>
+  </data>
+  <data name="PfFurtherChecks" xml:space="preserve">
+    <value>L’annuaire applique d’autres contrôles que JIM ne peut pas voir : un mot de passe satisfaisant tout ce qui précède peut donc encore être refusé.</value>
+  </data>
+  <data name="PfGraphNoToken" xml:space="preserve">
+    <value>Aucun jeton d’accès n’a pu être obtenu auprès de Microsoft Entra ID : {0}</value>
+  </data>
+  <data name="PfGraphHttps" xml:space="preserve">
+    <value>Microsoft Graph est joint en HTTPS, avec TLS 1.2 ou version ultérieure.</value>
+  </data>
+  <data name="PfNotChecked" xml:space="preserve">
+    <value>Non vérifié : aucune connexion.</value>
+  </data>
+  <data name="PfGraphPolicySame" xml:space="preserve">
+    <value>Les règles de mot de passe de Microsoft Entra ID sont les mêmes dans tous les locataires.</value>
+  </data>
+  <data name="PfGraphToken" xml:space="preserve">
+    <value>Un jeton d’accès a été obtenu auprès de Microsoft Entra ID.</value>
+  </data>
+  <data name="PfGraphMechanism" xml:space="preserve">
+    <value>Les mots de passe sont définis via Microsoft Graph, sur le passwordProfile de l’utilisateur.</value>
+  </data>
+  <data name="PfGraphPolicySameBanned" xml:space="preserve">
+    <value>Les règles de mot de passe de Microsoft Entra ID sont les mêmes dans tous les locataires ; sa liste de mots de passe interdits ne peut pas être lue.</value>
+  </data>
+  <data name="PfGraphLacksPermission" xml:space="preserve">
+    <value>L’inscription d’application ne dispose pas de l’autorisation d’application {0}. Accordez-la avec le consentement de l’administrateur.</value>
+  </data>
+  <data name="PfGraphHoldsRole" xml:space="preserve">
+    <value>L’application détient l’autorisation et le rôle d’annuaire {0} dans tout le locataire.</value>
+  </data>
+  <data name="PfGraphNoRole" xml:space="preserve">
+    <value>L’application détient l’autorisation, mais son jeton n’indique aucun rôle d’annuaire permettant de réinitialiser les mots de passe. Graph exige aussi que l’application détienne User Administrator dans tout le locataire : exécutez Register-JIMEntraIdConnector -PasswordManagement, ou attribuez-le dans le centre d’administration Entra. Un rôle attribué dans la dernière heure peut manquer dans le jeton tant qu’il n’est pas renouvelé.</value>
+  </data>
 </root>
