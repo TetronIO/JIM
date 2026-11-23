@@ -185,6 +185,10 @@ Describe 'Test-ScenarioIsDirectoryAgnostic' {
         Test-ScenarioIsDirectoryAgnostic -ScenarioNumber 36 | Should -Be $true
     }
 
+    It 'is true for Scenario 037 (Entra ID as a source, which uses no other system)' {
+        Test-ScenarioIsDirectoryAgnostic -ScenarioNumber 37 | Should -Be $true
+    }
+
     It 'is false for a scenario that does use a directory' {
         Test-ScenarioIsDirectoryAgnostic -ScenarioNumber 1 | Should -Be $false
     }
@@ -211,8 +215,12 @@ Describe 'Test-ScenarioRunsOnItsOwn' {
         Test-ScenarioRunsOnItsOwn -ScenarioNumber 36 | Should -BeTrue
     }
 
+    It 'keeps Scenario 037 (Entra ID as a source) out of the sweep, for ad-lab.yml to run on its own and report with 036 as jim-entra-connector' {
+        Test-ScenarioRunsOnItsOwn -ScenarioNumber 37 | Should -BeTrue
+    }
+
     It 'leaves every other scenario in the sweep, Scenario 030 (AD FS trust) included' {
-        foreach ($number in (1..40 | Where-Object { $_ -notin 31, 35, 36 })) {
+        foreach ($number in (1..40 | Where-Object { $_ -notin 31, 35, 36, 37 })) {
             Test-ScenarioRunsOnItsOwn -ScenarioNumber $number | Should -BeFalse -Because "Scenario $number is part of -Scenario All"
         }
         Test-ScenarioRunsOnItsOwn -ScenarioNumber $null | Should -BeFalse

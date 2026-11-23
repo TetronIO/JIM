@@ -104,6 +104,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-031-ActiveDirectoryFederationSignIn" -DirectoryType ActiveDirectory  # Signing people in to JIM through AD FS, posted as jim-ad-lab-adfs (lab only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-035-EntraIdSignIn" -DirectoryType ActiveDirectory  # Signing people in to JIM through Microsoft Entra ID, posted as jim-sso-entra (lab only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-036-EntraIdTarget" -DirectoryType ActiveDirectory  # Provisioning to Microsoft Entra ID through the Entra ID Connector, posted as jim-entra-connector (needs the test tenant's credentials)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-037-EntraIdSource" -DirectoryType ActiveDirectory  # Importing from Microsoft Entra ID through the Entra ID Connector, posted with 036 as jim-entra-connector (needs the test tenant's credentials)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario-032-IntraTypeReferences" -DirectoryType OpenLDAP -Template Medium  # Managers and nested groups through the cross-page reference step (#2492, OpenLDAP only)
 
 # Short forms resolve to the full name: the number, Scenario-NNN, or the descriptive part
@@ -226,6 +227,7 @@ In **Containers Used**, `samba-* / openldap-primary` means the scenario runs aga
 | `Scenario-031-ActiveDirectoryFederationSignIn` | AD FS sign-in end to end ([#2441](https://github.com/TetronIO/JIM/issues/2441)), with JIM registered by `Register-JIMIdentityProvider` and matched on Object GUID: portal sign-in, the initial administrator, a bearer token on `/api`, `Connect-JIM` by PKCE, one Metaverse Object across both, a renamed employee, an employee with no JIM role refused every Administrator API, and the API reference's Try It. Posted as its own commit status, `jim-ad-lab-adfs` | Active Directory lab only (dc-primary, adfs-primary) |
 | `Scenario-035-EntraIdSignIn` | Microsoft Entra ID sign-in end to end ([#2367](https://github.com/TetronIO/JIM/issues/2367)), against the JIM test tenant, with JIM registered by `Register-JIMIdentityProvider -Provider EntraId` and matched on `oid`: portal sign-in, the initial administrator, `Connect-JIM` by PKCE with its version 2 access token on `/api`, one Metaverse Object across both, a person with no JIM identity refused every Administrator API, the API reference's Try It, and the registration found right on a second run. Posted as its own commit status, `jim-sso-entra` | Active Directory lab only (the tenant's credentials are the lab runner's) |
 | `Scenario-036-EntraIdTarget` | The Microsoft Entra ID Connector with Entra ID as a target ([#361](https://github.com/TetronIO/JIM/issues/361)), against the JIM test tenant: provision 24 users and four groups (one over Graph's 20 members on a create, one nested), deliver each Initial Password, update attributes, a user principal name and a manager, change a membership, disable then delete a leaver, synchronise again with nothing to export, and leave the tenant's own accounts untouched, each result read back through Graph by the harness. Posted as its own commit status, `jim-entra-connector` | Any directory type (it uses none), given the tenant's credentials: the lab runner's, or `JIM_SSO_ENTRA_GRAPH_TOKEN` |
+| `Scenario-037-EntraIdSource` | The Microsoft Entra ID Connector with Entra ID as a source ([#361](https://github.com/TetronIO/JIM/issues/361)): the harness seeds members, a guest, nested, mixed-scope and hidden-membership groups in the JIM test tenant, and JIM's Full and Delta Imports project them, follow a change, a membership change and two deletions, and read nothing when nothing changed. Posted with Scenario 036 as `jim-entra-connector` | Any directory type (it uses none), given the tenant's credentials, as Scenario 036 |
 | `Scenario-032-IntraTypeReferences` | The Full Synchronisation's cross-page reference step end to end ([#2492](https://github.com/TetronIO/JIM/issues/2492)): users with managers and groups nesting groups, references within one Object Type that no type order can resolve in the page loop, exported to an empty target and asserted manager by manager and member by member; also the step's measurement scenario (duration and reference-value count) | openldap-primary |
 
 **Available Templates (`-Template` parameter):**
@@ -1588,6 +1590,20 @@ PRD Scenario 5 (re-derivation after Collision Remediation) joins #242 release 4'
 **Running it.** It uses no directory, so it runs on any directory type, but needs `JIM_SSO_ENTRA_TENANT_ID`, `JIM_SSO_ENTRA_CI_CLIENT_ID` and a Graph token that may manage the Connector app's credentials: in GitHub Actions the CI app's federated credential, elsewhere `JIM_SSO_ENTRA_GRAPH_TOKEN` (a delegated token of the app's owner or an Application Administrator works). Two runs at once break each other, since each replaces the certificate JIM holds. The lab host must reach `login.microsoftonline.com` and `graph.microsoft.com`.
 
 **Runner handling.** `Test-ScenarioRunsOnItsOwn` keeps it out of every sweep, Pre-Release included, since only the lab runner holds the tenant's credentials; `ad-lab.yml` runs it as a step of its own, so a tenant outage shows as `jim-entra-connector` alone.
+
+#### Scenario 037: Entra ID as a Source
+
+**Status**: implemented for [#361](https://github.com/TetronIO/JIM/issues/361). Reported with Scenario 036 as `jim-entra-connector`; not yet a release gate.
+
+**Purpose**: the reverse of Scenario 036. The harness seeds users and groups in the test tenant through its own Graph requests, and JIM imports them through the Connector and projects them into the Metaverse, Delta Import included.
+
+**Scripts**: `test/integration/scenarios/Invoke-Scenario-037-EntraIdSource.ps1`, `test/integration/Setup-Scenario-037.ps1` and `test/integration/utils/Scenario-037-Data.ps1`, with the same harness as Scenario 036.
+
+**Seed**: six members and a guest (created with `userType` Guest, since an invitation needs `User.Invite.All`, which the Connector app does not hold); security groups Staff, Engineering, All Teams (whose member is Engineering), Mixed (one member in scope and one of the tenant's own users), Temporary; and a Microsoft 365 group with hidden membership. A tenant that refuses the Microsoft 365 group skips that one check, saying so.
+
+**Checks** (only `-Step All` is meaningful): Full Import (every seeded user and group projected with its attributes and members, the nested group, the hidden-membership group's members, the out-of-scope member left out, and `sourceOfAuthority` `cloud`, or `externalEntraDirectory` for the guest); Scoping (the tenant's own users imported, none projected); Delta Import (a job title, a member added and one removed, a user and a group deleted, each reaching the Metaverse, the two deletions under deletion rules with no grace period); Delta integrity (a Delta Import with nothing changed reads nothing, and does not fall back to reading everything). Imports repeat a few times while the Metaverse still differs, since Graph's lists and delta rounds lag its writes.
+
+**Safety and running it**: as Scenario 036, whose certificate it also replaces, so the two never run at once; the lab runs them one after the other in one step.
 
 #### Scenario 032: Intra-type References
 

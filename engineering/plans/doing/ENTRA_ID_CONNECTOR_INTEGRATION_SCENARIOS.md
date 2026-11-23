@@ -83,12 +83,12 @@ Not tested live: a deliberate write to an administrator. Graph refuses sensitive
 
 The harness seeds, through Graph: member users, a guest, security groups (one nested), a Microsoft 365 group with hidden membership, and a group with a member outside scope (one of the tenant's own accounts).
 
-1. **Full Import and projection:** a Full Import, then synchronisation projects the run's objects into the Metaverse. The check covers attributes, `sourceOfAuthority` (`cloud`, `guest`), memberships, the nested group, and the hidden-membership group's members read through `Member.Read.Hidden`.
+1. **Full Import and projection:** a Full Import, then synchronisation projects the run's objects into the Metaverse. The check covers attributes, `sourceOfAuthority` (`cloud`, and `externalEntraDirectory` for the guest), memberships, the nested group, and the hidden-membership group's members read through `Member.Read.Hidden`.
 2. **Scoping:** projection is scoped to the run's prefix, and the tenant's own accounts never project.
 3. **Delta Import:** the harness changes an attribute, adds and removes a member, and deletes a user and a group. A Delta Import picks each up, and the Metaverse follows its deletion rules.
 4. **Delta integrity:** a Delta Import with nothing changed reads nothing, with the delta link reused (`readEveryObjectInScope=False`).
 
-A true invited guest (`creationType` `Invitation`) needs `User.Invite.All`, which the Connector app does not hold. Phase 1 decides whether the harness gets it, or the guest case uses a user created with `userType` `Guest`.
+A true invited guest (`creationType` `Invitation`) needs `User.Invite.All`, which the Connector app does not hold, so the guest case uses a user created with `userType` `Guest`; the Connector reads either as `externalEntraDirectory`.
 
 ### Scenario 038: hybrid and Source of Authority (later)
 
@@ -115,6 +115,8 @@ Tracked by [#3029](https://github.com/TetronIO/JIM/issues/3029), since it needs 
 The scenario, its registration with the runner, and the `ad-lab.yml` step and status.
 
 ### Phase 3: Scenario 037
+
+The scenario, its registration with the runner, and the `ad-lab.yml` step, which runs Scenarios 036 and 037 one after the other (each replaces the certificate JIM holds) and reports both as `jim-entra-connector`. A tenant that refuses the Microsoft 365 group with hidden membership skips that check and says so.
 
 ### Phase 4: Scenario 038 ([#3029](https://github.com/TetronIO/JIM/issues/3029))
 

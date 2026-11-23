@@ -8,7 +8,7 @@
 # submits results to the metrics API, and posts a commit status named `jim-ad-lab` on the SHA it tested: `success` only
 # when everything passed, with the scenario count and the OS build in its description. It also signs people in to JIM
 # through the lab's AD FS server (Scenario 031, #2441) and through the JIM test tenant in Microsoft Entra ID (Scenario
-# 035, #2367), provisions to that tenant through the Microsoft Entra ID Connector (Scenario 036, #361), and posts each
+# 035, #2367), provisions to and imports from that tenant through the Microsoft Entra ID Connector (Scenarios 036 and 037, #361), and posts each
 # as a status of its own, `jim-ad-lab-adfs`, `jim-sso-entra` and `jim-entra-connector`, so a sign-in or tenant failure
 # never turns `jim-ad-lab` red or the reverse. `/release` and release.yml
 # require `success` for the SHA being tagged (scripts/Test-ReleaseGate.ps1 -Context jim-ad-lab) once the repository variable
@@ -230,10 +230,11 @@ jobs:
 
       # What this run covers. The LDAP scenarios (the suite, reported as jim-ad-lab), the AD FS sign-in checks
       # (Scenario 031, reported as jim-ad-lab-adfs, #2441), the Entra ID sign-in checks (Scenario 035, reported as
-      # jim-sso-entra, #2367) and the Entra ID Connector checks (Scenario 036, reported as jim-entra-connector, #361) run
-      # as separate steps, so a failure in one never colours another's status: a night (or a dispatch of All) runs all
-      # four, a dispatch of Scenario 031, 035 or 036 runs those checks only, and a dispatch of any other scenario runs
-      # that scenario in the suite only. Test-ScenarioRunsOnItsOwn keeps 031, 035 and 036 out of the suite's sweep.
+      # jim-sso-entra, #2367) and the Entra ID Connector checks (Scenarios 036 and 037, reported together as
+      # jim-entra-connector, #361) run as separate steps, so a failure in one never colours another's status: a night (or
+      # a dispatch of All) runs all four, a dispatch of Scenario 031, 035, 036 or 037 runs those checks only (036 or 037
+      # alone), and a dispatch of any other scenario runs that scenario in the suite only. Test-ScenarioRunsOnItsOwn keeps
+      # 031, 035, 036 and 037 out of the suite's sweep.
       - name: Decide what this run covers
         id: plan
         env:
@@ -246,7 +247,9 @@ jobs:
           $suite = -not (Test-ScenarioRunsOnItsOwn -ScenarioNumber $number)
           $signIn = ($name -eq 'All') -or ($number -eq 31)
           $entra = ($name -eq 'All') -or ($number -eq 35)
-          $entraConnector = ($name -eq 'All') -or ($number -eq 36)
+          $entraConnector = ($name -eq 'All') -or ($number -in 36, 37)
+          $entraConnectorScenarios = if ($name -eq 'All') { '36 37' } elseif ($number -in 36, 37) { "$number" } else { '' }
+          "entra_connector_scenarios=$entraConnectorScenarios" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "suite=$($suite.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "sign_in=$($signIn.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "entra=$($entra.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -352,8 +355,10 @@ jobs:
           pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario 35 -Template Nano -DirectoryType ActiveDirectory
           exit $LASTEXITCODE
 
-      # The Entra ID Connector checks (Scenario 036, #361): JIM provisions, updates, disables and deletes users and
-      # groups in the JIM test tenant through the Microsoft Entra ID Connector. The CI app (its federated credential)
+      # The Entra ID Connector checks (#361): in Scenario 036 JIM provisions, updates, disables and deletes users and
+      # groups in the JIM test tenant through the Microsoft Entra ID Connector, and in Scenario 037 imports the users
+      # and groups the harness seeds there, Delta Import included. Each runs even when the other fails, and the step
+      # fails if either did. The CI app (its federated credential)
       # gives the permanent "JIM Entra ID Connector (CI)" app registration a new certificate for JIM with
       # Register-JIMEntraIdConnector, and a short-lived one for the harness, which checks every result through Graph
       # itself and deletes everything the run made. Reported as jim-entra-connector below, so a tenant outage never
@@ -369,9 +374,14 @@ jobs:
           JIM_SSO_ENTRA_CI_CLIENT_ID: ${{ vars.JIM_SSO_ENTRA_CI_CLIENT_ID }}
           JIM_BENCH_API_URL: ${{ vars.JIM_BENCH_API_URL }}
           JIM_BENCH_API_KEY: ${{ secrets.JIM_BENCH_API_KEY }}
+          ENTRA_CONNECTOR_SCENARIOS: ${{ steps.plan.outputs.entra_connector_scenarios }}
         run: |
-          pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario 36 -Template Nano -DirectoryType ActiveDirectory
-          exit $LASTEXITCODE
+          $failed = @()
+          foreach ($number in ($env:ENTRA_CONNECTOR_SCENARIOS -split ' ' | Where-Object { $_ })) {
+            pwsh -File ./test/integration/Run-IntegrationTests.ps1 -Scenario $number -Template Nano -DirectoryType ActiveDirectory
+            if ($LASTEXITCODE -ne 0) { $failed += $number }
+          }
+          if ($failed.Count -gt 0) { Write-Host "::error::Entra ID Connector scenario(s) failed: $($failed -join ', ')"; exit 1 }
 
       # What the run left, condensed: scenario counts and the domain controller OS builds (recorded by the runner in
       # the regression report, or in the performance file for a single scenario) into dc-builds.json, the job
@@ -537,10 +547,12 @@ jobs:
           TESTED_SHA: ${{ github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           ENTRA_CONNECTOR_OUTCOME: ${{ steps.entra_connector.outcome }}
+          ENTRA_CONNECTOR_SCENARIOS: ${{ steps.plan.outputs.entra_connector_scenarios }}
         run: |
+          $scenarios = (@($env:ENTRA_CONNECTOR_SCENARIOS -split ' ' | Where-Object { $_ } | ForEach-Object { '0' + $_ })) -join ' and '
           switch ($env:ENTRA_CONNECTOR_OUTCOME) {
-            'success' { $state = 'success'; $description = 'Entra ID Connector checks passed (Scenario 036)' }
-            'failure' { $state = 'failure'; $description = 'Entra ID Connector checks failed (Scenario 036); see the run' }
+            'success' { $state = 'success'; $description = "Entra ID Connector checks passed (Scenario $scenarios)" }
+            'failure' { $state = 'failure'; $description = "Entra ID Connector checks failed (Scenario $scenarios); see the run" }
             default   { $state = 'error'; $description = 'the run stopped before the Entra ID Connector checks ran' }
           }
           gh api "repos/$env:REPOSITORY/statuses/$env:TESTED_SHA" -f state="$state" -f context='jim-entra-connector' -f description="$description" -f target_url="$env:RUN_URL"
