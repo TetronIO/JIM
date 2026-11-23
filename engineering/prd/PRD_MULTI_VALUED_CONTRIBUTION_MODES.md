@@ -43,6 +43,135 @@ The storage already supports both: each `MetaverseObjectAttributeValue` row reco
 3. As a data protection officer, I want to remove specific entries from an accumulated attribute and see who removed them and when, so that JIM can honour erasure requests.
 4. As an administrator changing an attribute's contribution mode, I want to see which values the change will add or remove before it takes effect, so that switching modes never silently loses data.
 
+## Data Flows
+
+### End to end: from accounts to the Metaverse and out again
+
+Each Connected System's import rule produces that system's values for the attribute. The attribute's contribution mode decides how those per-system value sets become the Metaverse Object's value set. Every value keeps a tag naming the Synchronisation Rule that contributed it; exports send the set with duplicates removed.
+
+```mermaid
+flowchart LR
+    subgraph Sources["Connected Systems"]
+        AD["Active Directory account<br/>sAMAccountName jsmith<br/>objectGUID 5f1c"]
+        EN["Entra ID account<br/>userPrincipalName jo@corp.example<br/>objectId 9a2e"]
+    end
+
+    AD -->|"AD import rule<br/>one expression, Split into values"| ADV["AD's values"]
+    EN -->|"Entra import rule<br/>one expression, Split into values"| ENV["Entra's values"]
+
+    ADV --> MODE{"Attribute's<br/>contribution mode"}
+    ENV --> MODE
+
+    MODE -->|"Priority: one winner<br/>supplies the whole set"| MV
+    MODE -->|"Merge: union of current values"| MV
+    MODE -->|"Accumulate: union of every value ever seen"| MV
+
+    MV["Metaverse Object<br/>Account Audit Log<br/>each value tagged with its contributor"]
+    MV -->|"export rules, optional<br/>deduplicated set"| TGT["Target systems"]
+```
+
+### The three modes given the same events
+
+Active Directory (priority 1) supplies `a` and `b`; the mail system (priority 2) supplies `b` and `c`. Then Active Directory renames `a` to `a2`, and later the Active Directory account is deleted.
+
+```mermaid
+flowchart LR
+    subgraph P["Priority (today)"]
+        direction LR
+        P1["a, b<br/>all from AD;<br/>mail ignored"] -->|"AD renames a to a2"| P2["a2, b"] -->|"AD account deleted"| P3["b, c<br/>mail now wins<br/>and replaces the set"]
+    end
+    subgraph M["Merge"]
+        direction LR
+        M1["a, b, c<br/>b held by both"] -->|"AD renames a to a2"| M2["a2, b, c<br/>a removed"] -->|"AD account deleted"| M3["b, c<br/>AD's copies removed;<br/>mail's b survives"]
+    end
+    subgraph A["Accumulate"]
+        direction LR
+        A1["a, b, c"] -->|"AD renames a to a2"| A2["a, a2, b, c<br/>a kept"] -->|"AD account deleted"| A3["a, a2, b, c<br/>nothing removed"]
+    end
+```
+
+### What one synchronisation does to each value
+
+How the engine decides, for one Metaverse Object and one attribute, which values to add and which to remove. Priority mode is unchanged and not shown.
+
+```mermaid
+flowchart TD
+    START["Synchronise one Metaverse Object"] --> GATHER["Evaluate every import rule mapping to the attribute:<br/>Connected With Value, Connected No Value or Not Applicable"]
+    GATHER --> UNDECIDED{"Any contributor's<br/>state undecidable?"}
+    UNDECIDED -->|yes| FAIL["Fail the object with an RPEI;<br/>change nothing"]
+    UNDECIDED -->|no| ADD["For each value a contributor supplies<br/>that it has no tagged copy of: add it, tagged"]
+    ADD --> MODE{"Mode?"}
+    MODE -->|Accumulate| KEEP["Remove nothing.<br/>A value already present from another<br/>contributor is not added twice"]
+    MODE -->|Merge| EACH["For each existing value tagged with contributor X"]
+    EACH --> STILL{"Does X still<br/>supply it?"}
+    STILL -->|yes| KEEPM["Keep"]
+    STILL -->|"no: value changed,<br/>removed, or X stopped applying"| REMOVE["Remove X's copy"]
+    REMOVE --> OTHER{"Another contributor<br/>holds a copy?"}
+    OTHER -->|yes| STAYS["Value stays in the set"]
+    OTHER -->|no| GONE["Value leaves the set<br/>and exports remove it"]
+```
+
+### Recall paths
+
+Every path that recalls a contributor's values today first checks the attribute's mode.
+
+```mermaid
+flowchart LR
+    subgraph Triggers["Things that recall values today"]
+        T1["Connected System Object obsoleted"]
+        T2["Object leaves the rule's scope"]
+        T3["Synchronisation Rule deleted"]
+        T4["Attribute Flow removed"]
+        T5["Connected System deleted"]
+        T6["Connector Space cleared"]
+    end
+    Triggers --> MODE{"Attribute's mode?"}
+    MODE -->|Priority| PRI["Today's behaviour:<br/>values withdrawn, next contributor<br/>in priority order may win"]
+    MODE -->|Merge| MER["Only that contributor's copies removed;<br/>other systems' values untouched"]
+    MODE -->|Accumulate| ACC["Nothing removed;<br/>the preview says the values are kept"]
+```
+
+### An account audit log over time
+
+Scenarios 1, 2, 3 and 6 in sequence.
+
+```mermaid
+sequenceDiagram
+    participant AD as Active Directory
+    participant EN as Entra ID
+    participant JIM as Synchronisation
+    participant LOG as Account Audit Log (Accumulate)
+    actor ADM as Administrator
+
+    AD->>JIM: Jo's account created (jsmith, 5f1c)
+    JIM->>LOG: add AD 5f1c sAMAccountName=jsmith, AD 5f1c UPN=jo@corp
+    EN->>JIM: Jo's account created (9a2e)
+    JIM->>LOG: add Entra 9a2e UPN=jo@corp, Entra 9a2e objectId=9a2e
+    AD->>JIM: renamed to jsmith2
+    JIM->>LOG: add AD 5f1c sAMAccountName=jsmith2 (jsmith kept)
+    AD->>JIM: account deleted, object obsoleted
+    Note over JIM,LOG: other attributes recalled as configured,<br/>but the log keeps all AD entries
+    ADM->>LOG: remove AD 5f1c sAMAccountName=jsmith (erasure request)
+    Note over LOG: change history records who removed it and when
+```
+
+### Changing an attribute's mode
+
+```mermaid
+flowchart TD
+    REQ["Administrator changes the mode<br/>(portal, API or PowerShell)"] --> MV{"Multi-valued?"}
+    MV -->|no| REJ["Refused: modes apply only<br/>to multi-valued attributes"]
+    MV -->|yes| REF{"Accumulate on a<br/>Reference attribute?"}
+    REF -->|yes| REJ2["Refused"]
+    REF -->|no| IMPACT["Impact report:<br/>objects that will gain or lose values"]
+    IMPACT --> LEAVE{"Leaving Accumulate?"}
+    LEAVE -->|yes| CONFIRM{"Confirmed?<br/>-Force or confirmation flag"}
+    CONFIRM -->|no| CANCEL["Not saved"]
+    CONFIRM -->|yes| SAVE
+    LEAVE -->|no| SAVE["Saved; listed under<br/>Changes awaiting synchronisation"]
+    SAVE --> NEXT["Next synchronisation of each object<br/>re-resolves the attribute under the new mode"]
+```
+
 ## Requirements
 
 ### Functional Requirements
