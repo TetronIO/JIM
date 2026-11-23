@@ -14,13 +14,13 @@
     <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Functions"
                EndIcon="@Icons.Material.Filled.ArrowDropDown" Disabled="@Disabled" OnClick="ToggleAsync"
                aria-haspopup="true" aria-expanded="@(_open ? "true" : "false")"
-               data-testid="jim-insert-function-button">Insert function</MudButton>
+               data-testid="jim-insert-function-button">@SyncRuleText.InsertFunctionButton</MudButton>
     <MudPopover Open="@_open" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" Paper="true" Elevation="8">
         @if (_open)
         {
             <div @ref="_list" @onkeydown="OnKeyDown" class="jim-insert-attribute-menu jim-insert-function-menu" data-testid="jim-insert-function-menu">
                 <div class="px-3 pt-2 pb-2">
-                    <SearchField @ref="_search" @bind-Value="_filter" Placeholder="Filter functions" Margin="Margin.Dense" />
+                    <SearchField @ref="_search" @bind-Value="_filter" Placeholder="@SyncRuleText.InsertFunctionFilter" Margin="Margin.Dense" />
                 </div>
                 <div class="jim-insert-attribute-list">
                     @foreach (var group in Filtered().GroupBy(function => function.Category).OrderBy(group => group.Key))
@@ -37,7 +37,7 @@
                     }
                     @if (!Filtered().Any())
                     {
-                        <MudText Class="px-4 py-2 mud-text-secondary" data-testid="jim-insert-function-none">No functions match "@_filter".</MudText>
+                        <MudText Class="px-4 py-2 mud-text-secondary" data-testid="jim-insert-function-none">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.InsertFunctionNoMatch, _filter)</MudText>
                     }
                 </div>
             </div>

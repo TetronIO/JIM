@@ -2141,4 +2141,13 @@
   <data name="InitialPasswordIssuePrefix" xml:space="preserve">
     <value>Mot de passe initial : {0}</value>
   </data>
+  <data name="InsertFunctionButton" xml:space="preserve">
+    <value>Insérer une fonction</value>
+  </data>
+  <data name="InsertFunctionFilter" xml:space="preserve">
+    <value>Filtrer les fonctions</value>
+  </data>
+  <data name="InsertFunctionNoMatch" xml:space="preserve">
+    <value>Aucune fonction ne correspond à « {0} ».</value>
+  </data>
 </root>
