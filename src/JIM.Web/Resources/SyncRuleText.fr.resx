@@ -2057,4 +2057,25 @@
   <data name="PreviewSizeRunButton" xml:space="preserve">
     <value>Lancer l’aperçu</value>
   </data>
+  <data name="ExprTestIntro" xml:space="preserve">
+    <value>Renseignez une valeur d’exemple pour chaque attribut que l’Expression lit, et voyez ce qu’elle produit au fil de la saisie. Laissez un champ vide pour voir ce que fait l’Expression lorsque l’objet n’a pas de valeur pour cet attribut.</value>
+  </data>
+  <data name="ExprTestNoAttributes" xml:space="preserve">
+    <value>Cette Expression ne lit aucun attribut ; elle produit donc la même valeur pour chaque objet.</value>
+  </data>
+  <data name="ExprTestOutput" xml:space="preserve">
+    <value>Sortie</value>
+  </data>
+  <data name="ExprTestNoValue" xml:space="preserve">
+    <value>L’Expression n’a renvoyé aucune valeur. JIM traite cela comme une « absence de valeur » faisant autorité pour cette contribution, résolue par la priorité des attributs et par « Null est une valeur ».</value>
+  </data>
+  <data name="ExprTestResultType" xml:space="preserve">
+    <value>Type : {0}</value>
+  </data>
+  <data name="ExprTestPosition" xml:space="preserve">
+    <value>Position {0}</value>
+  </data>
+  <data name="ExprTestCouldNotParse" xml:space="preserve">
+    <value>L’Expression n’a pas pu être analysée.</value>
+  </data>
 </root>

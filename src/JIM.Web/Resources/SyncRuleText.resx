@@ -2712,4 +2712,32 @@
     <value>Run preview</value>
     <comment>Confirming button of the preview size dialog.</comment>
   </data>
+  <data name="ExprTestIntro" xml:space="preserve">
+    <value>Supply a sample value for each attribute the Expression reads and see what it produces as you type. Leave an input empty to see what the Expression does when the object has no value for it.</value>
+    <comment>Introduces the expression test's sample value boxes.</comment>
+  </data>
+  <data name="ExprTestNoAttributes" xml:space="preserve">
+    <value>This Expression reads no attributes, so it produces the same value for every object.</value>
+    <comment>Shown when the expression reads no attributes.</comment>
+  </data>
+  <data name="ExprTestOutput" xml:space="preserve">
+    <value>Output</value>
+    <comment>Caption heading the expression test's output.</comment>
+  </data>
+  <data name="ExprTestNoValue" xml:space="preserve">
+    <value>The Expression returned no value. JIM treats that as an authoritative "no value" from this contribution, resolved by Attribute Priority and "Null is a value".</value>
+    <comment>Explains an expression that returned no value.</comment>
+  </data>
+  <data name="ExprTestResultType" xml:space="preserve">
+    <value>Type: {0}</value>
+    <comment>The result type of the expression test. {0} is the type name.</comment>
+  </data>
+  <data name="ExprTestPosition" xml:space="preserve">
+    <value>Position {0}</value>
+    <comment>Where a parse error sits in the expression. {0} is the position.</comment>
+  </data>
+  <data name="ExprTestCouldNotParse" xml:space="preserve">
+    <value>The Expression could not be parsed.</value>
+    <comment>Shown when an expression fails to parse and the evaluator gives no message of its own.</comment>
+  </data>
 </root>
