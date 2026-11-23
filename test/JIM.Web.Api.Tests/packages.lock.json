@@ -665,20 +665,20 @@
       },
       "Npgsql": {
         "type": "Transitive",
-        "resolved": "10.0.3",
-        "contentHash": "7nb5YzXuvWWJxB0J8DiyL3we+X4FOctZrt0fIBnucOIaIevFEEwGQVZKtiu9olXdlNAK1eNgqSral6r/jlhI4w==",
+        "resolved": "10.0.4",
+        "contentHash": "m2VCpcU9MKD8lLxTn+YaNIRWd+Gz3y/9wIaM+2ifDF24xZ2Kvvjx4CDB2BIgobr1Gj6a/gsdmfz1sQ+kmd7liw==",
         "dependencies": {
           "Microsoft.Extensions.Logging.Abstractions": "10.0.0"
         }
       },
       "Npgsql.EntityFrameworkCore.PostgreSQL": {
         "type": "Transitive",
-        "resolved": "10.0.3",
-        "contentHash": "IPGrrZnRkuW7OlHDhUESZz4G5DLkW7Nej/O3Cx+0iTsgyU5XJxBgpsvTHLloo3WWuAKKbDHXBvWPVkX1deRh1Q==",
+        "resolved": "10.0.4",
+        "contentHash": "KRFbmHOn260bgSSQTKZsKtvEFW1k1AaZUtb/IPmW31M47qMkzAOglP7FHQgMeqpZeMJ2rjRwczfEUP5lyWUAdA==",
         "dependencies": {
-          "Microsoft.EntityFrameworkCore": "[10.0.4, 11.0.0)",
-          "Microsoft.EntityFrameworkCore.Relational": "[10.0.4, 11.0.0)",
-          "Npgsql": "10.0.3"
+          "Microsoft.EntityFrameworkCore": "[10.0.15, 11.0.0)",
+          "Microsoft.EntityFrameworkCore.Relational": "[10.0.15, 11.0.0)",
+          "Npgsql": "10.0.4"
         }
       },
       "Oracle.ManagedDataAccess.Core": {
@@ -895,11 +895,11 @@
         "type": "Project",
         "dependencies": {
           "DynamicExpresso.Core": "[2.19.6, )",
-          "JIM.Connectors": "[0.17.0, )",
-          "JIM.Data": "[0.17.0, )",
-          "JIM.Models": "[0.17.0, )",
-          "JIM.Scim": "[0.17.0, )",
-          "JIM.Utilities": "[0.17.0, )",
+          "JIM.Connectors": "[1.0.0, )",
+          "JIM.Data": "[1.0.0, )",
+          "JIM.Models": "[1.0.0, )",
+          "JIM.Scim": "[1.0.0, )",
+          "JIM.Utilities": "[1.0.0, )",
           "Microsoft.AspNetCore.DataProtection": "[10.0.15, )",
           "Microsoft.AspNetCore.DataProtection.Extensions": "[10.0.15, )",
           "Microsoft.Extensions.Hosting.Abstractions": "[10.0.15, )",
@@ -912,28 +912,28 @@
         "type": "Project",
         "dependencies": {
           "CsvHelper": "[33.1.0, )",
-          "JIM.Models": "[0.17.0, )",
-          "JIM.Scim": "[0.17.0, )",
-          "JIM.Utilities": "[0.17.0, )",
+          "JIM.Models": "[1.0.0, )",
+          "JIM.Scim": "[1.0.0, )",
+          "JIM.Utilities": "[1.0.0, )",
           "Microsoft.Data.SqlClient": "[7.1.2, )",
           "Oracle.ManagedDataAccess.Core": "[23.26.400, )",
           "System.DirectoryServices.Protocols": "[10.0.15, )",
           "System.Security.Cryptography.Pkcs": "[10.0.15, )",
-          "Tetron.PowerShellRemoting": "[0.17.0, )"
+          "Tetron.PowerShellRemoting": "[1.0.0, )"
         }
       },
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.17.0, )"
+          "JIM.Models": "[1.0.0, )"
         }
       },
       "jim.inmemorydata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.17.0, )",
-          "JIM.Models": "[0.17.0, )",
-          "JIM.Utilities": "[0.17.0, )"
+          "JIM.Data": "[1.0.0, )",
+          "JIM.Models": "[1.0.0, )",
+          "JIM.Utilities": "[1.0.0, )"
         }
       },
       "jim.models": {
@@ -946,26 +946,26 @@
       "jim.postgresdata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.17.0, )",
-          "JIM.Models": "[0.17.0, )",
-          "JIM.Utilities": "[0.17.0, )",
+          "JIM.Data": "[1.0.0, )",
+          "JIM.Models": "[1.0.0, )",
+          "JIM.Utilities": "[1.0.0, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.15, )",
-          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
+          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.4, )",
           "Serilog": "[4.4.0, )"
         }
       },
       "jim.scim": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.17.0, )",
-          "JIM.Utilities": "[0.17.0, )"
+          "JIM.Models": "[1.0.0, )",
+          "JIM.Utilities": "[1.0.0, )"
         }
       },
       "jim.testsupport": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.17.0, )",
-          "JIM.Models": "[0.17.0, )",
+          "JIM.Data": "[1.0.0, )",
+          "JIM.Models": "[1.0.0, )",
           "NUnit": "[4.6.1, )",
           "Npgsql": "[10.0.3, )"
         }
@@ -973,7 +973,7 @@
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.17.0, )",
+          "JIM.Models": "[1.0.0, )",
           "Serilog": "[4.4.0, )"
         }
       },
@@ -983,10 +983,10 @@
           "Asp.Versioning.Mvc": "[10.2.1, )",
           "Asp.Versioning.Mvc.ApiExplorer": "[10.2.1, )",
           "Humanizer.Core": "[3.0.10, )",
-          "JIM.Application": "[0.17.0, )",
-          "JIM.Models": "[0.17.0, )",
-          "JIM.PostgresData": "[0.17.0, )",
-          "JIM.Utilities": "[0.17.0, )",
+          "JIM.Application": "[1.0.0, )",
+          "JIM.Models": "[1.0.0, )",
+          "JIM.PostgresData": "[1.0.0, )",
+          "JIM.Utilities": "[1.0.0, )",
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.15, )",
           "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.15, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.15, )",

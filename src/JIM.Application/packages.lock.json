@@ -457,20 +457,20 @@
         "type": "Project",
         "dependencies": {
           "CsvHelper": "[33.1.0, )",
-          "JIM.Models": "[0.17.0, )",
-          "JIM.Scim": "[0.17.0, )",
-          "JIM.Utilities": "[0.17.0, )",
+          "JIM.Models": "[1.0.0, )",
+          "JIM.Scim": "[1.0.0, )",
+          "JIM.Utilities": "[1.0.0, )",
           "Microsoft.Data.SqlClient": "[7.1.2, )",
           "Oracle.ManagedDataAccess.Core": "[23.26.400, )",
           "System.DirectoryServices.Protocols": "[10.0.15, )",
           "System.Security.Cryptography.Pkcs": "[10.0.15, )",
-          "Tetron.PowerShellRemoting": "[0.17.0, )"
+          "Tetron.PowerShellRemoting": "[1.0.0, )"
         }
       },
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.17.0, )"
+          "JIM.Models": "[1.0.0, )"
         }
       },
       "jim.models": {
@@ -483,14 +483,14 @@
       "jim.scim": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.17.0, )",
-          "JIM.Utilities": "[0.17.0, )"
+          "JIM.Models": "[1.0.0, )",
+          "JIM.Utilities": "[1.0.0, )"
         }
       },
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.17.0, )",
+          "JIM.Models": "[1.0.0, )",
           "Serilog": "[4.4.0, )"
         }
       },
