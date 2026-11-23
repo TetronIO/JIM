@@ -1968,4 +1968,108 @@
     <value>Add Group</value>
     <comment>Button adding the criteria group.</comment>
   </data>
+  <data name="CriterionPattern" xml:space="preserve">
+    <value>Pattern</value>
+    <comment>Label of a pattern criterion's value.</comment>
+  </data>
+  <data name="CriterionPatternHelp" xml:space="preserve">
+    <value>A .NET regular expression, matched anywhere in the value unless anchored with ^ and $.</value>
+    <comment>Helper text under the pattern field.</comment>
+  </data>
+  <data name="CriterionCaseSensitive" xml:space="preserve">
+    <value>Case-sensitive</value>
+    <comment>Checkbox label on a text criterion.</comment>
+  </data>
+  <data name="CriterionTextValue" xml:space="preserve">
+    <value>Text Value</value>
+    <comment>Label of a text criterion's value.</comment>
+  </data>
+  <data name="CriterionGuidValue" xml:space="preserve">
+    <value>Guid Value</value>
+    <comment>Label of a GUID criterion's value.</comment>
+  </data>
+  <data name="CriterionNumberValue" xml:space="preserve">
+    <value>Number Value</value>
+    <comment>Label of a number criterion's value.</comment>
+  </data>
+  <data name="CriterionLongNumberValue" xml:space="preserve">
+    <value>Long Number Value</value>
+    <comment>Label of a long number criterion's value.</comment>
+  </data>
+  <data name="CriterionDecimalValue" xml:space="preserve">
+    <value>Decimal Value</value>
+    <comment>Label of a decimal criterion's value.</comment>
+  </data>
+  <data name="CriterionAbsoluteDate" xml:space="preserve">
+    <value>Absolute date</value>
+    <comment>Date criterion mode: a fixed date.</comment>
+  </data>
+  <data name="CriterionRelativeToNow" xml:space="preserve">
+    <value>Relative to now</value>
+    <comment>Date criterion mode: a period before or after now.</comment>
+  </data>
+  <data name="CriterionDateValue" xml:space="preserve">
+    <value>Date Value</value>
+    <comment>Label of an absolute date criterion's value.</comment>
+  </data>
+  <data name="CriterionCount" xml:space="preserve">
+    <value>Count</value>
+    <comment>Label of the count in a relative date.</comment>
+  </data>
+  <data name="CriterionUnit" xml:space="preserve">
+    <value>Unit</value>
+    <comment>Label of the unit in a relative date.</comment>
+  </data>
+  <data name="UnitHours" xml:space="preserve">
+    <value>Hours</value>
+    <comment>Relative date unit.</comment>
+  </data>
+  <data name="UnitDays" xml:space="preserve">
+    <value>Days</value>
+    <comment>Relative date unit.</comment>
+  </data>
+  <data name="UnitWeeks" xml:space="preserve">
+    <value>Weeks</value>
+    <comment>Relative date unit.</comment>
+  </data>
+  <data name="UnitMonths" xml:space="preserve">
+    <value>Months</value>
+    <comment>Relative date unit.</comment>
+  </data>
+  <data name="UnitYears" xml:space="preserve">
+    <value>Years</value>
+    <comment>Relative date unit.</comment>
+  </data>
+  <data name="CriterionDirection" xml:space="preserve">
+    <value>Direction</value>
+    <comment>Label of the direction in a relative date.</comment>
+  </data>
+  <data name="CriterionAgo" xml:space="preserve">
+    <value>Ago</value>
+    <comment>Relative date direction: in the past.</comment>
+  </data>
+  <data name="CriterionFromNow" xml:space="preserve">
+    <value>From now</value>
+    <comment>Relative date direction: in the future.</comment>
+  </data>
+  <data name="CriterionRelativePreview" xml:space="preserve">
+    <value>Matches against {0}, re-evaluated on each run. Days and coarser units are rounded to midnight UTC; Hours is exact.</value>
+    <comment>{0} is the resolved relative date.</comment>
+  </data>
+  <data name="CriterionBooleanValue" xml:space="preserve">
+    <value>Boolean Value</value>
+    <comment>Label of a boolean criterion's value.</comment>
+  </data>
+  <data name="CriterionBooleanState" xml:space="preserve">
+    <value>: {0}</value>
+    <comment>Text beside a tri-state boolean checkbox. {0} is the state. Leading colon is intentional.</comment>
+  </data>
+  <data name="CriterionNull" xml:space="preserve">
+    <value>Null</value>
+    <comment>A boolean criterion with no value chosen.</comment>
+  </data>
+  <data name="CriterionUnsupported" xml:space="preserve">
+    <value>This attribute type is not supported in search criteria.</value>
+    <comment>Shown for an attribute type a criterion cannot test.</comment>
+  </data>
 </root>

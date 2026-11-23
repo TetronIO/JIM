@@ -1499,4 +1499,82 @@
   <data name="ScopeAddGroup" xml:space="preserve">
     <value>Ajouter le groupe</value>
   </data>
+  <data name="CriterionPattern" xml:space="preserve">
+    <value>Motif</value>
+  </data>
+  <data name="CriterionPatternHelp" xml:space="preserve">
+    <value>Une expression régulière .NET, recherchée n’importe où dans la valeur, sauf si elle est ancrée avec ^ et $.</value>
+  </data>
+  <data name="CriterionCaseSensitive" xml:space="preserve">
+    <value>Sensible à la casse</value>
+  </data>
+  <data name="CriterionTextValue" xml:space="preserve">
+    <value>Valeur de texte</value>
+  </data>
+  <data name="CriterionGuidValue" xml:space="preserve">
+    <value>Valeur GUID</value>
+  </data>
+  <data name="CriterionNumberValue" xml:space="preserve">
+    <value>Valeur numérique</value>
+  </data>
+  <data name="CriterionLongNumberValue" xml:space="preserve">
+    <value>Valeur de nombre long</value>
+  </data>
+  <data name="CriterionDecimalValue" xml:space="preserve">
+    <value>Valeur décimale</value>
+  </data>
+  <data name="CriterionAbsoluteDate" xml:space="preserve">
+    <value>Date absolue</value>
+  </data>
+  <data name="CriterionRelativeToNow" xml:space="preserve">
+    <value>Relative à maintenant</value>
+  </data>
+  <data name="CriterionDateValue" xml:space="preserve">
+    <value>Valeur de date</value>
+  </data>
+  <data name="CriterionCount" xml:space="preserve">
+    <value>Nombre</value>
+  </data>
+  <data name="CriterionUnit" xml:space="preserve">
+    <value>Unité</value>
+  </data>
+  <data name="UnitHours" xml:space="preserve">
+    <value>Heures</value>
+  </data>
+  <data name="UnitDays" xml:space="preserve">
+    <value>Jours</value>
+  </data>
+  <data name="UnitWeeks" xml:space="preserve">
+    <value>Semaines</value>
+  </data>
+  <data name="UnitMonths" xml:space="preserve">
+    <value>Mois</value>
+  </data>
+  <data name="UnitYears" xml:space="preserve">
+    <value>Années</value>
+  </data>
+  <data name="CriterionDirection" xml:space="preserve">
+    <value>Direction</value>
+  </data>
+  <data name="CriterionAgo" xml:space="preserve">
+    <value>Il y a</value>
+  </data>
+  <data name="CriterionFromNow" xml:space="preserve">
+    <value>À partir de maintenant</value>
+  </data>
+  <data name="CriterionRelativePreview" xml:space="preserve">
+    <value>Correspond à {0}, réévalué à chaque exécution. Les jours et les unités plus grandes sont arrondis à minuit UTC ; les heures sont exactes.</value>
+  </data>
+  <data name="CriterionBooleanValue" xml:space="preserve">
+    <value>Valeur booléenne</value>
+  </data>
+  <data name="CriterionBooleanState" xml:space="preserve">
+    <value> : {0}</value>
+  </data>
+  <data name="CriterionNull" xml:space="preserve">
+    <value>Null</value>
+  </data>
+  <data name="CriterionUnsupported" xml:space="preserve">
+    <value>Ce type d’attribut n’est pas pris en charge dans les critères de recherche.</value>
+  </data>
 </root>
