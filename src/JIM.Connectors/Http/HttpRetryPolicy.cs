@@ -134,7 +134,8 @@ public class HttpRetryPolicy
     {
         return exception switch
         {
-            HttpRequestException => true,
+            // A certificate JIM does not trust is refused the same way every time.
+            HttpRequestException => !TlsTrustFailure.IsTlsTrustFailure(exception),
             TimeoutException => true,
             // HttpClient surfaces its own timeout as a cancellation wrapping a TimeoutException;
             // a cancellation without that inner exception came from the caller's token.

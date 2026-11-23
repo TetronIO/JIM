@@ -229,6 +229,18 @@ public class HttpRetryPolicyTests
     }
 
     [Test]
+    public void EvaluateException_CertificateRefusedInTheHandshake_DoesNotRetry()
+    {
+        // A certificate JIM does not trust is refused the same way every time; retrying only delays the explanation.
+        var refused = new HttpRequestException("The SSL connection could not be established.",
+            new System.Security.Authentication.AuthenticationException("The remote certificate is invalid."));
+
+        var decision = CreatePolicy().EvaluateException(refused, attempt: 1);
+
+        Assert.That(decision.ShouldRetry, Is.False);
+    }
+
+    [Test]
     public void EvaluateException_TimeoutFromHttpClient_Retries()
     {
         // HttpClient surfaces its own timeout as a TaskCanceledException wrapping a TimeoutException.
