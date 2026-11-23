@@ -89,7 +89,7 @@
 
                 @if (!string.IsNullOrEmpty(Diagnostic.Remediation))
                 {
-                    <div class="jim-certificate-remediation">@Diagnostic.Remediation</div>
+                    <div class="jim-certificate-remediation">@(Diagnostic.RemediationDetail is { } remediation ? remediation.Show() : Diagnostic.Remediation)</div>
                 }
 
                 @* The chain JIM assembled, from the root down to the server, with where each certificate came from: a

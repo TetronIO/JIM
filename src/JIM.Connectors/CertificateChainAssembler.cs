@@ -1,7 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
+using JIM.Connectors.Resources;
 using JIM.Models.Connectors;
+using JIM.Models.Localisation;
 using JIM.Utilities;
 using System.Security.Cryptography.X509Certificates;
 
@@ -137,7 +140,7 @@ internal static class CertificateChainAssembler
     /// Why the chain could not be relied on whatever JIM trusted, or null when it can. Checks the certificate
     /// authorities only: the server certificate's own dates and name are judged, and reported, by the caller.
     /// </summary>
-    private static string? FindProblem(List<AssembledCertificateChainElement> elements)
+    private static JimMessage? FindProblem(List<AssembledCertificateChainElement> elements)
     {
         using var chain = new X509Chain();
         chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
@@ -156,14 +159,14 @@ internal static class CertificateChainAssembler
             {
                 if (status.HasFlag(X509ChainStatusFlags.NotTimeValid))
                     return element.Certificate.NotAfter.ToUniversalTime() < DateTime.UtcNow
-                        ? $"{name} expired on {element.Certificate.NotAfter.ToUniversalTime():d MMM yyyy}. A chain through an expired certificate authority is never valid; it needs renewing."
-                        : $"{name} is not valid until {element.Certificate.NotBefore.ToUniversalTime():d MMM yyyy}.";
+                        ? Problem(nameof(ConnectorMessages.CertChainExpired), name, element.Certificate.NotAfter.ToUniversalTime().ToString("d MMM yyyy", CultureInfo.CurrentCulture))
+                        : Problem(nameof(ConnectorMessages.CertChainNotYetValid), name, element.Certificate.NotBefore.ToUniversalTime().ToString("d MMM yyyy", CultureInfo.CurrentCulture));
 
                 if (status.HasFlag(X509ChainStatusFlags.InvalidBasicConstraints))
-                    return $"{name} is not marked as a certificate authority, so it cannot vouch for the certificate below it.";
+                    return Problem(nameof(ConnectorMessages.CertChainNotAuthority), name);
 
                 if (status.HasFlag(X509ChainStatusFlags.NotSignatureValid))
-                    return $"The signature {name} made on the certificate below it does not verify.";
+                    return Problem(nameof(ConnectorMessages.CertChainBadSignature), name);
             }
         }
 
@@ -173,11 +176,14 @@ internal static class CertificateChainAssembler
         {
             var constraints = authority.Extensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
             if (constraints is { CertificateAuthority: false })
-                return $"{PresentedServerCertificate.CommonNameOf(authority.Subject)} is not marked as a certificate authority, so it cannot vouch for the certificate below it.";
+                return Problem(nameof(ConnectorMessages.CertChainNotAuthority), PresentedServerCertificate.CommonNameOf(authority.Subject));
         }
 
         return null;
     }
+
+    private static JimMessage Problem(string key, params MessageArgument[] arguments) =>
+        JimMessage.Create(ConnectorMessageCatalogues.Connectors, key, arguments);
 
     private static bool Contains(IReadOnlyCollection<X509Certificate2> certificates, X509Certificate2 certificate) =>
         certificates.Any(candidate => string.Equals(candidate.Thumbprint, certificate.Thumbprint, StringComparison.OrdinalIgnoreCase));
@@ -201,13 +207,13 @@ internal sealed class AssembledCertificateChain : IDisposable
         X509Certificate2? root,
         string? missingIssuer,
         bool isTrusted,
-        string? problem)
+        JimMessage? problem)
     {
         Elements = elements;
         Root = root;
         MissingIssuer = missingIssuer;
         IsTrusted = isTrusted;
-        Problem = problem;
+        ProblemMessage = problem;
     }
 
     /// <summary>
@@ -236,7 +242,10 @@ internal sealed class AssembledCertificateChain : IDisposable
     /// <summary>
     /// Why the chain cannot be relied on whatever JIM trusted, or null when it can.
     /// </summary>
-    internal string? Problem { get; }
+    internal string? Problem => ProblemMessage?.ToEnglish();
+
+    /// <summary>The same as <see cref="Problem"/>, held as a message the portal can show in the viewer's language.</summary>
+    internal JimMessage? ProblemMessage { get; }
 
     public void Dispose()
     {

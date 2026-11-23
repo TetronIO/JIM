@@ -3,6 +3,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 using JIM.Connectors.Http;
+using JIM.Connectors.Resources;
+using JIM.Models.Localisation;
 
 namespace JIM.Connectors.SCIM;
 
@@ -42,24 +44,44 @@ internal static class ScimTransportSecurity
     /// <param name="exampleUrl">A well-formed value to show when the configured one does not parse, if any.</param>
     public static bool TryValidate(string url, string settingName, string whatIsSent, [NotNullWhen(true)] out Uri? uri, [NotNullWhen(false)] out string? errorMessage, string? exampleUrl = null)
     {
+        var valid = TryValidateMessage(url, settingName, whatIsSent, out uri, out var detail, exampleUrl);
+        errorMessage = detail?.ToEnglish();
+        return valid;
+    }
+
+    /// <summary>
+    /// <see cref="TryValidate"/> with the refusal held as a message, so the portal can show it in the viewer's language.
+    /// </summary>
+    public static bool TryValidateMessage(string url, string settingName, string whatIsSent, [NotNullWhen(true)] out Uri? uri, [NotNullWhen(false)] out JimMessage? error, string? exampleUrl = null)
+    {
         uri = null;
 
         if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed))
         {
-            errorMessage = exampleUrl == null
-                ? $"The '{settingName}' setting is not a valid absolute URL."
-                : $"The '{settingName}' setting is not a valid absolute URL. Supply the full address, i.e. {exampleUrl}.";
+            error = exampleUrl == null
+                ? Message(nameof(ConnectorMessages.ScimUrlInvalid), settingName)
+                : Message(nameof(ConnectorMessages.ScimUrlInvalidWithExample), settingName, exampleUrl);
             return false;
         }
 
         if (!IsPermitted(parsed))
         {
-            errorMessage = $"The '{settingName}' setting must use HTTPS. HTTP is only permitted for loopback addresses when testing locally, because {whatIsSent} is sent to this address.";
+            // what is sent is one of two known phrases; anything else (a caller's own) is passed as it is
+            MessageArgument payload = whatIsSent switch
+            {
+                BaseUrlPayload => Message(nameof(ConnectorMessages.ScimPayloadIdentityData)),
+                TokenEndpointPayload => Message(nameof(ConnectorMessages.ScimPayloadClientSecret)),
+                _ => whatIsSent
+            };
+            error = Message(nameof(ConnectorMessages.ScimUrlNotHttps), settingName, payload);
             return false;
         }
 
         uri = parsed;
-        errorMessage = null;
+        error = null;
         return true;
     }
+
+    private static JimMessage Message(string key, params MessageArgument[] arguments) =>
+        JimMessage.Create(ConnectorMessageCatalogues.Connectors, key, arguments);
 }

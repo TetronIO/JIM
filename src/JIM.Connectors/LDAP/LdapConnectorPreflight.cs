@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
+using JIM.Connectors.Resources;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 using JIM.Utilities;
 using Serilog;
@@ -85,12 +88,11 @@ internal class LdapConnectorPreflight
     private PasswordPreflightCheckResult CheckEncryption()
     {
         if (_isConnectionEncrypted)
-            return PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Encryption,
-                "The connection is encrypted, so passwords are protected in transit.");
+            return PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Encryption, Pf(nameof(ConnectorMessages.PfEncrypted)));
 
-        var details = new List<string>
+        var details = new List<JimMessage>
         {
-            "Enable the 'Use Secure Connection' setting on this Connected System, and set the port to the one the directory serves LDAPS on."
+            Pf(nameof(ConnectorMessages.PfEnableSecureConnection))
         };
 
         // Active Directory refuses the write itself rather than accepting it insecurely, so for those targets this
@@ -98,11 +100,9 @@ internal class LdapConnectorPreflight
         // a signed and sealed bind satisfies Active Directory without TLS, and JIM cannot tell from here whether
         // one is in use.
         if (IsActiveDirectory)
-            details.Add("Active Directory refuses to accept a password over a connection that is neither encrypted nor signed and sealed, so a password set is likely to be rejected until this is addressed.");
+            details.Add(Pf(nameof(ConnectorMessages.PfAdRefusesUnencrypted)));
 
-        return PasswordPreflightCheckResult.Warning(PasswordPreflightCheck.Encryption,
-            "The connection is not encrypted. Passwords would be sent where anyone on the network path can read them.",
-            details);
+        return PasswordPreflightCheckResult.Warning(PasswordPreflightCheck.Encryption, Pf(nameof(ConnectorMessages.PfNotEncrypted)), details);
     }
 
     /// <summary>
@@ -112,20 +112,19 @@ internal class LdapConnectorPreflight
     {
         if (IsActiveDirectory)
             return PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.PasswordMechanism,
-                $"JIM would set passwords by writing the '{LdapConnectorPassword.AttributeUnicodePwd}' attribute, which is how Active Directory accepts them.");
+                Pf(nameof(ConnectorMessages.PfMechanismAd), LdapConnectorPassword.AttributeUnicodePwd));
 
         if (_supportsPasswordModifyExtension)
-            return PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.PasswordMechanism,
-                "JIM would set passwords using the LDAP Password Modify extended operation, which this directory advertises support for.");
+            return PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.PasswordMechanism, Pf(nameof(ConnectorMessages.PfMechanismPasswordModify)));
 
         // Writing userPassword directly is the obvious alternative and JIM will not do it: a directory applies its
         // configured hashing to the extended operation, but stores a directly written attribute exactly as it is
         // given. That would put cleartext passwords into the directory, so an unsupported target is refused.
         return PasswordPreflightCheckResult.Failed(PasswordPreflightCheck.PasswordMechanism,
-            "This directory does not advertise the LDAP Password Modify extended operation, which is the only mechanism JIM will use to set a password on a directory that is not Active Directory.",
+            Pf(nameof(ConnectorMessages.PfMechanismUnsupported)),
             [
-                $"JIM looks for the extended operation '{LdapConnectorPassword.PasswordModifyExtensionOid}' on the directory's rootDSE.",
-                "JIM will not write a password attribute directly instead, because a directory stores a directly written value exactly as given rather than hashing it, which would leave cleartext passwords in the directory."
+                Pf(nameof(ConnectorMessages.PfMechanismLooksFor), LdapConnectorPassword.PasswordModifyExtensionOid),
+                Pf(nameof(ConnectorMessages.PfMechanismNoDirectWrite))
             ]);
     }
 
@@ -151,13 +150,13 @@ internal class LdapConnectorPreflight
     {
         if (!IsActiveDirectory)
             return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.ResetRights,
-                "JIM cannot check whether the account it connects as is allowed to reset passwords on this directory.",
-                ["This directory publishes no way for a client to ask what it is allowed to do, so the account's rights have to be confirmed at the directory itself."]);
+                Pf(nameof(ConnectorMessages.PfRightsNotCheckable)),
+                [Pf(nameof(ConnectorMessages.PfRightsNotCheckableDetail))]);
 
         if (containerExternalIds.Count == 0)
             return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.ResetRights,
-                "JIM cannot check whether the account it connects as is allowed to reset passwords, because it does not yet know where it would be provisioning.",
-                ["Select the containers to manage on the Scope tab, then check again."]);
+                Pf(nameof(ConnectorMessages.PfRightsNoContainers)),
+                [Pf(nameof(ConnectorMessages.PfRightsSelectContainers))]);
 
         // Rights are read per container, and a Connected System can manage a great many. Checking every one of
         // them turns a diagnostic into a long-running directory scan, so the number is bounded and the bound is
@@ -166,30 +165,34 @@ internal class LdapConnectorPreflight
         var findings = await new LdapConnectorResetRights(_executor, _logger).CheckAsync(checkedContainers, cancellationToken);
 
         var details = findings
-            .Select(f => $"{DescribeOutcome(f.Outcome)} {f.ContainerDn}: {f.Detail}")
+            .Select(f => Pf(nameof(ConnectorMessages.PfRightsFinding), DescribeOutcome(f.Outcome), f.ContainerDn, f.Detail))
             .ToList();
 
         if (containerExternalIds.Count > checkedContainers.Count)
-            details.Add($"JIM checked the first {checkedContainers.Count} of this Connected System's {containerExternalIds.Count} managed containers.");
+            details.Add(Pf(nameof(ConnectorMessages.PfRightsCheckedFirst),
+                checkedContainers.Count.ToString(CultureInfo.InvariantCulture), containerExternalIds.Count.ToString(CultureInfo.InvariantCulture)));
 
         if (findings.Any(f => f.Outcome == ResetRightsOutcome.Denied))
             return PasswordPreflightCheckResult.Failed(PasswordPreflightCheck.ResetRights,
-                "The account JIM connects as cannot reset passwords everywhere it would be provisioning.", details);
+                Pf(nameof(ConnectorMessages.PfRightsDenied)), details);
 
         if (findings.Any(f => f.Outcome == ResetRightsOutcome.CouldNotDetermine))
             return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.ResetRights,
-                "JIM could not confirm everywhere that the account it connects as is allowed to reset passwords.", details);
+                Pf(nameof(ConnectorMessages.PfRightsUnconfirmed)), details);
 
         return PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.ResetRights,
-            "The account JIM connects as can reset passwords everywhere it would be provisioning.", details);
+            Pf(nameof(ConnectorMessages.PfRightsAllowed)), details);
     }
 
-    private static string DescribeOutcome(ResetRightsOutcome outcome) => outcome switch
+    private static JimMessage DescribeOutcome(ResetRightsOutcome outcome) => outcome switch
     {
-        ResetRightsOutcome.Granted => "Allowed in",
-        ResetRightsOutcome.Denied => "Not allowed in",
-        _ => "Could not tell for"
+        ResetRightsOutcome.Granted => Pf(nameof(ConnectorMessages.PfOutcomeAllowed)),
+        ResetRightsOutcome.Denied => Pf(nameof(ConnectorMessages.PfOutcomeDenied)),
+        _ => Pf(nameof(ConnectorMessages.PfOutcomeUnknown))
     };
+
+    private static JimMessage Pf(string key, params MessageArgument[] arguments) =>
+        JimMessage.Create(ConnectorMessageCatalogues.Connectors, key, arguments);
 
     /// <summary>
     /// How many managed containers a single check will read. A bound, not a sample: the containers checked are
@@ -216,74 +219,69 @@ internal class LdapConnectorPreflight
 
         if (policy == null)
             return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.PolicyDiscovery,
-                $"JIM could not read {PolicyNoun}, so it cannot pre-fill the password generator from it.",
+                Pf(nameof(ConnectorMessages.PfPolicyUnreadable), PolicyNoun),
                 [PolicyReadRemedy]);
 
         switch (policy.DiscoveryOutcome)
         {
             case PasswordPolicyDiscoveryOutcome.NotPublished:
                 return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.PolicyDiscovery,
-                    "This directory does not publish a password policy that a client can read, so JIM cannot pre-fill the password generator from it.",
+                    Pf(nameof(ConnectorMessages.PfPolicyNotPublished)),
                     NotPublishedDetails());
 
             case PasswordPolicyDiscoveryOutcome.ConfigurationNotReadable:
                 return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.PolicyDiscovery,
-                    "JIM could not read the directory's password policy: the account it connects as cannot read the server configuration that holds it.",
+                    Pf(nameof(ConnectorMessages.PfPolicyConfigNotReadable)),
                     [ConfigurationRemedy]);
 
             case PasswordPolicyDiscoveryOutcome.NoPolicyConfigured:
                 return PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.PolicyDiscovery,
-                    "JIM read the directory's password policy configuration: no policy is configured, so no rules apply to a generated password.",
+                    Pf(nameof(ConnectorMessages.PfPolicyNoneConfigured)),
                     DescribeCaveats(policy));
         }
 
         if (!policy.HasAnyDiscoveredConstraint)
             return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.PolicyDiscovery,
-                $"JIM could not read {PolicyNoun}, so it cannot pre-fill the password generator from it.",
+                Pf(nameof(ConnectorMessages.PfPolicyUnreadable), PolicyNoun),
                 [PolicyReadRemedy]);
 
-        var details = new List<string>();
+        var details = new List<JimMessage>();
         if (policy.MinimumLength is { } minimumLength)
-            details.Add($"Minimum length: {minimumLength}.");
+            details.Add(Pf(nameof(ConnectorMessages.PfMinimumLength), minimumLength.ToString(CultureInfo.CurrentCulture)));
         if (policy.ComplexityRequired is { } complexityRequired)
             details.Add(complexityRequired
-                ? $"Complexity is required: a password must use at least {policy.RequiredCharacterClassCount} of the 5 character categories."
-                : "Complexity is not required.");
+                ? Pf(nameof(ConnectorMessages.PfComplexityRequired), $"{policy.RequiredCharacterClassCount}")
+                : Pf(nameof(ConnectorMessages.PfComplexityNotRequired)));
         details.AddRange(DescribeCaveats(policy));
 
         return PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.PolicyDiscovery,
-            $"JIM read {PolicyNoun} and can pre-fill the password generator from it.",
+            Pf(nameof(ConnectorMessages.PfPolicyRead), PolicyNoun),
             details);
     }
 
-    private string PolicyNoun => IsActiveDirectory ? "the domain password policy" : "the directory's password policy";
+    private JimMessage PolicyNoun => Pf(IsActiveDirectory ? nameof(ConnectorMessages.PfPolicyNounDomain) : nameof(ConnectorMessages.PfPolicyNounDirectory));
 
-    private string PolicyReadRemedy => _directoryType switch
+    private JimMessage PolicyReadRemedy => Pf(_directoryType switch
     {
-        LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD =>
-            "Check that the account JIM connects as can read the domain root object.",
-        LdapDirectoryType.OpenLDAP =>
-            "Check that the account JIM connects as can read the policy entry the ppolicy overlay applies by default.",
-        LdapDirectoryType.DirectoryServer389 =>
-            "Check that the account JIM connects as can read the password attributes on cn=config.",
-        _ => "Check that the account JIM connects as can read where this directory holds its password policy."
-    };
+        LdapDirectoryType.ActiveDirectory or LdapDirectoryType.SambaAD => nameof(ConnectorMessages.PfPolicyRemedyActiveDirectory),
+        LdapDirectoryType.OpenLDAP => nameof(ConnectorMessages.PfPolicyRemedyOpenLdap),
+        LdapDirectoryType.DirectoryServer389 => nameof(ConnectorMessages.PfPolicyRemedyDirectoryServer389),
+        _ => nameof(ConnectorMessages.PfPolicyRemedyOther)
+    });
 
-    private string ConfigurationRemedy => _directoryType switch
+    private JimMessage ConfigurationRemedy => Pf(_directoryType switch
     {
-        LdapDirectoryType.OpenLDAP =>
-            "Grant the account JIM connects as read access to the ppolicy overlay configuration under cn=config and to the policy entry it names, then check again.",
-        LdapDirectoryType.DirectoryServer389 =>
-            "Grant the account JIM connects as read access to the password attributes on cn=config, then check again.",
-        _ => "Grant the account JIM connects as read access to the server configuration that holds the password policy, then check again."
-    };
+        LdapDirectoryType.OpenLDAP => nameof(ConnectorMessages.PfConfigRemedyOpenLdap),
+        LdapDirectoryType.DirectoryServer389 => nameof(ConnectorMessages.PfConfigRemedyDirectoryServer389),
+        _ => nameof(ConnectorMessages.PfConfigRemedyOther)
+    });
 
-    private List<string> NotPublishedDetails()
+    private List<JimMessage> NotPublishedDetails()
     {
-        var details = new List<string>();
+        var details = new List<JimMessage>();
         if (_directoryType == LdapDirectoryType.OpenLDAP)
-            details.Add("The directory does not advertise the password policy control, so the ppolicy overlay is not loaded.");
-        details.Add("Set the password requirements on the Synchronisation Rule to match the target's policy by hand, and expect a rejection to be how a mismatch shows up.");
+            details.Add(Pf(nameof(ConnectorMessages.PfPpolicyNotLoaded)));
+        details.Add(Pf(nameof(ConnectorMessages.PfSetByHand)));
         return details;
     }
 
@@ -292,21 +290,17 @@ internal class LdapConnectorPreflight
     /// when they want to know whether this will work, and "the policy JIM read may not be the policy that
     /// applies" is exactly the caveat that belongs in that answer.
     /// </summary>
-    private List<string> DescribeCaveats(ConnectedSystemPasswordPolicy policy)
+    private List<JimMessage> DescribeCaveats(ConnectedSystemPasswordPolicy policy)
     {
-        var details = new List<string>();
+        var details = new List<JimMessage>();
 
         if (policy.PolicyOverrideSignal == PolicyOverrideSignal.Present)
-            details.Add(IsActiveDirectory
-                ? "This domain has Fine-Grained Password Policies, which apply stricter rules to some accounts. What JIM read is a floor, not the whole story."
-                : "Some objects in this directory are governed by a password policy other than the one JIM read, which may be stricter. What JIM read is a floor, not the whole story.");
+            details.Add(Pf(IsActiveDirectory ? nameof(ConnectorMessages.PfFgppPresent) : nameof(ConnectorMessages.PfOverridePresent)));
         else if (policy.PolicyOverrideSignal == PolicyOverrideSignal.CouldNotDetermine)
-            details.Add(IsActiveDirectory
-                ? "JIM could not establish whether this domain has Fine-Grained Password Policies, which would apply stricter rules to some accounts. Treat what it read as a floor."
-                : "JIM could not establish whether some objects in this directory are governed by a password policy other than the one it read, which could be stricter. Treat what it read as a floor.");
+            details.Add(Pf(IsActiveDirectory ? nameof(ConnectorMessages.PfFgppUnknown) : nameof(ConnectorMessages.PfOverrideUnknown)));
 
         if (policy.FurtherChecksApply)
-            details.Add("The directory applies further checks JIM cannot see, so a password satisfying everything above can still be refused.");
+            details.Add(Pf(nameof(ConnectorMessages.PfFurtherChecks)));
 
         return details;
     }

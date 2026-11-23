@@ -1,7 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Connectors.Resources;
 using JIM.Connectors.Sql.Providers;
+using JIM.Models.Localisation;
 using JIM.Models.Enums;
 using System.Globalization;
 using System.Runtime.ExceptionServices;
@@ -85,8 +87,7 @@ internal sealed record SqlSchemaConfiguration
     {
         if (string.IsNullOrWhiteSpace(document))
         {
-            AddFault(faults, new SqlSchemaConfigurationException(
-                $"{SqlConnectorConstants.SettingObjectTypes} is empty. A Connected System needs at least one object type before JIM can discover its schema; see the setting's description for an example to start from."));
+            AddFault(faults, new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocEmpty), SqlConnectorConstants.SettingObjectTypes)));
             return null;
         }
 
@@ -103,7 +104,7 @@ internal sealed record SqlSchemaConfiguration
 
         if (parsed?.ObjectTypes == null || parsed.ObjectTypes.Count == 0)
         {
-            AddFault(faults, new SqlSchemaConfigurationException($"{SqlConnectorConstants.SettingObjectTypes} must declare at least one object type in its 'objectTypes' list."));
+            AddFault(faults, new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocNoObjectTypes), SqlConnectorConstants.SettingObjectTypes)));
             return null;
         }
 
@@ -126,7 +127,7 @@ internal sealed record SqlSchemaConfiguration
 
             if (!names.Add(objectType.Name))
             {
-                AddFault(faults, new SqlSchemaConfigurationException($"Object Type '{objectType.Name}' is declared more than once. Object type names identify them to JIM, so each must be unique.") { Field = "name" },
+                AddFault(faults, new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocDuplicateName), objectType.Name)) { Field = "name" },
                     index, objectType.Name);
                 continue;
             }
@@ -162,7 +163,7 @@ internal sealed record SqlSchemaConfiguration
     }
 
     private static void AddFault(List<Fault> faults, SqlSchemaConfigurationException exception, int? objectTypeIndex = null, string? objectTypeName = null) =>
-        faults.Add(new Fault(new SqlObjectTypesProblem(exception.Message, objectTypeIndex, objectTypeName, exception.Field), exception));
+        faults.Add(new Fault(new SqlObjectTypesProblem(exception.Message, objectTypeIndex, objectTypeName, exception.Field, Detail: exception.Detail), exception));
 
     /// <summary>
     /// A problem as an editor sees it, paired with the exception <see cref="Parse"/> throws for it.
@@ -218,36 +219,43 @@ internal sealed record SqlSchemaConfiguration
 
         var objectTypeName = objectTypeIndex.HasValue ? ReadObjectTypeName(document, objectTypeIndex.Value) : null;
 
-        string message;
+        JimMessage detail;
         if (match.Success && field != null && !FieldNames[level].Contains(field, StringComparer.OrdinalIgnoreCase))
         {
             var suggestion = ClosestFieldName(field, FieldNames[level]);
-            message = $"{DescribeLevel(level, objectTypeIndex, objectTypeName)} has an unrecognised field '{field}'." +
-                      (suggestion == null ? "" : $" Did you mean '{suggestion}'?") +
-                      " Fields that are not recognised are refused rather than ignored, because ignoring one would leave the Connected System configured differently from how the document reads.";
+            detail = Doc(nameof(ConnectorMessages.SqlDocUnrecognisedField), DescribeLevel(level, objectTypeIndex, objectTypeName), field,
+                suggestion == null ? (MessageArgument)string.Empty : Doc(nameof(ConnectorMessages.SqlDocDidYouMean), suggestion));
         }
         else
         {
-            message = $"{SqlConnectorConstants.SettingObjectTypes} could not be read as JSON: {ex.Message}";
+            detail = Doc(nameof(ConnectorMessages.SqlDocJsonUnreadable), SqlConnectorConstants.SettingObjectTypes, ex.Message);
             field = null;
         }
 
-        var exception = new SqlSchemaConfigurationException(message, ex) { Field = field };
-        return new Fault(new SqlObjectTypesProblem(message, objectTypeIndex, objectTypeName, field, lineNumber, column), exception);
+        var exception = new SqlSchemaConfigurationException(detail, ex) { Field = field };
+        return new Fault(new SqlObjectTypesProblem(detail.ToEnglish(), objectTypeIndex, objectTypeName, field, lineNumber, column, detail), exception);
     }
 
-    private static string DescribeLevel(DocumentLevel level, int? objectTypeIndex, string? objectTypeName)
+    private static JimMessage DescribeLevel(DocumentLevel level, int? objectTypeIndex, string? objectTypeName)
     {
-        var objectType = objectTypeName != null ? $"Object Type '{objectTypeName}'" : $"the object type in position {objectTypeIndex + 1}";
+        JimMessage ObjectType(bool capital) => objectTypeName != null
+            ? Doc(capital ? nameof(ConnectorMessages.SqlDocObjectTypeNamedCapital) : nameof(ConnectorMessages.SqlDocObjectTypeNamed), objectTypeName)
+            : Doc(capital ? nameof(ConnectorMessages.SqlDocObjectTypeByPositionCapital) : nameof(ConnectorMessages.SqlDocObjectTypeByPosition), Cnt((objectTypeIndex ?? -1) + 1));
+
         return level switch
         {
-            DocumentLevel.ObjectType => char.ToUpperInvariant(objectType[0]) + objectType[1..],
-            DocumentLevel.Column => $"A configured column of {objectType}",
-            DocumentLevel.RelatedTable => $"A related table of {objectType}",
-            DocumentLevel.ChangeLog => $"The change log of {objectType}",
-            _ => $"The {SqlConnectorConstants.SettingObjectTypes} document"
+            DocumentLevel.ObjectType => ObjectType(true),
+            DocumentLevel.Column => Doc(nameof(ConnectorMessages.SqlDocLevelColumn), ObjectType(false)),
+            DocumentLevel.RelatedTable => Doc(nameof(ConnectorMessages.SqlDocLevelRelatedTable), ObjectType(false)),
+            DocumentLevel.ChangeLog => Doc(nameof(ConnectorMessages.SqlDocLevelChangeLog), ObjectType(false)),
+            _ => Doc(nameof(ConnectorMessages.SqlDocLevelDocument), SqlConnectorConstants.SettingObjectTypes)
         };
     }
+
+    private static JimMessage Doc(string key, params MessageArgument[] arguments) =>
+        JimMessage.Create(ConnectorMessageCatalogues.Connectors, key, arguments);
+
+    private static string Cnt(int number) => number.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>
     /// The name an Object Type was given, read loosely so it can be quoted in the account of a fault that
@@ -313,23 +321,21 @@ internal sealed record SqlSchemaConfiguration
     private static SqlObjectTypeConfiguration ReadObjectType(SqlObjectTypeDocument? document, int index)
     {
         if (document == null)
-            throw new SqlSchemaConfigurationException($"The object type in position {index + 1} of 'objectTypes' is empty.");
+            throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocPositionEmpty), Cnt(index + 1)));
 
         // With no name to quote, the position in the list is the only way to point at it.
         if (string.IsNullOrWhiteSpace(document.Name))
-            throw new SqlSchemaConfigurationException($"The object type in position {index + 1} of 'objectTypes' has no 'name'. Every object type needs one, because it is what JIM calls it.") { Field = "name" };
+            throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocPositionNoName), Cnt(index + 1))) { Field = "name" };
 
         var name = document.Name.Trim();
         var hasTable = !string.IsNullOrWhiteSpace(document.Table);
         var hasSelect = !string.IsNullOrWhiteSpace(document.Select);
 
         if (hasTable == hasSelect)
-            throw new SqlSchemaConfigurationException(
-                $"Object Type '{name}' must name exactly one source: either a 'table' (a table or a view) or a 'select' statement, and not both.") { Field = "table" };
+            throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocOneSource), name)) { Field = "table" };
 
         if (hasSelect && !string.IsNullOrWhiteSpace(document.Schema))
-            throw new SqlSchemaConfigurationException(
-                $"Object Type '{name}' supplies both a 'schema' and a 'select' statement. A schema qualifies a table name; a statement qualifies its own tables, so remove the 'schema'.");
+            throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocSchemaWithSelect), name));
 
         if (hasTable)
         {
@@ -379,9 +385,7 @@ internal sealed record SqlSchemaConfiguration
             ValidateIdentifier(document.Schema, objectTypeName, "changeLog.schema");
 
         if (document.AnchorColumns == null || document.AnchorColumns.Count != anchorColumnCount)
-            throw new SqlSchemaConfigurationException(
-                $"Object Type '{objectTypeName}' identifies its change-log rows by {document.AnchorColumns?.Count ?? 0} column(s), but the object type's anchor has {anchorColumnCount}. " +
-                "A change attributed by part of an anchor belongs to some other object, so 'changeLog.anchorColumns' must name one column per anchor column, in the same order.");
+            throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocChangeLogAnchorCount), objectTypeName, Cnt(document.AnchorColumns?.Count ?? 0), Cnt(anchorColumnCount)));
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var anchorColumn in document.AnchorColumns)
@@ -389,7 +393,7 @@ internal sealed record SqlSchemaConfiguration
             ValidateIdentifier(anchorColumn, objectTypeName, "changeLog.anchorColumns");
 
             if (!seen.Add(anchorColumn!))
-                throw new SqlSchemaConfigurationException($"Object Type '{objectTypeName}' lists change-log anchor column '{anchorColumn}' more than once.");
+                throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocChangeLogAnchorDuplicate), objectTypeName, anchorColumn));
         }
 
         return new SqlChangeLogConfiguration
@@ -417,12 +421,10 @@ internal sealed record SqlSchemaConfiguration
         // Deletions are the whole reason this mode is the recommended one, and a change log with no way
         // of stating one detects strictly less than a watermark column does at more cost.
         if (!changeTypes.ContainsValue(ObjectChangeType.Deleted))
-            throw new SqlSchemaConfigurationException(
-                $"Object Type '{objectTypeName}' has a change log with no 'deleteValues'. Observing deletions is what a change-log table is for; if this database cannot record them, use Watermark Column mode instead.");
+            throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocChangeLogNoDelete), objectTypeName));
 
         if (!changeTypes.ContainsValue(ObjectChangeType.Added) && !changeTypes.ContainsValue(ObjectChangeType.Updated))
-            throw new SqlSchemaConfigurationException(
-                $"Object Type '{objectTypeName}' has a change log with neither 'createValues' nor 'updateValues', so nothing but deletions could ever be imported from it.");
+            throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocChangeLogNoCreateOrUpdate), objectTypeName));
 
         return changeTypes;
     }
@@ -440,15 +442,14 @@ internal sealed record SqlSchemaConfiguration
         foreach (var value in values)
         {
             if (string.IsNullOrWhiteSpace(value))
-                throw new SqlSchemaConfigurationException($"Object Type '{objectTypeName}' has an empty value in 'changeLog.{fieldName}'. A change-log row's change type is matched against these exactly, so a blank one could never match.");
+                throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocChangeLogEmptyValue), objectTypeName, fieldName));
 
             var trimmed = value.Trim();
 
             // Values are matched without regard to case, so a value meaning two things is ambiguous even
             // where the two spellings differ, and guessing which the administrator meant is not JIM's to do.
             if (changeTypes.TryGetValue(trimmed, out var existing))
-                throw new SqlSchemaConfigurationException(
-                    $"Object Type '{objectTypeName}' has change-log value '{trimmed}' meaning both {existing} and {changeType}. Each value can only mean one kind of change.");
+                throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocChangeLogValueAmbiguous), objectTypeName, trimmed, existing.ToString(), changeType.ToString()));
 
             changeTypes[trimmed] = changeType;
         }
@@ -490,16 +491,10 @@ internal sealed record SqlSchemaConfiguration
             switch (mode)
             {
                 case SqlDeltaImportMode.ChangeLogTable when objectType.ChangeLog == null:
-                    throw new SqlSchemaConfigurationException(
-                        $"{SqlConnectorConstants.SettingDeltaImportMode} is '{SqlConnectorConstants.DeltaImportModeChangeLogTable}', but Object Type '{objectType.Name}' is selected for synchronisation and has no 'changeLog'. " +
-                        "A Delta Import that skipped an object type would report success while leaving its objects to drift, so every selected object type needs one. " +
-                        "Give it a 'changeLog', or deselect it if JIM never imports from it.");
+                    throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocDeltaNeedsChangeLog), SqlConnectorConstants.SettingDeltaImportMode, SqlConnectorConstants.DeltaImportModeChangeLogTable, objectType.Name));
 
                 case SqlDeltaImportMode.WatermarkColumn when objectType.WatermarkColumn == null:
-                    throw new SqlSchemaConfigurationException(
-                        $"{SqlConnectorConstants.SettingDeltaImportMode} is '{SqlConnectorConstants.DeltaImportModeWatermarkColumn}', but Object Type '{objectType.Name}' is selected for synchronisation and has no 'watermarkColumn'. " +
-                        "A Delta Import that skipped an object type would report success while leaving its objects to drift, so every selected object type needs one. " +
-                        "Give it a 'watermarkColumn', or deselect it if JIM never imports from it.");
+                    throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocDeltaNeedsWatermark), SqlConnectorConstants.SettingDeltaImportMode, SqlConnectorConstants.DeltaImportModeWatermarkColumn, objectType.Name));
 
                 case SqlDeltaImportMode.WatermarkColumn:
                     ValidateRelatedTableWatermarkColumns(objectType);
@@ -512,16 +507,13 @@ internal sealed record SqlSchemaConfiguration
     private static void ValidateRelatedTableWatermarkColumns(SqlObjectTypeConfiguration objectType)
     {
         foreach (var relatedTable in objectType.RelatedTables.Where(relatedTable => relatedTable.WatermarkColumn == null))
-            throw new SqlSchemaConfigurationException(
-                $"{SqlConnectorConstants.SettingDeltaImportMode} is '{SqlConnectorConstants.DeltaImportModeWatermarkColumn}', but Object Type '{objectType.Name}' has related table attribute '{relatedTable.AttributeName}' with no 'watermarkColumn'. " +
-                $"A row added to or removed from '{relatedTable.TableName}' changes the object without touching its own row, so without a watermark column on the related table that change could never be detected.");
+            throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocRelatedNeedsWatermark), SqlConnectorConstants.SettingDeltaImportMode, SqlConnectorConstants.DeltaImportModeWatermarkColumn, objectType.Name, relatedTable.AttributeName, relatedTable.TableName));
     }
 
     private static List<string> ReadAnchorColumns(SqlObjectTypeDocument document, string objectTypeName)
     {
         if (document.AnchorColumns == null || document.AnchorColumns.Count == 0)
-            throw new SqlSchemaConfigurationException(
-                $"Object Type '{objectTypeName}' has no 'anchorColumns'. JIM identifies an object by its anchor, so at least one column must be named.") { Field = "anchorColumns" };
+            throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocNoAnchorColumns), objectTypeName)) { Field = "anchorColumns" };
 
         var anchorColumns = new List<string>(document.AnchorColumns.Count);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -531,7 +523,7 @@ internal sealed record SqlSchemaConfiguration
             ValidateIdentifier(anchorColumn, objectTypeName, "anchorColumns");
 
             if (!seen.Add(anchorColumn!))
-                throw new SqlSchemaConfigurationException($"Object Type '{objectTypeName}' lists anchor column '{anchorColumn}' more than once.");
+                throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocAnchorDuplicate), objectTypeName, anchorColumn));
 
             anchorColumns.Add(anchorColumn!);
         }
@@ -552,11 +544,10 @@ internal sealed record SqlSchemaConfiguration
             ValidateIdentifier(column.Name, objectTypeName, "columns.name");
 
             if (string.IsNullOrWhiteSpace(column.ReferencesObjectType))
-                throw new SqlSchemaConfigurationException(
-                    $"Object Type '{objectTypeName}' configures column '{column.Name}' without a 'referencesObjectType'. A column is only configured to say what its type cannot, which today means naming the object type it points at.");
+                throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocColumnNoReference), objectTypeName, column.Name));
 
             if (!seen.Add(column.Name!))
-                throw new SqlSchemaConfigurationException($"Object Type '{objectTypeName}' configures column '{column.Name}' more than once.");
+                throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocColumnDuplicate), objectTypeName, column.Name));
 
             columns.Add(new SqlColumnConfiguration { Name = column.Name!, ReferencesObjectType = column.ReferencesObjectType.Trim() });
         }
@@ -575,13 +566,12 @@ internal sealed record SqlSchemaConfiguration
         foreach (var relatedTable in document.RelatedTables)
         {
             if (string.IsNullOrWhiteSpace(relatedTable.AttributeName))
-                throw new SqlSchemaConfigurationException(
-                    $"Object Type '{objectTypeName}' has a related table with no 'attributeName'. The attribute name is what the multi-valued attribute is called on the object type.");
+                throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocRelatedNoAttributeName), objectTypeName));
 
             var attributeName = relatedTable.AttributeName.Trim();
 
             if (!seen.Add(attributeName))
-                throw new SqlSchemaConfigurationException($"Object Type '{objectTypeName}' declares related table attribute '{attributeName}' more than once.");
+                throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocRelatedDuplicate), objectTypeName, attributeName));
 
             ValidateIdentifier(relatedTable.Table, objectTypeName, $"relatedTables['{attributeName}'].table");
             ValidateIdentifier(relatedTable.ValueColumn, objectTypeName, $"relatedTables['{attributeName}'].valueColumn");
@@ -590,9 +580,7 @@ internal sealed record SqlSchemaConfiguration
                 ValidateIdentifier(relatedTable.Schema, objectTypeName, $"relatedTables['{attributeName}'].schema");
 
             if (relatedTable.JoinColumns == null || relatedTable.JoinColumns.Count != anchorColumnCount)
-                throw new SqlSchemaConfigurationException(
-                    $"Object Type '{objectTypeName}' joins related table attribute '{attributeName}' on {relatedTable.JoinColumns?.Count ?? 0} column(s), but the object type's anchor has {anchorColumnCount}. " +
-                    "Joining on part of an anchor gathers another object's values onto this one, so 'joinColumns' must name one column per anchor column, in the same order.");
+                throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocJoinColumnCount), objectTypeName, attributeName, Cnt(relatedTable.JoinColumns?.Count ?? 0), Cnt(anchorColumnCount)));
 
             foreach (var joinColumn in relatedTable.JoinColumns)
                 ValidateIdentifier(joinColumn, objectTypeName, $"relatedTables['{attributeName}'].joinColumns");
@@ -618,12 +606,10 @@ internal sealed record SqlSchemaConfiguration
     private static void ValidateReferences(SqlObjectTypeConfiguration objectType, HashSet<string> names)
     {
         foreach (var column in objectType.Columns.Where(column => !names.Contains(column.ReferencesObjectType)))
-            throw new SqlSchemaConfigurationException(
-                $"Object Type '{objectType.Name}' says column '{column.Name}' references object type '{column.ReferencesObjectType}', which this document does not declare. A reference can only point at an object type JIM also synchronises.") { Field = "columns" };
+            throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocColumnReferenceUnknown), objectType.Name, column.Name, column.ReferencesObjectType)) { Field = "columns" };
 
         foreach (var relatedTable in objectType.RelatedTables.Where(relatedTable => relatedTable.ReferencesObjectType != null && !names.Contains(relatedTable.ReferencesObjectType)))
-            throw new SqlSchemaConfigurationException(
-                $"Object Type '{objectType.Name}' says related table attribute '{relatedTable.AttributeName}' references object type '{relatedTable.ReferencesObjectType}', which this document does not declare.") { Field = "relatedTables" };
+            throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocRelatedReferenceUnknown), objectType.Name, relatedTable.AttributeName, relatedTable.ReferencesObjectType)) { Field = "relatedTables" };
     }
 
     /// <summary>
@@ -635,11 +621,10 @@ internal sealed record SqlSchemaConfiguration
     private static void ValidateIdentifier(string? identifier, string objectTypeName, string fieldName)
     {
         if (string.IsNullOrWhiteSpace(identifier))
-            throw new SqlSchemaConfigurationException($"Object Type '{objectTypeName}' has no value for '{fieldName}'.") { Field = fieldName };
+            throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocNoValueForField), objectTypeName, fieldName)) { Field = fieldName };
 
         if (identifier.Trim() != identifier)
-            throw new SqlSchemaConfigurationException(
-                $"Object Type '{objectTypeName}' has '{fieldName}' set to '{identifier}', which starts or ends with whitespace. Database identifiers are used exactly as written, so the spaces would name a different object.") { Field = fieldName };
+            throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocIdentifierWhitespace), objectTypeName, fieldName, identifier)) { Field = fieldName };
 
         try
         {
@@ -647,7 +632,7 @@ internal sealed record SqlSchemaConfiguration
         }
         catch (ArgumentException ex)
         {
-            throw new SqlSchemaConfigurationException($"Object Type '{objectTypeName}' has '{fieldName}' set to a value that cannot name a database object: {ex.Message}", ex) { Field = fieldName };
+            throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocIdentifierInvalid), objectTypeName, fieldName, ex.Message), ex) { Field = fieldName };
         }
     }
 
@@ -661,12 +646,10 @@ internal sealed record SqlSchemaConfiguration
         switch (CheckSelectStatement(statement))
         {
             case SelectStatementProblem.NotAQuery:
-                throw new SqlSchemaConfigurationException(
-                    $"Object Type '{objectTypeName}' has a 'select' that does not begin with SELECT or WITH. JIM reads objects with it, so it has to be a query.") { Field = "select" };
+                throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocSelectNotQuery), objectTypeName)) { Field = "select" };
 
             case SelectStatementProblem.MoreThanOneStatement:
-                throw new SqlSchemaConfigurationException(
-                    $"Object Type '{objectTypeName}' has a 'select' containing a semicolon. It must be a single statement, with no terminator.") { Field = "select" };
+                throw new SqlSchemaConfigurationException(Doc(nameof(ConnectorMessages.SqlDocSelectSemicolon), objectTypeName)) { Field = "select" };
         }
     }
 

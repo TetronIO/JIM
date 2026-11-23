@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Connectors.Resources;
+using JIM.Models.Localisation;
+
 namespace JIM.Connectors.LDAP;
 
 /// <summary>
@@ -15,15 +18,20 @@ internal static class LdapExchangeSettings
     /// Active Directory's protocols, but Exchange cannot run against it.
     /// </summary>
     internal static string? DirectoryTypeRefusal(bool manageExchangeRecipients, LdapDirectoryType directoryType) =>
+        DirectoryTypeRefusalMessage(manageExchangeRecipients, directoryType)?.ToEnglish();
+
+    /// <summary>The same refusal as <see cref="DirectoryTypeRefusal"/>, held as a message the portal shows in the viewer's language.</summary>
+    internal static JimMessage? DirectoryTypeRefusalMessage(bool manageExchangeRecipients, LdapDirectoryType directoryType) =>
         manageExchangeRecipients && directoryType != LdapDirectoryType.ActiveDirectory
-            ? $"Exchange recipients can be managed only on Active Directory, and this directory is {Describe(directoryType)}. Turn off {LdapConnectorConstants.SETTING_MANAGE_EXCHANGE_RECIPIENTS}, or connect to an Active Directory domain controller."
+            ? JimMessage.Create(ConnectorMessageCatalogues.Connectors, nameof(ConnectorMessages.LdapExchangeDirectoryTypeRefusal),
+                Describe(directoryType), LdapConnectorConstants.SETTING_MANAGE_EXCHANGE_RECIPIENTS)
             : null;
 
-    private static string Describe(LdapDirectoryType directoryType) => directoryType switch
+    private static JimMessage Describe(LdapDirectoryType directoryType) => JimMessage.Create(ConnectorMessageCatalogues.Connectors, directoryType switch
     {
-        LdapDirectoryType.SambaAD => "Samba AD",
-        LdapDirectoryType.OpenLDAP => "OpenLDAP",
-        LdapDirectoryType.DirectoryServer389 => "389 Directory Server",
-        _ => "not one JIM recognises"
-    };
+        LdapDirectoryType.SambaAD => nameof(ConnectorMessages.LdapDirectoryKindSambaAD),
+        LdapDirectoryType.OpenLDAP => nameof(ConnectorMessages.LdapDirectoryKindOpenLDAP),
+        LdapDirectoryType.DirectoryServer389 => nameof(ConnectorMessages.LdapDirectoryKindDirectoryServer389),
+        _ => nameof(ConnectorMessages.LdapDirectoryKindUnrecognised)
+    });
 }

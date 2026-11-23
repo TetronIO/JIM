@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LdapDirectoryKindUnrecognised" xml:space="preserve">
+    <value>not one JIM recognizes</value>
+  </data>
+  <data name="SqlTimeZoneUnknown" xml:space="preserve">
+    <value>{0} '{1}' is not a time zone this deployment recognizes. Enter UTC, or an IANA time zone name such as Europe/London or America/New_York.</value>
+  </data>
+  <data name="SqlDocUnrecognisedField" xml:space="preserve">
+    <value>{0} has an unrecognized field '{1}'.{2} Fields that are not recognized are refused rather than ignored, because ignoring one would leave the Connected System configured differently from how the document reads.</value>
+  </data>
+  <data name="SqlDocDeltaNeedsChangeLog" xml:space="preserve">
+    <value>{0} is '{1}', but Object Type '{2}' is selected for synchronization and has no 'changeLog'. A Delta Import that skipped an object type would report success while leaving its objects to drift, so every selected object type needs one. Give it a 'changeLog', or deselect it if JIM never imports from it.</value>
+  </data>
+  <data name="SqlDocDeltaNeedsWatermark" xml:space="preserve">
+    <value>{0} is '{1}', but Object Type '{2}' is selected for synchronization and has no 'watermarkColumn'. A Delta Import that skipped an object type would report success while leaving its objects to drift, so every selected object type needs one. Give it a 'watermarkColumn', or deselect it if JIM never imports from it.</value>
+  </data>
+  <data name="SqlDocColumnReferenceUnknown" xml:space="preserve">
+    <value>Object Type '{0}' says column '{1}' references object type '{2}', which this document does not declare. A reference can only point at an object type JIM also synchronizes.</value>
+  </data>
+  <data name="PfSetByHand" xml:space="preserve">
+    <value>Set the password requirements on the Synchronization Rule to match the target's policy by hand, and expect a rejection to be how a mismatch shows up.</value>
+  </data>
+  <data name="PfGraphNoRole" xml:space="preserve">
+    <value>The app holds the permission, but its token shows no directory role that resets passwords. Graph also needs the app to hold User Administrator across the tenant: run Register-JIMEntraIdConnector -PasswordManagement, or assign it in the Entra admin center. A role assigned in the last hour can be missing from the token until it is renewed.</value>
+  </data>
+</root>

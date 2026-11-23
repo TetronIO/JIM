@@ -15,6 +15,8 @@ using JIM.Models.Enums;
 using JIM.Models.History;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
+using JIM.Models.Resources;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Security;
@@ -2216,8 +2218,8 @@ public partial class ConnectedSystemServer
                 var waiting = await Application.Repository.Sync.CountWaitingExchangeChangesAsync(connectedSystem.Id);
                 if (waiting > 0)
                     results.Add(ConnectorSettingValueValidationResult.Warning(null,
-                        $"Exchange delivery is held: {waiting} {(waiting == 1 ? "change is" : "changes are")} waiting. " +
-                        "They are delivered when this Connected System manages Exchange recipients again."));
+                        JimMessage.Counted(MessageCatalogues.SettingValidation, nameof(SettingValidationMessages.ExchangeDeliveryHeldOne), waiting,
+                            waiting.ToString(System.Globalization.CultureInfo.InvariantCulture))));
             }
         }
         finally

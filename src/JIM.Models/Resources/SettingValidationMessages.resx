@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="SupplyAValue" xml:space="preserve">
+    <value>Please supply a value for {0}</value>
+    <comment>{0} is the name of a Connector setting; it stays as the Connector names it.</comment>
+  </data>
+  <data name="GroupAtLeast" xml:space="preserve">
+    <value>Provide a value for at least one of these settings: {0}.</value>
+    <comment>{0} is a comma-separated list of setting names in single quotes.</comment>
+  </data>
+  <data name="GroupExactly" xml:space="preserve">
+    <value>Provide a value for exactly one of these settings: {0}.</value>
+    <comment>{0} is a comma-separated list of setting names in single quotes.</comment>
+  </data>
+  <data name="GroupOnly" xml:space="preserve">
+    <value>Provide a value for only one of these settings, not more than one: {0}.</value>
+    <comment>{0} is a comma-separated list of setting names in single quotes.</comment>
+  </data>
+  <data name="ExchangeDeliveryHeldOne" xml:space="preserve">
+    <value>Exchange delivery is held: {0} change is waiting. They are delivered when this Connected System manages Exchange recipients again.</value>
+    <comment>{0} is a count of one.</comment>
+  </data>
+  <data name="ExchangeDeliveryHeldOther" xml:space="preserve">
+    <value>Exchange delivery is held: {0} changes are waiting. They are delivered when this Connected System manages Exchange recipients again.</value>
+    <comment>{0} is a count of two or more.</comment>
+  </data>
+</root>

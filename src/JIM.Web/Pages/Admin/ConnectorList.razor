@@ -43,7 +43,7 @@
             <CellTemplate>
                 @* A row in a virtualised grid is one line, so a long description is clipped rather than wrapped;
                    it is available in full on hover, and on the Connector's own page. *@
-                <OneLineText Text="@context.Item.Description" />
+                <OneLineText Text="@ConnectorSettingDisplay.ConnectorDescription(context.Item.Name, context.Item.Description)" />
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn Title="@ConnectorText.ColumnBuiltIn" Sortable="false" HeaderClass="jim-nowrap" HeaderStyle="width: 90px;">

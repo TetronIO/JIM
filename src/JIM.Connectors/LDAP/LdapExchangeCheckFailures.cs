@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
+using JIM.Connectors.Resources;
+using JIM.Models.Localisation;
 using Tetron.PowerShellRemoting;
 using Tetron.PowerShellRemoting.Kerberos;
 using Tetron.PowerShellRemoting.WSMan;
@@ -31,48 +34,48 @@ internal static class LdapExchangeCheckFailures
     /// <summary>
     /// What to tell the administrator, given what opening the Exchange session threw.
     /// </summary>
-    internal static string Describe(Exception error, LdapExchangeKerberosSignIn signIn, Uri endpoint)
+    internal static string Describe(Exception error, LdapExchangeKerberosSignIn signIn, Uri endpoint) =>
+        DescribeMessage(error, signIn, endpoint).ToEnglish();
+
+    /// <summary>
+    /// The same words as <see cref="Describe"/>, held as a message so the portal can show them in the viewer's language
+    /// (#3030). What another system said (Exchange's own words, a Kerberos library's) stays in its own language.
+    /// </summary>
+    internal static JimMessage DescribeMessage(Exception error, LdapExchangeKerberosSignIn signIn, Uri endpoint)
     {
         if (Find<KerberosException>(error) is { } kerberos)
             return DescribeKerberos(kerberos, signIn, endpoint);
 
         var failure = RemoteFailure.FromException(error);
+        var address = endpoint.ToString();
         return failure.Kind switch
         {
             RemoteFailureKind.Authentication when Find<WSManFaultException>(error) is { } refusal =>
-                $"Exchange refused {signIn.Principal}: {Sentence(refusal.Message)} The account signed in to the domain, but Exchange does not let it use remote PowerShell. " +
-                "Add it to Exchange's Recipient Management role group, and check its remote PowerShell access is not turned off.",
+                Message(nameof(ConnectorMessages.LdapExchangeRefusedRemotePowerShell), signIn.Principal, Sentence(refusal.Message)),
             RemoteFailureKind.Connection =>
-                $"JIM could not reach Exchange at {endpoint}: {Sentence(failure.Message)} Check the Exchange server's name, and that this server can reach it on port {endpoint.Port}.",
+                Message(nameof(ConnectorMessages.LdapExchangeUnreachable), address, Sentence(failure.Message), endpoint.Port.ToString(CultureInfo.InvariantCulture)),
             RemoteFailureKind.Timeout =>
-                $"Exchange at {endpoint} did not answer: {Sentence(failure.Message)} Check the server is running, and that nothing between this server and it is holding the connection.",
+                Message(nameof(ConnectorMessages.LdapExchangeTimedOut), address, Sentence(failure.Message)),
             RemoteFailureKind.Certificate =>
-                $"JIM does not trust Exchange's certificate at {endpoint}: {Sentence(failure.Message)} Add the certificate authority that issued it in Certificates, " +
-                "and use the server's name as its certificate gives it.",
-            _ => $"Exchange at {endpoint} refused the session: {failure.Message}"
+                Message(nameof(ConnectorMessages.LdapExchangeCertificateUntrusted), address, Sentence(failure.Message)),
+            _ => Message(nameof(ConnectorMessages.LdapExchangeSessionRefused), address, failure.Message)
         };
     }
 
-    private static string DescribeKerberos(KerberosException kerberos, LdapExchangeKerberosSignIn signIn, Uri endpoint) => kerberos.MinorStatus switch
+    private static JimMessage DescribeKerberos(KerberosException kerberos, LdapExchangeKerberosSignIn signIn, Uri endpoint) => kerberos.MinorStatus switch
     {
-        ClockSkew =>
-            $"This server's clock differs from the domain's by more than five minutes, so Kerberos refused the sign-in. " +
-            $"Correct the time on this server, or on the domain controller {signIn.Kdc}, then save again.",
-        PreauthenticationFailed or IntegrityCheckFailed =>
-            $"The domain refused the password for {signIn.Principal}. Check the Password above: JIM signs in to Exchange with the directory account.",
-        ClientUnknown =>
-            $"The domain controller {signIn.Kdc} does not know the account {signIn.Principal}, so it cannot sign in to Exchange.",
-        ServiceUnknown =>
-            $"The domain has no service principal HTTP/{endpoint.Host}, so Kerberos cannot sign in to it. " +
-            "Use the Exchange server's own DNS name, not an alias or an IP address, as the Exchange server.",
-        ClientRevoked =>
-            $"The account {signIn.Principal} is disabled or locked out, so the domain refused the sign-in.",
-        PasswordExpired =>
-            $"The account {signIn.Principal} cannot sign in because its password has expired. Set a new one, and enter it as the Password above.",
-        DomainControllerUnreachable =>
-            $"JIM could not reach the domain controller {signIn.Kdc} on port 88 to sign in to Exchange with Kerberos. Check this server can reach it.",
-        _ => $"Kerberos refused the sign-in for {signIn.Principal} through {signIn.Kdc}: {kerberos.Message}"
+        ClockSkew => Message(nameof(ConnectorMessages.LdapKerberosClockSkew), signIn.Kdc),
+        PreauthenticationFailed or IntegrityCheckFailed => Message(nameof(ConnectorMessages.LdapKerberosPasswordRefused), signIn.Principal),
+        ClientUnknown => Message(nameof(ConnectorMessages.LdapKerberosAccountUnknown), signIn.Kdc, signIn.Principal),
+        ServiceUnknown => Message(nameof(ConnectorMessages.LdapKerberosServiceUnknown), endpoint.Host),
+        ClientRevoked => Message(nameof(ConnectorMessages.LdapKerberosAccountDisabled), signIn.Principal),
+        PasswordExpired => Message(nameof(ConnectorMessages.LdapKerberosPasswordExpired), signIn.Principal),
+        DomainControllerUnreachable => Message(nameof(ConnectorMessages.LdapKerberosDomainControllerUnreachable), signIn.Kdc),
+        _ => Message(nameof(ConnectorMessages.LdapKerberosRefused), signIn.Principal, signIn.Kdc, kerberos.Message)
     };
+
+    private static JimMessage Message(string key, params MessageArgument[] arguments) =>
+        JimMessage.Create(ConnectorMessageCatalogues.Connectors, key, arguments);
 
     /// <summary>
     /// Another system's words, ended as a sentence so the advice that follows them reads as its own.

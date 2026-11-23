@@ -27,7 +27,7 @@
                 <MudExpansionPanel Expanded="@GetCategoryExpanded(categoryKey)"
                                    ExpandedChanged="@(expanded => OnCategoryExpandedChanged(categoryKey, expanded))">
                     <TitleContent>
-                        <MudText Typo="Typo.h5">@categoryKey</MudText>
+                        <MudText Typo="Typo.h5">@settingCategory.ForDisplay()</MudText>
                     </TitleContent>
                     <ChildContent>
                         @{
@@ -70,7 +70,7 @@
                                     ? ConnectedSystemText.SettingsTabGroupExactly
                                     : ConnectedSystemText.SettingsTabGroupAtLeast;
                                 <MudPaper Outlined="true" Class="@groupSpacingClass">
-                                    <MudText Typo="Typo.h6">@requiredGroup</MudText>
+                                    <MudText Typo="Typo.h6">@ConnectorSettingDisplay.Group(ConnectedSystem.ConnectorDefinition?.Name, requiredGroup)</MudText>
                                     @if (groupSatisfied)
                                     {
                                         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">@groupCaption</MudText>
@@ -92,7 +92,8 @@
                                                                      DirectoryServerDiscoveryEnabled="@CanDiscoverDirectoryServers()"
                                                                      DirectoryServerDiscoveryDraftSettings="DiscoveryDraftSettingValues"
                                                                      DirectoryServerTerm="@DirectoryServerTermFor(groupMembers[k])"
-                                                                     ConnectedSystemId="@ConnectedSystem.Id" />
+                                                                     ConnectedSystemId="@ConnectedSystem.Id"
+                                                                     ConnectorDefinitionName="@ConnectedSystem.ConnectorDefinition?.Name" />
                                     }
                                 </MudPaper>
                             }
@@ -117,6 +118,7 @@
                                                           SettingValue="@settingValue"
                                                           SettingValues="@ConnectedSystem.SettingValues"
                                                           SelectedObjectTypeNames="@SelectedObjectTypeNames"
+                                                          ConnectorDefinitionName="@ConnectedSystem.ConnectorDefinition?.Name"
                                                           Catalogue="@_catalogueSource"
                                                           ValueChanged="OnSettingValueChanged"
                                                           HasProblemsChanged="OnCatalogueDocumentProblemsChangedAsync"
@@ -137,7 +139,8 @@
                                                              DirectoryServerDiscoveryEnabled="@CanDiscoverDirectoryServers()"
                                                              DirectoryServerDiscoveryDraftSettings="DiscoveryDraftSettingValues"
                                                              DirectoryServerTerm="@DirectoryServerTermFor(settingValue)"
-                                                             ConnectedSystemId="@ConnectedSystem.Id" />
+                                                             ConnectedSystemId="@ConnectedSystem.Id"
+                                                                     ConnectorDefinitionName="@ConnectedSystem.ConnectorDefinition?.Name" />
                                 j++;
                             }
                         }
@@ -276,7 +279,7 @@
             <ul class="mt-3">
                 @foreach (var warning in _settingWarnings)
                 {
-                    <li>@(warning.SettingValue?.Setting?.Name is { } settingName ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingsTabErrorLine, settingName, warning.ErrorMessage) : warning.ErrorMessage)</li>
+                    <li>@(warning.SettingValue?.Setting?.Name is { } settingName ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingsTabErrorLine, SettingLabelFor(settingName), warning.Describe(ConnectedSystem.ConnectorDefinition?.Name)) : warning.Describe(ConnectedSystem.ConnectorDefinition?.Name))</li>
                 }
             </ul>
         </MudAlert>
@@ -377,6 +380,10 @@
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    /// <summary>The setting's label in the viewer's language, for the lists of problems that name a setting.</summary>
+    private string SettingLabelFor(string settingName) =>
+        ConnectorSettingDisplay.Label(ConnectedSystem.ConnectorDefinition?.Name, settingName);
 
     private bool IsSettingsFormValid { get; set; }
     private string[] SettingsFormErrors { get; set; } = [];
@@ -584,10 +591,10 @@
             switch (result.SettingValue)
             {
                 case { Setting.Name: not null } when !string.IsNullOrEmpty(result.ErrorMessage):
-                    SettingsFormCustomErrors[result.SettingValue.Setting.Name] = result.ErrorMessage;
+                    SettingsFormCustomErrors[SettingLabelFor(result.SettingValue.Setting.Name)] = result.Describe(ConnectedSystem.ConnectorDefinition?.Name);
                     break;
                 case null when !string.IsNullOrEmpty(result.ErrorMessage):
-                    SettingsFormCustomErrors[string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingsTabGeneralIssue, i + 1)] = result.ErrorMessage;
+                    SettingsFormCustomErrors[string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.SettingsTabGeneralIssue, i + 1)] = result.Describe(ConnectedSystem.ConnectorDefinition?.Name);
                     break;
             }
         }

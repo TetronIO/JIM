@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Text.Json;
 using JIM.Connectors.Sql;
 using JIM.Models.Staging;
+using JIM.Web.Localisation;
 using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
@@ -48,7 +49,7 @@ public sealed class SqlObjectTypesEditorModel
     public ISet<string>? SelectedObjectTypeNames { get; set; }
 
     /// <summary>Problems that concern no one Object Type, such as a document with no Object Types at all.</summary>
-    public IReadOnlyList<string> DocumentProblems => [.. _problems.Where(p => p.ObjectTypeIndex == null).Select(p => p.Message)];
+    public IReadOnlyList<string> DocumentProblems => [.. _problems.Where(p => p.ObjectTypeIndex == null).Select(p => p.Text())];
 
     /// <summary>
     /// Reads a stored document into a model. A document with problems loads, so they can be fixed in the editor;
@@ -78,7 +79,7 @@ public sealed class SqlObjectTypesEditorModel
             // The parser's own account is better than the serialiser's: it names the field and suggests the
             // intended one. Every JsonException here is also one of its problems, located the same way.
             model = null;
-            failure = SqlObjectTypesDocument.Validate(json).FirstOrDefault()?.Message ?? "The document is not valid JSON.";
+            failure = SqlObjectTypesDocument.Validate(json).FirstOrDefault()?.Text() ?? "The document is not valid JSON.";
             return false;
         }
     }
@@ -94,7 +95,7 @@ public sealed class SqlObjectTypesEditorModel
     /// </summary>
     public IReadOnlyList<string> ProblemsFor(int index)
     {
-        var problems = _problems.Where(p => p.ObjectTypeIndex == index).Select(p => p.Message).ToList();
+        var problems = _problems.Where(p => p.ObjectTypeIndex == index).Select(p => p.Text()).ToList();
         if (index < 0 || index >= ObjectTypes.Count)
             return problems;
 

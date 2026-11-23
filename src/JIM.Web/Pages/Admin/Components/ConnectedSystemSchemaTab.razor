@@ -794,7 +794,7 @@
                         }
                         else
                         {
-                            var description = context.Item.Description;
+                            var description = ConnectorSettingDisplay.AttributeDescription(ConnectedSystem.ConnectorDefinition.Name, _selectedObjectType?.Name, context.Item.Name, context.Item.Description)!;
                             <span class="jim-one-line" title="@description">@((MarkupString)Helpers.LinkifyRfcReferences(description))</span>
                         }
                     </CellTemplate>

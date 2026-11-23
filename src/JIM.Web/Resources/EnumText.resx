@@ -42,4 +42,23 @@
     <value>Cancelled</value>
     <comment>An Activity status.</comment>
   </data>
+  <data name="ConnectedSystemSettingCategory_Connectivity" xml:space="preserve">
+    <value>Connectivity</value>
+    <comment>The heading of a group of Connected System settings.</comment>
+  </data>
+  <data name="ConnectedSystemSettingCategory_General" xml:space="preserve">
+    <value>General</value>
+  </data>
+  <data name="ConnectedSystemSettingCategory_Capabilities" xml:space="preserve">
+    <value>Capabilities</value>
+  </data>
+  <data name="ConnectedSystemSettingCategory_Schema" xml:space="preserve">
+    <value>Schema</value>
+  </data>
+  <data name="ConnectedSystemSettingCategory_Import" xml:space="preserve">
+    <value>Import</value>
+  </data>
+  <data name="ConnectedSystemSettingCategory_Export" xml:space="preserve">
+    <value>Export</value>
+  </data>
 </root>

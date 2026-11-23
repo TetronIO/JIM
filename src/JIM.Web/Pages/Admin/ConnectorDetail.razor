@@ -45,7 +45,7 @@
         <MudText Typo="Typo.h5" Class="mb-4">@ConnectorText.Details</MudText>
         <MudGrid Spacing="4">
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="@ConnectorText.ColumnDescription" Variant="Variant.Outlined">@_connector.Description</MudField>
+                <MudField Label="@ConnectorText.ColumnDescription" Variant="Variant.Outlined">@ConnectorSettingDisplay.ConnectorDescription(_connector.Name, _connector.Description)</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudField Label="@ConnectorText.Url" Variant="Variant.Outlined"><MudLink Href="@_connector.Url">@_connector.Url</MudLink></MudField>
