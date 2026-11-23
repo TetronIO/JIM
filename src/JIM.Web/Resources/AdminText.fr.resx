@@ -1077,7 +1077,7 @@
     <value>« {0} » ne peut pas être renommé tant que des expressions le lisent par son nom. Modifiez-les d’abord : {1}.</value>
   </data>
   <data name="AttrEditorSchemaRefused" xml:space="preserve">
-    <value>Impossible de modifier le schéma : {0} objet(s) Metaverse détiennent une valeur enregistrée, et seul un élargissement au multivalué les conserve.</value>
+    <value>Impossible de modifier le schéma : des objets Metaverse (au nombre de {0}) détiennent une valeur enregistrée, et seul un élargissement au multivalué les conserve.</value>
   </data>
   <data name="AttrEditorSaved" xml:space="preserve">
     <value>Modifications enregistrées pour « {0} ».</value>

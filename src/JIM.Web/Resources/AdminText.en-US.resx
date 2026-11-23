@@ -38,4 +38,16 @@
   <data name="AdminTilePendingDeletionsDesc" xml:space="preserve">
     <value>Review Metaverse Objects awaiting deletion before it is finalized</value>
   </data>
+  <data name="DeleteObjectTypeSafe" xml:space="preserve">
+    <value>No Metaverse Objects of this type exist and no Synchronization Rule targets it. Safe to delete.</value>
+  </data>
+  <data name="DeleteObjectTypeRulesHeadline" xml:space="preserve">
+    <value>{0} Synchronization Rule(s) target this type</value>
+  </data>
+  <data name="DeleteObjectTypeRulesBody" xml:space="preserve">
+    <value>Remove these Synchronization Rules first; deleting the type would otherwise remove the whole rule.</value>
+  </data>
+  <data name="DeleteAttributeReadersBody" xml:space="preserve">
+    <value>Change or remove each one first, then delete. JIM does not remove them for you: a Scoping Criterion removed from a Synchronization Rule changes which objects the rule manages.</value>
+  </data>
 </root>
