@@ -36,6 +36,9 @@ public partial class LocalisationResourceTests
     [GeneratedRegex(@"\{(\d+)(?:[,:][^}]*)?\}")]
     private static partial Regex Placeholder();
 
+    [GeneratedRegex(@"(?<=\p{L})'(?=\p{L})")]
+    private static partial Regex StraightElision();
+
     [Test]
     public void ResourceFolder_HasNeutralFilesToCheck()
     {
@@ -197,6 +200,19 @@ public partial class LocalisationResourceTests
         Assert.That(problems, Is.Empty,
             "Translations must use the agreed word for each JIM term (engineering/localisation/glossary.json)." +
             Environment.NewLine + string.Join(Environment.NewLine, problems));
+    }
+
+    [Test]
+    public void French_ElidesWithTheTypographicApostrophe()
+    {
+        // "l’objet", never "l'objet": areas are translated in parallel, and a straight apostrophe in one reads as a slip
+        // beside the typographic one everywhere else. A straight quote around a name ('Port') is not an elision.
+        var problems = ForEachTranslation((file, key, value, _) =>
+            file.Culture == "fr" && StraightElision().IsMatch(value)
+                ? $"{file.FileName}: '{key}' elides with a straight apostrophe; use ’ (U+2019): {value}"
+                : null);
+
+        Assert.That(problems, Is.Empty, string.Join(Environment.NewLine, problems));
     }
 
     [Test]
