@@ -162,7 +162,7 @@ flowchart TD
     REQ["Administrator changes the mode<br/>(portal, API or PowerShell)"] --> MV{"Multi-valued?"}
     MV -->|no| REJ["Refused: modes apply only<br/>to multi-valued attributes"]
     MV -->|yes| REF{"Accumulate on a<br/>Reference attribute?"}
-    REF -->|yes| REJ2["Refused"]
+    REF -->|yes| REJ2["Refused: record the<br/>reference as text instead"]
     REF -->|no| IMPACT["Impact report:<br/>objects that will gain or lose values"]
     IMPACT --> LEAVE{"Leaving Accumulate?"}
     LEAVE -->|yes| CONFIRM{"Confirmed?<br/>-Force or confirmation flag"}
@@ -179,7 +179,7 @@ flowchart TD
 **Configuration**
 
 1. Each multi-valued Metaverse attribute has a contribution mode: Priority (default), Merge or Accumulate. Single-valued attributes have no mode; the portal does not offer one and the API and PowerShell reject one.
-2. Accumulate is not available for Reference attributes. Merge is available for every data type unless the implementation plan finds a reason to exclude references (Open Question 5).
+2. Accumulate is not available for Reference attributes (see Constraints for why); the refusal message points to recording the reference as text instead. Merge is available for every data type unless the implementation plan finds a reason to exclude references (Open Question 5).
 3. In Merge and Accumulate modes, the priority order for that attribute is not used. The portal shows the contributors without an order and says why; the priority endpoints and cmdlets report the mode, and reordering them is refused with a message that names the mode.
 4. In Merge and Accumulate modes, "Null is a value" has no effect on mappings to that attribute. The Attribute Flow editor disables it with an explanation, and saving a mapping with it set is accepted but recorded as having no effect (no error, so existing mappings keep saving).
 
@@ -284,10 +284,22 @@ Account Audit Log (Accumulate)
 **When**: an administrator sets the mode of the single-valued "Display Name" attribute to Merge through the API.
 **Then**: the request is rejected with a 400 that says contribution modes apply only to multi-valued attributes.
 
+### Scenario 9: Auditing references as text
+
+**Given**: an administrator wants a history of every manager Jo has had.
+**When**: they set the multi-valued Reference attribute "Managers" to Accumulate.
+**Then**: the change is refused, and the message suggests recording the reference as text instead.
+**When**: they create a multi-valued text attribute "Manager History" in Accumulate mode, fed by the Active Directory rule with `"AD|manager=" + cs["manager"]`.
+**Then**: each manager's distinguished name is added as Jo's manager changes, and every entry stays after that manager's Metaverse Object is deleted.
+
 ## Constraints
 
 - Additive under semantic versioning: new optional fields and parameters only; the default reproduces today's behaviour exactly.
-- Accumulate is not allowed for Reference attributes: a reference to a deleted Metaverse Object must still be removed by reference recall.
+- Accumulate is not allowed for Reference attributes, for two reasons:
+  - **A reference cannot outlive its target.** A Reference value is only a pointer to another Metaverse Object. When that object is deleted, JIM deletes the pointing rows from every surviving object rather than nulling them, because a nulled row carries no information (#1019, `MetaverseObjectAttributeValue.IsValuelessReferenceRow`). An accumulated reference would therefore be removed anyway, breaking Accumulate's guarantee.
+  - **It makes revoking access fail silently.** The common multi-valued Reference attribute is a group's Members. Accumulate on Members, combined with an export flow, would keep sending removed people back into the group, so their access would never be revoked.
+
+  An audit of references wants a snapshot that survives the referenced object, which a text attribute provides: an Accumulate text attribute fed by an expression that records the source's own identifier for the reference (for example `"manager=" + cs["manager"]`, the manager's distinguished name in Active Directory). Scenario 9 covers this.
 - Synchronisation integrity rules in `src/JIM.Application/CLAUDE.md` apply: no silent value loss, every failure reported through RPEIs and Activities.
 - No new third-party dependencies.
 
@@ -310,7 +322,7 @@ Account Audit Log (Accumulate)
 | Doc | Change |
 |------|--------|
 | `docs/concepts/attribute-priority.md` | New section on contribution modes, and the resolution diagram's scope stated as Priority mode |
-| `docs/concepts/expression-recipes.md` | Account audit log recipe using `Split` |
+| `docs/concepts/expression-recipes.md` | Account audit log recipe using `Split`, and recording references as text for an Accumulate history |
 | `docs/configuration/deleted-objects.md` | How Accumulate values relate to deletion records and retention |
 | `docs/configuration/` Metaverse attribute and object pages | Mode setting, impact report, manual removal |
 | `docs/powershell/` metaverse pages | New and changed parameters, output shapes, the new cmdlet |
@@ -332,7 +344,7 @@ Account Audit Log (Accumulate)
 ## Acceptance Criteria
 
 - [ ] A multi-valued attribute's mode can be set and read in the portal, REST API and PowerShell; single-valued attributes and Reference attributes in Accumulate are refused.
-- [ ] Scenarios 1 to 8 behave as described, covered by unit tests and an integration scenario.
+- [ ] Scenarios 1 to 9 behave as described, covered by unit tests and an integration scenario.
 - [ ] Every recall path listed in requirement 9 is tested in Merge and Accumulate modes.
 - [ ] Upgrading an existing database changes no resolved value; existing tests pass unchanged.
 - [ ] Mode changes show an impact report, and leaving Accumulate needs confirmation.
