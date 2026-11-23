@@ -74,6 +74,7 @@ public static partial class HardCodedTextScanner
         var context = new ScanContext(source);
         var blanked = BlankRazorComments(source);
         new RazorWalker(blanked, context).Run();
+        FindEnglishOnlyDisplayCalls(blanked, context);
         return context.Results();
     }
 
@@ -83,8 +84,29 @@ public static partial class HardCodedTextScanner
         var context = new ScanContext(source);
         var walker = new RazorWalker(source, context);
         walker.ScanCSharpRange(0, source.Length, insideTextAttribute: false);
+        FindEnglishOnlyDisplayCalls(source, context);
         return context.Results();
     }
+
+    /// <summary>
+    /// A name made readable in code (<c>status.ToString().SplitOnCapitalLetters()</c>, <c>op.ToString().Humanize()</c>)
+    /// is English whatever the reader's language: there is no literal to see, so these calls count as findings
+    /// themselves. Show an enum with <c>EnumDisplay.ForDisplay()</c> instead.
+    /// </summary>
+    private static void FindEnglishOnlyDisplayCalls(string source, ScanContext context)
+    {
+        foreach (Match match in EnglishOnlyDisplayCall().Matches(source))
+        {
+            var lineStart = source.LastIndexOf('\n', Math.Max(0, match.Index - 1)) + 1;
+            if (source.AsSpan(lineStart, match.Index - lineStart).TrimStart().StartsWith("//", StringComparison.Ordinal))
+                continue;
+
+            context.Add(match.Index, match.Value);
+        }
+    }
+
+    [GeneratedRegex(@"\.SplitOnCapitalLetters\(\)|\.ToString\(\)\.Humanize\(")]
+    private static partial Regex EnglishOnlyDisplayCall();
 
     /// <summary>Replaces Razor and HTML comments with spaces, keeping line breaks so line numbers still match.</summary>
     private static string BlankRazorComments(string source)

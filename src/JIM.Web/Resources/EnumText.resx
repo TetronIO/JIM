@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ActivityStatus_NotSet" xml:space="preserve">
+    <value>Not Set</value>
+    <comment>An Activity status.</comment>
+  </data>
+  <data name="ActivityStatus_InProgress" xml:space="preserve">
+    <value>In Progress</value>
+    <comment>An Activity status.</comment>
+  </data>
+  <data name="ActivityStatus_Complete" xml:space="preserve">
+    <value>Complete</value>
+    <comment>An Activity status (une activité: feminine).</comment>
+  </data>
+  <data name="ActivityStatus_CompleteWithWarning" xml:space="preserve">
+    <value>Complete With Warning</value>
+    <comment>An Activity status.</comment>
+  </data>
+  <data name="ActivityStatus_CompleteWithError" xml:space="preserve">
+    <value>Complete With Error</value>
+    <comment>An Activity status.</comment>
+  </data>
+  <data name="ActivityStatus_FailedWithError" xml:space="preserve">
+    <value>Failed With Error</value>
+    <comment>An Activity status.</comment>
+  </data>
+  <data name="ActivityStatus_Cancelled" xml:space="preserve">
+    <value>Cancelled</value>
+    <comment>An Activity status.</comment>
+  </data>
+</root>

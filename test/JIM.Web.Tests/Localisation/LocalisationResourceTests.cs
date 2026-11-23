@@ -203,15 +203,13 @@ public partial class LocalisationResourceTests
     public void EveryCountedText_HasItsSingularAndPlural()
     {
         // A counted text is two keys, XOne and XOther, chosen by the reader's language's plural rule (PluralRules,
-        // JimMessage.Counted). One without the other renders a key name on screen for half the counts.
+        // JimMessage.Counted). One without the other renders a key name on screen for half the counts. Only the
+        // singular is checked from: a key ending "Other" is as often a plain word ("ActivityOperationOther").
         var problems = ResourceFiles.Value
             .Where(file => file.Culture == null)
             .SelectMany(file => file.Values.Keys
                 .Where(key => key.EndsWith("One", StringComparison.Ordinal) && !file.Values.ContainsKey(key[..^3] + "Other"))
-                .Select(key => $"{file.FileName}: '{key}' has no '{key[..^3]}Other'")
-                .Concat(file.Values.Keys
-                    .Where(key => key.EndsWith("Other", StringComparison.Ordinal) && !file.Values.ContainsKey(key[..^5] + "One"))
-                    .Select(key => $"{file.FileName}: '{key}' has no '{key[..^5]}One'")))
+                .Select(key => $"{file.FileName}: '{key}' has no '{key[..^3]}Other'"))
             .ToList();
 
         Assert.That(problems, Is.Empty, string.Join(Environment.NewLine, problems));
