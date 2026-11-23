@@ -530,4 +530,168 @@
     <value>Connected System Objects queued for deletion.</value>
     <comment>Snackbar</comment>
   </data>
+  <data name="PexPageTitle" xml:space="preserve">
+    <value>Pending Export Detail</value>
+    <comment>Page title</comment>
+  </data>
+  <data name="PexHeadingLabel" xml:space="preserve">
+    <value>Pending Export:</value>
+    <comment>Page heading label</comment>
+  </data>
+  <data name="PexTerm" xml:space="preserve">
+    <value>Pending Export</value>
+    <comment>Page info title</comment>
+  </data>
+  <data name="PexPageInfo" xml:space="preserve">
+    <value>A Pending Export is a change JIM has queued for a Connected System and not yet confirmed: the object it applies to, the attribute changes it carries, and how its attempts have gone.</value>
+    <comment>Page info body</comment>
+  </data>
+  <data name="PexCardDetails" xml:space="preserve">
+    <value>Details</value>
+    <comment>Card heading</comment>
+  </data>
+  <data name="PexCardRelated" xml:space="preserve">
+    <value>Related Objects</value>
+    <comment>Card heading</comment>
+  </data>
+  <data name="PexLabelId" xml:space="preserve">
+    <value>ID</value>
+    <comment>Detail row label</comment>
+  </data>
+  <data name="PexLabelHasUnresolved" xml:space="preserve">
+    <value>Has Unresolved References</value>
+    <comment>Detail row label</comment>
+  </data>
+  <data name="PexLabelTarget" xml:space="preserve">
+    <value>Target</value>
+    <comment>Detail row label</comment>
+  </data>
+  <data name="PexLabelSource" xml:space="preserve">
+    <value>Source</value>
+    <comment>Detail row label</comment>
+  </data>
+  <data name="PexNewObject" xml:space="preserve">
+    <value>New object (will be created)</value>
+    <comment>Shown when the target object does not exist yet</comment>
+  </data>
+  <data name="PexErrorInformation" xml:space="preserve">
+    <value>Error Information</value>
+    <comment>Alert heading</comment>
+  </data>
+  <data name="PexLabelFailedAttempts" xml:space="preserve">
+    <value>Failed Attempts</value>
+    <comment>Error table row label</comment>
+  </data>
+  <data name="PexAttemptsAgain" xml:space="preserve">
+    <value>JIM attempts it again at every export run.</value>
+    <comment>Error table note</comment>
+  </data>
+  <data name="PexLabelFailingSince" xml:space="preserve">
+    <value>Failing Since</value>
+    <comment>Error table row label</comment>
+  </data>
+  <data name="PexLabelLastAttempted" xml:space="preserve">
+    <value>Last Attempted</value>
+    <comment>Error table row label</comment>
+  </data>
+  <data name="PexLabelErrorMessage" xml:space="preserve">
+    <value>Error Message</value>
+    <comment>Error table row label</comment>
+  </data>
+  <data name="PexLabelStackTrace" xml:space="preserve">
+    <value>Stack Trace</value>
+    <comment>Error table row label</comment>
+  </data>
+  <data name="PexUnresolvedTitle" xml:space="preserve">
+    <value>Unresolved References</value>
+    <comment>Card heading</comment>
+  </data>
+  <data name="PexUnresolvedIntro" xml:space="preserve">
+    <value>These reference values have not been written to the Connected System yet. Everything else on this Pending Export is written as soon as it can be; each reference is written when the object it refers to can be addressed in this Connected System.</value>
+    <comment>Card intro</comment>
+  </data>
+  <data name="PexColumnReferencedObject" xml:space="preserve">
+    <value>Referenced Object</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="PexColumnReason" xml:space="preserve">
+    <value>Reason</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="PexReasonResolvable" xml:space="preserve">
+    <value>Resolvable on next export</value>
+    <comment>Reason label</comment>
+  </data>
+  <data name="PexReasonAwaitingAnchor" xml:space="preserve">
+    <value>Awaiting anchor</value>
+    <comment>Reason label</comment>
+  </data>
+  <data name="PexReasonNotInSystem" xml:space="preserve">
+    <value>Not in this Connected System</value>
+    <comment>Reason label</comment>
+  </data>
+  <data name="PexExplainResolvable" xml:space="preserve">
+    <value>The referenced object now has an anchor in this Connected System. The reference is written on the next export run.</value>
+    <comment>Tooltip explaining the reason</comment>
+  </data>
+  <data name="PexExplainAwaitingAnchor" xml:space="preserve">
+    <value>The referenced object exists in this Connected System but does not carry an anchor yet. Its own export has not been executed or confirmed. The reference is written once it has.</value>
+    <comment>Tooltip explaining the reason</comment>
+  </data>
+  <data name="PexExplainNotInSystem" xml:space="preserve">
+    <value>The referenced object has no Connected System Object in this Connected System. It is out of scope for every Synchronisation Rule into this system, or has not been provisioned. The reference cannot be written until it is.</value>
+    <comment>Tooltip explaining the reason</comment>
+  </data>
+  <data name="PexAttributeChanges" xml:space="preserve">
+    <value>Attribute Changes</value>
+    <comment>Attribute table title</comment>
+  </data>
+  <data name="PexColumnAttributeFlow" xml:space="preserve">
+    <value>Attribute Flow</value>
+    <comment>Attribute table column header</comment>
+  </data>
+  <data name="PexColumnValueFrom" xml:space="preserve">
+    <value>Value from</value>
+    <comment>Attribute table column header</comment>
+  </data>
+  <data name="PexSeveral" xml:space="preserve">
+    <value>Several</value>
+    <comment>Attribute Flow cell when values have several Synchronisation Rules</comment>
+  </data>
+  <data name="PexChangesOne" xml:space="preserve">
+    <value>{0} change</value>
+    <comment>Attribute table cell; {0} is the count, formatted</comment>
+  </data>
+  <data name="PexChangesOther" xml:space="preserve">
+    <value>{0} changes</value>
+    <comment>Attribute table cell; {0} is the count, formatted</comment>
+  </data>
+  <data name="PexAttributeChangesZero" xml:space="preserve">
+    <value>Attribute Changes (0)</value>
+    <comment>Empty card heading</comment>
+  </data>
+  <data name="PexNoChangesDelete" xml:space="preserve">
+    <value>No attribute changes (object will be deleted).</value>
+    <comment>Empty card text</comment>
+  </data>
+  <data name="PexNoChanges" xml:space="preserve">
+    <value>No attribute changes recorded.</value>
+    <comment>Empty card text</comment>
+  </data>
+  <data name="PexNotFound" xml:space="preserve">
+    <value>This Pending Export is no longer queued. It has either been exported to the Connected System, or been superseded by a later change to the same Connected System Object. Pending Exports are removed once they are no longer waiting to be applied, so links to an individual one stop resolving after its export runs.</value>
+    <comment>Info alert when the export is gone</comment>
+  </data>
+  <data name="PexBackToList" xml:space="preserve">
+    <value>Back to List</value>
+    <comment>Button</comment>
+  </data>
+  <data name="PexBreadcrumbNotFound" xml:space="preserve">
+    <value>Not Found</value>
+    <comment>Breadcrumb</comment>
+  </data>
+  <data name="PexUnknown" xml:space="preserve">
+    <value>Unknown</value>
+    <comment>Shown when an object's name cannot be found</comment>
+  </data>
 </root>

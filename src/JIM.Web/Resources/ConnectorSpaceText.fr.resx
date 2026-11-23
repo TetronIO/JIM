@@ -401,4 +401,127 @@
   <data name="CsoListQueuedForDeletion" xml:space="preserve">
     <value>Les objets de systèmes connectés ont été mis en file d’attente pour suppression.</value>
   </data>
+  <data name="PexPageTitle" xml:space="preserve">
+    <value>Détail de l’exportation en attente</value>
+  </data>
+  <data name="PexHeadingLabel" xml:space="preserve">
+    <value>Exportation en attente :</value>
+  </data>
+  <data name="PexTerm" xml:space="preserve">
+    <value>Exportation en attente</value>
+  </data>
+  <data name="PexPageInfo" xml:space="preserve">
+    <value>Une exportation en attente est une modification que JIM a mise en file d’attente pour un système connecté et qu’il n’a pas encore confirmée : l’objet auquel elle s’applique, les modifications d’attributs qu’elle transporte et le résultat de ses tentatives.</value>
+  </data>
+  <data name="PexCardDetails" xml:space="preserve">
+    <value>Détails</value>
+  </data>
+  <data name="PexCardRelated" xml:space="preserve">
+    <value>Objets liés</value>
+  </data>
+  <data name="PexLabelId" xml:space="preserve">
+    <value>ID</value>
+  </data>
+  <data name="PexLabelHasUnresolved" xml:space="preserve">
+    <value>Contient des références non résolues</value>
+  </data>
+  <data name="PexLabelTarget" xml:space="preserve">
+    <value>Cible</value>
+  </data>
+  <data name="PexLabelSource" xml:space="preserve">
+    <value>Source</value>
+  </data>
+  <data name="PexNewObject" xml:space="preserve">
+    <value>Nouvel objet (sera créé)</value>
+  </data>
+  <data name="PexErrorInformation" xml:space="preserve">
+    <value>Informations sur l’erreur</value>
+  </data>
+  <data name="PexLabelFailedAttempts" xml:space="preserve">
+    <value>Tentatives échouées</value>
+  </data>
+  <data name="PexAttemptsAgain" xml:space="preserve">
+    <value>JIM la retente à chaque exécution d’exportation.</value>
+  </data>
+  <data name="PexLabelFailingSince" xml:space="preserve">
+    <value>En échec depuis</value>
+  </data>
+  <data name="PexLabelLastAttempted" xml:space="preserve">
+    <value>Dernière tentative</value>
+  </data>
+  <data name="PexLabelErrorMessage" xml:space="preserve">
+    <value>Message d’erreur</value>
+  </data>
+  <data name="PexLabelStackTrace" xml:space="preserve">
+    <value>Trace de la pile</value>
+  </data>
+  <data name="PexUnresolvedTitle" xml:space="preserve">
+    <value>Références non résolues</value>
+  </data>
+  <data name="PexUnresolvedIntro" xml:space="preserve">
+    <value>Ces valeurs de référence n’ont pas encore été écrites dans le système connecté. Tout le reste de cette exportation en attente est écrit dès que possible ; chaque référence est écrite lorsque l’objet auquel elle renvoie peut être adressé dans ce système connecté.</value>
+  </data>
+  <data name="PexColumnReferencedObject" xml:space="preserve">
+    <value>Objet référencé</value>
+  </data>
+  <data name="PexColumnReason" xml:space="preserve">
+    <value>Motif</value>
+  </data>
+  <data name="PexReasonResolvable" xml:space="preserve">
+    <value>Résolvable à la prochaine exportation</value>
+  </data>
+  <data name="PexReasonAwaitingAnchor" xml:space="preserve">
+    <value>En attente d’un ancrage</value>
+  </data>
+  <data name="PexReasonNotInSystem" xml:space="preserve">
+    <value>Absent de ce système connecté</value>
+  </data>
+  <data name="PexExplainResolvable" xml:space="preserve">
+    <value>L’objet référencé dispose désormais d’un ancrage dans ce système connecté. La référence est écrite à la prochaine exécution d’exportation.</value>
+  </data>
+  <data name="PexExplainAwaitingAnchor" xml:space="preserve">
+    <value>L’objet référencé existe dans ce système connecté mais ne porte pas encore d’ancrage. Sa propre exportation n’a pas été exécutée ou confirmée. La référence est écrite une fois qu’elle l’a été.</value>
+  </data>
+  <data name="PexExplainNotInSystem" xml:space="preserve">
+    <value>L’objet référencé n’a pas d’objet de système connecté dans ce système connecté. Il est hors périmètre pour chaque règle de synchronisation vers ce système, ou n’a pas été provisionné. La référence ne peut pas être écrite tant que ce n’est pas le cas.</value>
+  </data>
+  <data name="PexAttributeChanges" xml:space="preserve">
+    <value>Modifications d’attributs</value>
+  </data>
+  <data name="PexColumnAttributeFlow" xml:space="preserve">
+    <value>Flux d’attributs</value>
+  </data>
+  <data name="PexColumnValueFrom" xml:space="preserve">
+    <value>Valeur provenant de</value>
+  </data>
+  <data name="PexSeveral" xml:space="preserve">
+    <value>Plusieurs</value>
+  </data>
+  <data name="PexChangesOne" xml:space="preserve">
+    <value>{0} modification</value>
+  </data>
+  <data name="PexChangesOther" xml:space="preserve">
+    <value>{0} modifications</value>
+  </data>
+  <data name="PexAttributeChangesZero" xml:space="preserve">
+    <value>Modifications d’attributs (0)</value>
+  </data>
+  <data name="PexNoChangesDelete" xml:space="preserve">
+    <value>Aucune modification d’attribut (l’objet sera supprimé).</value>
+  </data>
+  <data name="PexNoChanges" xml:space="preserve">
+    <value>Aucune modification d’attribut enregistrée.</value>
+  </data>
+  <data name="PexNotFound" xml:space="preserve">
+    <value>Cette exportation en attente n’est plus en file d’attente. Elle a soit été exportée vers le système connecté, soit remplacée par une modification ultérieure du même objet de système connecté. Les exportations en attente sont supprimées dès qu’elles n’attendent plus d’être appliquées ; les liens vers l’une d’elles cessent donc de fonctionner une fois son exportation exécutée.</value>
+  </data>
+  <data name="PexBackToList" xml:space="preserve">
+    <value>Retour à la liste</value>
+  </data>
+  <data name="PexBreadcrumbNotFound" xml:space="preserve">
+    <value>Introuvable</value>
+  </data>
+  <data name="PexUnknown" xml:space="preserve">
+    <value>Inconnu</value>
+  </data>
 </root>
