@@ -39,7 +39,7 @@ This spike proves that architecture end to end and measures its cost. It is time
 
 - There is no WinRM, PSRP or Exchange code in JIM, and no reference to `System.Management.Automation`.
 - The Worker image ships `libgssapi-krb5-2` (`src/JIM.Worker/Dockerfile`). Today that's only for PostgreSQL and LDAP.
-- The LDAP connector does not use Kerberos or SASL. The AD lab PRD (`engineering/prd/doing/PRD_ACTIVE_DIRECTORY_LAB.md`) lists that as a non-goal, so Kerberos from the container is new ground for this spike.
+- The LDAP connector does not use Kerberos or SASL. The AD lab PRD (`engineering/prd/done/PRD_ACTIVE_DIRECTORY_LAB.md`) lists that as a non-goal, so Kerberos from the container is new ground for this spike.
 - The AD lab provides Windows Server 2025 domain controllers with Exchange schema preparation only. The Exchange servers come with #2412.
 
 ### Spike layout
