@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LabelWorkerSync" xml:space="preserve">
+    <value>Worker · Synchronisierung</value>
+  </data>
+  <data name="LabelWorkerPasswords" xml:space="preserve">
+    <value>Worker · Kennwörter</value>
+  </data>
+  <data name="LabelWorkerExchange" xml:space="preserve">
+    <value>Worker · Exchange</value>
+  </data>
+  <data name="LabelScheduler" xml:space="preserve">
+    <value>Scheduler</value>
+  </data>
+  <data name="StatusHealthy" xml:space="preserve">
+    <value>Fehlerfrei</value>
+  </data>
+  <data name="StatusDegraded" xml:space="preserve">
+    <value>Beeinträchtigt</value>
+  </data>
+  <data name="StatusUnhealthy" xml:space="preserve">
+    <value>Gestört</value>
+  </data>
+  <data name="SummaryAllHealthy" xml:space="preserve">
+    <value>Alle Dienste fehlerfrei</value>
+  </data>
+  <data name="SummaryUnhealthyOne" xml:space="preserve">
+    <value>{0} Dienst gestört</value>
+  </data>
+  <data name="SummaryUnhealthyOther" xml:space="preserve">
+    <value>{0} Dienste gestört</value>
+  </data>
+  <data name="SummaryDegradedOne" xml:space="preserve">
+    <value>{0} Dienst beeinträchtigt</value>
+  </data>
+  <data name="SummaryDegradedOther" xml:space="preserve">
+    <value>{0} Dienste beeinträchtigt</value>
+  </data>
+  <data name="SummaryDegradedContinuationOne" xml:space="preserve">
+    <value>{0} beeinträchtigt</value>
+  </data>
+  <data name="SummaryDegradedContinuationOther" xml:space="preserve">
+    <value>{0} beeinträchtigt</value>
+  </data>
+  <data name="Idle" xml:space="preserve">
+    <value>Leerlauf</value>
+  </data>
+  <data name="WasRunning" xml:space="preserve">
+    <value>Lief zuletzt: {0}</value>
+  </data>
+  <data name="LastHeartbeat" xml:space="preserve">
+    <value>Letzter Heartbeat {0}</value>
+  </data>
+  <data name="Up" xml:space="preserve">
+    <value>läuft seit {0}</value>
+  </data>
+  <data name="CompactSeconds" xml:space="preserve">
+    <value>{0} s</value>
+  </data>
+  <data name="CompactMinutes" xml:space="preserve">
+    <value>{0} Min.</value>
+  </data>
+  <data name="CompactHours" xml:space="preserve">
+    <value>{0} Std.</value>
+  </data>
+  <data name="CompactDays" xml:space="preserve">
+    <value>{0} T.</value>
+  </data>
+  <data name="NextToday" xml:space="preserve">
+    <value>heute {0}</value>
+  </data>
+  <data name="NextTomorrow" xml:space="preserve">
+    <value>morgen {0}</value>
+  </data>
+  <data name="NextCountdown" xml:space="preserve">
+    <value>in {0}</value>
+  </data>
+  <data name="NextScheduleHeader" xml:space="preserve">
+    <value>nächster Zeitplan {0}</value>
+  </data>
+  <data name="MemoryLowWorker" xml:space="preserve">
+    <value>Der Arbeitsspeicher des Workers wird knapp: {0} von {1} belegt, davon {2} durch den Worker.</value>
+  </data>
+  <data name="MemoryWorkerRemedy" xml:space="preserve">
+    <value>Bei {0} beendet der Worker seine laufende Arbeit, statt mittendrin abgebrochen zu werden; geben Sie JIM mehr Arbeitsspeicher oder führen Sie weniger gleichzeitig aus.</value>
+  </data>
+  <data name="MemoryLowScheduler" xml:space="preserve">
+    <value>Der Arbeitsspeicher des Schedulers wird knapp: {0} von {1} belegt, davon {2} durch den Scheduler.</value>
+  </data>
+  <data name="MemoryRemedy" xml:space="preserve">
+    <value>Geben Sie JIM mehr Arbeitsspeicher.</value>
+  </data>
+  <data name="NameWorker" xml:space="preserve">
+    <value>der Worker</value>
+  </data>
+  <data name="NameWorkerSync" xml:space="preserve">
+    <value>der Synchronisierungsdienst des Workers</value>
+  </data>
+  <data name="NameWorkerPasswords" xml:space="preserve">
+    <value>der Kennwortzustelldienst des Workers</value>
+  </data>
+  <data name="NameWorkerExchange" xml:space="preserve">
+    <value>der Exchange-Zustelldienst des Workers</value>
+  </data>
+  <data name="NameScheduler" xml:space="preserve">
+    <value>der Scheduler</value>
+  </data>
+  <data name="ListAnd" xml:space="preserve">
+    <value>{0} und {1}</value>
+  </data>
+  <data name="ListOr" xml:space="preserve">
+    <value>{0} oder {1}</value>
+  </data>
+  <data name="NeverReportedOne" xml:space="preserve">
+    <value>{0} hat sich noch nie gemeldet.</value>
+  </data>
+  <data name="NeverReportedOther" xml:space="preserve">
+    <value>{0} haben sich noch nie gemeldet.</value>
+  </data>
+  <data name="NotReportedOne" xml:space="preserve">
+    <value>{0} hat sich seit {1} nicht gemeldet.</value>
+  </data>
+  <data name="NotReportedOther" xml:space="preserve">
+    <value>{0} haben sich seit {1} nicht gemeldet.</value>
+  </data>
+  <data name="StoppedSynchronised" xml:space="preserve">
+    <value>synchronisiert</value>
+  </data>
+  <data name="StoppedDelivered" xml:space="preserve">
+    <value>zugestellt</value>
+  </data>
+  <data name="StoppedScheduled" xml:space="preserve">
+    <value>geplant</value>
+  </data>
+  <data name="NothingBeingOne" xml:space="preserve">
+    <value>Es wird nichts {0}; Arbeit in der Warteschlange bleibt erhalten und wird fortgesetzt, sobald er wieder läuft.</value>
+  </data>
+  <data name="NothingBeingOther" xml:space="preserve">
+    <value>Es wird nichts {0}; Arbeit in der Warteschlange bleibt erhalten und wird fortgesetzt, sobald sie wieder laufen.</value>
+  </data>
+  <data name="Stalled" xml:space="preserve">
+    <value>{0} hat bei {1} keinen Fortschritt gemacht.</value>
+  </data>
+  <data name="StalledFor" xml:space="preserve">
+    <value>{0} hat bei {1} seit {2} keinen Fortschritt gemacht.</value>
+  </data>
+  <data name="BannerOperationsLink" xml:space="preserve">
+    <value>Betrieb</value>
+  </data>
+  <data name="BannerLogsLink" xml:space="preserve">
+    <value>Protokolle</value>
+  </data>
+  <data name="MemoryDetail" xml:space="preserve">
+    <value>{0} belegt · {1} von {2} in Verwendung</value>
+  </data>
+</root>

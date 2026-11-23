@@ -8,34 +8,34 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <MudNavMenu Color="Color.Primary" Class="pt-3 pb-3 jim-nav-menu">
-    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home" Class="jim-nav-top-level">Home</MudNavLink>
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home" Class="jim-nav-top-level">@LayoutText.NavHome</MudNavLink>
 
     @if (_usersEnabled)
     {
-        <MudNavGroup Title="Users" Expanded="_usersExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "users"))" Icon="@_userIcon" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
-            <MudNavLink Href="/t/users" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">All Users</MudNavLink>
+        <MudNavGroup Title="@LayoutText.NavUsers" Expanded="_usersExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "users"))" Icon="@_userIcon" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+            <MudNavLink Href="/t/users" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">@LayoutText.NavAllUsers</MudNavLink>
             @if (_peopleEnabled)
             {
-                <MudNavLink Href="/t/users/s/people" Match="NavLinkMatch.Prefix" Class="jim-nav-child">People</MudNavLink>
+                <MudNavLink Href="/t/users/s/people" Match="NavLinkMatch.Prefix" Class="jim-nav-child">@LayoutText.NavPeople</MudNavLink>
             }
             @if (_servicePrincipalsEnabled)
             {
-                <MudNavLink Href="/t/users/s/service-principals" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Service Principals</MudNavLink>
+                <MudNavLink Href="/t/users/s/service-principals" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">@LayoutText.NavServicePrincipals</MudNavLink>
             }
         </MudNavGroup>
     }
 
     @if (_groupsEnabled)
     {
-        <MudNavGroup Title="Groups" Expanded="_groupsExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "groups"))" Icon="@_groupIcon" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
-            <MudNavLink Href="/t/groups" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">All Groups</MudNavLink>
+        <MudNavGroup Title="@LayoutText.NavGroups" Expanded="_groupsExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "groups"))" Icon="@_groupIcon" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+            <MudNavLink Href="/t/groups" Match="NavLinkMatch.All" Class="jim-nowrap jim-nav-child">@LayoutText.NavAllGroups</MudNavLink>
             @if (_securityGroupsEnabled)
             {
-                <MudNavLink Href="/t/groups/s/security-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Security Groups</MudNavLink>
+                <MudNavLink Href="/t/groups/s/security-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">@LayoutText.NavSecurityGroups</MudNavLink>
             }
             @if (_distributionGroupsEnabled)
             {
-                <MudNavLink Href="/t/groups/s/distribution-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Distribution Groups</MudNavLink>
+                <MudNavLink Href="/t/groups/s/distribution-groups" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">@LayoutText.NavDistributionGroups</MudNavLink>
             }
         </MudNavGroup>
     }
@@ -51,21 +51,21 @@
     </AuthorizeView>
     *@
 
-    <MudNavGroup Title="Activity" Expanded="_activityExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "activity"))" Icon="@Icons.Material.Filled.DynamicFeed" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+    <MudNavGroup Title="@LayoutText.NavActivityGroup" Expanded="_activityExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "activity"))" Icon="@Icons.Material.Filled.DynamicFeed" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
         @* Prefix matching keeps this link lit on the Activity detail pages (/activity/{id}, /activity/item/{id}),
            but /activity/mine and /activity/object-changes are also under that prefix and belong to the links below;
            flip to exact matching while on either so only its own link is highlighted. *@
-        <MudNavLink Href="/activity" Match="@(IsOnActivitySubPage ? NavLinkMatch.All : NavLinkMatch.Prefix)" Class="jim-nav-child">Activity</MudNavLink>
-        <MudNavLink Href="/activity/mine" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">My Activity</MudNavLink>
-        <MudNavLink Href="/activity/object-changes" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Object Changes</MudNavLink>
+        <MudNavLink Href="/activity" Match="@(IsOnActivitySubPage ? NavLinkMatch.All : NavLinkMatch.Prefix)" Class="jim-nav-child">@LayoutText.NavActivity</MudNavLink>
+        <MudNavLink Href="/activity/mine" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">@LayoutText.NavMyActivity</MudNavLink>
+        <MudNavLink Href="/activity/object-changes" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">@LayoutText.NavObjectChanges</MudNavLink>
     </MudNavGroup>
 
     <AuthorizeView Roles="Administrator">
-        <MudNavGroup Title="Admin" Expanded="_adminExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "admin"))" Icon="@Icons.Material.Filled.Settings" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
-            <MudNavLink Href="/admin/operations" Match="NavLinkMatch.Prefix" Class="jim-nav-child">Operations</MudNavLink>
-            <MudNavLink Href="/admin/connected-systems" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Connected Systems</MudNavLink>
-            <MudNavLink Href="/admin/sync-rules" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">Synchronisation Rules</MudNavLink>
-            <MudNavLink Href="/admin" Match="NavLinkMatch.All" Class="jim-nav-child">Administration</MudNavLink>
+        <MudNavGroup Title="@LayoutText.NavAdmin" Expanded="_adminExpanded" ExpandedChanged="@(expanded => OnGroupExpandedChangedAsync(expanded, "admin"))" Icon="@Icons.Material.Filled.Settings" HideExpandIcon="@(!DrawerOpen)" Class="jim-nav-top-level">
+            <MudNavLink Href="/admin/operations" Match="NavLinkMatch.Prefix" Class="jim-nav-child">@LayoutText.NavOperations</MudNavLink>
+            <MudNavLink Href="/admin/connected-systems" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">@LayoutText.NavConnectedSystems</MudNavLink>
+            <MudNavLink Href="/admin/sync-rules" Match="NavLinkMatch.Prefix" Class="jim-nowrap jim-nav-child">@LayoutText.NavSynchronisationRules</MudNavLink>
+            <MudNavLink Href="/admin" Match="NavLinkMatch.All" Class="jim-nav-child">@LayoutText.NavAdministration</MudNavLink>
         </MudNavGroup>
     </AuthorizeView>
 </MudNavMenu>

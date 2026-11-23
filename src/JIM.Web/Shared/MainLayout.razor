@@ -40,22 +40,22 @@ else
                 @if (!IsDrawerOpen && !string.IsNullOrEmpty(_serviceName))
                 {
                     <MudTooltip Text="@_serviceName" Arrow="true" Placement="Placement.Right">
-                        <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="JIM Logo"></MudImage>
+                        <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="@LayoutText.LogoAlt"></MudImage>
                     </MudTooltip>
                 }
                 else
                 {
-                    <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="JIM Logo"></MudImage>
+                    <MudImage Src="/images/jim-logo.png" Width="28" Class="mt-4 ms-4 mb-3" Alt="@LayoutText.LogoAlt"></MudImage>
                 }
                 @if (IsDrawerOpen)
                 {
                     <MudText Class="ms-2 jim-drawer-logo-text">JIM</MudText>
-                    <MudTooltip Text="@(IsDrawerPinned ? "Collapse sidebar" : "Pin sidebar open")" Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="@(IsDrawerPinned ? LayoutText.CollapseSidebar : LayoutText.PinSidebarOpen)" Arrow="true" Placement="Placement.Top">
                         <MudIconButton Icon="@Icons.Material.Filled.MenuOpen"
                                        Size="Size.Small"
                                        OnClick="ToggleDrawerPinned"
                                        Class="@($"jim-drawer-toggle{(IsDrawerPinned ? "" : " jim-drawer-toggle-collapsed")}")"
-                                       aria-label="@(IsDrawerPinned ? "Collapse sidebar" : "Pin sidebar open")" />
+                                       aria-label="@(IsDrawerPinned ? LayoutText.CollapseSidebar : LayoutText.PinSidebarOpen)" />
                     </MudTooltip>
                 }
             </div>
@@ -97,7 +97,7 @@ else
                                 Tetron
                             </MudLink>
                             <span class="jim-page-footer-sep">|</span>
-                            <span>All rights reserved</span>
+                            <span>@LayoutText.FooterAllRightsReserved</span>
                             <span class="jim-page-footer-sep">|</span>
                             <span>v@(AppVersion)</span>
                             @if (!string.IsNullOrEmpty(_serviceName))
@@ -140,10 +140,10 @@ else
             {
                 FontFamily =
                 [
-                    "IBM Plex Sans",
+                    "IBM Plex Sans", // i18n: exempt - a font name, not text
                     "-apple-system",
-                    "Segoe UI Variable Display",
-                    "Helvetica Neue",
+                    "Segoe UI Variable Display", // i18n: exempt - a font name, not text
+                    "Helvetica Neue", // i18n: exempt - a font name, not text
                     "Arial"
                 ],
                 FontWeight = "400",

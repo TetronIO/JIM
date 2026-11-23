@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="RelativeJustNow" xml:space="preserve">
+    <value>just now</value>
+    <comment>A moment that has just passed, under a minute ago.</comment>
+  </data>
+  <data name="RelativeUnderAMinute" xml:space="preserve">
+    <value>in under a minute</value>
+    <comment>A moment less than a minute away.</comment>
+  </data>
+  <data name="RelativeAgo" xml:space="preserve">
+    <value>{0} ago</value>
+    <comment>{0} is a counted unit from the Relative* unit keys, e.g. "3 hours".</comment>
+  </data>
+  <data name="RelativeIn" xml:space="preserve">
+    <value>in {0}</value>
+    <comment>{0} is a counted unit from the Relative* unit keys, e.g. "3 hours".</comment>
+  </data>
+  <data name="RelativeSecondOne" xml:space="preserve">
+    <value>{0} second</value>
+    <comment>Singular, inside a sentence ("for {0}", "{0} ago"). German: dative case.</comment>
+  </data>
+  <data name="RelativeSecondOther" xml:space="preserve">
+    <value>{0} seconds</value>
+    <comment>Plural, inside a sentence. German: dative case.</comment>
+  </data>
+  <data name="RelativeMinuteOne" xml:space="preserve">
+    <value>{0} minute</value>
+    <comment>Singular, inside RelativeAgo or RelativeIn. German: dative case.</comment>
+  </data>
+  <data name="RelativeMinuteOther" xml:space="preserve">
+    <value>{0} minutes</value>
+    <comment>Plural, inside RelativeAgo or RelativeIn. German: dative case.</comment>
+  </data>
+  <data name="RelativeHourOne" xml:space="preserve">
+    <value>{0} hour</value>
+    <comment>Singular, inside RelativeAgo or RelativeIn. German: dative case.</comment>
+  </data>
+  <data name="RelativeHourOther" xml:space="preserve">
+    <value>{0} hours</value>
+    <comment>Plural, inside RelativeAgo or RelativeIn. German: dative case.</comment>
+  </data>
+  <data name="RelativeDayOne" xml:space="preserve">
+    <value>{0} day</value>
+    <comment>Singular, inside RelativeAgo or RelativeIn. German: dative case.</comment>
+  </data>
+  <data name="RelativeDayOther" xml:space="preserve">
+    <value>{0} days</value>
+    <comment>Plural, inside RelativeAgo or RelativeIn. German: dative case.</comment>
+  </data>
+  <data name="RelativeMonthOne" xml:space="preserve">
+    <value>{0} month</value>
+    <comment>Singular, inside RelativeAgo or RelativeIn. German: dative case.</comment>
+  </data>
+  <data name="RelativeMonthOther" xml:space="preserve">
+    <value>{0} months</value>
+    <comment>Plural, inside RelativeAgo or RelativeIn. German: dative case.</comment>
+  </data>
+  <data name="RelativeYearOne" xml:space="preserve">
+    <value>{0} year</value>
+    <comment>Singular, inside RelativeAgo or RelativeIn. German: dative case.</comment>
+  </data>
+  <data name="RelativeYearOther" xml:space="preserve">
+    <value>{0} years</value>
+    <comment>Plural, inside RelativeAgo or RelativeIn. German: dative case.</comment>
+  </data>
+</root>

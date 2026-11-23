@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Cancel" xml:space="preserve">
+    <value>Cancel</value>
+    <comment>A button that closes a dialog without doing anything.</comment>
+  </data>
+  <data name="ClearSearch" xml:space="preserve">
+    <value>Clear Search</value>
+    <comment>Button in an empty table whose search matched nothing.</comment>
+  </data>
+  <data name="TrySearchAgain" xml:space="preserve">
+    <value>Try a different search term, or clear the search.</value>
+    <comment>Secondary text in an empty table whose search matched nothing.</comment>
+  </data>
+  <data name="Never" xml:space="preserve">
+    <value>Never</value>
+    <comment>A time that has not happened, e.g. a Schedule that has never run.</comment>
+  </data>
+  <data name="Enabled" xml:space="preserve">
+    <value>Enabled</value>
+    <comment>Status chip.</comment>
+  </data>
+  <data name="Disabled" xml:space="preserve">
+    <value>Disabled</value>
+    <comment>Status chip.</comment>
+  </data>
+  <data name="ColumnName" xml:space="preserve">
+    <value>Name</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="ColumnStatus" xml:space="preserve">
+    <value>Status</value>
+    <comment>Table column heading.</comment>
+  </data>
+</root>

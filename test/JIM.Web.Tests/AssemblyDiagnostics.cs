@@ -3,6 +3,12 @@
 
 using NUnit.Framework;
 
+// Portal text is localised (#3030), so the culture a test runs in decides the words it renders. Pin the whole
+// assembly to the portal's default language, British English, so a test asserting on "Synchronisation" passes on a
+// machine whose own culture is en-US, de-DE or invariant. A test about another language sets its culture itself.
+[assembly: SetCulture("en-GB")]
+[assembly: SetUICulture("en-GB")]
+
 // Enables per-test memory snapshots when JIM_TEST_MEMORY_LOG is set. No-op otherwise.
 [assembly: JIM.TestSupport.MemoryLogging]
 

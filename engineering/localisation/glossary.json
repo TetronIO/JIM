@@ -1,0 +1,82 @@
+{
+  "$comment": "JIM's domain vocabulary in every portal language (#3030). Each term's patterns are regular expressions: wherever a neutral (en-GB) resource value matches 'en-GB', the same key's value in each other language must match that language's pattern. LocalisationResourceTests enforces it. Patterns for de and fr are matched case-insensitively, since German and French write these terms as ordinary nouns. Read engineering/LOCALISATION.md before adding a term.",
+  "terms": [
+    {
+      "term": "Synchronisation Rule",
+      "en-GB": "Synchronisation Rules?",
+      "en-US": "Synchronization Rules?",
+      "de": "Synchronisierungsregel",
+      "fr": "règles? de synchronisation"
+    },
+    {
+      "term": "Connected System Object",
+      "en-GB": "Connected System Objects?",
+      "en-US": "Connected System Objects?",
+      "de": "Objekte? (des|der|im|in) verbundenen? Systeme?n?",
+      "fr": "objets? de systèmes? connectés?"
+    },
+    {
+      "term": "Connected System",
+      "en-GB": "Connected Systems?(?! Objects?)",
+      "en-US": "Connected Systems?(?! Objects?)",
+      "de": "verbunden\\w* System",
+      "fr": "systèmes? connectés?"
+    },
+    {
+      "term": "Metaverse Object",
+      "en-GB": "Metaverse Objects?",
+      "en-US": "Metaverse Objects?",
+      "de": "Metaverse-Objekt",
+      "fr": "objets? Metaverse"
+    },
+    {
+      "term": "Run Profile",
+      "en-GB": "Run Profiles?",
+      "en-US": "Run Profiles?",
+      "de": "Ausführungsprofil",
+      "fr": "profils? d’exécution"
+    },
+    {
+      "term": "Schedule",
+      "en-GB": "\\bSchedules?\\b",
+      "en-US": "\\bSchedules?\\b",
+      "de": "Zeitpl[aä]n",
+      "fr": "planifications?"
+    },
+    {
+      "term": "Activity",
+      "en-GB": "\\bActivit(y|ies)\\b",
+      "en-US": "\\bActivit(y|ies)\\b",
+      "de": "Aktivität",
+      "fr": "activités?"
+    },
+    {
+      "term": "Attribute Flow",
+      "en-GB": "Attribute Flows?",
+      "en-US": "Attribute Flows?",
+      "de": "Attributfl[uü]ss",
+      "fr": "flux d’attributs"
+    },
+    {
+      "term": "Pending Export",
+      "en-GB": "Pending Exports?",
+      "en-US": "Pending Exports?",
+      "de": "ausstehende\\w* Export",
+      "fr": "exportations? en attente"
+    },
+    {
+      "term": "Object Matching Rule",
+      "en-GB": "Object Matching Rules?",
+      "en-US": "Object Matching Rules?",
+      "de": "Objektabgleichsregel",
+      "fr": "règles? de correspondance d’objets"
+    },
+    {
+      "term": "Connector Space",
+      "en-GB": "Connector Space",
+      "en-US": "Connector Space",
+      "de": "Connectorbereich",
+      "fr": "espace connecteur"
+    }
+  ]
+}

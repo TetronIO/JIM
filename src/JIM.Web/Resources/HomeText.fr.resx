@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="PageTitle" xml:space="preserve">
+    <value>Accueil JIM</value>
+  </data>
+  <data name="Welcome" xml:space="preserve">
+    <value>Bienvenue</value>
+  </data>
+  <data name="WelcomeSubtitle" xml:space="preserve">
+    <value>dans Junctional Identity Manager</value>
+  </data>
+  <data name="GettingStarted" xml:space="preserve">
+    <value>Prise en main</value>
+  </data>
+  <data name="GettingStartedIntro" xml:space="preserve">
+    <value>Effectuez ces étapes pour commencer à synchroniser les systèmes connectés.</value>
+  </data>
+  <data name="CreateConnectedSystem" xml:space="preserve">
+    <value>Créer un système connecté</value>
+  </data>
+  <data name="CreateSynchronisationRules" xml:space="preserve">
+    <value>Créer des règles de synchronisation</value>
+  </data>
+  <data name="CreateSchedule" xml:space="preserve">
+    <value>Créer une planification</value>
+  </data>
+  <data name="RunFirstSynchronisation" xml:space="preserve">
+    <value>Lancer votre première synchronisation</value>
+  </data>
+  <data name="StatUsers" xml:space="preserve">
+    <value>Utilisateurs</value>
+  </data>
+  <data name="StatGroups" xml:space="preserve">
+    <value>Groupes</value>
+  </data>
+  <data name="StatConnectedSystems" xml:space="preserve">
+    <value>Systèmes connectés</value>
+  </data>
+  <data name="StatSynchronisationRules" xml:space="preserve">
+    <value>Règles de synchronisation</value>
+  </data>
+  <data name="SchedulesHeading" xml:space="preserve">
+    <value>Planifications</value>
+  </data>
+  <data name="ScheduleSingular" xml:space="preserve">
+    <value>Planification</value>
+  </data>
+  <data name="SchedulePlural" xml:space="preserve">
+    <value>Planifications</value>
+  </data>
+  <data name="SearchSchedules" xml:space="preserve">
+    <value>Rechercher des planifications</value>
+  </data>
+  <data name="ColumnTrigger" xml:space="preserve">
+    <value>Déclencheur</value>
+  </data>
+  <data name="ColumnLastRun" xml:space="preserve">
+    <value>Dernière exécution</value>
+  </data>
+  <data name="ColumnNextRun" xml:space="preserve">
+    <value>Prochaine exécution</value>
+  </data>
+  <data name="TriggerManual" xml:space="preserve">
+    <value>Manuel</value>
+  </data>
+  <data name="NoSchedulesMatch" xml:space="preserve">
+    <value>Aucune planification ne correspond à « {0} »</value>
+  </data>
+  <data name="NoSchedulesYet" xml:space="preserve">
+    <value>Aucune planification n’a encore été créée</value>
+  </data>
+  <data name="NoSchedulesYetHint" xml:space="preserve">
+    <value>Une planification exécute des profils d’exécution selon un déclencheur récurrent ; créez-en une pour synchroniser sans intervention.</value>
+  </data>
+  <data name="QuickLinks" xml:space="preserve">
+    <value>Liens rapides</value>
+  </data>
+  <data name="QuickUsers" xml:space="preserve">
+    <value>Utilisateurs</value>
+  </data>
+  <data name="QuickGroups" xml:space="preserve">
+    <value>Groupes</value>
+  </data>
+  <data name="QuickActivity" xml:space="preserve">
+    <value>Activité</value>
+  </data>
+  <data name="QuickOperations" xml:space="preserve">
+    <value>Opérations</value>
+  </data>
+  <data name="QuickConnectedSystems" xml:space="preserve">
+    <value>Systèmes connectés</value>
+  </data>
+  <data name="QuickSynchronisationRules" xml:space="preserve">
+    <value>Règles de synchronisation</value>
+  </data>
+  <data name="QuickSettings" xml:space="preserve">
+    <value>Paramètres</value>
+  </data>
+</root>

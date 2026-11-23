@@ -10,16 +10,16 @@
                     <UserNotAuthorised />
                 </NotAuthorized>
                 <Authorizing>
-                    <h1>Authorization in progress</h1>
-                    <p>Only visible while authorization is in progress.</p>
+                    <h1>@LayoutText.AuthorisingHeading</h1>
+                    <p>@LayoutText.AuthorisingMessage</p>
                 </Authorizing>
             </AuthorizeRouteView>
             <FocusOnNavigate RouteData="@routeData" Selector="h1" />
         </Found>
         <NotFound>
-            <PageTitle>Not found</PageTitle>
+            <PageTitle>@LayoutText.NotFoundTitle</PageTitle>
             <LayoutView Layout="@typeof(MainLayout)">
-                <p role="alert">Sorry, there's nothing at this address.</p>
+                <p role="alert">@LayoutText.NotFoundMessage</p>
             </LayoutView>
         </NotFound>
     </Router>

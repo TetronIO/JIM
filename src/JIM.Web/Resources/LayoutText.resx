@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AuthorisingHeading" xml:space="preserve">
+    <value>Authorisation in progress</value>
+    <comment>Shown only while the router checks the user's roles.</comment>
+  </data>
+  <data name="AuthorisingMessage" xml:space="preserve">
+    <value>Only visible while authorisation is in progress.</value>
+  </data>
+  <data name="NotFoundTitle" xml:space="preserve">
+    <value>Not found</value>
+    <comment>Browser tab title for an unknown address.</comment>
+  </data>
+  <data name="NotFoundMessage" xml:space="preserve">
+    <value>Sorry, there's nothing at this address.</value>
+  </data>
+  <data name="LogoAlt" xml:space="preserve">
+    <value>JIM logo</value>
+    <comment>Alternative text for the logo image.</comment>
+  </data>
+  <data name="CollapseSidebar" xml:space="preserve">
+    <value>Collapse sidebar</value>
+  </data>
+  <data name="PinSidebarOpen" xml:space="preserve">
+    <value>Pin sidebar open</value>
+  </data>
+  <data name="FooterAllRightsReserved" xml:space="preserve">
+    <value>All rights reserved</value>
+    <comment>Page footer, after the copyright year and company name.</comment>
+  </data>
+  <data name="NavHome" xml:space="preserve">
+    <value>Home</value>
+    <comment>Navigation menu.</comment>
+  </data>
+  <data name="NavUsers" xml:space="preserve">
+    <value>Users</value>
+    <comment>Navigation menu group.</comment>
+  </data>
+  <data name="NavAllUsers" xml:space="preserve">
+    <value>All Users</value>
+    <comment>Navigation menu.</comment>
+  </data>
+  <data name="NavPeople" xml:space="preserve">
+    <value>People</value>
+    <comment>Navigation menu.</comment>
+  </data>
+  <data name="NavServicePrincipals" xml:space="preserve">
+    <value>Service Principals</value>
+    <comment>Navigation menu.</comment>
+  </data>
+  <data name="NavGroups" xml:space="preserve">
+    <value>Groups</value>
+    <comment>Navigation menu group.</comment>
+  </data>
+  <data name="NavAllGroups" xml:space="preserve">
+    <value>All Groups</value>
+    <comment>Navigation menu.</comment>
+  </data>
+  <data name="NavSecurityGroups" xml:space="preserve">
+    <value>Security Groups</value>
+    <comment>Navigation menu.</comment>
+  </data>
+  <data name="NavDistributionGroups" xml:space="preserve">
+    <value>Distribution Groups</value>
+    <comment>Navigation menu.</comment>
+  </data>
+  <data name="NavActivityGroup" xml:space="preserve">
+    <value>Activity</value>
+    <comment>Navigation menu group heading.</comment>
+  </data>
+  <data name="NavActivity" xml:space="preserve">
+    <value>Activity</value>
+    <comment>Navigation menu: the list of every Activity.</comment>
+  </data>
+  <data name="NavMyActivity" xml:space="preserve">
+    <value>My Activity</value>
+    <comment>Navigation menu: Activities the signed-in user started.</comment>
+  </data>
+  <data name="NavObjectChanges" xml:space="preserve">
+    <value>Object Changes</value>
+    <comment>Navigation menu.</comment>
+  </data>
+  <data name="NavAdmin" xml:space="preserve">
+    <value>Admin</value>
+    <comment>Navigation menu group heading; kept short.</comment>
+  </data>
+  <data name="NavOperations" xml:space="preserve">
+    <value>Operations</value>
+    <comment>Navigation menu.</comment>
+  </data>
+  <data name="NavConnectedSystems" xml:space="preserve">
+    <value>Connected Systems</value>
+    <comment>Navigation menu.</comment>
+  </data>
+  <data name="NavSynchronisationRules" xml:space="preserve">
+    <value>Synchronisation Rules</value>
+    <comment>Navigation menu.</comment>
+  </data>
+  <data name="NavAdministration" xml:space="preserve">
+    <value>Administration</value>
+    <comment>Navigation menu: the administration landing page.</comment>
+  </data>
+  <data name="UserMenuDarkMode" xml:space="preserve">
+    <value>Dark mode</value>
+    <comment>User menu toggle.</comment>
+  </data>
+  <data name="UserMenuLanguage" xml:space="preserve">
+    <value>Language</value>
+    <comment>User menu: heading for the language choice.</comment>
+  </data>
+  <data name="UserMenuViewClaims" xml:space="preserve">
+    <value>View claims</value>
+    <comment>User menu, development builds only.</comment>
+  </data>
+  <data name="UserMenuSignOut" xml:space="preserve">
+    <value>Sign out</value>
+    <comment>User menu.</comment>
+  </data>
+  <data name="LanguagePreview" xml:space="preserve">
+    <value>{0} (preview)</value>
+    <comment>A language offered in development builds only, while its translation is incomplete. {0} is the language's own name.</comment>
+  </data>
+  <data name="SignOutDialogTitle" xml:space="preserve">
+    <value>Sign Out</value>
+    <comment>Confirmation dialog title.</comment>
+  </data>
+  <data name="SignOutDialogMessage" xml:space="preserve">
+    <value>Are you sure you want to sign out?</value>
+  </data>
+  <data name="SignOutDialogConfirm" xml:space="preserve">
+    <value>Sign out</value>
+    <comment>Confirmation dialog button.</comment>
+  </data>
+  <data name="ReconnectMessage" xml:space="preserve">
+    <value>Attempting to reconnect to JIM...</value>
+    <comment>Shown when the browser loses its connection to the server.</comment>
+  </data>
+  <data name="ReconnectReloading" xml:space="preserve">
+    <value>Reloading...</value>
+    <comment>Shown when reconnection gives up and the page reloads.</comment>
+  </data>
+  <data name="ReconnectAttempt" xml:space="preserve">
+    <value>Attempt {0} of {1}...</value>
+    <comment>{0} is the attempt number, {1} the maximum.</comment>
+  </data>
+  <data name="ErrorProduction" xml:space="preserve">
+    <value>An error has occurred. This application may no longer respond until reloaded.</value>
+  </data>
+  <data name="ErrorDevelopment" xml:space="preserve">
+    <value>An unhandled exception has occurred. See browser dev tools for details.</value>
+  </data>
+  <data name="ErrorReload" xml:space="preserve">
+    <value>Reload</value>
+  </data>
+  <data name="ErrorDismiss" xml:space="preserve">
+    <value>Dismiss</value>
+    <comment>Accessible name of the close button on the error bar.</comment>
+  </data>
+</root>

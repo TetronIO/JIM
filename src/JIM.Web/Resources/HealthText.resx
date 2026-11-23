@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LabelWorkerSync" xml:space="preserve">
+    <value>Worker · Sync</value>
+    <comment>Service card title. "Worker" and "Scheduler" are the names of JIM's services and stay as they are.</comment>
+  </data>
+  <data name="LabelWorkerPasswords" xml:space="preserve">
+    <value>Worker · Passwords</value>
+    <comment>Service card title.</comment>
+  </data>
+  <data name="LabelWorkerExchange" xml:space="preserve">
+    <value>Worker · Exchange</value>
+    <comment>Service card title. Exchange is a product name.</comment>
+  </data>
+  <data name="LabelScheduler" xml:space="preserve">
+    <value>Scheduler</value>
+    <comment>Service card title; the service's name.</comment>
+  </data>
+  <data name="StatusHealthy" xml:space="preserve">
+    <value>Healthy</value>
+    <comment>A service's health status.</comment>
+  </data>
+  <data name="StatusDegraded" xml:space="preserve">
+    <value>Degraded</value>
+    <comment>A service's health status.</comment>
+  </data>
+  <data name="StatusUnhealthy" xml:space="preserve">
+    <value>Unhealthy</value>
+    <comment>A service's health status.</comment>
+  </data>
+  <data name="SummaryAllHealthy" xml:space="preserve">
+    <value>All services healthy</value>
+  </data>
+  <data name="SummaryUnhealthyOne" xml:space="preserve">
+    <value>{0} service unhealthy</value>
+  </data>
+  <data name="SummaryUnhealthyOther" xml:space="preserve">
+    <value>{0} services unhealthy</value>
+  </data>
+  <data name="SummaryDegradedOne" xml:space="preserve">
+    <value>{0} service degraded</value>
+  </data>
+  <data name="SummaryDegradedOther" xml:space="preserve">
+    <value>{0} services degraded</value>
+  </data>
+  <data name="SummaryDegradedContinuationOne" xml:space="preserve">
+    <value>{0} degraded</value>
+    <comment>Follows a count of unhealthy services after a comma, so it repeats no noun.</comment>
+  </data>
+  <data name="SummaryDegradedContinuationOther" xml:space="preserve">
+    <value>{0} degraded</value>
+    <comment>Follows a count of unhealthy services after a comma, so it repeats no noun.</comment>
+  </data>
+  <data name="Idle" xml:space="preserve">
+    <value>Idle</value>
+    <comment>What a service with no work in hand is doing.</comment>
+  </data>
+  <data name="WasRunning" xml:space="preserve">
+    <value>Was running: {0}</value>
+    <comment>{0} is the work a service was doing when it went quiet.</comment>
+  </data>
+  <data name="LastHeartbeat" xml:space="preserve">
+    <value>Last heartbeat {0}</value>
+    <comment>{0} is a date and time.</comment>
+  </data>
+  <data name="Up" xml:space="preserve">
+    <value>up {0}</value>
+    <comment>How long a service has been running; {0} is a short duration such as "54 s".</comment>
+  </data>
+  <data name="CompactSeconds" xml:space="preserve">
+    <value>{0} s</value>
+    <comment>Short duration on a card.</comment>
+  </data>
+  <data name="CompactMinutes" xml:space="preserve">
+    <value>{0} min</value>
+    <comment>Short duration on a card.</comment>
+  </data>
+  <data name="CompactHours" xml:space="preserve">
+    <value>{0} h</value>
+    <comment>Short duration on a card.</comment>
+  </data>
+  <data name="CompactDays" xml:space="preserve">
+    <value>{0} d</value>
+    <comment>Short duration on a card.</comment>
+  </data>
+  <data name="NextToday" xml:space="preserve">
+    <value>today {0}</value>
+    <comment>{0} is a time of day.</comment>
+  </data>
+  <data name="NextTomorrow" xml:space="preserve">
+    <value>tomorrow {0}</value>
+    <comment>{0} is a time of day.</comment>
+  </data>
+  <data name="NextCountdown" xml:space="preserve">
+    <value>in {0}</value>
+    <comment>{0} is a short duration.</comment>
+  </data>
+  <data name="NextScheduleHeader" xml:space="preserve">
+    <value>next Schedule {0}</value>
+    <comment>{0} is when, e.g. "tomorrow 02:00".</comment>
+  </data>
+  <data name="MemoryLowWorker" xml:space="preserve">
+    <value>Memory is low for the Worker: {0} of {1} in use, {2} of it by the Worker.</value>
+    <comment>{0} used, {1} total, {2} the Worker's own share; each a size such as "57 GB".</comment>
+  </data>
+  <data name="MemoryWorkerRemedy" xml:space="preserve">
+    <value>At {0} the Worker stops its running work rather than be stopped part-way through; give JIM more memory, or run less at once.</value>
+    <comment>{0} is a percentage.</comment>
+  </data>
+  <data name="MemoryLowScheduler" xml:space="preserve">
+    <value>Memory is low for the Scheduler: {0} of {1} in use, {2} of it by the Scheduler.</value>
+    <comment>{0} used, {1} total, {2} the Scheduler's own share.</comment>
+  </data>
+  <data name="MemoryRemedy" xml:space="preserve">
+    <value>Give JIM more memory.</value>
+  </data>
+  <data name="NameWorker" xml:space="preserve">
+    <value>the Worker</value>
+    <comment>A service as the subject of a sentence, lower case: the code capitalises it when it starts the sentence.</comment>
+  </data>
+  <data name="NameWorkerSync" xml:space="preserve">
+    <value>the Worker's synchronisation service</value>
+    <comment>A service as the subject of a sentence, lower case.</comment>
+  </data>
+  <data name="NameWorkerPasswords" xml:space="preserve">
+    <value>the Worker's password delivery service</value>
+    <comment>A service as the subject of a sentence, lower case.</comment>
+  </data>
+  <data name="NameWorkerExchange" xml:space="preserve">
+    <value>the Worker's Exchange delivery service</value>
+    <comment>A service as the subject of a sentence, lower case.</comment>
+  </data>
+  <data name="NameScheduler" xml:space="preserve">
+    <value>the Scheduler</value>
+    <comment>A service as the subject of a sentence, lower case.</comment>
+  </data>
+  <data name="ListAnd" xml:space="preserve">
+    <value>{0} and {1}</value>
+    <comment>Joins the last item of a list to the rest.</comment>
+  </data>
+  <data name="ListOr" xml:space="preserve">
+    <value>{0} or {1}</value>
+    <comment>Joins the last item of a list to the rest.</comment>
+  </data>
+  <data name="NeverReportedOne" xml:space="preserve">
+    <value>{0} has never reported.</value>
+    <comment>{0} is one service.</comment>
+  </data>
+  <data name="NeverReportedOther" xml:space="preserve">
+    <value>{0} have never reported.</value>
+    <comment>{0} is several services joined with ListAnd.</comment>
+  </data>
+  <data name="NotReportedOne" xml:space="preserve">
+    <value>{0} has not reported for {1}.</value>
+    <comment>{0} is one service; {1} a duration.</comment>
+  </data>
+  <data name="NotReportedOther" xml:space="preserve">
+    <value>{0} have not reported for {1}.</value>
+    <comment>{0} is several services; {1} a duration.</comment>
+  </data>
+  <data name="StoppedSynchronised" xml:space="preserve">
+    <value>synchronised</value>
+    <comment>Past participle in NothingBeing*: what has stopped.</comment>
+  </data>
+  <data name="StoppedDelivered" xml:space="preserve">
+    <value>delivered</value>
+    <comment>Past participle in NothingBeing*: what has stopped.</comment>
+  </data>
+  <data name="StoppedScheduled" xml:space="preserve">
+    <value>scheduled</value>
+    <comment>Past participle in NothingBeing*: what has stopped.</comment>
+  </data>
+  <data name="NothingBeingOne" xml:space="preserve">
+    <value>Nothing is being {0}; queued work is safe and resumes when it returns.</value>
+    <comment>{0} is one or more past participles joined with ListOr. "It" is the one service that is down.</comment>
+  </data>
+  <data name="NothingBeingOther" xml:space="preserve">
+    <value>Nothing is being {0}; queued work is safe and resumes when they return.</value>
+    <comment>"They" are the services that are down.</comment>
+  </data>
+  <data name="Stalled" xml:space="preserve">
+    <value>{0} has made no progress on {1}.</value>
+    <comment>{0} is a service; {1} the work it is running.</comment>
+  </data>
+  <data name="StalledFor" xml:space="preserve">
+    <value>{0} has made no progress on {1} for {2}.</value>
+    <comment>{0} is a service; {1} the work it is running; {2} a duration.</comment>
+  </data>
+  <data name="BannerOperationsLink" xml:space="preserve">
+    <value>Operations</value>
+    <comment>Link to the Operations page.</comment>
+  </data>
+  <data name="BannerLogsLink" xml:space="preserve">
+    <value>Logs</value>
+    <comment>Link to the Logs page.</comment>
+  </data>
+  <data name="MemoryDetail" xml:space="preserve">
+    <value>{0} held · {1} of {2} in use</value>
+    <comment>A card detail: {0} the service's own memory, {1} a percentage, {2} the total.</comment>
+  </data>
+</root>

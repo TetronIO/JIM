@@ -1,3 +1,4 @@
+@using System.Globalization
 @using System.Security.Claims
 @using Microsoft.Extensions.Hosting
 @inject AuthenticationStateProvider AuthenticationStateProvider
@@ -40,19 +41,48 @@
                         <div class="d-flex align-center gap-2">
                             <MudIcon Icon="@(IsDarkMode ? Icons.Material.Filled.DarkMode : Icons.Material.Filled.WbSunny)"
                                      Size="Size.Small" />
-                            <MudText Typo="Typo.body2">Dark mode</MudText>
+                            <MudText Typo="Typo.body2">@LayoutText.UserMenuDarkMode</MudText>
                         </div>
                         <MudSwitch T="bool" Value="@IsDarkMode" ReadOnly="true"
                                    Color="Color.Primary" Size="Size.Small" Class="ma-0 jim-user-menu-switch" />
                     </div>
                 </MudListItem>
+                @if (_languages.Count > 1)
+                {
+                    <MudDivider Class="my-1" />
+                    <MudListItem OnClick="ToggleLanguages">
+                        <div class="d-flex align-center justify-space-between gap-6 jim-user-menu-row">
+                            <div class="d-flex align-center gap-2">
+                                <MudIcon Icon="@Icons.Material.Filled.Language" Size="Size.Small" />
+                                <MudText Typo="Typo.body2">@LayoutText.UserMenuLanguage</MudText>
+                            </div>
+                            <div class="d-flex align-center gap-1">
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_currentLanguage.NativeName</MudText>
+                                <MudIcon Icon="@(_languagesOpen ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" Size="Size.Small" />
+                            </div>
+                        </div>
+                    </MudListItem>
+                    @if (_languagesOpen)
+                    {
+                        @foreach (var language in _languages)
+                        {
+                            <MudListItem @key="language.CultureName" OnClick="@(() => SelectLanguage(language))" Class="jim-user-menu-language"
+                                         lang="@language.CultureName">
+                                <div class="d-flex align-center gap-2">
+                                    <MudIcon Icon="@(language == _currentLanguage ? Icons.Material.Filled.Check : string.Empty)" Size="Size.Small" />
+                                    <MudText Typo="Typo.body2">@LanguageLabel(language)</MudText>
+                                </div>
+                            </MudListItem>
+                        }
+                    }
+                }
                 @if (_isDevelopment)
                 {
                     <MudDivider Class="my-1" />
                     <MudListItem OnClick="HandleViewClaims">
                         <div class="d-flex align-center gap-2">
                             <MudIcon Icon="@Icons.Material.Filled.Badge" Size="Size.Small" />
-                            <MudText Typo="Typo.body2">View claims</MudText>
+                            <MudText Typo="Typo.body2">@LayoutText.UserMenuViewClaims</MudText>
                         </div>
                     </MudListItem>
                 }
@@ -62,7 +92,7 @@
                     <MudListItem OnClick="HandleSignOutAsync">
                         <div class="d-flex align-center gap-2">
                             <MudIcon Icon="@Icons.Material.Filled.Logout" Size="Size.Small" />
-                            <MudText Typo="Typo.body2">Sign out</MudText>
+                            <MudText Typo="Typo.body2">@LayoutText.UserMenuSignOut</MudText>
                         </div>
                     </MudListItem>
                 }
@@ -96,6 +126,9 @@
     private bool _showSignOut;
     private bool _isDevelopment;
     private bool _loaded;
+    private bool _languagesOpen;
+    private IReadOnlyList<UiLanguage> _languages = [];
+    private UiLanguage _currentLanguage = UiLanguages.Default;
 
     protected override async Task OnInitializedAsync()
     {
@@ -111,6 +144,10 @@
         _showSignOut = settings?.SSOEnableLogOut ?? true;
 
         _isDevelopment = Environment.IsDevelopment();
+
+        // The languages this environment offers: released ones everywhere, unreleased ones in development builds.
+        _languages = UiLanguages.Offered(includeUnreleased: _isDevelopment);
+        _currentLanguage = UiLanguages.Current(CultureInfo.CurrentUICulture, includeUnreleased: _isDevelopment);
 
         _loaded = true;
     }
@@ -130,6 +167,33 @@
         await IsDarkModeChanged.InvokeAsync(!IsDarkMode);
     }
 
+    private void ToggleLanguages()
+    {
+        _languagesOpen = !_languagesOpen;
+    }
+
+    /// <summary>
+    /// A language's own name, marked as a preview where it is offered only because this is a development build.
+    /// </summary>
+    private static string LanguageLabel(UiLanguage language) =>
+        language.IsReleased
+            ? language.NativeName
+            : string.Format(CultureInfo.CurrentCulture, LayoutText.LanguagePreview, language.NativeName);
+
+    /// <summary>
+    /// Stores the choice in the culture cookie and reloads the current page in it. A Blazor Server circuit runs in
+    /// the culture it started with, so the page has to be loaded afresh for the new language to take effect.
+    /// </summary>
+    private void SelectLanguage(UiLanguage language)
+    {
+        ClosePopover();
+        if (language == _currentLanguage)
+            return;
+
+        var currentPath = "/" + NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        NavigationManager.NavigateTo(CultureSelection.SelectionUrl(language.CultureName, currentPath), forceLoad: true);
+    }
+
     private void HandleViewClaims()
     {
         ClosePopover();
@@ -141,10 +205,10 @@
         ClosePopover();
 
         var result = await DialogService.ShowMessageBoxAsync(
-            "Sign Out",
-            "Are you sure you want to sign out?",
-            yesText: "Sign out",
-            cancelText: "Cancel");
+            LayoutText.SignOutDialogTitle,
+            LayoutText.SignOutDialogMessage,
+            yesText: LayoutText.SignOutDialogConfirm,
+            cancelText: CommonText.Cancel);
 
         if (result.HasValue && result.Value)
         {
