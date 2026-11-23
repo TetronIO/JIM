@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using JIM.Application.Expressions;
@@ -159,6 +162,7 @@ internal static class ScopingEvaluator
                 throw InvalidCriterion(invalidReason, criterion.ComparisonType, type, attributeName);
 
             ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId, type, attributeName, boundary: null, value: null, valueCount: 0);
+            SetFailure(node, JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.CriterionIsInvalid), invalidReason));
             return ScopingCriterionOutcome.Invalid;
         }
 
@@ -173,7 +177,7 @@ internal static class ScopingEvaluator
                 throw new ScopingCriterionFailedException(ruleName ?? "(unnamed)", attributeName, heldReason);
 
             ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId, type, attributeName, boundary: null, value: null, valueCount: 0);
-            node.FailureReason = heldReason;
+            SetFailure(node, JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.Verbatim), heldReason));
             node.HeldAsDataType = heldType;
             return ScopingCriterionOutcome.Invalid;
         }
@@ -244,26 +248,26 @@ internal static class ScopingEvaluator
 
         if (!SyncRuleScopingCriteria.IsConnectionOperator(criterion.ComparisonType))
         {
-            const string reason = "a connection criterion can only test that the object has, or has no, connection";
+            var reason = JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ConnectionCriterionOperatorReason));
             if (node == null)
             {
                 Log.Error("Scoping evaluation: a {Operator} connection criterion on {Connection} cannot be evaluated; the Synchronisation Rule is misconfigured",
                     criterion.ComparisonType, LogSanitiser.Sanitise(description));
                 throw new InvalidOperationException(
-                    $"The '{criterion.ComparisonType}' scoping criterion on the connection to {description} cannot be evaluated: {reason}.");
+                    $"The '{criterion.ComparisonType}' scoping criterion on the connection to {description} cannot be evaluated: {reason.ToEnglish()}.");
             }
 
-            node.FailureReason = $"The criterion is invalid: {reason}.";
+            SetFailure(node, JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.CriterionIsInvalid), reason));
             return ScopingCriterionOutcome.Invalid;
         }
 
         if (source.HasConnection(typeId) is not { } has)
         {
-            var failure = $"JIM could not read which Connected Systems the object is connected to, so whether it has a {description} is unknown.";
+            var failure = JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ConnectionUnreadable), description);
             if (node == null)
-                throw new ScopingCriterionFailedException(ruleName ?? "(unnamed)", description, failure);
+                throw new ScopingCriterionFailedException(ruleName ?? "(unnamed)", description, failure.ToEnglish());
 
-            node.FailureReason = failure;
+            SetFailure(node, failure);
             return ScopingCriterionOutcome.Invalid;
         }
 
@@ -286,7 +290,7 @@ internal static class ScopingEvaluator
         var type = criterion.CompareAs ?? AttributeDataType.NotSet;
 
         var invalidReason = type == AttributeDataType.NotSet
-            ? "it has no type to compare the expression's value as"
+            ? JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.NoTypeToCompareAs))
             : InvalidReason(criterion, type);
         if (invalidReason != null)
         {
@@ -295,7 +299,7 @@ internal static class ScopingEvaluator
 
             ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId: 0, type, expression, boundary: null, value: null, valueCount: 0);
             node.Expression = expression;
-            node.FailureReason = $"The criterion is invalid: {invalidReason}.";
+            SetFailure(node, JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.CriterionIsInvalid), invalidReason));
             return ScopingCriterionOutcome.Invalid;
         }
 
@@ -317,8 +321,7 @@ internal static class ScopingEvaluator
             ExpressionInputResolver.FindHeldInputs(expression, heldUnderAnotherDataType) is { Count: > 0 } heldInputs)
         {
             heldAs = heldInputs[0].HeldDataType;
-            failure = HeldUnderAnotherDataTypeText.Describe(HeldUnderAnotherDataTypeText.InputsSubject(heldInputs), heldAs.Value,
-                currentType: null, DecidedAfterImport);
+            failure = JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.Verbatim), HeldUnderAnotherDataTypeText.Describe(HeldUnderAnotherDataTypeText.InputsSubject(heldInputs), heldAs.Value, currentType: null, DecidedAfterImport));
         }
 
         if (failure == null)
@@ -330,14 +333,13 @@ internal static class ScopingEvaluator
             }
             catch (ExpressionEvaluationException ex)
             {
-                failure = $"Its expression could not be evaluated: {ex.Message}";
+                failure = JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionCouldNotBeEvaluated), ex.Message);
             }
 
             // Both messages can quote a value the expression read or computed; one derived from an attribute that may
             // hold a credential must not reach an error message, a log or an explanation.
             if (failure != null && ReadsCredential(expression, source))
-                failure = $"Its expression could not be evaluated, or computed a value that cannot be compared as {DescribeType(type)}; " +
-                          "the value is withheld because the expression reads an attribute that may hold a credential.";
+                failure = JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionCouldNotBeEvaluatedCredential), DescribeType(type));
         }
 
         CriterionVerdict verdict = default;
@@ -350,8 +352,7 @@ internal static class ScopingEvaluator
             }
             catch (RegexMatchTimeoutException)
             {
-                failure = $"Its pattern '{criterion.StringValue}' ran past its time limit of {CriterionPatterns.MatchTimeout.TotalMilliseconds:0} ms " +
-                          "on one of the expression's values; simplify the pattern (nested repetition such as (a+)+ is the usual cause).";
+                failure = JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.PatternTimedOutOnExpressionValues), criterion.StringValue ?? string.Empty, CriterionPatterns.MatchTimeout.TotalMilliseconds.ToString("0"));
             }
         }
 
@@ -360,13 +361,13 @@ internal static class ScopingEvaluator
             if (node == null)
             {
                 Log.Warning("Scoping evaluation: the expression criterion {Expression} in {SyncRule} could not be evaluated: {Reason}",
-                    LogSanitiser.Sanitise(expression), LogSanitiser.Sanitise(ruleName), LogSanitiser.Sanitise(failure));
-                throw new ScopingCriterionFailedException(ruleName ?? "(unnamed)", expression, failure);
+                    LogSanitiser.Sanitise(expression), LogSanitiser.Sanitise(ruleName), LogSanitiser.Sanitise(failure.ToEnglish()));
+                throw new ScopingCriterionFailedException(ruleName ?? "(unnamed)", expression, failure.ToEnglish());
             }
 
             ScopingTraceBuilder.RecordAttribute(node, criterion, attributeId: 0, type, expression, boundary, value: null, valueCount: 0);
             RecordExpression(node, expression, context, source);
-            node.FailureReason = failure;
+            SetFailure(node, failure);
             node.HeldAsDataType = heldAs;
             return ScopingCriterionOutcome.Invalid;
         }
@@ -460,7 +461,7 @@ internal static class ScopingEvaluator
     /// Why the expression cannot be trusted to read this object's attributes, or null when every attribute it reads on
     /// the scoped side is one the object type has.
     /// </summary>
-    private static string? DescribeUnknownInput<TSource>(string expression, TSource source)
+    private static JimMessage? DescribeUnknownInput<TSource>(string expression, TSource source)
         where TSource : struct, IScopingValueSource
     {
         foreach (var input in ExpressionInputResolver.ResolveCached(expression).Where(input => input.Source == source.ExpressionSide))
@@ -468,11 +469,9 @@ internal static class ScopingEvaluator
             switch (source.IsInSchema(input.AttributeName))
             {
                 case null:
-                    return $"Its expression reads {input.Accessor}, but the object type's attributes were not available to confirm the " +
-                           "attribute exists, so a missing value could not be told apart from a missing attribute.";
+                    return JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.UnknownInputUnavailable), input.Accessor);
                 case false:
-                    return $"Its expression reads {input.Accessor}, which is not an attribute of the object type; it may have been " +
-                           "renamed or removed since the rule was saved. Update the expression.";
+                    return JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.UnknownInputGone), input.Accessor);
             }
         }
 
@@ -484,7 +483,7 @@ internal static class ScopingEvaluator
     /// everywhere else: each element of a collection, with no value and blank text read as no value. Returns why one
     /// cannot be read, naming it, or null when all can.
     /// </summary>
-    private static string? TryReadComputedValues(object? result, AttributeDataType type, out List<ScopingValue> values)
+    private static JimMessage? TryReadComputedValues(object? result, AttributeDataType type, out List<ScopingValue> values)
     {
         values = [];
         // No value, and blank text, read as no value.
@@ -492,7 +491,7 @@ internal static class ScopingEvaluator
                      .Where(element => element != null && !(element is string text && string.IsNullOrWhiteSpace(text))))
         {
             if (!ExpressionResultConverter.TryConvert(element!, type, out var converted) || converted == null)
-                return $"Its expression computed '{ExpressionText.Describe(element!)}', which cannot be compared as {DescribeType(type)}.";
+                return JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ComputedValueCannotBeCompared), ExpressionText.Describe(element!), DescribeType(type));
 
             values.Add(converted switch
             {
@@ -510,16 +509,23 @@ internal static class ScopingEvaluator
         return null;
     }
 
-    private static string DescribeType(AttributeDataType type) => type switch
+    private static JimMessage DescribeType(AttributeDataType type) => type switch
     {
-        AttributeDataType.Number => "a Number",
-        AttributeDataType.LongNumber => "a Long Number",
-        AttributeDataType.Decimal => "a Decimal",
-        AttributeDataType.DateTime => "a DateTime",
-        AttributeDataType.Boolean => "a Boolean",
-        AttributeDataType.Guid => "a Guid",
-        _ => type.ToString()
+        AttributeDataType.Number => JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.CompareAsNumber)),
+        AttributeDataType.LongNumber => JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.CompareAsLongNumber)),
+        AttributeDataType.Decimal => JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.CompareAsDecimal)),
+        AttributeDataType.DateTime => JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.CompareAsDateTime)),
+        AttributeDataType.Boolean => JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.CompareAsBoolean)),
+        AttributeDataType.Guid => JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.CompareAsGuid)),
+        _ => JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.Verbatim), type.ToString())
     };
+
+    /// <summary>Records why a criterion cannot be evaluated on its explanation: the message and its English.</summary>
+    private static void SetFailure(ScopingCriterionExplanation node, JimMessage reason)
+    {
+        node.FailureReasonDetail = reason;
+        node.FailureReason = reason.ToEnglish();
+    }
 
     /// <summary>An expression's computed values, walked as an attribute's are.</summary>
     private struct ComputedValueCursor(List<ScopingValue> values) : IScopingValueCursor
@@ -545,23 +551,25 @@ internal static class ScopingEvaluator
     /// refuses both, so reaching one here means a rule was persisted before that guard existed or was changed outside
     /// it, and silently mis-scoping objects would be worse than failing.
     /// </summary>
-    private static string? InvalidReason(SyncRuleScopingCriteria criterion, AttributeDataType type)
+    private static JimMessage? InvalidReason(SyncRuleScopingCriteria criterion, AttributeDataType type)
     {
         if (!SearchComparisonOperators.IsValid(criterion.ComparisonType, type, CriterionContext.Scoping))
-            return $"Comparison operator '{criterion.ComparisonType}' is not valid for the {type} attribute";
+            return JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.InvalidReasonOperator), criterion.ComparisonType.ToString(), type.ToString());
 
-        return SearchComparisonOperators.IsPattern(criterion.ComparisonType)
-            ? SearchComparisonOperators.ValidatePattern(criterion.StringValue)
-            : null;
+        if (!SearchComparisonOperators.IsPattern(criterion.ComparisonType))
+            return null;
+
+        var pattern = SearchComparisonOperators.ValidatePattern(criterion.StringValue);
+        return pattern == null ? null : JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.Verbatim), pattern);
     }
 
     /// <summary>The failure for a criterion that cannot be evaluated, logged as it is created.</summary>
-    private static InvalidOperationException InvalidCriterion(string reason, SearchComparisonType comparisonType, AttributeDataType type, string attributeName)
+    private static InvalidOperationException InvalidCriterion(JimMessage reason, SearchComparisonType comparisonType, AttributeDataType type, string attributeName)
     {
         Log.Error("Scoping evaluation: a {Operator} criterion on the {Type} attribute {Attribute} cannot be evaluated ({Reason}); " +
-                  "the Synchronisation Rule is misconfigured", comparisonType, type, attributeName, reason);
+                  "the Synchronisation Rule is misconfigured", comparisonType, type, attributeName, reason.ToEnglish());
         return new InvalidOperationException(
-            $"The '{comparisonType}' scoping criterion on the {type} attribute '{attributeName}' cannot be evaluated: {reason}.");
+            $"The '{comparisonType}' scoping criterion on the {type} attribute '{attributeName}' cannot be evaluated: {reason.ToEnglish()}.");
     }
 
     /// <summary>

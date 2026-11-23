@@ -12,7 +12,7 @@
 <div class="jim-connection-detail" data-testid="jim-mvo-connection-detail">
     <section class="jim-connection-detail-section">
         <MudText Typo="Typo.subtitle2" Class="jim-connection-detail-heading">@MetaverseText.McdHowJoined</MudText>
-        <MudText data-testid="jim-join-description">@Connection.Join.Description</MudText>
+        <MudText data-testid="jim-join-description">@MessageDisplay.Show(Connection.Join.DescriptionDetail, Connection.Join.Description)</MudText>
         <div class="jim-connection-detail-meta">
             @if (Connection.Join.DateJoined.HasValue)
             {
@@ -70,7 +70,7 @@
             @foreach (var conflict in Connection.Conflicts)
             {
                 <div @key="conflict.SyncRuleId" class="jim-connection-conflict" data-testid="jim-connection-conflict">
-                    <MudText Typo="Typo.body2">@conflict.Description</MudText>
+                    <MudText Typo="Typo.body2">@MessageDisplay.Show(conflict.DescriptionDetail, conflict.Description)</MudText>
                     <ScopingExplanationView Explanation="conflict.Scoping" />
                 </div>
             }

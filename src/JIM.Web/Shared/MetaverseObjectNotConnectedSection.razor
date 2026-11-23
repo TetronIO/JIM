@@ -67,8 +67,8 @@
                         <div class="jim-one-line-list">
                             <MudChip T="string" Variant="Variant.Text" Color="@ReasonColour(context.Reason)" Class="ma-0"
                                      data-testid="jim-not-connected-reason" data-reason="@context.Reason">@ReasonLabel(context.Reason)</MudChip>
-                            <span class="jim-one-line-list-value mud-text-secondary" title="@context.Hint"
-                                  data-testid="jim-not-connected-hint">@context.Hint</span>
+                            <span class="jim-one-line-list-value mud-text-secondary" title="@MessageDisplay.Show(context.HintDetail, context.Hint)"
+                                  data-testid="jim-not-connected-hint">@MessageDisplay.Show(context.HintDetail, context.Hint)</span>
                         </div>
                     </MudTd>
                     <MudTd Class="jim-nowrap">
@@ -85,7 +85,7 @@
                             <td colspan="5" class="jim-connection-detail-cell">
                                 <div class="jim-connection-detail" data-testid="jim-not-connected-detail">
                                     <section class="jim-connection-detail-section">
-                                        <MudText Typo="Typo.subtitle2" Class="jim-connection-detail-heading">@context.BulletsTitle</MudText>
+                                        <MudText Typo="Typo.subtitle2" Class="jim-connection-detail-heading">@MessageDisplay.Show(context.BulletsTitleDetail, context.BulletsTitle)</MudText>
                                         <ScopingBulletList Bullets="context.Bullets" />
                                     </section>
                                     @if (ShowsScopingTree(context.Reason))
@@ -168,7 +168,7 @@
         bool copied;
         try
         {
-            copied = await JsRuntime.InvokeAsync<bool>("jimInterop.copyToClipboard", entry.Summary);
+            copied = await JsRuntime.InvokeAsync<bool>("jimInterop.copyToClipboard", SummaryText(entry));
         }
         catch (Exception ex) when (ex is JSDisconnectedException or JSException or InvalidOperationException)
         {
@@ -181,10 +181,13 @@
             return;
         }
 
-        var parameters = new DialogParameters<CopyTextDialog> { { d => d.Text, entry.Summary } };
+        var parameters = new DialogParameters<CopyTextDialog> { { d => d.Text, SummaryText(entry) } };
         await DialogService.ShowAsync<CopyTextDialog>(MetaverseText.MncCopySummary, parameters,
             new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true });
     }
+
+    /// <summary>The copyable summary in the viewer's language, or the stored English where the entry has no message.</summary>
+    private static string SummaryText(NotConnectedEntry entry) => MessageDisplay.Show(entry.SummaryDetail, entry.Summary) ?? entry.Summary;
 
     private static string ReasonLabel(NotConnectedReason reason) => reason switch
     {

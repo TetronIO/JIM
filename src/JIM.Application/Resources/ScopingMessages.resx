@@ -50,4 +50,645 @@
     <value>The expression calls {0}, which returns a different value each time it runs, so an object's scope would change with no change to the object and nothing would act on it. To scope by date, compare the expression as a Date against a relative date (for example, more than 30 days ago).</value>
     <comment>{0} is a comma-separated list of function names.</comment>
   </data>
+  <data name="Verbatim" xml:space="preserve">
+    <value>{0}</value>
+    <comment>Carries text that is data or punctuation (a name, a value, a comma, a space) or English produced elsewhere. Shown as it is, in every language.</comment>
+  </data>
+  <data name="Concat" xml:space="preserve">
+    <value>{0}{1}</value>
+    <comment>Joins two pieces of one sentence with nothing between them. Never translate or add words.</comment>
+  </data>
+  <data name="QuotedValue" xml:space="preserve">
+    <value>"{0}"</value>
+    <comment>A text value quoted in the plain-text form of a line, so its boundaries survive being pasted. {0} is the value.</comment>
+  </data>
+  <data name="Is" xml:space="preserve">
+    <value>is</value>
+    <comment>Starts an ordered comparison as a condition: "is before", "is greater than".</comment>
+  </data>
+  <data name="MustBe" xml:space="preserve">
+    <value>must be</value>
+    <comment>Starts an ordered comparison as a requirement: "must be before", "must be greater than".</comment>
+  </data>
+  <data name="Or" xml:space="preserve">
+    <value>or</value>
+    <comment>Joins alternatives inside a condition: "A or B".</comment>
+  </data>
+  <data name="OrLeading" xml:space="preserve">
+    <value>or</value>
+    <comment>Opens a bullet that is an alternative to the one before it: "or Department equals Sales".</comment>
+  </data>
+  <data name="OrAlternative" xml:space="preserve">
+    <value>or</value>
+    <comment>Introduces the last alternative after "either A, or B" ("soit A, soit B" in French).</comment>
+  </data>
+  <data name="Either" xml:space="preserve">
+    <value>either</value>
+    <comment>Opens a choice: "either A, or B".</comment>
+  </data>
+  <data name="AndEither" xml:space="preserve">
+    <value>and either</value>
+    <comment>Opens a choice that follows other requirements: "and either A, or B".</comment>
+  </data>
+  <data name="And" xml:space="preserve">
+    <value>and</value>
+    <comment>Joins requirements inside a condition: "A and B".</comment>
+  </data>
+  <data name="OpEquals" xml:space="preserve">
+    <value>equals</value>
+    <comment>A comparison as a condition, and as the label shown for an invalid operator.</comment>
+  </data>
+  <data name="OpNotEquals" xml:space="preserve">
+    <value>does not equal</value>
+    <comment>A comparison as a condition, and as the label shown for an invalid operator.</comment>
+  </data>
+  <data name="OpStartsWith" xml:space="preserve">
+    <value>starts with</value>
+    <comment>A comparison as a condition, and as the label shown for an invalid operator.</comment>
+  </data>
+  <data name="OpNotStartsWith" xml:space="preserve">
+    <value>does not start with</value>
+    <comment>A comparison as a condition, and as the label shown for an invalid operator.</comment>
+  </data>
+  <data name="OpEndsWith" xml:space="preserve">
+    <value>ends with</value>
+    <comment>A comparison as a condition, and as the label shown for an invalid operator.</comment>
+  </data>
+  <data name="OpNotEndsWith" xml:space="preserve">
+    <value>does not end with</value>
+    <comment>A comparison as a condition, and as the label shown for an invalid operator.</comment>
+  </data>
+  <data name="OpContains" xml:space="preserve">
+    <value>contains</value>
+    <comment>A comparison as a condition, and as the label shown for an invalid operator.</comment>
+  </data>
+  <data name="OpNotContains" xml:space="preserve">
+    <value>does not contain</value>
+    <comment>A comparison as a condition, and as the label shown for an invalid operator.</comment>
+  </data>
+  <data name="OpMatchesPattern" xml:space="preserve">
+    <value>matches pattern</value>
+    <comment>A comparison as a condition, and as the label shown for an invalid operator.</comment>
+  </data>
+  <data name="OpNotMatchesPattern" xml:space="preserve">
+    <value>does not match pattern</value>
+    <comment>A comparison as a condition, and as the label shown for an invalid operator.</comment>
+  </data>
+  <data name="MustEqual" xml:space="preserve">
+    <value>must equal</value>
+    <comment>A comparison as a requirement.</comment>
+  </data>
+  <data name="MustNotEqual" xml:space="preserve">
+    <value>must not equal</value>
+    <comment>A comparison as a requirement.</comment>
+  </data>
+  <data name="MustStartWith" xml:space="preserve">
+    <value>must start with</value>
+    <comment>A comparison as a requirement.</comment>
+  </data>
+  <data name="MustNotStartWith" xml:space="preserve">
+    <value>must not start with</value>
+    <comment>A comparison as a requirement.</comment>
+  </data>
+  <data name="MustEndWith" xml:space="preserve">
+    <value>must end with</value>
+    <comment>A comparison as a requirement.</comment>
+  </data>
+  <data name="MustNotEndWith" xml:space="preserve">
+    <value>must not end with</value>
+    <comment>A comparison as a requirement.</comment>
+  </data>
+  <data name="MustContain" xml:space="preserve">
+    <value>must contain</value>
+    <comment>A comparison as a requirement.</comment>
+  </data>
+  <data name="MustNotContain" xml:space="preserve">
+    <value>must not contain</value>
+    <comment>A comparison as a requirement.</comment>
+  </data>
+  <data name="MustMatchPattern" xml:space="preserve">
+    <value>must match pattern</value>
+    <comment>A comparison as a requirement.</comment>
+  </data>
+  <data name="MustNotMatchPattern" xml:space="preserve">
+    <value>must not match pattern</value>
+    <comment>A comparison as a requirement.</comment>
+  </data>
+  <data name="OpBefore" xml:space="preserve">
+    <value>before</value>
+    <comment>An ordered date comparison, read after "is" or "must be".</comment>
+  </data>
+  <data name="OpOnOrBefore" xml:space="preserve">
+    <value>on or before</value>
+    <comment>An ordered date comparison, read after "is" or "must be".</comment>
+  </data>
+  <data name="OpAfter" xml:space="preserve">
+    <value>after</value>
+    <comment>An ordered date comparison, read after "is" or "must be".</comment>
+  </data>
+  <data name="OpOnOrAfter" xml:space="preserve">
+    <value>on or after</value>
+    <comment>An ordered date comparison, read after "is" or "must be".</comment>
+  </data>
+  <data name="OpLessThan" xml:space="preserve">
+    <value>less than</value>
+    <comment>An ordered comparison, read after "is" or "must be".</comment>
+  </data>
+  <data name="OpLessThanOrEquals" xml:space="preserve">
+    <value>less than or equal to</value>
+    <comment>An ordered comparison, read after "is" or "must be".</comment>
+  </data>
+  <data name="OpGreaterThan" xml:space="preserve">
+    <value>greater than</value>
+    <comment>An ordered comparison, read after "is" or "must be".</comment>
+  </data>
+  <data name="OpGreaterThanOrEquals" xml:space="preserve">
+    <value>greater than or equal to</value>
+    <comment>An ordered comparison, read after "is" or "must be".</comment>
+  </data>
+  <data name="CriterionWithNoAttribute" xml:space="preserve">
+    <value>Criterion with no attribute</value>
+  </data>
+  <data name="IgnoringCase" xml:space="preserve">
+    <value>ignoring case</value>
+    <comment>Shown in brackets after a text criterion that ignores case.</comment>
+  </data>
+  <data name="ActualReferencesNoAttribute" xml:space="preserve">
+    <value>references no attribute</value>
+  </data>
+  <data name="ActualCannotBeEvaluated" xml:space="preserve">
+    <value>cannot be evaluated</value>
+  </data>
+  <data name="ActualCannotBeEvaluatedBecause" xml:space="preserve">
+    <value>cannot be evaluated. {0}</value>
+    <comment>{0} is the reason, a sentence.</comment>
+  </data>
+  <data name="ActualHasConnection" xml:space="preserve">
+    <value>has one</value>
+    <comment>What an object holds for a connection criterion.</comment>
+  </data>
+  <data name="ActualHasNoConnection" xml:space="preserve">
+    <value>has none</value>
+    <comment>What an object holds for a connection criterion.</comment>
+  </data>
+  <data name="ActualComputedHidden" xml:space="preserve">
+    <value>computed a hidden value</value>
+  </data>
+  <data name="ActualIsHidden" xml:space="preserve">
+    <value>is hidden</value>
+  </data>
+  <data name="ActualComputedNoValue" xml:space="preserve">
+    <value>computed no value</value>
+  </data>
+  <data name="ActualHasNoValue" xml:space="preserve">
+    <value>has no value</value>
+  </data>
+  <data name="ActualComputedValue" xml:space="preserve">
+    <value>computed {0}</value>
+    <comment>{0} is the value the expression computed.</comment>
+  </data>
+  <data name="ActualIsValue" xml:space="preserve">
+    <value>is {0}</value>
+    <comment>{0} is the value the attribute holds.</comment>
+  </data>
+  <data name="ActualComputedOneOf" xml:space="preserve">
+    <value>computed {0} (one of {1} values)</value>
+    <comment>{0} is the value that decided it; {1} is how many values there were.</comment>
+  </data>
+  <data name="ActualIncludesOneOf" xml:space="preserve">
+    <value>includes {0} (one of {1} values)</value>
+    <comment>{0} is the value that decided it; {1} is how many values there were.</comment>
+  </data>
+  <data name="ActualComputedCount" xml:space="preserve">
+    <value>computed {0} values</value>
+    <comment>{0} is how many values.</comment>
+  </data>
+  <data name="ActualHasCount" xml:space="preserve">
+    <value>has {0} values</value>
+    <comment>{0} is how many values.</comment>
+  </data>
+  <data name="ActualNoneOfComputedValues" xml:space="preserve">
+    <value>none of {0} computed values {1} {2}</value>
+    <comment>{0} is how many values; {1} is the comparison as a condition ("equals"); {2} is the expected value.</comment>
+  </data>
+  <data name="ActualNoneOfValues" xml:space="preserve">
+    <value>none of {0} values {1} {2}</value>
+    <comment>{0} is how many values; {1} is the comparison as a condition ("equals"); {2} is the expected value.</comment>
+  </data>
+  <data name="GroupAllMustBeMet" xml:space="preserve">
+    <value>All of these must be met</value>
+    <comment>Heading of a group of criteria that must all be met.</comment>
+  </data>
+  <data name="GroupAnyOneOfThese" xml:space="preserve">
+    <value>Any one of these</value>
+    <comment>Heading of a group of criteria of which one is enough.</comment>
+  </data>
+  <data name="GroupStateCannotBeEvaluated" xml:space="preserve">
+    <value>cannot be evaluated</value>
+    <comment>A group's state, in brackets after its heading.</comment>
+  </data>
+  <data name="GroupStateMet" xml:space="preserve">
+    <value>met</value>
+    <comment>A group's state, in brackets after its heading.</comment>
+  </data>
+  <data name="GroupStateNoneMet" xml:space="preserve">
+    <value>none met</value>
+    <comment>A group's state, in brackets after its heading.</comment>
+  </data>
+  <data name="GroupStateNotMet" xml:space="preserve">
+    <value>not met</value>
+    <comment>A group's state, in brackets after its heading.</comment>
+  </data>
+  <data name="GroupLine" xml:space="preserve">
+    <value>{0} ({1})</value>
+    <comment>{0} is the group's heading; {1} its state.</comment>
+  </data>
+  <data name="Currently" xml:space="preserve">
+    <value>currently</value>
+    <comment>Introduces what an object holds now, in brackets after an expectation it fails.</comment>
+  </data>
+  <data name="CaseSensitiveCurrently" xml:space="preserve">
+    <value>case-sensitive; currently</value>
+    <comment>Introduces what an object holds now where it differs from the expectation only by case.</comment>
+  </data>
+  <data name="CurrentlyHasConnection" xml:space="preserve">
+    <value>currently has one</value>
+  </data>
+  <data name="CurrentlyHasNoConnection" xml:space="preserve">
+    <value>currently has none</value>
+  </data>
+  <data name="CurrentlyIncludes" xml:space="preserve">
+    <value>currently includes</value>
+    <comment>Introduces one of several values an object holds, followed by the value.</comment>
+  </data>
+  <data name="OneOfCountValues" xml:space="preserve">
+    <value>one of {0} values</value>
+    <comment>{0} is how many values.</comment>
+  </data>
+  <data name="CurrentlyCountValues" xml:space="preserve">
+    <value>currently {0} values</value>
+    <comment>{0} is how many values.</comment>
+  </data>
+  <data name="NoneOfItsValuesMatches" xml:space="preserve">
+    <value>none of its {0} values matches</value>
+    <comment>{0} is how many values.</comment>
+  </data>
+  <data name="NoValueWord" xml:space="preserve">
+    <value>no value</value>
+    <comment>Shown where the object holds no value for an attribute.</comment>
+  </data>
+  <data name="AHiddenValue" xml:space="preserve">
+    <value>a hidden value</value>
+    <comment>Stands in for an expected value that is withheld because the attribute may hold a credential.</comment>
+  </data>
+  <data name="CurrentValueHidden" xml:space="preserve">
+    <value>current value hidden</value>
+  </data>
+  <data name="AnEmptyValue" xml:space="preserve">
+    <value>an empty value</value>
+  </data>
+  <data name="AnAttribute" xml:space="preserve">
+    <value>an attribute</value>
+    <comment>Stands in for an attribute's name where the criterion names none.</comment>
+  </data>
+  <data name="MustHaveNoValue" xml:space="preserve">
+    <value>must have no value</value>
+  </data>
+  <data name="HasNoValueCondition" xml:space="preserve">
+    <value>has no value</value>
+  </data>
+  <data name="NeedsAValue" xml:space="preserve">
+    <value>needs a value</value>
+  </data>
+  <data name="HasAValue" xml:space="preserve">
+    <value>has a value</value>
+  </data>
+  <data name="NeedsAValueThat" xml:space="preserve">
+    <value>needs a value that {0}</value>
+    <comment>{0} is a comparison as a condition ("equals").</comment>
+  </data>
+  <data name="HasAValueThat" xml:space="preserve">
+    <value>has a value that {0}</value>
+    <comment>{0} is a comparison as a condition ("equals").</comment>
+  </data>
+  <data name="ConnectionNeeds" xml:space="preserve">
+    <value>Needs</value>
+    <comment>Starts a requirement that an object has a connection; the connection's name follows.</comment>
+  </data>
+  <data name="ConnectionNeedsNo" xml:space="preserve">
+    <value>Needs no</value>
+    <comment>Starts a requirement that an object has no connection; the connection's name follows.</comment>
+  </data>
+  <data name="ConnectionHas" xml:space="preserve">
+    <value>Has</value>
+    <comment>Starts a condition that an object has a connection; the connection's name follows.</comment>
+  </data>
+  <data name="ConnectionHasNo" xml:space="preserve">
+    <value>Has no</value>
+    <comment>Starts a condition that an object has no connection; the connection's name follows.</comment>
+  </data>
+  <data name="CriterionHasNoAttributeStart" xml:space="preserve">
+    <value>Criterion {0} has no attribute and can never be met</value>
+    <comment>At the start of a line. {0} is the criterion's position, such as 1.2.</comment>
+  </data>
+  <data name="CriterionHasNoAttributeMid" xml:space="preserve">
+    <value>criterion {0} has no attribute and can never be met</value>
+    <comment>Inside a line. {0} is the criterion's position, such as 1.2.</comment>
+  </data>
+  <data name="FailsOn" xml:space="preserve">
+    <value>Fails on {0}</value>
+    <comment>{0} lists the attributes an out-of-scope object fails on.</comment>
+  </data>
+  <data name="HintCriterionPath" xml:space="preserve">
+    <value>criterion {0}</value>
+    <comment>Names a criterion that has no attribute in a hint. {0} is the criterion's position.</comment>
+  </data>
+  <data name="UndecidedUntilFullImport" xml:space="preserve">
+    <value>Undecided until a Full Import reads {0}</value>
+    <comment>{0} lists attribute names.</comment>
+  </data>
+  <data name="ScopingCannotBeEvaluated" xml:space="preserve">
+    <value>Scoping cannot be evaluated</value>
+  </data>
+  <data name="InvalidCriterionOn" xml:space="preserve">
+    <value>Invalid criterion on {0}</value>
+    <comment>{0} is an attribute name.</comment>
+  </data>
+  <data name="InvalidCriteriaOn" xml:space="preserve">
+    <value>Invalid criteria on {0}</value>
+    <comment>{0} lists attribute names.</comment>
+  </data>
+  <data name="JoinLastAnd" xml:space="preserve">
+    <value>{0} and {1}</value>
+    <comment>Joins the last two items of a list; {0} is the earlier items, comma-separated.</comment>
+  </data>
+  <data name="CriterionCompares" xml:space="preserve">
+    <value>Criterion {0} compares</value>
+    <comment>{0} is the criterion's position. The attribute's name follows.</comment>
+  </data>
+  <data name="WhichCannotBeEvaluatedYet" xml:space="preserve">
+    <value>, which cannot be evaluated yet. {0}</value>
+    <comment>Follows an attribute's name. {0} is a sentence naming the value's type and what resolves it.</comment>
+  </data>
+  <data name="WithPatternThatCannotBeEvaluated" xml:space="preserve">
+    <value>with a pattern that cannot be evaluated; correct or remove it in the Synchronisation Rule.</value>
+    <comment>Follows an attribute's name.</comment>
+  </data>
+  <data name="WithOperatorTypeCannotUse" xml:space="preserve">
+    <value>with "{0}", which {1} attribute cannot use; correct or remove it in the Synchronisation Rule.</value>
+    <comment>Follows an attribute's name. {0} is the comparison's label; {1} is the attribute's data type with its article in English ("a text") and "de type ..." in French.</comment>
+  </data>
+  <data name="TypeAText" xml:space="preserve">
+    <value>a text</value>
+    <comment>An attribute's data type, read before "attribute".</comment>
+  </data>
+  <data name="TypeANumber" xml:space="preserve">
+    <value>a number</value>
+    <comment>An attribute's data type, read before "attribute".</comment>
+  </data>
+  <data name="TypeALongNumber" xml:space="preserve">
+    <value>a long number</value>
+    <comment>An attribute's data type, read before "attribute".</comment>
+  </data>
+  <data name="TypeADecimal" xml:space="preserve">
+    <value>a decimal</value>
+    <comment>An attribute's data type, read before "attribute".</comment>
+  </data>
+  <data name="TypeADate" xml:space="preserve">
+    <value>a date</value>
+    <comment>An attribute's data type, read before "attribute".</comment>
+  </data>
+  <data name="TypeABoolean" xml:space="preserve">
+    <value>a Boolean</value>
+    <comment>An attribute's data type, read before "attribute".</comment>
+  </data>
+  <data name="TypeAGuid" xml:space="preserve">
+    <value>a GUID</value>
+    <comment>An attribute's data type, read before "attribute".</comment>
+  </data>
+  <data name="TypeABinary" xml:space="preserve">
+    <value>a binary</value>
+    <comment>An attribute's data type, read before "attribute".</comment>
+  </data>
+  <data name="TypeAReference" xml:space="preserve">
+    <value>a reference</value>
+    <comment>An attribute's data type, read before "attribute".</comment>
+  </data>
+  <data name="TypeAnUntyped" xml:space="preserve">
+    <value>an untyped</value>
+    <comment>An attribute's data type, read before "attribute".</comment>
+  </data>
+  <data name="GenericObjectName" xml:space="preserve">
+    <value>This Metaverse Object</value>
+    <comment>Names the object in the copyable summary where it has no display name.</comment>
+  </data>
+  <data name="TitleToComeIntoScope" xml:space="preserve">
+    <value>To come into scope</value>
+  </data>
+  <data name="TitleWhatHappensNext" xml:space="preserve">
+    <value>What happens next</value>
+  </data>
+  <data name="TitleWhatWouldConnectIt" xml:space="preserve">
+    <value>What would connect it</value>
+  </data>
+  <data name="TitleWhatWouldFixIt" xml:space="preserve">
+    <value>What would fix it</value>
+  </data>
+  <data name="HintInScopeStagedNext" xml:space="preserve">
+    <value>In scope; staged at the next synchronisation</value>
+  </data>
+  <data name="HintInScopeNothingStaged" xml:space="preserve">
+    <value>In scope; nothing staged yet</value>
+  </data>
+  <data name="HintInScopeProvisioningOff" xml:space="preserve">
+    <value>In scope; provisioning is off</value>
+  </data>
+  <data name="HintConnectedSystemDisabled" xml:space="preserve">
+    <value>Connected System disabled</value>
+  </data>
+  <data name="BulletAwaitingExportReview" xml:space="preserve">
+    <value>This Metaverse Object is awaiting its Export Review.</value>
+  </data>
+  <data name="BulletNextSynchronisationReviews" xml:space="preserve">
+    <value>The next synchronisation of any Connected System reviews it and stages its provisioning to {0}.</value>
+    <comment>{0} is a Connected System name.</comment>
+  </data>
+  <data name="BulletStagedWhenValuesChange" xml:space="preserve">
+    <value>Provisioning is staged the next time this Metaverse Object's attribute values change during synchronisation.</value>
+  </data>
+  <data name="BulletSavingRuleStages" xml:space="preserve">
+    <value>Saving a change to the Synchronisation Rule that can bring objects into its scope also stages it, at the next synchronisation of any Connected System.</value>
+  </data>
+  <data name="BulletSwitchOnProvision" xml:space="preserve">
+    <value>Switch on Provision to Connected System in the Synchronisation Rule, or</value>
+  </data>
+  <data name="BulletCreateObjectThatJoins" xml:space="preserve">
+    <value>create an object in {0} that joins to this Metaverse Object.</value>
+    <comment>{0} is a Connected System name.</comment>
+  </data>
+  <data name="ReasonNotInScope" xml:space="preserve">
+    <value>not in scope of the Synchronisation Rule "{0}".</value>
+    <comment>Completes "Reason: ...". {0} is a Synchronisation Rule name.</comment>
+  </data>
+  <data name="ReasonInScopeStagesNext" xml:space="preserve">
+    <value>in scope of the Synchronisation Rule "{0}"; the next synchronisation stages its provisioning.</value>
+    <comment>Completes "Reason: ...". {0} is a Synchronisation Rule name.</comment>
+  </data>
+  <data name="ReasonInScopeNothingStaged" xml:space="preserve">
+    <value>in scope of the Synchronisation Rule "{0}", but nothing has been staged yet.</value>
+    <comment>Completes "Reason: ...". {0} is a Synchronisation Rule name.</comment>
+  </data>
+  <data name="ReasonInScopeNoProvisioning" xml:space="preserve">
+    <value>in scope of the Synchronisation Rule "{0}", but the rule does not provision new objects.</value>
+    <comment>Completes "Reason: ...". {0} is a Synchronisation Rule name.</comment>
+  </data>
+  <data name="ReasonScopingCannotBeEvaluated" xml:space="preserve">
+    <value>the scoping of the Synchronisation Rule "{0}" cannot be evaluated.</value>
+    <comment>Completes "Reason: ...". {0} is a Synchronisation Rule name.</comment>
+  </data>
+  <data name="SummaryNotProvisioned" xml:space="preserve">
+    <value>{0} is not provisioned to {1}.</value>
+    <comment>First line of the copyable summary. {0} is the object's name; {1} a Connected System name.</comment>
+  </data>
+  <data name="SummaryReason" xml:space="preserve">
+    <value>Reason: {0}</value>
+    <comment>Second line of the copyable summary. {0} is one of the Reason... sentences.</comment>
+  </data>
+  <data name="SummaryNoteDisabled" xml:space="preserve">
+    <value>Note: the Connected System {0} is disabled.</value>
+    <comment>{0} is a Connected System name.</comment>
+  </data>
+  <data name="SummaryTitleLine" xml:space="preserve">
+    <value>{0}:</value>
+    <comment>Heads the list of bullets in the copyable summary. {0} is the bullets' title.</comment>
+  </data>
+  <data name="SummaryEvaluated" xml:space="preserve">
+    <value>Evaluated {0}.</value>
+    <comment>Last line of the copyable summary. {0} is the moment, to the minute, in UTC, in a fixed English form so it reads the same wherever it is pasted.</comment>
+  </data>
+  <data name="ObjectTypeConflict" xml:space="preserve">
+    <value>The Synchronisation Rule "{0}" targets "{1}" objects in {2}, but this Metaverse Object is already represented there by a "{3}" object. A Metaverse Object can have only one Connected System Object per Connected System, so this rule cannot connect it.</value>
+    <comment>{0} is a Synchronisation Rule name; {1} the Object Type the rule targets; {2} a Connected System name; {3} the Object Type already holding the slot.</comment>
+  </data>
+  <data name="JoinRule" xml:space="preserve">
+    <value>the Synchronisation Rule "{0}"</value>
+    <comment>Names the rule that made a join, inside a sentence.</comment>
+  </data>
+  <data name="JoinRuleSinceDeleted" xml:space="preserve">
+    <value>the Synchronisation Rule "{0}" (since deleted)</value>
+    <comment>Names the rule that made a join, inside a sentence, where the rule has since been deleted.</comment>
+  </data>
+  <data name="JoinProjectedBy" xml:space="preserve">
+    <value>Projected by {0}</value>
+    <comment>{0} is a JoinRule phrase.</comment>
+  </data>
+  <data name="JoinProvisionedBy" xml:space="preserve">
+    <value>Provisioned by {0}</value>
+    <comment>{0} is a JoinRule phrase.</comment>
+  </data>
+  <data name="JoinMatchedUnder" xml:space="preserve">
+    <value>Joined by matching, under {0}{1}</value>
+    <comment>{0} is a JoinRule phrase; {1} is the matched clause, which may be empty.</comment>
+  </data>
+  <data name="JoinMatchedOnRules" xml:space="preserve">
+    <value>Joined by matching on the Connected System's Object Matching Rules{0}</value>
+    <comment>{0} is the matched clause, which may be empty.</comment>
+  </data>
+  <data name="JoinExportMatched" xml:space="preserve">
+    <value>Joined by {0}, which matched an existing object instead of provisioning a new one</value>
+    <comment>{0} is a JoinRule phrase.</comment>
+  </data>
+  <data name="JoinProjectedNotRecorded" xml:space="preserve">
+    <value>Projected; the Synchronisation Rule was not recorded</value>
+  </data>
+  <data name="JoinProvisionedNotRecorded" xml:space="preserve">
+    <value>Provisioned; the Synchronisation Rule was not recorded</value>
+  </data>
+  <data name="JoinNotRecorded" xml:space="preserve">
+    <value>Joined; how was not recorded</value>
+  </data>
+  <data name="MatchedRuleDeleted" xml:space="preserve">
+    <value>: matched "{0}" (the Object Matching Rule has since been deleted)</value>
+    <comment>A clause after a join sentence. {0} is the value matched on.</comment>
+  </data>
+  <data name="MatchedOn" xml:space="preserve">
+    <value>: matched "{0}" on {1} (equals {2})</value>
+    <comment>A clause after a join sentence. {0} is the value matched on; {1} the Metaverse Attribute; {2} the source it equals.</comment>
+  </data>
+  <data name="CriterionIsInvalid" xml:space="preserve">
+    <value>The criterion is invalid: {0}.</value>
+    <comment>{0} is a reason that continues the sentence, with no capital and no full stop.</comment>
+  </data>
+  <data name="InvalidReasonOperator" xml:space="preserve">
+    <value>Comparison operator '{0}' is not valid for the {1} attribute</value>
+    <comment>Part of CriterionIsInvalid. {0} is the operator's name and {1} the attribute's data type, both as the product names them.</comment>
+  </data>
+  <data name="NoTypeToCompareAs" xml:space="preserve">
+    <value>it has no type to compare the expression's value as</value>
+    <comment>Part of CriterionIsInvalid.</comment>
+  </data>
+  <data name="ConnectionCriterionOperatorReason" xml:space="preserve">
+    <value>a connection criterion can only test that the object has, or has no, connection</value>
+    <comment>Part of CriterionIsInvalid.</comment>
+  </data>
+  <data name="ConnectionUnreadable" xml:space="preserve">
+    <value>JIM could not read which Connected Systems the object is connected to, so whether it has a {0} is unknown.</value>
+    <comment>{0} names a connection, such as "user in PANOPLY AD".</comment>
+  </data>
+  <data name="UnknownInputUnavailable" xml:space="preserve">
+    <value>Its expression reads {0}, but the object type's attributes were not available to confirm the attribute exists, so a missing value could not be told apart from a missing attribute.</value>
+    <comment>{0} is an expression accessor such as cs["name"].</comment>
+  </data>
+  <data name="UnknownInputGone" xml:space="preserve">
+    <value>Its expression reads {0}, which is not an attribute of the object type; it may have been renamed or removed since the rule was saved. Update the expression.</value>
+    <comment>{0} is an expression accessor such as cs["name"].</comment>
+  </data>
+  <data name="ExpressionCouldNotBeEvaluated" xml:space="preserve">
+    <value>Its expression could not be evaluated: {0}</value>
+    <comment>{0} is the evaluator's own message, English produced by the expression library.</comment>
+  </data>
+  <data name="ExpressionCouldNotBeEvaluatedCredential" xml:space="preserve">
+    <value>Its expression could not be evaluated, or computed a value that cannot be compared as {0}; the value is withheld because the expression reads an attribute that may hold a credential.</value>
+    <comment>{0} is a CompareAs... phrase.</comment>
+  </data>
+  <data name="PatternTimedOutOnExpressionValues" xml:space="preserve">
+    <value>Its pattern '{0}' ran past its time limit of {1} ms on one of the expression's values; simplify the pattern (nested repetition such as (a+)+ is the usual cause).</value>
+    <comment>{0} is the pattern; {1} the time limit in milliseconds.</comment>
+  </data>
+  <data name="ComputedValueCannotBeCompared" xml:space="preserve">
+    <value>Its expression computed '{0}', which cannot be compared as {1}.</value>
+    <comment>{0} is the value computed; {1} is a CompareAs... phrase.</comment>
+  </data>
+  <data name="CompareAsNumber" xml:space="preserve">
+    <value>a Number</value>
+    <comment>A data type, read after "compared as".</comment>
+  </data>
+  <data name="CompareAsLongNumber" xml:space="preserve">
+    <value>a Long Number</value>
+    <comment>A data type, read after "compared as".</comment>
+  </data>
+  <data name="CompareAsDecimal" xml:space="preserve">
+    <value>a Decimal</value>
+    <comment>A data type, read after "compared as".</comment>
+  </data>
+  <data name="CompareAsDateTime" xml:space="preserve">
+    <value>a DateTime</value>
+    <comment>A data type, read after "compared as".</comment>
+  </data>
+  <data name="CompareAsBoolean" xml:space="preserve">
+    <value>a Boolean</value>
+    <comment>A data type, read after "compared as".</comment>
+  </data>
+  <data name="CompareAsGuid" xml:space="preserve">
+    <value>a Guid</value>
+    <comment>A data type, read after "compared as".</comment>
+  </data>
+  <data name="ScopeTestAttributeNotFound" xml:space="preserve">
+    <value>'{0}' has a value, but {1} has no attribute of that name, so scoping would never see one.</value>
+    <comment>{0} is an attribute name the tester was given a value for; {1} is the Object Type's name in quotes, or ScopeTestTheObjectType.</comment>
+  </data>
+  <data name="ScopeTestTheObjectType" xml:space="preserve">
+    <value>the object type</value>
+    <comment>Stands in for an Object Type's name where the rule's type cannot be found.</comment>
+  </data>
 </root>

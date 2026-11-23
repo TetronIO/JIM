@@ -79,9 +79,9 @@
     @if (_result is { Explanation: null } inputProblem)
     {
         <MudAlert Severity="Severity.Error" Class="mt-3">
-            @foreach (var inputError in inputProblem.InputErrors)
+            @for (var i = 0; i < inputProblem.InputErrors.Count; i++)
             {
-                <MudText Typo="Typo.body2">@inputError</MudText>
+                <MudText Typo="Typo.body2">@(i < inputProblem.InputErrorDetails.Count ? inputProblem.InputErrorDetails[i].Show() : inputProblem.InputErrors[i])</MudText>
             }
         </MudAlert>
     }

@@ -51,7 +51,7 @@
     <value>Cette sélection ne laisse rien à gérer à JIM sur ce système connecté : {0}. Les profils d’exécution ne peuvent pas être exécutés sur celui-ci, et chaque objet déjà importé serait sorti du périmètre.</value>
   </data>
   <data name="ScopeSelectionInoperableRunProfiles" xml:space="preserve">
-    <value>{0} profil(s) d’exécution ciblent une partition que cette sélection désélectionne et seraient refusés à l’exécution : {1}. Dirigez-les vers une partition sélectionnée, ou conservez la partition sélectionnée.</value>
+    <value>Profils d’exécution ciblant une partition que cette sélection désélectionne ({0}) ; ils seraient refusés à l’exécution : {1}. Dirigez-les vers une partition sélectionnée, ou conservez la partition sélectionnée.</value>
   </data>
   <data name="ScopeSelectionContainersNotMeasured" xml:space="preserve">
     <value>Le connecteur '{0}' possède des conteneurs mais ne peut pas indiquer si un objet se trouve dans l’un d’eux ; cet aperçu ne compte donc que ce que changerait la modification de la sélection des partitions. Les modifications de conteneurs ne sont pas mesurées, et les totaux ci-dessous ne constituent pas une réponse complète.</value>

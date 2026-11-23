@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
 using JIM.Models.Logic.Scoping;
 
 namespace JIM.Models.Staging.DTOs;
@@ -36,6 +37,15 @@ public sealed class NotConnectedEntry
 
     /// <inheritdoc cref="NotConnectedSummary.Summary"/>
     public string Summary { get; set; } = string.Empty;
+
+    /// <summary><see cref="Hint"/> as a <see cref="JimMessage"/> (#3030).</summary>
+    public JimMessage? HintDetail { get; set; }
+
+    /// <summary><see cref="BulletsTitle"/> as a <see cref="JimMessage"/> (#3030).</summary>
+    public JimMessage? BulletsTitleDetail { get; set; }
+
+    /// <summary><see cref="Summary"/> as a <see cref="JimMessage"/> (#3030).</summary>
+    public JimMessage? SummaryDetail { get; set; }
 
     /// <summary>The rule's scoping evaluated against the Metaverse Object now.</summary>
     public ScopingExplanation Scoping { get; set; } = new();

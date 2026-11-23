@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using JIM.Application.Expressions;
 using JIM.Models.Core;
 using JIM.Models.Logic;
@@ -109,6 +112,7 @@ public static class ScopeTester
         var exporting = syncRule.Direction == SyncRuleDirection.Export;
         var attributes = SchemaAttributes(syncRule);
         var errors = new List<string>();
+        var errorDetails = new Dictionary<string, JimMessage>(StringComparer.Ordinal);
         var typedInputs = new List<(ScopedAttribute Attribute, List<object> Values)>();
         foreach (var input in inputs.Where(input => input.Values.Count > 0))
         {
@@ -116,8 +120,10 @@ public static class ScopeTester
             if (attribute == null)
             {
                 var objectTypeName = exporting ? syncRule.MetaverseObjectType?.Name : syncRule.ConnectedSystemObjectType?.Name;
-                errors.Add($"'{input.AttributeName}' has a value, but {(objectTypeName == null ? "the object type" : $"'{objectTypeName}'")} " +
-                           "has no attribute of that name, so scoping would never see one.");
+                MessageArgument typeLabel = objectTypeName == null ? (MessageArgument)JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ScopeTestTheObjectType)) : $"'{objectTypeName}'";
+                var notFound = JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ScopeTestAttributeNotFound), input.AttributeName, typeLabel);
+                errors.Add(notFound.ToEnglish());
+                errorDetails[notFound.ToEnglish()] = notFound;
                 continue;
             }
 
@@ -125,7 +131,12 @@ public static class ScopeTester
         }
 
         if (errors.Count > 0)
-            return new ScopeTestResult { InputErrors = errors };
+            // Errors from the value parser are English produced elsewhere, shown as they are.
+            return new ScopeTestResult
+            {
+                InputErrors = errors,
+                InputErrorDetails = [.. errors.Select(error => errorDetails.GetValueOrDefault(error) ?? JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.Verbatim), error))]
+            };
 
         var scoping = new ScopingEvaluationServer();
         Func<DateTime, ScopingExplanation> explainAt;

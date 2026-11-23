@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Logic.Scoping;
 
 /// <summary>
@@ -34,4 +36,7 @@ public sealed class ScopingExplanation
     /// Cost Centre or Job Title"), or the invalid criteria an undetermined rule stops at; empty when in scope.
     /// </summary>
     public string Hint { get; set; } = string.Empty;
+
+    /// <summary><see cref="Hint"/> as a <see cref="JimMessage"/> (#3030); null when there is no hint.</summary>
+    public JimMessage? HintDetail { get; set; }
 }

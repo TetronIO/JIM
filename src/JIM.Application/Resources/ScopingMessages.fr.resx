@@ -44,4 +44,508 @@
   <data name="ExpressionNonRepeatable" xml:space="preserve">
     <value>L’expression appelle {0}, qui renvoie une valeur différente à chaque exécution ; le périmètre d’un objet changerait donc sans que l’objet change et rien n’agirait en conséquence. Pour définir un périmètre selon une date, comparez l’expression en tant que date à une date relative (par exemple, il y a plus de 30 jours).</value>
   </data>
+  <data name="Verbatim" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="Concat" xml:space="preserve">
+    <value>{0}{1}</value>
+  </data>
+  <data name="QuotedValue" xml:space="preserve">
+    <value>« {0} »</value>
+  </data>
+  <data name="Is" xml:space="preserve">
+    <value>est</value>
+  </data>
+  <data name="MustBe" xml:space="preserve">
+    <value>doit être</value>
+  </data>
+  <data name="Or" xml:space="preserve">
+    <value>ou</value>
+  </data>
+  <data name="OrLeading" xml:space="preserve">
+    <value>ou</value>
+  </data>
+  <data name="OrAlternative" xml:space="preserve">
+    <value>soit</value>
+  </data>
+  <data name="Either" xml:space="preserve">
+    <value>soit</value>
+  </data>
+  <data name="AndEither" xml:space="preserve">
+    <value>et soit</value>
+  </data>
+  <data name="And" xml:space="preserve">
+    <value>et</value>
+  </data>
+  <data name="OpEquals" xml:space="preserve">
+    <value>est égal à</value>
+  </data>
+  <data name="OpNotEquals" xml:space="preserve">
+    <value>n’est pas égal à</value>
+  </data>
+  <data name="OpStartsWith" xml:space="preserve">
+    <value>commence par</value>
+  </data>
+  <data name="OpNotStartsWith" xml:space="preserve">
+    <value>ne commence pas par</value>
+  </data>
+  <data name="OpEndsWith" xml:space="preserve">
+    <value>se termine par</value>
+  </data>
+  <data name="OpNotEndsWith" xml:space="preserve">
+    <value>ne se termine pas par</value>
+  </data>
+  <data name="OpContains" xml:space="preserve">
+    <value>contient</value>
+  </data>
+  <data name="OpNotContains" xml:space="preserve">
+    <value>ne contient pas</value>
+  </data>
+  <data name="OpMatchesPattern" xml:space="preserve">
+    <value>correspond au motif</value>
+  </data>
+  <data name="OpNotMatchesPattern" xml:space="preserve">
+    <value>ne correspond pas au motif</value>
+  </data>
+  <data name="MustEqual" xml:space="preserve">
+    <value>doit être égal à</value>
+  </data>
+  <data name="MustNotEqual" xml:space="preserve">
+    <value>ne doit pas être égal à</value>
+  </data>
+  <data name="MustStartWith" xml:space="preserve">
+    <value>doit commencer par</value>
+  </data>
+  <data name="MustNotStartWith" xml:space="preserve">
+    <value>ne doit pas commencer par</value>
+  </data>
+  <data name="MustEndWith" xml:space="preserve">
+    <value>doit se terminer par</value>
+  </data>
+  <data name="MustNotEndWith" xml:space="preserve">
+    <value>ne doit pas se terminer par</value>
+  </data>
+  <data name="MustContain" xml:space="preserve">
+    <value>doit contenir</value>
+  </data>
+  <data name="MustNotContain" xml:space="preserve">
+    <value>ne doit pas contenir</value>
+  </data>
+  <data name="MustMatchPattern" xml:space="preserve">
+    <value>doit correspondre au motif</value>
+  </data>
+  <data name="MustNotMatchPattern" xml:space="preserve">
+    <value>ne doit pas correspondre au motif</value>
+  </data>
+  <data name="OpBefore" xml:space="preserve">
+    <value>antérieur à</value>
+  </data>
+  <data name="OpOnOrBefore" xml:space="preserve">
+    <value>antérieur ou égal à</value>
+  </data>
+  <data name="OpAfter" xml:space="preserve">
+    <value>postérieur à</value>
+  </data>
+  <data name="OpOnOrAfter" xml:space="preserve">
+    <value>postérieur ou égal à</value>
+  </data>
+  <data name="OpLessThan" xml:space="preserve">
+    <value>inférieur à</value>
+  </data>
+  <data name="OpLessThanOrEquals" xml:space="preserve">
+    <value>inférieur ou égal à</value>
+  </data>
+  <data name="OpGreaterThan" xml:space="preserve">
+    <value>supérieur à</value>
+  </data>
+  <data name="OpGreaterThanOrEquals" xml:space="preserve">
+    <value>supérieur ou égal à</value>
+  </data>
+  <data name="CriterionWithNoAttribute" xml:space="preserve">
+    <value>Critère sans attribut</value>
+  </data>
+  <data name="IgnoringCase" xml:space="preserve">
+    <value>sans tenir compte de la casse</value>
+  </data>
+  <data name="ActualReferencesNoAttribute" xml:space="preserve">
+    <value>ne référence aucun attribut</value>
+  </data>
+  <data name="ActualCannotBeEvaluated" xml:space="preserve">
+    <value>ne peut pas être évalué</value>
+  </data>
+  <data name="ActualCannotBeEvaluatedBecause" xml:space="preserve">
+    <value>ne peut pas être évalué. {0}</value>
+  </data>
+  <data name="ActualHasConnection" xml:space="preserve">
+    <value>en a un</value>
+  </data>
+  <data name="ActualHasNoConnection" xml:space="preserve">
+    <value>n’en a aucun</value>
+  </data>
+  <data name="ActualComputedHidden" xml:space="preserve">
+    <value>a calculé une valeur masquée</value>
+  </data>
+  <data name="ActualIsHidden" xml:space="preserve">
+    <value>est masquée</value>
+  </data>
+  <data name="ActualComputedNoValue" xml:space="preserve">
+    <value>n’a calculé aucune valeur</value>
+  </data>
+  <data name="ActualHasNoValue" xml:space="preserve">
+    <value>n’a aucune valeur</value>
+  </data>
+  <data name="ActualComputedValue" xml:space="preserve">
+    <value>a calculé {0}</value>
+  </data>
+  <data name="ActualIsValue" xml:space="preserve">
+    <value>est {0}</value>
+  </data>
+  <data name="ActualComputedOneOf" xml:space="preserve">
+    <value>a calculé {0} (une valeur parmi {1})</value>
+  </data>
+  <data name="ActualIncludesOneOf" xml:space="preserve">
+    <value>comprend {0} (une valeur parmi {1})</value>
+  </data>
+  <data name="ActualComputedCount" xml:space="preserve">
+    <value>a calculé {0} valeurs</value>
+  </data>
+  <data name="ActualHasCount" xml:space="preserve">
+    <value>a {0} valeurs</value>
+  </data>
+  <data name="ActualNoneOfComputedValues" xml:space="preserve">
+    <value>aucune des {0} valeurs calculées {1} {2}</value>
+  </data>
+  <data name="ActualNoneOfValues" xml:space="preserve">
+    <value>aucune des {0} valeurs {1} {2}</value>
+  </data>
+  <data name="GroupAllMustBeMet" xml:space="preserve">
+    <value>Toutes doivent être remplies</value>
+  </data>
+  <data name="GroupAnyOneOfThese" xml:space="preserve">
+    <value>L’une d’entre elles</value>
+  </data>
+  <data name="GroupStateCannotBeEvaluated" xml:space="preserve">
+    <value>ne peut pas être évalué</value>
+  </data>
+  <data name="GroupStateMet" xml:space="preserve">
+    <value>remplie</value>
+  </data>
+  <data name="GroupStateNoneMet" xml:space="preserve">
+    <value>aucune remplie</value>
+  </data>
+  <data name="GroupStateNotMet" xml:space="preserve">
+    <value>non remplie</value>
+  </data>
+  <data name="GroupLine" xml:space="preserve">
+    <value>{0} ({1})</value>
+  </data>
+  <data name="Currently" xml:space="preserve">
+    <value>actuellement</value>
+  </data>
+  <data name="CaseSensitiveCurrently" xml:space="preserve">
+    <value>sensible à la casse ; actuellement</value>
+  </data>
+  <data name="CurrentlyHasConnection" xml:space="preserve">
+    <value>en a actuellement un</value>
+  </data>
+  <data name="CurrentlyHasNoConnection" xml:space="preserve">
+    <value>n’en a actuellement aucun</value>
+  </data>
+  <data name="CurrentlyIncludes" xml:space="preserve">
+    <value>comprend actuellement</value>
+  </data>
+  <data name="OneOfCountValues" xml:space="preserve">
+    <value>une valeur parmi {0}</value>
+  </data>
+  <data name="CurrentlyCountValues" xml:space="preserve">
+    <value>actuellement {0} valeurs</value>
+  </data>
+  <data name="NoneOfItsValuesMatches" xml:space="preserve">
+    <value>aucune de ses {0} valeurs ne correspond</value>
+  </data>
+  <data name="NoValueWord" xml:space="preserve">
+    <value>aucune valeur</value>
+  </data>
+  <data name="AHiddenValue" xml:space="preserve">
+    <value>une valeur masquée</value>
+  </data>
+  <data name="CurrentValueHidden" xml:space="preserve">
+    <value>valeur actuelle masquée</value>
+  </data>
+  <data name="AnEmptyValue" xml:space="preserve">
+    <value>une valeur vide</value>
+  </data>
+  <data name="AnAttribute" xml:space="preserve">
+    <value>un attribut</value>
+  </data>
+  <data name="MustHaveNoValue" xml:space="preserve">
+    <value>ne doit avoir aucune valeur</value>
+  </data>
+  <data name="HasNoValueCondition" xml:space="preserve">
+    <value>n’a aucune valeur</value>
+  </data>
+  <data name="NeedsAValue" xml:space="preserve">
+    <value>nécessite une valeur</value>
+  </data>
+  <data name="HasAValue" xml:space="preserve">
+    <value>a une valeur</value>
+  </data>
+  <data name="NeedsAValueThat" xml:space="preserve">
+    <value>nécessite une valeur qui {0}</value>
+  </data>
+  <data name="HasAValueThat" xml:space="preserve">
+    <value>a une valeur qui {0}</value>
+  </data>
+  <data name="ConnectionNeeds" xml:space="preserve">
+    <value>Nécessite</value>
+  </data>
+  <data name="ConnectionNeedsNo" xml:space="preserve">
+    <value>Ne nécessite aucun</value>
+  </data>
+  <data name="ConnectionHas" xml:space="preserve">
+    <value>Possède</value>
+  </data>
+  <data name="ConnectionHasNo" xml:space="preserve">
+    <value>Ne possède aucun</value>
+  </data>
+  <data name="CriterionHasNoAttributeStart" xml:space="preserve">
+    <value>Le critère {0} n’a aucun attribut et ne peut jamais être rempli</value>
+  </data>
+  <data name="CriterionHasNoAttributeMid" xml:space="preserve">
+    <value>le critère {0} n’a aucun attribut et ne peut jamais être rempli</value>
+  </data>
+  <data name="FailsOn" xml:space="preserve">
+    <value>Échoue sur {0}</value>
+  </data>
+  <data name="HintCriterionPath" xml:space="preserve">
+    <value>critère {0}</value>
+  </data>
+  <data name="UndecidedUntilFullImport" xml:space="preserve">
+    <value>Indécis tant qu’une importation complète n’a pas lu {0}</value>
+  </data>
+  <data name="ScopingCannotBeEvaluated" xml:space="preserve">
+    <value>Le périmètre ne peut pas être évalué</value>
+  </data>
+  <data name="InvalidCriterionOn" xml:space="preserve">
+    <value>Critère non valide sur {0}</value>
+  </data>
+  <data name="InvalidCriteriaOn" xml:space="preserve">
+    <value>Critères non valides sur {0}</value>
+  </data>
+  <data name="JoinLastAnd" xml:space="preserve">
+    <value>{0} et {1}</value>
+  </data>
+  <data name="CriterionCompares" xml:space="preserve">
+    <value>Le critère {0} compare</value>
+  </data>
+  <data name="WhichCannotBeEvaluatedYet" xml:space="preserve">
+    <value>, qui ne peut pas encore être évalué. {0}</value>
+  </data>
+  <data name="WithPatternThatCannotBeEvaluated" xml:space="preserve">
+    <value>avec un motif qui ne peut pas être évalué ; corrigez-le ou supprimez-le dans la règle de synchronisation.</value>
+  </data>
+  <data name="WithOperatorTypeCannotUse" xml:space="preserve">
+    <value>avec « {0} », qu’un attribut {1} ne peut pas utiliser ; corrigez-le ou supprimez-le dans la règle de synchronisation.</value>
+  </data>
+  <data name="TypeAText" xml:space="preserve">
+    <value>de type texte</value>
+  </data>
+  <data name="TypeANumber" xml:space="preserve">
+    <value>de type nombre</value>
+  </data>
+  <data name="TypeALongNumber" xml:space="preserve">
+    <value>de type nombre long</value>
+  </data>
+  <data name="TypeADecimal" xml:space="preserve">
+    <value>de type décimal</value>
+  </data>
+  <data name="TypeADate" xml:space="preserve">
+    <value>de type date</value>
+  </data>
+  <data name="TypeABoolean" xml:space="preserve">
+    <value>de type booléen</value>
+  </data>
+  <data name="TypeAGuid" xml:space="preserve">
+    <value>de type GUID</value>
+  </data>
+  <data name="TypeABinary" xml:space="preserve">
+    <value>de type binaire</value>
+  </data>
+  <data name="TypeAReference" xml:space="preserve">
+    <value>de type référence</value>
+  </data>
+  <data name="TypeAnUntyped" xml:space="preserve">
+    <value>sans type</value>
+  </data>
+  <data name="GenericObjectName" xml:space="preserve">
+    <value>Cet objet Metaverse</value>
+  </data>
+  <data name="TitleToComeIntoScope" xml:space="preserve">
+    <value>Pour entrer dans le périmètre</value>
+  </data>
+  <data name="TitleWhatHappensNext" xml:space="preserve">
+    <value>Ce qui se passe ensuite</value>
+  </data>
+  <data name="TitleWhatWouldConnectIt" xml:space="preserve">
+    <value>Ce qui le connecterait</value>
+  </data>
+  <data name="TitleWhatWouldFixIt" xml:space="preserve">
+    <value>Ce qui le corrigerait</value>
+  </data>
+  <data name="HintInScopeStagedNext" xml:space="preserve">
+    <value>Dans le périmètre ; mis en attente à la prochaine synchronisation</value>
+  </data>
+  <data name="HintInScopeNothingStaged" xml:space="preserve">
+    <value>Dans le périmètre ; rien n’est encore mis en attente</value>
+  </data>
+  <data name="HintInScopeProvisioningOff" xml:space="preserve">
+    <value>Dans le périmètre ; le provisionnement est désactivé</value>
+  </data>
+  <data name="HintConnectedSystemDisabled" xml:space="preserve">
+    <value>Système connecté désactivé</value>
+  </data>
+  <data name="BulletAwaitingExportReview" xml:space="preserve">
+    <value>Cet objet Metaverse attend sa révision d’exportation.</value>
+  </data>
+  <data name="BulletNextSynchronisationReviews" xml:space="preserve">
+    <value>La prochaine synchronisation de n’importe quel système connecté le révise et met en attente son provisionnement vers {0}.</value>
+  </data>
+  <data name="BulletStagedWhenValuesChange" xml:space="preserve">
+    <value>Le provisionnement est mis en attente la prochaine fois que les valeurs d’attributs de cet objet Metaverse changent pendant la synchronisation.</value>
+  </data>
+  <data name="BulletSavingRuleStages" xml:space="preserve">
+    <value>L’enregistrement d’une modification de la règle de synchronisation susceptible de faire entrer des objets dans son périmètre le met également en attente, lors de la prochaine synchronisation de n’importe quel système connecté.</value>
+  </data>
+  <data name="BulletSwitchOnProvision" xml:space="preserve">
+    <value>Activez « Provisionner vers le système connecté » dans la règle de synchronisation, ou</value>
+  </data>
+  <data name="BulletCreateObjectThatJoins" xml:space="preserve">
+    <value>créez dans {0} un objet qui se joint à cet objet Metaverse.</value>
+  </data>
+  <data name="ReasonNotInScope" xml:space="preserve">
+    <value>hors du périmètre de la règle de synchronisation « {0} ».</value>
+  </data>
+  <data name="ReasonInScopeStagesNext" xml:space="preserve">
+    <value>dans le périmètre de la règle de synchronisation « {0} » ; la prochaine synchronisation met en attente son provisionnement.</value>
+  </data>
+  <data name="ReasonInScopeNothingStaged" xml:space="preserve">
+    <value>dans le périmètre de la règle de synchronisation « {0} », mais rien n’a encore été mis en attente.</value>
+  </data>
+  <data name="ReasonInScopeNoProvisioning" xml:space="preserve">
+    <value>dans le périmètre de la règle de synchronisation « {0} », mais la règle ne provisionne pas de nouveaux objets.</value>
+  </data>
+  <data name="ReasonScopingCannotBeEvaluated" xml:space="preserve">
+    <value>le périmètre de la règle de synchronisation « {0} » ne peut pas être évalué.</value>
+  </data>
+  <data name="SummaryNotProvisioned" xml:space="preserve">
+    <value>{0} n’est pas provisionné vers {1}.</value>
+  </data>
+  <data name="SummaryReason" xml:space="preserve">
+    <value>Raison : {0}</value>
+  </data>
+  <data name="SummaryNoteDisabled" xml:space="preserve">
+    <value>Remarque : le système connecté {0} est désactivé.</value>
+  </data>
+  <data name="SummaryTitleLine" xml:space="preserve">
+    <value>{0} :</value>
+  </data>
+  <data name="SummaryEvaluated" xml:space="preserve">
+    <value>Évalué le {0}.</value>
+  </data>
+  <data name="ObjectTypeConflict" xml:space="preserve">
+    <value>La règle de synchronisation « {0} » cible des objets « {1} » dans {2}, mais cet objet Metaverse y est déjà représenté par un objet « {3} ». Un objet Metaverse ne peut avoir qu’un seul objet de système connecté par système connecté ; cette règle ne peut donc pas le connecter.</value>
+  </data>
+  <data name="JoinRule" xml:space="preserve">
+    <value>la règle de synchronisation « {0} »</value>
+  </data>
+  <data name="JoinRuleSinceDeleted" xml:space="preserve">
+    <value>la règle de synchronisation « {0} » (depuis supprimée)</value>
+  </data>
+  <data name="JoinProjectedBy" xml:space="preserve">
+    <value>Projeté par {0}</value>
+  </data>
+  <data name="JoinProvisionedBy" xml:space="preserve">
+    <value>Provisionné par {0}</value>
+  </data>
+  <data name="JoinMatchedUnder" xml:space="preserve">
+    <value>Joint par correspondance, selon {0}{1}</value>
+  </data>
+  <data name="JoinMatchedOnRules" xml:space="preserve">
+    <value>Joint par correspondance sur les règles de correspondance d’objets du système connecté{0}</value>
+  </data>
+  <data name="JoinExportMatched" xml:space="preserve">
+    <value>Joint par {0}, qui a fait correspondre un objet existant au lieu d’en provisionner un nouveau</value>
+  </data>
+  <data name="JoinProjectedNotRecorded" xml:space="preserve">
+    <value>Projeté ; la règle de synchronisation n’a pas été enregistrée</value>
+  </data>
+  <data name="JoinProvisionedNotRecorded" xml:space="preserve">
+    <value>Provisionné ; la règle de synchronisation n’a pas été enregistrée</value>
+  </data>
+  <data name="JoinNotRecorded" xml:space="preserve">
+    <value>Joint ; la manière n’a pas été enregistrée</value>
+  </data>
+  <data name="MatchedRuleDeleted" xml:space="preserve">
+    <value> : correspondance sur « {0} » (la règle de correspondance d’objets a depuis été supprimée)</value>
+  </data>
+  <data name="MatchedOn" xml:space="preserve">
+    <value> : correspondance sur « {0} » dans {1} (égal à {2})</value>
+  </data>
+  <data name="CriterionIsInvalid" xml:space="preserve">
+    <value>Le critère n’est pas valide : {0}.</value>
+  </data>
+  <data name="InvalidReasonOperator" xml:space="preserve">
+    <value>L’opérateur de comparaison '{0}' n’est pas valide pour l’attribut de type {1}</value>
+  </data>
+  <data name="NoTypeToCompareAs" xml:space="preserve">
+    <value>il n’a aucun type selon lequel comparer la valeur de l’expression</value>
+  </data>
+  <data name="ConnectionCriterionOperatorReason" xml:space="preserve">
+    <value>un critère de connexion ne peut tester que la présence ou l’absence d’une connexion de l’objet</value>
+  </data>
+  <data name="ConnectionUnreadable" xml:space="preserve">
+    <value>JIM n’a pas pu lire à quels systèmes connectés l’objet est connecté ; on ignore donc s’il possède un {0}.</value>
+  </data>
+  <data name="UnknownInputUnavailable" xml:space="preserve">
+    <value>Son expression lit {0}, mais les attributs du type d’objet n’étaient pas disponibles pour confirmer que l’attribut existe ; une valeur absente n’a donc pas pu être distinguée d’un attribut absent.</value>
+  </data>
+  <data name="UnknownInputGone" xml:space="preserve">
+    <value>Son expression lit {0}, qui n’est pas un attribut du type d’objet ; il a peut-être été renommé ou supprimé depuis l’enregistrement de la règle. Mettez à jour l’expression.</value>
+  </data>
+  <data name="ExpressionCouldNotBeEvaluated" xml:space="preserve">
+    <value>Son expression n’a pas pu être évaluée : {0}</value>
+  </data>
+  <data name="ExpressionCouldNotBeEvaluatedCredential" xml:space="preserve">
+    <value>Son expression n’a pas pu être évaluée, ou a calculé une valeur qui ne peut pas être comparée en tant que {0} ; la valeur est masquée car l’expression lit un attribut susceptible de contenir un identifiant.</value>
+  </data>
+  <data name="PatternTimedOutOnExpressionValues" xml:space="preserve">
+    <value>Son motif '{0}' a dépassé sa limite de temps de {1} ms sur l’une des valeurs de l’expression ; simplifiez le motif (une répétition imbriquée telle que (a+)+ en est la cause habituelle).</value>
+  </data>
+  <data name="ComputedValueCannotBeCompared" xml:space="preserve">
+    <value>Son expression a calculé '{0}', qui ne peut pas être comparé en tant que {1}.</value>
+  </data>
+  <data name="CompareAsNumber" xml:space="preserve">
+    <value>un nombre</value>
+  </data>
+  <data name="CompareAsLongNumber" xml:space="preserve">
+    <value>un nombre long</value>
+  </data>
+  <data name="CompareAsDecimal" xml:space="preserve">
+    <value>un décimal</value>
+  </data>
+  <data name="CompareAsDateTime" xml:space="preserve">
+    <value>une date et heure</value>
+  </data>
+  <data name="CompareAsBoolean" xml:space="preserve">
+    <value>un booléen</value>
+  </data>
+  <data name="CompareAsGuid" xml:space="preserve">
+    <value>un GUID</value>
+  </data>
+  <data name="ScopeTestAttributeNotFound" xml:space="preserve">
+    <value>'{0}' a une valeur, mais {1} n’a aucun attribut de ce nom ; le périmètre n’en verrait donc jamais.</value>
+  </data>
+  <data name="ScopeTestTheObjectType" xml:space="preserve">
+    <value>le type d’objet</value>
+  </data>
 </root>

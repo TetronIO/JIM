@@ -20,4 +20,55 @@
   <data name="ExpressionReadsConnectedSystemOnExport" xml:space="preserve">
     <value>The expression reads {0}, but an export Synchronization Rule scopes Metaverse Objects, read as mv["..."], so that input would never hold a value.</value>
   </data>
+  <data name="WithPatternThatCannotBeEvaluated" xml:space="preserve">
+    <value>with a pattern that cannot be evaluated; correct or remove it in the Synchronization Rule.</value>
+  </data>
+  <data name="WithOperatorTypeCannotUse" xml:space="preserve">
+    <value>with "{0}", which {1} attribute cannot use; correct or remove it in the Synchronization Rule.</value>
+  </data>
+  <data name="HintInScopeStagedNext" xml:space="preserve">
+    <value>In scope; staged at the next synchronization</value>
+  </data>
+  <data name="BulletNextSynchronisationReviews" xml:space="preserve">
+    <value>The next synchronization of any Connected System reviews it and stages its provisioning to {0}.</value>
+  </data>
+  <data name="BulletStagedWhenValuesChange" xml:space="preserve">
+    <value>Provisioning is staged the next time this Metaverse Object's attribute values change during synchronization.</value>
+  </data>
+  <data name="BulletSavingRuleStages" xml:space="preserve">
+    <value>Saving a change to the Synchronization Rule that can bring objects into its scope also stages it, at the next synchronization of any Connected System.</value>
+  </data>
+  <data name="BulletSwitchOnProvision" xml:space="preserve">
+    <value>Switch on Provision to Connected System in the Synchronization Rule, or</value>
+  </data>
+  <data name="ReasonNotInScope" xml:space="preserve">
+    <value>not in scope of the Synchronization Rule "{0}".</value>
+  </data>
+  <data name="ReasonInScopeStagesNext" xml:space="preserve">
+    <value>in scope of the Synchronization Rule "{0}"; the next synchronization stages its provisioning.</value>
+  </data>
+  <data name="ReasonInScopeNothingStaged" xml:space="preserve">
+    <value>in scope of the Synchronization Rule "{0}", but nothing has been staged yet.</value>
+  </data>
+  <data name="ReasonInScopeNoProvisioning" xml:space="preserve">
+    <value>in scope of the Synchronization Rule "{0}", but the rule does not provision new objects.</value>
+  </data>
+  <data name="ReasonScopingCannotBeEvaluated" xml:space="preserve">
+    <value>the scoping of the Synchronization Rule "{0}" cannot be evaluated.</value>
+  </data>
+  <data name="ObjectTypeConflict" xml:space="preserve">
+    <value>The Synchronization Rule "{0}" targets "{1}" objects in {2}, but this Metaverse Object is already represented there by a "{3}" object. A Metaverse Object can have only one Connected System Object per Connected System, so this rule cannot connect it.</value>
+  </data>
+  <data name="JoinRule" xml:space="preserve">
+    <value>the Synchronization Rule "{0}"</value>
+  </data>
+  <data name="JoinRuleSinceDeleted" xml:space="preserve">
+    <value>the Synchronization Rule "{0}" (since deleted)</value>
+  </data>
+  <data name="JoinProjectedNotRecorded" xml:space="preserve">
+    <value>Projected; the Synchronization Rule was not recorded</value>
+  </data>
+  <data name="JoinProvisionedNotRecorded" xml:space="preserve">
+    <value>Provisioned; the Synchronization Rule was not recorded</value>
+  </data>
 </root>
