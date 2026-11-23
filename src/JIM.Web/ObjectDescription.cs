@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Web.Resources;
+using System.Globalization;
+
 namespace JIM.Web;
 
 /// <summary>
@@ -39,12 +42,12 @@ public static class ObjectDescription
         var hasSystem = !string.IsNullOrWhiteSpace(connectedSystemName);
 
         if (hasType && hasSystem)
-            return $"{typeName} {name} in {connectedSystemName}";
+            return string.Format(CultureInfo.CurrentCulture, DisplayText.ObjectTypeNameInSystem, typeName, name, connectedSystemName);
         if (hasSystem)
-            return $"{name} in {connectedSystemName}";
+            return string.Format(CultureInfo.CurrentCulture, DisplayText.ObjectInSystem, name, connectedSystemName);
         if (hasType)
             return $"{typeName} {name}";
-        return $"Connected System Object {name}";
+        return string.Format(CultureInfo.CurrentCulture, DisplayText.ObjectConnectedSystemObjectNamed, name);
     }
 
     /// <summary>
@@ -75,12 +78,12 @@ public static class ObjectDescription
         var hasSystem = !string.IsNullOrWhiteSpace(connectedSystemName);
 
         if (hasType && hasSystem)
-            return $"{typeName} in {connectedSystemName}";
+            return string.Format(CultureInfo.CurrentCulture, DisplayText.ObjectInSystem, typeName, connectedSystemName);
         if (hasSystem)
-            return $"in {connectedSystemName}";
+            return string.Format(CultureInfo.CurrentCulture, DisplayText.ObjectInSystemOnly, connectedSystemName);
         if (hasType)
             return typeName!;
-        return "Connected System Object";
+        return DisplayText.ObjectConnectedSystemObjectNoun;
     }
 
     /// <summary>
@@ -94,8 +97,8 @@ public static class ObjectDescription
     public static string ForConnectedSystemObjectPlace(string? connectedSystemName)
     {
         return !string.IsNullOrWhiteSpace(connectedSystemName)
-            ? $"in {connectedSystemName}"
-            : "Connected System Object";
+            ? string.Format(CultureInfo.CurrentCulture, DisplayText.ObjectInSystemOnly, connectedSystemName)
+            : DisplayText.ObjectConnectedSystemObjectNoun;
     }
 
     /// <summary>
@@ -108,7 +111,7 @@ public static class ObjectDescription
     {
         return !string.IsNullOrWhiteSpace(typeName)
             ? $"{typeName} {name}"
-            : $"Metaverse Object {name}";
+            : string.Format(CultureInfo.CurrentCulture, DisplayText.ObjectMetaverseObjectNamed, name);
     }
 
     /// <summary>
@@ -120,8 +123,8 @@ public static class ObjectDescription
     public static string ForMetaverseObjectPlace(string? typeName)
     {
         return !string.IsNullOrWhiteSpace(typeName)
-            ? $"{typeName} in the Metaverse"
-            : "Metaverse Object";
+            ? string.Format(CultureInfo.CurrentCulture, DisplayText.ObjectTypeInMetaverse, typeName)
+            : DisplayText.ObjectMetaverseObjectNoun;
     }
 
     /// <summary>
@@ -132,7 +135,7 @@ public static class ObjectDescription
     /// </summary>
     public static string ForMetaverseObjectPlace()
     {
-        return "in the Metaverse";
+        return DisplayText.ObjectInMetaverse;
     }
 
     /// <summary>
@@ -166,7 +169,7 @@ public static class ObjectDescription
         {
             name != null
                 ? ForConnectedSystemObjectLabel(typeName, name)
-                : Present(typeName) ?? "Connected System Object"
+                : Present(typeName) ?? DisplayText.ObjectConnectedSystemObjectNoun
         };
 
         var presentExternalId = Present(externalId);
@@ -175,7 +178,7 @@ public static class ObjectDescription
 
         var presentSystem = Present(connectedSystemName);
         if (presentSystem != null)
-            parts.Add($"in {presentSystem}");
+            parts.Add(string.Format(CultureInfo.CurrentCulture, DisplayText.ObjectInSystemOnly, presentSystem));
 
         return string.Join(" · ", parts);
     }
@@ -192,7 +195,7 @@ public static class ObjectDescription
         var name = Present(displayName);
         return name != null
             ? ForConnectedSystemObjectLabel(typeName, name)
-            : Present(typeName) ?? "Metaverse Object";
+            : Present(typeName) ?? DisplayText.ObjectMetaverseObjectNoun;
     }
 
     /// <summary>

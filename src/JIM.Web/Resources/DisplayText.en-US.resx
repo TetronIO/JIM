@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ErrorHeadingSynchronisationFailed" xml:space="preserve">
+    <value>Synchronization Failed</value>
+  </data>
+  <data name="ExternalIdStatusPendingRemoval" xml:space="preserve">
+    <value>This object has been detected as deleted from the source system. It is pending removal during the next synchronization.</value>
+  </data>
+  <data name="OperationDeletedImport" xml:space="preserve">
+    <value>The object was detected as deleted from the source system. It is now pending removal during the next synchronization.</value>
+  </data>
+  <data name="OperationDeletedSync" xml:space="preserve">
+    <value>The deletion of this object has been processed during synchronization. Associated metaverse links and data have been updated.</value>
+  </data>
+  <data name="OperationAttributeFlow" xml:space="preserve">
+    <value>Attribute values were flowed from the Connected System Object to the Metaverse Object according to the Synchronization Rule mappings.</value>
+  </data>
+  <data name="OperationDisconnectedOutOfScope" xml:space="preserve">
+    <value>The object fell out of scope of the import Synchronization Rule scoping criteria and was disconnected from the metaverse.</value>
+  </data>
+  <data name="OperationCreated" xml:space="preserve">
+    <value>The Metaverse Object was created directly (e.g. via data generation or the admin interface) rather than through synchronization.</value>
+  </data>
+  <data name="OperationExportScopeReview" xml:space="preserve">
+    <value>This Metaverse Object was reviewed against the export Synchronization Rules, because an export rule changed or the object was created or changed outside synchronization. It was provisioned or deprovisioned as the rules now require, or had values changed outside synchronization delivered to its accounts.</value>
+  </data>
+  <data name="RunTypeResultsSynchronisation" xml:space="preserve">
+    <value>Synchronization Results</value>
+  </data>
+  <data name="TermMetaverseText" xml:space="preserve">
+    <value>The central, authoritative repository within JIM. The Metaverse holds one Metaverse Object for each real-world thing JIM manages, aggregated from every Connected System via Synchronization Rules.</value>
+  </data>
+  <data name="TermConnectorSpaceText" xml:space="preserve">
+    <value>The staging area where Connected System Objects reside before and after synchronization. The Connector Space acts as a buffer between external systems and the Metaverse, ensuring that changes are validated before they are applied.</value>
+  </data>
+  <data name="TermProjectionText" xml:space="preserve">
+    <value>Creating a new Metaverse Object when no existing one matches an incoming Connected System Object. Projection is enabled per Synchronization Rule.</value>
+  </data>
+  <data name="TermAttributeFlowText" xml:space="preserve">
+    <value>A rule that maps an attribute between a Connected System Object and a Metaverse Object. Attribute Flows define how data moves during synchronization, including any transformations applied via expressions.</value>
+  </data>
+  <data name="TermPendingExportText" xml:space="preserve">
+    <value>A queued change waiting to be sent to a target system. Pending Exports are created during synchronization and held until an export Run Profile is executed, at which point they are applied to the Connected System.</value>
+  </data>
+  <data name="TermScopingText" xml:space="preserve">
+    <value>The Scoping Criteria that decide which objects a Synchronization Rule applies to. While an object is outside them, the rule flows nothing for it; when a joined object leaves them, the rule's Out-of-Scope Action (import rules) or Deprovisioning Action (export rules) decides what happens next.</value>
+  </data>
+  <data name="TermAttributePriorityText" xml:space="preserve">
+    <value>The deterministic precedence that decides which Connected System's value wins when several contribute the same Metaverse Object attribute. Each contributing inbound Synchronization Rule holds a priority for the attribute, and the highest-priority contributor that has a value sets it, so the result never depends on the order synchronizations happen to run in.</value>
+  </data>
+  <data name="PasswordChangeStatusCancelled" xml:space="preserve">
+    <value>Canceled</value>
+  </data>
+  <data name="PasswordChangeCancelledByAdministrator" xml:space="preserve">
+    <value>Canceled by an administrator</value>
+  </data>
+  <data name="PasswordChangeCancelledBy" xml:space="preserve">
+    <value>Canceled by {0}</value>
+  </data>
+  <data name="PasswordChangeHeld" xml:space="preserve">
+    <value>Waiting for Password Synchronization to be switched on for this Connected System</value>
+  </data>
+  <data name="PasswordChangeHeldAfterAttempt" xml:space="preserve">
+    <value>Waiting for Password Synchronization to be switched on for this Connected System. Last attempt: {0}</value>
+  </data>
+  <data name="PasswordFirstPasswordTooltip" xml:space="preserve">
+    <value>This change is also the first password of a Connected System Object JIM provisioned while it was waiting. Delivering it applies the provisioning Synchronization Rule's Initial Password settings for enabling the Connected System Object and for whether its password never expires. Cancelling it leaves that Connected System Object without a password from JIM.</value>
+  </data>
+  <data name="PasswordCancelFirstPasswordConsequence" xml:space="preserve">
+    <value>{0} It is the first password of a Connected System Object JIM provisioned there, so cancelling it leaves that Connected System Object without a password from JIM, and it is not enabled as its Synchronization Rule's Initial Password asks, until a password is set on it.</value>
+  </data>
+  <data name="PasswordCancelOrdinaryConsequence" xml:space="preserve">
+    <value>{0} Their password stays as it was on that system until a new change is synchronized.</value>
+  </data>
+</root>
