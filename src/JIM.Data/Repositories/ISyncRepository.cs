@@ -1074,6 +1074,19 @@ public interface ISyncRepository
     Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesToAsync(int connectedSystemId, IReadOnlyCollection<Guid> metaverseObjectIds);
 
     /// <summary>
+    /// The Pending Exports of a Connected System holding an exported removal of a reference to any of the given Connected
+    /// System Objects (a Remove awaiting confirmation whose <c>ResolvedReferenceCsoId</c> names one), with their attribute
+    /// value changes and those changes' attributes, untracked. A Delta Import that learns the target deleted those objects
+    /// confirms such removals: nothing can still refer to an object the target deleted (#3053).
+    /// </summary>
+    /// <remarks>
+    /// Asked only when an import learned of deletions, once per run. <c>ResolvedReferenceCsoId</c> carries no index (it is a
+    /// soft pointer, written at bulk-export scale), so the query reads the system's Pending Exports' changes through their
+    /// Pending Export.
+    /// </remarks>
+    Task<List<PendingExport>> GetPendingExportsAwaitingRemovalOfReferencesToAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
     /// Gets the count of Pending Exports for a Connected System.
     /// Used by the export processor to determine paging.
     /// </summary>

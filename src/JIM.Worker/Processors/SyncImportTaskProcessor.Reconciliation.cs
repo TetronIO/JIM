@@ -78,6 +78,16 @@ public partial class SyncImportTaskProcessor
 
         public Dictionary<ReconciliationReloadReason, int> ReloadsByReason { get; } = [];
 
+        /// <summary>
+        /// The objects the Connector reported the target deleted this run, and the run marks deleted: an exported removal of a
+        /// reference to one, on any object, is confirmed by the deletion (#3053; <see cref="SyncEngine.IsRemovalOfReferenceToDeletedObject"/>).
+        /// Empty on a Full Import, whose objects are read whole, so what they refer to is read too.
+        /// </summary>
+        public IReadOnlySet<Guid> DeletedObjectIds { get; init; } = new HashSet<Guid>();
+
+        /// <summary>The objects reconciled this run, so a removal confirmed by a deletion is not judged twice.</summary>
+        public ConcurrentDictionary<Guid, byte> ReconciledObjectIds { get; } = new();
+
         public int ReconciledCount;
         public int JudgedFromHeldValuesCount;
         public int ReloadedCount;
@@ -141,11 +151,19 @@ public partial class SyncImportTaskProcessor
 
         var deferredIds = await FindObjectsSavedMoreThanOnceWithPendingExportsAsync(updatedCsoIds);
 
+        // Read once the run's deletes are settled: a Delta Import's withheld ones are put back before its save phase, and a
+        // delete a later page superseded leaves its object as it was.
+        var deletedObjectIds = _connectorReportedDeletes
+            .Where(delete => delete.Cso.Status == ConnectedSystemObjectStatus.Obsolete && delete.StatusBefore != ConnectedSystemObjectStatus.Obsolete)
+            .Select(delete => delete.Cso.Id)
+            .ToHashSet();
+
         return new PendingExportReconciliationRun
         {
             DeferredIds = deferredIds,
             DatabaseFoldsCaseLikeIdentifierKey = databaseFoldsCaseLikeIdentifierKey,
-            PageSize = pageSize
+            PageSize = pageSize,
+            DeletedObjectIds = deletedObjectIds
         };
     }
 
@@ -323,6 +341,75 @@ public partial class SyncImportTaskProcessor
     }
 
     /// <summary>
+    /// Confirms the exported removals of references to the objects this run learned the target deleted, on the objects the
+    /// run did not reconcile (#3053). A target that deletes an object drops it from everything that referred to it, and need
+    /// report no change on those: Microsoft Entra ID reports none on a group whose member it deleted, so a Delta Import never
+    /// returns the group, and its removal of the member would wait for the next Full Import. Only those removals are judged:
+    /// an object the import did not return has nothing else to be judged by. Outcomes are recorded as reconciliation's are,
+    /// on an execution item raised for each object.
+    /// </summary>
+    private async Task ConfirmRemovalsOfReferencesToDeletedObjectsAsync(PendingExportReconciliationRun run)
+    {
+        if (run.DeletedObjectIds.Count == 0)
+            return;
+
+        using var span = Diagnostics.Sync.StartSpan("ConfirmRemovalsOfReferencesToDeletedObjects").SetTag("deletedCount", run.DeletedObjectIds.Count);
+        var pendingExports = (await _syncRepo.GetPendingExportsAwaitingRemovalOfReferencesToAsync(_connectedSystem.Id, [.. run.DeletedObjectIds]))
+            .Where(pe => pe.ConnectedSystemObjectId is { } id && !run.ReconciledObjectIds.ContainsKey(id) && !run.DeletedObjectIds.Contains(id))
+            .ToList();
+        if (pendingExports.Count == 0)
+        {
+            span.SetSuccess();
+            return;
+        }
+
+        var objectsById = new Dictionary<Guid, ConnectedSystemObject>();
+        foreach (var page in pendingExports.Select(pe => pe.ConnectedSystemObjectId!.Value).Chunk(run.PageSize))
+            foreach (var cso in await _syncRepo.GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(_connectedSystem.Id, page))
+                objectsById[cso.Id] = cso;
+
+        var pendingExportsToDelete = new ConcurrentBag<PendingExport>();
+        var pendingExportsToUpdate = new ConcurrentBag<PendingExport>();
+        var confirmedAttrChangesToDelete = new ConcurrentBag<PendingExportAttributeValueChange>();
+        var raisedItems = new ConcurrentBag<ActivityRunProfileExecutionItem>();
+        var modifiedImportItems = new ConcurrentDictionary<Guid, ActivityRunProfileExecutionItem>();
+        var confirmedCount = 0;
+        foreach (var pendingExport in pendingExports)
+        {
+            if (!objectsById.TryGetValue(pendingExport.ConnectedSystemObjectId!.Value, out var cso))
+                continue;
+
+            var result = new PendingExportReconciliationResult();
+            SyncEngine.ConfirmRemovalsOfReferencesToDeletedObjects(pendingExport, run.DeletedObjectIds, result);
+            if (!result.HasChanges)
+                continue;
+
+            confirmedCount += result.ConfirmedChanges.Count;
+            RecordReconciliationResult(run, cso, pendingExport, result, [], pendingExportsToDelete, pendingExportsToUpdate,
+                confirmedAttrChangesToDelete, raisedItems, modifiedImportItems);
+            run.ReconciledObjectIds.TryAdd(cso.Id, 0);
+            Interlocked.Increment(ref run.ReconciledCount);
+        }
+
+        Log.Information("ConfirmRemovalsOfReferencesToDeletedObjectsAsync: The target deleted {DeletedCount} object(s); confirmed {ConfirmedCount} " +
+            "exported removal(s) of references to them on {ObjectCount} other object(s) this import did not return",
+            run.DeletedObjectIds.Count, confirmedCount, raisedItems.Count);
+
+        // The execution items first, so a Pending Export is only ever removed once what confirmed it is recorded (#2908).
+        var raised = raisedItems.ToList();
+        if (raised.Count > 0)
+        {
+            var written = raised.ToList();
+            if (await FlushImportRpeisAsync(raised, countInActivityTotals: false))
+                run.RaisedItemTotals.Add(written);
+        }
+
+        await FlushPendingExportChangesAsync(pendingExportsToDelete, pendingExportsToUpdate, confirmedAttrChangesToDelete);
+        span.SetTag("confirmedCount", confirmedCount);
+        span.SetSuccess();
+    }
+
+    /// <summary>
     /// Reconciles the objects saved more than once this run (<see cref="PendingExportReconciliationRun.DeferredIds"/>), once
     /// each, after every batch is saved: reloaded, as every object was reconciled before #2908, with their Pending Exports
     /// loaded now. No batch touched those, so they are as they stood when the save phase began.
@@ -416,7 +503,8 @@ public partial class SyncImportTaskProcessor
 
                     var result = new PendingExportReconciliationResult();
                     _syncEngine.ReconcileCsoAgainstPendingExport(cso, pendingExport, result, metaverseObjectIdsOwedPassword,
-                        connectedSystemObjectIdsWithExchangeChange, probedValuesByCsoId.GetValueOrDefault(cso.Id));
+                        connectedSystemObjectIdsWithExchangeChange, probedValuesByCsoId.GetValueOrDefault(cso.Id), run.DeletedObjectIds);
+                    run.ReconciledObjectIds.TryAdd(cso.Id, 0);
 
                     if (isFirstBatch)
                     {
