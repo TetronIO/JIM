@@ -186,7 +186,7 @@
                         <CellTemplate>
                             <MudChip T="string" Variant="Variant.Text"
                                 Color="Helpers.GetActivityMudBlazorColorForOperation(context.Item.TargetOperationType)">
-                                @context.Item.TargetOperationType.ToString().SplitOnCapitalLetters()
+                                @context.Item.TargetOperationType.ForDisplay()
                             </MudChip>
                         </CellTemplate>
                     </TemplateColumn>
@@ -207,7 +207,7 @@
                         <CellTemplate>
                             <MudChip T="string" Variant="Variant.Text"
                                 Color="Helpers.GetActivityMudBlazorColorForStatus(context.Item.Status)">
-                                @context.Item.Status.ToString().SplitOnCapitalLetters()
+                                @context.Item.Status.ForDisplay()
                             </MudChip>
                         </CellTemplate>
                     </TemplateColumn>

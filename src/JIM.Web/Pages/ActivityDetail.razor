@@ -20,8 +20,8 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>@ActivityText.ActivityTitleLabel @_activity?.TargetOperationType.ToString().SplitOnCapitalLetters() @(_activity == null ? null : Helpers.GetActivityTargetTypeName(_activity.TargetType))@(ShowTargetInTitle() ? $": {GetTargetDisplayText()}" : "")</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span class="jim-title-segment">@ActivityText.ActivityTitleLabel</span> <span class="jim-title-segment mud-primary-text">@_activity?.TargetOperationType.ToString().SplitOnCapitalLetters() @(_activity == null ? null : Helpers.GetActivityTargetTypeName(_activity.TargetType))</span>@if (ShowTargetInTitle()) {<span class="jim-title-segment">: <span class="jim-title-accent">@GetTargetDisplayText()</span></span>}
+<PageTitle>@ActivityText.ActivityTitleLabel @_activity?.TargetOperationType.ForDisplay() @(_activity == null ? null : Helpers.GetActivityTargetTypeName(_activity.TargetType))@(ShowTargetInTitle() ? $": {GetTargetDisplayText()}" : "")</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span class="jim-title-segment">@ActivityText.ActivityTitleLabel</span> <span class="jim-title-segment mud-primary-text">@_activity?.TargetOperationType.ForDisplay() @(_activity == null ? null : Helpers.GetActivityTargetTypeName(_activity.TargetType))</span>@if (ShowTargetInTitle()) {<span class="jim-title-segment">: <span class="jim-title-accent">@GetTargetDisplayText()</span></span>}
     <PageInfo Title="@ActivityText.ActivityPageTitle" DocsPage="configuration/activities.md">
         @ActivityText.ActivityPageDescription
     </PageInfo>
@@ -107,7 +107,7 @@
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityFieldStatus</MudText><br />
-                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(_activity.Status)" Class="ml-0">@_activity.Status.ToString().SplitOnCapitalLetters()</MudChip>
+                <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(_activity.Status)" Class="ml-0">@_activity.Status.ForDisplay()</MudChip>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudTooltip Arrow="true" Placement="Placement.Top">
@@ -1206,7 +1206,7 @@
                         <MudText Typo="Typo.button">@ActivityText.ActivityColumnStatus</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
-                        <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(context.Item.Status)" Class="ml-0">@context.Item.Status.ToString().SplitOnCapitalLetters()</MudChip>
+                        <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(context.Item.Status)" Class="ml-0">@context.Item.Status.ForDisplay()</MudChip>
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn T="Activity" Title="@ActivityText.ActivityColumnStarted" Sortable="false">

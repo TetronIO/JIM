@@ -28,6 +28,13 @@ public static class EnumDisplay
                ?? value.ToString().SplitOnCapitalLetters();
     }
 
+    /// <summary>
+    /// The display text for an enum value held as its name (a drop-down whose items carry the name as their value);
+    /// an empty string for no name, and the name itself for one that is not a value of the enum.
+    /// </summary>
+    public static string NameForDisplay<TEnum>(string? name) where TEnum : struct, Enum =>
+        Enum.TryParse<TEnum>(name, out var value) ? value.ForDisplay() : name ?? string.Empty;
+
     /// <summary>The resource key for a value: <c>{EnumType}_{Value}</c>.</summary>
     public static string KeyFor(Enum value) => $"{value.GetType().Name}_{value}";
 }

@@ -6,6 +6,7 @@ using System.Web;
 using JIM.Models.Activities;
 using JIM.Models.Tasking.DTOs;
 using JIM.Utilities;
+using JIM.Web.Localisation;
 using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
@@ -106,7 +107,7 @@ public sealed record OperationsActivityFilters
         ActivityStatus.CompleteWithError => OperationsText.CompletedStatusCompleteWithError,
         ActivityStatus.FailedWithError => OperationsText.CompletedStatusFailedWithError,
         ActivityStatus.Cancelled => OperationsText.CompletedStatusCancelled,
-        _ => status.ToString().SplitOnCapitalLetters()
+        _ => status.ForDisplay()
     };
 
     /// <summary>These filters with one of them back at its default: what closing that filter's chip does.</summary>

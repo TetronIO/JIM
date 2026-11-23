@@ -2852,4 +2852,307 @@
     <value>↑↓ to choose · Enter or Tab to insert · Esc to close</value>
     <comment>Keyboard hint shown beneath the expression suggestions.</comment>
   </data>
+  <data name="FlowTestIntro" xml:space="preserve">
+    <value>Give each input a value, or load them from an object, and see what a Synchronisation would do with this Attribute Flow as it stands. Each value is read as its attribute's type.</value>
+  </data>
+  <data name="FlowTestValueSourceAria" xml:space="preserve">
+    <value>Where the values come from</value>
+  </data>
+  <data name="FlowTestSampleValues" xml:space="preserve">
+    <value>Sample values</value>
+  </data>
+  <data name="FlowTestFromObject" xml:space="preserve">
+    <value>From an object</value>
+  </data>
+  <data name="FlowTestNoInputs" xml:space="preserve">
+    <value>This Expression reads no attributes, so it produces the same value for every object.</value>
+  </data>
+  <data name="FlowTestColumnInput" xml:space="preserve">
+    <value>Input</value>
+  </data>
+  <data name="FlowTestColumnType" xml:space="preserve">
+    <value>Type</value>
+  </data>
+  <data name="FlowTestColumnValue" xml:space="preserve">
+    <value>Value</value>
+  </data>
+  <data name="FlowTestColumnNoValue" xml:space="preserve">
+    <value>No value</value>
+  </data>
+  <data name="FlowTestNoValueAria" xml:space="preserve">
+    <value>{0} has no value</value>
+  </data>
+  <data name="FlowTestNotAvailable" xml:space="preserve">
+    <value>Not available</value>
+  </data>
+  <data name="FlowTestTypeAndPlurality" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
+  <data name="FlowTestSingleValued" xml:space="preserve">
+    <value>single-valued</value>
+  </data>
+  <data name="FlowTestMultiValued" xml:space="preserve">
+    <value>multi-valued</value>
+  </data>
+  <data name="FlowTestNotHeldExport" xml:space="preserve">
+    <value>An export Attribute Flow reads only the Metaverse Object, so this input never has a value.</value>
+  </data>
+  <data name="FlowTestNotHeldNoAttribute" xml:space="preserve">
+    <value>'{0}' has no attribute of this name, so this input never has a value.</value>
+  </data>
+  <data name="FlowTestIncomplete" xml:space="preserve">
+    <value>No result until the Expression is complete: {0}</value>
+  </data>
+  <data name="FlowTestIncompleteAt" xml:space="preserve">
+    <value>No result until the Expression is complete: {0} (position {1})</value>
+  </data>
+  <data name="FlowTestParseFailed" xml:space="preserve">
+    <value>The Expression could not be parsed.</value>
+  </data>
+  <data name="FlowTestEnterValues" xml:space="preserve">
+    <value>Enter a value for each input, or load them from an object, to see the result.</value>
+  </data>
+  <data name="FlowTestHeading" xml:space="preserve">
+    <value>What a Synchronisation would do</value>
+  </data>
+  <data name="FlowTestStepExpressionReturned" xml:space="preserve">
+    <value>1. Expression returned</value>
+  </data>
+  <data name="FlowTestStepBaseExpressionReturned" xml:space="preserve">
+    <value>1. Base expression returned</value>
+  </data>
+  <data name="FlowTestStepValueProcessing" xml:space="preserve">
+    <value>2. Value processing</value>
+  </data>
+  <data name="FlowTestStepConverted" xml:space="preserve">
+    <value>3. Converted for {0}</value>
+  </data>
+  <data name="FlowTestStepBaseForGeneration" xml:space="preserve">
+    <value>3. Base for generation</value>
+  </data>
+  <data name="FlowTestStepResult" xml:space="preserve">
+    <value>4. Result</value>
+  </data>
+  <data name="FlowTestResultType" xml:space="preserve">
+    <value>Type: {0}</value>
+  </data>
+  <data name="FlowTestNoValue" xml:space="preserve">
+    <value>No value</value>
+  </data>
+  <data name="FlowTestFailed" xml:space="preserve">
+    <value>Failed: {0}</value>
+  </data>
+  <data name="FlowTestNotEvaluated" xml:space="preserve">
+    <value>Not evaluated: no value for {0}</value>
+  </data>
+  <data name="FlowTestNotConvertible" xml:space="preserve">
+    <value>'{0}' is not a {1} value</value>
+  </data>
+  <data name="FlowTestMultiValuedResult" xml:space="preserve">
+    <value>{0} values, for an attribute that holds one</value>
+  </data>
+  <data name="FlowTestNothingToConvert" xml:space="preserve">
+    <value>Nothing to convert</value>
+  </data>
+  <data name="FlowTestNoBaseExpression" xml:space="preserve">
+    <value>No base expression</value>
+  </data>
+  <data name="FlowTestSaveAsTestCase" xml:space="preserve">
+    <value>Save as test case</value>
+  </data>
+  <data name="FlowTestFindMetaverseObject" xml:space="preserve">
+    <value>Find a {0}</value>
+  </data>
+  <data name="FlowTestFindConnectedSystemObject" xml:space="preserve">
+    <value>Find a {0} in {1}</value>
+  </data>
+  <data name="FlowTestMetaverseObjectFallback" xml:space="preserve">
+    <value>Metaverse Object</value>
+  </data>
+  <data name="FlowTestConnectedSystemObjectFallback" xml:space="preserve">
+    <value>Connected System Object</value>
+  </data>
+  <data name="FlowTestConnectedSystemFallback" xml:space="preserve">
+    <value>the Connected System</value>
+  </data>
+  <data name="FlowTestTargetFallback" xml:space="preserve">
+    <value>the target</value>
+  </data>
+  <data name="FlowTestNothingToProcess" xml:space="preserve">
+    <value>Nothing to process</value>
+  </data>
+  <data name="FlowTestNotAppliedText" xml:space="preserve">
+    <value>Not applied: value processing applies to Text attributes on import only</value>
+  </data>
+  <data name="FlowTestNotAppliedImport" xml:space="preserve">
+    <value>Not applied: value processing applies on import only</value>
+  </data>
+  <data name="FlowTestNoneSet" xml:space="preserve">
+    <value>None set</value>
+  </data>
+  <data name="FlowTestStepsThen" xml:space="preserve">
+    <value>{0}, then {1}</value>
+  </data>
+  <data name="FlowTestProcessingChanged" xml:space="preserve">
+    <value>{0}: changed the value</value>
+  </data>
+  <data name="FlowTestProcessingUnchanged" xml:space="preserve">
+    <value>{0}: unchanged</value>
+  </data>
+  <data name="FlowTestBaseOutcomeBase" xml:space="preserve">
+    <value>Base</value>
+  </data>
+  <data name="FlowTestBaseOutcomeWaits" xml:space="preserve">
+    <value>Waits</value>
+  </data>
+  <data name="FlowTestBaseOutcomeTokenOnly" xml:space="preserve">
+    <value>Token only</value>
+  </data>
+  <data name="FlowTestOutcomeError" xml:space="preserve">
+    <value>Error</value>
+  </data>
+  <data name="FlowTestOutcomeValues" xml:space="preserve">
+    <value>Values</value>
+  </data>
+  <data name="FlowTestOutcomeNoValue" xml:space="preserve">
+    <value>No value</value>
+  </data>
+  <data name="FlowTestStepTrim" xml:space="preserve">
+    <value>Trim leading and trailing whitespace</value>
+  </data>
+  <data name="FlowTestStepCollapse" xml:space="preserve">
+    <value>Collapse internal whitespace</value>
+  </data>
+  <data name="FlowTestStepUpper" xml:space="preserve">
+    <value>Upper case</value>
+  </data>
+  <data name="FlowTestStepLower" xml:space="preserve">
+    <value>Lower case</value>
+  </data>
+  <data name="FlowTestStepTitle" xml:space="preserve">
+    <value>Title case</value>
+  </data>
+  <data name="FlowTestStepWhitespaceNoValue" xml:space="preserve">
+    <value>Treat whitespace as no value</value>
+  </data>
+  <data name="FlowTestSavedCaseGenerated" xml:space="preserve">
+    <value>Generated Value for {0}, run against the Attribute Flow as saved</value>
+  </data>
+  <data name="FlowTestSavedCaseFlow" xml:space="preserve">
+    <value>Attribute Flow to {0}, run against the Attribute Flow as saved</value>
+  </data>
+  <data name="ScopingGroupLogicType" xml:space="preserve">
+    <value>CRITERIA GROUP. LOGIC TYPE:</value>
+  </data>
+  <data name="ScopingDeleteGroup" xml:space="preserve">
+    <value>Delete group</value>
+  </data>
+  <data name="ScopingDeleteAria" xml:space="preserve">
+    <value>delete</value>
+  </data>
+  <data name="ScopingDeleteCriteria" xml:space="preserve">
+    <value>Delete criteria</value>
+  </data>
+  <data name="ScopingAddCriteria" xml:space="preserve">
+    <value>Add Criteria</value>
+  </data>
+  <data name="ScopingAddFirstCriteria" xml:space="preserve">
+    <value>Add your first criteria...</value>
+  </data>
+  <data name="ScopingObjectTypeFallback" xml:space="preserve">
+    <value>Object Type {0}</value>
+  </data>
+  <data name="ScopingConnectionIn" xml:space="preserve">
+    <value>in</value>
+  </data>
+  <data name="ScopingExpressionComparedAs" xml:space="preserve">
+    <value>Expression, compared as {0}</value>
+  </data>
+  <data name="ScopingCompare" xml:space="preserve">
+    <value>Compare</value>
+  </data>
+  <data name="ScopingOptionAttribute" xml:space="preserve">
+    <value>Attribute</value>
+  </data>
+  <data name="ScopingOptionAttributeTooltip" xml:space="preserve">
+    <value>Compare the values an attribute holds</value>
+  </data>
+  <data name="ScopingOptionExpression" xml:space="preserve">
+    <value>Expression</value>
+  </data>
+  <data name="ScopingOptionExpressionTooltip" xml:space="preserve">
+    <value>Compare a value worked out from the object, for values the source stores in a different shape</value>
+  </data>
+  <data name="ScopingOptionConnection" xml:space="preserve">
+    <value>Connection</value>
+  </data>
+  <data name="ScopingOptionConnectionTooltip" xml:space="preserve">
+    <value>Test whether the identity is joined to an object of a type in a Connected System</value>
+  </data>
+  <data name="ScopingConnectedSystem" xml:space="preserve">
+    <value>Connected System</value>
+  </data>
+  <data name="ScopingSelectConnectedSystem" xml:space="preserve">
+    <value>Please select a Connected System</value>
+  </data>
+  <data name="ScopingConnectedSystemHelp" xml:space="preserve">
+    <value>The system whose objects the identity must, or must not, be joined to</value>
+  </data>
+  <data name="ScopingObjectType" xml:space="preserve">
+    <value>Object Type</value>
+  </data>
+  <data name="ScopingSelectObjectType" xml:space="preserve">
+    <value>Please select an Object Type</value>
+  </data>
+  <data name="ScopingExpressionLabel" xml:space="preserve">
+    <value>Expression</value>
+  </data>
+  <data name="ScopingCompareAs" xml:space="preserve">
+    <value>Compare as</value>
+  </data>
+  <data name="ScopingCompareAsHelp" xml:space="preserve">
+    <value>The type the computed value is converted to before it is compared</value>
+  </data>
+  <data name="ScopingMetaverseAttribute" xml:space="preserve">
+    <value>Metaverse Attribute</value>
+  </data>
+  <data name="ScopingSelectMetaverseAttribute" xml:space="preserve">
+    <value>Please select a Metaverse attribute</value>
+  </data>
+  <data name="ScopingConnectedSystemAttribute" xml:space="preserve">
+    <value>Connected System Attribute</value>
+  </data>
+  <data name="ScopingSelectConnectedSystemAttribute" xml:space="preserve">
+    <value>Please select a Connected System attribute</value>
+  </data>
+  <data name="ScopingComparisonType" xml:space="preserve">
+    <value>Comparison Type</value>
+  </data>
+  <data name="ScopingSelectComparisonType" xml:space="preserve">
+    <value>Please select the type of comparison to make</value>
+  </data>
+  <data name="ScopingConnectionHas" xml:space="preserve">
+    <value>Has</value>
+  </data>
+  <data name="ScopingConnectionHasNo" xml:space="preserve">
+    <value>Has no</value>
+  </data>
+  <data name="ScopingExpressionPlaceholderExport" xml:space="preserve">
+    <value>e.g. Lower(Trim(mv["Department"]))</value>
+  </data>
+  <data name="ScopingExpressionPlaceholderImport" xml:space="preserve">
+    <value>e.g. Lower(Trim(cs["department"]))</value>
+  </data>
+  <data name="ScopingExpressionHelpExport" xml:space="preserve">
+    <value>Reads the Metaverse Object only, as mv["Attribute Name"].</value>
+  </data>
+  <data name="ScopingExpressionHelpImport" xml:space="preserve">
+    <value>Reads the Connected System Object only, as cs["attributeName"].</value>
+  </data>
+  <data name="ScopingScopedTypeFallback" xml:space="preserve">
+    <value>the scoped object type</value>
+  </data>
+  <data name="ScopingAttributeFallback" xml:space="preserve">
+    <value>attribute</value>
+  </data>
 </root>

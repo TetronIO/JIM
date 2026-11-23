@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Web.Localisation;
 using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
@@ -70,7 +71,7 @@ public static class FollowUpSummaryDisplay
     {
         ActivityTargetType.PasswordSynchronisation => ActivityText.ActivityFollowUpTitleInitialPassword,
         ActivityTargetType.ExchangeRecipient => ActivityText.ActivityFollowUpTitleExchangeChanges,
-        _ => kind.ToString()
+        _ => kind.ForDisplay()
     };
 
     private static FollowUpSummaryState State(ActivityTargetType kind, string state, int count)

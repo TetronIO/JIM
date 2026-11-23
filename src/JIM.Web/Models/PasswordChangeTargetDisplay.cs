@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using JIM.Models.Staging;
+using JIM.Web.Localisation;
 using JIM.Web.Resources;
 using JIM.Models.Transactional.DTOs;
 using MudBlazor;
@@ -128,7 +129,7 @@ public static class PasswordChangeTargetDisplay
                 return MetaverseText.PctCancelled;
 
             default:
-                return outcome.State.ToString();
+                return outcome.State.ForDisplay();
         }
     }
 }

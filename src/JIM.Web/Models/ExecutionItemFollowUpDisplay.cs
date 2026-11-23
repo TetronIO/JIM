@@ -5,6 +5,7 @@ using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Transactional.DTOs;
 using JIM.Utilities;
+using JIM.Web.Localisation;
 using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
@@ -86,7 +87,7 @@ public sealed record ExecutionItemFollowUpDisplay(
                 PasswordChangeTargetState.Parked => (ActivityText.ActivityFollowUpStateParked, "err", false),
                 PasswordChangeTargetState.Expired => (ActivityText.ActivityFollowUpStateExpired, "err", false),
                 PasswordChangeTargetState.Cancelled => (ActivityText.ActivityFollowUpStateCancelled, "err", false),
-                _ => (target.State.ToString(), "neutral", false)
+                _ => (target.State.ForDisplay(), "neutral", false)
             };
             return new(followUp.ActivityId, ActivityText.ActivityFollowUpTitleInitialPassword, followUp.TargetName, label, modifier,
                 PasswordChangeTargetDisplay.Words(target), running, followUp.Created, followUp.TargetType);
@@ -119,6 +120,6 @@ public sealed record ExecutionItemFollowUpDisplay(
         ActivityStatus.CompleteWithError => ActivityText.ActivityStatusCompleteWithError,
         ActivityStatus.FailedWithError => ActivityText.ActivityStatusFailedWithError,
         ActivityStatus.Cancelled => ActivityText.ActivityStatusCancelled,
-        _ => status.ToString().SplitOnCapitalLetters()
+        _ => status.ForDisplay()
     };
 }

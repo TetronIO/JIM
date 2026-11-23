@@ -39,7 +39,7 @@ public static class ServiceHealthDisplay
         JimService.WorkerDelivery => HealthText.LabelWorkerPasswords,
         JimService.WorkerExchange => HealthText.LabelWorkerExchange,
         JimService.Scheduler => HealthText.LabelScheduler,
-        _ => service.ToString()
+        _ => service.ForDisplay()
     };
 
     /// <summary>
@@ -50,7 +50,7 @@ public static class ServiceHealthDisplay
         ServiceHealthStatus.Healthy => HealthText.StatusHealthy,
         ServiceHealthStatus.Degraded => HealthText.StatusDegraded,
         ServiceHealthStatus.Unhealthy => HealthText.StatusUnhealthy,
-        _ => status.ToString()
+        _ => status.ForDisplay()
     };
 
     /// <summary>

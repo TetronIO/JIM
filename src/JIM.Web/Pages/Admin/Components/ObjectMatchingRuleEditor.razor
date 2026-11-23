@@ -41,7 +41,7 @@
                 @foreach (var csAttribute in SelectableAttributes)
                 {
                     <MudSelectItem Value="@csAttribute">
-                        @csAttribute.Name <span class="mud-text-secondary">(@csAttribute.Type)</span>
+                        @csAttribute.Name <span class="mud-text-secondary">(@csAttribute.Type.ForDisplay())</span>
                     </MudSelectItem>
                 }
             </MudSelect>

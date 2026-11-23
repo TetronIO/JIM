@@ -79,7 +79,7 @@
                 </HeaderTemplate>
                 <CellTemplate>
                     <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(context.Item.Status)">
-                        @context.Item.Status.ToString().SplitOnCapitalLetters()
+                        @context.Item.Status.ForDisplay()
                     </MudChip>
                 </CellTemplate>
             </TemplateColumn>
@@ -312,7 +312,9 @@ else
             return ConnectorSpaceText.PexAll;
 
         if (selectedValues.Count == 1)
-            return selectedValues[0].SplitOnCapitalLetters();
+            return Enum.TryParse<PendingExportStatus>(selectedValues[0], out var status) ? status.ForDisplay()
+                : Enum.TryParse<PendingExportChangeType>(selectedValues[0], out var changeType) ? changeType.ForDisplay()
+                : selectedValues[0];
 
         return string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.PexSelectedCount, selectedValues.Count);
     }

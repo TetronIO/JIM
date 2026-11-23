@@ -129,7 +129,7 @@
         </TemplateColumn>
         <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="@ActivityText.ActivityColumnChange" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <CellTemplate>
-                @context.Item.Change.ChangeType.ToString().SplitOnCapitalLetters()
+                @context.Item.Change.ChangeType.ForDisplay()
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="@ActivityText.ActivityObjectChangesAttributes" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">

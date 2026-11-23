@@ -118,7 +118,7 @@
         ScheduleExecutionStatus.Cancelled => ActivityText.ActivityStatusCancelled,
         ScheduleExecutionStatus.Paused => ActivityText.ActivityScheduleStatusPaused,
         ScheduleExecutionStatus.CompleteWithError => ActivityText.ActivityStatusFilterCompleteWithError,
-        _ => status.ToString().SplitOnCapitalLetters()
+        _ => status.ForDisplay()
     };
 
     private string CompactClass => string.IsNullOrWhiteSpace(Class) ? "pa-3" : $"pa-3 {Class}";

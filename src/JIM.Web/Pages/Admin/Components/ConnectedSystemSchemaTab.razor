@@ -162,12 +162,13 @@
                 Variant="Variant.Outlined"
                 Class="mt-5"
                 Disabled="!_objectTypeAttributeBeingEditedIsEditable"
+                ToStringFunc="@(name => EnumDisplay.NameForDisplay<AttributeDataType>(name))"
                 @bind-Value="_objectTypeAttributeBeingEditedText">
-                @foreach (AttributeDataType type in Enum.GetValues(typeof(AttributeDataType)))
+                @foreach (var type in Enum.GetValues<AttributeDataType>())
                 {
                     if (type != AttributeDataType.NotSet)
                     {
-                        <MudSelectItem Value="@type.ToString()"/>
+                        <MudSelectItem Value="@type.ToString()">@type.ForDisplay()</MudSelectItem>
                     }
                 }
             </MudSelect>
@@ -1021,7 +1022,7 @@
         AttributeDataType.Boolean => SchemaText.DataTypeBoolean,
         AttributeDataType.LongNumber => SchemaText.DataTypeLongNumber,
         AttributeDataType.Decimal => SchemaText.DataTypeDecimal,
-        _ => type.ToString()
+        _ => type.ForDisplay()
     };
 
     protected override void OnParametersSet()
