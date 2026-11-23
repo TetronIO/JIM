@@ -495,7 +495,7 @@
             var readers = await jim.Metaverse.GetMetaverseAttributeExpressionReadersAsync(Attribute!.Id, _originalName);
             if (readers.Count > 0)
             {
-                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.AttrEditorRenameBlocked, _originalName, string.Join("; ", readers.Select(r => r.Description))), Severity.Error);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.AttrEditorRenameBlocked, _originalName, string.Join("; ", readers.Select(r => r.ShowDescription()))), Severity.Error);
                 return;
             }
         }

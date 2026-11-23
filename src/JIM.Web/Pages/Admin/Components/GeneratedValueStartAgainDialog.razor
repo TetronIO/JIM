@@ -133,7 +133,7 @@
         }
         catch (ArgumentException ex)
         {
-            Snackbar.Add(ex.Message, Severity.Error);
+            Snackbar.Add(ex.ToDisplayText(), Severity.Error);
             return false;
         }
 

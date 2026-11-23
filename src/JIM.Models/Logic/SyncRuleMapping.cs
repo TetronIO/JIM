@@ -187,6 +187,22 @@ public class SyncRuleMapping : IAuditable
     public List<string> SaveWarnings { get; } = [];
 
     /// <summary>
+    /// The warnings in <see cref="SaveWarnings"/> that carry a message the portal shows in the viewer's language (#3030),
+    /// keyed by their British English. Never serialised.
+    /// </summary>
+    [NotMapped]
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Dictionary<string, JIM.Models.Localisation.JimMessage> SaveWarningDetails { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Raises a save warning: its English joins <see cref="SaveWarnings"/> and its message is kept beside it.</summary>
+    public void AddSaveWarning(JIM.Models.Localisation.JimMessage detail)
+    {
+        var english = JIM.Models.Localisation.MessageRenderer.ToEnglish(detail);
+        SaveWarnings.Add(english);
+        SaveWarningDetails[english] = detail;
+    }
+
+    /// <summary>
     /// The Metaverse-Derived Attribute Flows (#1750, FR 3) the save that returned this instance left with a missing
     /// input: disabling this mapping, or changing what it writes or reads, took away the last enabled contributor of
     /// an attribute they read. Transient, like <see cref="SaveWarnings"/>: never persisted, and empty on every

@@ -122,7 +122,7 @@
                                 @{
                                     var rowAction = UnresolvedReferenceDisplay.ActionFor(context.Item.Cause, ConnectedSystemId, objectTypeName);
                                 }
-                                <MudLink Href="@rowAction.Href" title="@($"{context.Item.Finding} {context.Item.Remedy}")">@rowAction.Text</MudLink>
+                                <MudLink Href="@rowAction.Href" title="@($"{context.Item.ShowFinding()} {context.Item.ShowRemedy()}")">@rowAction.Text</MudLink>
                             </CellTemplate>
                         </TemplateColumn>
                     </Columns>

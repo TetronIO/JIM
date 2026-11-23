@@ -9,7 +9,7 @@ namespace JIM.Models.Localisation;
 /// which is always its British English (#3030). Use it where an exception's text reaches a person; an unexpected fault
 /// stays an ordinary exception.
 /// </summary>
-public class JimMessageException : Exception
+public class JimMessageException : Exception, IJimMessageCarrier
 {
     public JimMessageException(JimMessage detail)
         : base(detail.ToEnglish())

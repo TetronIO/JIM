@@ -26,7 +26,7 @@
         @foreach (var fix in expanded ? group.Fixes : group.Fixes.Take(CollapsedFixCount))
         {
             var action = UnresolvedReferenceDisplay.ActionFor(fix.Cause, ConnectedSystemId, ObjectTypeName);
-            var (before, identifier, after) = UnresolvedReferenceDisplay.SplitFinding(fix.Finding, fix.ContainerExternalId ?? fix.PartitionExternalId);
+            var (before, identifier, after) = UnresolvedReferenceDisplay.SplitFinding(fix.ShowFinding(), fix.ContainerExternalId ?? fix.PartitionExternalId);
             <div class="jim-unresolved-fix-cell jim-unresolved-fix-count-cell">
                 <MudChip T="string" Variant="Variant.Text" Color="@UnresolvedReferenceDisplay.FixLocationColour(fix.FixLocation)"
                          Class="ma-0 jim-unresolved-fix-count">@fix.Count.ToString("N0")</MudChip>
@@ -40,7 +40,7 @@
                 {
                     @before<span class="jim-text-code">@identifier</span>@after
                 }
-                <div class="jim-unresolved-fix-remedy">@fix.Remedy</div>
+                <div class="jim-unresolved-fix-remedy">@fix.ShowRemedy()</div>
             </div>
             @if (ShowObjectCounts)
             {

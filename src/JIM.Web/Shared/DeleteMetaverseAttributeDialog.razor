@@ -81,7 +81,7 @@
                 Headline = string.Format(CultureInfo.CurrentCulture, AdminText.DeleteAttributeReadersHeadline, _impact.Readers.Count.ToString("N0", CultureInfo.CurrentCulture)),
                 Items = _impact.Readers.Select(reader => new ConsequenceItem
                 {
-                    Text = reader.Description,
+                    Text = reader.ShowDescription(),
                     Icon = Icons.Material.Filled.Link,
                     Href = Helpers.AttributeReaderHref(reader)
                 }).ToList(),
