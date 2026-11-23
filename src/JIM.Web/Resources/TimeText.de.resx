@@ -26,6 +26,12 @@
   <data name="RelativeIn" xml:space="preserve">
     <value>in {0}</value>
   </data>
+  <data name="RelativeSecondOne" xml:space="preserve">
+    <value>{0} Sekunde</value>
+  </data>
+  <data name="RelativeSecondOther" xml:space="preserve">
+    <value>{0} Sekunden</value>
+  </data>
   <data name="RelativeMinuteOne" xml:space="preserve">
     <value>{0} Minute</value>
   </data>

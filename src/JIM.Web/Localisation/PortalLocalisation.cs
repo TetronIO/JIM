@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using Microsoft.AspNetCore.Localization;
 
 namespace JIM.Web.Localisation;
@@ -12,18 +13,29 @@ public static class PortalLocalisation
 {
     /// <summary>
     /// Request localisation for the portal: the culture cookie first, then the browser's <c>Accept-Language</c>, then
-    /// en-GB. The query-string provider ASP.NET Core adds by default is left out, so a link cannot switch someone's
+    /// the default. The query-string provider ASP.NET Core adds by default is left out, so a link cannot switch someone's
     /// language. A requested culture with no language of its own falls back to its parent (de-AT to de) before the
     /// default.
     /// </summary>
-    public static RequestLocalizationOptions CreateOptions(bool includeUnreleased)
+    /// <param name="includeUnreleased">Whether unreleased languages are offered (development builds).</param>
+    /// <param name="serverCulture">
+    /// The culture the host runs in, from <c>LANG</c>: a documented setting that decides how the portal writes dates and
+    /// numbers. Someone who has not chosen a language keeps those formats, with British English text; only choosing a
+    /// language changes both, so a deployment's formats are exactly what they were before languages existed, even with
+    /// no <c>LANG</c> at all (the invariant culture).
+    /// </param>
+    public static RequestLocalizationOptions CreateOptions(bool includeUnreleased, CultureInfo serverCulture)
     {
-        var cultures = UiLanguages.OfferedCultures(includeUnreleased);
+        var uiCultures = UiLanguages.OfferedCultures(includeUnreleased);
+        var formattingCultures = uiCultures.ToList();
+        if (!formattingCultures.Any(culture => culture.Name == serverCulture.Name))
+            formattingCultures.Add(serverCulture);
+
         return new RequestLocalizationOptions
         {
-            DefaultRequestCulture = new RequestCulture(UiLanguages.Default.CultureName),
-            SupportedCultures = cultures,
-            SupportedUICultures = cultures,
+            DefaultRequestCulture = new RequestCulture(serverCulture, CultureInfo.GetCultureInfo(UiLanguages.Default.CultureName)),
+            SupportedCultures = formattingCultures,
+            SupportedUICultures = uiCultures,
             FallBackToParentCultures = true,
             FallBackToParentUICultures = true,
             RequestCultureProviders =

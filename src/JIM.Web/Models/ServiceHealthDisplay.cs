@@ -1,9 +1,12 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Application.Services;
 using JIM.Models.Operations;
 using JIM.Models.Scheduling.DTOs;
+using JIM.Web.Localisation;
+using JIM.Web.Resources;
 using MudBlazor;
 
 namespace JIM.Web.Models;
@@ -17,6 +20,12 @@ namespace JIM.Web.Models;
 /// has to decide which services to name and how, and that decision belongs beside the words it produces rather
 /// than in a layout component.
 /// </para>
+/// <para>
+/// Every word comes from <c>HealthText</c> in the viewer's language (#3030). The banner names which services are down,
+/// so its sentences are whole templates in singular and plural forms with the services filled in, never English
+/// grammar assembled from translated fragments: a German subject takes "hat" or "haben", and a duration after
+/// "seit" takes the dative.
+/// </para>
 /// </summary>
 public static class ServiceHealthDisplay
 {
@@ -26,10 +35,10 @@ public static class ServiceHealthDisplay
     /// </summary>
     public static string Label(JimService service) => service switch
     {
-        JimService.WorkerSync => "Worker · Sync",
-        JimService.WorkerDelivery => "Worker · Passwords",
-        JimService.WorkerExchange => "Worker · Exchange",
-        JimService.Scheduler => "Scheduler",
+        JimService.WorkerSync => HealthText.LabelWorkerSync,
+        JimService.WorkerDelivery => HealthText.LabelWorkerPasswords,
+        JimService.WorkerExchange => HealthText.LabelWorkerExchange,
+        JimService.Scheduler => HealthText.LabelScheduler,
         _ => service.ToString()
     };
 
@@ -38,9 +47,9 @@ public static class ServiceHealthDisplay
     /// </summary>
     public static string StatusWord(ServiceHealthStatus status) => status switch
     {
-        ServiceHealthStatus.Healthy => "Healthy",
-        ServiceHealthStatus.Degraded => "Degraded",
-        ServiceHealthStatus.Unhealthy => "Unhealthy",
+        ServiceHealthStatus.Healthy => HealthText.StatusHealthy,
+        ServiceHealthStatus.Degraded => HealthText.StatusDegraded,
+        ServiceHealthStatus.Unhealthy => HealthText.StatusUnhealthy,
         _ => status.ToString()
     };
 
@@ -82,13 +91,18 @@ public static class ServiceHealthDisplay
         var unhealthy = report.Services.Count(s => s.Status == ServiceHealthStatus.Unhealthy);
         var degraded = report.Services.Count(s => s.Status == ServiceHealthStatus.Degraded);
         if (unhealthy == 0 && degraded == 0)
-            return "All services healthy";
+            return HealthText.SummaryAllHealthy;
 
         var parts = new List<string>();
         if (unhealthy > 0)
-            parts.Add($"{unhealthy} {(unhealthy == 1 ? "service" : "services")} unhealthy");
+            parts.Add(Counted(unhealthy, HealthText.SummaryUnhealthyOne, HealthText.SummaryUnhealthyOther));
         if (degraded > 0)
-            parts.Add(parts.Count == 0 ? $"{degraded} {(degraded == 1 ? "service" : "services")} degraded" : $"{degraded} degraded");
+        {
+            parts.Add(parts.Count == 0
+                ? Counted(degraded, HealthText.SummaryDegradedOne, HealthText.SummaryDegradedOther)
+                : Counted(degraded, HealthText.SummaryDegradedContinuationOne, HealthText.SummaryDegradedContinuationOther));
+        }
+
         return string.Join(", ", parts);
     }
 
@@ -104,7 +118,7 @@ public static class ServiceHealthDisplay
         if (service.Status == ServiceHealthStatus.Unhealthy)
             return service.Reason;
 
-        return string.IsNullOrWhiteSpace(service.CurrentWork) ? "Idle" : service.CurrentWork;
+        return string.IsNullOrWhiteSpace(service.CurrentWork) ? HealthText.Idle : service.CurrentWork;
     }
 
     /// <summary>
@@ -119,7 +133,7 @@ public static class ServiceHealthDisplay
         if (service.Status != ServiceHealthStatus.Unhealthy || string.IsNullOrWhiteSpace(service.CurrentWork))
             return null;
 
-        return $"Was running: {service.CurrentWork}";
+        return Format(HealthText.WasRunning, service.CurrentWork);
     }
 
     /// <summary>
@@ -139,7 +153,7 @@ public static class ServiceHealthDisplay
             return wasDoing;
 
         return service.LastSeenAt is { } lastSeenAt
-            ? $"Last heartbeat {lastSeenAt.ToLocalTime().ToFriendlyDate()}"
+            ? Format(HealthText.LastHeartbeat, lastSeenAt.ToLocalTime().ToFriendlyDate())
             : null;
     }
 
@@ -155,7 +169,7 @@ public static class ServiceHealthDisplay
         if (uptime == null)
             return condition;
 
-        var up = $"up {CompactDuration(uptime.Value)}";
+        var up = Format(HealthText.Up, CompactDuration(uptime.Value));
         return condition == null ? up : $"{condition} · {up}";
     }
 
@@ -210,10 +224,10 @@ public static class ServiceHealthDisplay
 
         return duration switch
         {
-            { TotalMinutes: < 1 } => $"{(int)duration.TotalSeconds} s",
-            { TotalHours: < 1 } => $"{(int)duration.TotalMinutes} min",
-            { TotalDays: < 1 } => $"{(int)duration.TotalHours} h",
-            _ => $"{(int)duration.TotalDays} d"
+            { TotalMinutes: < 1 } => Format(HealthText.CompactSeconds, (int)duration.TotalSeconds),
+            { TotalHours: < 1 } => Format(HealthText.CompactMinutes, (int)duration.TotalMinutes),
+            { TotalDays: < 1 } => Format(HealthText.CompactHours, (int)duration.TotalHours),
+            _ => Format(HealthText.CompactDays, (int)duration.TotalDays)
         };
     }
 
@@ -229,30 +243,32 @@ public static class ServiceHealthDisplay
         var next = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(nextRunUtc, DateTimeKind.Utc), zone);
         var today = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(asOfUtc, DateTimeKind.Utc), zone).Date;
         var days = (next.Date - today).Days;
-        var time = next.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+        var time = next.ToString("HH:mm", CultureInfo.InvariantCulture);
 
+        // The weekday and month are the viewer's language's own abbreviations ("Wed", "Mi", "mer.").
         return days switch
         {
-            <= 0 => $"today {time}",
-            1 => $"tomorrow {time}",
-            < 7 => $"{next.ToString("ddd", System.Globalization.CultureInfo.InvariantCulture)} {time}",
-            _ => $"{next.ToString("d MMM", System.Globalization.CultureInfo.InvariantCulture)} {time}"
+            <= 0 => Format(HealthText.NextToday, time),
+            1 => Format(HealthText.NextTomorrow, time),
+            < 7 => $"{next.ToString("ddd", CultureInfo.CurrentCulture)} {time}",
+            _ => $"{next.ToString("d MMM", CultureInfo.CurrentCulture)} {time}"
         };
     }
 
     /// <summary>How long until the next Schedule fires, abbreviated for a card ("in 3 d", "in 40 min").</summary>
     public static string NextScheduleCountdown(DateTime nextRunUtc, DateTime asOfUtc) =>
-        $"in {CompactDuration(nextRunUtc - asOfUtc)}";
+        Format(HealthText.NextCountdown, CompactDuration(nextRunUtc - asOfUtc));
 
     /// <summary>
     /// The phrase the collapsed Service Health header adds, so the next Schedule is never hidden with the cards
     /// ("next Schedule tomorrow 02:00"), or null when no Schedule is due.
     /// </summary>
     public static string? NextScheduleHeaderPhrase(NextDueSchedule? next, DateTime asOfUtc, TimeZoneInfo zone) =>
-        next == null ? null : $"next Schedule {NextScheduleWhen(next.NextRunTime, asOfUtc, zone)}";
+        next == null ? null : Format(HealthText.NextScheduleHeader, NextScheduleWhen(next.NextRunTime, asOfUtc, zone));
 
     /// <summary>
-    /// A duration in its largest whole unit, in full words for a sentence ("4 minutes", "1 hour").
+    /// A duration in its largest whole unit, in full words for a sentence ("4 minutes", "1 hour"). The units are the
+    /// relative-time ones, which German writes in the dative: right after "seit", where the banner puts them.
     /// </summary>
     public static string LongDuration(TimeSpan duration)
     {
@@ -261,13 +277,11 @@ public static class ServiceHealthDisplay
 
         return duration switch
         {
-            { TotalMinutes: < 1 } => Unit((int)duration.TotalSeconds, "second"),
-            { TotalHours: < 1 } => Unit((int)duration.TotalMinutes, "minute"),
-            { TotalDays: < 1 } => Unit((int)duration.TotalHours, "hour"),
-            _ => Unit((int)duration.TotalDays, "day")
+            { TotalMinutes: < 1 } => Counted((int)duration.TotalSeconds, TimeText.RelativeSecondOne, TimeText.RelativeSecondOther),
+            { TotalHours: < 1 } => Counted((int)duration.TotalMinutes, TimeText.RelativeMinuteOne, TimeText.RelativeMinuteOther),
+            { TotalDays: < 1 } => Counted((int)duration.TotalHours, TimeText.RelativeHourOne, TimeText.RelativeHourOther),
+            _ => Counted((int)duration.TotalDays, TimeText.RelativeDayOne, TimeText.RelativeDayOther)
         };
-
-        static string Unit(int value, string singular) => value == 1 ? $"1 {singular}" : $"{value} {singular}s";
     }
 
     /// <summary>
@@ -323,7 +337,7 @@ public static class ServiceHealthDisplay
         if (ReadingOf(service) is not { TotalBytes: { } total, UsedFraction: { } share } reading)
             return null;
 
-        return $"{MemoryPressure.Bytes(reading.ProcessBytes)} held · {MemoryPressure.Percent(share)} of {MemoryPressure.Bytes(total)} in use";
+        return Format(HealthText.MemoryDetail, MemoryPressure.Bytes(reading.ProcessBytes), MemoryPressure.Percent(share), MemoryPressure.Bytes(total));
     }
 
     /// <summary>
@@ -341,20 +355,28 @@ public static class ServiceHealthDisplay
                      ?? memoryLow.FirstOrDefault(s => s.Service == JimService.WorkerExchange);
         if (worker != null && ReadingOf(worker) is { } workerReading)
         {
-            sentences.Add($"Memory is low for the Worker: {MemoryPressure.Describe(workerReading, "the Worker")}.");
-            sentences.Add($"At {MemoryPressure.Percent(MemoryPressure.StopShare)} the Worker stops its running work rather than be stopped part-way through; give JIM more memory, or run less at once.");
+            sentences.Add(MemoryLowSentence(HealthText.MemoryLowWorker, workerReading));
+            sentences.Add(Format(HealthText.MemoryWorkerRemedy, MemoryPressure.Percent(MemoryPressure.StopShare)));
         }
 
         var scheduler = memoryLow.FirstOrDefault(s => s.Service == JimService.Scheduler);
         if (scheduler != null && ReadingOf(scheduler) is { } schedulerReading)
         {
-            sentences.Add($"Memory is low for the Scheduler: {MemoryPressure.Describe(schedulerReading, "the Scheduler")}.");
+            sentences.Add(MemoryLowSentence(HealthText.MemoryLowScheduler, schedulerReading));
             if (worker == null)
-                sentences.Add("Give JIM more memory.");
+                sentences.Add(HealthText.MemoryRemedy);
         }
 
         return new ServiceHealthBannerContent(Severity.Warning, string.Join(" ", sentences));
     }
+
+    /// <summary>
+    /// "Memory is low for the Worker: 57 GB of 62 GB in use, 41 GB of it by the Worker." The same figures as
+    /// <see cref="MemoryPressure.Describe"/>, which writes English for Activity messages, in the viewer's language.
+    /// </summary>
+    private static string MemoryLowSentence(string template, MemoryReading reading) =>
+        Format(template, MemoryPressure.Bytes(reading.UsedBytes ?? 0), MemoryPressure.Bytes(reading.TotalBytes ?? 0),
+            MemoryPressure.Bytes(reading.ProcessBytes));
 
     private static MemoryReading? ReadingOf(ServiceHealth service) =>
         service is { ProcessMemoryBytes: { } process, MemoryTotalBytes: { } total, MemoryAvailableBytes: { } available }
@@ -378,39 +400,39 @@ public static class ServiceHealthDisplay
         var names = new List<string>();
         if (syncDown && passwordsDown && (exchangeDown || !exchangeReported))
         {
-            names.Add("the Worker");
+            names.Add(HealthText.NameWorker);
         }
         else
         {
             if (syncDown)
-                names.Add("the Worker's synchronisation service");
+                names.Add(HealthText.NameWorkerSync);
             if (passwordsDown)
-                names.Add("the Worker's password delivery service");
+                names.Add(HealthText.NameWorkerPasswords);
             if (exchangeDown)
-                names.Add("the Worker's Exchange delivery service");
+                names.Add(HealthText.NameWorkerExchange);
         }
 
         if (schedulerDown)
-            names.Add("the Scheduler");
+            names.Add(HealthText.NameScheduler);
 
         var plural = names.Count > 1;
-        var subject = Capitalise(JoinAnd(names));
+        var subject = Capitalise(JoinList(names, HealthText.ListAnd));
 
         // "For how long" is the longest silence among the named services, because that is the one the administrator
         // is most behind on. A service that never started has no silence to measure; when none of them has, say so.
         var silences = down.Where(s => s.LastSeenAt.HasValue).Select(s => asOf - s.LastSeenAt!.Value).ToList();
         var first = silences.Count == 0
-            ? $"{subject} {(plural ? "have" : "has")} never reported."
-            : $"{subject} {(plural ? "have" : "has")} not reported for {LongDuration(silences.Max())}.";
+            ? Format(plural ? HealthText.NeverReportedOther : HealthText.NeverReportedOne, subject)
+            : Format(plural ? HealthText.NotReportedOther : HealthText.NotReportedOne, subject, LongDuration(silences.Max()));
 
         var stopped = new List<string>();
         if (syncDown)
-            stopped.Add("synchronised");
+            stopped.Add(HealthText.StoppedSynchronised);
         if (passwordsDown || exchangeDown)
-            stopped.Add("delivered");
+            stopped.Add(HealthText.StoppedDelivered);
         if (schedulerDown)
-            stopped.Add("scheduled");
-        var second = $"Nothing is being {JoinOr(stopped)}; queued work is safe and resumes when {(plural ? "they return" : "it returns")}.";
+            stopped.Add(HealthText.StoppedScheduled);
+        var second = Format(plural ? HealthText.NothingBeingOther : HealthText.NothingBeingOne, JoinList(stopped, HealthText.ListOr));
 
         return new ServiceHealthBannerContent(Severity.Error, $"{first} {second}");
     }
@@ -421,36 +443,39 @@ public static class ServiceHealthDisplay
         // calls the thing running their Full Import; the other two are named for what they are.
         var sentences = stalled.Select(s =>
         {
-            var name = s.Service switch
+            var name = Capitalise(s.Service switch
             {
-                JimService.WorkerSync => "The Worker",
-                JimService.WorkerDelivery => "The Worker's password delivery service",
-                JimService.WorkerExchange => "The Worker's Exchange delivery service",
-                _ => "The Scheduler"
-            };
-            var since = s.LastProgressAt is { } lastProgressAt ? $" for {LongDuration(asOf - lastProgressAt)}" : string.Empty;
-            return $"{name} has made no progress on {s.CurrentWork}{since}.";
+                JimService.WorkerSync => HealthText.NameWorker,
+                JimService.WorkerDelivery => HealthText.NameWorkerPasswords,
+                JimService.WorkerExchange => HealthText.NameWorkerExchange,
+                _ => HealthText.NameScheduler
+            });
+            return s.LastProgressAt is { } lastProgressAt
+                ? Format(HealthText.StalledFor, name, s.CurrentWork ?? string.Empty, LongDuration(asOf - lastProgressAt))
+                : Format(HealthText.Stalled, name, s.CurrentWork ?? string.Empty);
         });
 
         return new ServiceHealthBannerContent(Severity.Warning, string.Join(" ", sentences));
     }
 
-    private static string JoinAnd(IReadOnlyList<string> items) => items.Count switch
+    /// <summary>
+    /// "a, b and c": the items before the last separated by commas, the last joined by <paramref name="lastJoin"/>
+    /// (<c>HealthText.ListAnd</c> or <c>ListOr</c>), whose word for "and" or "or" is the language's own.
+    /// </summary>
+    private static string JoinList(IReadOnlyList<string> items, string lastJoin) => items.Count switch
     {
         0 => string.Empty,
         1 => items[0],
-        _ => $"{string.Join(", ", items.Take(items.Count - 1))} and {items[^1]}"
-    };
-
-    private static string JoinOr(IReadOnlyList<string> items) => items.Count switch
-    {
-        0 => string.Empty,
-        1 => items[0],
-        _ => $"{string.Join(", ", items.Take(items.Count - 1))} or {items[^1]}"
+        _ => Format(lastJoin, string.Join(", ", items.Take(items.Count - 1)), items[^1])
     };
 
     private static string Capitalise(string text) =>
-        string.IsNullOrEmpty(text) ? text : char.ToUpperInvariant(text[0]) + text[1..];
+        string.IsNullOrEmpty(text) ? text : char.ToUpper(text[0], CultureInfo.CurrentCulture) + text[1..];
+
+    private static string Counted(int count, string one, string other) => Format(PluralRules.Choose(count, one, other), count);
+
+    private static string Format(string template, params object?[] arguments) =>
+        string.Format(CultureInfo.CurrentCulture, template, arguments);
 }
 
 /// <summary>

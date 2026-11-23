@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="TriggerManual" xml:space="preserve">
+    <value>Manual</value>
+    <comment>A Schedule that only runs when started by hand.</comment>
+  </data>
+  <data name="Daily" xml:space="preserve">
+    <value>Daily</value>
+    <comment>Which days a Schedule runs.</comment>
+  </data>
+  <data name="Weekdays" xml:space="preserve">
+    <value>Weekdays</value>
+    <comment>Monday to Friday.</comment>
+  </data>
+  <data name="Weekends" xml:space="preserve">
+    <value>Weekends</value>
+    <comment>Saturday and Sunday.</comment>
+  </data>
+  <data name="DailyExcept" xml:space="preserve">
+    <value>Daily exc. {0}</value>
+    <comment>{0} is an abbreviated day name.</comment>
+  </data>
+  <data name="EveryHoursShort" xml:space="preserve">
+    <value>Every {0} hr</value>
+    <comment>Follows the days after a comma: "Daily, Every 1 hr".</comment>
+  </data>
+  <data name="EveryMinutesShort" xml:space="preserve">
+    <value>Every {0} min</value>
+    <comment>Follows the days after a comma.</comment>
+  </data>
+  <data name="IntervalWindow" xml:space="preserve">
+    <value>{0} ({1} to {2})</value>
+    <comment>{0} is the interval; {1} and {2} are times of day.</comment>
+  </data>
+  <data name="DaysAtTimes" xml:space="preserve">
+    <value>{0} at {1}</value>
+    <comment>{0} is the days; {1} one or more times of day.</comment>
+  </data>
+  <data name="TimesPerDay" xml:space="preserve">
+    <value>{0}, {1} times/day</value>
+    <comment>{0} is the days; {1} a count.</comment>
+  </data>
+  <data name="NotConfigured" xml:space="preserve">
+    <value>Not configured</value>
+  </data>
+  <data name="CronEveryHours" xml:space="preserve">
+    <value>Every {0} hours</value>
+  </data>
+  <data name="CronDailyAt" xml:space="preserve">
+    <value>Daily at {0}</value>
+    <comment>{0} is a time of day.</comment>
+  </data>
+  <data name="Hourly" xml:space="preserve">
+    <value>Hourly</value>
+  </data>
+  <data name="HourlyAt" xml:space="preserve">
+    <value>Hourly at :{0}</value>
+    <comment>{0} is the minute past the hour, two digits.</comment>
+  </data>
+  <data name="DaysEveryMinutes" xml:space="preserve">
+    <value>{0}, every {1} min</value>
+    <comment>{0} is the days.</comment>
+  </data>
+  <data name="CronEveryMinutes" xml:space="preserve">
+    <value>Every {0} minutes</value>
+  </data>
+  <data name="DaysEveryHours" xml:space="preserve">
+    <value>{0}, every {1} hrs</value>
+    <comment>{0} is the days.</comment>
+  </data>
+  <data name="TimeOfDayFormat" xml:space="preserve">
+    <value>h:mm tt</value>
+    <comment>A .NET time format for a time of day: twelve-hour with AM/PM in English, twenty-four-hour elsewhere. Not shown as text.</comment>
+  </data>
+</root>

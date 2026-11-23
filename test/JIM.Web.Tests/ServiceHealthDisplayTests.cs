@@ -1,4 +1,4 @@
-// Copyright (c) Tetron Limited. All rights reserved.
+﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Servers;
@@ -608,11 +608,12 @@ public class ServiceHealthDisplayTests
 
     // ─── Next Schedule (#2549) ───
 
-    // 2026-09-05 is a Saturday; the strip says when the next Schedule fires in the reader's own terms.
+    // 2026-09-05 is a Saturday; the strip says when the next Schedule fires in the reader's own terms. The weekday and
+    // month are the reader's language's own abbreviations, and the assembly runs in en-GB, which writes September "Sept".
     [TestCase("2026-09-05T16:30:00", "today 16:30")]
     [TestCase("2026-09-06T02:00:00", "tomorrow 02:00")]
     [TestCase("2026-09-09T02:00:00", "Wed 02:00")]
-    [TestCase("2026-09-20T02:00:00", "20 Sep 02:00")]
+    [TestCase("2026-09-20T02:00:00", "20 Sept 02:00")]
     public void NextScheduleWhen_RelativeToToday_ReadsNaturally(string next, string expected)
     {
         var nextRun = DateTime.SpecifyKind(DateTime.Parse(next, System.Globalization.CultureInfo.InvariantCulture), DateTimeKind.Utc);

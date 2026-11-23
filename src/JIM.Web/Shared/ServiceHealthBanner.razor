@@ -20,8 +20,8 @@
     <MudAlert Severity="@_content.Severity" Dense="true" Class="jim-service-health-banner mb-5">
         <span>@_content.Sentence</span>
         <span class="jim-service-health-banner-links">
-            <MudLink Href="/admin/operations" Color="Color.Inherit" Underline="Underline.Always">Operations</MudLink>
-            <MudLink Href="/admin/logs" Color="Color.Inherit" Underline="Underline.Always">Logs</MudLink>
+            <MudLink Href="/admin/operations" Color="Color.Inherit" Underline="Underline.Always">@HealthText.BannerOperationsLink</MudLink>
+            <MudLink Href="/admin/logs" Color="Color.Inherit" Underline="Underline.Always">@HealthText.BannerLogsLink</MudLink>
         </span>
     </MudAlert>
 }

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="TriggerManual" xml:space="preserve">
+    <value>Manuel</value>
+  </data>
+  <data name="Daily" xml:space="preserve">
+    <value>Tous les jours</value>
+  </data>
+  <data name="Weekdays" xml:space="preserve">
+    <value>En semaine</value>
+  </data>
+  <data name="Weekends" xml:space="preserve">
+    <value>Le week-end</value>
+  </data>
+  <data name="DailyExcept" xml:space="preserve">
+    <value>Tous les jours sauf {0}</value>
+  </data>
+  <data name="EveryHoursShort" xml:space="preserve">
+    <value>toutes les {0} h</value>
+  </data>
+  <data name="EveryMinutesShort" xml:space="preserve">
+    <value>toutes les {0} min</value>
+  </data>
+  <data name="IntervalWindow" xml:space="preserve">
+    <value>{0} (de {1} à {2})</value>
+  </data>
+  <data name="DaysAtTimes" xml:space="preserve">
+    <value>{0} à {1}</value>
+  </data>
+  <data name="TimesPerDay" xml:space="preserve">
+    <value>{0}, {1} fois par jour</value>
+  </data>
+  <data name="NotConfigured" xml:space="preserve">
+    <value>Non configuré</value>
+  </data>
+  <data name="CronEveryHours" xml:space="preserve">
+    <value>Toutes les {0} heures</value>
+  </data>
+  <data name="CronDailyAt" xml:space="preserve">
+    <value>Tous les jours à {0}</value>
+  </data>
+  <data name="Hourly" xml:space="preserve">
+    <value>Toutes les heures</value>
+  </data>
+  <data name="HourlyAt" xml:space="preserve">
+    <value>Toutes les heures à :{0}</value>
+  </data>
+  <data name="DaysEveryMinutes" xml:space="preserve">
+    <value>{0}, toutes les {1} min</value>
+  </data>
+  <data name="CronEveryMinutes" xml:space="preserve">
+    <value>Toutes les {0} minutes</value>
+  </data>
+  <data name="DaysEveryHours" xml:space="preserve">
+    <value>{0}, toutes les {1} h</value>
+  </data>
+  <data name="TimeOfDayFormat" xml:space="preserve">
+    <value>HH:mm</value>
+  </data>
+</root>

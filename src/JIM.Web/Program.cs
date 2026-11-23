@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Application.Utilities;
 using JIM.Application;
 using JIM.Application.Hosting;
@@ -747,13 +748,14 @@ try
     app.UseStaticFiles();
 
     // Portal language (#3030): the culture cookie the language picker sets, else the browser's Accept-Language, else
-    // en-GB. Unreleased languages are offered in Development only. The REST API and SCIM are left out on purpose: their
-    // contract is machine-readable and stays culture-independent, so a client's Accept-Language must not change how a
-    // response formats anything.
+    // British English text in the host's own formats (LANG). Unreleased languages are offered in Development only. The
+    // REST API and SCIM are left out on purpose: their contract is machine-readable, so a client's Accept-Language must
+    // not change how a response formats anything.
     var includeUnreleasedLanguages = app.Environment.IsDevelopment();
+    var portalLocalisation = PortalLocalisation.CreateOptions(includeUnreleasedLanguages, CultureInfo.CurrentCulture);
     app.UseWhen(
         context => !context.Request.Path.StartsWithSegments("/api") && !ScimRoutes.IsScimRequest(context.Request),
-        appBuilder => appBuilder.UseRequestLocalization(PortalLocalisation.CreateOptions(includeUnreleasedLanguages)));
+        appBuilder => appBuilder.UseRequestLocalization(portalLocalisation));
 
     app.UseRouting();
 

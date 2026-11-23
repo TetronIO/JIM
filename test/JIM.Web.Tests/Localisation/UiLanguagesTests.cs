@@ -77,6 +77,40 @@ public class UiLanguagesTests
         Assert.That(CultureSelection.CookieValueFor(culture, includeUnreleased: true), Is.Null);
     }
 
+    /// <summary>
+    /// <c>LANG</c> is a documented setting that decides how the portal writes dates and numbers. A person who has not
+    /// chosen a language keeps the server's formats; only the words default to British English. Overriding the
+    /// formats with en-GB would quietly change every date on a deployment configured for, say, en-US.
+    /// </summary>
+    [TestCase("en-US")]
+    [TestCase("de-CH")]
+    [TestCase("en-GB")]
+    public void CreateOptions_NoChoiceMade_FormatsInTheServersCultureAndWritesBritishEnglish(string serverCulture)
+    {
+        var options = PortalLocalisation.CreateOptions(includeUnreleased: false, CultureInfo.GetCultureInfo(serverCulture));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(options.DefaultRequestCulture.Culture.Name, Is.EqualTo(serverCulture));
+            Assert.That(options.DefaultRequestCulture.UICulture.Name, Is.EqualTo("en-GB"));
+            Assert.That(options.SupportedCultures!.Select(culture => culture.Name), Does.Contain(serverCulture));
+            Assert.That(options.SupportedUICultures!.Select(culture => culture.Name), Is.EquivalentTo(
+                UiLanguages.Offered(includeUnreleased: false).Select(language => language.CultureName)));
+        }
+    }
+
+    [Test]
+    public void CreateOptions_NoLangAtAll_KeepsTheInvariantFormatsTheHostAlwaysHad()
+    {
+        var options = PortalLocalisation.CreateOptions(includeUnreleased: false, CultureInfo.InvariantCulture);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(options.DefaultRequestCulture.Culture, Is.EqualTo(CultureInfo.InvariantCulture));
+            Assert.That(options.DefaultRequestCulture.UICulture.Name, Is.EqualTo("en-GB"));
+        }
+    }
+
     [TestCase("/admin/connected-systems?t=schema", "/admin/connected-systems?t=schema")]
     [TestCase("/", "/")]
     [TestCase(null, "/")]

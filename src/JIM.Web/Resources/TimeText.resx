@@ -30,6 +30,14 @@
     <value>in {0}</value>
     <comment>{0} is a counted unit from the Relative* unit keys, e.g. "3 hours".</comment>
   </data>
+  <data name="RelativeSecondOne" xml:space="preserve">
+    <value>{0} second</value>
+    <comment>Singular, inside a sentence ("for {0}", "{0} ago"). German: dative case.</comment>
+  </data>
+  <data name="RelativeSecondOther" xml:space="preserve">
+    <value>{0} seconds</value>
+    <comment>Plural, inside a sentence. German: dative case.</comment>
+  </data>
   <data name="RelativeMinuteOne" xml:space="preserve">
     <value>{0} minute</value>
     <comment>Singular, inside RelativeAgo or RelativeIn. German: dative case.</comment>
