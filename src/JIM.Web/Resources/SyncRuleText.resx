@@ -2600,4 +2600,28 @@
     <value>Stop provisioning recipients</value>
     <comment>Button removing every Attribute Flow to an Exchange attribute.</comment>
   </data>
+  <data name="IdentityAwaitingChip" xml:space="preserve">
+    <value>Awaiting synchronisation</value>
+    <comment>Chip on an import rule whose saved changes await the next synchronisation.</comment>
+  </data>
+  <data name="IdentityAwaitingOne" xml:space="preserve">
+    <value>1 saved change reaches existing objects at the next synchronisation of {0}, which processes every {1}.</value>
+    <comment>Tooltip. {0} is the Connected System name, {1} the object phrase. Singular.</comment>
+  </data>
+  <data name="IdentityAwaitingMany" xml:space="preserve">
+    <value>{0:N0} saved changes reach existing objects at the next synchronisation of {1}, which processes every {2}.</value>
+    <comment>Tooltip. {0} is the count, {1} the Connected System name, {2} the object phrase. Plural.</comment>
+  </data>
+  <data name="IdentityObjectOfType" xml:space="preserve">
+    <value>{0} object</value>
+    <comment>The object phrase when the Connected System Object Type is known. {0} is the type name.</comment>
+  </data>
+  <data name="IdentityObjectGeneric" xml:space="preserve">
+    <value>object</value>
+    <comment>The object phrase when the type name is not known.</comment>
+  </data>
+  <data name="IdentityIn" xml:space="preserve">
+    <value>in</value>
+    <comment>Word between the Synchronisation Rule's type and its Connected System.</comment>
+  </data>
 </root>

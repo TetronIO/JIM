@@ -236,4 +236,13 @@
   <data name="DerivedSequencingFallback" xml:space="preserve">
     <value>When another Connected System changes {0}, JIM marks this object so this Connected System's next synchronization picks it up. Synchronize the source first for the value to be right in the same cycle.</value>
   </data>
+  <data name="IdentityAwaitingChip" xml:space="preserve">
+    <value>Awaiting synchronization</value>
+  </data>
+  <data name="IdentityAwaitingOne" xml:space="preserve">
+    <value>1 saved change reaches existing objects at the next synchronization of {0}, which processes every {1}.</value>
+  </data>
+  <data name="IdentityAwaitingMany" xml:space="preserve">
+    <value>{0:N0} saved changes reach existing objects at the next synchronization of {1}, which processes every {2}.</value>
+  </data>
 </root>

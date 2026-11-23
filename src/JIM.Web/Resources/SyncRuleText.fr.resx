@@ -1973,4 +1973,22 @@
   <data name="ExRecipStop" xml:space="preserve">
     <value>Arrêter le provisionnement des destinataires</value>
   </data>
+  <data name="IdentityAwaitingChip" xml:space="preserve">
+    <value>En attente de synchronisation</value>
+  </data>
+  <data name="IdentityAwaitingOne" xml:space="preserve">
+    <value>1 modification enregistrée atteint les objets existants lors de la prochaine synchronisation de {0}, qui traite chaque {1}.</value>
+  </data>
+  <data name="IdentityAwaitingMany" xml:space="preserve">
+    <value>{0:N0} modifications enregistrées atteignent les objets existants lors de la prochaine synchronisation de {1}, qui traite chaque {2}.</value>
+  </data>
+  <data name="IdentityObjectOfType" xml:space="preserve">
+    <value>objet {0}</value>
+  </data>
+  <data name="IdentityObjectGeneric" xml:space="preserve">
+    <value>objet</value>
+  </data>
+  <data name="IdentityIn" xml:space="preserve">
+    <value>dans</value>
+  </data>
 </root>
