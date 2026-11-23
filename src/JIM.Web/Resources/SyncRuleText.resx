@@ -964,4 +964,117 @@
     <value>Applies only where no export has written the Connected System Object's enabled state, such as &lt;code&gt;userAccountControl&lt;/code&gt;, by the time the password is delivered; where one has, the Attribute Flow decides. Off leaves the Connected System Object as it was created. Also applies, with Password never expires, when a password change already waiting for the person is delivered as the Connected System Object's first password instead of the Initial Password.</value>
     <comment>Markup: a code element is intentional.</comment>
   </data>
+  <data name="SyncRulesTitle" xml:space="preserve">
+    <value>Synchronisation Rules</value>
+    <comment>Page title, heading, breadcrumb and info title for the Synchronisation Rule list. Plural.</comment>
+  </data>
+  <data name="SyncRulesIntro" xml:space="preserve">
+    <value>Synchronisation Rules are used to define the flow of information between JIM and Connected Systems.</value>
+    <comment>Info popover on the Synchronisation Rule list.</comment>
+  </data>
+  <data name="CreateConnectedSystemFirst" xml:space="preserve">
+    <value>Please create a {0} first.</value>
+    <comment>Alert when there are no Connected Systems. {0} is a link whose text is ConnectedSystemTerm.</comment>
+  </data>
+  <data name="ConnectedSystemTerm" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Singular noun. Used as a link, a filter label and a column heading.</comment>
+  </data>
+  <data name="DirectionLabel" xml:space="preserve">
+    <value>Direction</value>
+    <comment>Label of the direction filter, and the Direction column heading.</comment>
+  </data>
+  <data name="DirectionInbound" xml:space="preserve">
+    <value>Inbound</value>
+    <comment>Direction: from a Connected System into the Metaverse.</comment>
+  </data>
+  <data name="DirectionOutbound" xml:space="preserve">
+    <value>Outbound</value>
+    <comment>Direction: from the Metaverse into a Connected System.</comment>
+  </data>
+  <data name="ActionLabel" xml:space="preserve">
+    <value>Action</value>
+    <comment>Label of the action filter.</comment>
+  </data>
+  <data name="ActionProjects" xml:space="preserve">
+    <value>Projects</value>
+    <comment>Action type: projects new objects to the Metaverse. A verb in the third person, as a chip.</comment>
+  </data>
+  <data name="ActionProvisions" xml:space="preserve">
+    <value>Provisions</value>
+    <comment>Action type: provisions new objects into the Connected System. A verb in the third person, as a chip.</comment>
+  </data>
+  <data name="ActionFlowOnly" xml:space="preserve">
+    <value>Flow Only</value>
+    <comment>Action type: only flows attributes, neither projects nor provisions.</comment>
+  </data>
+  <data name="SingularSyncRule" xml:space="preserve">
+    <value>Synchronisation Rule</value>
+    <comment>Singular noun, in the grid count.</comment>
+  </data>
+  <data name="PluralSyncRules" xml:space="preserve">
+    <value>Synchronisation Rules</value>
+    <comment>Plural noun, in the grid count.</comment>
+  </data>
+  <data name="CreateSyncRuleButton" xml:space="preserve">
+    <value>Create Synchronisation Rule</value>
+    <comment>Button on the Synchronisation Rule list.</comment>
+  </data>
+  <data name="ObjectMappingColumn" xml:space="preserve">
+    <value>Object Mapping</value>
+    <comment>Grid column heading: the object types a rule maps between.</comment>
+  </data>
+  <data name="ConnectedSystemObjectTypeTooltip" xml:space="preserve">
+    <value>Connected System Object Type</value>
+    <comment>Tooltip on the Connected System Object Type chip.</comment>
+  </data>
+  <data name="MetaverseObjectTypeTooltip" xml:space="preserve">
+    <value>Metaverse Object Type</value>
+    <comment>Tooltip on the Metaverse Object Type chip.</comment>
+  </data>
+  <data name="ProjectsTooltip" xml:space="preserve">
+    <value>Projects new objects to the Metaverse</value>
+    <comment>Tooltip on the Projects chip.</comment>
+  </data>
+  <data name="ProvisionsTooltip" xml:space="preserve">
+    <value>Provisions new objects to the Connected System</value>
+    <comment>Tooltip on the Provisions chip.</comment>
+  </data>
+  <data name="ColumnAttention" xml:space="preserve">
+    <value>Attention</value>
+    <comment>Grid column heading for items needing attention.</comment>
+  </data>
+  <data name="NoRulesMatchSearch" xml:space="preserve">
+    <value>No Synchronisation Rules match "{0}"</value>
+    <comment>Empty grid when the search matched nothing. {0} is the search text.</comment>
+  </data>
+  <data name="NoRulesMatchSearchHint" xml:space="preserve">
+    <value>Try a different search term, or clear the search.</value>
+  </data>
+  <data name="NoRulesMatchFilters" xml:space="preserve">
+    <value>No Synchronisation Rules match the current filters</value>
+    <comment>Empty grid when the filters match nothing.</comment>
+  </data>
+  <data name="NoRulesMatchFiltersHint" xml:space="preserve">
+    <value>Adjust or clear the filters above to see more results.</value>
+  </data>
+  <data name="NoRulesYet" xml:space="preserve">
+    <value>No Synchronisation Rules yet</value>
+    <comment>Empty grid when there are no Synchronisation Rules.</comment>
+  </data>
+  <data name="NoRulesYetHint" xml:space="preserve">
+    <value>Use the Create Synchronisation Rule button to define your first flow.</value>
+  </data>
+  <data name="BreadcrumbHome" xml:space="preserve">
+    <value>Home</value>
+    <comment>Breadcrumb: the home page.</comment>
+  </data>
+  <data name="BreadcrumbAdministration" xml:space="preserve">
+    <value>Administration</value>
+    <comment>Breadcrumb: the administration index.</comment>
+  </data>
+  <data name="SelectedCount" xml:space="preserve">
+    <value>{0} selected</value>
+    <comment>Summary of a multi-select with several values chosen. {0} is the count.</comment>
+  </data>
 </root>

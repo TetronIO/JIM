@@ -740,4 +740,91 @@
   <data name="EnableAccountNote" xml:space="preserve">
     <value>S’applique uniquement lorsqu’aucune exportation n’a écrit l’état d’activation de l’objet de système connecté, par exemple &lt;code&gt;userAccountControl&lt;/code&gt;, au moment où le mot de passe est remis ; si c’est le cas, le flux d’attributs décide. Désactivé laisse l’objet de système connecté tel qu’il a été créé. S’applique également, avec Le mot de passe n’expire jamais, lorsqu’une modification de mot de passe déjà en attente pour la personne est remise comme premier mot de passe de l’objet de système connecté à la place du mot de passe initial.</value>
   </data>
+  <data name="SyncRulesTitle" xml:space="preserve">
+    <value>Règles de synchronisation</value>
+  </data>
+  <data name="SyncRulesIntro" xml:space="preserve">
+    <value>Les règles de synchronisation définissent le flux d’informations entre JIM et les systèmes connectés.</value>
+  </data>
+  <data name="CreateConnectedSystemFirst" xml:space="preserve">
+    <value>Veuillez d’abord créer un {0}.</value>
+  </data>
+  <data name="ConnectedSystemTerm" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="DirectionLabel" xml:space="preserve">
+    <value>Sens</value>
+  </data>
+  <data name="DirectionInbound" xml:space="preserve">
+    <value>Entrant</value>
+  </data>
+  <data name="DirectionOutbound" xml:space="preserve">
+    <value>Sortant</value>
+  </data>
+  <data name="ActionLabel" xml:space="preserve">
+    <value>Action</value>
+  </data>
+  <data name="ActionProjects" xml:space="preserve">
+    <value>Projette</value>
+  </data>
+  <data name="ActionProvisions" xml:space="preserve">
+    <value>Provisionne</value>
+  </data>
+  <data name="ActionFlowOnly" xml:space="preserve">
+    <value>Flux seulement</value>
+  </data>
+  <data name="SingularSyncRule" xml:space="preserve">
+    <value>Règle de synchronisation</value>
+  </data>
+  <data name="PluralSyncRules" xml:space="preserve">
+    <value>Règles de synchronisation</value>
+  </data>
+  <data name="CreateSyncRuleButton" xml:space="preserve">
+    <value>Créer une règle de synchronisation</value>
+  </data>
+  <data name="ObjectMappingColumn" xml:space="preserve">
+    <value>Mappage d’objets</value>
+  </data>
+  <data name="ConnectedSystemObjectTypeTooltip" xml:space="preserve">
+    <value>Type d’objets de système connecté</value>
+  </data>
+  <data name="MetaverseObjectTypeTooltip" xml:space="preserve">
+    <value>Type d’objet Metaverse</value>
+  </data>
+  <data name="ProjectsTooltip" xml:space="preserve">
+    <value>Projette les nouveaux objets vers le Metaverse</value>
+  </data>
+  <data name="ProvisionsTooltip" xml:space="preserve">
+    <value>Provisionne les nouveaux objets dans le système connecté</value>
+  </data>
+  <data name="ColumnAttention" xml:space="preserve">
+    <value>Attention</value>
+  </data>
+  <data name="NoRulesMatchSearch" xml:space="preserve">
+    <value>Aucune règle de synchronisation ne correspond à « {0} »</value>
+  </data>
+  <data name="NoRulesMatchSearchHint" xml:space="preserve">
+    <value>Essayez un autre terme de recherche, ou effacez la recherche.</value>
+  </data>
+  <data name="NoRulesMatchFilters" xml:space="preserve">
+    <value>Aucune règle de synchronisation ne correspond aux filtres actuels</value>
+  </data>
+  <data name="NoRulesMatchFiltersHint" xml:space="preserve">
+    <value>Ajustez ou effacez les filtres ci-dessus pour voir davantage de résultats.</value>
+  </data>
+  <data name="NoRulesYet" xml:space="preserve">
+    <value>Aucune règle de synchronisation pour le moment</value>
+  </data>
+  <data name="NoRulesYetHint" xml:space="preserve">
+    <value>Utilisez le bouton Créer une règle de synchronisation pour définir votre premier flux.</value>
+  </data>
+  <data name="BreadcrumbHome" xml:space="preserve">
+    <value>Accueil</value>
+  </data>
+  <data name="BreadcrumbAdministration" xml:space="preserve">
+    <value>Administration</value>
+  </data>
+  <data name="SelectedCount" xml:space="preserve">
+    <value>{0} sélectionnés</value>
+  </data>
 </root>

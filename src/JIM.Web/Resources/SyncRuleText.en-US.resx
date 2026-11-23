@@ -83,4 +83,31 @@
   <data name="ExpiryOnlyWhatConnectorApplies" xml:space="preserve">
     <value>Only what the {0} can apply is offered. Where a particular target cannot honor the choice, JIM records what it applied instead rather than assuming the request was met.</value>
   </data>
+  <data name="SyncRulesTitle" xml:space="preserve">
+    <value>Synchronization Rules</value>
+  </data>
+  <data name="SyncRulesIntro" xml:space="preserve">
+    <value>Synchronization Rules are used to define the flow of information between JIM and Connected Systems.</value>
+  </data>
+  <data name="SingularSyncRule" xml:space="preserve">
+    <value>Synchronization Rule</value>
+  </data>
+  <data name="PluralSyncRules" xml:space="preserve">
+    <value>Synchronization Rules</value>
+  </data>
+  <data name="CreateSyncRuleButton" xml:space="preserve">
+    <value>Create Synchronization Rule</value>
+  </data>
+  <data name="NoRulesMatchSearch" xml:space="preserve">
+    <value>No Synchronization Rules match "{0}"</value>
+  </data>
+  <data name="NoRulesMatchFilters" xml:space="preserve">
+    <value>No Synchronization Rules match the current filters</value>
+  </data>
+  <data name="NoRulesYet" xml:space="preserve">
+    <value>No Synchronization Rules yet</value>
+  </data>
+  <data name="NoRulesYetHint" xml:space="preserve">
+    <value>Use the Create Synchronization Rule button to define your first flow.</value>
+  </data>
 </root>
