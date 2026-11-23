@@ -296,7 +296,7 @@
             @if (!string.IsNullOrWhiteSpace(_selectedActivity.WarningMessage))
             {
                 <MudAlert Severity="Severity.Warning">
-                    @foreach (var warningLine in _selectedActivity.WarningMessage.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    @foreach (var warningLine in (MessageDisplay.Show(_selectedActivity.WarningMessageDetail, _selectedActivity.WarningMessage) ?? string.Empty).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                     {
                         <MudText Typo="Typo.body1">@warningLine</MudText>
                     }
@@ -584,7 +584,7 @@
                         </TitleContent>
                         <ChildContent>
                             <MudText Typo="Typo.body2" Style="white-space: pre-wrap; word-break: break-word;">
-                                @_selectedActivity.ErrorMessage
+                                @MessageDisplay.Show(_selectedActivity.ErrorMessageDetail, _selectedActivity.ErrorMessage)
                             </MudText>
                             <CollapsibleStackTrace StackTrace="@_selectedActivity.ErrorStackTrace" />
                         </ChildContent>

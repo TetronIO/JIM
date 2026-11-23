@@ -189,7 +189,7 @@
                     @if (!string.IsNullOrWhiteSpace(context.Item.ErrorMessage))
                     {
                         <MudText Typo="Typo.body2" Color="Color.Error" Style="white-space: pre-wrap; word-break: break-word;">
-                            @context.Item.ErrorMessage
+                            @MessageDisplay.Show(context.Item.ErrorMessageDetail, context.Item.ErrorMessage)
                         </MudText>
                     }
                     @* Why a step that never started was cancelled. An explanation, not an error, so it reads as
@@ -197,7 +197,7 @@
                     @if (context.Item.Status == ScheduleExecutionStepStatus.Cancelled && !string.IsNullOrWhiteSpace(context.Item.CancellationReason))
                     {
                         <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                            @context.Item.CancellationReason
+                            @MessageDisplay.Show(context.Item.CancellationReasonDetail, context.Item.CancellationReason)
                         </MudText>
                     }
                 </CellTemplate>

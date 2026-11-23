@@ -1,12 +1,15 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.History;
+using JIM.Models.Localisation;
 using JIM.Models.Exceptions;
 using JIM.Models.Scheduling;
 using JIM.Models.Security;
@@ -314,6 +317,7 @@ public partial class ActivityServer
         var now = DateTime.UtcNow;
         activity.ExecutionTime = DateTime.UtcNow - activity.Executed;
         activity.ErrorMessage = exception.Message;
+        StoreErrorDetail(activity, exception, exception.Message);
 
         // Only persist stack traces for unexpected errors (bugs), not for operational errors
         // that have clear, user-actionable messages
@@ -333,6 +337,22 @@ public partial class ActivityServer
         activity.ExecutionTime = now - activity.Executed;
         activity.TotalActivityTime = now - activity.Created;
         activity.ErrorMessage = errorMessage;
+        activity.ErrorMessageDetailJson = null;
+        activity.Status = ActivityStatus.CompleteWithError;
+        await TryFinaliseRunProfileExecutionStatsAsync(activity);
+        await Application.Repository.Activity.UpdateActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Completes the Activity with an error the portal shows in the viewer's language (#3039); the English stored beside
+    /// it, and read by the REST API, is the message's British English.
+    /// </summary>
+    public async Task CompleteActivityWithErrorAsync(Activity activity, JimMessage errorMessage)
+    {
+        var now = DateTime.UtcNow;
+        activity.ExecutionTime = now - activity.Executed;
+        activity.TotalActivityTime = now - activity.Created;
+        activity.ErrorMessageDetail = errorMessage;
         activity.Status = ActivityStatus.CompleteWithError;
         await TryFinaliseRunProfileExecutionStatsAsync(activity);
         await Application.Repository.Activity.UpdateActivityAsync(activity);
@@ -343,6 +363,40 @@ public partial class ActivityServer
         var now = DateTime.UtcNow;
         activity.ExecutionTime = DateTime.UtcNow - activity.Executed;
         activity.ErrorMessage = errorMessage;
+        activity.ErrorMessageDetailJson = null;
+        activity.ExecutionTime = now - activity.Executed;
+        activity.TotalActivityTime = now - activity.Created;
+        activity.Status = ActivityStatus.FailedWithError;
+        await TryFinaliseRunProfileExecutionStatsAsync(activity);
+        await Application.Repository.Activity.UpdateActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Fails the Activity with <paramref name="errorMessage"/>, the English a caller built from <paramref name="cause"/>
+    /// and its inner exceptions (the chain <see cref="FailActivityWithErrorAsync(Activity, Exception)"/> writes), and
+    /// stores the message the cause carries beside it so the portal can show it in the viewer's language (#3039). The
+    /// English is stored exactly as given; the message is kept only where it rebuilds that English.
+    /// </summary>
+    public async Task FailActivityWithErrorAsync(Activity activity, string errorMessage, Exception cause)
+    {
+        activity.ErrorMessage = errorMessage;
+        StoreErrorDetail(activity, cause, errorMessage);
+        var now = DateTime.UtcNow;
+        activity.ExecutionTime = now - activity.Executed;
+        activity.TotalActivityTime = now - activity.Created;
+        activity.Status = ActivityStatus.FailedWithError;
+        await TryFinaliseRunProfileExecutionStatsAsync(activity);
+        await Application.Repository.Activity.UpdateActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Fails the Activity with an error the portal shows in the viewer's language (#3039); the English stored beside it,
+    /// and read by the REST API, is the message's British English.
+    /// </summary>
+    public async Task FailActivityWithErrorAsync(Activity activity, JimMessage errorMessage)
+    {
+        var now = DateTime.UtcNow;
+        activity.ErrorMessageDetail = errorMessage;
         activity.ExecutionTime = now - activity.Executed;
         activity.TotalActivityTime = now - activity.Created;
         activity.Status = ActivityStatus.FailedWithError;
@@ -356,6 +410,10 @@ public partial class ActivityServer
         activity.ErrorMessage = RanOutOfMemory(exception)
             ? MemoryPressure.OutOfMemoryText(new HostMemoryProbe().Read())
             : GetFullExceptionMessage(exception);
+        if (!RanOutOfMemory(exception))
+            StoreErrorDetail(activity, exception, activity.ErrorMessage);
+        else
+            activity.ErrorMessageDetailJson = null;
         activity.ErrorDetail = ActivityErrorDetail.TryDescribe(exception);
 
         // Only persist stack traces for unexpected errors (bugs), not for operational errors
@@ -396,6 +454,43 @@ public partial class ActivityServer
         return $"{exception.Message} --> {GetFullExceptionMessage(exception.InnerException)}";
     }
 
+    /// <summary>
+    /// Stores, beside the English already on the Activity, the message an exception carries so the portal can show the
+    /// failure in the viewer's language (#3039); many refusals carry one, so their failed Activities become
+    /// translatable without a call-site change. Only when the message rebuilds exactly the English that was stored: an
+    /// exception with English text only, or one whose framework text differs from its message (an
+    /// <see cref="ArgumentException"/>'s parameter suffix), leaves the English to stand.
+    /// </summary>
+    private static void StoreErrorDetail(Activity activity, Exception exception, string? english)
+    {
+        var detail = DescribeFailure(exception);
+        if (detail is not null && detail.ToEnglish() == english)
+            activity.ErrorMessageDetailJson = MessageJson.Serialise(detail);
+        else
+            activity.ErrorMessageDetailJson = null;
+    }
+
+    /// <summary>
+    /// The exception's message with its causes (the chain <see cref="GetFullExceptionMessage"/> writes), where any link
+    /// in the chain carries a message of its own; null when none does, which leaves the English alone.
+    /// </summary>
+    private static JimMessage? DescribeFailure(Exception exception)
+    {
+        var own = exception.DetailOf();
+        if (exception.InnerException is null)
+            return own;
+
+        var cause = DescribeFailure(exception.InnerException);
+        if (own is null && cause is null)
+            return null;
+
+        return JimMessage.Create(
+            ApplicationMessageCatalogues.Activities,
+            nameof(ActivityMessages.FailureWithCause),
+            own is not null && own.ToEnglish() == exception.Message ? own : (MessageArgument)exception.Message,
+            cause ?? (MessageArgument)GetFullExceptionMessage(exception.InnerException));
+    }
+
     public async Task CancelActivityAsync(Activity activity)
     {
         if (activity.Status == ActivityStatus.Cancelled)
@@ -420,6 +515,17 @@ public partial class ActivityServer
     public async Task UpdateActivityMessageAsync(Activity activity, string message)
     {
         activity.Message = message;
+        activity.MessageDetailJson = null;
+        await UpdateActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Updates the message on an Activity with one the portal shows in the viewer's language (#3039); the English stored
+    /// beside it is the message's British English.
+    /// </summary>
+    public async Task UpdateActivityMessageAsync(Activity activity, JimMessage message)
+    {
+        activity.MessageDetail = message;
         await UpdateActivityAsync(activity);
     }
 
@@ -517,6 +623,7 @@ public partial class ActivityServer
                 ConnectedSystemId = activity.ConnectedSystemId,
                 Status = activity.Status,
                 Message = activity.Message,
+                MessageDetail = activity.MessageDetail,
                 PasswordOutcomes = activity.TargetType == ActivityTargetType.PasswordSynchronisation
                     ? await Application.PasswordSynchronisation.GetChangeOutcomesAsync(activity.Id)
                     : null,

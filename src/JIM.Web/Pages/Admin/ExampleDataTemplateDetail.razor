@@ -231,7 +231,7 @@
                 </div>
                 @if (completed.Status == ActivityStatus.CompleteWithWarning && !string.IsNullOrEmpty(completed.Message))
                 {
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">@completed.Message</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">@MessageDisplay.Show(completed.MessageDetail, completed.Message)</MudText>
                 }
             }
             else if (completed.Status == ActivityStatus.Cancelled)
@@ -240,7 +240,7 @@
             }
             else
             {
-                <MudAlert Severity="Severity.Error" Class="mt-1">@(string.IsNullOrEmpty(completed.Message) ? ExampleDataText.GenerationFailed : string.Format(CultureInfo.CurrentCulture, ExampleDataText.GenerationFailedWithMessage, completed.Message)) <MudLink Href="@($"/activity/{completed.Id}")">@ExampleDataText.ViewDetails</MudLink></MudAlert>
+                <MudAlert Severity="Severity.Error" Class="mt-1">@(string.IsNullOrEmpty(completed.Message) ? ExampleDataText.GenerationFailed : string.Format(CultureInfo.CurrentCulture, ExampleDataText.GenerationFailedWithMessage, MessageDisplay.Show(completed.MessageDetail, completed.Message))) <MudLink Href="@($"/activity/{completed.Id}")">@ExampleDataText.ViewDetails</MudLink></MudAlert>
             }
         </MudPaper>
     }

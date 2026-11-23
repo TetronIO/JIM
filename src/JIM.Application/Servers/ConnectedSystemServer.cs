@@ -1644,7 +1644,7 @@ public partial class ConnectedSystemServer
             var errorMessage = GetFullExceptionMessage(ex);
 
             // Mark activity as failed
-            await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage);
+            await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage, ex);
 
             if (alreadyFenced)
             {
@@ -1794,7 +1794,7 @@ public partial class ConnectedSystemServer
             Log.Error(ex, "DeleteAsync: Failed to delete Connected System {Id}", connectedSystemId);
 
             var errorMessage = GetFullExceptionMessage(ex);
-            await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage);
+            await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage, ex);
 
             if (alreadyFenced)
             {

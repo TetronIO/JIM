@@ -519,6 +519,7 @@ public class SchedulerServer
                         ? activity.Executed + (activity.TotalActivityTime ?? TimeSpan.Zero)
                         : null,
                     ErrorMessage = activity?.ErrorMessage,
+                    ErrorMessageDetail = activity?.ErrorMessageDetail,
                     // Only the reasons JIM writes when it cancels a step that had not started. A step cancelled while
                     // running did run, and its message is whatever progress it last reported.
                     CancellationReason = activity is { Status: ActivityStatus.Cancelled } && ScheduleStepNotRunReasons.IsNotRunReason(activity.Message)

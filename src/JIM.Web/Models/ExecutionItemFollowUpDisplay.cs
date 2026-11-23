@@ -75,7 +75,7 @@ public sealed record ExecutionItemFollowUpDisplay(
             // change already waiting for the account, whose own Activity reports the delivery.
             var target = followUp.PasswordOutcomes?.Targets.FirstOrDefault();
             if (target == null)
-                return new(followUp.ActivityId, ActivityText.ActivityFollowUpTitleInitialPassword, followUp.TargetName, ActivityText.ActivityFollowUpStateCarried, "neutral", followUp.Message, false, followUp.Created, followUp.TargetType);
+                return new(followUp.ActivityId, ActivityText.ActivityFollowUpTitleInitialPassword, followUp.TargetName, ActivityText.ActivityFollowUpStateCarried, "neutral", MessageDisplay.Show(followUp.MessageDetail, followUp.Message), false, followUp.Created, followUp.TargetType);
 
             var (label, modifier, running) = target.State switch
             {
@@ -107,7 +107,7 @@ public sealed record ExecutionItemFollowUpDisplay(
             ? ExchangeChangeOutcomeDisplay.Title(null)
             : Helpers.GetActivityTargetTypeName(followUp.TargetType);
         return new(followUp.ActivityId, title, followUp.TargetName,
-            StatusLabel(followUp.Status), statusModifier, followUp.Message,
+            StatusLabel(followUp.Status), statusModifier, MessageDisplay.Show(followUp.MessageDetail, followUp.Message),
             followUp.Status is ActivityStatus.InProgress or ActivityStatus.NotSet, followUp.Created, followUp.TargetType);
     }
 

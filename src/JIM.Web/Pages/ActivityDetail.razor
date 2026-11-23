@@ -231,7 +231,7 @@
             {
                 <MudItem xs="12">
                     <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityFieldMessage</MudText>
-                    <MudText Style="white-space: pre-line;">@_activity.Message</MudText>
+                    <MudText Style="white-space: pre-line;">@MessageDisplay.Show(_activity.MessageDetail, _activity.Message)</MudText>
                 </MudItem>
             }
         </MudGrid>
@@ -301,7 +301,7 @@
                                         ObjectsPerSecond="@_etaEstimate.ObjectsPerSecond"
                                         EstimatedSecondsRemaining="@_etaEstimate.EstimatedSecondsRemaining"
                                         Phases="_phases"
-                                        Message="@_activity.Message" />
+                                        Message="@MessageDisplay.Show(_activity.MessageDetail, _activity.Message)" />
                 </MudStack>
             }
         </MudPaper>
@@ -311,7 +311,7 @@
     {
         @* One line per warning: a synchronisation can record several, one per Connected System it couldn't probe (#242). *@
         <MudAlert Severity="Severity.Warning" Class="mt-4">
-            @foreach (var warningLine in _activity.WarningMessage.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            @foreach (var warningLine in (MessageDisplay.Show(_activity.WarningMessageDetail, _activity.WarningMessage) ?? string.Empty).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
                 <MudText Typo="Typo.body1" Style="font-weight: 500;">@warningLine</MudText>
             }
@@ -333,7 +333,7 @@
         <MudAlert Severity="Severity.Error" Class="mt-4 jim-alert-error jim-exception-text">
             @if (!string.IsNullOrEmpty(_activity.ErrorMessage))
             {
-                <MudText Typo="Typo.body1" Style="font-weight: 500;">@_activity.ErrorMessage</MudText>
+                <MudText Typo="Typo.body1" Style="font-weight: 500;">@MessageDisplay.Show(_activity.ErrorMessageDetail, _activity.ErrorMessage)</MudText>
             }
 
             <CollapsibleStackTrace StackTrace="@_activity.ErrorStackTrace" />
@@ -1193,7 +1193,7 @@
                     <CellTemplate>
                         @if (!string.IsNullOrEmpty(context.Item.Message))
                         {
-                            <span>@context.Item.Message</span>
+                            <span>@MessageDisplay.Show(context.Item.MessageDetail, context.Item.Message)</span>
                         }
                         else
                         {
