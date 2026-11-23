@@ -191,4 +191,19 @@
   <data name="TestCasesIntroRule" xml:space="preserve">
     <value>Each case gives this Synchronization Rule's Scope, an Attribute Flow or an Object Matching Rule inputs, and says what it should give. Runs test the rule as saved: save edits on the other tabs first.</value>
   </data>
+  <data name="MatchingRulesSpecific" xml:space="preserve">
+    <value>Matching rules are specific to this Synchronization Rule.</value>
+  </data>
+  <data name="SimpleModeExplanation" xml:space="preserve">
+    <value>This Connected System uses &lt;strong&gt;Simple Mode&lt;/strong&gt; for object matching. In Simple Mode, matching rules are defined once on the Connected System (per object type) and shared by every Synchronization Rule that targets this system, so you do not have to repeat the same matching logic on each rule. As a result, this rule cannot define its own matching rules here.</value>
+  </data>
+  <data name="SwitchToAdvancedMode" xml:space="preserve">
+    <value>Switch the Connected System to &lt;strong&gt;Advanced Mode&lt;/strong&gt; if you need matching logic that is specific to an individual Synchronization Rule.</value>
+  </data>
+  <data name="MatchingRuleNowCaseSensitive" xml:space="preserve">
+    <value>Matching rule is now case-sensitive. Remember to save the Synchronization Rule.</value>
+  </data>
+  <data name="MatchingRuleNowCaseInsensitive" xml:space="preserve">
+    <value>Matching rule is now case-insensitive. Remember to save the Synchronization Rule.</value>
+  </data>
 </root>

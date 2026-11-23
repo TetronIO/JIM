@@ -1728,4 +1728,72 @@
     <value>Deleted test case '{0}'.</value>
     <comment>Snackbar after deleting. {0} is the test case name.</comment>
   </data>
+  <data name="ObjectMatchingRulesHeading" xml:space="preserve">
+    <value>Object Matching Rules</value>
+    <comment>Heading of the matching tab.</comment>
+  </data>
+  <data name="MatchingRulesSpecific" xml:space="preserve">
+    <value>Matching rules are specific to this Synchronisation Rule.</value>
+    <comment>Tooltip on the Advanced Mode chip.</comment>
+  </data>
+  <data name="AdvancedMode" xml:space="preserve">
+    <value>Advanced Mode</value>
+    <comment>Object matching mode: rules defined per Synchronisation Rule.</comment>
+  </data>
+  <data name="SimpleModeExplanation" xml:space="preserve">
+    <value>This Connected System uses &lt;strong&gt;Simple Mode&lt;/strong&gt; for object matching. In Simple Mode, matching rules are defined once on the Connected System (per object type) and shared by every Synchronisation Rule that targets this system, so you do not have to repeat the same matching logic on each rule. As a result, this rule cannot define its own matching rules here.</value>
+    <comment>Markup: strong is intentional.</comment>
+  </data>
+  <data name="SwitchToAdvancedMode" xml:space="preserve">
+    <value>Switch the Connected System to &lt;strong&gt;Advanced Mode&lt;/strong&gt; if you need matching logic that is specific to an individual Synchronisation Rule.</value>
+    <comment>Markup: strong is intentional.</comment>
+  </data>
+  <data name="ConfigureMatchingRules" xml:space="preserve">
+    <value>Configure Matching Rules</value>
+    <comment>Link to the Connected System's Matching tab.</comment>
+  </data>
+  <data name="MatchingImportHelp" xml:space="preserve">
+    <value>Define rules to match Connected System Objects to Metaverse Objects. Use immutable attributes (e.g., employeeID, objectGUID). Multiple rules can be ordered; the first match wins. Objects are Joined when matched, Disconnected when not.</value>
+    <comment>Explains matching on an import rule.</comment>
+  </data>
+  <data name="MatchingExportHelp" xml:space="preserve">
+    <value>Define rules to match Metaverse Objects to Connected System Objects. Use immutable attributes (e.g., employeeID, objectGUID). Multiple rules can be ordered; the first match wins.</value>
+    <comment>Explains matching on an export rule.</comment>
+  </data>
+  <data name="AddMatchingRule" xml:space="preserve">
+    <value>Add Matching Rule</value>
+    <comment>Button, and dialog title, for adding an object matching rule.</comment>
+  </data>
+  <data name="MatchOnOverline" xml:space="preserve">
+    <value>MATCH ON:</value>
+    <comment>Caption on an object matching rule card.</comment>
+  </data>
+  <data name="MatchOnAttribute" xml:space="preserve">
+    <value>ATTRIBUTE</value>
+    <comment>What an object matching rule matches on: a Connected System attribute.</comment>
+  </data>
+  <data name="MatchOnExpression" xml:space="preserve">
+    <value>EXPRESSION</value>
+    <comment>What an object matching rule matches on: an expression.</comment>
+  </data>
+  <data name="PositionOverline" xml:space="preserve">
+    <value>POSITION: {0}</value>
+    <comment>Caption giving an object matching rule's order. {0} is the position, from 1.</comment>
+  </data>
+  <data name="MatchingCaseSensitive" xml:space="preserve">
+    <value>Case Sensitive</value>
+    <comment>Switch label on an object matching rule card.</comment>
+  </data>
+  <data name="RemoveMatchingRuleQuestion" xml:space="preserve">
+    <value>Are you sure you want to remove this Matching Rule?</value>
+    <comment>Confirmation before removing an object matching rule.</comment>
+  </data>
+  <data name="MatchingRuleNowCaseSensitive" xml:space="preserve">
+    <value>Matching rule is now case-sensitive. Remember to save the Synchronisation Rule.</value>
+    <comment>Snackbar after switching a matching rule to case sensitive.</comment>
+  </data>
+  <data name="MatchingRuleNowCaseInsensitive" xml:space="preserve">
+    <value>Matching rule is now case-insensitive. Remember to save the Synchronisation Rule.</value>
+    <comment>Snackbar after switching a matching rule to case insensitive.</comment>
+  </data>
 </root>

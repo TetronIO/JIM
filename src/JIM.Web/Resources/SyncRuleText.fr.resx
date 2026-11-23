@@ -1319,4 +1319,55 @@
   <data name="TestCaseDeleted" xml:space="preserve">
     <value>Cas de test « {0} » supprimé.</value>
   </data>
+  <data name="ObjectMatchingRulesHeading" xml:space="preserve">
+    <value>Règles de correspondance d’objets</value>
+  </data>
+  <data name="MatchingRulesSpecific" xml:space="preserve">
+    <value>Les règles de correspondance sont propres à cette règle de synchronisation.</value>
+  </data>
+  <data name="AdvancedMode" xml:space="preserve">
+    <value>Mode avancé</value>
+  </data>
+  <data name="SimpleModeExplanation" xml:space="preserve">
+    <value>Ce système connecté utilise le &lt;strong&gt;mode simple&lt;/strong&gt; pour la correspondance d’objets. En mode simple, les règles de correspondance sont définies une seule fois sur le système connecté (par type d’objet) et partagées par chaque règle de synchronisation qui cible ce système ; vous n’avez donc pas à répéter la même logique de correspondance sur chaque règle. Par conséquent, cette règle ne peut pas définir ici ses propres règles de correspondance.</value>
+  </data>
+  <data name="SwitchToAdvancedMode" xml:space="preserve">
+    <value>Passez le système connecté en &lt;strong&gt;mode avancé&lt;/strong&gt; si vous avez besoin d’une logique de correspondance propre à une règle de synchronisation donnée.</value>
+  </data>
+  <data name="ConfigureMatchingRules" xml:space="preserve">
+    <value>Configurer les règles de correspondance</value>
+  </data>
+  <data name="MatchingImportHelp" xml:space="preserve">
+    <value>Définissez des règles pour faire correspondre les objets de système connecté aux objets Metaverse. Utilisez des attributs immuables (par exemple employeeID, objectGUID). Plusieurs règles peuvent être ordonnées ; la première correspondance l’emporte. Les objets sont rattachés lorsqu’ils correspondent, et détachés sinon.</value>
+  </data>
+  <data name="MatchingExportHelp" xml:space="preserve">
+    <value>Définissez des règles pour faire correspondre les objets Metaverse aux objets de système connecté. Utilisez des attributs immuables (par exemple employeeID, objectGUID). Plusieurs règles peuvent être ordonnées ; la première correspondance l’emporte.</value>
+  </data>
+  <data name="AddMatchingRule" xml:space="preserve">
+    <value>Ajouter une règle de correspondance</value>
+  </data>
+  <data name="MatchOnOverline" xml:space="preserve">
+    <value>CORRESPOND SUR :</value>
+  </data>
+  <data name="MatchOnAttribute" xml:space="preserve">
+    <value>ATTRIBUT</value>
+  </data>
+  <data name="MatchOnExpression" xml:space="preserve">
+    <value>EXPRESSION</value>
+  </data>
+  <data name="PositionOverline" xml:space="preserve">
+    <value>POSITION : {0}</value>
+  </data>
+  <data name="MatchingCaseSensitive" xml:space="preserve">
+    <value>Sensible à la casse</value>
+  </data>
+  <data name="RemoveMatchingRuleQuestion" xml:space="preserve">
+    <value>Voulez-vous vraiment supprimer cette règle de correspondance ?</value>
+  </data>
+  <data name="MatchingRuleNowCaseSensitive" xml:space="preserve">
+    <value>La règle de correspondance est désormais sensible à la casse. Pensez à enregistrer la règle de synchronisation.</value>
+  </data>
+  <data name="MatchingRuleNowCaseInsensitive" xml:space="preserve">
+    <value>La règle de correspondance est désormais insensible à la casse. Pensez à enregistrer la règle de synchronisation.</value>
+  </data>
 </root>
