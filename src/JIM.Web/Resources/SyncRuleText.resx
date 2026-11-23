@@ -676,4 +676,292 @@
     <value>Choose the attribute to assign the value to, then try it here.</value>
     <comment>Shown in the Try it pane before a target attribute is chosen.</comment>
   </data>
+  <data name="InitialPasswordHeading" xml:space="preserve">
+    <value>Initial Password</value>
+    <comment>Heading of the Initial Password section of a Synchronisation Rule.</comment>
+  </data>
+  <data name="InitialPasswordConnectorCannotSet" xml:space="preserve">
+    <value>The {0} cannot set passwords, so JIM cannot give the Connected System Objects this Synchronisation Rule provisions an initial password.</value>
+    <comment>Shown when the Connector cannot set passwords. {0} is the Connector name, for example LDAP Connector.</comment>
+  </data>
+  <data name="UnknownConnectorLabel" xml:space="preserve">
+    <value>Connected System's Connector</value>
+    <comment>Stands in for the Connector name when it could not be resolved.</comment>
+  </data>
+  <data name="ParkedWaitingOne" xml:space="preserve">
+    <value>{0:N0} Connected System Object is waiting on a change to these settings</value>
+    <comment>Singular. {0} is the number of parked objects.</comment>
+  </data>
+  <data name="ParkedWaitingOther" xml:space="preserve">
+    <value>{0:N0} Connected System Objects are waiting on a change to these settings</value>
+    <comment>Plural. {0} is the number of parked objects.</comment>
+  </data>
+  <data name="ParkedExplanation" xml:space="preserve">
+    <value>The Connected System refused the password these settings produced, so JIM has stopped trying: the same settings produce another password it refuses for the same reason. Correct them below and save, and the Connected System Objects are attempted again by the Password Delivery Service within seconds.</value>
+    <comment>Explains why accounts are parked.</comment>
+  </data>
+  <data name="ParkedNoReason" xml:space="preserve">
+    <value>The target refused the password without saying why.</value>
+    <comment>Shown in place of a rejection message the target did not send.</comment>
+  </data>
+  <data name="ParkedFirstSeen" xml:space="preserve">
+    <value>First seen {0}</value>
+    <comment>{0} is a relative time, for example 2 hours ago.</comment>
+  </data>
+  <data name="ReleaseOnSaveOne" xml:space="preserve">
+    <value>Saving will release {0:N0} parked Connected System Object</value>
+    <comment>Singular. {0} is the number of objects that saving will release.</comment>
+  </data>
+  <data name="ReleaseOnSaveOther" xml:space="preserve">
+    <value>Saving will release {0:N0} parked Connected System Objects</value>
+    <comment>Plural. {0} is the number of objects that saving will release.</comment>
+  </data>
+  <data name="ReleaseOnSaveDetail" xml:space="preserve">
+    <value>They will be attempted again with these settings by the Password Delivery Service within seconds. Nothing is generated now: each password is generated at the moment it is set.</value>
+  </data>
+  <data name="SetInitialPasswordQuestion" xml:space="preserve">
+    <value>Set an initial password on the Connected System Objects this Synchronisation Rule provisions?</value>
+    <comment>Switch label.</comment>
+  </data>
+  <data name="SetInitialPasswordHelp" xml:space="preserve">
+    <value>A newly provisioned Connected System Object has no password and cannot be signed in to. Enabling this has JIM set one through the Connected System's password channel, straight after the object is created. By default JIM generates a different password for each one and stores none of them.</value>
+    <comment>Explains the initial password switch.</comment>
+  </data>
+  <data name="PasswordSettingsHeading" xml:space="preserve">
+    <value>Password Settings</value>
+    <comment>Heading of the password settings.</comment>
+  </data>
+  <data name="InitialPasswordSourceFollow" xml:space="preserve">
+    <value>Follow the Connected System</value>
+    <comment>Option: the settings follow the password policy discovered on the Connected System.</comment>
+  </data>
+  <data name="InitialPasswordSourceFollowHelp" xml:space="preserve">
+    <value>The settings are derived from the password policy discovered on the Connected System, and re-derived whenever that policy is read again. Nothing to configure, and nothing to keep in step by hand.</value>
+  </data>
+  <data name="InitialPasswordSourceCustom" xml:space="preserve">
+    <value>Custom</value>
+    <comment>Option: the settings are the ones saved here.</comment>
+  </data>
+  <data name="InitialPasswordSourceCustomHelp" xml:space="preserve">
+    <value>Exactly the settings saved here. JIM will not change them because the Connected System published something different, but it will still tell you when they cannot satisfy it.</value>
+  </data>
+  <data name="InitialPasswordSourceStatic" xml:space="preserve">
+    <value>One password for every Connected System Object</value>
+    <comment>Option: one password shared by every object.</comment>
+  </data>
+  <data name="NotRecommended" xml:space="preserve">
+    <value>Not recommended</value>
+    <comment>Chip beside the one password option.</comment>
+  </data>
+  <data name="InitialPasswordSourceStaticHelp" xml:space="preserve">
+    <value>One password you choose, set on every Connected System Object this Synchronisation Rule provisions, so you can tell a new starter what it is.</value>
+  </data>
+  <data name="NoDiscoveredPolicy" xml:space="preserve">
+    <value>JIM has not discovered a password policy on this Connected System, either because the Connector cannot read one or because the schema has not been imported since the capability was added. JIM's own defaults apply until it does.</value>
+    <comment>Shown when no password policy has been discovered.</comment>
+  </data>
+  <data name="PasswordStyleLabel" xml:space="preserve">
+    <value>Style</value>
+    <comment>Label of the password style field.</comment>
+  </data>
+  <data name="PasswordStyleRandom" xml:space="preserve">
+    <value>Random characters (t7Rm#qK4vHx2Ndbf)</value>
+    <comment>Password style option, with an example.</comment>
+  </data>
+  <data name="PasswordStyleWords" xml:space="preserve">
+    <value>Words (Brown-Chicken-Ladder-47)</value>
+    <comment>Password style option, with an example.</comment>
+  </data>
+  <data name="PasswordStylePronounceable" xml:space="preserve">
+    <value>Pronounceable (tovanic-hupelo-92)</value>
+    <comment>Password style option, with an example.</comment>
+  </data>
+  <data name="PasswordLengthLabel" xml:space="preserve">
+    <value>Length</value>
+    <comment>Label of the password length field.</comment>
+  </data>
+  <data name="MinimumUppercaseLabel" xml:space="preserve">
+    <value>Minimum uppercase</value>
+    <comment>Label of a password policy field.</comment>
+  </data>
+  <data name="MinimumLowercaseLabel" xml:space="preserve">
+    <value>Minimum lowercase</value>
+    <comment>Label of a password policy field.</comment>
+  </data>
+  <data name="MinimumDigitsLabel" xml:space="preserve">
+    <value>Minimum digits</value>
+    <comment>Label of a password policy field.</comment>
+  </data>
+  <data name="MinimumSymbolsLabel" xml:space="preserve">
+    <value>Minimum symbols</value>
+    <comment>Label of a password policy field.</comment>
+  </data>
+  <data name="NumberOfWordsLabel" xml:space="preserve">
+    <value>Number of words</value>
+    <comment>Label of the word count field.</comment>
+  </data>
+  <data name="SeparatorLabel" xml:space="preserve">
+    <value>Separator</value>
+    <comment>Label of the word separator field.</comment>
+  </data>
+  <data name="SeparatorHyphen" xml:space="preserve">
+    <value>Hyphen</value>
+    <comment>Word separator option.</comment>
+  </data>
+  <data name="SeparatorFullStop" xml:space="preserve">
+    <value>Full stop</value>
+    <comment>Word separator option.</comment>
+  </data>
+  <data name="SeparatorUnderscore" xml:space="preserve">
+    <value>Underscore</value>
+    <comment>Word separator option.</comment>
+  </data>
+  <data name="SeparatorDigit" xml:space="preserve">
+    <value>Digit</value>
+    <comment>Word separator option.</comment>
+  </data>
+  <data name="SeparatorRandomSymbol" xml:space="preserve">
+    <value>Random symbol</value>
+    <comment>Word separator option.</comment>
+  </data>
+  <data name="CapitalisationLabel" xml:space="preserve">
+    <value>Capitalisation</value>
+    <comment>Label of the word capitalisation field.</comment>
+  </data>
+  <data name="CapitalisationLowercase" xml:space="preserve">
+    <value>Lowercase</value>
+    <comment>Word capitalisation option.</comment>
+  </data>
+  <data name="CapitalisationEachWord" xml:space="preserve">
+    <value>Each word</value>
+    <comment>Word capitalisation option.</comment>
+  </data>
+  <data name="CapitalisationUppercase" xml:space="preserve">
+    <value>Uppercase</value>
+    <comment>Word capitalisation option.</comment>
+  </data>
+  <data name="CapitalisationFirstWordOnly" xml:space="preserve">
+    <value>First word only</value>
+    <comment>Word capitalisation option.</comment>
+  </data>
+  <data name="CapitalisationRandomWord" xml:space="preserve">
+    <value>One random word</value>
+    <comment>Word capitalisation option.</comment>
+  </data>
+  <data name="AppendedDigitsLabel" xml:space="preserve">
+    <value>Appended digits</value>
+    <comment>Label of the appended digits field.</comment>
+  </data>
+  <data name="AppendSymbolLabel" xml:space="preserve">
+    <value>Append a symbol</value>
+    <comment>Switch label.</comment>
+  </data>
+  <data name="PermittedSymbolsLabel" xml:space="preserve">
+    <value>Permitted symbols</value>
+    <comment>Label of the permitted symbols field.</comment>
+  </data>
+  <data name="PermittedSymbolsHelp" xml:space="preserve">
+    <value>The symbols JIM may use. Narrow this where something downstream of the Connected System cannot cope with a particular character.</value>
+  </data>
+  <data name="LeaveOutConfusedLabel" xml:space="preserve">
+    <value>Leave out easily confused characters</value>
+    <comment>Switch label.</comment>
+  </data>
+  <data name="LeaveOutConfusedHelp" xml:space="preserve">
+    <value>Excludes {0}, which are hard to tell apart when a password is read out or copied by hand. An initial password is transcribed far more often than a permanent one.</value>
+    <comment>{0} is the list of ambiguous characters.</comment>
+  </data>
+  <data name="StaticNotRecommended" xml:space="preserve">
+    <value>This option is not recommended</value>
+    <comment>Heading of the warning on the one password option.</comment>
+  </data>
+  <data name="StaticWarningBody" xml:space="preserve">
+    <value>Every Connected System Object this Synchronisation Rule provisions shares this password until its owner changes it, so anybody who learns of this can sign in as any new starter who has not. Note: the password is stored encrypted and cannot be shown to you again.</value>
+    <comment>Warning body on the one password option.</comment>
+  </data>
+  <data name="PasswordLabel" xml:space="preserve">
+    <value>Password</value>
+    <comment>Label of the password field.</comment>
+  </data>
+  <data name="ConfirmPasswordLabel" xml:space="preserve">
+    <value>Confirm password</value>
+    <comment>Label of the confirmation field.</comment>
+  </data>
+  <data name="ShowOrHidePassword" xml:space="preserve">
+    <value>Show or hide the password</value>
+    <comment>Accessible name of the reveal button.</comment>
+  </data>
+  <data name="PasswordsDoNotMatch" xml:space="preserve">
+    <value>The two passwords do not match.</value>
+    <comment>Error under the confirmation field.</comment>
+  </data>
+  <data name="StaticPasswordSetAt" xml:space="preserve">
+    <value>A password is set, last changed {0}. Leave these fields blank to keep it.</value>
+    <comment>{0} is a relative time, for example 2 hours ago.</comment>
+  </data>
+  <data name="StaticPasswordSet" xml:space="preserve">
+    <value>A password is set. Leave these fields blank to keep it.</value>
+  </data>
+  <data name="StaticPasswordNotSet" xml:space="preserve">
+    <value>No password has been set. Until one is, the accounts this Synchronisation Rule provisions are held for an administrator rather than given a password nobody knows.</value>
+  </data>
+  <data name="StaticPasswordUsable" xml:space="preserve">
+    <value>This password is {0} characters and covers {1} of the character categories this Connected System counts.</value>
+    <comment>{0} is the length, {1} the number of categories covered.</comment>
+  </data>
+  <data name="StaticPasswordUnusable" xml:space="preserve">
+    <value>This password cannot be used:</value>
+    <comment>Shown above the reasons a password is refused.</comment>
+  </data>
+  <data name="GeneratedPasswordGuarantee" xml:space="preserve">
+    <value>Every generated password will be at least {0} characters, cover {1} of the four character categories, and carry at least {2:F1} bits of entropy.</value>
+    <comment>{0} length, {1} categories, {2} entropy in bits.</comment>
+  </data>
+  <data name="SettingsCannotBeUsed" xml:space="preserve">
+    <value>These settings cannot be used:</value>
+    <comment>Shown above the reasons the settings are refused.</comment>
+  </data>
+  <data name="AfterPasswordSetLabel" xml:space="preserve">
+    <value>After the password is set</value>
+    <comment>Label of the expiry behaviour field.</comment>
+  </data>
+  <data name="ExpiryRequireChange" xml:space="preserve">
+    <value>Require a change at the next sign-in</value>
+    <comment>Expiry option.</comment>
+  </data>
+  <data name="ExpiryAccordingToTarget" xml:space="preserve">
+    <value>Age according to the Connected System's own policy</value>
+    <comment>Expiry option.</comment>
+  </data>
+  <data name="ExpiryNeverExpires" xml:space="preserve">
+    <value>Never expires</value>
+    <comment>Expiry option.</comment>
+  </data>
+  <data name="ExpiryOnlyWhatConnectorApplies" xml:space="preserve">
+    <value>Only what the {0} can apply is offered. Where a particular target cannot honour the choice, JIM records what it applied instead rather than assuming the request was met.</value>
+    <comment>{0} is the Connector name, for example LDAP Connector.</comment>
+  </data>
+  <data name="ExpiryUacNote" xml:space="preserve">
+    <value>Applies only where no export has written &lt;code&gt;userAccountControl&lt;/code&gt;. Where one has, the Attribute Flow decides Password never expires. Requiring a change at the next sign-in always applies.</value>
+    <comment>Markup: a code element is intentional.</comment>
+  </data>
+  <data name="StaticExpiryNote" xml:space="preserve">
+    <value>Requiring a change at the next sign-in is what ends a Connected System Object's share of the one password above. Any other choice leaves every Connected System Object this rule provisions on it until somebody changes it by hand.</value>
+  </data>
+  <data name="RequireChangeMayBeIgnored" xml:space="preserve">
+    <value>If this rule's &lt;code&gt;userAccountControl&lt;/code&gt; Attribute Flow sets Password never expires, Active Directory ignores Require a change at the next sign-in.</value>
+    <comment>Markup: a code element is intentional.</comment>
+  </data>
+  <data name="RequireChangeMayBeIgnoredStatic" xml:space="preserve">
+    <value> Every Connected System Object this rule provisions would then keep the one shared password above.</value>
+    <comment>Appended for the one password option. Leading space is intentional.</comment>
+  </data>
+  <data name="EnableAccountLabel" xml:space="preserve">
+    <value>Enable the Connected System Object once the password is set</value>
+    <comment>Switch label.</comment>
+  </data>
+  <data name="EnableAccountNote" xml:space="preserve">
+    <value>Applies only where no export has written the Connected System Object's enabled state, such as &lt;code&gt;userAccountControl&lt;/code&gt;, by the time the password is delivered; where one has, the Attribute Flow decides. Off leaves the Connected System Object as it was created. Also applies, with Password never expires, when a password change already waiting for the person is delivered as the Connected System Object's first password instead of the Initial Password.</value>
+    <comment>Markup: a code element is intentional.</comment>
+  </data>
 </root>

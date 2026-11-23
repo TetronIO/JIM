@@ -65,4 +65,22 @@
   <data name="MvaToSvaWarningImport" xml:space="preserve">
     <value>{0} is Multi-Valued but {1} is Single-Valued. If a synchronized object has more than one value, no value will flow for this attribute and an error will be recorded against that object (a single value flows normally). To always flow a value, target a Multi-Valued attribute or use an Expression to select one.</value>
   </data>
+  <data name="InitialPasswordConnectorCannotSet" xml:space="preserve">
+    <value>The {0} cannot set passwords, so JIM cannot give the Connected System Objects this Synchronization Rule provisions an initial password.</value>
+  </data>
+  <data name="SetInitialPasswordQuestion" xml:space="preserve">
+    <value>Set an initial password on the Connected System Objects this Synchronization Rule provisions?</value>
+  </data>
+  <data name="InitialPasswordSourceStaticHelp" xml:space="preserve">
+    <value>One password you choose, set on every Connected System Object this Synchronization Rule provisions, so you can tell a new starter what it is.</value>
+  </data>
+  <data name="StaticWarningBody" xml:space="preserve">
+    <value>Every Connected System Object this Synchronization Rule provisions shares this password until its owner changes it, so anybody who learns of this can sign in as any new starter who has not. Note: the password is stored encrypted and cannot be shown to you again.</value>
+  </data>
+  <data name="StaticPasswordNotSet" xml:space="preserve">
+    <value>No password has been set. Until one is, the accounts this Synchronization Rule provisions are held for an administrator rather than given a password nobody knows.</value>
+  </data>
+  <data name="ExpiryOnlyWhatConnectorApplies" xml:space="preserve">
+    <value>Only what the {0} can apply is offered. Where a particular target cannot honor the choice, JIM records what it applied instead rather than assuming the request was met.</value>
+  </data>
 </root>

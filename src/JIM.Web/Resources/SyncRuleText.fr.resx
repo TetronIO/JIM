@@ -518,4 +518,226 @@
   <data name="ChooseAttributeToTry" xml:space="preserve">
     <value>Choisissez l’attribut auquel affecter la valeur, puis essayez-la ici.</value>
   </data>
+  <data name="InitialPasswordHeading" xml:space="preserve">
+    <value>Mot de passe initial</value>
+  </data>
+  <data name="InitialPasswordConnectorCannotSet" xml:space="preserve">
+    <value>{0} ne peut pas définir de mots de passe ; JIM ne peut donc pas attribuer de mot de passe initial aux objets de système connecté que cette règle de synchronisation provisionne.</value>
+  </data>
+  <data name="UnknownConnectorLabel" xml:space="preserve">
+    <value>Connecteur du système connecté</value>
+  </data>
+  <data name="ParkedWaitingOne" xml:space="preserve">
+    <value>{0:N0} objet de système connecté est en attente d’une modification de ces paramètres</value>
+  </data>
+  <data name="ParkedWaitingOther" xml:space="preserve">
+    <value>{0:N0} objets de système connecté sont en attente d’une modification de ces paramètres</value>
+  </data>
+  <data name="ParkedExplanation" xml:space="preserve">
+    <value>Le système connecté a refusé le mot de passe produit par ces paramètres, de sorte que JIM a cessé d’essayer : ces mêmes paramètres produisent un autre mot de passe qu’il refuse pour la même raison. Corrigez-les ci-dessous et enregistrez ; les objets de système connecté seront de nouveau traités par le service de remise des mots de passe dans quelques secondes.</value>
+  </data>
+  <data name="ParkedNoReason" xml:space="preserve">
+    <value>La cible a refusé le mot de passe sans en indiquer la raison.</value>
+  </data>
+  <data name="ParkedFirstSeen" xml:space="preserve">
+    <value>Vu pour la première fois {0}</value>
+  </data>
+  <data name="ReleaseOnSaveOne" xml:space="preserve">
+    <value>L’enregistrement libérera {0:N0} objet de système connecté en attente</value>
+  </data>
+  <data name="ReleaseOnSaveOther" xml:space="preserve">
+    <value>L’enregistrement libérera {0:N0} objets de système connecté en attente</value>
+  </data>
+  <data name="ReleaseOnSaveDetail" xml:space="preserve">
+    <value>Ils seront de nouveau traités avec ces paramètres par le service de remise des mots de passe dans quelques secondes. Aucun mot de passe n’est généré maintenant : chacun est généré au moment où il est défini.</value>
+  </data>
+  <data name="SetInitialPasswordQuestion" xml:space="preserve">
+    <value>Définir un mot de passe initial sur les objets de système connecté que cette règle de synchronisation provisionne ?</value>
+  </data>
+  <data name="SetInitialPasswordHelp" xml:space="preserve">
+    <value>Un objet de système connecté nouvellement provisionné n’a pas de mot de passe et ne peut pas être utilisé pour se connecter. Lorsque cette option est activée, JIM en définit un par le canal de mots de passe du système connecté, immédiatement après la création de l’objet. Par défaut, JIM génère un mot de passe différent pour chacun et n’en conserve aucun.</value>
+  </data>
+  <data name="PasswordSettingsHeading" xml:space="preserve">
+    <value>Paramètres du mot de passe</value>
+  </data>
+  <data name="InitialPasswordSourceFollow" xml:space="preserve">
+    <value>Suivre le système connecté</value>
+  </data>
+  <data name="InitialPasswordSourceFollowHelp" xml:space="preserve">
+    <value>Les paramètres sont déduits de la politique de mot de passe découverte sur le système connecté, et recalculés chaque fois que cette politique est relue. Rien à configurer, et rien à synchroniser à la main.</value>
+  </data>
+  <data name="InitialPasswordSourceCustom" xml:space="preserve">
+    <value>Personnalisé</value>
+  </data>
+  <data name="InitialPasswordSourceCustomHelp" xml:space="preserve">
+    <value>Exactement les paramètres enregistrés ici. JIM ne les modifie pas parce que le système connecté publie autre chose, mais il vous signale quand ils ne peuvent pas le satisfaire.</value>
+  </data>
+  <data name="InitialPasswordSourceStatic" xml:space="preserve">
+    <value>Un mot de passe pour tous les objets de système connecté</value>
+  </data>
+  <data name="NotRecommended" xml:space="preserve">
+    <value>Non recommandé</value>
+  </data>
+  <data name="InitialPasswordSourceStaticHelp" xml:space="preserve">
+    <value>Un mot de passe que vous choisissez, défini sur chaque objet de système connecté que cette règle de synchronisation provisionne, afin que vous puissiez en communiquer un nouveau à une nouvelle recrue.</value>
+  </data>
+  <data name="NoDiscoveredPolicy" xml:space="preserve">
+    <value>JIM n’a découvert aucune politique de mot de passe sur ce système connecté, soit parce que le connecteur ne peut pas en lire une, soit parce que le schéma n’a pas été importé depuis l’ajout de cette fonctionnalité. Les valeurs par défaut de JIM s’appliquent tant que ce n’est pas le cas.</value>
+  </data>
+  <data name="PasswordStyleLabel" xml:space="preserve">
+    <value>Style</value>
+  </data>
+  <data name="PasswordStyleRandom" xml:space="preserve">
+    <value>Caractères aléatoires (t7Rm#qK4vHx2Ndbf)</value>
+  </data>
+  <data name="PasswordStyleWords" xml:space="preserve">
+    <value>Mots (Brown-Chicken-Ladder-47)</value>
+  </data>
+  <data name="PasswordStylePronounceable" xml:space="preserve">
+    <value>Prononçable (tovanic-hupelo-92)</value>
+  </data>
+  <data name="PasswordLengthLabel" xml:space="preserve">
+    <value>Longueur</value>
+  </data>
+  <data name="MinimumUppercaseLabel" xml:space="preserve">
+    <value>Minimum de majuscules</value>
+  </data>
+  <data name="MinimumLowercaseLabel" xml:space="preserve">
+    <value>Minimum de minuscules</value>
+  </data>
+  <data name="MinimumDigitsLabel" xml:space="preserve">
+    <value>Minimum de chiffres</value>
+  </data>
+  <data name="MinimumSymbolsLabel" xml:space="preserve">
+    <value>Minimum de symboles</value>
+  </data>
+  <data name="NumberOfWordsLabel" xml:space="preserve">
+    <value>Nombre de mots</value>
+  </data>
+  <data name="SeparatorLabel" xml:space="preserve">
+    <value>Séparateur</value>
+  </data>
+  <data name="SeparatorHyphen" xml:space="preserve">
+    <value>Trait d’union</value>
+  </data>
+  <data name="SeparatorFullStop" xml:space="preserve">
+    <value>Point</value>
+  </data>
+  <data name="SeparatorUnderscore" xml:space="preserve">
+    <value>Tiret bas</value>
+  </data>
+  <data name="SeparatorDigit" xml:space="preserve">
+    <value>Chiffre</value>
+  </data>
+  <data name="SeparatorRandomSymbol" xml:space="preserve">
+    <value>Symbole aléatoire</value>
+  </data>
+  <data name="CapitalisationLabel" xml:space="preserve">
+    <value>Majuscules et minuscules</value>
+  </data>
+  <data name="CapitalisationLowercase" xml:space="preserve">
+    <value>Minuscules</value>
+  </data>
+  <data name="CapitalisationEachWord" xml:space="preserve">
+    <value>Chaque mot</value>
+  </data>
+  <data name="CapitalisationUppercase" xml:space="preserve">
+    <value>Majuscules</value>
+  </data>
+  <data name="CapitalisationFirstWordOnly" xml:space="preserve">
+    <value>Premier mot seulement</value>
+  </data>
+  <data name="CapitalisationRandomWord" xml:space="preserve">
+    <value>Un mot aléatoire</value>
+  </data>
+  <data name="AppendedDigitsLabel" xml:space="preserve">
+    <value>Chiffres ajoutés</value>
+  </data>
+  <data name="AppendSymbolLabel" xml:space="preserve">
+    <value>Ajouter un symbole</value>
+  </data>
+  <data name="PermittedSymbolsLabel" xml:space="preserve">
+    <value>Symboles autorisés</value>
+  </data>
+  <data name="PermittedSymbolsHelp" xml:space="preserve">
+    <value>Les symboles que JIM peut utiliser. Réduisez cette liste lorsqu’un élément en aval du système connecté ne peut pas gérer un caractère donné.</value>
+  </data>
+  <data name="LeaveOutConfusedLabel" xml:space="preserve">
+    <value>Exclure les caractères faciles à confondre</value>
+  </data>
+  <data name="LeaveOutConfusedHelp" xml:space="preserve">
+    <value>Exclut {0}, qui sont difficiles à distinguer lorsqu’un mot de passe est lu à voix haute ou recopié à la main. Un mot de passe initial est retranscrit bien plus souvent qu’un mot de passe permanent.</value>
+  </data>
+  <data name="StaticNotRecommended" xml:space="preserve">
+    <value>Cette option n’est pas recommandée</value>
+  </data>
+  <data name="StaticWarningBody" xml:space="preserve">
+    <value>Chaque objet de système connecté que cette règle de synchronisation provisionne partage ce mot de passe jusqu’à ce que son propriétaire le modifie ; quiconque en prend connaissance peut donc se connecter en tant que toute nouvelle recrue qui ne l’a pas encore changé. Remarque : le mot de passe est stocké chiffré et ne peut plus vous être présenté.</value>
+  </data>
+  <data name="PasswordLabel" xml:space="preserve">
+    <value>Mot de passe</value>
+  </data>
+  <data name="ConfirmPasswordLabel" xml:space="preserve">
+    <value>Confirmer le mot de passe</value>
+  </data>
+  <data name="ShowOrHidePassword" xml:space="preserve">
+    <value>Afficher ou masquer le mot de passe</value>
+  </data>
+  <data name="PasswordsDoNotMatch" xml:space="preserve">
+    <value>Les deux mots de passe ne correspondent pas.</value>
+  </data>
+  <data name="StaticPasswordSetAt" xml:space="preserve">
+    <value>Un mot de passe est défini, modifié {0}. Laissez ces champs vides pour le conserver.</value>
+  </data>
+  <data name="StaticPasswordSet" xml:space="preserve">
+    <value>Un mot de passe est défini. Laissez ces champs vides pour le conserver.</value>
+  </data>
+  <data name="StaticPasswordNotSet" xml:space="preserve">
+    <value>Aucun mot de passe n’a été défini. Tant qu’il n’y en a pas, les comptes que cette règle de synchronisation provisionne sont mis en attente pour un administrateur plutôt que de recevoir un mot de passe que personne ne connaît.</value>
+  </data>
+  <data name="StaticPasswordUsable" xml:space="preserve">
+    <value>Ce mot de passe comporte {0} caractères et couvre {1} des catégories de caractères que ce système connecté prend en compte.</value>
+  </data>
+  <data name="StaticPasswordUnusable" xml:space="preserve">
+    <value>Ce mot de passe ne peut pas être utilisé :</value>
+  </data>
+  <data name="GeneratedPasswordGuarantee" xml:space="preserve">
+    <value>Chaque mot de passe généré comportera au moins {0} caractères, couvrira {1} des quatre catégories de caractères et présentera au moins {2:F1} bits d’entropie.</value>
+  </data>
+  <data name="SettingsCannotBeUsed" xml:space="preserve">
+    <value>Ces paramètres ne peuvent pas être utilisés :</value>
+  </data>
+  <data name="AfterPasswordSetLabel" xml:space="preserve">
+    <value>Après la définition du mot de passe</value>
+  </data>
+  <data name="ExpiryRequireChange" xml:space="preserve">
+    <value>Exiger un changement à la prochaine ouverture de session</value>
+  </data>
+  <data name="ExpiryAccordingToTarget" xml:space="preserve">
+    <value>Vieillir selon la politique propre au système connecté</value>
+  </data>
+  <data name="ExpiryNeverExpires" xml:space="preserve">
+    <value>N’expire jamais</value>
+  </data>
+  <data name="ExpiryOnlyWhatConnectorApplies" xml:space="preserve">
+    <value>Seules les options que {0} peut appliquer sont proposées. Lorsqu’une cible ne peut pas honorer le choix, JIM enregistre ce qu’il a appliqué à la place plutôt que de supposer la demande satisfaite.</value>
+  </data>
+  <data name="ExpiryUacNote" xml:space="preserve">
+    <value>S’applique uniquement lorsqu’aucune exportation n’a écrit &lt;code&gt;userAccountControl&lt;/code&gt;. Si c’est le cas, le flux d’attributs décide de Le mot de passe n’expire jamais. Exiger un changement à la prochaine ouverture de session s’applique toujours.</value>
+  </data>
+  <data name="StaticExpiryNote" xml:space="preserve">
+    <value>Exiger un changement à la prochaine ouverture de session est ce qui met fin à la part qu’un objet de système connecté possède du mot de passe unique ci-dessus. Tout autre choix laisse chaque objet de système connecté que cette règle provisionne avec ce mot de passe jusqu’à ce que quelqu’un le modifie à la main.</value>
+  </data>
+  <data name="RequireChangeMayBeIgnored" xml:space="preserve">
+    <value>Si le flux d’attributs &lt;code&gt;userAccountControl&lt;/code&gt; de cette règle définit Le mot de passe n’expire jamais, Active Directory ignore Exiger un changement à la prochaine ouverture de session.</value>
+  </data>
+  <data name="RequireChangeMayBeIgnoredStatic" xml:space="preserve">
+    <value> Chaque objet de système connecté que cette règle provisionne conserverait alors le mot de passe unique ci-dessus.</value>
+  </data>
+  <data name="EnableAccountLabel" xml:space="preserve">
+    <value>Activer l’objet de système connecté une fois le mot de passe défini</value>
+  </data>
+  <data name="EnableAccountNote" xml:space="preserve">
+    <value>S’applique uniquement lorsqu’aucune exportation n’a écrit l’état d’activation de l’objet de système connecté, par exemple &lt;code&gt;userAccountControl&lt;/code&gt;, au moment où le mot de passe est remis ; si c’est le cas, le flux d’attributs décide. Désactivé laisse l’objet de système connecté tel qu’il a été créé. S’applique également, avec Le mot de passe n’expire jamais, lorsqu’une modification de mot de passe déjà en attente pour la personne est remise comme premier mot de passe de l’objet de système connecté à la place du mot de passe initial.</value>
+  </data>
 </root>
