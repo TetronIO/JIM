@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Web.Resources;
+
 namespace JIM.Web.Shared;
 
 /// <summary>
@@ -10,16 +12,16 @@ namespace JIM.Web.Shared;
 public static class SiblingPages
 {
     /// <summary>Connected Systems and the Connectors they are built from.</summary>
-    public static readonly IReadOnlyList<SegmentedToggleOption<string>> ConnectedSystems =
+    public static IReadOnlyList<SegmentedToggleOption<string>> ConnectedSystems =>
     [
-        new("systems", "Connected Systems", Href: "/admin/connected-systems"),
-        new("connectors", "Connectors", Href: "/admin/connected-systems/connectors")
+        new("systems", DisplayText.SiblingConnectedSystems, Href: "/admin/connected-systems"),
+        new("connectors", DisplayText.SiblingConnectors, Href: "/admin/connected-systems/connectors")
     ];
 
     /// <summary>Example Data templates and the Data Sets they draw values from.</summary>
-    public static readonly IReadOnlyList<SegmentedToggleOption<string>> ExampleData =
+    public static IReadOnlyList<SegmentedToggleOption<string>> ExampleData =>
     [
-        new("templates", "Templates", Href: "/admin/example-data"),
-        new("datasets", "Data Sets", Href: "/admin/example-data/datasets")
+        new("templates", DisplayText.SiblingTemplates, Href: "/admin/example-data"),
+        new("datasets", DisplayText.SiblingDataSets, Href: "/admin/example-data/datasets")
     ];
 }

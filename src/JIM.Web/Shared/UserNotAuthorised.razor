@@ -70,27 +70,27 @@
     </div>
 
     <div class="not-authorised-content">
-        <MudText Typo="Typo.h3" Class="not-authorised-title">Access Denied</MudText>
+        <MudText Typo="Typo.h3" Class="not-authorised-title">@SharedText.NotAuthorisedTitle</MudText>
         <MudText Typo="Typo.h6" Color="Color.Secondary" Class="not-authorised-subtitle">
-            Oops! It looks like you don't have the key to this door.
+            @SharedText.NotAuthorisedSubtitle
         </MudText>
 
         @if (_isInUsersRole)
         {
             <MudAlert Severity="Severity.Info" Class="mt-4">
-                <MudText>You're signed in, but you don't have permission to access this page.</MudText>
+                <MudText>@SharedText.NotAuthorisedNoPermission</MudText>
             </MudAlert>
 
             <MudExpansionPanels Class="mt-4" Elevation="0">
-                <MudExpansionPanel Text="Technical Details" MaxHeight="500">
+                <MudExpansionPanel Text="@SharedText.TechnicalDetails" MaxHeight="500">
                     <MudSimpleTable Hover="true" Dense="true" Class="mt-2" Elevation="0">
                         <tbody>
                             <tr>
-                                <td><strong>User</strong></td>
+                                <td><strong>@SharedText.NotAuthorisedUserLabel</strong></td>
                                 <td><code>@_userName</code></td>
                             </tr>
                             <tr>
-                                <td><strong>Your Roles</strong></td>
+                                <td><strong>@SharedText.NotAuthorisedRolesLabel</strong></td>
                                 <td><code>@_userRoles</code></td>
                             </tr>
                         </tbody>
@@ -99,8 +99,7 @@
                     <MudDivider Class="my-3"/>
 
                     <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        <strong>Administrator Note:</strong> This user is authenticated and exists in JIM,
-                        but lacks the required role for this page. Check the user's role assignments.
+                        <strong>@SharedText.NotAuthorisedAdminNote</strong> @SharedText.NotAuthorisedMissingRoleNote
                     </MudText>
                 </MudExpansionPanel>
             </MudExpansionPanels>
@@ -108,23 +107,23 @@
         else
         {
             <MudAlert Severity="Severity.Warning" Class="mt-4">
-                <MudText>You've been authenticated, but your account couldn't be found in JIM.</MudText>
+                <MudText>@SharedText.NotAuthorisedNotFound</MudText>
             </MudAlert>
 
             <MudExpansionPanels Class="mt-4" Elevation="0">
-                <MudExpansionPanel Text="Technical Details" MaxHeight="500">
+                <MudExpansionPanel Text="@SharedText.TechnicalDetails" MaxHeight="500">
                     <MudSimpleTable Hover="true" Dense="true" Class="mt-2" Elevation="0">
                         <tbody>
                             <tr>
-                                <td><strong>Token Name</strong></td>
+                                <td><strong>@SharedText.NotAuthorisedTokenNameLabel</strong></td>
                                 <td><code>@_userName</code></td>
                             </tr>
                             <tr>
-                                <td><strong>Claim Type</strong></td>
+                                <td><strong>@SharedText.NotAuthorisedClaimTypeLabel</strong></td>
                                 <td><code>@_ssoClaimType</code></td>
                             </tr>
                             <tr>
-                                <td><strong>Claim Value</strong></td>
+                                <td><strong>@SharedText.NotAuthorisedClaimValueLabel</strong></td>
                                 <td><code>@_userUniqueIdClaimValue</code></td>
                             </tr>
                         </tbody>
@@ -133,9 +132,7 @@
                     <MudDivider Class="my-3"/>
 
                     <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        <strong>Administrator Note:</strong> Could not map this claim to a Metaverse user.
-                        Please verify the user exists in JIM and has a value for the SSO attribute
-                        <code>@_ssoAttributeName</code>.
+                        <strong>@SharedText.NotAuthorisedAdminNote</strong> @((MarkupString)string.Format(System.Globalization.CultureInfo.CurrentCulture, System.Net.WebUtility.HtmlEncode(SharedText.NotAuthorisedUnmappedClaimNote), "<code>" + System.Net.WebUtility.HtmlEncode(_ssoAttributeName ?? string.Empty) + "</code>"))
                     </MudText>
                 </MudExpansionPanel>
             </MudExpansionPanels>
@@ -143,7 +140,7 @@
 
         <div class="not-authorised-actions mt-5">
             <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/" StartIcon="@Icons.Material.Filled.Home">
-                Go to Home
+                @SharedText.NotAuthorisedGoToHome
             </MudButton>
         </div>
     </div>
@@ -337,7 +334,7 @@
             .Where(c => c.Type == Constants.BuiltInRoles.RoleClaimType)
             .Select(c => c.Value)
             .ToList();
-        _userRoles = roles.Count > 0 ? string.Join(", ", roles) : "(none)";
+        _userRoles = roles.Count > 0 ? string.Join(", ", roles) : SharedText.NotAuthorisedRolesNone;
 
         using var jim = JimFactory.Create();
         var serviceSettings = await jim.ServiceSettings.GetServiceSettingsAsync();

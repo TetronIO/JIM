@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Web.Resources;
+
 namespace JIM.Web.Models;
 
 /// <summary>
@@ -10,7 +12,7 @@ namespace JIM.Web.Models;
 public class ExampleDataTemplateChangedException : Exception
 {
     public ExampleDataTemplateChangedException()
-        : base("This Data Generation Template has changed since the page was loaded. Reload the page and make the change again.")
+        : base(DisplayText.TemplateChangedSincePageLoaded)
     {
     }
 }

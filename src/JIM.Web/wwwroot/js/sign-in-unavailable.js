@@ -5,6 +5,8 @@
     'use strict';
 
     var intervalMs = 10000;
+    // The page's own words come from the server as data- attributes on this script, in the viewer's language.
+    var words = (document.currentScript && document.currentScript.dataset) || {};
     var available = ['Trusted', 'NotHttps'];
 
     function signInAvailable(status) {
@@ -14,8 +16,8 @@
         var poll = document.getElementById('sign-in-poll');
         var button = document.getElementById('sign-in-button');
 
-        if (title) title.textContent = 'Sign-in is available';
-        if (message) message.textContent = status.message || 'JIM trusts your identity provider. Nothing needed restarting.';
+        if (title) title.textContent = words.availableTitle;
+        if (message) message.textContent = status.message || words.availableMessage;
         if (fix) fix.hidden = true;
         ['sign-in-chain', 'sign-in-pass-on'].forEach(function (id) {
             var element = document.getElementById(id);
@@ -25,14 +27,14 @@
         var open = document.getElementById('sign-in-open');
         if (lock) lock.style.display = 'none';
         if (open) open.style.display = '';
-        if (poll) poll.textContent = 'Your identity provider is trusted.';
+        if (poll) poll.textContent = words.trustedText;
         if (button) {
             button.classList.remove('jim-idp-button-disabled');
             button.setAttribute('aria-disabled', 'false');
             button.setAttribute('tabindex', '0');
             button.focus();
         }
-        document.title = 'JIM: Sign-in is available';
+        document.title = 'JIM: ' + words.availableTitle;
     }
 
     function check() {
@@ -54,8 +56,8 @@
             var target = document.getElementById(copy.getAttribute('data-copy-target'));
             if (!target || !navigator.clipboard) return;
             navigator.clipboard.writeText(target.textContent).then(function () {
-                copy.textContent = 'Copied';
-                window.setTimeout(function () { copy.textContent = 'Copy'; }, 1500);
+                copy.textContent = words.copiedText;
+                window.setTimeout(function () { copy.textContent = words.copyText; }, 1500);
             });
         });
     }

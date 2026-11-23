@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Web.Resources;
+
 namespace JIM.Web;
 
 /// <summary>
@@ -25,56 +27,56 @@ public static class TermDefinitions
     /// <summary>
     /// The wording for every <see cref="Term"/> <c>TermHint</c> can render.
     /// </summary>
-    public static readonly IReadOnlyDictionary<Term, Entry> Definitions = new Dictionary<Term, Entry>
+    public static IReadOnlyDictionary<Term, Entry> Definitions => new Dictionary<Term, Entry>
     {
         [Term.Metaverse] = new Entry(
-            "Metaverse",
-            "The central, authoritative repository within JIM. The Metaverse holds one Metaverse Object for each real-world thing JIM manages, aggregated from every Connected System via Synchronisation Rules.",
+            DisplayText.TermMetaverseName,
+            DisplayText.TermMetaverseText,
             "metaverse"),
 
         [Term.ConnectorSpace] = new Entry(
-            "Connector Space",
-            "The staging area where Connected System Objects reside before and after synchronisation. The Connector Space acts as a buffer between external systems and the Metaverse, ensuring that changes are validated before they are applied.",
+            DisplayText.TermConnectorSpaceName,
+            DisplayText.TermConnectorSpaceText,
             "connector-space"),
 
         [Term.Projection] = new Entry(
-            "Projection",
-            "Creating a new Metaverse Object when no existing one matches an incoming Connected System Object. Projection is enabled per Synchronisation Rule.",
+            DisplayText.TermProjectionName,
+            DisplayText.TermProjectionText,
             "projection"),
 
         [Term.Join] = new Entry(
-            "Join",
-            "Linking a Connected System Object to an existing Metaverse Object. A Join happens when an Object Matching Rule finds that an incoming Connected System Object corresponds to one that already exists.",
+            DisplayText.TermJoinName,
+            DisplayText.TermJoinText,
             "join"),
 
         [Term.AttributeFlow] = new Entry(
-            "Attribute Flow",
-            "A rule that maps an attribute between a Connected System Object and a Metaverse Object. Attribute Flows define how data moves during synchronisation, including any transformations applied via expressions.",
+            DisplayText.TermAttributeFlowName,
+            DisplayText.TermAttributeFlowText,
             "attribute-flow"),
 
         [Term.PendingExport] = new Entry(
-            "Pending Export",
-            "A queued change waiting to be sent to a target system. Pending Exports are created during synchronisation and held until an export Run Profile is executed, at which point they are applied to the Connected System.",
+            DisplayText.TermPendingExportName,
+            DisplayText.TermPendingExportText,
             "pending-export"),
 
         [Term.ObjectMatchingRule] = new Entry(
-            "Object Matching Rule",
-            "A rule that decides whether an incoming Connected System Object corresponds to an existing Metaverse Object. Import matching joins a Connected System Object to a Metaverse Object; export matching joins a Metaverse Object being provisioned to an account that already exists in the target system, rather than creating a duplicate.",
+            DisplayText.TermObjectMatchingRuleName,
+            DisplayText.TermObjectMatchingRuleText,
             "object-matching-rule"),
 
         [Term.Scoping] = new Entry(
-            "Scoping",
-            "The Scoping Criteria that decide which objects a Synchronisation Rule applies to. While an object is outside them, the rule flows nothing for it; when a joined object leaves them, the rule's Out-of-Scope Action (import rules) or Deprovisioning Action (export rules) decides what happens next.",
+            DisplayText.TermScopingName,
+            DisplayText.TermScopingText,
             "scoping"),
 
         [Term.ContainerScope] = new Entry(
-            "Container Scope",
-            "How far beneath a selected Container objects are imported from: the whole subtree beneath it (the default), or only the objects held directly within it.",
+            DisplayText.TermContainerScopeName,
+            DisplayText.TermContainerScopeText,
             "container-scope"),
 
         [Term.AttributePriority] = new Entry(
-            "Attribute Priority",
-            "The deterministic precedence that decides which Connected System's value wins when several contribute the same Metaverse Object attribute. Each contributing inbound Synchronisation Rule holds a priority for the attribute, and the highest-priority contributor that has a value sets it, so the result never depends on the order synchronisations happen to run in.",
+            DisplayText.TermAttributePriorityName,
+            DisplayText.TermAttributePriorityText,
             "attribute-priority")
     };
 

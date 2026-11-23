@@ -1,3 +1,4 @@
+@using System.Globalization
 @typeparam TItem
 @inject IDialogService DialogService
 
@@ -37,7 +38,7 @@
         @if (items.Count > visibleCount)
         {
             <MudLink Color="Color.Default" Underline="Underline.Hover" Class="jim-attr-expand-link" OnClick="OpenAllAsync">
-                +@((items.Count - visibleCount).ToString("N0")) more
+                @string.Format(CultureInfo.CurrentCulture, SharedText.OverflowMore, (items.Count - visibleCount).ToString("N0"))
             </MudLink>
         }
     </div>

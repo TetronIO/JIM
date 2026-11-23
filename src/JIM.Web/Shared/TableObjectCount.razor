@@ -16,6 +16,7 @@
     {
         <MudText Class="mx-2 mud-text-disabled">|</MudText>
     }
+    @* i18n: exempt - CSS class names, not text *@
     <MudText Typo="Typo.body2" Class="@($"mud-text-secondary {Class}".TrimEnd())">@DisplayText(count)</MudText>
 }
 
@@ -66,7 +67,9 @@
         if (Total.HasValue && Total.Value != count)
         {
             var total = Total.Value.ToString("N0", CultureInfo.InvariantCulture);
-            return string.IsNullOrEmpty(PluralName) ? $"{formatted} of {total}" : $"{formatted} of {total} {PluralName}";
+            return string.IsNullOrEmpty(PluralName)
+                ? string.Format(CultureInfo.CurrentCulture, SharedText.ObjectCountOf, formatted, total)
+                : string.Format(CultureInfo.CurrentCulture, SharedText.ObjectCountOfNoun, formatted, total, PluralName);
         }
 
         if (string.IsNullOrEmpty(PluralName))

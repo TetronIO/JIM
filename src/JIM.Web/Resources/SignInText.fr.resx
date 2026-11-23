@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ProblemNone" xml:space="preserve">
+    <value>(aucun)</value>
+  </data>
+  <data name="ProblemWrongAudienceDescription" xml:space="preserve">
+    <value>Le fournisseur d’identité a émis un jeton d’identité pour un autre client ; JIM l’a donc refusé.</value>
+  </data>
+  <data name="ProblemWrongAudienceFix" xml:space="preserve">
+    <value>Définissez {0} sur l’identifiant client que le fournisseur d’identité a enregistré pour le portail de JIM.</value>
+  </data>
+  <data name="ProblemWrongIssuerDescription" xml:space="preserve">
+    <value>Le jeton d’identité provient d’un émetteur que JIM n’accepte pas.</value>
+  </data>
+  <data name="ProblemApiWrongAudienceDescription" xml:space="preserve">
+    <value>Un jeton d’accès émis par le fournisseur d’identité a été refusé, car il n’est pas destiné à l’API de JIM.</value>
+  </data>
+  <data name="ProblemApiWrongAudienceFix" xml:space="preserve">
+    <value>JIM attend l’audience que nomme {0} lorsqu’il s’agit d’un URI api://, et sinon l’identifiant client du portail, {1}. Modifiez ce paramètre, ou faites émettre par le fournisseur d’identité l’audience attendue par JIM.</value>
+  </data>
+  <data name="ProblemApiWrongIssuerDescription" xml:space="preserve">
+    <value>Un jeton d’accès provient d’un émetteur que JIM n’accepte pas.</value>
+  </data>
+  <data name="ProblemMissingClaimDescription" xml:space="preserve">
+    <value>JIM n’a pas pu déterminer qui s’est connecté, car la connexion ne portait aucune revendication « {0} ».</value>
+  </data>
+  <data name="ProblemMissingClaimFix" xml:space="preserve">
+    <value>Définissez {0} sur une revendication que le fournisseur d’identité émet pour tout le monde, ou faites-lui émettre « {1} ».</value>
+  </data>
+  <data name="ProblemEntraVersion1Fix" xml:space="preserve">
+    <value>Microsoft Entra ID a émis un jeton d’accès de version 1. Définissez requestedAccessTokenVersion sur 2 dans le manifeste de l’inscription d’application (Register-JIMIdentityProvider -Provider EntraId le fait), afin que ses jetons portent l’identifiant client comme audience et proviennent de l’émetteur de version 2 du locataire, ce que JIM accepte.</value>
+  </data>
+  <data name="ProblemIssuerFix" xml:space="preserve">
+    <value>Si cet émetteur est celui de votre fournisseur d’identité, ajoutez-le à {0} avec ceux qui sont listés ; sinon, vérifiez que {1} désigne le fournisseur d’identité avec lequel les personnes se connectent.</value>
+  </data>
+  <data name="ProblemInvalidClientDescription" xml:space="preserve">
+    <value>Le fournisseur d’identité n’a pas accepté le client du portail de JIM.</value>
+  </data>
+  <data name="ProblemInvalidClientExpected" xml:space="preserve">
+    <value>que le fournisseur d’identité accepte le client « {0} » et son secret</value>
+  </data>
+  <data name="ProblemInvalidClientFix" xml:space="preserve">
+    <value>Vérifiez que {0} désigne le client du portail, et que {1} contient son secret actuel. Register-JIMIdentityProvider -ResetClientSecret en génère un nouveau.</value>
+  </data>
+  <data name="ProblemUnauthorizedClientDescription" xml:space="preserve">
+    <value>Le fournisseur d’identité n’autorise pas le client du portail de JIM à connecter les personnes de cette façon.</value>
+  </data>
+  <data name="ProblemUnauthorizedClientExpected" xml:space="preserve">
+    <value>que le client « {0} » connecte les personnes avec un code d’autorisation</value>
+  </data>
+  <data name="ProblemUnauthorizedClientFix" xml:space="preserve">
+    <value>Vérifiez que {0} désigne le client du portail, et que le fournisseur d’identité l’autorise à utiliser le flux de code d’autorisation.</value>
+  </data>
+  <data name="ProblemInvalidScopeDescription" xml:space="preserve">
+    <value>Le fournisseur d’identité a refusé les étendues demandées par JIM.</value>
+  </data>
+  <data name="ProblemInvalidScopeFix" xml:space="preserve">
+    <value>Définissez {0} sur une étendue que le fournisseur d’identité accorde au client du portail de JIM, ou laissez-le vide.</value>
+  </data>
+  <data name="LockoutWarning" xml:space="preserve">
+    <value>La connexion dépend de « {0} ». Cette modification empêche tout le monde de se connecter à JIM, vous y compris. Tant qu’un autre certificat n’est pas approuvé pour la connexion, seule la clé d’API d’infrastructure peut rétablir la situation.</value>
+  </data>
+  <data name="LockoutWarningForHost" xml:space="preserve">
+    <value>La connexion dépend de « {0} » : c’est le seul certificat que JIM approuve pour {1}. Cette modification empêche tout le monde de se connecter à JIM, vous y compris. Tant qu’un autre certificat n’est pas approuvé pour la connexion, seule la clé d’API d’infrastructure peut rétablir la situation.</value>
+  </data>
+  <data name="PassOnToAdministrator" xml:space="preserve">
+    <value>Si vous n’administrez pas ce déploiement de JIM, transmettez ces informations à la personne qui s’en charge.</value>
+  </data>
+  <data name="TryAgain" xml:space="preserve">
+    <value>Réessayer</value>
+  </data>
+  <data name="IllustrationIdentityProviderAbbreviation" xml:space="preserve">
+    <value>IdP</value>
+  </data>
+  <data name="ErrorTitle" xml:space="preserve">
+    <value>Un problème est survenu</value>
+  </data>
+  <data name="ErrorIllustrationLabel" xml:space="preserve">
+    <value>Illustration d’un engrenage cassé</value>
+  </data>
+  <data name="ErrorSubtitle" xml:space="preserve">
+    <value>Ce n’était pas prévu. Un engrenage a déraillé !</value>
+  </data>
+  <data name="ErrorRequestId" xml:space="preserve">
+    <value>ID de la requête :</value>
+  </data>
+  <data name="ErrorGoToDashboard" xml:space="preserve">
+    <value>Aller au tableau de bord</value>
+  </data>
+  <data name="FailedTitle" xml:space="preserve">
+    <value>La connexion n’a pas pu aboutir</value>
+  </data>
+  <data name="FailedIllustrationLabel" xml:space="preserve">
+    <value>Une boucle de connexion entre JIM et le fournisseur d’identité, interrompue par un panneau d’arrêt, avec un cookie qui s’effrite</value>
+  </data>
+  <data name="FailedSubtitle" xml:space="preserve">
+    <value>JIM a interrompu la connexion plutôt que de continuer à vous renvoyer vers votre fournisseur d’identité.</value>
+  </data>
+  <data name="FailedPlainHttp" xml:space="preserve">
+    <value>Vous êtes connecté à JIM en HTTP simple. Votre navigateur supprime les cookies dont dépend la connexion si la connexion n’est pas sécurisée ; {0}.</value>
+  </data>
+  <data name="FailedPlainHttpEmphasis" xml:space="preserve">
+    <value>l’accès par navigateur depuis d’autres machines exige HTTPS</value>
+  </data>
+  <data name="FailedBehindProxy" xml:space="preserve">
+    <value>Si votre barre d’adresse affiche déjà {0}, TLS se termine au niveau d’un proxy inverse que JIM n’a pas été configuré pour approuver. Définissez {1} pour que JIM puisse voir que la connexion d’origine était sécurisée.</value>
+  </data>
+  <data name="FailedCookiesMissing" xml:space="preserve">
+    <value>Votre navigateur est revenu du fournisseur d’identité sans les cookies que JIM a définis au début de la connexion, même après que JIM l’a relancée. Vérifiez que votre navigateur accepte les cookies de ce site, et que tout proxy inverse placé devant JIM transmet les cookies sans les modifier.</value>
+  </data>
+  <data name="FailedDocsHttps" xml:space="preserve">
+    <value>Servir JIM en HTTPS</value>
+  </data>
+  <data name="FailedDocsLoops" xml:space="preserve">
+    <value>Dépannage des boucles de connexion</value>
+  </data>
+  <data name="ProblemTitle" xml:space="preserve">
+    <value>Un paramètre a empêché la connexion</value>
+  </data>
+  <data name="ProblemIllustrationLabel" xml:space="preserve">
+    <value>JIM et le fournisseur d’identité, avec entre eux une valeur qui ne correspond pas</value>
+  </data>
+  <data name="ProblemSetting" xml:space="preserve">
+    <value>Paramètre</value>
+  </data>
+  <data name="ProblemExpected" xml:space="preserve">
+    <value>Attendu</value>
+  </data>
+  <data name="ProblemReceived" xml:space="preserve">
+    <value>Reçu</value>
+  </data>
+  <data name="ProblemUnknown" xml:space="preserve">
+    <value>Un paramètre a empêché la connexion, mais JIM ne conserve plus les détails, peut-être parce qu’il a redémarré depuis.</value>
+  </data>
+  <data name="ProblemTryAgain" xml:space="preserve">
+    <value>Réessayez pour les voir. Un administrateur peut aussi lister les problèmes de connexion récents avec {0}, ou les retrouver dans le journal de JIM.</value>
+  </data>
+  <data name="ProblemDocs" xml:space="preserve">
+    <value>Dépannage de la connexion</value>
+  </data>
+  <data name="UnavailableTitleAvailable" xml:space="preserve">
+    <value>La connexion est disponible</value>
+  </data>
+  <data name="UnavailableTitleUnavailable" xml:space="preserve">
+    <value>La connexion est indisponible</value>
+  </data>
+  <data name="UnavailableIllustrationLabel" xml:space="preserve">
+    <value>JIM et le fournisseur d’identité, avec entre eux un cadenas que JIM ne peut pas ouvrir</value>
+  </data>
+  <data name="UnavailableChainLabel" xml:space="preserve">
+    <value>Chaîne de certificats présentée</value>
+  </data>
+  <data name="UnavailableChainPresentedBy" xml:space="preserve">
+    <value>Chaîne de certificats présentée par {0}</value>
+  </data>
+  <data name="UnavailableNotSent" xml:space="preserve">
+    <value>Non envoyé par le serveur</value>
+  </data>
+  <data name="UnavailableNotSentHint" xml:space="preserve">
+    <value>Récupérez-le auprès de votre autorité de certification pour l’approuver ; une racine survit à tous les certificats qu’elle émet.</value>
+  </data>
+  <data name="UnavailableServerCertificate" xml:space="preserve">
+    <value>Certificat du serveur</value>
+  </data>
+  <data name="UnavailableCertificateAuthority" xml:space="preserve">
+    <value>Autorité de certification</value>
+  </data>
+  <data name="UnavailableCertificateMeta" xml:space="preserve">
+    <value>Empreinte {0} · valide jusqu’au {1}</value>
+  </data>
+  <data name="UnavailableFixHeading" xml:space="preserve">
+    <value>Approuvez-le avec PowerShell, à l’aide de la clé d’API d’infrastructure</value>
+  </data>
+  <data name="UnavailableFixFooter" xml:space="preserve">
+    <value>Vérifiez d’abord l’empreinte par rapport à celle que publie votre autorité de certification. Un administrateur déjà connecté peut plutôt l’approuver depuis la bannière du portail.</value>
+  </data>
+  <data name="UnavailableDocs" xml:space="preserve">
+    <value>Approuver le certificat de votre fournisseur d’identité</value>
+  </data>
+  <data name="UnavailablePolling" xml:space="preserve">
+    <value>Nouvelle vérification toutes les 10 secondes</value>
+  </data>
+  <data name="UnavailableSignIn" xml:space="preserve">
+    <value>Se connecter</value>
+  </data>
+  <data name="UnavailableAvailableMessage" xml:space="preserve">
+    <value>JIM approuve votre fournisseur d’identité. Rien n’a eu besoin d’être redémarré.</value>
+  </data>
+  <data name="UnavailableTrusted" xml:space="preserve">
+    <value>Votre fournisseur d’identité est approuvé.</value>
+  </data>
+</root>

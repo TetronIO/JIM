@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Activities
 @using JIM.Models.Activities.DTOs
 
@@ -75,27 +76,33 @@
             if (Status == null)
                 return string.Empty;
 
-            var subject = string.IsNullOrWhiteSpace(ConnectedSystemName) ? "This Connected System" : ConnectedSystemName;
+            var subject = string.IsNullOrWhiteSpace(ConnectedSystemName) ? SharedText.DriftThisConnectedSystem : ConnectedSystemName;
 
             if (Status.NeverFullySynchronised)
-                return $"{subject} has never completed a Full Synchronisation, so its configuration has never been " +
-                       "applied in full.";
+                return string.Format(CultureInfo.CurrentCulture, SharedText.DriftNeverFullySynchronised, subject);
 
-            var changes = Status.ChangeCount == 1 ? "1 configuration change" : $"{Status.ChangeCount:N0} configuration changes";
+            var changes = string.Format(CultureInfo.CurrentCulture,
+                PluralRules.Choose(Status.ChangeCount, SharedText.DriftChangesOne, SharedText.DriftChangesOther),
+                Status.ChangeCount.ToString("N0", CultureInfo.CurrentCulture));
 
             // The value is hoisted out of the conditional rather than dereferenced inside it: nullable flow analysis
             // is not something CodeQL follows reliably through a guard here (see the Razor and lambda rules in
             // src/CLAUDE.md), and the local costs nothing.
             var lastFullSync = Status.LastFullSynchronisation;
-            var since = lastFullSync.HasValue
-                ? $" since the last Full Synchronisation ({lastFullSync.Value.ToLocalTime().ToFriendlyDate()})"
-                : " since the last Full Synchronisation";
+            var lastFullSyncText = lastFullSync.HasValue ? lastFullSync.Value.ToLocalTime().ToFriendlyDate() : null;
 
-            var apply = Status.ChangeCount == 1 ? "apply it" : "apply them";
+            if (Status.HighestChangeClass == ConfigurationChangeClass.Destructive)
+            {
+                return lastFullSyncText != null
+                    ? string.Format(CultureInfo.CurrentCulture, SharedText.DriftDestructiveSince, changes, lastFullSyncText)
+                    : string.Format(CultureInfo.CurrentCulture, SharedText.DriftDestructiveSinceNoDate, changes);
+            }
 
-            return Status.HighestChangeClass == ConfigurationChangeClass.Destructive
-                ? $"{changes}{since}, including a destructive change. Review before running a Full Synchronisation."
-                : $"{changes}{since}. Run a Full Synchronisation to {apply}.";
+            return lastFullSyncText != null
+                ? string.Format(CultureInfo.CurrentCulture,
+                    PluralRules.Choose(Status.ChangeCount, SharedText.DriftApplySinceOne, SharedText.DriftApplySinceOther), changes, lastFullSyncText)
+                : string.Format(CultureInfo.CurrentCulture,
+                    PluralRules.Choose(Status.ChangeCount, SharedText.DriftApplySinceNoDateOne, SharedText.DriftApplySinceNoDateOther), changes);
         }
     }
 
@@ -109,14 +116,22 @@
             if (Status == null)
                 return string.Empty;
 
-            var subject = string.IsNullOrWhiteSpace(ConnectedSystemName) ? "this Connected System" : ConnectedSystemName;
+            var subject = string.IsNullOrWhiteSpace(ConnectedSystemName) ? SharedText.DriftThisConnectedSystemMidSentence : ConnectedSystemName;
             var typeNames = Status.AwaitingSynchronisation.Select(awaiting => awaiting.ObjectTypeName).ToList();
-            var types = typeNames.Count == 1
-                ? $"{typeNames[0]} object"
-                : $"object of {string.Join(", ", typeNames.Take(typeNames.Count - 1))} and {typeNames[^1]}";
-            var changes = AwaitingChangeCount == 1 ? "1 saved change awaits" : $"{AwaitingChangeCount:N0} saved changes await";
+            var count = AwaitingChangeCount;
+            var countText = count.ToString("N0", CultureInfo.CurrentCulture);
 
-            return $"{changes} the next synchronisation of {subject}, which processes every {types}.";
+            if (typeNames.Count == 1)
+            {
+                return count == 1
+                    ? string.Format(CultureInfo.CurrentCulture, SharedText.DriftAwaitingOneChangeOneType, subject, typeNames[0])
+                    : string.Format(CultureInfo.CurrentCulture, SharedText.DriftAwaitingManyChangesOneType, countText, subject, typeNames[0]);
+            }
+
+            var allButLast = string.Join(", ", typeNames.Take(typeNames.Count - 1));
+            return count == 1
+                ? string.Format(CultureInfo.CurrentCulture, SharedText.DriftAwaitingOneChangeSeveralTypes, subject, allButLast, typeNames[^1])
+                : string.Format(CultureInfo.CurrentCulture, SharedText.DriftAwaitingManyChangesSeveralTypes, countText, subject, allButLast, typeNames[^1]);
         }
     }
 }

@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Web.Resources;
+using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
@@ -27,7 +29,7 @@ public static partial class SignInProblemDiagnosis
     /// <summary>The page that explains a portal sign-in a setting stopped.</summary>
     public const string ProblemPagePath = "/sign-in-problem";
 
-    private const string None = "(none)";
+    private static string None => SignInText.ProblemNone;
 
     /// <summary>
     /// Diagnoses a failed portal sign-in: an ID token for another audience or from another issuer, or an error the
@@ -45,14 +47,14 @@ public static partial class SignInProblemDiagnosis
             SecurityTokenInvalidAudienceException audience => new SignInProblemReport(
                 SignInProblemSource.Portal,
                 Constants.Config.SsoClientId,
-                "The identity provider issued an ID token for another client, so JIM refused it.",
+                SignInText.ProblemWrongAudienceDescription,
                 options.ClientId ?? None,
                 ValueOrNone(audience.InvalidAudience),
-                $"Set {Constants.Config.SsoClientId} to the client ID the identity provider registered for JIM's portal."),
+                string.Format(CultureInfo.CurrentCulture, SignInText.ProblemWrongAudienceFix, Constants.Config.SsoClientId)),
             SecurityTokenInvalidIssuerException issuer => new SignInProblemReport(
                 SignInProblemSource.Portal,
                 Constants.Config.SsoValidIssuers,
-                "The ID token came from an issuer JIM does not accept.",
+                SignInText.ProblemWrongIssuerDescription,
                 JoinOrNone(PortalIssuers(options)),
                 ValueOrNone(issuer.InvalidIssuer),
                 IssuerFix),
@@ -165,13 +167,12 @@ public static partial class SignInProblemDiagnosis
             reports.Add(new SignInProblemReport(
                 SignInProblemSource.Api,
                 Constants.Config.SsoApiScope,
-                "An access token the identity provider issued was refused because it is not for JIM's API.",
+                SignInText.ProblemApiWrongAudienceDescription,
                 JoinOrNone(expectedAudiences),
                 JoinOrNone(tokenAudiences),
                 entraIdVersion1
                     ? EntraIdVersion1Fix
-                    : $"JIM expects the audience {Constants.Config.SsoApiScope} names when it is an api:// URI, and otherwise the portal's " +
-                      $"client ID, {Constants.Config.SsoClientId}. Change that setting, or have the identity provider issue the audience JIM expects."));
+                    : string.Format(CultureInfo.CurrentCulture, SignInText.ProblemApiWrongAudienceFix, Constants.Config.SsoApiScope, Constants.Config.SsoClientId)));
         }
 
         if (acceptedIssuers.Count > 0 && !acceptedIssuers.Contains(token.Issuer, StringComparer.Ordinal))
@@ -179,7 +180,7 @@ public static partial class SignInProblemDiagnosis
             reports.Add(new SignInProblemReport(
                 SignInProblemSource.Api,
                 Constants.Config.SsoValidIssuers,
-                "An access token came from an issuer JIM does not accept.",
+                SignInText.ProblemApiWrongIssuerDescription,
                 JoinOrNone(acceptedIssuers),
                 ValueOrNone(token.Issuer),
                 entraIdVersion1 ? EntraIdVersion1Fix : IssuerFix));
@@ -199,47 +200,42 @@ public static partial class SignInProblemDiagnosis
         return new SignInProblemReport(
             source,
             Constants.Config.SsoClaimType,
-            $"JIM could not tell who signed in, because the sign-in carried no '{claimType}' claim.",
+            string.Format(CultureInfo.CurrentCulture, SignInText.ProblemMissingClaimDescription, claimType),
             claimType,
             JoinOrNone(claims.Select(c => c.Type).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList()),
-            $"Set {Constants.Config.SsoClaimType} to a claim the identity provider issues for everyone, or have it issue '{claimType}'.");
+            string.Format(CultureInfo.CurrentCulture, SignInText.ProblemMissingClaimFix, Constants.Config.SsoClaimType, claimType));
     }
 
     private const string EntraIdVersion1IssuerPrefix = "https://sts.windows.net/";
 
-    private const string EntraIdVersion1Fix =
-        "Microsoft Entra ID issued a version 1 access token. Set requestedAccessTokenVersion to 2 in the app registration's manifest " +
-        "(Register-JIMIdentityProvider -Provider EntraId does), so its tokens carry the client ID as their audience and come from the " +
-        "tenant's version 2 issuer, which is what JIM accepts.";
+    private static string EntraIdVersion1Fix => SignInText.ProblemEntraVersion1Fix;
 
     private static string IssuerFix =>
-        $"If that issuer is your identity provider's, add it to {Constants.Config.SsoValidIssuers} along with those listed; " +
-        $"otherwise check that {Constants.Config.SsoAuthority} names the identity provider people sign in with.";
+        string.Format(CultureInfo.CurrentCulture, SignInText.ProblemIssuerFix, Constants.Config.SsoValidIssuers, Constants.Config.SsoAuthority);
 
     private static SignInProblemReport? DiagnoseProtocolError(string? error, OpenIdConnectOptions options) => error switch
     {
         "invalid_client" => new SignInProblemReport(
             SignInProblemSource.Portal,
             Constants.Config.SsoSecret,
-            "The identity provider did not accept JIM's portal client.",
-            $"the identity provider to accept client '{options.ClientId}' and its secret",
+            SignInText.ProblemInvalidClientDescription,
+            string.Format(CultureInfo.CurrentCulture, SignInText.ProblemInvalidClientExpected, options.ClientId),
             error,
-            $"Check that {Constants.Config.SsoClientId} names the portal's client, and that {Constants.Config.SsoSecret} holds its current " +
-            "secret. Register-JIMIdentityProvider -ResetClientSecret makes a new one."),
+            string.Format(CultureInfo.CurrentCulture, SignInText.ProblemInvalidClientFix, Constants.Config.SsoClientId, Constants.Config.SsoSecret)),
         "unauthorized_client" => new SignInProblemReport(
             SignInProblemSource.Portal,
             Constants.Config.SsoClientId,
-            "The identity provider does not let JIM's portal client sign people in this way.",
-            $"client '{options.ClientId}' to sign people in with an authorisation code",
+            SignInText.ProblemUnauthorizedClientDescription,
+            string.Format(CultureInfo.CurrentCulture, SignInText.ProblemUnauthorizedClientExpected, options.ClientId),
             error,
-            $"Check that {Constants.Config.SsoClientId} names the portal's client, and that the identity provider lets it use the authorisation code flow."),
+            string.Format(CultureInfo.CurrentCulture, SignInText.ProblemUnauthorizedClientFix, Constants.Config.SsoClientId)),
         "invalid_scope" or "invalid_resource" => new SignInProblemReport(
             SignInProblemSource.Portal,
             Constants.Config.SsoApiScope,
-            "The identity provider refused the scopes JIM asked for.",
+            SignInText.ProblemInvalidScopeDescription,
             string.Join(' ', options.Scope),
             error,
-            $"Set {Constants.Config.SsoApiScope} to a scope the identity provider grants JIM's portal client, or leave it empty."),
+            string.Format(CultureInfo.CurrentCulture, SignInText.ProblemInvalidScopeFix, Constants.Config.SsoApiScope)),
         _ => null
     };
 
