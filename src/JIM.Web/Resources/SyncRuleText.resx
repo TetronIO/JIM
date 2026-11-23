@@ -2624,4 +2624,44 @@
     <value>in</value>
     <comment>Word between the Synchronisation Rule's type and its Connected System.</comment>
   </data>
+  <data name="InsertAttributeButton" xml:space="preserve">
+    <value>Insert attribute</value>
+    <comment>Button opening the menu of attributes to insert into an expression.</comment>
+  </data>
+  <data name="InsertAttributeFilter" xml:space="preserve">
+    <value>Filter attributes</value>
+    <comment>Placeholder of the filter box in the insert attribute menu.</comment>
+  </data>
+  <data name="InsertAttributeFromMetaverse" xml:space="preserve">
+    <value>From the Metaverse · mv[...]</value>
+    <comment>Group heading in the insert attribute menu.</comment>
+  </data>
+  <data name="InsertAttributeFromSystem" xml:space="preserve">
+    <value>From {0} · cs[...]</value>
+    <comment>Group heading in the insert attribute menu. {0} is the Connected System name.</comment>
+  </data>
+  <data name="InsertAttributeNoMatch" xml:space="preserve">
+    <value>No attributes match "{0}".</value>
+    <comment>Shown when the filter matches nothing. {0} is the filter text.</comment>
+  </data>
+  <data name="InsertAttributeReferenceReason" xml:space="preserve">
+    <value>Reference, not supported yet</value>
+    <comment>Why a Reference attribute cannot be inserted: shown beside it.</comment>
+  </data>
+  <data name="InsertAttributeReferenceExplain" xml:space="preserve">
+    <value>Reference attributes cannot be read by a Derived Attribute Flow yet.</value>
+    <comment>Explanation on hover of a Reference attribute.</comment>
+  </data>
+  <data name="InsertAttributeTargetReason" xml:space="preserve">
+    <value>this flow's target</value>
+    <comment>Why the flow's own target cannot be inserted: shown beside it.</comment>
+  </data>
+  <data name="InsertAttributeSelfExplain" xml:space="preserve">
+    <value>Reading {0} here would make {0} depend on itself.</value>
+    <comment>Explanation on hover of the flow's own target. {0} is the attribute name.</comment>
+  </data>
+  <data name="InsertAttributeFromSystemFallback" xml:space="preserve">
+    <value>the Connected System</value>
+    <comment>Fills the {0} of the Connected System group heading when the system has no name. Reads 'From the Connected System · cs[...]'.</comment>
+  </data>
 </root>

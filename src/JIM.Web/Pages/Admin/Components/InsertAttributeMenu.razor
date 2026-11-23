@@ -24,16 +24,16 @@
     <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add"
                EndIcon="@Icons.Material.Filled.ArrowDropDown" Disabled="@Disabled" OnClick="ToggleAsync"
                aria-haspopup="true" aria-expanded="@(_open ? "true" : "false")"
-               data-testid="jim-insert-attribute-button">Insert attribute</MudButton>
+               data-testid="jim-insert-attribute-button">@SyncRuleText.InsertAttributeButton</MudButton>
     <MudPopover Open="@_open" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" Paper="true" Elevation="8">
         <div @ref="_list" @onkeydown="OnKeyDown" class="jim-insert-attribute-menu" data-testid="jim-insert-attribute-menu">
             <div class="px-3 pt-2 pb-2">
-                <SearchField @ref="_search" @bind-Value="_filter" Placeholder="Filter attributes" Margin="Margin.Dense" />
+                <SearchField @ref="_search" @bind-Value="_filter" Placeholder="@SyncRuleText.InsertAttributeFilter" Margin="Margin.Dense" />
             </div>
             <div class="jim-insert-attribute-list">
                 @if (_metaverseItems.Count > 0)
                 {
-                    <MudText Typo="Typo.overline" Class="px-4 mud-text-secondary d-block" data-testid="jim-insert-attribute-group-mv">From the Metaverse · mv[...]</MudText>
+                    <MudText Typo="Typo.overline" Class="px-4 mud-text-secondary d-block" data-testid="jim-insert-attribute-group-mv">@SyncRuleText.InsertAttributeFromMetaverse</MudText>
                     @foreach (var item in Filtered(_metaverseItems))
                     {
                         @ItemButton(item, $"mv-{item.Id}")
@@ -41,7 +41,7 @@
                 }
                 @if (_connectedSystemItems.Count > 0)
                 {
-                    <MudText Typo="Typo.overline" Class="px-4 mud-text-secondary d-block" data-testid="jim-insert-attribute-group-cs">From @(string.IsNullOrWhiteSpace(ConnectedSystemName) ? "the Connected System" : ConnectedSystemName) · cs[...]</MudText>
+                    <MudText Typo="Typo.overline" Class="px-4 mud-text-secondary d-block" data-testid="jim-insert-attribute-group-cs">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.InsertAttributeFromSystem, string.IsNullOrWhiteSpace(ConnectedSystemName) ? SyncRuleText.InsertAttributeFromSystemFallback : ConnectedSystemName)</MudText>
                     @foreach (var item in Filtered(_connectedSystemItems))
                     {
                         @ItemButton(item, $"cs-{item.Id}")
@@ -49,7 +49,7 @@
                 }
                 @if (!Filtered(_metaverseItems).Any() && !Filtered(_connectedSystemItems).Any())
                 {
-                    <MudText Class="px-4 py-2 mud-text-secondary">No attributes match "@_filter".</MudText>
+                    <MudText Class="px-4 py-2 mud-text-secondary">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.InsertAttributeNoMatch, _filter)</MudText>
                 }
             </div>
         </div>
@@ -203,12 +203,12 @@
             return new InsertableAttribute(candidate.Id, candidate.Name, accessor, null);
 
         if (candidate.Type == AttributeDataType.Reference)
-            return new InsertableAttribute(candidate.Id, candidate.Name, accessor, "Reference, not supported yet",
-                "Reference attributes cannot be read by a Derived Attribute Flow yet.");
+            return new InsertableAttribute(candidate.Id, candidate.Name, accessor, SyncRuleText.InsertAttributeReferenceReason,
+                SyncRuleText.InsertAttributeReferenceExplain);
 
         return candidate.Id == TargetMetaverseAttributeId
-            ? new InsertableAttribute(candidate.Id, candidate.Name, accessor, "this flow's target",
-                $"Reading {candidate.Name} here would make {candidate.Name} depend on itself.")
+            ? new InsertableAttribute(candidate.Id, candidate.Name, accessor, SyncRuleText.InsertAttributeTargetReason,
+                string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.InsertAttributeSelfExplain, candidate.Name))
             : new InsertableAttribute(candidate.Id, candidate.Name, accessor, null);
     }
 

@@ -1991,4 +1991,34 @@
   <data name="IdentityIn" xml:space="preserve">
     <value>dans</value>
   </data>
+  <data name="InsertAttributeButton" xml:space="preserve">
+    <value>Insérer un attribut</value>
+  </data>
+  <data name="InsertAttributeFilter" xml:space="preserve">
+    <value>Filtrer les attributs</value>
+  </data>
+  <data name="InsertAttributeFromMetaverse" xml:space="preserve">
+    <value>Depuis le Metaverse · mv[...]</value>
+  </data>
+  <data name="InsertAttributeFromSystem" xml:space="preserve">
+    <value>Depuis {0} · cs[...]</value>
+  </data>
+  <data name="InsertAttributeNoMatch" xml:space="preserve">
+    <value>Aucun attribut ne correspond à « {0} ».</value>
+  </data>
+  <data name="InsertAttributeReferenceReason" xml:space="preserve">
+    <value>Référence, pas encore prise en charge</value>
+  </data>
+  <data name="InsertAttributeReferenceExplain" xml:space="preserve">
+    <value>Les attributs de référence ne peuvent pas encore être lus par un flux d’attributs dérivé.</value>
+  </data>
+  <data name="InsertAttributeTargetReason" xml:space="preserve">
+    <value>cible de ce flux</value>
+  </data>
+  <data name="InsertAttributeSelfExplain" xml:space="preserve">
+    <value>Lire {0} ici ferait dépendre {0} de lui-même.</value>
+  </data>
+  <data name="InsertAttributeFromSystemFallback" xml:space="preserve">
+    <value>le système connecté</value>
+  </data>
 </root>
