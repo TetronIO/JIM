@@ -1520,4 +1520,124 @@
   <data name="ActivityMechanismExport" xml:space="preserve">
     <value>Exportation</value>
   </data>
+  <data name="ActivityPreviewClose" xml:space="preserve">
+    <value>Fermer cet aperçu</value>
+  </data>
+  <data name="ActivityPreviewNoLongerAvailable" xml:space="preserve">
+    <value>Cet aperçu n’est plus disponible. Les aperçus sont supprimés avec leur activité, selon la durée de conservation configurée pour ce système ; relancez l’aperçu pour voir ce que la modification ferait maintenant.</value>
+  </data>
+  <data name="ActivityPreviewDidNotFinish" xml:space="preserve">
+    <value>L’aperçu ne s’est pas terminé : il n’a donc vu qu’une partie des objets concernés par la modification. Rien de ce qu’il a enregistré n’est affiché, car un décompte partiel lu comme un décompte complet est la façon dont une modification est approuvée à tort comme sûre.</value>
+  </data>
+  <data name="ActivityPreviewCancelled" xml:space="preserve">
+    <value>L’aperçu a été annulé : il ne couvre donc que les objets qu’il avait atteints. Relancez-le pour obtenir une réponse complète.</value>
+  </data>
+  <data name="ActivityPreviewStaleness" xml:space="preserve">
+    <value>Évalué d’après les données telles qu’elles étaient {0}. Un import survenu depuis peut modifier les résultats de l’aperçu.</value>
+  </data>
+  <data name="ActivityPreviewBlocking" xml:space="preserve">
+    <value>La configuration proposée ne peut pas être appliquée.</value>
+  </data>
+  <data name="ActivityPreviewWhatWouldChange" xml:space="preserve">
+    <value>Ce qui changerait</value>
+  </data>
+  <data name="ActivityPreviewSearchChanges" xml:space="preserve">
+    <value>Rechercher des modifications</value>
+  </data>
+  <data name="ActivityPreviewTransitionWithPattern" xml:space="preserve">
+    <value>{0} ({1})</value>
+  </data>
+  <data name="ActivityPreviewAppliesTo" xml:space="preserve">
+    <value>S’applique à</value>
+  </data>
+  <data name="ActivityPreviewObjectsOf" xml:space="preserve">
+    <value>{0} objets{1}</value>
+  </data>
+  <data name="ActivityPreviewObjectsWord" xml:space="preserve">
+    <value>objets</value>
+  </data>
+  <data name="ActivityPreviewObjectsHeading" xml:space="preserve">
+    <value>Objets</value>
+  </data>
+  <data name="ActivityPreviewCountExact" xml:space="preserve">
+    <value>Ce décompte est exact. La liste d’objets ci-dessous n’en présente qu’un échantillon de {0}, et non la totalité.</value>
+  </data>
+  <data name="ActivityPreviewListSampled" xml:space="preserve">
+    <value>Liste échantillonnée</value>
+  </data>
+  <data name="ActivityPreviewNoChangesMatch" xml:space="preserve">
+    <value>Aucune modification ne correspond à « {0} »</value>
+  </data>
+  <data name="ActivityPreviewNothingWouldChange" xml:space="preserve">
+    <value>Rien ne changerait</value>
+  </data>
+  <data name="ActivityPreviewNothingDetail" xml:space="preserve">
+    <value>Aucun objet ne change d’état à la suite de cette modification.</value>
+  </data>
+  <data name="ActivityPreviewUnchangedOne" xml:space="preserve">
+    <value>1 objet ne changerait pas</value>
+  </data>
+  <data name="ActivityPreviewUnchangedOther" xml:space="preserve">
+    <value>{0} objets ne changeraient pas</value>
+  </data>
+  <data name="ActivityPreviewShowThem" xml:space="preserve">
+    <value>Les afficher</value>
+  </data>
+  <data name="ActivityPreviewGroupCount" xml:space="preserve">
+    <value>objets ({0})</value>
+  </data>
+  <data name="ActivityPreviewDeltasSampled" xml:space="preserve">
+    <value>{0} objets figurent dans ce groupe. La liste ci-dessous n’en présente que les {1} premiers, si bien qu’un objet absent de cette liste ne signifie pas qu’il n’est pas concerné.</value>
+  </data>
+  <data name="ActivityPreviewObjectSingular" xml:space="preserve">
+    <value>Objet</value>
+  </data>
+  <data name="ActivityPreviewSearchObject" xml:space="preserve">
+    <value>Rechercher un objet, un attribut ou une valeur</value>
+  </data>
+  <data name="ActivityPreviewMatches" xml:space="preserve">
+    <value>Correspondances</value>
+  </data>
+  <data name="ActivityPreviewNoObjectsMatch" xml:space="preserve">
+    <value>Aucun objet de ce groupe ne correspond à cette recherche</value>
+  </data>
+  <data name="ActivityPreviewNoDetailKept" xml:space="preserve">
+    <value>Aucun détail par objet n’a été conservé pour ce groupe</value>
+  </data>
+  <data name="ActivityPreviewNoDetailKeptDetail" xml:space="preserve">
+    <value>Le détail par objet n’est enregistré que lorsque l’aperçu a été demandé pour le conserver ; le décompte du groupe ci-dessus reste exact.</value>
+  </data>
+  <data name="ActivityPreviewDefaultTitle" xml:space="preserve">
+    <value>Aperçu</value>
+  </data>
+  <data name="ActivityPreviewStatusRunning" xml:space="preserve">
+    <value>En cours</value>
+  </data>
+  <data name="ActivityPreviewStatusCompleteWarnings" xml:space="preserve">
+    <value>Terminée avec des avertissements</value>
+  </data>
+  <data name="ActivityPreviewStatusFailed" xml:space="preserve">
+    <value>Échec</value>
+  </data>
+  <data name="ActivityPreviewObjectInSystem" xml:space="preserve">
+    <value>Objet de système connecté dans {0}</value>
+  </data>
+  <data name="ActivityPreviewMatchesFor" xml:space="preserve">
+    <value>Correspondances pour {0} ({1})</value>
+  </data>
+  <data name="ActivityPreviewCountOf" xml:space="preserve">
+    <value>{0} sur {1}</value>
+  </data>
+  <data name="ActivityPreviewStageValidation" xml:space="preserve">
+    <value>Validation</value>
+  </data>
+  <data name="ActivityPreviewStageObjectsAffected" xml:space="preserve">
+    <value>Objets concernés</value>
+  </data>
+  <data name="ActivityPreviewStageSummary" xml:space="preserve">
+    <value>Synthèse</value>
+  </data>
+  <data name="ActivityPreviewStageObjectDetail" xml:space="preserve">
+    <value>Détail des objets</value>
+  </data>
 </root>

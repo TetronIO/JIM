@@ -2022,4 +2022,164 @@
     <value>Export</value>
     <comment>Mechanism of a change made by an export, when no run profile name is recorded</comment>
   </data>
+  <data name="ActivityPreviewClose" xml:space="preserve">
+    <value>Close this preview</value>
+    <comment>Tooltip and label on the button that closes a preview panel</comment>
+  </data>
+  <data name="ActivityPreviewNoLongerAvailable" xml:space="preserve">
+    <value>This preview is no longer available. Previews are removed with their Activity under the retention period configured for this system; run the preview again to see what the change would do now.</value>
+    <comment>Shown when a preview's Activity has been removed</comment>
+  </data>
+  <data name="ActivityPreviewDidNotFinish" xml:space="preserve">
+    <value>The preview did not finish, so it has seen only part of the objects the change would affect. Nothing it recorded is shown, because a partial count read as a whole one is how a change gets approved as safe.</value>
+    <comment>Shown when a preview failed before it finished counting</comment>
+  </data>
+  <data name="ActivityPreviewCancelled" xml:space="preserve">
+    <value>The preview was cancelled, so it covers only the objects it had reached. Run it again for a complete answer.</value>
+    <comment>Shown when a preview was cancelled part-way through</comment>
+  </data>
+  <data name="ActivityPreviewStaleness" xml:space="preserve">
+    <value>Evaluated against data as it stood {0}. An import since then may change the preview results.</value>
+    <comment>Shown when a preview's data has since changed; {0} is how long ago it was evaluated, for example "2 hours ago"</comment>
+  </data>
+  <data name="ActivityPreviewBlocking" xml:space="preserve">
+    <value>The proposed configuration cannot be applied.</value>
+    <comment>Shown when a preview found a problem that blocks the change</comment>
+  </data>
+  <data name="ActivityPreviewWhatWouldChange" xml:space="preserve">
+    <value>What would change</value>
+    <comment>Heading of the summary groups in a preview</comment>
+  </data>
+  <data name="ActivityPreviewSearchChanges" xml:space="preserve">
+    <value>Search changes</value>
+    <comment>Placeholder of the search box on the preview's summary groups</comment>
+  </data>
+  <data name="ActivityPreviewTransitionWithPattern" xml:space="preserve">
+    <value>{0} ({1})</value>
+    <comment>Tooltip on a summary row: the transition, then the pattern it matched in brackets; {0} transition, {1} pattern</comment>
+  </data>
+  <data name="ActivityPreviewAppliesTo" xml:space="preserve">
+    <value>Applies to</value>
+    <comment>Column heading: the object type a summary row covers</comment>
+  </data>
+  <data name="ActivityPreviewObjectsOf" xml:space="preserve">
+    <value>{0} objects{1}</value>
+    <comment>Tooltip on a summary row: the object type and the system clause beside it; {0} type, {1} clause</comment>
+  </data>
+  <data name="ActivityPreviewObjectsWord" xml:space="preserve">
+    <value>objects</value>
+    <comment>Word after the object type on a summary row, which says the row covers a population</comment>
+  </data>
+  <data name="ActivityPreviewObjectsHeading" xml:space="preserve">
+    <value>Objects</value>
+    <comment>Column heading: how many objects a summary row covers</comment>
+  </data>
+  <data name="ActivityPreviewCountExact" xml:space="preserve">
+    <value>This count is exact. Its object list below is a sample of {0} of them, not all of them.</value>
+    <comment>Tooltip on a count whose object list is sampled; {0} is the sample size</comment>
+  </data>
+  <data name="ActivityPreviewListSampled" xml:space="preserve">
+    <value>List sampled</value>
+    <comment>Chip beside a count whose object list is sampled</comment>
+  </data>
+  <data name="ActivityPreviewNoChangesMatch" xml:space="preserve">
+    <value>No changes match "{0}"</value>
+    <comment>Empty state after a search of a preview's summary; {0} is what was searched for</comment>
+  </data>
+  <data name="ActivityPreviewNothingWouldChange" xml:space="preserve">
+    <value>Nothing would change</value>
+    <comment>Empty state of a preview that would change nothing</comment>
+  </data>
+  <data name="ActivityPreviewNothingDetail" xml:space="preserve">
+    <value>No object moves through any transition as a result of this change.</value>
+    <comment>Empty state secondary text of a preview that would change nothing</comment>
+  </data>
+  <data name="ActivityPreviewUnchangedOne" xml:space="preserve">
+    <value>1 object would not change</value>
+    <comment>Shown when one object would not change</comment>
+  </data>
+  <data name="ActivityPreviewUnchangedOther" xml:space="preserve">
+    <value>{0} objects would not change</value>
+    <comment>Shown when several objects would not change; {0} is the count</comment>
+  </data>
+  <data name="ActivityPreviewShowThem" xml:space="preserve">
+    <value>Show them</value>
+    <comment>Link that opens the objects that would not change</comment>
+  </data>
+  <data name="ActivityPreviewGroupCount" xml:space="preserve">
+    <value>objects ({0})</value>
+    <comment>Words after an object type on a link to a group; {0} is the count</comment>
+  </data>
+  <data name="ActivityPreviewDeltasSampled" xml:space="preserve">
+    <value>{0} objects are in this group. The list below is a sample of the first {1} of them, so an object being absent from it does not mean it is unaffected.</value>
+    <comment>Warning above a drill-down whose object list is sampled; {0} is the group's count, {1} the sample size</comment>
+  </data>
+  <data name="ActivityPreviewObjectSingular" xml:space="preserve">
+    <value>Object</value>
+    <comment>Singular name of an object in a preview's drill-down, and its column heading</comment>
+  </data>
+  <data name="ActivityPreviewSearchObject" xml:space="preserve">
+    <value>Search object, attribute or value</value>
+    <comment>Placeholder of the search box on a preview's drill-down</comment>
+  </data>
+  <data name="ActivityPreviewMatches" xml:space="preserve">
+    <value>Matches</value>
+    <comment>Column heading: the objects an ambiguous change would match</comment>
+  </data>
+  <data name="ActivityPreviewNoObjectsMatch" xml:space="preserve">
+    <value>No objects in this group match that search</value>
+    <comment>Empty state after a search of a preview's drill-down</comment>
+  </data>
+  <data name="ActivityPreviewNoDetailKept" xml:space="preserve">
+    <value>No object-level detail was kept for this group</value>
+    <comment>Empty state of a preview group whose objects were not kept</comment>
+  </data>
+  <data name="ActivityPreviewNoDetailKeptDetail" xml:space="preserve">
+    <value>Object detail is recorded only when the preview was asked to keep it; the group's count above is still exact.</value>
+    <comment>Empty state secondary text: the count is exact even without the object detail</comment>
+  </data>
+  <data name="ActivityPreviewDefaultTitle" xml:space="preserve">
+    <value>Preview</value>
+    <comment>Heading of the preview panel when a surface does not give its own</comment>
+  </data>
+  <data name="ActivityPreviewStatusRunning" xml:space="preserve">
+    <value>Running</value>
+    <comment>Status of a preview that is still running</comment>
+  </data>
+  <data name="ActivityPreviewStatusCompleteWarnings" xml:space="preserve">
+    <value>Complete with warnings</value>
+    <comment>Status of a preview that finished with warnings</comment>
+  </data>
+  <data name="ActivityPreviewStatusFailed" xml:space="preserve">
+    <value>Failed</value>
+    <comment>Status of a preview that failed</comment>
+  </data>
+  <data name="ActivityPreviewObjectInSystem" xml:space="preserve">
+    <value>Connected System Object in {0}</value>
+    <comment>Tooltip on a chip for a Connected System Object; {0} is the system's name</comment>
+  </data>
+  <data name="ActivityPreviewMatchesFor" xml:space="preserve">
+    <value>Matches for {0} ({1})</value>
+    <comment>Title of the list of objects an ambiguous change would match; {0} the object, {1} the count</comment>
+  </data>
+  <data name="ActivityPreviewCountOf" xml:space="preserve">
+    <value>{0} of {1}</value>
+    <comment>A count of the matches listed out of the total; {0} listed, {1} total</comment>
+  </data>
+  <data name="ActivityPreviewStageValidation" xml:space="preserve">
+    <value>Validation</value>
+    <comment>Name of the validation stage of a preview</comment>
+  </data>
+  <data name="ActivityPreviewStageObjectsAffected" xml:space="preserve">
+    <value>Objects affected</value>
+    <comment>Name of the stage that counts the objects a change affects</comment>
+  </data>
+  <data name="ActivityPreviewStageSummary" xml:space="preserve">
+    <value>Summary</value>
+    <comment>Name of the stage that summarises a preview</comment>
+  </data>
+  <data name="ActivityPreviewStageObjectDetail" xml:space="preserve">
+    <value>Object detail</value>
+    <comment>Name of the stage that records the object detail of a preview</comment>
+  </data>
 </root>

@@ -45,14 +45,14 @@
         {
             <MudButton data-testid="jim-preview-cancel" Variant="Variant.Text" Color="Color.Default"
                        StartIcon="@Icons.Material.Filled.Cancel" Disabled="@_cancelling" OnClick="CancelAsync">
-                Cancel
+                @CommonText.Cancel
             </MudButton>
         }
         @if (OnClose.HasDelegate)
         {
-            <MudTooltip Text="Close this preview" Arrow="true" Placement="Placement.Top">
+            <MudTooltip Text="@ActivityText.ActivityPreviewClose" Arrow="true" Placement="Placement.Top">
                 <MudIconButton data-testid="jim-preview-close" Icon="@Icons.Material.Filled.Close" Size="Size.Small"
-                               aria-label="Close this preview" OnClick="OnClose" />
+                               aria-label="@ActivityText.ActivityPreviewClose" OnClick="OnClose" />
             </MudTooltip>
         }
     </div>
@@ -69,8 +69,7 @@
             @if (_preview == null || _activity == null)
             {
                 <MudAlert Severity="Severity.Info" Class="mt-4">
-                    This preview is no longer available. Previews are removed with their Activity under the retention
-                    period configured for this system; run the preview again to see what the change would do now.
+                    @ActivityText.ActivityPreviewNoLongerAvailable
                 </MudAlert>
             }
             else
@@ -123,9 +122,7 @@
                 {
                     <MudAlert Severity="Severity.Error" Class="mt-4">
                         <MudText Typo="Typo.body1">
-                            The preview did not finish, so it has seen only part of the objects the change would
-                            affect. Nothing it recorded is shown, because a partial count read as a whole one is how a
-                            change gets approved as safe.
+                            @ActivityText.ActivityPreviewDidNotFinish
                         </MudText>
                         @if (!string.IsNullOrEmpty(activity.ErrorMessage))
                         {
@@ -136,8 +133,7 @@
                 else if (activity.Status == ActivityStatus.Cancelled)
                 {
                     <MudAlert Severity="Severity.Info" Class="mt-4">
-                        The preview was cancelled, so it covers only the objects it had reached. Run it again for a
-                        complete answer.
+                        @ActivityText.ActivityPreviewCancelled
                     </MudAlert>
                 }
 
@@ -147,8 +143,7 @@
                     var baseline = preview.StalenessBaseline.Value;
                     <MudAlert Severity="Severity.Normal" Class="mt-4" Dense="true">
                         <MudTooltip Arrow="true" Placement="Placement.Top" Text="@baseline.ToLocalTime().ToFriendlyDate()">
-                            Evaluated against data as it stood @baseline.ToLocalTime().ToRelativeTime(). An import
-                            since then may change the preview results.
+                            @string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPreviewStaleness, baseline.ToLocalTime().ToRelativeTime())
                         </MudTooltip>
                     </MudAlert>
                 }
@@ -159,7 +154,7 @@
                     @if (_findings.Any(f => f.Severity == PreviewValidationSeverity.Blocking))
                     {
                         <MudText Typo="Typo.body1" Class="mt-4">
-                            The proposed configuration cannot be applied.
+                            @ActivityText.ActivityPreviewBlocking
                         </MudText>
                     }
                     @foreach (var finding in _findings.OrderByDescending(f => f.Severity))
@@ -207,7 +202,7 @@
                     @* ─── Summary groups: the landing view ─── *@
                     @if (_changeGroups.Count > 0)
                     {
-                        <MudText Typo="Typo.subtitle1" Class="mt-4">What would change</MudText>
+                        <MudText Typo="Typo.subtitle1" Class="mt-4">@ActivityText.ActivityPreviewWhatWouldChange</MudText>
                         @* The summary groups are already in memory (they are read whole on every refresh), so the
                            grid slices its windows from the list rather than reading a range. *@
                         <VirtualisedDataGrid @ref="_groupsGrid" T="ConfigurationChangePreviewGroup"
@@ -216,14 +211,14 @@
                                              DefaultSortBy="consequence"
                                              DefaultSortDescending="false"
                                              LoadWindow="LoadGroupWindowAsync"
-                                             SingularName="Change"
-                                             PluralName="Changes"
-                                             SearchPlaceholder="Search changes"
+                                             SingularName="@ActivityText.ActivityHistoryChangeSingular"
+                                             PluralName="@ActivityText.ActivityHistoryChangesPlural"
+                                             SearchPlaceholder="@ActivityText.ActivityPreviewSearchChanges"
                                              RowClicked="OnGroupClicked">
                             <Columns>
-                                <TemplateColumn Title="Change" Sortable="false">
+                                <TemplateColumn Title="@ActivityText.ActivityColumnChange" Sortable="false">
                                     <HeaderTemplate>
-                                        <VirtualisedSortHeader Title="Change" Name="change" />
+                                        <VirtualisedSortHeader Title="@ActivityText.ActivityColumnChange" Name="change" />
                                     </HeaderTemplate>
                                     <CellTemplate Context="row">
                                         @* A dot, not a chip. The outlined pill was carrying five unrelated meanings on  *@
@@ -238,7 +233,7 @@
                                             var transitionName = Helpers.GetOutcomeTypePlainName(row.Item.TransitionType);
                                             var patternName = PreviewPatternKeys.GetDisplayName(row.Item.PatternKey);
                                         }
-                                        <span class="jim-one-line" title="@(string.IsNullOrEmpty(patternName) ? transitionName : $"{transitionName} ({patternName})")">
+                                        <span class="jim-one-line" title="@(string.IsNullOrEmpty(patternName) ? transitionName : string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPreviewTransitionWithPattern, transitionName, patternName))">
                                             <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small" Class="mr-2"
                                                      Color="@Helpers.GetOutcomeTypeMudBlazorColor(row.Item.TransitionType)" />
                                             @transitionName
@@ -249,9 +244,9 @@
                                         </span>
                                     </CellTemplate>
                                 </TemplateColumn>
-                                <TemplateColumn Title="Applies to" Sortable="false">
+                                <TemplateColumn Title="@ActivityText.ActivityPreviewAppliesTo" Sortable="false">
                                     <HeaderTemplate>
-                                        <VirtualisedSortHeader Title="Applies to" Name="appliesto" />
+                                        <VirtualisedSortHeader Title="@ActivityText.ActivityPreviewAppliesTo" Name="appliesto" />
                                     </HeaderTemplate>
                                     <CellTemplate Context="row">
                                         @if (string.IsNullOrEmpty(row.Item.MetaverseObjectTypeName))
@@ -268,9 +263,9 @@
                                             @* One line, as every cell of a virtualised grid must be; the whole phrase is the tooltip.
                                                A takeover's system is where the value now comes from, not where the objects are. *@
                                             var systemClause = ConfigurationChangePreviewWording.SystemClause(row.Item.TransitionType, row.Item.ConnectedSystemName);
-                                            <span class="jim-one-line" title="@($"{row.Item.MetaverseObjectTypeName} objects{systemClause}")">
+                                            <span class="jim-one-line" title="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPreviewObjectsOf, row.Item.MetaverseObjectTypeName, systemClause)">
                                                 <span class="jim-code-inline">@row.Item.MetaverseObjectTypeName</span>
-                                                <span> objects</span>
+                                                <span> @ActivityText.ActivityPreviewObjectsWord</span>
                                                 <span>@systemClause</span>
                                             </span>
                                         }
@@ -279,9 +274,9 @@
                                 @* The fill column: a value transition can run long ("Not eligible for deletion ->
                                    Eligible for deletion immediately"), and without a bounded column the one-line clamp
                                    never clips, so the row widens the table and pushes Objects off the panel. *@
-                                <TemplateColumn Title="Attribute" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+                                <TemplateColumn Title="@ActivityText.ActivityColumnAttribute" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                                     <HeaderTemplate>
-                                        <VirtualisedSortHeader Title="Attribute" Name="attribute" />
+                                        <VirtualisedSortHeader Title="@ActivityText.ActivityColumnAttribute" Name="attribute" />
                                     </HeaderTemplate>
                                     <CellTemplate Context="row">
                                         @* One line: the value transition reads inline after the attribute it
@@ -306,17 +301,17 @@
                                 </TemplateColumn>
                                 @* Right-aligned and tabular so the counts line up as a column of numbers rather than
                                    starting wherever the label beside them happened to end. *@
-                                <TemplateColumn Title="Objects" Sortable="false" CellClass="jim-preview-count">
+                                <TemplateColumn Title="@ActivityText.ActivityPreviewObjectsHeading" Sortable="false" CellClass="jim-preview-count">
                                     <HeaderTemplate>
-                                        <VirtualisedSortHeader Title="Objects" Name="objects" />
+                                        <VirtualisedSortHeader Title="@ActivityText.ActivityPreviewObjectsHeading" Name="objects" />
                                     </HeaderTemplate>
                                     <CellTemplate Context="row">
                                         @if (row.Item.DeltasSampled)
                                         {
                                             <MudTooltip Arrow="true" Placement="Placement.Top"
-                                                        Text="@($"This count is exact. Its object list below is a sample of {ConfigurationChangePreviewServer.MaximumDeltasPerGroup:N0} of them, not all of them.")">
+                                                        Text="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPreviewCountExact, ConfigurationChangePreviewServer.MaximumDeltasPerGroup.ToString("N0", System.Globalization.CultureInfo.CurrentCulture))">
                                                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" Class="mr-2">
-                                                    List sampled
+                                                    @ActivityText.ActivityPreviewListSampled
                                                 </MudChip>
                                             </MudTooltip>
                                         }
@@ -338,16 +333,16 @@
                                 @if (!string.IsNullOrWhiteSpace(grid.SearchText))
                                 {
                                     <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                                     PrimaryText="@($"No changes match \"{grid.SearchText}\"")"
-                                                     SecondaryText="Try a different search term, or clear the search."
-                                                     ActionText="Clear Search"
+                                                     PrimaryText="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPreviewNoChangesMatch, grid.SearchText)"
+                                                     SecondaryText="@ActivityText.ActivitySearchTryAgain"
+                                                     ActionText="@ActivityText.ActivityClearSearch"
                                                      OnAction="@(() => grid.ClearSearchAsync())" />
                                 }
                                 else
                                 {
                                     <TableEmptyState Icon="@Icons.Material.Filled.CheckCircle"
-                                                     PrimaryText="Nothing would change"
-                                                     SecondaryText="No object moves through any transition as a result of this change." />
+                                                     PrimaryText="@ActivityText.ActivityPreviewNothingWouldChange"
+                                                     SecondaryText="@ActivityText.ActivityPreviewNothingDetail" />
                                 }
                             </EmptyContent>
                         </VirtualisedDataGrid>
@@ -362,19 +357,19 @@
                             <div class="d-flex align-center flex-wrap gap-2 mt-4" data-testid="jim-preview-unchanged">
                                 <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Class="mud-text-secondary" />
                                 <MudText Class="mud-text-secondary">
-                                    @(UnchangedObjectCount == 1 ? "1 object would not change" : $"{UnchangedObjectCount:N0} objects would not change")@(_unchangedGroups.Count > 1 ? ":" : ".")
+                                    @(UnchangedObjectCount == 1 ? ActivityText.ActivityPreviewUnchangedOne : string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPreviewUnchangedOther, UnchangedObjectCount.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)))@(_unchangedGroups.Count > 1 ? ":" : ".")
                                 </MudText>
                                 @if (_unchangedGroups.Count == 1)
                                 {
                                     var only = _unchangedGroups[0];
-                                    <MudLink OnClick="@(() => OnGroupClicked(only))" data-testid="jim-preview-unchanged-open">Show them</MudLink>
+                                    <MudLink OnClick="@(() => OnGroupClicked(only))" data-testid="jim-preview-unchanged-open">@ActivityText.ActivityPreviewShowThem</MudLink>
                                 }
                                 else
                                 {
                                     @foreach (var unchanged in _unchangedGroups)
                                     {
                                         <MudLink OnClick="@(() => OnGroupClicked(unchanged))" data-testid="jim-preview-unchanged-open">
-                                            <span class="jim-code-inline">@unchanged.MetaverseObjectTypeName</span> objects (@unchanged.ObjectCount.ToString("N0"))
+                                            <span class="jim-code-inline">@unchanged.MetaverseObjectTypeName</span> @string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPreviewGroupCount, unchanged.ObjectCount.ToString("N0", System.Globalization.CultureInfo.CurrentCulture))
                                         </MudLink>
                                     }
                                 }
@@ -408,16 +403,14 @@
                             </div>
                             <MudSpacer />
                             <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Close" OnClick="CloseDrillDown">
-                                Close
+                                @CommonText.Close
                             </MudButton>
                         </div>
 
                         @if (selected.DeltasSampled)
                         {
                             <MudAlert Severity="Severity.Warning" Class="mt-2" Dense="true">
-                                @selected.ObjectCount.ToString("N0") objects are in this group. The list below is a
-                                sample of the first @ConfigurationChangePreviewServer.MaximumDeltasPerGroup.ToString("N0")
-                                of them, so an object being absent from it does not mean it is unaffected.
+                                @string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPreviewDeltasSampled, selected.ObjectCount.ToString("N0", System.Globalization.CultureInfo.CurrentCulture), ConfigurationChangePreviewServer.MaximumDeltasPerGroup.ToString("N0", System.Globalization.CultureInfo.CurrentCulture))
                             </MudAlert>
                         }
 
@@ -433,13 +426,13 @@
                                              DefaultSortBy="recorded"
                                              LoadWindow="LoadDeltaWindowAsync"
                                              RowClicked="@DeltaRowClicked"
-                                             SingularName="Object"
-                                             PluralName="Objects"
-                                             SearchPlaceholder="Search object, attribute or value">
+                                             SingularName="@ActivityText.ActivityPreviewObjectSingular"
+                                             PluralName="@ActivityText.ActivityPreviewObjectsHeading"
+                                             SearchPlaceholder="@ActivityText.ActivityPreviewSearchObject">
                             <Columns>
-                                <TemplateColumn Title="Object" Sortable="false">
+                                <TemplateColumn Title="@ActivityText.ActivityPreviewObjectSingular" Sortable="false">
                                     <HeaderTemplate>
-                                        <MudText Typo="Typo.button">Object</MudText>
+                                        <MudText Typo="Typo.button">@ActivityText.ActivityPreviewObjectSingular</MudText>
                                     </HeaderTemplate>
                                     <CellTemplate Context="row">
                                         @* The name is the way into the object, so it is an ObjectChip linking to the object
@@ -463,17 +456,17 @@
                                         }
                                     </CellTemplate>
                                 </TemplateColumn>
-                                <TemplateColumn Title="Type" Sortable="false">
+                                <TemplateColumn Title="@ActivityText.ActivityColumnType" Sortable="false">
                                     <HeaderTemplate>
-                                        <MudText Typo="Typo.button">Type</MudText>
+                                        <MudText Typo="Typo.button">@ActivityText.ActivityColumnType</MudText>
                                     </HeaderTemplate>
                                     <CellTemplate Context="row">
                                         <TextValueDisplay Value="@row.Item.ObjectTypeName" />
                                     </CellTemplate>
                                 </TemplateColumn>
-                                <TemplateColumn Title="Attribute" Sortable="false">
+                                <TemplateColumn Title="@ActivityText.ActivityColumnAttribute" Sortable="false">
                                     <HeaderTemplate>
-                                        <MudText Typo="Typo.button">Attribute</MudText>
+                                        <MudText Typo="Typo.button">@ActivityText.ActivityColumnAttribute</MudText>
                                     </HeaderTemplate>
                                     <CellTemplate Context="row">
                                         @* Per row as well as per group: a group that collapsed back to the attribute level
@@ -482,7 +475,7 @@
                                         @{
                                             var deltaPatternName = PreviewPatternKeys.GetDisplayName(row.Item.PatternKey);
                                         }
-                                        <span class="jim-one-line" title="@(string.IsNullOrEmpty(deltaPatternName) ? row.Item.AttributeName : $"{row.Item.AttributeName} ({deltaPatternName})")">
+                                        <span class="jim-one-line" title="@(string.IsNullOrEmpty(deltaPatternName) ? row.Item.AttributeName : string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPreviewTransitionWithPattern, row.Item.AttributeName, deltaPatternName))">
                                             <TextValueDisplay Value="@row.Item.AttributeName" />
                                             @if (!string.IsNullOrEmpty(deltaPatternName))
                                             {
@@ -518,10 +511,10 @@
                                    column, so it takes what the other columns leave and a long name ellipsises rather than
                                    pushing the row past the panel. No type on the chips: every candidate is of the type the
                                    rule searches, and the tooltip names it. *@
-                                <TemplateColumn Title="Matches" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column"
+                                <TemplateColumn Title="@ActivityText.ActivityPreviewMatches" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column"
                                                 Hidden="@(selected.TransitionType != ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously)">
                                     <HeaderTemplate>
-                                        <MudText Typo="Typo.button">Matches</MudText>
+                                        <MudText Typo="Typo.button">@ActivityText.ActivityPreviewMatches</MudText>
                                     </HeaderTemplate>
                                     <CellTemplate Context="row">
                                         <OverflowList TItem="ConfigurationChangePreviewDeltaMatchCandidate" Items="@row.Item.MatchCandidates"
@@ -552,16 +545,16 @@
                                 @if (!string.IsNullOrWhiteSpace(grid.SearchText))
                                 {
                                     <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                                     PrimaryText="No objects in this group match that search"
-                                                     SecondaryText="Try a different search term, or clear the search."
-                                                     ActionText="Clear Search"
+                                                     PrimaryText="@ActivityText.ActivityPreviewNoObjectsMatch"
+                                                     SecondaryText="@ActivityText.ActivitySearchTryAgain"
+                                                     ActionText="@ActivityText.ActivityClearSearch"
                                                      OnAction="@(() => grid.ClearSearchAsync())" />
                                 }
                                 else
                                 {
                                     <TableEmptyState Icon="@Icons.Material.Filled.ManageSearch"
-                                                     PrimaryText="No object-level detail was kept for this group"
-                                                     SecondaryText="Object detail is recorded only when the preview was asked to keep it; the group's count above is still exact." />
+                                                     PrimaryText="@ActivityText.ActivityPreviewNoDetailKept"
+                                                     SecondaryText="@ActivityText.ActivityPreviewNoDetailKeptDetail" />
                                 }
                             </EmptyContent>
                         </VirtualisedDataGrid>
@@ -611,7 +604,7 @@
 
     /// <summary>Heading for the panel. Surfaces override it where a more specific noun reads better.</summary>
     [Parameter]
-    public string Title { get; set; } = "Preview";
+    public string Title { get; set; } = ActivityText.ActivityPreviewDefaultTitle;
 
     /// <summary>
     /// Whether the panel renders the preview's own progress bar and message. Set false where the host already shows
@@ -741,12 +734,12 @@
 
     private string StatusLabel => _activity?.Status switch
     {
-        ActivityStatus.InProgress => "Running",
-        ActivityStatus.Complete => "Complete",
-        ActivityStatus.CompleteWithWarning => "Complete with warnings",
-        ActivityStatus.FailedWithError => "Failed",
-        ActivityStatus.Cancelled => "Cancelled",
-        _ => "Queued"
+        ActivityStatus.InProgress => ActivityText.ActivityPreviewStatusRunning,
+        ActivityStatus.Complete => ActivityText.ActivityStatusComplete,
+        ActivityStatus.CompleteWithWarning => ActivityText.ActivityPreviewStatusCompleteWarnings,
+        ActivityStatus.FailedWithError => ActivityText.ActivityPreviewStatusFailed,
+        ActivityStatus.Cancelled => ActivityText.ActivityStatusCancelled,
+        _ => ActivityText.ActivityWordingQueued
     };
 
     protected override void OnInitialized()
@@ -1003,11 +996,11 @@
     private string ObjectTooltip(ObjectChipKind side, ConfigurationChangePreviewDelta row) => side switch
     {
         ObjectChipKind.ConnectedSystemObject when ObjectConnectedSystemId(row) != row.ConnectedSystemId && _activity?.TargetName is { Length: > 0 } previewedSystemName =>
-            $"Connected System Object in {previewedSystemName}",
+            string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPreviewObjectInSystem, previewedSystemName),
         ObjectChipKind.ConnectedSystemObject when _selectedGroup?.ConnectedSystemName is { Length: > 0 } groupSystemName =>
-            $"Connected System Object in {groupSystemName}",
-        ObjectChipKind.ConnectedSystemObject => "Connected System Object",
-        _ => "Metaverse Object"
+            string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPreviewObjectInSystem, groupSystemName),
+        ObjectChipKind.ConnectedSystemObject => ActivityText.ActivityFieldConnectedSystemObject,
+        _ => ActivityText.ActivityFieldMetaverseObject
     };
 
     /// <summary>
@@ -1093,8 +1086,10 @@
     private static string CandidatesTitle(ConfigurationChangePreviewDelta row)
     {
         var total = row.MatchCandidates.Count == 0 ? 0 : Math.Max(row.MatchCandidates[0].CandidateTotal, row.MatchCandidates.Count);
-        var listed = total > row.MatchCandidates.Count ? $"{row.MatchCandidates.Count} of {total}" : $"{total}";
-        return $"Matches for {row.ObjectDisplayName} ({listed})";
+        var listed = total > row.MatchCandidates.Count
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPreviewCountOf, row.MatchCandidates.Count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture), total.ToString("N0", System.Globalization.CultureInfo.CurrentCulture))
+            : total.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
+        return string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPreviewMatchesFor, row.ObjectDisplayName, listed);
     }
 
     private async Task CancelAsync()
@@ -1211,15 +1206,15 @@
         if (string.IsNullOrEmpty(group.MetaverseObjectTypeName))
             return group.ConnectedSystemName ?? string.Empty;
 
-        return $"{group.MetaverseObjectTypeName} objects{ConfigurationChangePreviewWording.SystemClause(group.TransitionType, group.ConnectedSystemName)}";
+        return string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPreviewObjectsOf, group.MetaverseObjectTypeName, ConfigurationChangePreviewWording.SystemClause(group.TransitionType, group.ConnectedSystemName));
     }
 
     private static IEnumerable<(string Name, ConfigurationChangePreviewStageStatus Status)> Stages(ConfigurationChangePreview preview) =>
     [
-        ("Validation", preview.ValidationStatus),
-        ("Objects affected", preview.ImpactCountsStatus),
-        ("Summary", preview.SummaryStatus),
-        ("Object detail", preview.DeltasStatus)
+        (ActivityText.ActivityPreviewStageValidation, preview.ValidationStatus),
+        (ActivityText.ActivityPreviewStageObjectsAffected, preview.ImpactCountsStatus),
+        (ActivityText.ActivityPreviewStageSummary, preview.SummaryStatus),
+        (ActivityText.ActivityPreviewStageObjectDetail, preview.DeltasStatus)
     ];
 
     /// <summary>
