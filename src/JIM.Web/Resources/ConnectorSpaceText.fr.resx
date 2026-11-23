@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DeletedObjectsPageTitle" xml:space="preserve">
+    <value>Objets supprimés</value>
+  </data>
+  <data name="DeletedInfoLead" xml:space="preserve">
+    <value>Lorsque des objets sont supprimés, leur historique des modifications est conservé ici à des fins d’audit et de conformité. Cliquez sur</value>
+  </data>
+  <data name="DeletedInfoTrail" xml:space="preserve">
+    <value>pour afficher l’historique complet des modifications apportées à un objet avant sa suppression.</value>
+  </data>
+  <data name="DeletedView" xml:space="preserve">
+    <value>Afficher</value>
+  </data>
+  <data name="DeletedHomeBreadcrumb" xml:space="preserve">
+    <value>Accueil</value>
+  </data>
+  <data name="DeletedAdministrationBreadcrumb" xml:space="preserve">
+    <value>Administration</value>
+  </data>
+  <data name="DeletedCsoTab" xml:space="preserve">
+    <value>Objets de systèmes connectés supprimés</value>
+  </data>
+  <data name="DeletedMvoTab" xml:space="preserve">
+    <value>Objets Metaverse supprimés</value>
+  </data>
+  <data name="DeletedFromDate" xml:space="preserve">
+    <value>Date de début</value>
+  </data>
+  <data name="DeletedToDate" xml:space="preserve">
+    <value>Date de fin</value>
+  </data>
+  <data name="DeletedConnectedSystem" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="DeletedObjectType" xml:space="preserve">
+    <value>Type d’objet</value>
+  </data>
+  <data name="DeletedCsoSingular" xml:space="preserve">
+    <value>Objet de système connecté supprimé</value>
+  </data>
+  <data name="DeletedCsoPlural" xml:space="preserve">
+    <value>Objets de systèmes connectés supprimés</value>
+  </data>
+  <data name="DeletedMvoSingular" xml:space="preserve">
+    <value>Objet Metaverse supprimé</value>
+  </data>
+  <data name="DeletedMvoPlural" xml:space="preserve">
+    <value>Objets Metaverse supprimés</value>
+  </data>
+  <data name="DeletedSearchExternalId" xml:space="preserve">
+    <value>Rechercher par ID externe</value>
+  </data>
+  <data name="DeletedSearchDisplayName" xml:space="preserve">
+    <value>Rechercher par nom d’affichage</value>
+  </data>
+  <data name="DeletedColumnExternalId" xml:space="preserve">
+    <value>ID externe</value>
+  </data>
+  <data name="DeletedColumnDisplayName" xml:space="preserve">
+    <value>Nom d’affichage</value>
+  </data>
+  <data name="DeletedColumnDeleted" xml:space="preserve">
+    <value>Supprimé</value>
+  </data>
+  <data name="DeletedColumnDeletedBy" xml:space="preserve">
+    <value>Supprimé par</value>
+  </data>
+  <data name="DeletedNotAvailable" xml:space="preserve">
+    <value>S/O</value>
+  </data>
+  <data name="DeletedConnectedSystemIdFallback" xml:space="preserve">
+    <value>ID : {0}</value>
+  </data>
+  <data name="DeletedCsoNoSearchMatch" xml:space="preserve">
+    <value>Aucun objet de système connecté supprimé ne correspond à « {0} »</value>
+  </data>
+  <data name="DeletedCsoNoQueryMatch" xml:space="preserve">
+    <value>Aucun objet de système connecté supprimé ne correspond à votre requête</value>
+  </data>
+  <data name="DeletedCsoNoneRecorded" xml:space="preserve">
+    <value>Aucune suppression d’objet de système connecté n’a encore été enregistrée</value>
+  </data>
+  <data name="DeletedCsoNoneRecordedHint" xml:space="preserve">
+    <value>Lorsque des objets de systèmes connectés sont supprimés, leur historique des modifications est conservé ici.</value>
+  </data>
+  <data name="DeletedMvoNoSearchMatch" xml:space="preserve">
+    <value>Aucun objet Metaverse supprimé ne correspond à « {0} »</value>
+  </data>
+  <data name="DeletedMvoNoQueryMatch" xml:space="preserve">
+    <value>Aucun objet Metaverse supprimé ne correspond à votre requête</value>
+  </data>
+  <data name="DeletedMvoNoneRecorded" xml:space="preserve">
+    <value>Aucune suppression d’objet Metaverse n’a encore été enregistrée</value>
+  </data>
+  <data name="DeletedMvoNoneRecordedHint" xml:space="preserve">
+    <value>Lorsque des objets Metaverse sont supprimés, leur historique des modifications est conservé ici.</value>
+  </data>
+  <data name="DeletedAdjustCriteria" xml:space="preserve">
+    <value>Modifiez les critères ci-dessus et relancez la recherche, ou effacez-les pour afficher toutes les suppressions.</value>
+  </data>
+  <data name="DeletedClearCriteria" xml:space="preserve">
+    <value>Effacer les critères</value>
+  </data>
+  <data name="DeletedHistoryTitle" xml:space="preserve">
+    <value>Historique des modifications : {0}</value>
+  </data>
+  <data name="DeletedNoHistory" xml:space="preserve">
+    <value>Aucun historique des modifications disponible</value>
+  </data>
+  <data name="DeletedCsoNoHistoryHint" xml:space="preserve">
+    <value>Aucune modification n’a été enregistrée pour cet objet de système connecté avant sa suppression.</value>
+  </data>
+  <data name="DeletedMvoNoHistoryHint" xml:space="preserve">
+    <value>Aucune modification n’a été enregistrée pour cet objet Metaverse avant sa suppression.</value>
+  </data>
+  <data name="DeletedCsoNotFound" xml:space="preserve">
+    <value>Aucun enregistrement de suppression n’a été trouvé pour cet objet de système connecté.</value>
+  </data>
+  <data name="DeletedMvoNotFound" xml:space="preserve">
+    <value>Aucun enregistrement de suppression n’a été trouvé pour cet objet Metaverse.</value>
+  </data>
+</root>
