@@ -1,0 +1,1797 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="OutcomeCsoAddedLabel" xml:space="preserve">
+    <value>Objekt im verbundenen System hinzugefügt</value>
+  </data>
+  <data name="OutcomeCsoUpdatedLabel" xml:space="preserve">
+    <value>Objekt im verbundenen System aktualisiert</value>
+  </data>
+  <data name="OutcomeCsoDeletedLabel" xml:space="preserve">
+    <value>Objekt im verbundenen System gelöscht</value>
+  </data>
+  <data name="OutcomeCsoDeletedClause" xml:space="preserve">
+    <value>als Objekt im verbundenen System gelöscht werden</value>
+  </data>
+  <data name="OutcomeDeletionDetectedLabel" xml:space="preserve">
+    <value>Löschung erkannt</value>
+  </data>
+  <data name="OutcomeExportConfirmedLabel" xml:space="preserve">
+    <value>Export bestätigt</value>
+  </data>
+  <data name="OutcomeExportFailedLabel" xml:space="preserve">
+    <value>Export fehlgeschlagen</value>
+  </data>
+  <data name="OutcomeProjectedLabel" xml:space="preserve">
+    <value>In das Metaverse projiziert</value>
+  </data>
+  <data name="OutcomeProjectedClause" xml:space="preserve">
+    <value>ein neues Metaverse-Objekt projizieren</value>
+  </data>
+  <data name="OutcomeProjectedSpeculative" xml:space="preserve">
+    <value>Ein Metaverse-Objekt würde projiziert</value>
+  </data>
+  <data name="OutcomeJoinedLabel" xml:space="preserve">
+    <value>Mit Metaverse-Objekt verknüpft</value>
+  </data>
+  <data name="OutcomeJoinedClause" xml:space="preserve">
+    <value>mit einem vorhandenen Metaverse-Objekt verknüpft werden</value>
+  </data>
+  <data name="OutcomeJoinedSpeculative" xml:space="preserve">
+    <value>Würde mit einem vorhandenen Metaverse-Objekt verknüpft</value>
+  </data>
+  <data name="OutcomeAttributeFlowLabel" xml:space="preserve">
+    <value>Attribute übertragen</value>
+  </data>
+  <data name="OutcomeAttributeFlowClause" xml:space="preserve">
+    <value>einen geänderten Wert erhalten</value>
+  </data>
+  <data name="OutcomeAttributeFlowSpeculative" xml:space="preserve">
+    <value>Attribute würden übertragen</value>
+  </data>
+  <data name="OutcomeDisconnectedLabel" xml:space="preserve">
+    <value>Getrennt</value>
+  </data>
+  <data name="OutcomeDisconnectedOutOfScopeLabel" xml:space="preserve">
+    <value>Geltungsbereich verlassen</value>
+  </data>
+  <data name="OutcomeDisconnectedOutOfScopeSpeculative" xml:space="preserve">
+    <value>Würde vom Metaverse-Objekt getrennt</value>
+  </data>
+  <data name="OutcomeOutOfScopeRetainJoinLabel" xml:space="preserve">
+    <value>Geltungsbereich verlassen, Verknüpfung behalten</value>
+  </data>
+  <data name="OutcomeOutOfScopeRetainJoinClause" xml:space="preserve">
+    <value>den Importgeltungsbereich verlassen und die Verknüpfung mit dem Metaverse-Objekt behalten</value>
+  </data>
+  <data name="OutcomeOutOfScopeRetainJoinSpeculative" xml:space="preserve">
+    <value>Würde den Geltungsbereich verlassen und die Verknüpfung mit dem Metaverse-Objekt behalten</value>
+  </data>
+  <data name="OutcomeMvoDeletedLabel" xml:space="preserve">
+    <value>Metaverse-Objekt gelöscht</value>
+  </data>
+  <data name="OutcomeMvoDeletedSpeculative" xml:space="preserve">
+    <value>Das Metaverse-Objekt würde gelöscht</value>
+  </data>
+  <data name="OutcomeMvoDeletionScheduledLabel" xml:space="preserve">
+    <value>Löschung des Metaverse-Objekts geplant</value>
+  </data>
+  <data name="OutcomeMvoDeletionScheduledSpeculative" xml:space="preserve">
+    <value>Die Löschung des Metaverse-Objekts würde geplant</value>
+  </data>
+  <data name="OutcomeMvoDeletionCancelledLabel" xml:space="preserve">
+    <value>Löschung des Metaverse-Objekts abgebrochen</value>
+  </data>
+  <data name="OutcomeDriftCorrectionLabel" xml:space="preserve">
+    <value>Drift korrigiert</value>
+  </data>
+  <data name="OutcomeDriftCorrectionClause" xml:space="preserve">
+    <value>korrigiert werden, wo sie außerhalb von JIM geändert wurden</value>
+  </data>
+  <data name="OutcomeDriftCorrectionSpeculative" xml:space="preserve">
+    <value>Drift würde korrigiert</value>
+  </data>
+  <data name="OutcomeProvisionedLabel" xml:space="preserve">
+    <value>Provisioniert</value>
+  </data>
+  <data name="OutcomeProvisionedClause" xml:space="preserve">
+    <value>in einem verbundenen System als Ziel provisioniert werden</value>
+  </data>
+  <data name="OutcomeProvisionedSpeculative" xml:space="preserve">
+    <value>Ein Objekt im verbundenen System würde provisioniert</value>
+  </data>
+  <data name="OutcomePendingExportCreatedLabel" xml:space="preserve">
+    <value>Export in Warteschlange</value>
+  </data>
+  <data name="OutcomePendingExportCreatedSpeculative" xml:space="preserve">
+    <value>Ein Export würde in die Warteschlange gestellt</value>
+  </data>
+  <data name="OutcomeDeprovisionQueuedLabel" xml:space="preserve">
+    <value>Deprovisionierung in Warteschlange</value>
+  </data>
+  <data name="OutcomeDeprovisionQueuedSpeculative" xml:space="preserve">
+    <value>Würde in seinem verbundenen System (Ziel) deprovisioniert</value>
+  </data>
+  <data name="OutcomeProvisioningCancelledLabel" xml:space="preserve">
+    <value>Provisionierung abgebrochen</value>
+  </data>
+  <data name="OutcomeProvisioningCancelledClause" xml:space="preserve">
+    <value>nicht mehr in einem verbundenen System (Ziel) provisioniert werden</value>
+  </data>
+  <data name="OutcomeProvisioningCancelledSpeculative" xml:space="preserve">
+    <value>Die Provisionierung in seinem verbundenen System (Ziel) würde abgebrochen</value>
+  </data>
+  <data name="OutcomeTargetDisconnectedLabel" xml:space="preserve">
+    <value>Vom Zielsystem getrennt</value>
+  </data>
+  <data name="OutcomeTargetDisconnectedSpeculative" xml:space="preserve">
+    <value>Würde von seinem verbundenen System (Ziel) getrennt</value>
+  </data>
+  <data name="OutcomeHandedToAnotherExportRuleLabel" xml:space="preserve">
+    <value>An andere Regel übergeben</value>
+  </data>
+  <data name="OutcomeHandedToAnotherExportRuleClause" xml:space="preserve">
+    <value>von einer anderen Exportregel übernommen werden</value>
+  </data>
+  <data name="OutcomeHandedToAnotherExportRuleSpeculative" xml:space="preserve">
+    <value>Eine andere Exportregel würde sein Konto übernehmen</value>
+  </data>
+  <data name="OutcomePendingExportChangesWithdrawnLabel" xml:space="preserve">
+    <value>Änderungen des ausstehenden Exports zurückgezogen</value>
+  </data>
+  <data name="OutcomePendingExportChangesWithdrawnClause" xml:space="preserve">
+    <value>Änderungen aus dem ausstehenden Export zurückgezogen bekommen</value>
+  </data>
+  <data name="OutcomePendingExportChangesWithdrawnSpeculative" xml:space="preserve">
+    <value>Für sein verbundenes System (Ziel) in die Warteschlange gestellte Änderungen würden zurückgezogen</value>
+  </data>
+  <data name="OutcomeExportedLabel" xml:space="preserve">
+    <value>Exportiert</value>
+  </data>
+  <data name="OutcomeDeprovisionedLabel" xml:space="preserve">
+    <value>Deprovisioniert</value>
+  </data>
+  <data name="OutcomeAssertedNullLabel" xml:space="preserve">
+    <value>Leerwert behauptet</value>
+  </data>
+  <data name="OutcomeNoContributorLabel" xml:space="preserve">
+    <value>Wert geleert</value>
+  </data>
+  <data name="OutcomeNoContributorClause" xml:space="preserve">
+    <value>einen Wert geleert bekommen</value>
+  </data>
+  <data name="OutcomeNoContributorSpeculative" xml:space="preserve">
+    <value>Wert würde geleert</value>
+  </data>
+  <data name="OutcomeValuesPreservedLabel" xml:space="preserve">
+    <value>Werte beibehalten</value>
+  </data>
+  <data name="OutcomeValuesPreservedSpeculative" xml:space="preserve">
+    <value>Werte würden beibehalten</value>
+  </data>
+  <data name="OutcomeWouldFallInScopeLabel" xml:space="preserve">
+    <value>Gelangt in den Importgeltungsbereich</value>
+  </data>
+  <data name="OutcomeWouldFallInScopeClause" xml:space="preserve">
+    <value>in den Importgeltungsbereich gelangen</value>
+  </data>
+  <data name="OutcomeWouldFallOutOfScopeLabel" xml:space="preserve">
+    <value>Verlässt den Importgeltungsbereich</value>
+  </data>
+  <data name="OutcomeWouldFallOutOfScopeClause" xml:space="preserve">
+    <value>den Importgeltungsbereich verlassen</value>
+  </data>
+  <data name="OutcomeWouldBecomeDeletionEligibleLabel" xml:space="preserve">
+    <value>Kommt zum Löschen infrage</value>
+  </data>
+  <data name="OutcomeWouldBecomeDeletionEligibleClause" xml:space="preserve">
+    <value>zum Löschen infrage kommen</value>
+  </data>
+  <data name="OutcomeWouldCeaseToBeDeletionEligibleLabel" xml:space="preserve">
+    <value>Kommt nicht mehr zum Löschen infrage</value>
+  </data>
+  <data name="OutcomeWouldCeaseToBeDeletionEligibleClause" xml:space="preserve">
+    <value>nicht mehr zum Löschen infrage kommen</value>
+  </data>
+  <data name="OutcomeWouldChangeDeletionEligibleDateLabel" xml:space="preserve">
+    <value>Löschdatum ändert sich</value>
+  </data>
+  <data name="OutcomeWouldChangeDeletionEligibleDateClause" xml:space="preserve">
+    <value>ein geändertes Löschdatum erhalten</value>
+  </data>
+  <data name="OutcomeWouldDisconnectFromMetaverseObjectLabel" xml:space="preserve">
+    <value>Wird vom Metaverse-Objekt getrennt</value>
+  </data>
+  <data name="OutcomeWouldDisconnectFromMetaverseObjectClause" xml:space="preserve">
+    <value>vom Metaverse-Objekt getrennt werden</value>
+  </data>
+  <data name="OutcomeWouldStageDeleteExportLabel" xml:space="preserve">
+    <value>Aus dem Zielsystem entfernt</value>
+  </data>
+  <data name="OutcomeWouldStageDeleteExportClause" xml:space="preserve">
+    <value>aus ihrem verbundenen System (Ziel) entfernt werden</value>
+  </data>
+  <data name="OutcomeWouldStageDisableExportLabel" xml:space="preserve">
+    <value>Im Zielsystem deaktiviert</value>
+  </data>
+  <data name="OutcomeWouldStageDisableExportClause" xml:space="preserve">
+    <value>in ihrem verbundenen System (Ziel) deaktiviert und getrennt werden</value>
+  </data>
+  <data name="OutcomeWouldRemainJoinedLabel" xml:space="preserve">
+    <value>Behält die Verknüpfung mit dem Metaverse-Objekt</value>
+  </data>
+  <data name="OutcomeWouldRemainJoinedClause" xml:space="preserve">
+    <value>die Verknüpfung mit dem Metaverse-Objekt behalten</value>
+  </data>
+  <data name="OutcomeWouldChangeDeprovisionActionLabel" xml:space="preserve">
+    <value>Aktion beim Verlassen des Geltungsbereichs ändert sich</value>
+  </data>
+  <data name="OutcomeWouldChangeDeprovisionActionClause" xml:space="preserve">
+    <value>eine geänderte Aktion beim Verlassen des Geltungsbereichs erhalten</value>
+  </data>
+  <data name="OutcomeWouldFailAttributeFlowLabel" xml:space="preserve">
+    <value>Attributfluss wird nicht ausgewertet</value>
+  </data>
+  <data name="OutcomeWouldFailAttributeFlowClause" xml:space="preserve">
+    <value>einen Attributfluss haben, der nicht ausgewertet würde</value>
+  </data>
+  <data name="OutcomeWouldJoinDifferentMetaverseObjectLabel" xml:space="preserve">
+    <value>Wird mit anderem Metaverse-Objekt verknüpft</value>
+  </data>
+  <data name="OutcomeWouldJoinDifferentMetaverseObjectClause" xml:space="preserve">
+    <value>mit einem anderen Metaverse-Objekt verknüpft werden</value>
+  </data>
+  <data name="OutcomeWouldJoinInsteadOfProjectLabel" xml:space="preserve">
+    <value>Verknüpft statt zu projizieren</value>
+  </data>
+  <data name="OutcomeWouldJoinInsteadOfProjectClause" xml:space="preserve">
+    <value>mit einem vorhandenen Metaverse-Objekt verknüpft werden, statt ein neues zu projizieren</value>
+  </data>
+  <data name="OutcomeWouldProjectInsteadOfJoinLabel" xml:space="preserve">
+    <value>Projiziert statt zu verknüpfen</value>
+  </data>
+  <data name="OutcomeWouldProjectInsteadOfJoinClause" xml:space="preserve">
+    <value>ein neues Metaverse-Objekt projizieren, statt mit einem vorhandenen verknüpft zu werden</value>
+  </data>
+  <data name="OutcomeWouldMatchAmbiguouslyLabel" xml:space="preserve">
+    <value>Entspricht mehr als einem Metaverse-Objekt</value>
+  </data>
+  <data name="OutcomeWouldMatchAmbiguouslyClause" xml:space="preserve">
+    <value>mehr als einem Metaverse-Objekt entsprechen</value>
+  </data>
+  <data name="OutcomeWouldStopProjectingLabel" xml:space="preserve">
+    <value>Erstellt kein Metaverse-Objekt mehr</value>
+  </data>
+  <data name="OutcomeWouldStopProjectingClause" xml:space="preserve">
+    <value>kein Metaverse-Objekt mehr erstellt bekommen</value>
+  </data>
+  <data name="OutcomeWouldStopProvisioningLabel" xml:space="preserve">
+    <value>Erstellt kein Objekt im verbundenen System mehr</value>
+  </data>
+  <data name="OutcomeWouldStopProvisioningClause" xml:space="preserve">
+    <value>kein Objekt im verbundenen System mehr erstellt bekommen</value>
+  </data>
+  <data name="OutcomeWouldStopCorrectingDriftLabel" xml:space="preserve">
+    <value>Darf von JIM abweichen</value>
+  </data>
+  <data name="OutcomeWouldStopCorrectingDriftClause" xml:space="preserve">
+    <value>von dem abweichen dürfen, was JIM hält</value>
+  </data>
+  <data name="OutcomeWouldStopBeingImportedLabel" xml:space="preserve">
+    <value>Wird nicht mehr importiert, bleibt verknüpft</value>
+  </data>
+  <data name="OutcomeWouldStopBeingImportedClause" xml:space="preserve">
+    <value>nicht mehr importiert werden, aber verknüpft bleiben und die zuletzt importierten Werte behalten</value>
+  </data>
+  <data name="OutcomeWouldResumeBeingImportedLabel" xml:space="preserve">
+    <value>Wieder importiert</value>
+  </data>
+  <data name="OutcomeWouldResumeBeingImportedClause" xml:space="preserve">
+    <value>wieder importiert werden, sodass ihre Werte dem verbundenen System wieder folgen</value>
+  </data>
+  <data name="OutcomeWouldWithdrawContributedValuesLabel" xml:space="preserve">
+    <value>Beigetragene Werte zurückgezogen</value>
+  </data>
+  <data name="OutcomeWouldWithdrawContributedValuesClause" xml:space="preserve">
+    <value>die Werte, die dieses verbundene System beigetragen hat, zurückgezogen bekommen</value>
+  </data>
+  <data name="OutcomeWouldRetainContributedValuesLabel" xml:space="preserve">
+    <value>Beigetragene Werte behalten</value>
+  </data>
+  <data name="OutcomeWouldRetainContributedValuesClause" xml:space="preserve">
+    <value>die Werte behalten, die dieses verbundene System beigetragen hat</value>
+  </data>
+  <data name="OutcomeWouldLeaveExportScopeLabel" xml:space="preserve">
+    <value>Verlässt Exportgeltungsbereich, nichts zu entfernen</value>
+  </data>
+  <data name="OutcomeWouldLeaveExportScopeClause" xml:space="preserve">
+    <value>den Exportgeltungsbereich verlassen, ohne dass im Zielsystem etwas zu entfernen ist</value>
+  </data>
+  <data name="OutcomeWouldEnterExportScopeLabel" xml:space="preserve">
+    <value>Gelangt in den Exportgeltungsbereich</value>
+  </data>
+  <data name="OutcomeWouldEnterExportScopeClause" xml:space="preserve">
+    <value>in den Exportgeltungsbereich gelangen</value>
+  </data>
+  <data name="OutcomeWouldTakeOverContributedValueLabel" xml:space="preserve">
+    <value>Neuer Beitragender, Wert ändert sich</value>
+  </data>
+  <data name="OutcomeWouldTakeOverContributedValueClause" xml:space="preserve">
+    <value>einen Wert durch den eines anderen Beitragenden ersetzt bekommen</value>
+  </data>
+  <data name="OutcomeWouldTakeOverSameValueLabel" xml:space="preserve">
+    <value>Neuer Beitragender, gleicher Wert</value>
+  </data>
+  <data name="OutcomeWouldTakeOverSameValueClause" xml:space="preserve">
+    <value>denselben Wert von einem anderen Beitragenden behalten</value>
+  </data>
+  <data name="OutcomeWouldStageUpdateExportLabel" xml:space="preserve">
+    <value>Im Zielsystem aktualisiert</value>
+  </data>
+  <data name="OutcomeWouldStageUpdateExportClause" xml:space="preserve">
+    <value>in ihrem verbundenen System (Ziel) aktualisiert werden</value>
+  </data>
+  <data name="OutcomeWouldNotChangeLabel" xml:space="preserve">
+    <value>Keine Änderung</value>
+  </data>
+  <data name="OutcomeWouldNotChangeClause" xml:space="preserve">
+    <value>sich nicht ändern</value>
+  </data>
+  <data name="OutcomeWouldFailLabel" xml:space="preserve">
+    <value>Schlägt mit einem Fehler fehl</value>
+  </data>
+  <data name="OutcomeWouldFailClause" xml:space="preserve">
+    <value>mit einem Fehler fehlschlagen</value>
+  </data>
+  <data name="OutcomeGeneratedValueAssignedLabel" xml:space="preserve">
+    <value>Wert generiert</value>
+  </data>
+  <data name="OutcomeGeneratedValueAdoptedLabel" xml:space="preserve">
+    <value>Vorhandener Wert übernommen</value>
+  </data>
+  <data name="OutcomeGeneratedValueRetiredLabel" xml:space="preserve">
+    <value>Wert ausgemustert</value>
+  </data>
+  <data name="OutcomeGeneratedValueRemediatedLabel" xml:space="preserve">
+    <value>Wert korrigiert</value>
+  </data>
+  <data name="OutcomeGeneratedValueWaitingLabel" xml:space="preserve">
+    <value>Wert zurückgehalten</value>
+  </data>
+  <data name="OutcomeGeneratedValueCandidatesSkippedLabel" xml:space="preserve">
+    <value>Kandidat übergangen</value>
+  </data>
+  <data name="OutcomeCsoCreatedLabel" xml:space="preserve">
+    <value>Objekt im verbundenen System erstellt</value>
+  </data>
+  <data name="OutcomeChangesAppliedLabel" xml:space="preserve">
+    <value>Änderungen angewendet</value>
+  </data>
+  <data name="OutcomeCsoDisabledLabel" xml:space="preserve">
+    <value>Objekt im verbundenen System deaktiviert</value>
+  </data>
+  <data name="OperationCreated" xml:space="preserve">
+    <value>Erstellt</value>
+  </data>
+  <data name="OperationJoined" xml:space="preserve">
+    <value>Verknüpft</value>
+  </data>
+  <data name="OperationUpdated" xml:space="preserve">
+    <value>Aktualisiert</value>
+  </data>
+  <data name="OperationDeleted" xml:space="preserve">
+    <value>Gelöscht</value>
+  </data>
+  <data name="OperationDisabled" xml:space="preserve">
+    <value>Deaktiviert</value>
+  </data>
+  <data name="CauseProjected" xml:space="preserve">
+    <value>{0} wurde in das Metaverse projiziert</value>
+  </data>
+  <data name="CauseJoined" xml:space="preserve">
+    <value>{0} wurde mit diesem vorhandenen Metaverse-Objekt verknüpft</value>
+  </data>
+  <data name="CauseCreatedDirectly" xml:space="preserve">
+    <value>Dieses Metaverse-Objekt wurde direkt in JIM erstellt</value>
+  </data>
+  <data name="CauseSourceSystemFallback" xml:space="preserve">
+    <value>das Quellsystem</value>
+  </data>
+  <data name="CauseImportedChanged" xml:space="preserve">
+    <value>{0} wurde aus {1} mit geänderten Attributen importiert</value>
+  </data>
+  <data name="CauseImportDeleted" xml:space="preserve">
+    <value>Das Objekt im verbundenen System von {0} wurde aus {1} gelöscht</value>
+  </data>
+  <data name="CauseImportAdded" xml:space="preserve">
+    <value>{0} wurde als neues Objekt im verbundenen System in {1} importiert</value>
+  </data>
+  <data name="CauseExportConfirmedOne" xml:space="preserve">
+    <value>{0} wurde exportiert, und dieser Import bestätigt es</value>
+  </data>
+  <data name="CauseExportConfirmedOther" xml:space="preserve">
+    <value>{0} wurden exportiert, und dieser Import bestätigt sie</value>
+  </data>
+  <data name="CauseProvisionedTo" xml:space="preserve">
+    <value>{0} wurde in {1} provisioniert, daher hat dieser Lauf das Objekt im verbundenen System erstellt</value>
+  </data>
+  <data name="CauseProvisioned" xml:space="preserve">
+    <value>{0} wurde provisioniert, daher hat dieser Lauf das Objekt im verbundenen System erstellt</value>
+  </data>
+  <data name="CauseMetaverseChangedSeveralRuns" xml:space="preserve">
+    <value>Das Metaverse-Objekt von {0} hat sich in {1} Synchronisierungen geändert, daher hat dieser Lauf die Änderungen auf das Objekt im verbundenen System angewendet</value>
+  </data>
+  <data name="CauseMetaverseChanged" xml:space="preserve">
+    <value>Das Metaverse-Objekt von {0} hat sich geändert, daher hat dieser Lauf die Änderungen auf das Objekt im verbundenen System angewendet</value>
+  </data>
+  <data name="CauseMetaverseDeleted" xml:space="preserve">
+    <value>Das Metaverse-Objekt {0} wurde gelöscht, daher hat dieser Lauf das Objekt im verbundenen System gelöscht</value>
+  </data>
+  <data name="CauseDeprovisionedDisabled" xml:space="preserve">
+    <value>{0} wurde deprovisioniert, daher hat dieser Lauf das Objekt im verbundenen System deaktiviert</value>
+  </data>
+  <data name="CauseStagedBySeveralRuns" xml:space="preserve">
+    <value>{0} Synchronisierungen von {1} haben diese Änderung bereitgestellt, und dieser Lauf hat sie exportiert</value>
+  </data>
+  <data name="CauseStagedByOneRun" xml:space="preserve">
+    <value>Eine Synchronisierung von {0} hat diese Änderung bereitgestellt, und dieser Lauf hat sie exportiert</value>
+  </data>
+  <data name="CauseDeprovisionQueuedOne" xml:space="preserve">
+    <value>{0} wurde gelöscht, daher wurde diese Deprovisionierung in die Warteschlange gestellt</value>
+  </data>
+  <data name="CauseDeprovisionQueuedOther" xml:space="preserve">
+    <value>{0} wurden gelöscht, daher wurde diese Deprovisionierung in die Warteschlange gestellt</value>
+  </data>
+  <data name="CauseGraceDeletionOne" xml:space="preserve">
+    <value>{0} wurde zum Löschen vorgemerkt, und dieser Lauf hat es nach Ablauf der Karenzzeit gelöscht</value>
+  </data>
+  <data name="CauseGraceDeletionOther" xml:space="preserve">
+    <value>{0} wurden zum Löschen vorgemerkt, und dieser Lauf hat sie nach Ablauf der Karenzzeit gelöscht</value>
+  </data>
+  <data name="CauseRejectingSystemFallback" xml:space="preserve">
+    <value>Das verbundene System (Ziel)</value>
+  </data>
+  <data name="CauseRejectedAlreadyInUse" xml:space="preserve">
+    <value>{0} hat den generierten Wert als bereits verwendet abgelehnt, daher hat JIM einen neuen generiert</value>
+  </data>
+  <data name="CauseRejectedAnchoredElsewhere" xml:space="preserve">
+    <value>{0} hat den generierten Wert abgelehnt, aber ein anderes verbundenes System hält ihn bereits, daher braucht das Objekt eine Entscheidung</value>
+  </data>
+  <data name="CauseRejectedRenameAuthorised" xml:space="preserve">
+    <value>{0} hat den generierten Wert abgelehnt und ein Administrator hat die Umbenennung erlaubt, daher hat JIM einen neuen generiert</value>
+  </data>
+  <data name="CauseRejectedRevised" xml:space="preserve">
+    <value>{0} hat den generierten Wert abgelehnt, daher hat JIM ihn überarbeitet</value>
+  </data>
+  <data name="ReasonProvisioningDecision" xml:space="preserve">
+    <value>hat die Provisionierungsentscheidung getroffen</value>
+  </data>
+  <data name="ReasonLastConnectionHeld" xml:space="preserve">
+    <value>hielt die letzte verbleibende Verbindung, daher hat die Löschregel sie gelöscht</value>
+  </data>
+  <data name="ReasonLastConnectionHeldNoSources" xml:space="preserve">
+    <value>hielt die letzte verbleibende Verbindung, daher hat die Löschregel sie gelöscht (es waren keine maßgeblichen Quellen konfiguriert)</value>
+  </data>
+  <data name="ReasonLastAuthoritativeDisconnected" xml:space="preserve">
+    <value>war die letzte maßgebliche Quelle, die getrennt wurde, daher hat die Löschregel sie gelöscht</value>
+  </data>
+  <data name="ReasonAuthoritativeDisconnected" xml:space="preserve">
+    <value>war eine maßgebliche Quelle und wurde getrennt, daher hat die Löschregel sie gelöscht</value>
+  </data>
+  <data name="ReasonLastConnectionRemoved" xml:space="preserve">
+    <value>Die letzte verbleibende Verbindung wurde entfernt, daher hat die Löschregel sie gelöscht</value>
+  </data>
+  <data name="ReasonLastConnectionRemovedNoSources" xml:space="preserve">
+    <value>Die letzte verbleibende Verbindung wurde entfernt, daher hat die Löschregel sie gelöscht (es waren keine maßgeblichen Quellen konfiguriert)</value>
+  </data>
+  <data name="ReasonLastAuthoritativeSourceDisconnected" xml:space="preserve">
+    <value>Die letzte maßgebliche Quelle wurde getrennt, daher hat die Löschregel sie gelöscht</value>
+  </data>
+  <data name="ReasonAuthoritativeSourceDisconnected" xml:space="preserve">
+    <value>Eine maßgebliche Quelle wurde getrennt, daher hat die Löschregel sie gelöscht</value>
+  </data>
+  <data name="EndingNoFurtherCauses" xml:space="preserve">
+    <value>Keine früheren Ursachen erfasst</value>
+  </data>
+  <data name="EndingCauseNotRetained" xml:space="preserve">
+    <value>Die Ursache hierfür wird nicht mehr aufbewahrt</value>
+  </data>
+  <data name="EndingDepthLimitReached" xml:space="preserve">
+    <value>Jenseits dieses Punkts gibt es weitere Ursachen</value>
+  </data>
+  <data name="MoreCausesSuffixOne" xml:space="preserve">
+    <value>, und {0} weitere Ursache</value>
+  </data>
+  <data name="MoreCausesSuffixOther" xml:space="preserve">
+    <value>, und {0} weitere Ursachen</value>
+  </data>
+  <data name="ShowMembersLabel" xml:space="preserve">
+    <value>Die {0} {1} anzeigen</value>
+  </data>
+  <data name="HideMembersLabel" xml:space="preserve">
+    <value>Die {0} {1} ausblenden</value>
+  </data>
+  <data name="MembersNounSynchronisations" xml:space="preserve">
+    <value>Synchronisierungen</value>
+  </data>
+  <data name="MembersNounObjectOne" xml:space="preserve">
+    <value>Objekt</value>
+  </data>
+  <data name="MembersNounObjectOther" xml:space="preserve">
+    <value>Objekte</value>
+  </data>
+  <data name="CauseReferencesRemovedOne" xml:space="preserve">
+    <value>{0} wurde gelöscht, daher wurden die Verweise darauf entfernt</value>
+  </data>
+  <data name="CauseReferencesRemovedOther" xml:space="preserve">
+    <value>{0} wurden gelöscht, daher wurden die Verweise darauf entfernt</value>
+  </data>
+  <data name="CauseReferencesRemovedFromOne" xml:space="preserve">
+    <value>{0} wurde gelöscht, daher wurden die Verweise darauf aus {1} entfernt</value>
+  </data>
+  <data name="CauseReferencesRemovedFromOther" xml:space="preserve">
+    <value>{0} wurden gelöscht, daher wurden die Verweise darauf aus {1} entfernt</value>
+  </data>
+  <data name="CauseAttributeRemovedOne" xml:space="preserve">
+    <value>{0} wurde gelöscht, daher wurde es entfernt aus dem Attribut</value>
+  </data>
+  <data name="CauseAttributeRemovedOther" xml:space="preserve">
+    <value>{0} wurden gelöscht, daher wurden sie entfernt aus dem Attribut</value>
+  </data>
+  <data name="CauseAttributeRemovedOwnerOne" xml:space="preserve">
+    <value>{0} wurde gelöscht, daher wurde es entfernt aus dem Attribut von {1}:</value>
+  </data>
+  <data name="CauseAttributeRemovedOwnerOther" xml:space="preserve">
+    <value>{0} wurden gelöscht, daher wurden sie entfernt aus dem Attribut von {1}:</value>
+  </data>
+  <data name="SummarySentence" xml:space="preserve">
+    <value>{0}: {1}.</value>
+  </data>
+  <data name="SummaryListJoin" xml:space="preserve">
+    <value>{0}, {1}</value>
+  </data>
+  <data name="SummaryListJoinLast" xml:space="preserve">
+    <value>{0} und {1}</value>
+  </data>
+  <data name="SummaryRun" xml:space="preserve">
+    <value>Ein Lauf</value>
+  </data>
+  <data name="SummaryRunProfileA" xml:space="preserve">
+    <value>Ein Lauf mit {0}</value>
+  </data>
+  <data name="SummaryRunProfileAn" xml:space="preserve">
+    <value>Ein Lauf mit {0}</value>
+  </data>
+  <data name="SummarySubjectOnSystem" xml:space="preserve">
+    <value>{0} auf {1}</value>
+  </data>
+  <data name="SummaryProcessedMetaverseObject" xml:space="preserve">
+    <value>{0} hat das Metaverse-Objekt verarbeitet</value>
+  </data>
+  <data name="SummaryWouldProcessMetaverseObject" xml:space="preserve">
+    <value>{0} würde das Metaverse-Objekt verarbeiten</value>
+  </data>
+  <data name="SummaryProcessedConnectedSystemObject" xml:space="preserve">
+    <value>{0} hat das Objekt im verbundenen System verarbeitet</value>
+  </data>
+  <data name="SummaryWouldProcessConnectedSystemObject" xml:space="preserve">
+    <value>{0} würde das Objekt im verbundenen System verarbeiten</value>
+  </data>
+  <data name="SummaryProcessedObject" xml:space="preserve">
+    <value>{0} hat {1} verarbeitet</value>
+  </data>
+  <data name="SummaryWouldProcessObject" xml:space="preserve">
+    <value>{0} würde {1} verarbeiten</value>
+  </data>
+  <data name="SummaryProcessedTypedObject" xml:space="preserve">
+    <value>{0} hat {1} {2} verarbeitet</value>
+  </data>
+  <data name="SummaryWouldProcessTypedObject" xml:space="preserve">
+    <value>{0} würde {1} {2} verarbeiten</value>
+  </data>
+  <data name="SummaryHeldForDecision" xml:space="preserve">
+    <value>ein generierter Wert des Objekts wurde als bereits verwendet abgelehnt, daher wird der Export zurückgehalten, bis ein Administrator entscheidet</value>
+  </data>
+  <data name="SummaryGeneratedValueCorrected" xml:space="preserve">
+    <value>ein generierter Wert des Objekts wurde als bereits verwendet abgelehnt, daher hat JIM ihn korrigiert, und die nächste Synchronisierung exportiert den neuen Wert</value>
+  </data>
+  <data name="SummaryNoChangesWereNeeded" xml:space="preserve">
+    <value>es waren keine Änderungen nötig</value>
+  </data>
+  <data name="SummaryNoChangesAreNeeded" xml:space="preserve">
+    <value>es sind keine Änderungen nötig</value>
+  </data>
+  <data name="SummaryWouldProject" xml:space="preserve">
+    <value>ein neues Metaverse-Objekt würde projiziert</value>
+  </data>
+  <data name="SummaryWouldJoinTo" xml:space="preserve">
+    <value>es würde mit dem Metaverse-Objekt {0} verknüpft</value>
+  </data>
+  <data name="SummaryWouldJoinExisting" xml:space="preserve">
+    <value>es würde mit einem vorhandenen Metaverse-Objekt verknüpft</value>
+  </data>
+  <data name="SummaryWouldFlowOne" xml:space="preserve">
+    <value>es würde {0} Attribut erhalten</value>
+  </data>
+  <data name="SummaryWouldFlowOther" xml:space="preserve">
+    <value>es würde {0} Attribute erhalten</value>
+  </data>
+  <data name="SummaryWouldFlowUnknown" xml:space="preserve">
+    <value>es würde Attribute erhalten</value>
+  </data>
+  <data name="SummaryDownstreamSystem" xml:space="preserve">
+    <value>ein nachgelagertes System</value>
+  </data>
+  <data name="SummaryWouldQueueExportOne" xml:space="preserve">
+    <value>ein Export mit {0} Änderung würde für {1} in die Warteschlange gestellt</value>
+  </data>
+  <data name="SummaryWouldQueueExportOther" xml:space="preserve">
+    <value>ein Export mit {0} Änderungen würde für {1} in die Warteschlange gestellt</value>
+  </data>
+  <data name="SummaryWouldQueueExportUnknown" xml:space="preserve">
+    <value>ein Export würde für {0} in die Warteschlange gestellt</value>
+  </data>
+  <data name="SummaryWouldQueueExportsOne" xml:space="preserve">
+    <value>Exporte mit {0} Änderung würden für {1} Systeme in die Warteschlange gestellt</value>
+  </data>
+  <data name="SummaryWouldQueueExportsOther" xml:space="preserve">
+    <value>Exporte mit {0} Änderungen würden für {1} Systeme in die Warteschlange gestellt</value>
+  </data>
+  <data name="SummaryWouldLeaveScopeOfRule" xml:space="preserve">
+    <value>es würde den Geltungsbereich der Synchronisierungsregel {0} verlassen</value>
+  </data>
+  <data name="SummaryLeftScopeOfRule" xml:space="preserve">
+    <value>es hat den Geltungsbereich der Synchronisierungsregel {0} verlassen</value>
+  </data>
+  <data name="SummaryWouldLeaveScopeOfItsRule" xml:space="preserve">
+    <value>es würde den Geltungsbereich seiner Synchronisierungsregel verlassen</value>
+  </data>
+  <data name="SummaryLeftScopeOfItsRule" xml:space="preserve">
+    <value>es hat den Geltungsbereich seiner Synchronisierungsregel verlassen</value>
+  </data>
+  <data name="SummaryWouldKeepJoinTo" xml:space="preserve">
+    <value>und die Verknüpfung mit dem Metaverse-Objekt {0} behalten</value>
+  </data>
+  <data name="SummaryKeptJoinTo" xml:space="preserve">
+    <value>und die Verknüpfung mit dem Metaverse-Objekt {0} behalten</value>
+  </data>
+  <data name="SummaryWouldKeepJoin" xml:space="preserve">
+    <value>und die Verknüpfung mit seinem Metaverse-Objekt behalten</value>
+  </data>
+  <data name="SummaryKeptJoin" xml:space="preserve">
+    <value>und die Verknüpfung mit seinem Metaverse-Objekt behalten</value>
+  </data>
+  <data name="SummaryRetainedJoinJoin" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="SummaryMvoWouldBeDeleted" xml:space="preserve">
+    <value>das Metaverse-Objekt {0} würde gelöscht</value>
+  </data>
+  <data name="SummaryMvoWouldBeDeletedUnnamed" xml:space="preserve">
+    <value>das Metaverse-Objekt würde gelöscht</value>
+  </data>
+  <data name="SummaryMvoWouldBeScheduled" xml:space="preserve">
+    <value>das Metaverse-Objekt {0} würde zum Löschen vorgemerkt</value>
+  </data>
+  <data name="SummaryMvoWouldBeScheduledUnnamed" xml:space="preserve">
+    <value>das Metaverse-Objekt würde zum Löschen vorgemerkt</value>
+  </data>
+  <data name="SummaryWouldQueueDeprovisionOne" xml:space="preserve">
+    <value>die Deprovisionierung würde für {0} System in die Warteschlange gestellt</value>
+  </data>
+  <data name="SummaryWouldQueueDeprovisionOther" xml:space="preserve">
+    <value>die Deprovisionierung würde für {0} Systeme in die Warteschlange gestellt</value>
+  </data>
+  <data name="SummaryWouldCancelProvisioningOne" xml:space="preserve">
+    <value>die Provisionierung würde für {0} System abgebrochen, da noch nichts exportiert wurde</value>
+  </data>
+  <data name="SummaryWouldCancelProvisioningOther" xml:space="preserve">
+    <value>die Provisionierung würde für {0} Systeme abgebrochen, da noch nichts exportiert wurde</value>
+  </data>
+  <data name="SummaryProjected" xml:space="preserve">
+    <value>ein neues Metaverse-Objekt wurde projiziert</value>
+  </data>
+  <data name="SummaryJoinedTo" xml:space="preserve">
+    <value>es wurde mit dem Metaverse-Objekt {0} verknüpft</value>
+  </data>
+  <data name="SummaryJoinedExisting" xml:space="preserve">
+    <value>es wurde mit einem vorhandenen Metaverse-Objekt verknüpft</value>
+  </data>
+  <data name="SummaryDeletionCancelled" xml:space="preserve">
+    <value>seine geplante Löschung wurde abgebrochen</value>
+  </data>
+  <data name="SummaryFlowedOne" xml:space="preserve">
+    <value>es hat {0} Attribut erhalten</value>
+  </data>
+  <data name="SummaryFlowedOther" xml:space="preserve">
+    <value>es hat {0} Attribute erhalten</value>
+  </data>
+  <data name="SummaryFlowedUnknown" xml:space="preserve">
+    <value>es hat Attribute erhalten</value>
+  </data>
+  <data name="SummaryWouldGenerateValue" xml:space="preserve">
+    <value>ein Wert würde generiert</value>
+  </data>
+  <data name="SummaryGeneratedValue" xml:space="preserve">
+    <value>ein Wert wurde generiert</value>
+  </data>
+  <data name="SummaryWouldGenerateAs" xml:space="preserve">
+    <value>{0} würde als {1} generiert</value>
+  </data>
+  <data name="SummaryGeneratedAs" xml:space="preserve">
+    <value>{0} wurde als {1} generiert</value>
+  </data>
+  <data name="SummaryQueuedExportOne" xml:space="preserve">
+    <value>ein Export mit {0} Änderung steht jetzt für {1} in der Warteschlange</value>
+  </data>
+  <data name="SummaryQueuedExportOther" xml:space="preserve">
+    <value>ein Export mit {0} Änderungen steht jetzt für {1} in der Warteschlange</value>
+  </data>
+  <data name="SummaryQueuedExportUnknown" xml:space="preserve">
+    <value>ein Export steht jetzt für {0} in der Warteschlange</value>
+  </data>
+  <data name="SummaryQueuedExportsOne" xml:space="preserve">
+    <value>Exporte mit {0} Änderung stehen jetzt für {1} Systeme in der Warteschlange</value>
+  </data>
+  <data name="SummaryQueuedExportsOther" xml:space="preserve">
+    <value>Exporte mit {0} Änderungen stehen jetzt für {1} Systeme in der Warteschlange</value>
+  </data>
+  <data name="SummaryDisconnectedFromMvo" xml:space="preserve">
+    <value>es wurde vom Metaverse-Objekt {0} getrennt</value>
+  </data>
+  <data name="SummaryDisconnectedFromItsMvo" xml:space="preserve">
+    <value>es wurde von seinem Metaverse-Objekt getrennt</value>
+  </data>
+  <data name="SummaryMvoWasDeleted" xml:space="preserve">
+    <value>das Metaverse-Objekt {0} wurde gelöscht</value>
+  </data>
+  <data name="SummaryMvoWasDeletedUnnamed" xml:space="preserve">
+    <value>das Metaverse-Objekt wurde gelöscht</value>
+  </data>
+  <data name="SummaryMvoWasScheduled" xml:space="preserve">
+    <value>das Metaverse-Objekt {0} wurde zum Löschen vorgemerkt</value>
+  </data>
+  <data name="SummaryMvoWasScheduledUnnamed" xml:space="preserve">
+    <value>das Metaverse-Objekt wurde zum Löschen vorgemerkt</value>
+  </data>
+  <data name="SummaryDeprovisioningQueuedOne" xml:space="preserve">
+    <value>die Deprovisionierung steht jetzt für {0} System in der Warteschlange</value>
+  </data>
+  <data name="SummaryDeprovisioningQueuedOther" xml:space="preserve">
+    <value>die Deprovisionierung steht jetzt für {0} Systeme in der Warteschlange</value>
+  </data>
+  <data name="SummaryProvisioningCancelledOne" xml:space="preserve">
+    <value>die Provisionierung wurde für {0} System abgebrochen, da noch nichts exportiert wurde</value>
+  </data>
+  <data name="SummaryProvisioningCancelledOther" xml:space="preserve">
+    <value>die Provisionierung wurde für {0} Systeme abgebrochen, da noch nichts exportiert wurde</value>
+  </data>
+  <data name="SummaryExportFailedOne" xml:space="preserve">
+    <value>ein Export mit {0} Änderung wurde versucht, ist aber fehlgeschlagen und erfordert Aufmerksamkeit</value>
+  </data>
+  <data name="SummaryExportFailedOther" xml:space="preserve">
+    <value>ein Export mit {0} Änderungen wurde versucht, ist aber fehlgeschlagen und erfordert Aufmerksamkeit</value>
+  </data>
+  <data name="SummaryExportFailedUnknown" xml:space="preserve">
+    <value>ein Export wurde versucht, ist aber fehlgeschlagen und erfordert Aufmerksamkeit</value>
+  </data>
+  <data name="SummaryExportedOne" xml:space="preserve">
+    <value>{0} Änderung wurde exportiert</value>
+  </data>
+  <data name="SummaryExportedOther" xml:space="preserve">
+    <value>{0} Änderungen wurden exportiert</value>
+  </data>
+  <data name="SummaryExportedUnknown" xml:space="preserve">
+    <value>Änderungen wurden exportiert</value>
+  </data>
+  <data name="SummaryConfirmedOne" xml:space="preserve">
+    <value>{0} exportierte Änderung wurde bestätigt</value>
+  </data>
+  <data name="SummaryConfirmedOther" xml:space="preserve">
+    <value>{0} exportierte Änderungen wurden bestätigt</value>
+  </data>
+  <data name="SummaryConfirmedUnknown" xml:space="preserve">
+    <value>der Export wurde bestätigt</value>
+  </data>
+  <data name="SummaryWithdrawnOneSpec" xml:space="preserve">
+    <value>{0} für {1} in die Warteschlange gestellte Änderung würde zurückgezogen, da es den Wert bereits enthält</value>
+  </data>
+  <data name="SummaryWithdrawnOtherSpec" xml:space="preserve">
+    <value>{0} für {1} in die Warteschlange gestellte Änderungen würden zurückgezogen, da es die Werte bereits enthält</value>
+  </data>
+  <data name="SummaryWithdrawnOne" xml:space="preserve">
+    <value>{0} für {1} in die Warteschlange gestellte Änderung wurde zurückgezogen, da es den Wert bereits enthält</value>
+  </data>
+  <data name="SummaryWithdrawnOther" xml:space="preserve">
+    <value>{0} für {1} in die Warteschlange gestellte Änderungen wurden zurückgezogen, da es die Werte bereits enthält</value>
+  </data>
+  <data name="SummaryWithdrawnSystemsOneSpec" xml:space="preserve">
+    <value>{0} für {1} Systeme in die Warteschlange gestellte Änderung würde zurückgezogen, da sie die Werte bereits enthalten</value>
+  </data>
+  <data name="SummaryWithdrawnSystemsOtherSpec" xml:space="preserve">
+    <value>{0} für {1} Systeme in die Warteschlange gestellte Änderungen würden zurückgezogen, da sie die Werte bereits enthalten</value>
+  </data>
+  <data name="SummaryWithdrawnSystemsOne" xml:space="preserve">
+    <value>{0} für {1} Systeme in die Warteschlange gestellte Änderung wurde zurückgezogen, da sie die Werte bereits enthalten</value>
+  </data>
+  <data name="SummaryWithdrawnSystemsOther" xml:space="preserve">
+    <value>{0} für {1} Systeme in die Warteschlange gestellte Änderungen wurden zurückgezogen, da sie die Werte bereits enthalten</value>
+  </data>
+  <data name="PillNeedsDecision" xml:space="preserve">
+    <value>Entscheidung erforderlich</value>
+  </data>
+  <data name="PillAttributesFlowedOne" xml:space="preserve">
+    <value>{0} Attribut übertragen</value>
+  </data>
+  <data name="PillAttributesFlowedOther" xml:space="preserve">
+    <value>{0} Attribute übertragen</value>
+  </data>
+  <data name="PillProvisionedSystemsOne" xml:space="preserve">
+    <value>Provisioniert · {0} System</value>
+  </data>
+  <data name="PillProvisionedSystemsOther" xml:space="preserve">
+    <value>Provisioniert · {0} Systeme</value>
+  </data>
+  <data name="PillDeprovisionQueuedSystemsOne" xml:space="preserve">
+    <value>Deprovisionierung in Warteschlange · {0} System</value>
+  </data>
+  <data name="PillDeprovisionQueuedSystemsOther" xml:space="preserve">
+    <value>Deprovisionierung in Warteschlange · {0} Systeme</value>
+  </data>
+  <data name="PillDeprovisioningSystemsOne" xml:space="preserve">
+    <value>Deprovisionierung · {0} System</value>
+  </data>
+  <data name="PillDeprovisioningSystemsOther" xml:space="preserve">
+    <value>Deprovisionierung · {0} Systeme</value>
+  </data>
+  <data name="PillProvisioningCancelledSystemsOne" xml:space="preserve">
+    <value>Provisionierung abgebrochen · {0} System</value>
+  </data>
+  <data name="PillProvisioningCancelledSystemsOther" xml:space="preserve">
+    <value>Provisionierung abgebrochen · {0} Systeme</value>
+  </data>
+  <data name="PillTargetDisconnectedSystemsOne" xml:space="preserve">
+    <value>Vom Zielsystem getrennt · {0} System</value>
+  </data>
+  <data name="PillTargetDisconnectedSystemsOther" xml:space="preserve">
+    <value>Vom Zielsystem getrennt · {0} Systeme</value>
+  </data>
+  <data name="PillExportQueuedChangesOne" xml:space="preserve">
+    <value>Export in Warteschlange · {0} Änderung</value>
+  </data>
+  <data name="PillExportQueuedChangesOther" xml:space="preserve">
+    <value>Export in Warteschlange · {0} Änderungen</value>
+  </data>
+  <data name="PillExportedChangesOne" xml:space="preserve">
+    <value>Exportiert · {0} Änderung</value>
+  </data>
+  <data name="PillExportedChangesOther" xml:space="preserve">
+    <value>Exportiert · {0} Änderungen</value>
+  </data>
+  <data name="PillOutOfScope" xml:space="preserve">
+    <value>Außerhalb des Geltungsbereichs</value>
+  </data>
+  <data name="PillDeletionScheduled" xml:space="preserve">
+    <value>Löschung geplant</value>
+  </data>
+  <data name="LineageDeletionScheduledTitle" xml:space="preserve">
+    <value>Löschung geplant</value>
+  </data>
+  <data name="LineageDeletionScheduledText" xml:space="preserve">
+    <value>Seine Karenzzeit läuft. Es wird nach Ablauf der Karenzzeit gelöscht, sofern es nicht zuvor erneut mit einem Objekt im verbundenen System verknüpft wird.</value>
+  </data>
+  <data name="LineageFurtherThanShownTitle" xml:space="preserve">
+    <value>Dies reicht weiter als angezeigt</value>
+  </data>
+  <data name="LineageWalkStoppedAtItem" xml:space="preserve">
+    <value>Die Verfolgung endete beim obigen Element. Machen Sie dort weiter, um zu sehen, was folgte.</value>
+  </data>
+  <data name="LineageWalkStoppedAtItems" xml:space="preserve">
+    <value>Die Verfolgung endete bei den obigen Elementen. Machen Sie bei einem beliebigen davon über seinen eigenen Link weiter.</value>
+  </data>
+  <data name="LineageConnectedSystemObjectFallback" xml:space="preserve">
+    <value>Objekt im verbundenen System</value>
+  </data>
+  <data name="LineageConnectedSystemObjectsFallback" xml:space="preserve">
+    <value>Objekte in verbundenen Systemen</value>
+  </data>
+  <data name="LineageNothingMoreFollows" xml:space="preserve">
+    <value>Zu diesem Objekt im verbundenen System folgt nichts weiter</value>
+  </data>
+  <data name="LineageItsConnectedSystem" xml:space="preserve">
+    <value>sein verbundenes System</value>
+  </data>
+  <data name="LineageStaysInSystem" xml:space="preserve">
+    <value>Es bleibt in {0}, und JIM verwaltet es nicht mehr.</value>
+  </data>
+  <data name="LineageWaitingForSynchronisationTitle" xml:space="preserve">
+    <value>Warten auf die nächste Synchronisierung von {0}</value>
+  </data>
+  <data name="LineageWaitingForSynchronisationText" xml:space="preserve">
+    <value>Seit diesem Import wurde keine Synchronisierung von {0} ausgeführt, daher hat noch nichts auf die Änderung reagiert.</value>
+  </data>
+  <data name="LineageWaitingForSynchronisationPill" xml:space="preserve">
+    <value>Wartet auf eine Synchronisierung</value>
+  </data>
+  <data name="LineageNothingFollowed" xml:space="preserve">
+    <value>Nichts folgte</value>
+  </data>
+  <data name="LineageNothingFollowedText" xml:space="preserve">
+    <value>Seit diesem Import wurde eine Synchronisierung von {0} ausgeführt, die dadurch nichts geändert hat.</value>
+  </data>
+  <data name="LineageNeedsAttention" xml:space="preserve">
+    <value>Erfordert Aufmerksamkeit</value>
+  </data>
+  <data name="LineageNeedsAttentionTextOne" xml:space="preserve">
+    <value>{0} ausstehender Export wurde angehalten, und es geschieht nichts weiter, bis jemand eingreift.</value>
+  </data>
+  <data name="LineageNeedsAttentionTextOther" xml:space="preserve">
+    <value>{0} ausstehende Exporte wurden angehalten, und es geschieht nichts weiter, bis jemand eingreift.</value>
+  </data>
+  <data name="LineageWaitingForRetryTitle" xml:space="preserve">
+    <value>Warten auf eine Wiederholung</value>
+  </data>
+  <data name="LineageWaitingForRetryTextOne" xml:space="preserve">
+    <value>{0} ausstehender Export wird beim nächsten Export von {1} wiederholt.</value>
+  </data>
+  <data name="LineageWaitingForRetryTextOther" xml:space="preserve">
+    <value>{0} ausstehende Exporte werden beim nächsten Export von {1} wiederholt.</value>
+  </data>
+  <data name="LineageRetryPending" xml:space="preserve">
+    <value>Wiederholung ausstehend</value>
+  </data>
+  <data name="LineageWaitingForImportTitle" xml:space="preserve">
+    <value>Warten auf den nächsten Import von {0}</value>
+  </data>
+  <data name="LineageWaitingForImportText" xml:space="preserve">
+    <value>Exportiert; es wird auf einen Import gewartet, der bestätigt, dass die Änderung angekommen ist.</value>
+  </data>
+  <data name="LineageWaitingForImportPill" xml:space="preserve">
+    <value>Wartet auf einen bestätigenden Import</value>
+  </data>
+  <data name="LineageWaitingForExportTitle" xml:space="preserve">
+    <value>Warten auf den nächsten Export von {0}</value>
+  </data>
+  <data name="LineageQueuedAsPendingExport" xml:space="preserve">
+    <value>Die Änderung steht als ausstehender Export in der Warteschlange.</value>
+  </data>
+  <data name="LineageQueuedPendingExports" xml:space="preserve">
+    <value>{0} ausstehende Exporte stehen in der Warteschlange.</value>
+  </data>
+  <data name="LineageWaitingForExportPill" xml:space="preserve">
+    <value>Wartet auf einen Export</value>
+  </data>
+  <data name="LineageViewPendingExport" xml:space="preserve">
+    <value>Ausstehenden Export anzeigen</value>
+  </data>
+  <data name="LineageViewPendingExports" xml:space="preserve">
+    <value>Ausstehende Exporte anzeigen</value>
+  </data>
+  <data name="LineageLaterRunActedOnObject" xml:space="preserve">
+    <value>Ein späterer Lauf hat auf dieses Objekt gewirkt</value>
+  </data>
+  <data name="LineageLaterRunActedOnObjects" xml:space="preserve">
+    <value>Ein späterer Lauf hat auf {0} {1} gewirkt</value>
+  </data>
+  <data name="LineageItemsNoLongerRetained" xml:space="preserve">
+    <value>Die von ihm erfassten Elemente werden nicht mehr aufbewahrt.</value>
+  </data>
+  <data name="LineageBranchesWaitingOne" xml:space="preserve">
+    <value>{0} Zweig wartet auf {1}.</value>
+  </data>
+  <data name="LineageBranchesWaitingOther" xml:space="preserve">
+    <value>{0} Zweige warten auf {1}.</value>
+  </data>
+  <data name="LineageBranchNeedsAttentionOne" xml:space="preserve">
+    <value>{0} Zweig erfordert Aufmerksamkeit.</value>
+  </data>
+  <data name="LineageBranchNeedsAttentionOther" xml:space="preserve">
+    <value>{0} Zweige erfordern Aufmerksamkeit.</value>
+  </data>
+  <data name="LineageNothingFollowedFromRun" xml:space="preserve">
+    <value>Aus diesem Lauf folgte nichts.</value>
+  </data>
+  <data name="LineageEveryBranchEnded" xml:space="preserve">
+    <value>Jeder Zweig ist bis zu seinem Ende durchlaufen.</value>
+  </data>
+  <data name="LineagePillWithCount" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
+  <data name="LineageWaitingOnSynchronisation" xml:space="preserve">
+    <value>eine Synchronisierung von {0}</value>
+  </data>
+  <data name="LineageWaitingOnExport" xml:space="preserve">
+    <value>einen Export von {0}</value>
+  </data>
+  <data name="LineageWaitingOnImport" xml:space="preserve">
+    <value>einen Import von {0}</value>
+  </data>
+  <data name="LineageWaitingOnRetry" xml:space="preserve">
+    <value>eine Wiederholung</value>
+  </data>
+  <data name="LineageWaitingOnScheduledDeletion" xml:space="preserve">
+    <value>eine geplante Löschung</value>
+  </data>
+  <data name="LineageWhyReferencedDeletedOne" xml:space="preserve">
+    <value>Das Metaverse-Objekt, auf das es verwies, wurde gelöscht.</value>
+  </data>
+  <data name="LineageWhyReferencedDeletedOther" xml:space="preserve">
+    <value>Das Metaverse-Objekt, auf das sie verwiesen, wurde gelöscht.</value>
+  </data>
+  <data name="LineageWhyMetaverseObjectDeleted" xml:space="preserve">
+    <value>Sein Metaverse-Objekt wurde gelöscht.</value>
+  </data>
+  <data name="LineageWhyGracePeriodEnded" xml:space="preserve">
+    <value>Die von seiner Löschregel gewährte Karenzzeit war abgelaufen.</value>
+  </data>
+  <data name="LineageWhyExportRejected" xml:space="preserve">
+    <value>Der Export seines generierten Werts wurde abgelehnt.</value>
+  </data>
+  <data name="LineageSettingDeprovisioningAction" xml:space="preserve">
+    <value>Deprovisionierungsaktion</value>
+  </data>
+  <data name="LineageSettingDelete" xml:space="preserve">
+    <value>Löschen</value>
+  </data>
+  <data name="LineageSettingDisconnect" xml:space="preserve">
+    <value>Trennen</value>
+  </data>
+  <data name="LineageSettingDeleteText" xml:space="preserve">
+    <value>Diese Regel entfernt die Objekte, die sie deprovisioniert, statt sie bestehen zu lassen.</value>
+  </data>
+  <data name="LineageSettingDisconnectText" xml:space="preserve">
+    <value>Diese Regel lässt die Objekte, die sie deprovisioniert, bestehen, daher wurde nichts exportiert.</value>
+  </data>
+  <data name="LineageSettingDeletionRule" xml:space="preserve">
+    <value>Löschregel</value>
+  </data>
+  <data name="LineageDeletionRuleManual" xml:space="preserve">
+    <value>Manuell</value>
+  </data>
+  <data name="LineageDeletionRuleWhenLastConnectorDisconnected" xml:space="preserve">
+    <value>Wenn der letzte Connector getrennt wurde</value>
+  </data>
+  <data name="LineageDeletionRuleWhenAuthoritativeSourceDisconnected" xml:space="preserve">
+    <value>Wenn die maßgebliche Quelle getrennt wurde</value>
+  </data>
+  <data name="LineageGracePeriodScheduled" xml:space="preserve">
+    <value>Karenzzeit: {0}, daher wurde es zum Löschen vorgemerkt, statt im selben Lauf gelöscht zu werden.</value>
+  </data>
+  <data name="LineageGracePeriodNone" xml:space="preserve">
+    <value>keine</value>
+  </data>
+  <data name="LineageGracePeriodEnded" xml:space="preserve">
+    <value>Gelöscht, nachdem seine Karenzzeit von {0} abgelaufen war.</value>
+  </data>
+  <data name="LineageNoGracePeriod" xml:space="preserve">
+    <value>Keine Karenzzeit, daher wurde es im selben Lauf gelöscht.</value>
+  </data>
+  <data name="LineageDeletedMetaverseObjectFallback" xml:space="preserve">
+    <value>ein gelöschtes Metaverse-Objekt</value>
+  </data>
+  <data name="LineageReferenceFallback" xml:space="preserve">
+    <value>ein Verweis</value>
+  </data>
+  <data name="LineageRemovedFrom" xml:space="preserve">
+    <value>{0} aus {1} entfernt</value>
+  </data>
+  <data name="LineageRemovedFromOnObjects" xml:space="preserve">
+    <value>{0} aus {1} bei {2} {3} entfernt</value>
+  </data>
+  <data name="LineageReferenceRemoved" xml:space="preserve">
+    <value>Verweis entfernt</value>
+  </data>
+  <data name="LineageRemovedFromAttribute" xml:space="preserve">
+    <value>Aus {0} entfernt</value>
+  </data>
+  <data name="LineageConfirmedByNextImport" xml:space="preserve">
+    <value>Durch den nächsten Import bestätigt</value>
+  </data>
+  <data name="LineageConfirmedByNextImportOnObjects" xml:space="preserve">
+    <value>Durch den nächsten Import bestätigt, bei {0} {1}</value>
+  </data>
+  <data name="LineageNounObject" xml:space="preserve">
+    <value>Objekt</value>
+  </data>
+  <data name="LineageNounObjects" xml:space="preserve">
+    <value>Objekte</value>
+  </data>
+  <data name="LineageNounTypeObjects" xml:space="preserve">
+    <value>{0}-Objekte</value>
+  </data>
+  <data name="LineageContinueFromLastItem" xml:space="preserve">
+    <value>Beim letzten Element weitermachen</value>
+  </data>
+  <data name="LineageContinueFrom" xml:space="preserve">
+    <value>Bei {0} weitermachen</value>
+  </data>
+  <data name="LineageRunTypeFullImport" xml:space="preserve">
+    <value>Vollständiger Import</value>
+  </data>
+  <data name="LineageRunTypeDeltaImport" xml:space="preserve">
+    <value>Deltaimport</value>
+  </data>
+  <data name="LineageRunTypeFullSynchronisation" xml:space="preserve">
+    <value>Vollständige Synchronisierung</value>
+  </data>
+  <data name="LineageRunTypeDeltaSynchronisation" xml:space="preserve">
+    <value>Deltasynchronisierung</value>
+  </data>
+  <data name="LineageRunTypeExport" xml:space="preserve">
+    <value>Export</value>
+  </data>
+  <data name="LineageViewActivity" xml:space="preserve">
+    <value>Aktivität anzeigen</value>
+  </data>
+  <data name="LineageUnnamedObject" xml:space="preserve">
+    <value>Unbenanntes Objekt</value>
+  </data>
+  <data name="LineageRunKindSynchronisation" xml:space="preserve">
+    <value>Synchronisierungslauf</value>
+  </data>
+  <data name="LineageRunKindImport" xml:space="preserve">
+    <value>Importlauf</value>
+  </data>
+  <data name="LineageRunKindExport" xml:space="preserve">
+    <value>Exportlauf</value>
+  </data>
+  <data name="LineageEarlierCauses" xml:space="preserve">
+    <value>Frühere Ursachen</value>
+  </data>
+  <data name="LineageMetaverseObjectFallback" xml:space="preserve">
+    <value>Metaverse-Objekt</value>
+  </data>
+  <data name="LineageMetaverseObjectsFallback" xml:space="preserve">
+    <value>Metaverse-Objekte</value>
+  </data>
+  <data name="LineageFollowUpTitleState" xml:space="preserve">
+    <value>{0}, {1}</value>
+  </data>
+  <data name="LineageFollowUpListJoin" xml:space="preserve">
+    <value>{0}; {1}</value>
+  </data>
+  <data name="LineageFollowUpsRunningOne" xml:space="preserve">
+    <value>{0} Folgevorgang läuft noch: {1}.</value>
+  </data>
+  <data name="LineageFollowUpsRunningOther" xml:space="preserve">
+    <value>{0} Folgevorgänge laufen noch: {1}.</value>
+  </data>
+  <data name="EventConnectedSystemFallback" xml:space="preserve">
+    <value>Verbundenes System</value>
+  </data>
+  <data name="EventIdentityFallback" xml:space="preserve">
+    <value>Identität</value>
+  </data>
+  <data name="EventMetaverseObjectNotDeleted" xml:space="preserve">
+    <value>Metaverse-Objekt nicht gelöscht</value>
+  </data>
+  <data name="EventDeletionRuleManual" xml:space="preserve">
+    <value>Die Löschregel dieses Objekttyps ist „Manuell“, daher löscht eine Trennung das Metaverse-Objekt nie.</value>
+  </data>
+  <data name="EventAuthoritativeSourceStillConnected" xml:space="preserve">
+    <value>Eine maßgebliche Quelle ist noch verbunden ({0}), und dieser Objekttyp wird nur gelöscht, wenn alle getrennt sind.</value>
+  </data>
+  <data name="EventDeletionRuleDeclined" xml:space="preserve">
+    <value>Die damals geltende Löschregel wurde ausgewertet und hat das Metaverse-Objekt nicht gelöscht.</value>
+  </data>
+  <data name="EventWouldMatchOn" xml:space="preserve">
+    <value>Würde anhand von „{0}“ abgeglichen</value>
+  </data>
+  <data name="EventMatchedOn" xml:space="preserve">
+    <value>Anhand von „{0}“ abgeglichen</value>
+  </data>
+  <data name="EventMatchedWhere" xml:space="preserve">
+    <value>{0}, wobei {1}</value>
+  </data>
+  <data name="EventBadgeDestructive" xml:space="preserve">
+    <value>Destruktiv</value>
+  </data>
+  <data name="EventTypeAndId" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="EventPendingExportLink" xml:space="preserve">
+    <value>Ausstehender Export</value>
+  </data>
+  <data name="EventPendingExportsLink" xml:space="preserve">
+    <value>Ausstehende Exporte</value>
+  </data>
+  <data name="EventViewDeletionRecord" xml:space="preserve">
+    <value>Löschdatensatz anzeigen</value>
+  </data>
+  <data name="EventSynchronisationRuleFallback" xml:space="preserve">
+    <value>Synchronisierungsregel</value>
+  </data>
+  <data name="FocusNotRetained" xml:space="preserve">
+    <value>Nicht mehr aufbewahrt</value>
+  </data>
+  <data name="FocusKindConnectedSystemObject" xml:space="preserve">
+    <value>Objekt im verbundenen System</value>
+  </data>
+  <data name="FocusKindMetaverseObject" xml:space="preserve">
+    <value>Metaverse-Objekt</value>
+  </data>
+  <data name="FocusKindExecutionItem" xml:space="preserve">
+    <value>Ausführungselement</value>
+  </data>
+  <data name="FocusItemLabel" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
+  <data name="SourceVerbCsoProcessed" xml:space="preserve">
+    <value>Objekt im verbundenen System verarbeitet</value>
+  </data>
+  <data name="SourceVerbCsoWouldBeProcessed" xml:space="preserve">
+    <value>Objekt im verbundenen System würde verarbeitet</value>
+  </data>
+  <data name="SourceVerbMvoProcessed" xml:space="preserve">
+    <value>Metaverse-Objekt verarbeitet</value>
+  </data>
+  <data name="SourceVerbMvoWouldBeProcessed" xml:space="preserve">
+    <value>Metaverse-Objekt würde verarbeitet</value>
+  </data>
+  <data name="AttributeTypeUnknown" xml:space="preserve">
+    <value>Unbekannt</value>
+  </data>
+  <data name="AttributeTypeText" xml:space="preserve">
+    <value>Text</value>
+  </data>
+  <data name="AttributeTypeNumber" xml:space="preserve">
+    <value>Zahl</value>
+  </data>
+  <data name="AttributeTypeDateTime" xml:space="preserve">
+    <value>Datum und Uhrzeit</value>
+  </data>
+  <data name="AttributeTypeBinary" xml:space="preserve">
+    <value>Binär</value>
+  </data>
+  <data name="AttributeTypeReference" xml:space="preserve">
+    <value>Verweis</value>
+  </data>
+  <data name="AttributeTypeGuid" xml:space="preserve">
+    <value>GUID</value>
+  </data>
+  <data name="AttributeTypeBoolean" xml:space="preserve">
+    <value>Boolesch</value>
+  </data>
+  <data name="AttributeTypeLongNumber" xml:space="preserve">
+    <value>Lange Zahl</value>
+  </data>
+  <data name="AttributePluralityMulti" xml:space="preserve">
+    <value>Mehrwertig</value>
+  </data>
+  <data name="AttributePluralitySingle" xml:space="preserve">
+    <value>Einwertig</value>
+  </data>
+  <data name="AttributeTypeAndPlurality" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
+  <data name="EventTargetIdentifiedBy" xml:space="preserve">
+    <value>Ziel identifiziert durch</value>
+  </data>
+  <data name="EventWithdrawnFromPendingExport" xml:space="preserve">
+    <value>Aus dem ausstehenden Export zurückgezogen</value>
+  </data>
+  <data name="TableViewCurrentHeading" xml:space="preserve">
+    <value>Aktuell</value>
+  </data>
+  <data name="TableViewBeforeHeading" xml:space="preserve">
+    <value>Vorher</value>
+  </data>
+  <data name="TableViewWouldBeHeading" xml:space="preserve">
+    <value>Würde sein</value>
+  </data>
+  <data name="TableViewAfterHeading" xml:space="preserve">
+    <value>Nachher</value>
+  </data>
+  <data name="TableViewNewObjectIn" xml:space="preserve">
+    <value>Neues Objekt in {0}</value>
+  </data>
+  <data name="TableViewNewDownstreamObject" xml:space="preserve">
+    <value>Neues nachgelagertes Objekt</value>
+  </data>
+  <data name="TableViewScheduledForDeletion" xml:space="preserve">
+    <value>Zum Löschen vorgemerkt</value>
+  </data>
+  <data name="TableViewAttributeValue" xml:space="preserve">
+    <value>Attributwert</value>
+  </data>
+  <data name="TableViewObjectBeingSynchronised" xml:space="preserve">
+    <value>Objekt in Synchronisierung</value>
+  </data>
+  <data name="TableChangeKindScope" xml:space="preserve">
+    <value>Geltungsbereich</value>
+  </data>
+  <data name="TableChangeKindProjection" xml:space="preserve">
+    <value>Projektion</value>
+  </data>
+  <data name="TableChangeKindJoin" xml:space="preserve">
+    <value>Verknüpfung</value>
+  </data>
+  <data name="TableChangeKindDisconnect" xml:space="preserve">
+    <value>Trennen</value>
+  </data>
+  <data name="TableChangeKindDelete" xml:space="preserve">
+    <value>Löschen</value>
+  </data>
+  <data name="TableChangeKindDeprovision" xml:space="preserve">
+    <value>Deprovisionieren</value>
+  </data>
+  <data name="TableChangeKindProvision" xml:space="preserve">
+    <value>Provisionieren</value>
+  </data>
+  <data name="TableChangeKindExportQueued" xml:space="preserve">
+    <value>Export in Warteschlange</value>
+  </data>
+  <data name="TableChangeKindProvisioningCancelled" xml:space="preserve">
+    <value>Provisionierung abgebrochen</value>
+  </data>
+  <data name="TableChangeKindQueuedChangesWithdrawn" xml:space="preserve">
+    <value>Änderungen in Warteschlange zurückgezogen</value>
+  </data>
+  <data name="TableChangeKindNoContributor" xml:space="preserve">
+    <value>Kein Beitragender</value>
+  </data>
+  <data name="TableChangeKindValuesPreserved" xml:space="preserve">
+    <value>Werte beibehalten</value>
+  </data>
+  <data name="TableChangeKindAttributeChange" xml:space="preserve">
+    <value>Attributänderung</value>
+  </data>
+  <data name="ItemLinkViewActivityItem" xml:space="preserve">
+    <value>Aktivitätselement anzeigen</value>
+  </data>
+  <data name="ItemLinkExploreFromHere" xml:space="preserve">
+    <value>Von hier aus untersuchen</value>
+  </data>
+  <data name="ObjectTimelineTitle" xml:space="preserve">
+    <value>Was damit geschah</value>
+  </data>
+  <data name="ObjectTimelineCountOf" xml:space="preserve">
+    <value>{0:N0} von {1:N0} Elementen, neueste zuerst</value>
+  </data>
+  <data name="ObjectTimelineCountOne" xml:space="preserve">
+    <value>{0:N0} Element, neuestes zuerst</value>
+  </data>
+  <data name="ObjectTimelineCountOther" xml:space="preserve">
+    <value>{0:N0} Elemente, neueste zuerst</value>
+  </data>
+  <data name="ObjectTimelineWhen" xml:space="preserve">
+    <value>Wann</value>
+  </data>
+  <data name="ObjectTimelineRun" xml:space="preserve">
+    <value>Lauf</value>
+  </data>
+  <data name="ObjectTimelineWhatHappened" xml:space="preserve">
+    <value>Was geschah</value>
+  </data>
+  <data name="ObjectTimelineBecause" xml:space="preserve">
+    <value>Ursache</value>
+  </data>
+  <data name="ObjectTimelineExplore" xml:space="preserve">
+    <value>Untersuchen</value>
+  </data>
+  <data name="ObjectTimelineFollowUp" xml:space="preserve">
+    <value>Folgevorgang</value>
+  </data>
+  <data name="ObjectTimelineEmptyTitle" xml:space="preserve">
+    <value>Für dieses Objekt ist nichts erfasst</value>
+  </data>
+  <data name="ObjectTimelineEmptyText" xml:space="preserve">
+    <value>Es wird kein Ausführungselement dazu aufbewahrt. Möglicherweise hat die Verlaufsaufbewahrung es entfernt, oder es wurde noch nicht verarbeitet.</value>
+  </data>
+  <data name="ObjectTimelineShowMore" xml:space="preserve">
+    <value>{0:N0} weitere anzeigen</value>
+  </data>
+  <data name="ObjectTimelineDeletedConnectedSystemObject" xml:space="preserve">
+    <value>Dieses Objekt wurde gelöscht. Seine Elemente werden über seinen Löschdatensatz und seine externe ID in {0} gefunden, so wie es die Lineage bei einem gelöschten Datensatz tut.</value>
+  </data>
+  <data name="ObjectTimelineDeletedMetaverseObject" xml:space="preserve">
+    <value>Dieses Objekt wurde gelöscht. Seine Elemente werden über die Änderungsdatensätze gefunden, die seine Löschung hinterlassen hat.</value>
+  </data>
+  <data name="ObjectTimelineChangesNotRecorded" xml:space="preserve">
+    <value>Direkt an diesem Metaverse-Objekt vorgenommene Änderungen werden in dieser Bereitstellung nicht erfasst, weil die Änderungsverfolgung ausgeschaltet ist. Diese Zeilen stammen aus den Elementen, die zu den damit verknüpften Objekten in verbundenen Systemen erfasst wurden.</value>
+  </data>
+  <data name="AttributeDetailFilterPlaceholder" xml:space="preserve">
+    <value>Attribute filtern...</value>
+  </data>
+  <data name="AttributeDetailSingular" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="AttributeDetailPlural" xml:space="preserve">
+    <value>Attribute</value>
+  </data>
+  <data name="AttributeDetailFilterByOperation" xml:space="preserve">
+    <value>Nach Vorgang filtern</value>
+  </data>
+  <data name="AttributeDetailAll" xml:space="preserve">
+    <value>Alle</value>
+  </data>
+  <data name="AttributeDetailChange" xml:space="preserve">
+    <value>Änderung</value>
+  </data>
+  <data name="AttributeDetailAttribute" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="AttributeDetailValue" xml:space="preserve">
+    <value>Wert</value>
+  </data>
+  <data name="AttributeOperationSet" xml:space="preserve">
+    <value>Festgelegt</value>
+  </data>
+  <data name="AttributeOperationAdd" xml:space="preserve">
+    <value>Hinzugefügt</value>
+  </data>
+  <data name="AttributeOperationRemove" xml:space="preserve">
+    <value>Entfernt</value>
+  </data>
+  <data name="AttributeDetailNoMatch" xml:space="preserve">
+    <value>Keine Attribute entsprechen „{0}“</value>
+  </data>
+  <data name="AttributeDetailTryDifferent" xml:space="preserve">
+    <value>Versuchen Sie einen anderen Suchbegriff oder setzen Sie die Filter zurück.</value>
+  </data>
+  <data name="AttributeDetailClearFilters" xml:space="preserve">
+    <value>Filter zurücksetzen</value>
+  </data>
+  <data name="AttributeDetailNoneSet" xml:space="preserve">
+    <value>Es wurden keine Attribute festgelegt</value>
+  </data>
+  <data name="AttributeDetailNoneAdd" xml:space="preserve">
+    <value>Es wurden keine Attribute hinzugefügt</value>
+  </data>
+  <data name="AttributeDetailNoneRemove" xml:space="preserve">
+    <value>Es wurden keine Attribute entfernt</value>
+  </data>
+  <data name="AttributeDetailChooseAll" xml:space="preserve">
+    <value>Wählen Sie „Alle“, um jedes von diesem Ereignis berührte Attribut zu sehen.</value>
+  </data>
+  <data name="AttributeDetailNoValues" xml:space="preserve">
+    <value>Dieses Ereignis enthält keine Attributwerte</value>
+  </data>
+  <data name="AttributeDetailNoValuesText" xml:space="preserve">
+    <value>Attributwerte erscheinen hier, wenn eine Änderung sie schreibt oder wenn ein ausstehender Export die Werte enthält, die sein Ziel identifizieren.</value>
+  </data>
+  <data name="EventAttributeCountOne" xml:space="preserve">
+    <value>{0} Attribut</value>
+  </data>
+  <data name="EventAttributeCountOther" xml:space="preserve">
+    <value>{0} Attribute</value>
+  </data>
+  <data name="EventCardShowAttributeDetail" xml:space="preserve">
+    <value>{0}: Attributdetails anzeigen</value>
+  </data>
+  <data name="SourceDetailSubjectMetaverseObject" xml:space="preserve">
+    <value>Metaverse-Objekt</value>
+  </data>
+  <data name="SourceDetailSubjectConnectedSystemObject" xml:space="preserve">
+    <value>Objekt im verbundenen System</value>
+  </data>
+  <data name="SourceDetailWouldPickUpOnSystem" xml:space="preserve">
+    <value>{0} auf {1} würde dieses Objekt aufgreifen.</value>
+  </data>
+  <data name="SourceDetailWouldPickUp" xml:space="preserve">
+    <value>{0} würde dieses Objekt aufgreifen.</value>
+  </data>
+  <data name="SourceDetailRunOnSystemWouldPickUp" xml:space="preserve">
+    <value>Ein Lauf auf {1} würde dieses Objekt aufgreifen.</value>
+  </data>
+  <data name="SourceDetailWouldBePickedUp" xml:space="preserve">
+    <value>Dieses Objekt würde zur Verarbeitung aufgegriffen.</value>
+  </data>
+  <data name="SourceDetailPickedUpOnSystem" xml:space="preserve">
+    <value>{0} auf {1} hat dieses {2} aufgegriffen.</value>
+  </data>
+  <data name="SourceDetailPickedUp" xml:space="preserve">
+    <value>{0} hat dieses {2} aufgegriffen.</value>
+  </data>
+  <data name="SourceDetailRunOnSystemPickedUp" xml:space="preserve">
+    <value>Ein Lauf auf {1} hat dieses {2} aufgegriffen.</value>
+  </data>
+  <data name="SourceDetailWasPickedUp" xml:space="preserve">
+    <value>Dieses {2} wurde zur Verarbeitung aufgegriffen.</value>
+  </data>
+  <data name="PanelNoTracking" xml:space="preserve">
+    <value>Die Ergebnisverfolgung war beim Erfassen dieser Aktivität nicht aktiviert. Nur der Vorgangstyp ist verfügbar.</value>
+  </data>
+  <data name="PanelPreviewPill" xml:space="preserve">
+    <value>Vorschau</value>
+  </data>
+  <data name="PanelPreviewNothingChanged" xml:space="preserve">
+    <value>Es wurde nichts geändert.</value>
+  </data>
+  <data name="PanelPreviewFullSynchronisation" xml:space="preserve">
+    <value>Was eine vollständige Synchronisierung von {0} jetzt mit diesem Objekt tun würde.</value>
+  </data>
+  <data name="PanelPreviewExportRules" xml:space="preserve">
+    <value>Was jede aktivierte Export-Synchronisierungsregel jetzt mit diesem Metaverse-Objekt in seinem aktuellen Zustand tun würde.</value>
+  </data>
+  <data name="PanelClosePreview" xml:space="preserve">
+    <value>Vorschau schließen</value>
+  </data>
+  <data name="PanelOpenInExplorer" xml:space="preserve">
+    <value>Im Explorer öffnen</value>
+  </data>
+  <data name="PanelViewSwitcher" xml:space="preserve">
+    <value>Kausalitätsansicht</value>
+  </data>
+  <data name="PanelCloseDetail" xml:space="preserve">
+    <value>Details schließen</value>
+  </data>
+  <data name="PanelViewLineage" xml:space="preserve">
+    <value>Lineage</value>
+  </data>
+  <data name="PanelViewTable" xml:space="preserve">
+    <value>Tabelle</value>
+  </data>
+  <data name="PanelViewTimeline" xml:space="preserve">
+    <value>Zeitleiste</value>
+  </data>
+  <data name="PanelAttributeChangesOne" xml:space="preserve">
+    <value>{0} Attributänderung</value>
+  </data>
+  <data name="PanelAttributeChangesOther" xml:space="preserve">
+    <value>{0} Attributänderungen</value>
+  </data>
+  <data name="PanelDrawerSubtitle" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
+  <data name="QueuedByTitle" xml:space="preserve">
+    <value>In Warteschlange gestellt von</value>
+  </data>
+  <data name="QueuedByIntro" xml:space="preserve">
+    <value>Die Läufe, die Änderungen in diesem ausstehenden Export bereitgestellt haben, neueste zuerst, und warum jeder es tat.</value>
+  </data>
+  <data name="QueuedByWhatItDid" xml:space="preserve">
+    <value>Was er tat</value>
+  </data>
+  <data name="QueuedBySystemPrefix" xml:space="preserve">
+    <value>{0} · </value>
+  </data>
+  <data name="QueuedByEmptyTitle" xml:space="preserve">
+    <value>Es ist kein Lauf als Bereitsteller dieses ausstehenden Exports erfasst</value>
+  </data>
+  <data name="QueuedByEmptyText" xml:space="preserve">
+    <value>Er wurde in die Warteschlange gestellt, bevor JIM erfasste, welcher Lauf welche Änderung einreiht, oder über einen Pfad, der kein Ausführungselement erfasst. Seine Attributänderungen sind dennoch genau das, was exportiert wird.</value>
+  </data>
+  <data name="QueuedByOmittedNote" xml:space="preserve">
+    <value>Ein ausstehender Export behält die jüngsten Läufe, die ihn bereitgestellt haben, daher sind frühere Läufe möglicherweise nicht aufgeführt.</value>
+  </data>
+  <data name="QueuedByEarlierRunsOne" xml:space="preserve">
+    <value>{0} früherer Lauf hat ihn ebenfalls bereitgestellt; seine Elemente werden nicht mehr aufbewahrt.</value>
+  </data>
+  <data name="QueuedByEarlierRunsOther" xml:space="preserve">
+    <value>{0} frühere Läufe haben ihn ebenfalls bereitgestellt; ihre Elemente werden nicht mehr aufbewahrt.</value>
+  </data>
+  <data name="QueuedByRunsOne" xml:space="preserve">
+    <value>{0} Lauf hat ihn bereitgestellt; seine Elemente werden nicht mehr aufbewahrt.</value>
+  </data>
+  <data name="QueuedByRunsOther" xml:space="preserve">
+    <value>{0} Läufe haben ihn bereitgestellt; ihre Elemente werden nicht mehr aufbewahrt.</value>
+  </data>
+  <data name="FocusHeaderFocusedOn" xml:space="preserve">
+    <value>Fokus auf</value>
+  </data>
+  <data name="FocusHeaderOf" xml:space="preserve">
+    <value>von</value>
+  </data>
+  <data name="FocusHeaderIn" xml:space="preserve">
+    <value>in {0}</value>
+  </data>
+  <data name="FocusHeaderItemNotRetained" xml:space="preserve">
+    <value>Dieses Ausführungselement wird nicht mehr aufbewahrt: Die Verlaufsaufbewahrung hat es entfernt.</value>
+  </data>
+  <data name="FocusHeaderDeletedAgo" xml:space="preserve">
+    <value>gelöscht {0}</value>
+  </data>
+  <data name="FocusHeaderDeleted" xml:space="preserve">
+    <value>gelöscht</value>
+  </data>
+  <data name="FocusHeaderObjectNotRetained" xml:space="preserve">
+    <value>Dieses Objekt wird nicht mehr aufbewahrt: Weder es noch ein Datensatz seiner Löschung ist vorhanden.</value>
+  </data>
+  <data name="FocusHeaderOpenActivityItem" xml:space="preserve">
+    <value>Aktivitätselement öffnen</value>
+  </data>
+  <data name="FocusHeaderOpenMetaverseObject" xml:space="preserve">
+    <value>Metaverse-Objekt öffnen</value>
+  </data>
+  <data name="FocusHeaderOpenConnectedSystemObject" xml:space="preserve">
+    <value>Objekt im verbundenen System öffnen</value>
+  </data>
+  <data name="TableViewObjectsTouched" xml:space="preserve">
+    <value>Betroffene Objekte</value>
+  </data>
+  <data name="TableViewGroupSource" xml:space="preserve">
+    <value>Objekt in Synchronisierung</value>
+  </data>
+  <data name="TableViewGroupMetaverseObject" xml:space="preserve">
+    <value>Metaverse-Objekt</value>
+  </data>
+  <data name="TableViewGroupDownstream" xml:space="preserve">
+    <value>Nachgelagerte Objekte</value>
+  </data>
+  <data name="TableViewResizeObjectsList" xml:space="preserve">
+    <value>Größe der Objektliste ändern</value>
+  </data>
+  <data name="TableViewFilterByChange" xml:space="preserve">
+    <value>Nach Änderung filtern</value>
+  </data>
+  <data name="TableViewColumnObject" xml:space="preserve">
+    <value>Objekt</value>
+  </data>
+  <data name="TableViewColumnChange" xml:space="preserve">
+    <value>Änderung</value>
+  </data>
+  <data name="TableViewColumnAttribute" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="TableViewColumnSynchronisationRule" xml:space="preserve">
+    <value>Synchronisierungsregel</value>
+  </data>
+  <data name="TableViewColumnOutcome" xml:space="preserve">
+    <value>Ergebnis</value>
+  </data>
+  <data name="TableViewViewAll" xml:space="preserve">
+    <value>Alle {0} anzeigen</value>
+  </data>
+  <data name="TableViewNoRowsMatch" xml:space="preserve">
+    <value>Keine Zeilen entsprechen diesem Filter</value>
+  </data>
+  <data name="TableViewChooseAll" xml:space="preserve">
+    <value>Wählen Sie „Alle“, um jede von diesem Objekt getragene Änderung zu sehen.</value>
+  </data>
+  <data name="TableViewSummaryAdded" xml:space="preserve">
+    <value>{0} hinzugefügt</value>
+  </data>
+  <data name="TableViewSummaryRemoved" xml:space="preserve">
+    <value>{0} entfernt</value>
+  </data>
+  <data name="TableViewSummarySet" xml:space="preserve">
+    <value>{0} festgelegt</value>
+  </data>
+  <data name="TableViewSummaryJoin" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
+  <data name="TableViewResizeColumn" xml:space="preserve">
+    <value>Größe der Spalte „{0}“ ändern</value>
+  </data>
+  <data name="TableViewOutcomeTitle" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="TableViewFilterScopeAndJoin" xml:space="preserve">
+    <value>Geltungsbereich und Verknüpfung</value>
+  </data>
+  <data name="TableViewFilterAttributeChanges" xml:space="preserve">
+    <value>Attributänderungen</value>
+  </data>
+  <data name="TableViewFilterObjectChanges" xml:space="preserve">
+    <value>Objektänderungen</value>
+  </data>
+  <data name="TableViewFilterDestructive" xml:space="preserve">
+    <value>Destruktiv</value>
+  </data>
+  <data name="TableViewFilterAll" xml:space="preserve">
+    <value>Alle</value>
+  </data>
+  <data name="LineageEarlierRun" xml:space="preserve">
+    <value>Früherer Lauf</value>
+  </data>
+  <data name="SummaryBandAfterThisRun" xml:space="preserve">
+    <value>Nach diesem Lauf</value>
+  </data>
+  <data name="SummaryBandRunLabel" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
+  <data name="SummaryBandWouldRun" xml:space="preserve">
+    <value>Würde ausgeführt: {0}</value>
+  </data>
+  <data name="TrailTitle" xml:space="preserve">
+    <value>Pfad</value>
+  </data>
+  <data name="SyncPreviewGeneratedValueNotice" xml:space="preserve">
+    <value>Die angezeigten generierten Werte sind der jeweils nächste freie Wert. Die Synchronisierung prüft beim Ausführen erneut und kann daher einen anderen ausstellen, wenn ein anderes Objekt diesen zuerst belegt.</value>
+  </data>
+  <data name="ConsequenceHide" xml:space="preserve">
+    <value>Ausblenden</value>
+  </data>
+  <data name="ConsequenceShow" xml:space="preserve">
+    <value>Anzeigen</value>
+  </data>
+  <data name="ConsequenceNamePrefix" xml:space="preserve">
+    <value>{0} · </value>
+  </data>
+  <data name="ConsequenceDue" xml:space="preserve">
+    <value>Fällig {0}</value>
+  </data>
+  <data name="ConsequenceFindMembers" xml:space="preserve">
+    <value>{0} suchen</value>
+  </data>
+  <data name="ConsequenceShowingOf" xml:space="preserve">
+    <value>{0:N0} von {1:N0} angezeigt</value>
+  </data>
+  <data name="LineageViewTruncated" xml:space="preserve">
+    <value>Einige Zweige reichen weiter zurück als angezeigt</value>
+  </data>
+  <data name="LineageViewThisRun" xml:space="preserve">
+    <value>Dieser Lauf</value>
+  </data>
+  <data name="LineageViewMetaverseObjectDeleted" xml:space="preserve">
+    <value>Dieses Metaverse-Objekt wurde nach diesem Lauf gelöscht.</value>
+  </data>
+  <data name="LineageViewConnectedSystemObjectDeleted" xml:space="preserve">
+    <value>Dieses Objekt im verbundenen System wurde nach diesem Lauf gelöscht.</value>
+  </data>
+  <data name="LineageViewFurtherThanShown" xml:space="preserve">
+    <value>Einige Folgen reichen weiter als angezeigt. Öffnen Sie das letzte Element eines Zweigs, um dort weiterzumachen.</value>
+  </data>
+  <data name="LineageViewCheckedAt" xml:space="preserve">
+    <value>Geprüft um {0}.</value>
+  </data>
+  <data name="LineageViewCheckAgain" xml:space="preserve">
+    <value>Erneut prüfen</value>
+  </data>
+  <data name="LineageViewReadingConsequences" xml:space="preserve">
+    <value>Es wird gelesen, was dieser Lauf ausgelöst hat…</value>
+  </data>
+  <data name="LineageViewCannotOpen" xml:space="preserve">
+    <value>JIM kann für dieses Objekt keine Seite öffnen.</value>
+  </data>
+  <data name="LineageViewTypePrefix" xml:space="preserve">
+    <value>{0}: </value>
+  </data>
+  <data name="LineageViewInMetaverse" xml:space="preserve">
+    <value>im Metaverse</value>
+  </data>
+  <data name="LineageViewUnplaceable" xml:space="preserve">
+    <value>Ursachen, die diese Ansicht nicht einordnen konnte</value>
+  </data>
+  <data name="ExplorerTitle" xml:space="preserve">
+    <value>Kausalitäts-Explorer</value>
+  </data>
+  <data name="ExplorerTitleWithFocus" xml:space="preserve">
+    <value>Kausalitäts-Explorer: {0}</value>
+  </data>
+  <data name="ExplorerPageInfo" xml:space="preserve">
+    <value>Verfolgt, warum etwas geschah und was daraus folgte, von einem Fokus zum nächsten, ohne die Seite zu verlassen. Ein Ausführungselement zeigt seine Lineage; ein Objekt im verbundenen System oder ein Metaverse-Objekt zeigt, was damit geschah. Der Pfad führt durch alles Verfolgte zurück.</value>
+  </data>
+  <data name="ExplorerStartTitle" xml:space="preserve">
+    <value>Beginnen Sie bei dem, was Sie erklären möchten</value>
+  </data>
+  <data name="ExplorerStartExploreCausality" xml:space="preserve">
+    <value>Kausalität untersuchen</value>
+  </data>
+  <data name="ExplorerStartText" xml:space="preserve">
+    <value>Öffnen Sie den Explorer dort, wo die Frage entsteht: {0} bei einem Objekt im verbundenen System oder einem Metaverse-Objekt, {1} neben einem Lauf im Bereich {2} eines ausstehenden Exports oder {3} im Kausalitätsbereich eines Ausführungselements.</value>
+  </data>
+  <data name="LineageJoinProjected" xml:space="preserve">
+    <value>projiziert</value>
+  </data>
+  <data name="LineageJoinJoined" xml:space="preserve">
+    <value>verknüpft</value>
+  </data>
+  <data name="LineageJoinImported" xml:space="preserve">
+    <value>importiert</value>
+  </data>
+  <data name="LineageJoinProvisioned" xml:space="preserve">
+    <value>provisioniert</value>
+  </data>
+  <data name="LineageJoinDisconnected" xml:space="preserve">
+    <value>getrennt</value>
+  </data>
+  <data name="LineageJoinExported" xml:space="preserve">
+    <value>exportiert</value>
+  </data>
+  <data name="TableViewEverything" xml:space="preserve">
+    <value>Alles</value>
+  </data>
+</root>
