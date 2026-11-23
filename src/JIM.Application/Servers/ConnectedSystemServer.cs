@@ -8297,7 +8297,7 @@ public partial class ConnectedSystemServer
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
         {
-            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetMappingTo), targetName),
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
@@ -8357,7 +8357,7 @@ public partial class ConnectedSystemServer
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
         {
-            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetMappingTo), targetName),
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
@@ -8424,7 +8424,7 @@ public partial class ConnectedSystemServer
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
         {
-            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetMappingTo), targetName),
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
@@ -8536,7 +8536,7 @@ public partial class ConnectedSystemServer
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
         {
-            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetMappingTo), targetName),
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
@@ -8776,7 +8776,7 @@ public partial class ConnectedSystemServer
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
         {
-            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetMappingTo), targetName),
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
@@ -9163,7 +9163,7 @@ public partial class ConnectedSystemServer
         var attributeName = ordered.Count > 0 ? ordered[0].TargetMetaverseAttribute?.Name ?? $"#{metaverseAttributeId}" : $"#{metaverseAttributeId}";
         return new Activity
         {
-            TargetName = $"Attribute priority order for {attributeName}",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetAttributePriorityOrder), attributeName),
             TargetType = ActivityTargetType.SynchronisationRule,
             TargetOperationType = ActivityTargetOperationType.Update
         };
@@ -11537,6 +11537,14 @@ public partial class ConnectedSystemServer
     /// Gets the target context for an ObjectMatchingRule activity.
     /// Returns Connected System name for Mode A (rules on ConnectedSystemObjectType) or Synchronisation Rule name for Mode B.
     /// </summary>
+    /// <summary>
+    /// An Object Matching Rule Activity's target: the Object Type it matches, or the generic wording when that is unknown.
+    /// </summary>
+    private static JimMessage RuleTargetName(ObjectMatchingRule rule) =>
+        rule.ConnectedSystemObjectType?.Name is { } objectTypeName
+            ? ActivityMessage.Create(nameof(ActivityMessages.TargetRuleFor), objectTypeName)
+            : ActivityMessage.Create(nameof(ActivityMessages.TargetRuleForUnknownType));
+
     private async Task<string?> GetObjectMatchingRuleContextAsync(ObjectMatchingRule rule)
     {
         // Mode B: Rule is on a SyncRule - show the Synchronisation Rule name
@@ -11791,7 +11799,7 @@ public partial class ConnectedSystemServer
 
         var activity = new Activity
         {
-            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetNameDetail = RuleTargetName(rule),
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Create
@@ -11813,7 +11821,7 @@ public partial class ConnectedSystemServer
 
         var activity = new Activity
         {
-            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetNameDetail = RuleTargetName(rule),
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Create
@@ -11835,7 +11843,7 @@ public partial class ConnectedSystemServer
 
         var activity = new Activity
         {
-            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetNameDetail = RuleTargetName(rule),
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Update,
@@ -11859,7 +11867,7 @@ public partial class ConnectedSystemServer
 
         var activity = new Activity
         {
-            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetNameDetail = RuleTargetName(rule),
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Update,
@@ -11898,7 +11906,7 @@ public partial class ConnectedSystemServer
     {
         var activity = new Activity
         {
-            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetNameDetail = RuleTargetName(rule),
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Delete
@@ -11916,7 +11924,7 @@ public partial class ConnectedSystemServer
     {
         var activity = new Activity
         {
-            TargetName = $"Rule for {rule.ConnectedSystemObjectType?.Name ?? "Object Type"}",
+            TargetNameDetail = RuleTargetName(rule),
             TargetContext = await GetObjectMatchingRuleContextAsync(rule),
             TargetType = ActivityTargetType.ObjectMatchingRule,
             TargetOperationType = ActivityTargetOperationType.Delete

@@ -332,11 +332,11 @@
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@OperationsText.CompletedColConnectedSystem</MudText><br/>
                             @if (_selectedActivity.ConnectedSystemId.HasValue)
                             {
-                                <MudLink Typo="Typo.body1" Href="@($"/admin/connected-systems/{_selectedActivity.ConnectedSystemId}/")">@_selectedActivity.TargetName</MudLink>
+                                <MudLink Typo="Typo.body1" Href="@($"/admin/connected-systems/{_selectedActivity.ConnectedSystemId}/")">@_selectedActivity.TargetNameForDisplay()</MudLink>
                             }
                             else
                             {
-                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? "-")</MudText>
+                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetNameForDisplay() ?? "-")</MudText>
                             }
                         </div>
                         break;
@@ -346,11 +346,11 @@
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@OperationsText.CompletedSyncRule</MudText><br/>
                             @if (_selectedActivity.SyncRuleId.HasValue)
                             {
-                                <MudLink Typo="Typo.body1" Href="@($"/admin/sync-rules/{_selectedActivity.SyncRuleId}")">@_selectedActivity.TargetName</MudLink>
+                                <MudLink Typo="Typo.body1" Href="@($"/admin/sync-rules/{_selectedActivity.SyncRuleId}")">@_selectedActivity.TargetNameForDisplay()</MudLink>
                             }
                             else
                             {
-                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? "-")</MudText>
+                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetNameForDisplay() ?? "-")</MudText>
                             }
                         </div>
                         break;
@@ -360,12 +360,12 @@
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@OperationsText.CompletedMetaverseObject</MudText><br/>
                             @if (_selectedMetaverseObjectHeader != null)
                             {
-                                <MudLink Typo="Typo.body1" Href="@Utilities.GetMetaverseObjectHref(_selectedMetaverseObjectHeader)">@(_selectedActivity.TargetName ?? _selectedMetaverseObjectHeader.Id.ToString())</MudLink>
+                                <MudLink Typo="Typo.body1" Href="@Utilities.GetMetaverseObjectHref(_selectedMetaverseObjectHeader)">@(_selectedActivity.TargetNameForDisplay() ?? _selectedMetaverseObjectHeader.Id.ToString())</MudLink>
                             }
                             else
                             {
                                 @* No longer exists (deleted since), or the Activity names no Metaverse Object. *@
-                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? _selectedActivity.MetaverseObjectId?.ToString() ?? "-")</MudText>
+                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetNameForDisplay() ?? _selectedActivity.MetaverseObjectId?.ToString() ?? "-")</MudText>
                             }
                         </div>
                         break;
@@ -375,11 +375,11 @@
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@OperationsText.CompletedDataGeneration</MudText><br/>
                             @if (_selectedActivity.ExampleDataTemplateId.HasValue)
                             {
-                                <MudLink Typo="Typo.body1" Href="@($"/admin/example-data/templates/{_selectedActivity.ExampleDataTemplateId}")">@_selectedActivity.TargetName</MudLink>
+                                <MudLink Typo="Typo.body1" Href="@($"/admin/example-data/templates/{_selectedActivity.ExampleDataTemplateId}")">@_selectedActivity.TargetNameForDisplay()</MudLink>
                             }
                             else
                             {
-                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? "-")</MudText>
+                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetNameForDisplay() ?? "-")</MudText>
                             }
                         </div>
                         break;
@@ -387,14 +387,14 @@
                     case ActivityTargetType.TrustedCertificate:
                         <div>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@OperationsText.CompletedTrustedCertificate</MudText><br/>
-                            <MudLink Typo="Typo.body1" Href="/admin/certificates">@(_selectedActivity.TargetName ?? "-")</MudLink>
+                            <MudLink Typo="Typo.body1" Href="/admin/certificates">@(_selectedActivity.TargetNameForDisplay() ?? "-")</MudLink>
                         </div>
                         break;
 
                     case ActivityTargetType.MetaverseAttribute:
                         <div>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@OperationsText.CompletedMetaverseAttribute</MudText><br/>
-                            <MudLink Typo="Typo.body1" Href="/admin/schema/metaverse">@(_selectedActivity.TargetName ?? "-")</MudLink>
+                            <MudLink Typo="Typo.body1" Href="/admin/schema/metaverse">@(_selectedActivity.TargetNameForDisplay() ?? "-")</MudLink>
                         </div>
                         break;
 
@@ -408,7 +408,7 @@
                         }
                         <div>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@OperationsText.CompletedObjectMatchingRule</MudText><br/>
-                            <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? "-")</MudText>
+                            <MudText Typo="Typo.body1">@(_selectedActivity.TargetNameForDisplay() ?? "-")</MudText>
                         </div>
                         break;
 
@@ -417,7 +417,7 @@
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@OperationsText.CompletedSystemTask</MudText><br/>
                             <MudText Typo="Typo.body1">
                                 <MudIcon Icon="@Icons.Material.Filled.CleaningServices" Class="mr-1" Style="vertical-align: middle;" />
-                                @(_selectedActivity.TargetName ?? OperationsText.ScheduleEditorStepTypeHistory)
+                                @(_selectedActivity.TargetNameForDisplay() ?? OperationsText.ScheduleEditorStepTypeHistory)
                             </MudText>
                         </div>
                         break;
@@ -425,7 +425,7 @@
                     case ActivityTargetType.ServiceSetting:
                         <div>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@OperationsText.CompletedServiceSetting</MudText><br/>
-                            <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? "-")</MudText>
+                            <MudText Typo="Typo.body1">@(_selectedActivity.TargetNameForDisplay() ?? "-")</MudText>
                         </div>
                         break;
 
@@ -433,11 +433,11 @@
                         <div>
                             @if (!string.IsNullOrEmpty(_selectedActivity.TargetContext))
                             {
-                                <MudText Typo="Typo.body1"><strong>@_selectedActivity.TargetContext</strong> → @_selectedActivity.TargetName</MudText>
+                                <MudText Typo="Typo.body1"><strong>@_selectedActivity.TargetContext</strong> → @_selectedActivity.TargetNameForDisplay()</MudText>
                             }
                             else
                             {
-                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? "-")</MudText>
+                                <MudText Typo="Typo.body1">@(_selectedActivity.TargetNameForDisplay() ?? "-")</MudText>
                             }
                         </div>
                         break;
@@ -455,7 +455,7 @@
                 {
                     <div class="mt-4">
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">@OperationsText.CompletedColRunProfile</MudText><br/>
-                        <MudText Typo="Typo.body1">@(_selectedActivity.TargetName ?? "-")</MudText>
+                        <MudText Typo="Typo.body1">@(_selectedActivity.TargetNameForDisplay() ?? "-")</MudText>
                     </div>
                 }
             </MudPaper>

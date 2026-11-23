@@ -223,6 +223,25 @@ public class Activity
     public string? TargetName { get; set; }
 
     /// <summary>
+    /// <see cref="TargetName"/> as a message, as JSON, where the name is wording JIM writes itself ("Factory reset",
+    /// "Rule for User") rather than a name someone gave (#3030). Null for a name that is data, and for an Activity
+    /// recorded before target names were stored this way.
+    /// </summary>
+    public string? TargetNameDetailJson { get; set; }
+
+    /// <summary>The target name as a message; setting it also sets <see cref="TargetName"/> to its British English.</summary>
+    [NotMapped]
+    public JimMessage? TargetNameDetail
+    {
+        get => MessageJson.Deserialise(TargetNameDetailJson);
+        set
+        {
+            TargetNameDetailJson = MessageJson.Serialise(value);
+            TargetName = value?.ToEnglish();
+        }
+    }
+
+    /// <summary>
     /// Additional context for the target, providing hierarchical information such as the parent entity name.
     /// For example, for a ConnectedSystemRunProfile activity, this would contain the Connected System name.
     /// For a SyncRule activity, this would contain the Connected System name.

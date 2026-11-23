@@ -285,6 +285,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("TargetName")
                         .HasColumnType("text");
 
+                    b.Property<string>("TargetNameDetailJson")
+                        .HasColumnType("text");
+
                     b.Property<int>("TargetOperationType")
                         .HasColumnType("integer");
 

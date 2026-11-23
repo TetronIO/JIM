@@ -49,40 +49,40 @@
                         case ActivityTargetType.ExampleDataTemplate:
                         case ActivityTargetType.DataGeneration:
                             @* Both template config-changes and data-generation runs carry ExampleDataTemplateId; deep-link to the template. *@
-                            <MudLink Href="@($"/admin/example-data/templates/{_activity.ExampleDataTemplateId}")">@_activity.TargetName</MudLink>
+                            <MudLink Href="@($"/admin/example-data/templates/{_activity.ExampleDataTemplateId}")">@_activity.TargetNameForDisplay()</MudLink>
                             break;
                         case ActivityTargetType.TrustedCertificate:
-                            <MudLink Href="/admin/certificates">@_activity.TargetName</MudLink>
+                            <MudLink Href="/admin/certificates">@_activity.TargetNameForDisplay()</MudLink>
                             break;
                         case ActivityTargetType.MetaverseAttribute:
-                            <MudLink Href="/admin/schema?t=attributes">@_activity.TargetName</MudLink>
+                            <MudLink Href="/admin/schema?t=attributes">@_activity.TargetNameForDisplay()</MudLink>
                             break;
                         case ActivityTargetType.MetaverseObjectType:
-                            <MudLink Href="/admin/schema">@_activity.TargetName</MudLink>
+                            <MudLink Href="/admin/schema">@_activity.TargetNameForDisplay()</MudLink>
                             break;
                         case ActivityTargetType.ServiceSetting when Helpers.GetServiceSettingActivityHref(_activity.TargetName) is { } serviceSettingHref:
                             @* Service Settings have no page of their own; deep-link with the name pre-filled into the search box. *@
-                            <MudLink Href="@serviceSettingHref">@_activity.TargetName</MudLink>
+                            <MudLink Href="@serviceSettingHref">@_activity.TargetNameForDisplay()</MudLink>
                             break;
                         case ActivityTargetType.HistoryRetentionCleanup:
                             <MudIcon Icon="@Icons.Material.Filled.CleaningServices" Class="mr-1" Style="vertical-align: middle;" />
-                            @(_activity.TargetName ?? ActivityText.ActivityTargetHistoryRetentionCleanup)
+                            @(_activity.TargetNameForDisplay() ?? ActivityText.ActivityTargetHistoryRetentionCleanup)
                             break;
                         case ActivityTargetType.ScimRequests:
-                            <MudLink Href="@($"/admin/connected-systems/{_activity.ConnectedSystemId}/?t=scim")">@_activity.TargetName</MudLink>
+                            <MudLink Href="@($"/admin/connected-systems/{_activity.ConnectedSystemId}/?t=scim")">@_activity.TargetNameForDisplay()</MudLink>
                             break;
                         case ActivityTargetType.Authentication:
                             <MudIcon Icon="@Icons.Material.Filled.Shield" Class="mr-1" Style="vertical-align: middle;" />
-                            @(_activity.TargetName ?? ActivityText.ActivityTargetAuthentication)
+                            @(_activity.TargetNameForDisplay() ?? ActivityText.ActivityTargetAuthentication)
                             break;
                         case ActivityTargetType.ObjectMatchingRule when Helpers.GetObjectMatchingRuleHref(_activity.SyncRuleId, _activity.ConnectedSystemId) is { } matchingRuleHref:
                             @* A rule has no page of its own; link to the owning object's Matching tab. *@
-                            <MudLink Href="@matchingRuleHref">@_activity.TargetName</MudLink>
+                            <MudLink Href="@matchingRuleHref">@_activity.TargetNameForDisplay()</MudLink>
                             break;
                         case ActivityTargetType.ObjectMatchingRule:
                         case ActivityTargetType.NotSet:
                         default:
-                            @(_activity.TargetName ?? "-")
+                            @(_activity.TargetNameForDisplay() ?? "-")
                             break;
                     }
                     </ActivityTargetChip>
@@ -137,7 +137,7 @@
                     <MudText>
                         @if (_parentActivity != null)
                         {
-                            var parentTargetName = !string.IsNullOrEmpty(_parentActivity.TargetName) ? _parentActivity.TargetName : ActivityText.ActivityNoName;
+                            var parentTargetName = !string.IsNullOrEmpty(_parentActivity.TargetName) ? _parentActivity.TargetNameForDisplay() : ActivityText.ActivityNoName;
                             <ObjectChip Kind="ObjectChipKind.Activity" TypeName="@Helpers.GetActivityTargetTypeName(_parentActivity.TargetType)"
                                         Name="@parentTargetName" Href="@parentActivityHref" Class="ma-0" />
                         }
@@ -1170,7 +1170,7 @@
                     <CellTemplate>
                         @if (!string.IsNullOrEmpty(context.Item.TargetContext) && !string.IsNullOrEmpty(context.Item.TargetName))
                         {
-                            <span><strong>@context.Item.TargetContext</strong> → @context.Item.TargetName</span>
+                            <span><strong>@context.Item.TargetContext</strong> → @context.Item.TargetNameForDisplay()</span>
                         }
                         else if (!string.IsNullOrEmpty(context.Item.TargetContext))
                         {
@@ -1178,7 +1178,7 @@
                         }
                         else if (!string.IsNullOrEmpty(context.Item.TargetName))
                         {
-                            <span>@context.Item.TargetName</span>
+                            <span>@context.Item.TargetNameForDisplay()</span>
                         }
                         else
                         {
@@ -1976,7 +1976,7 @@
         if (_activity == null)
             return ActivityText.ActivityNoName;
 
-        var targetName = !string.IsNullOrEmpty(_activity.TargetName) ? _activity.TargetName : ActivityText.ActivityNoName;
+        var targetName = !string.IsNullOrEmpty(_activity.TargetName) ? _activity.TargetNameForDisplay() ?? _activity.TargetName : ActivityText.ActivityNoName;
 
         if (!string.IsNullOrEmpty(_activity.TargetContext))
             return $"{_activity.TargetContext} → {targetName}";

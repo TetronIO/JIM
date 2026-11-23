@@ -451,7 +451,7 @@ namespace JIM.Application.Servers
         /// </summary>
         private static Activity NewTemporalScopeReconciliationActivity() => new()
         {
-            TargetName = "Temporal Scope Reconciliation",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetTemporalScopeReconciliation)),
             TargetType = ActivityTargetType.TemporalScopeReconciliation,
             TargetOperationType = ActivityTargetOperationType.Execute
         };
@@ -462,7 +462,7 @@ namespace JIM.Application.Servers
         /// </summary>
         private static Activity NewHistoryRetentionCleanupActivity() => new()
         {
-            TargetName = "History Retention Cleanup",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetHistoryRetentionCleanup)),
             TargetType = ActivityTargetType.HistoryRetentionCleanup,
             TargetOperationType = ActivityTargetOperationType.Delete
         };

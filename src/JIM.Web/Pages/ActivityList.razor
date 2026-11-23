@@ -186,7 +186,7 @@
             <CellTemplate>
                 @if (!string.IsNullOrEmpty(context.Item.TargetContext) && !string.IsNullOrEmpty(context.Item.TargetName))
                 {
-                    <span><strong>@context.Item.TargetContext</strong> → @context.Item.TargetName</span>
+                    <span><strong>@context.Item.TargetContext</strong> → @context.Item.TargetNameForDisplay()</span>
                 }
                 else if (!string.IsNullOrEmpty(context.Item.TargetContext))
                 {
@@ -194,7 +194,7 @@
                 }
                 else if (!string.IsNullOrEmpty(context.Item.TargetName))
                 {
-                    @context.Item.TargetName
+                    @context.Item.TargetNameForDisplay()
                 }
                 else
                 {

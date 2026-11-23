@@ -624,4 +624,34 @@
   <data name="CreatedBuiltInRole" xml:space="preserve">
     <value>Rôle intégré « {0} » créé</value>
   </data>
+  <data name="TargetBuiltInConfiguration" xml:space="preserve">
+    <value>Configuration intégrée</value>
+  </data>
+  <data name="TargetFactoryReset" xml:space="preserve">
+    <value>Réinitialisation d’usine</value>
+  </data>
+  <data name="TargetInteractiveSignInSucceeded" xml:space="preserve">
+    <value>Connexion interactive réussie</value>
+  </data>
+  <data name="TargetTemporalScopeReconciliation" xml:space="preserve">
+    <value>Réconciliation du périmètre temporel</value>
+  </data>
+  <data name="TargetHistoryRetentionCleanup" xml:space="preserve">
+    <value>Nettoyage de la conservation de l’historique</value>
+  </data>
+  <data name="TargetMappingTo" xml:space="preserve">
+    <value>Mappage vers {0}</value>
+  </data>
+  <data name="TargetTestCase" xml:space="preserve">
+    <value>Cas de test « {0} »</value>
+  </data>
+  <data name="TargetAttributePriorityOrder" xml:space="preserve">
+    <value>Ordre de priorité des attributs pour {0}</value>
+  </data>
+  <data name="TargetRuleFor" xml:space="preserve">
+    <value>Règle pour {0}</value>
+  </data>
+  <data name="TargetRuleForUnknownType" xml:space="preserve">
+    <value>Règle pour le type d’objet</value>
+  </data>
 </root>

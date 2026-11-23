@@ -74,7 +74,7 @@
                         <MudText Typo="Typo.button" Class="mud-text-secondary">@(IsHousekeepingContext() ? ActivityText.ActivityFieldActivity : ActivityText.ActivityFieldRunProfile)</MudText>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Class="mud-text-secondary" />
-                            <MudText>@_activity.TargetName</MudText>
+                            <MudText>@_activity.TargetNameForDisplay()</MudText>
                         </MudStack>
                     </MudItem>
 

@@ -827,4 +827,44 @@
     <value>Created built-in Role '{0}'</value>
     <comment>The message of the System Initialisation Activity that created a built-in item; {0} is its name.</comment>
   </data>
+  <data name="TargetBuiltInConfiguration" xml:space="preserve">
+    <value>Built-in configuration</value>
+    <comment>The target of the System Initialisation Activity.</comment>
+  </data>
+  <data name="TargetFactoryReset" xml:space="preserve">
+    <value>Factory reset</value>
+    <comment>The target of the factory reset Activity.</comment>
+  </data>
+  <data name="TargetInteractiveSignInSucceeded" xml:space="preserve">
+    <value>Interactive sign-in succeeded</value>
+    <comment>The target of a sign-in audit Activity.</comment>
+  </data>
+  <data name="TargetTemporalScopeReconciliation" xml:space="preserve">
+    <value>Temporal Scope Reconciliation</value>
+    <comment>The target of the built-in housekeeping Activity of that name.</comment>
+  </data>
+  <data name="TargetHistoryRetentionCleanup" xml:space="preserve">
+    <value>History Retention Cleanup</value>
+    <comment>The target of the built-in housekeeping Activity of that name.</comment>
+  </data>
+  <data name="TargetMappingTo" xml:space="preserve">
+    <value>Mapping to {0}</value>
+    <comment>{0} is the attribute the Attribute Flow writes. The English must start with Activity.SyncRuleMappingTargetNamePrefix.</comment>
+  </data>
+  <data name="TargetTestCase" xml:space="preserve">
+    <value>Test case '{0}'</value>
+    <comment>{0} is the configuration test case name. The English must start with Activity.ConfigurationTestCaseTargetNamePrefix.</comment>
+  </data>
+  <data name="TargetAttributePriorityOrder" xml:space="preserve">
+    <value>Attribute priority order for {0}</value>
+    <comment>{0} is the Metaverse Attribute name.</comment>
+  </data>
+  <data name="TargetRuleFor" xml:space="preserve">
+    <value>Rule for {0}</value>
+    <comment>An Object Matching Rule Activity target; {0} is the Object Type name.</comment>
+  </data>
+  <data name="TargetRuleForUnknownType" xml:space="preserve">
+    <value>Rule for Object Type</value>
+    <comment>An Object Matching Rule Activity target whose Object Type is unknown.</comment>
+  </data>
 </root>

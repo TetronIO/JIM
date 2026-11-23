@@ -176,7 +176,7 @@
                             <VirtualisedSortHeader Title="@AdminText.ApiKeyActivityTarget" Name="target" />
                         </HeaderTemplate>
                         <CellTemplate>
-                            @(!string.IsNullOrEmpty(context.Item.TargetName) ? context.Item.TargetName : AdminText.ApiKeyActivityNoName)
+                            @(!string.IsNullOrEmpty(context.Item.TargetName) ? context.Item.TargetNameForDisplay() : AdminText.ApiKeyActivityNoName)
                         </CellTemplate>
                     </TemplateColumn>
                     <TemplateColumn Title="@AdminText.ApiKeyActivityOperation" Sortable="false">

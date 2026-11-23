@@ -82,7 +82,7 @@ public partial class ConnectedSystemServer
 
         var activity = new Activity
         {
-            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetMappingTo), targetName),
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,

@@ -36,6 +36,39 @@ public class ActivityMessageFamiliesTests
         DisabledPartitionName = partitionName
     };
 
+    [TestCase(nameof(ActivityMessages.TargetBuiltInConfiguration), null, "Built-in configuration")]
+    [TestCase(nameof(ActivityMessages.TargetFactoryReset), null, "Factory reset")]
+    [TestCase(nameof(ActivityMessages.TargetInteractiveSignInSucceeded), null, "Interactive sign-in succeeded")]
+    [TestCase(nameof(ActivityMessages.TargetTemporalScopeReconciliation), null, "Temporal Scope Reconciliation")]
+    [TestCase(nameof(ActivityMessages.TargetHistoryRetentionCleanup), null, "History Retention Cleanup")]
+    [TestCase(nameof(ActivityMessages.TargetAttributePriorityOrder), "mail", "Attribute priority order for mail")]
+    [TestCase(nameof(ActivityMessages.TargetRuleFor), "User", "Rule for User")]
+    [TestCase(nameof(ActivityMessages.TargetRuleForUnknownType), null, "Rule for Object Type")]
+    public void TargetName_EveryKind_ReadsAsTheTargetNameAlwaysHas_AndRendersInFrench(string key, string? name, string english)
+    {
+        var message = name == null ? ActivityMessage.Create(key) : ActivityMessage.Create(key, name);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message.ToEnglish(), Is.EqualTo(english));
+            Assert.That(InFrench(message), Is.Not.EqualTo(english));
+        }
+    }
+
+    [Test]
+    public void TargetName_MappingAndTestCase_StartWithThePrefixesThePortalRecognises()
+    {
+        // Helpers.cs recognises mapping and test case Activities by these prefixes on the stored English, so the
+        // catalogue's wording and the constants must not drift apart.
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ActivityMessage.Create(nameof(ActivityMessages.TargetMappingTo), "mail").ToEnglish(),
+                Is.EqualTo($"{JIM.Models.Activities.Activity.SyncRuleMappingTargetNamePrefix}mail"));
+            Assert.That(ActivityMessage.Create(nameof(ActivityMessages.TargetTestCase), "In scope").ToEnglish(),
+                Is.EqualTo($"{JIM.Models.Activities.Activity.ConfigurationTestCaseTargetNamePrefix}'In scope'"));
+        }
+    }
+
     [TestCase(nameof(ActivityMessages.CreatedBuiltInServiceSetting), "Created built-in Service Setting 'Sync page size'")]
     [TestCase(nameof(ActivityMessages.CreatedBuiltInExampleDataSet), "Created built-in Example Data Set 'Sync page size'")]
     [TestCase(nameof(ActivityMessages.CreatedBuiltInExampleDataTemplate), "Created built-in Example Data Template 'Sync page size'")]
