@@ -16,7 +16,7 @@
                    DropShadow="false"
                    StartIcon="@(_shown ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
                    OnClick="@(() => _shown = !_shown)">
-            @(_shown ? "Hide stack trace" : "Show stack trace")
+            @(_shown ? SharedText.StackTraceHide : SharedText.StackTraceShow)
         </MudButton>
 
         @if (_shown)

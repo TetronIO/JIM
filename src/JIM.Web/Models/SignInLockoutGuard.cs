@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Web.Resources;
+using System.Globalization;
 using JIM.Models.Core;
 using JIM.Models.Security;
 
@@ -31,8 +33,7 @@ public static class SignInLockoutGuard
     /// <summary>
     /// What the confirmation says.
     /// </summary>
-    public static string Warning(string certificateName, string? host) =>
-        $"Sign-in depends on '{certificateName}'{(host == null ? string.Empty : $": it is the only certificate JIM trusts for {host}")}. " +
-        "This change stops everyone signing in to JIM, including you. Until another certificate is trusted for sign-in, " +
-        "only the infrastructure API key can put it right.";
+    public static string Warning(string certificateName, string? host) => host == null
+        ? string.Format(CultureInfo.CurrentCulture, SignInText.LockoutWarning, certificateName)
+        : string.Format(CultureInfo.CurrentCulture, SignInText.LockoutWarningForHost, certificateName, host);
 }

@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ProblemNone" xml:space="preserve">
+    <value>(none)</value>
+    <comment>Shown in place of an expected or received value when there is none.</comment>
+  </data>
+  <data name="ProblemWrongAudienceDescription" xml:space="preserve">
+    <value>The identity provider issued an ID token for another client, so JIM refused it.</value>
+    <comment>Sign-in problem description. 'ID token' is the OpenID Connect term.</comment>
+  </data>
+  <data name="ProblemWrongAudienceFix" xml:space="preserve">
+    <value>Set {0} to the client ID the identity provider registered for JIM's portal.</value>
+    <comment>{0} is the name of a JIM setting (an environment variable); never translate it.</comment>
+  </data>
+  <data name="ProblemWrongIssuerDescription" xml:space="preserve">
+    <value>The ID token came from an issuer JIM does not accept.</value>
+  </data>
+  <data name="ProblemApiWrongAudienceDescription" xml:space="preserve">
+    <value>An access token the identity provider issued was refused because it is not for JIM's API.</value>
+  </data>
+  <data name="ProblemApiWrongAudienceFix" xml:space="preserve">
+    <value>JIM expects the audience {0} names when it is an api:// URI, and otherwise the portal's client ID, {1}. Change that setting, or have the identity provider issue the audience JIM expects.</value>
+    <comment>{0} and {1} are the names of JIM settings; never translate them.</comment>
+  </data>
+  <data name="ProblemApiWrongIssuerDescription" xml:space="preserve">
+    <value>An access token came from an issuer JIM does not accept.</value>
+  </data>
+  <data name="ProblemMissingClaimDescription" xml:space="preserve">
+    <value>JIM could not tell who signed in, because the sign-in carried no '{0}' claim.</value>
+    <comment>{0} is a claim type, for example 'sub'.</comment>
+  </data>
+  <data name="ProblemMissingClaimFix" xml:space="preserve">
+    <value>Set {0} to a claim the identity provider issues for everyone, or have it issue '{1}'.</value>
+    <comment>{0} is the name of a JIM setting; {1} is a claim type.</comment>
+  </data>
+  <data name="ProblemEntraVersion1Fix" xml:space="preserve">
+    <value>Microsoft Entra ID issued a version 1 access token. Set requestedAccessTokenVersion to 2 in the app registration's manifest (Register-JIMIdentityProvider -Provider EntraId does), so its tokens carry the client ID as their audience and come from the tenant's version 2 issuer, which is what JIM accepts.</value>
+    <comment>requestedAccessTokenVersion and the cmdlet are code; never translate them.</comment>
+  </data>
+  <data name="ProblemIssuerFix" xml:space="preserve">
+    <value>If that issuer is your identity provider's, add it to {0} along with those listed; otherwise check that {1} names the identity provider people sign in with.</value>
+    <comment>{0} and {1} are the names of JIM settings.</comment>
+  </data>
+  <data name="ProblemInvalidClientDescription" xml:space="preserve">
+    <value>The identity provider did not accept JIM's portal client.</value>
+  </data>
+  <data name="ProblemInvalidClientExpected" xml:space="preserve">
+    <value>the identity provider to accept client '{0}' and its secret</value>
+    <comment>Completes 'Expected:'. {0} is a client ID.</comment>
+  </data>
+  <data name="ProblemInvalidClientFix" xml:space="preserve">
+    <value>Check that {0} names the portal's client, and that {1} holds its current secret. Register-JIMIdentityProvider -ResetClientSecret makes a new one.</value>
+    <comment>{0} and {1} are the names of JIM settings.</comment>
+  </data>
+  <data name="ProblemUnauthorizedClientDescription" xml:space="preserve">
+    <value>The identity provider does not let JIM's portal client sign people in this way.</value>
+  </data>
+  <data name="ProblemUnauthorizedClientExpected" xml:space="preserve">
+    <value>client '{0}' to sign people in with an authorisation code</value>
+    <comment>Completes 'Expected:'. {0} is a client ID.</comment>
+  </data>
+  <data name="ProblemUnauthorizedClientFix" xml:space="preserve">
+    <value>Check that {0} names the portal's client, and that the identity provider lets it use the authorisation code flow.</value>
+    <comment>{0} is the name of a JIM setting.</comment>
+  </data>
+  <data name="ProblemInvalidScopeDescription" xml:space="preserve">
+    <value>The identity provider refused the scopes JIM asked for.</value>
+  </data>
+  <data name="ProblemInvalidScopeFix" xml:space="preserve">
+    <value>Set {0} to a scope the identity provider grants JIM's portal client, or leave it empty.</value>
+    <comment>{0} is the name of a JIM setting.</comment>
+  </data>
+  <data name="LockoutWarning" xml:space="preserve">
+    <value>Sign-in depends on '{0}'. This change stops everyone signing in to JIM, including you. Until another certificate is trusted for sign-in, only the infrastructure API key can put it right.</value>
+    <comment>{0} is the name of a certificate.</comment>
+  </data>
+  <data name="LockoutWarningForHost" xml:space="preserve">
+    <value>Sign-in depends on '{0}': it is the only certificate JIM trusts for {1}. This change stops everyone signing in to JIM, including you. Until another certificate is trusted for sign-in, only the infrastructure API key can put it right.</value>
+    <comment>{0} is the name of a certificate, {1} the identity provider's host name.</comment>
+  </data>
+  <data name="PassOnToAdministrator" xml:space="preserve">
+    <value>If you do not look after this JIM deployment, pass these details to whoever does.</value>
+  </data>
+  <data name="TryAgain" xml:space="preserve">
+    <value>Try Again</value>
+    <comment>Button on an error page that reloads or restarts.</comment>
+  </data>
+  <data name="IllustrationIdentityProviderAbbreviation" xml:space="preserve">
+    <value>IdP</value>
+    <comment>Abbreviation of identity provider inside an illustration.</comment>
+  </data>
+  <data name="ErrorTitle" xml:space="preserve">
+    <value>Something went wrong</value>
+    <comment>Heading and page title of the general error page.</comment>
+  </data>
+  <data name="ErrorIllustrationLabel" xml:space="preserve">
+    <value>Broken cog illustration</value>
+  </data>
+  <data name="ErrorSubtitle" xml:space="preserve">
+    <value>Well, that wasn't supposed to happen. A cog has slipped!</value>
+  </data>
+  <data name="ErrorRequestId" xml:space="preserve">
+    <value>Request ID:</value>
+    <comment>Followed by the request's identifier.</comment>
+  </data>
+  <data name="ErrorGoToDashboard" xml:space="preserve">
+    <value>Go to Dashboard</value>
+  </data>
+  <data name="FailedTitle" xml:space="preserve">
+    <value>Sign-in could not complete</value>
+    <comment>Heading and page title.</comment>
+  </data>
+  <data name="FailedIllustrationLabel" xml:space="preserve">
+    <value>A sign-in loop between JIM and the identity provider, halted by a stop sign, with a cookie crumbling away</value>
+  </data>
+  <data name="FailedSubtitle" xml:space="preserve">
+    <value>JIM stopped the sign-in rather than keep sending you back to your identity provider.</value>
+  </data>
+  <data name="FailedPlainHttp" xml:space="preserve">
+    <value>You are connected to JIM over plain HTTP. Your browser discards the cookies sign-in depends on unless the connection is secure, so {0}.</value>
+    <comment>{0} is the emphasised phrase FailedPlainHttpEmphasis, shown in bold.</comment>
+  </data>
+  <data name="FailedPlainHttpEmphasis" xml:space="preserve">
+    <value>browser access from other machines requires HTTPS</value>
+    <comment>Shown in bold at the end of FailedPlainHttp.</comment>
+  </data>
+  <data name="FailedBehindProxy" xml:space="preserve">
+    <value>If your address bar already shows {0}, TLS ends at a reverse proxy that JIM has not been told to trust. Set {1} so JIM can see the original connection was secure.</value>
+    <comment>{0} is https:// and {1} is the setting name JIM_TRUSTED_PROXIES, both shown as code; never translate them.</comment>
+  </data>
+  <data name="FailedCookiesMissing" xml:space="preserve">
+    <value>Your browser came back from the identity provider without the cookies JIM set when sign-in began, even after JIM restarted it. Check that your browser accepts cookies from this site, and that any reverse proxy in front of JIM passes cookies through unchanged.</value>
+  </data>
+  <data name="FailedDocsHttps" xml:space="preserve">
+    <value>Serving JIM over HTTPS</value>
+    <comment>Link to documentation.</comment>
+  </data>
+  <data name="FailedDocsLoops" xml:space="preserve">
+    <value>Troubleshooting sign-in loops</value>
+    <comment>Link to documentation.</comment>
+  </data>
+  <data name="ProblemTitle" xml:space="preserve">
+    <value>A setting stopped sign-in</value>
+    <comment>Heading and page title.</comment>
+  </data>
+  <data name="ProblemIllustrationLabel" xml:space="preserve">
+    <value>JIM and the identity provider, with a value between them that does not match</value>
+  </data>
+  <data name="ProblemSetting" xml:space="preserve">
+    <value>Setting</value>
+    <comment>Term of a definition list: which setting is wrong.</comment>
+  </data>
+  <data name="ProblemExpected" xml:space="preserve">
+    <value>Expected</value>
+    <comment>Term of a definition list: the value JIM expected.</comment>
+  </data>
+  <data name="ProblemReceived" xml:space="preserve">
+    <value>Received</value>
+    <comment>Term of a definition list: the value JIM received.</comment>
+  </data>
+  <data name="ProblemUnknown" xml:space="preserve">
+    <value>A setting stopped the sign-in, but JIM no longer holds the details, perhaps because it has restarted since.</value>
+  </data>
+  <data name="ProblemTryAgain" xml:space="preserve">
+    <value>Try again to see them. An administrator can also list recent sign-in problems with {0}, or find them in JIM's log.</value>
+    <comment>{0} is the PowerShell cmdlet Get-JIMSignInDiagnostic, shown as code; never translate it.</comment>
+  </data>
+  <data name="ProblemDocs" xml:space="preserve">
+    <value>Troubleshooting sign-in</value>
+    <comment>Link to documentation.</comment>
+  </data>
+  <data name="UnavailableTitleAvailable" xml:space="preserve">
+    <value>Sign-in is available</value>
+    <comment>Heading and page title once sign-in works again.</comment>
+  </data>
+  <data name="UnavailableTitleUnavailable" xml:space="preserve">
+    <value>Sign-in is unavailable</value>
+    <comment>Heading and page title while sign-in is stopped.</comment>
+  </data>
+  <data name="UnavailableIllustrationLabel" xml:space="preserve">
+    <value>JIM and the identity provider, with a padlock between them that JIM cannot open</value>
+  </data>
+  <data name="UnavailableChainLabel" xml:space="preserve">
+    <value>Certificate chain presented</value>
+    <comment>Accessible name of the certificate chain.</comment>
+  </data>
+  <data name="UnavailableChainPresentedBy" xml:space="preserve">
+    <value>Certificate chain presented by {0}</value>
+    <comment>{0} is the identity provider's host name.</comment>
+  </data>
+  <data name="UnavailableNotSent" xml:space="preserve">
+    <value>Not sent by the server</value>
+    <comment>Pill beside a certificate the identity provider did not send.</comment>
+  </data>
+  <data name="UnavailableNotSentHint" xml:space="preserve">
+    <value>Fetch it from your certificate authority to trust it; a root outlasts every certificate it issues.</value>
+  </data>
+  <data name="UnavailableServerCertificate" xml:space="preserve">
+    <value>Server certificate</value>
+    <comment>Pill naming the kind of certificate.</comment>
+  </data>
+  <data name="UnavailableCertificateAuthority" xml:space="preserve">
+    <value>Certificate authority</value>
+    <comment>Pill naming the kind of certificate.</comment>
+  </data>
+  <data name="UnavailableCertificateMeta" xml:space="preserve">
+    <value>Thumbprint {0} · valid until {1}</value>
+    <comment>{0} is a certificate thumbprint, {1} a date.</comment>
+  </data>
+  <data name="UnavailableFixHeading" xml:space="preserve">
+    <value>Trust it with PowerShell, using the infrastructure API key</value>
+  </data>
+  <data name="UnavailableFixFooter" xml:space="preserve">
+    <value>Check the thumbprint against the one your certificate authority publishes first. An administrator who is already signed in can trust it from the banner in the portal instead.</value>
+  </data>
+  <data name="UnavailableDocs" xml:space="preserve">
+    <value>Trusting your identity provider's certificate</value>
+    <comment>Link to documentation.</comment>
+  </data>
+  <data name="UnavailablePolling" xml:space="preserve">
+    <value>Checking again every 10 seconds</value>
+  </data>
+  <data name="UnavailableSignIn" xml:space="preserve">
+    <value>Sign in</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="UnavailableAvailableMessage" xml:space="preserve">
+    <value>JIM trusts your identity provider. Nothing needed restarting.</value>
+    <comment>Shown by the page's script once sign-in works again, when the server sent no message of its own.</comment>
+  </data>
+  <data name="UnavailableTrusted" xml:space="preserve">
+    <value>Your identity provider is trusted.</value>
+    <comment>Shown by the page's script in place of the polling message.</comment>
+  </data>
+</root>

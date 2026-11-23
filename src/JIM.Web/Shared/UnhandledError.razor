@@ -105,23 +105,23 @@
     </div>
 
     <div class="unhandled-error-content">
-        <MudText Typo="Typo.h3" Class="unhandled-error-title">Something Went Wrong</MudText>
+        <MudText Typo="Typo.h3" Class="unhandled-error-title">@SharedText.UnhandledErrorTitle</MudText>
         <MudText Typo="Typo.h6" Color="Color.Secondary" Class="unhandled-error-subtitle">
-            Well, that wasn't supposed to happen. A cog has slipped!
+            @SharedText.UnhandledErrorSubtitle
         </MudText>
 
         @if (Exception != null)
         {
             <MudExpansionPanels Class="mt-4" Elevation="0">
-                <MudExpansionPanel Text="Technical Details" MaxHeight="500">
+                <MudExpansionPanel Text="@SharedText.TechnicalDetails" MaxHeight="500">
                     <MudSimpleTable Hover="true" Dense="true" Class="mt-2" Elevation="0">
                         <tbody>
                             <tr>
-                                <td><strong>Error</strong></td>
+                                <td><strong>@SharedText.UnhandledErrorLabel</strong></td>
                                 <td><code>@Exception.GetType().Name</code></td>
                             </tr>
                             <tr>
-                                <td><strong>Message</strong></td>
+                                <td><strong>@SharedText.UnhandledErrorMessage</strong></td>
                                 <td><code>@Exception.Message</code></td>
                             </tr>
                         </tbody>
@@ -135,11 +135,11 @@
             {
                 <MudButton Variant="Variant.Filled" Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.Refresh"
-                           OnClick="OnRecover">Try Again</MudButton>
+                           OnClick="OnRecover">@SharedText.UnhandledErrorTryAgain</MudButton>
             }
             <MudButton Variant="Variant.Filled"
                        StartIcon="@Icons.Material.Filled.Home"
-                       Href="/">Go to Dashboard</MudButton>
+                       Href="/">@SharedText.UnhandledErrorGoToDashboard</MudButton>
         </div>
     </div>
 </div>

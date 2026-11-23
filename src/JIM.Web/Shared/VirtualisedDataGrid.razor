@@ -60,7 +60,7 @@
            the list is doing in the count's place; a blank slot reads as nothing happening. *@
         @if (IsLoadingIndicatorShown && TotalItems == null)
         {
-            <MudText Typo="Typo.body2" Color="Color.Primary" Class="mr-3">@(string.IsNullOrWhiteSpace(SearchText) ? "Loading…" : "Searching…")</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Primary" Class="mr-3">@(string.IsNullOrWhiteSpace(SearchText) ? SharedText.GridLoading : SharedText.GridSearching)</MudText>
         }
         else
         {
@@ -147,6 +147,7 @@ else if (ReservesHeight)
        grid, and the grid's own outline and margin, so the swap is not visible. A toolbar drawn above the grid is
        already standing, so the stand-in reserves no row for it. *@
     <div id="@ContainerId" class="jim-virtualised-list jim-virtualised-list-reserving" style="@ContainerStyle">
+        @* i18n: exempt - CSS class names, not text *@
         <div class="@($"mud-table mud-table-outlined jim-virtualised-list-placeholder {GridClass}")">
             @if (ShowToolBar && !ToolBarAboveGrid)
             {
@@ -234,7 +235,7 @@ else if (ReservesHeight)
 
     /// <summary>Placeholder for the built-in search box.</summary>
     [Parameter]
-    public string SearchPlaceholder { get; set; } = "Search...";
+    public string SearchPlaceholder { get; set; } = SharedText.GridSearchPlaceholder;
 
     /// <summary>Prefix for the URL parameters this grid owns (q, sort, desc, row), so two grids on one page do
     /// not overwrite each other's state. Null for a page with a single grid.</summary>

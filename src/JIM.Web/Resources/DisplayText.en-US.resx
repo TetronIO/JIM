@@ -78,10 +78,10 @@
     <value>Waiting for Password Synchronization to be switched on for this Connected System. Last attempt: {0}</value>
   </data>
   <data name="PasswordFirstPasswordTooltip" xml:space="preserve">
-    <value>This change is also the first password of a Connected System Object JIM provisioned while it was waiting. Delivering it applies the provisioning Synchronization Rule's Initial Password settings for enabling the Connected System Object and for whether its password never expires. Cancelling it leaves that Connected System Object without a password from JIM.</value>
+    <value>This change is also the first password of a Connected System Object JIM provisioned while it was waiting. Delivering it applies the provisioning Synchronization Rule's Initial Password settings for enabling the Connected System Object and for whether its password never expires. Canceling it leaves that Connected System Object without a password from JIM.</value>
   </data>
   <data name="PasswordCancelFirstPasswordConsequence" xml:space="preserve">
-    <value>{0} It is the first password of a Connected System Object JIM provisioned there, so cancelling it leaves that Connected System Object without a password from JIM, and it is not enabled as its Synchronization Rule's Initial Password asks, until a password is set on it.</value>
+    <value>{0} It is the first password of a Connected System Object JIM provisioned there, so canceling it leaves that Connected System Object without a password from JIM, and it is not enabled as its Synchronization Rule's Initial Password asks, until a password is set on it.</value>
   </data>
   <data name="PasswordCancelOrdinaryConsequence" xml:space="preserve">
     <value>{0} Their password stays as it was on that system until a new change is synchronized.</value>

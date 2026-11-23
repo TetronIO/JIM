@@ -7,7 +7,7 @@
 @* Two-way bind Dense to the page's _dense field (@bind-Dense="_dense"); this control persists the *@
 @* choice globally via IUserPreferenceService. The page must still load the saved preference on first *@
 @* render so the table paints at the correct density immediately. See JIM.Web/CLAUDE.md "Row density". *@
-<MudTooltip Text="@(Dense ? "Normal row spacing" : "Compact row spacing")" Arrow="true" Placement="Placement.Top">
+<MudTooltip Text="@(Dense ? SharedText.DensityNormal : SharedText.DensityCompact)" Arrow="true" Placement="Placement.Top">
     <MudIconButton Icon="@(Dense ? Icons.Material.Filled.DensitySmall : Icons.Material.Filled.DensityMedium)"
                    Variant="Variant.Filled" Color="Color.Default" Size="Size.Small" OnClick="ToggleAsync" />
 </MudTooltip>
