@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -238,7 +240,7 @@ namespace JIM.Application.Servers
                 // Deprovisioning work (#809); record that on the Activity at queue time so the audit trail
                 // says so however the task ends.
                 if (deleteConnectedSystemTask.AbandonsDeprovisioningRun)
-                    activity.Message = ConnectedSystemServer.SynchronisedDeprovisioningAbandonedMessage;
+                    activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SynchronisedDeprovisioningAbandoned));
 
                 await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 

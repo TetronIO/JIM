@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Search;
@@ -107,7 +109,7 @@ public class SearchServer
             await Application.Repository.Search.UpdatePredefinedSearchAsync(predefinedSearch);
 
             await CapturePredefinedSearchConfigurationChangeAsync(activity, predefinedSearch.Id, changeReason);
-            activity.Message = $"Updated Predefined Search '{predefinedSearch.Name}'";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.PredefinedSearchUpdated), predefinedSearch.Name);
             await Application.Activities.CompleteActivityAsync(activity);
         }
         catch (Exception ex)
@@ -172,7 +174,7 @@ public class SearchServer
             var result = await Application.Repository.Search.CreatePredefinedSearchCriteriaGroupAsync(predefinedSearchId, parentGroupId, type, position);
 
             await CapturePredefinedSearchConfigurationChangeAsync(activity, predefinedSearchId, changeReason);
-            activity.Message = $"Added a criteria group to Predefined Search '{searchName}'";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SearchCriteriaGroupAdded), searchName);
             await Application.Activities.CompleteActivityAsync(activity);
 
             return result;
@@ -233,7 +235,7 @@ public class SearchServer
             if (result != null)
                 await CapturePredefinedSearchConfigurationChangeAsync(activity, owningSearchIdValue, changeReason);
 
-            activity.Message = $"Updated a criteria group on Predefined Search '{searchName}'";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SearchCriteriaGroupUpdated), searchName);
             await Application.Activities.CompleteActivityAsync(activity);
 
             return result;
@@ -289,11 +291,11 @@ public class SearchServer
             if (deleted)
             {
                 await CapturePredefinedSearchConfigurationChangeAsync(activity, owningSearchIdValue, changeReason);
-                activity.Message = $"Deleted a criteria group from Predefined Search '{searchName}'";
+                activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SearchCriteriaGroupDeleted), searchName);
             }
             else
             {
-                activity.Message = $"No criteria group found to delete on Predefined Search '{searchName}'";
+                activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SearchCriteriaGroupNotFound), searchName);
             }
 
             await Application.Activities.CompleteActivityAsync(activity);
@@ -359,7 +361,7 @@ public class SearchServer
             if (result != null)
                 await CapturePredefinedSearchConfigurationChangeAsync(activity, owningSearchIdValue, changeReason);
 
-            activity.Message = $"Added a criterion to Predefined Search '{searchName}'";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SearchCriterionAdded), searchName);
             await Application.Activities.CompleteActivityAsync(activity);
 
             return result;
@@ -416,7 +418,7 @@ public class SearchServer
             if (result != null)
                 await CapturePredefinedSearchConfigurationChangeAsync(activity, owningSearchIdValue, changeReason);
 
-            activity.Message = $"Updated a criterion on Predefined Search '{searchName}'";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SearchCriterionUpdated), searchName);
             await Application.Activities.CompleteActivityAsync(activity);
 
             return result;
@@ -472,11 +474,11 @@ public class SearchServer
             if (deleted)
             {
                 await CapturePredefinedSearchConfigurationChangeAsync(activity, owningSearchIdValue, changeReason);
-                activity.Message = $"Deleted a criterion from Predefined Search '{searchName}'";
+                activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SearchCriterionDeleted), searchName);
             }
             else
             {
-                activity.Message = $"No criterion found to delete on Predefined Search '{searchName}'";
+                activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SearchCriterionNotFound), searchName);
             }
 
             await Application.Activities.CompleteActivityAsync(activity);

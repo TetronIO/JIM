@@ -7,6 +7,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
@@ -152,6 +153,11 @@ public interface ISyncServer
     /// Marks an activity as failed with the specified error message.
     /// </summary>
     Task FailActivityWithErrorAsync(Activity activity, string errorMessage);
+
+    /// <summary>
+    /// Marks an activity as failed with an error the portal shows in the viewer's language (#3039).
+    /// </summary>
+    Task FailActivityWithErrorAsync(Activity activity, JimMessage errorMessage);
 
     /// <summary>
     /// Marks an activity as failed with details from the specified exception.

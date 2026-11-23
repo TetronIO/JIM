@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Interfaces;
@@ -115,7 +118,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             && !await _syncRepo.AnyGeneratedValueRevisionsPendingAsync())
         {
             Log.Information("PerformDeltaSyncAsync: No CSOs modified since last sync. Completing immediately.");
-            await _syncRepo.UpdateActivityMessageAsync(_activity, "No changes to process");
+            await _syncRepo.UpdateActivityMessageAsync(_activity, ActivityMessage.Create(nameof(ActivityMessages.NoChangesToProcess)));
 
             // Update the watermark even when there are no changes
             await UpdateDeltaSyncWatermarkAsync();
@@ -505,9 +508,8 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             await ApplyClaimedConfigurationChangesAsync("Delta Synchronisation");
 
             // Update activity message with throughput summary
-            var syncCompleteMessage = $"Sync complete: {objectsProcessed:N0} objects" +
-                throughput.FormatCompletion(objectsProcessed);
-            await _syncRepo.UpdateActivityMessageAsync(_activity, syncCompleteMessage);
+            await _syncRepo.UpdateActivityMessageAsync(_activity,
+                ActivityMessage.SyncComplete(objectsProcessed, throughput.CompletionArgument(objectsProcessed)));
 
             // Summary stats were accumulated incrementally during each FlushHistoryAsync call (production).
             // In tests (EF fallback), RPEIs remain in Activity.RunProfileExecutionItems — compute stats

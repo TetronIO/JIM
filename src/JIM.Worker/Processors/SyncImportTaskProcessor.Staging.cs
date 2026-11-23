@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using JIM.Application.Diagnostics;
 using JIM.Models.Activities;
 using JIM.Models.Enums;
@@ -610,9 +613,11 @@ public partial class SyncImportTaskProcessor
             var takesTheErrorSlot = handling == UnresolvedReferenceHandling.Error && !holder.ItemHadAnError;
             if (takesTheErrorSlot)
                 newlyErrored++;
+            var unresolvedMessage = takesTheErrorSlot ? ActivityMessage.UnresolvedReferences(holder.LeftUnresolved) : null;
             reports.Add(new UnresolvedReferenceReport(itemId, holder.UnresolvedCountWhenWritten + holder.LeftUnresolved.Count,
                 takesTheErrorSlot ? ActivityRunProfileExecutionItemErrorType.UnresolvedReference : null,
-                takesTheErrorSlot ? ImportOutcomeMessage.ForUnresolvedReferences(holder.LeftUnresolved) : null));
+                unresolvedMessage?.ToEnglish(),
+                unresolvedMessage is null ? null : MessageJson.Serialise(unresolvedMessage)));
         }
 
         if (objectsMissingAnItem > 0)
@@ -666,7 +671,7 @@ public partial class SyncImportTaskProcessor
                 _ambiguousReferenceTotal, handling);
 
             if (handling == UnresolvedReferenceHandling.Warn)
-                AppendActivityWarning($"{_ambiguousReferenceTotal} reference value(s) matched objects of more than one Object Type and could not be resolved. Declare each Reference attribute's target Object Type in the Connected System's schema configuration if the Connector supports doing so.");
+                ActivityMessage.AddWarning(_activity, ActivityMessage.Create(nameof(ActivityMessages.AmbiguousReferencesWarning), ActivityMessage.Plain(_ambiguousReferenceTotal)));
         }
 
         // Always logged when references were left unresolved, regardless of handling mode.
@@ -679,12 +684,9 @@ public partial class SyncImportTaskProcessor
             // Container excludes it. The second is the harder to spot, because the branch above the referenced object is
             // selected and looks right.
             if (handling == UnresolvedReferenceHandling.Warn)
-                AppendActivityWarning($"{_unresolvedReferenceTotal} reference value(s) could not be resolved to Connected System Objects. The referenced objects may be outside the configured Container Scope, or inside a Container it excludes. View the affected Connected System Objects for details.");
+                ActivityMessage.AddWarning(_activity, ActivityMessage.Create(nameof(ActivityMessages.UnresolvedReferencesWarning), ActivityMessage.Plain(_unresolvedReferenceTotal)));
         }
     }
-
-    private void AppendActivityWarning(string warning) =>
-        _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage) ? warning : $"{_activity.WarningMessage}\n{warning}";
 
     private static List<string> DistinctTypeNames(IEnumerable<string> typeNames) =>
         typeNames.Distinct().OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList();

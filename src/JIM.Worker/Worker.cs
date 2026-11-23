@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Utilities;
@@ -556,7 +559,7 @@ public class Worker : BackgroundService
                                             newWorkerTask.Activity.ClearedJoinRecordCount = clearResult.JoinRecordsWritten;
 
                                             // the Delta Import starting points the clear removed (#2724); null when there were none
-                                            newWorkerTask.Activity.Message = clearResult.DescribeDeltaImportReset();
+                                            newWorkerTask.Activity.MessageDetail = ActivityMessage.DeltaImportReset(clearResult);
 
                                             // task completed successfully, complete the activity
                                             await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
@@ -805,7 +808,7 @@ public class Worker : BackgroundService
                                         }
                                         else
                                         {
-                                            newWorkerTask.Activity.Message = $"Read {run.EntriesRead} object(s) and found {run.Results.Count} auxiliary class suggestion(s).";
+                                            newWorkerTask.Activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.AuxiliaryClassDiscoveryCompleted), ActivityMessage.Plain(run.EntriesRead), ActivityMessage.Plain(run.Results.Count));
                                             await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
                                         }
 
@@ -836,7 +839,7 @@ public class Worker : BackgroundService
 
                                         var reconciliationResult = await taskJim.ScopeReconciliation.ReconcileAsync(afterUtc, DateTime.UtcNow);
                                         // The cost of any full pass, and any object left undecided (#2054); null otherwise.
-                                        newWorkerTask.Activity.Message = reconciliationResult.Describe();
+                                        newWorkerTask.Activity.MessageDetail = ActivityMessage.ScopeReconciliation(reconciliationResult);
                                         if (reconciliationResult.UndecidableObjects > 0)
                                             await taskJim.Activities.CompleteActivityWithWarningAsync(newWorkerTask.Activity);
                                         else
@@ -866,7 +869,7 @@ public class Worker : BackgroundService
                                         var cutoffs = await taskJim.ChangeHistory.GetRetentionCutoffsAsync(DateTime.UtcNow);
                                         var cleanupResult = await taskJim.ChangeHistory.DeleteExpiredChangeHistoryAsync(newWorkerTask.Activity, cutoffs);
 
-                                        newWorkerTask.Activity.Message = DescribeRetentionCleanup(cleanupResult);
+                                        newWorkerTask.Activity.MessageDetail = ActivityMessage.RetentionCleanup(cleanupResult);
                                         await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
 
                                         Log.Information("ExecuteAsync: History retention cleanup completed in {ExecutionTime}: {Summary}",
@@ -1639,10 +1642,9 @@ public class Worker : BackgroundService
         if (runProfile.Enabled)
             return false;
 
-        var refusal = RunProfileEnablement.DescribeRunRefusal(runProfile);
         Log.Warning("RefuseIfRunProfileDisabledAsync: Run Profile {RunProfileId} is disabled ({DisabledReason}); its run is refused.",
             runProfile.Id, runProfile.DisabledReason);
-        await taskJim.Activities.FailActivityWithErrorAsync(activity, refusal);
+        await taskJim.Activities.FailActivityWithErrorAsync(activity, ActivityMessage.RunRefusal(runProfile));
         return true;
     }
 
@@ -1661,7 +1663,7 @@ public class Worker : BackgroundService
 
         Log.Warning("RefuseIfImportIncompleteAsync: Connected System {ConnectedSystemId} is marked import incomplete (since {Since:o}); Run Profile {RunProfileId} ({RunType}) is refused until a Full Import completes.",
             connectedSystem.Id, since, runProfile.Id, runProfile.RunType);
-        await taskJim.Activities.FailActivityWithErrorAsync(activity, ImportCompleteness.DescribeSynchronisationRefusal(connectedSystem, runProfile));
+        await taskJim.Activities.FailActivityWithErrorAsync(activity, ActivityMessage.ImportIncompleteRefusal(connectedSystem, runProfile));
         return true;
     }
 
@@ -1692,30 +1694,8 @@ public class Worker : BackgroundService
     /// says so rather than rendering a row of zeroes, because "there was nothing to remove" and "the pass never
     /// ran" are the two answers that must not look alike.
     /// </summary>
-    internal static string DescribeRetentionCleanup(ChangeHistoryServer.ChangeHistoryCleanupResult result)
-    {
-        var parts = new List<string>();
-
-        void Add(int count, string singular, string plural)
-        {
-            if (count > 0)
-                parts.Add($"{count} {(count == 1 ? singular : plural)}");
-        }
-
-        Add(result.CsoChangesDeleted, "Connected System Object change", "Connected System Object changes");
-        Add(result.MvoChangesDeleted, "Metaverse Object change", "Metaverse Object changes");
-        Add(result.PreviewsDeleted, "configuration change preview", "configuration change previews");
-        Add(result.ActivitiesDeleted, "Activity", "Activities");
-        Add(result.ConfigurationChangeActivitiesDeleted, "configuration change Activity", "configuration change Activities");
-        Add(result.SecurityEventActivitiesDeleted, "security event Activity", "security event Activities");
-        Add(result.PasswordEventActivitiesDeleted, "Password Synchronisation Activity", "Password Synchronisation Activities");
-        Add(result.PasswordQueueRecordsDeleted, "queued password change", "queued password changes");
-        Add(result.ExchangeQueueRecordsDeleted, "queued Exchange change", "queued Exchange changes");
-
-        return parts.Count == 0
-            ? "Nothing had reached its retention period."
-            : $"Removed {string.Join(", ", parts)}.";
-    }
+    internal static string DescribeRetentionCleanup(ChangeHistoryServer.ChangeHistoryCleanupResult result) =>
+        ActivityMessage.RetentionCleanup(result).ToEnglish();
 
     /// <summary>
     /// Completes an activity based on the execution results of its Run Profile execution items.
@@ -1758,13 +1738,13 @@ public class Worker : BackgroundService
                         activity.ConnectedSystemRunType, activity.ObjectsProcessed))
             {
                 case ActivityStatus.FailedWithError:
-                    await jim.Activities.FailActivityWithErrorAsync(activity, "All Run Profile execution items experienced an error. Review the items for more information.");
+                    await jim.Activities.FailActivityWithErrorAsync(activity, ActivityMessage.Create(nameof(ActivityMessages.AllItemsFailed)));
                     Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} failed - all items had errors", activity.Id);
                     break;
                 case ActivityStatus.CompleteWithError:
                     // UnhandledError RPEIs indicate code/logic bugs, not data issues.
                     // These must escalate to CompleteWithError to ensure visibility and investigation.
-                    await jim.Activities.CompleteActivityWithErrorAsync(activity, $"{counts.TotalUnhandledErrors} unhandled error(s) occurred during processing. Review the items for more information.");
+                    await jim.Activities.CompleteActivityWithErrorAsync(activity, ActivityMessage.Create(nameof(ActivityMessages.UnhandledErrors), ActivityMessage.Plain(counts.TotalUnhandledErrors)));
                     Log.Warning("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} completed with error - {UnhandledErrorCount} unhandled error(s) detected", activity.Id, counts.TotalUnhandledErrors);
                     break;
                 case ActivityStatus.CompleteWithWarning:

@@ -17,4 +17,548 @@
   <data name="FailureWithCause" xml:space="preserve">
     <value>{0} --&gt; {1}</value>
   </data>
+  <data name="Verbatim" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="JoinedBySpace" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="JoinedByComma" xml:space="preserve">
+    <value>{0}, {1}</value>
+  </data>
+  <data name="RoleCreated" xml:space="preserve">
+    <value>Rôle « {0} » créé.</value>
+  </data>
+  <data name="RoleMemberAdded" xml:space="preserve">
+    <value>« {0} » ajouté au rôle « {1} ».</value>
+  </data>
+  <data name="RoleMemberRemoved" xml:space="preserve">
+    <value>« {0} » retiré du rôle « {1} ».</value>
+  </data>
+  <data name="ApiKeyCreated" xml:space="preserve">
+    <value>Clé d’API « {0} » créée.</value>
+  </data>
+  <data name="ApiKeyUpdated" xml:space="preserve">
+    <value>Clé d’API « {0} » mise à jour.</value>
+  </data>
+  <data name="ApiKeyDeleted" xml:space="preserve">
+    <value>Clé d’API « {0} » supprimée.</value>
+  </data>
+  <data name="PredefinedSearchUpdated" xml:space="preserve">
+    <value>Recherche prédéfinie « {0} » mise à jour.</value>
+  </data>
+  <data name="SearchCriteriaGroupAdded" xml:space="preserve">
+    <value>Groupe de critères ajouté à la recherche prédéfinie « {0} ».</value>
+  </data>
+  <data name="SearchCriteriaGroupUpdated" xml:space="preserve">
+    <value>Groupe de critères mis à jour sur la recherche prédéfinie « {0} ».</value>
+  </data>
+  <data name="SearchCriteriaGroupDeleted" xml:space="preserve">
+    <value>Groupe de critères supprimé de la recherche prédéfinie « {0} ».</value>
+  </data>
+  <data name="SearchCriteriaGroupNotFound" xml:space="preserve">
+    <value>Aucun groupe de critères à supprimer sur la recherche prédéfinie « {0} ».</value>
+  </data>
+  <data name="SearchCriterionAdded" xml:space="preserve">
+    <value>Critère ajouté à la recherche prédéfinie « {0} ».</value>
+  </data>
+  <data name="SearchCriterionUpdated" xml:space="preserve">
+    <value>Critère mis à jour sur la recherche prédéfinie « {0} ».</value>
+  </data>
+  <data name="SearchCriterionDeleted" xml:space="preserve">
+    <value>Critère supprimé de la recherche prédéfinie « {0} ».</value>
+  </data>
+  <data name="SearchCriterionNotFound" xml:space="preserve">
+    <value>Aucun critère à supprimer sur la recherche prédéfinie « {0} ».</value>
+  </data>
+  <data name="CertificateAdded" xml:space="preserve">
+    <value>Certificat approuvé « {0} » ajouté (objet : {1}).</value>
+  </data>
+  <data name="CertificateAddedFromFile" xml:space="preserve">
+    <value>Certificat approuvé « {0} » ajouté à partir d’un fichier (objet : {1}).</value>
+  </data>
+  <data name="CertificateUpdated" xml:space="preserve">
+    <value>Certificat approuvé mis à jour : {0}</value>
+  </data>
+  <data name="CertificateUnchanged" xml:space="preserve">
+    <value>Aucune modification apportée au certificat approuvé.</value>
+  </data>
+  <data name="CertificateDeleted" xml:space="preserve">
+    <value>Certificat approuvé « {0} » supprimé.</value>
+  </data>
+  <data name="InitialAdministratorRoleAssigned" xml:space="preserve">
+    <value>Rôle {0} attribué à l’administrateur initial.</value>
+  </data>
+  <data name="InitialAdministratorCreated" xml:space="preserve">
+    <value>Administrateur initial « {0} » créé.</value>
+  </data>
+  <data name="BuiltInConfigurationApplied" xml:space="preserve">
+    <value>Configuration intégrée appliquée.</value>
+  </data>
+  <data name="SynchronisedDeprovisioningAbandoned" xml:space="preserve">
+    <value>Une exécution de déprovisionnement synchronisé a été abandonnée en cours de route et la suppression a été effectuée immédiatement. Les valeurs d’attribut contribuées restantes ont été conservées sans provenance (elles ne peuvent plus être rappelées), les contributeurs restants n’ont pas été réélus et les systèmes en aval n’ont pas été corrigés.</value>
+  </data>
+  <data name="JoinedByLine" xml:space="preserve">
+    <value>{0}
+{1}</value>
+  </data>
+  <data name="SchemaRefreshRemovalCompleted" xml:space="preserve">
+    <value>Objets de système connecté marqués comme obsolètes : {0} ; exportations en attente supprimées : {1} ; valeurs d’attribut stockées supprimées : {2}.</value>
+  </data>
+  <data name="ContainersAutoSelected" xml:space="preserve">
+    <value>{0} conteneur(s) créé(s) pendant l’exportation sélectionné(s) automatiquement.</value>
+  </data>
+  <data name="HierarchyAdded" xml:space="preserve">
+    <value>{0} ajouté(s)</value>
+  </data>
+  <data name="HierarchyRemoved" xml:space="preserve">
+    <value>{0} supprimé(s)</value>
+  </data>
+  <data name="HierarchyUpdated" xml:space="preserve">
+    <value>{0} mis à jour</value>
+  </data>
+  <data name="HierarchyPartitionsSelectedOne" xml:space="preserve">
+    <value>{0} partition sélectionnée</value>
+  </data>
+  <data name="HierarchyPartitionsSelectedOther" xml:space="preserve">
+    <value>{0} partitions sélectionnées</value>
+  </data>
+  <data name="HierarchyNoChanges" xml:space="preserve">
+    <value>Aucun changement</value>
+  </data>
+  <data name="ContributedValuesKept" xml:space="preserve">
+    <value>Les valeurs d’attribut contribuées ont été conservées ({0} valeur(s) ; objets Metaverse concernés : {1}) ; elles restent en place sans provenance de règle de synchronisation.</value>
+  </data>
+  <data name="ContributedValuesKeptForFlow" xml:space="preserve">
+    <value>Les valeurs d’attribut contribuées ont été conservées pour le flux d’attributs {0} supprimé ({1} valeur(s) ; objets Metaverse concernés : {2}) ; elles restent en place sans provenance de règle de synchronisation.</value>
+  </data>
+  <data name="SyncRuleDeletionRecalled" xml:space="preserve">
+    <value>Valeurs d’attribut rappelées : {0}, sur {1} objets Metaverse traités ; attributs réélus pour un contributeur restant : {2} ; attributs effacés (plus aucun contributeur) : {3} ; exportations en attente préparées : {4}. La règle de synchronisation a été supprimée.</value>
+  </data>
+  <data name="AllItemsFailed" xml:space="preserve">
+    <value>Tous les éléments d’exécution du profil d’exécution ont rencontré une erreur. Consultez les éléments pour en savoir plus.</value>
+  </data>
+  <data name="UnhandledErrors" xml:space="preserve">
+    <value>{0} erreur(s) non gérée(s) sont survenues pendant le traitement. Consultez les éléments pour en savoir plus.</value>
+  </data>
+  <data name="PartitionCountOne" xml:space="preserve">
+    <value>{0} partition</value>
+  </data>
+  <data name="PartitionCountOther" xml:space="preserve">
+    <value>{0} partitions</value>
+  </data>
+  <data name="DeltaImportResetBoth" xml:space="preserve">
+    <value>Le repère d’importation delta du système connecté et ceux de {0} ont été supprimés ; la prochaine importation delta lira donc tous les objets, comme le fait une importation complète.</value>
+  </data>
+  <data name="DeltaImportResetSystem" xml:space="preserve">
+    <value>Le repère d’importation delta du système connecté a été supprimé ; la prochaine importation delta lira donc tous les objets, comme le fait une importation complète.</value>
+  </data>
+  <data name="DeltaImportResetPartitions" xml:space="preserve">
+    <value>Les repères d’importation delta de {0} ont été supprimés ; la prochaine importation delta y lira donc tous les objets, comme le fait une importation complète.</value>
+  </data>
+  <data name="ScopeReconciliationFullPass" xml:space="preserve">
+    <value>Objets évalués intégralement : {0}, pour les règles de synchronisation concernées ({1}) dont les critères d’expression se comparent à une date relative, ce qu’aucune valeur stockée ne permet de restreindre.</value>
+  </data>
+  <data name="ScopeReconciliationUndecidable" xml:space="preserve">
+    <value>{0} objet(s) laissé(s) en l’état, car un critère de périmètre n’a pas pu être évalué pour eux ; le journal du service nomme chacun d’eux et en donne la raison.</value>
+  </data>
+  <data name="RetentionRemoved" xml:space="preserve">
+    <value>Suppression de {0}.</value>
+  </data>
+  <data name="RetentionNothing" xml:space="preserve">
+    <value>Aucun élément n’avait atteint sa durée de conservation.</value>
+  </data>
+  <data name="RetentionCsoChangesOne" xml:space="preserve">
+    <value>{0} modification d’objet de système connecté</value>
+  </data>
+  <data name="RetentionCsoChangesOther" xml:space="preserve">
+    <value>{0} modifications d’objet de système connecté</value>
+  </data>
+  <data name="RetentionMvoChangesOne" xml:space="preserve">
+    <value>{0} modification d’objet Metaverse</value>
+  </data>
+  <data name="RetentionMvoChangesOther" xml:space="preserve">
+    <value>{0} modifications d’objet Metaverse</value>
+  </data>
+  <data name="RetentionPreviewsOne" xml:space="preserve">
+    <value>{0} aperçu de modification de configuration</value>
+  </data>
+  <data name="RetentionPreviewsOther" xml:space="preserve">
+    <value>{0} aperçus de modification de configuration</value>
+  </data>
+  <data name="RetentionActivitiesOne" xml:space="preserve">
+    <value>{0} activité</value>
+  </data>
+  <data name="RetentionActivitiesOther" xml:space="preserve">
+    <value>{0} activités</value>
+  </data>
+  <data name="RetentionConfigurationActivitiesOne" xml:space="preserve">
+    <value>{0} activité de modification de configuration</value>
+  </data>
+  <data name="RetentionConfigurationActivitiesOther" xml:space="preserve">
+    <value>{0} activités de modification de configuration</value>
+  </data>
+  <data name="RetentionSecurityActivitiesOne" xml:space="preserve">
+    <value>{0} activité d’événement de sécurité</value>
+  </data>
+  <data name="RetentionSecurityActivitiesOther" xml:space="preserve">
+    <value>{0} activités d’événement de sécurité</value>
+  </data>
+  <data name="RetentionPasswordActivitiesOne" xml:space="preserve">
+    <value>{0} activité de synchronisation des mots de passe</value>
+  </data>
+  <data name="RetentionPasswordActivitiesOther" xml:space="preserve">
+    <value>{0} activités de synchronisation des mots de passe</value>
+  </data>
+  <data name="RetentionPasswordQueueOne" xml:space="preserve">
+    <value>{0} changement de mot de passe en file d’attente</value>
+  </data>
+  <data name="RetentionPasswordQueueOther" xml:space="preserve">
+    <value>{0} changements de mot de passe en file d’attente</value>
+  </data>
+  <data name="RetentionExchangeQueueOne" xml:space="preserve">
+    <value>{0} modification Exchange en file d’attente</value>
+  </data>
+  <data name="RetentionExchangeQueueOther" xml:space="preserve">
+    <value>{0} modifications Exchange en file d’attente</value>
+  </data>
+  <data name="RunRefusal" xml:space="preserve">
+    <value>Le profil d’exécution « {0} » est désactivé et ne peut donc pas s’exécuter. {1} {2}</value>
+  </data>
+  <data name="DisabledPartitionRemoved" xml:space="preserve">
+    <value>Une actualisation de la hiérarchie a supprimé la partition qu’il ciblait, « {0} », car le système connecté ne la contient plus.</value>
+  </data>
+  <data name="DisabledByAdministrator" xml:space="preserve">
+    <value>Un administrateur l’a désactivé.</value>
+  </data>
+  <data name="RemedyEnableChoosingPartition" xml:space="preserve">
+    <value>Réactivez-le en choisissant la partition qu’il lit pour l’exécuter.</value>
+  </data>
+  <data name="RemedyEnable" xml:space="preserve">
+    <value>Réactivez-le pour l’exécuter.</value>
+  </data>
+  <data name="ImportIncompleteRefusal" xml:space="preserve">
+    <value>Le profil d’exécution « {0} » ne peut pas s’exécuter : une importation du système connecté « {1} » s’est arrêtée en cours d’enregistrement de ce qu’elle avait lu{2}, de sorte que l’espace connecteur ne contient qu’une partie de cette importation. Le synchroniser maintenant pourrait supprimer des références Metaverse vers des objets que l’importation n’avait pas encore enregistrés, et exporter ces suppressions. {3}</value>
+  </data>
+  <data name="ImportIncompleteBeganWriting" xml:space="preserve">
+    <value> (elle a commencé à écrire le {0})</value>
+  </data>
+  <data name="ImportIncompleteRemedy" xml:space="preserve">
+    <value>Exécutez une importation complète de ce système connecté jusqu’à son terme{0} ; la synchronisation pourra ensuite s’exécuter.</value>
+  </data>
+  <data name="ImportIncompleteRemedyPartitions" xml:space="preserve">
+    <value>, en lisant toutes les partitions sélectionnées (un profil d’exécution qui cible une seule partition ne suffit pas)</value>
+  </data>
+  <data name="ImportStillIncomplete" xml:space="preserve">
+    <value>Une importation précédente s’est arrêtée en cours d’enregistrement de ce qu’elle avait lu{0} ; la synchronisation de ce système connecté est donc refusée. {1} et ne peut donc pas y remédier. {2}</value>
+  </data>
+  <data name="ImportStillIncompleteDelta" xml:space="preserve">
+    <value>Cette importation delta n’a lu que ce qui avait changé</value>
+  </data>
+  <data name="ImportStillIncompleteOnePartition" xml:space="preserve">
+    <value>Cette importation n’a lu qu’une seule partition</value>
+  </data>
+  <data name="ImportStillIncompleteNoObjects" xml:space="preserve">
+    <value>Cette importation n’a lu aucun objet</value>
+  </data>
+  <data name="AuxiliaryClassDiscoveryCompleted" xml:space="preserve">
+    <value>{0} objet(s) lu(s) et {1} suggestion(s) de classe auxiliaire trouvée(s).</value>
+  </data>
+  <data name="ImportCreated" xml:space="preserve">
+    <value>{0} créé(s)</value>
+  </data>
+  <data name="ImportUpdated" xml:space="preserve">
+    <value>{0} mis à jour</value>
+  </data>
+  <data name="ImportUnchanged" xml:space="preserve">
+    <value>{0} inchangé(s)</value>
+  </data>
+  <data name="ImportDeleted" xml:space="preserve">
+    <value>{0} supprimé(s)</value>
+  </data>
+  <data name="ImportWithheldOne" xml:space="preserve">
+    <value>{0} suppression retenue</value>
+  </data>
+  <data name="ImportWithheldOther" xml:space="preserve">
+    <value>{0} suppressions retenues</value>
+  </data>
+  <data name="ImportErrorsOne" xml:space="preserve">
+    <value>{0} erreur</value>
+  </data>
+  <data name="ImportErrorsOther" xml:space="preserve">
+    <value>{0} erreurs</value>
+  </data>
+  <data name="ImportDetectedDeletions" xml:space="preserve">
+    <value> ; {0} introuvable(s) désormais et marqué(s) comme supprimé(s)</value>
+  </data>
+  <data name="ImportCompleteOne" xml:space="preserve">
+    <value>Importation terminée : {0} objet ({1}){2}{3}</value>
+  </data>
+  <data name="ImportCompleteOther" xml:space="preserve">
+    <value>Importation terminée : {0} objets ({1}){2}{3}</value>
+  </data>
+  <data name="LimitBoth" xml:space="preserve">
+    <value>les limites de {0} et de {1} %</value>
+  </data>
+  <data name="LimitCount" xml:space="preserve">
+    <value>la limite de {0}</value>
+  </data>
+  <data name="LimitPercent" xml:space="preserve">
+    <value>la limite de {0} %</value>
+  </data>
+  <data name="LimitConfigured" xml:space="preserve">
+    <value>la limite configurée</value>
+  </data>
+  <data name="DeletionDetectionNextDelta" xml:space="preserve">
+    <value>ou relevez la limite. Chaque importation delta lira tous les objets et vérifiera de nouveau jusqu’à ce que le problème soit résolu.</value>
+  </data>
+  <data name="DeletionDetectionNextFull" xml:space="preserve">
+    <value>ou relevez la limite, puis exécutez de nouveau l’importation complète.</value>
+  </data>
+  <data name="DeletionDetectionRefusedOne" xml:space="preserve">
+    <value>La détection des suppressions a trouvé {0} objet ({1} % de {2}) qui n’est plus dans le système connecté, ce qui dépasse {3} de ce profil d’exécution ; aucun n’a été marqué comme supprimé. Vérifiez le périmètre du système connecté et les filtres du connecteur, {4}</value>
+  </data>
+  <data name="DeletionDetectionRefusedOther" xml:space="preserve">
+    <value>La détection des suppressions a trouvé {0} objets ({1} % de {2}) qui ne sont plus dans le système connecté, ce qui dépasse {3} de ce profil d’exécution ; aucun n’a été marqué comme supprimé. Vérifiez le périmètre du système connecté et les filtres du connecteur, {4}</value>
+  </data>
+  <data name="DeletesWithheldOne" xml:space="preserve">
+    <value>Le système connecté a signalé {0} objet ({1} % de {2}) comme supprimé, ce qui dépasse {3} de ce profil d’exécution ; aucun n’a été marqué comme supprimé. Chaque importation delta les signalera de nouveau jusqu’à ce que le problème soit résolu. Vérifiez ce qui les a supprimés dans le système connecté. Si ces suppressions sont voulues, relevez la limite, ou exécutez un profil d’exécution d’importation delta sans ces limites pour les laisser passer.</value>
+  </data>
+  <data name="DeletesWithheldOther" xml:space="preserve">
+    <value>Le système connecté a signalé {0} objets ({1} % de {2}) comme supprimés, ce qui dépasse {3} de ce profil d’exécution ; aucun n’a été marqué comme supprimé. Chaque importation delta les signalera de nouveau jusqu’à ce que le problème soit résolu. Vérifiez ce qui les a supprimés dans le système connecté. Si ces suppressions sont voulues, relevez la limite, ou exécutez un profil d’exécution d’importation delta sans ces limites pour les laisser passer.</value>
+  </data>
+  <data name="DeselectedBecauseOne" xml:space="preserve">
+    <value>une règle de synchronisation activée le gère encore : {1}.</value>
+  </data>
+  <data name="DeselectedBecauseOther" xml:space="preserve">
+    <value>{0} règles de synchronisation activées le gèrent encore : {1}.</value>
+  </data>
+  <data name="DeselectedDisableOne" xml:space="preserve">
+    <value>cette règle de synchronisation</value>
+  </data>
+  <data name="DeselectedDisableOther" xml:space="preserve">
+    <value>ces règles de synchronisation</value>
+  </data>
+  <data name="DeselectedHeldBack" xml:space="preserve">
+    <value>Le type d’objet « {0} » est désélectionné, mais ses objets n’ont pas été vérifiés pour la suppression, car {1} Ils restent joints et ne sont plus actualisés. Désactivez {2} pour retirer le type d’objet de la gestion, ou sélectionnez de nouveau le type d’objet.</value>
+  </data>
+  <data name="UnresolvedOnAttribute" xml:space="preserve">
+    <value>{0} sur {1}</value>
+  </data>
+  <data name="UnresolvedMissingOne" xml:space="preserve">
+    <value>{0} ne correspond à aucun objet de système connecté, par exemple {1}.</value>
+  </data>
+  <data name="UnresolvedMissingOther" xml:space="preserve">
+    <value>{0} ne correspondent à aucun objet de système connecté, par exemple {1}.</value>
+  </data>
+  <data name="UnresolvedExample" xml:space="preserve">
+    <value>Par exemple : {0}.</value>
+  </data>
+  <data name="UnresolvedAmbiguousAll" xml:space="preserve">
+    <value>Chacune correspond à des objets de plusieurs types d’objet ({0}) sur un attribut qui ne déclare pas le type d’objet qu’il référence.</value>
+  </data>
+  <data name="UnresolvedAmbiguousSomeOne" xml:space="preserve">
+    <value>{0} correspond à des objets de plusieurs types d’objet ({1}) sur un attribut qui ne déclare pas le type d’objet qu’il référence.</value>
+  </data>
+  <data name="UnresolvedAmbiguousSomeOther" xml:space="preserve">
+    <value>{0} correspondent à des objets de plusieurs types d’objet ({1}) sur un attribut qui ne déclare pas le type d’objet qu’il référence.</value>
+  </data>
+  <data name="UnresolvedSingleMissing" xml:space="preserve">
+    <value>Impossible de résoudre une référence sur {0} vers un objet de système connecté : {1}. {2}</value>
+  </data>
+  <data name="UnresolvedSingleAmbiguous" xml:space="preserve">
+    <value>Une valeur de référence ({0}) correspond à des objets de plusieurs types d’objet ({1}), et l’attribut « {2} » ne déclare pas le type d’objet qu’il référence ; la référence ne peut donc pas être résolue. {3}</value>
+  </data>
+  <data name="UnresolvedMany" xml:space="preserve">
+    <value>Impossible de résoudre {0} références vers des objets de système connecté ({1}).</value>
+  </data>
+  <data name="UnresolvedListsEvery" xml:space="preserve">
+    <value>L’objet de système connecté énumère toutes les valeurs non résolues.</value>
+  </data>
+  <data name="UnresolvedScopeRemedyOne" xml:space="preserve">
+    <value>Vérifiez que la portée du conteneur du système connecté inclut l’emplacement de l’objet référencé, et qu’aucun conteneur ne l’exclut.</value>
+  </data>
+  <data name="UnresolvedScopeRemedyOther" xml:space="preserve">
+    <value>Vérifiez que la portée du conteneur du système connecté inclut les emplacements des objets référencés, et qu’aucun conteneur ne les exclut.</value>
+  </data>
+  <data name="UnresolvedSchemaRemedy" xml:space="preserve">
+    <value>Déclarez le type d’objet cible de la référence dans la configuration du schéma du système connecté si le connecteur le permet.</value>
+  </data>
+  <data name="VerbImport" xml:space="preserve">
+    <value>importer</value>
+  </data>
+  <data name="VerbRead" xml:space="preserve">
+    <value>lire</value>
+  </data>
+  <data name="UnreadableValuesMany" xml:space="preserve">
+    <value>Impossible de {0} {1} valeurs ({2}) ; JIM a donc laissé ces attributs tels qu’il les détenait déjà.</value>
+  </data>
+  <data name="UnreadableAndMore" xml:space="preserve">
+    <value>Et {0} autre(s).</value>
+  </data>
+  <data name="UnreadableCorrectMany" xml:space="preserve">
+    <value>Corrigez les valeurs dans le système connecté, puis exécutez de nouveau l’importation.</value>
+  </data>
+  <data name="ExternalIdsNextDelta" xml:space="preserve">
+    <value>Corrigez les ID externes dans le système connecté. Chaque importation delta lira tous les objets et vérifiera de nouveau jusqu’à ce qu’ils puissent être lus.</value>
+  </data>
+  <data name="ExternalIdsNextFull" xml:space="preserve">
+    <value>Corrigez les ID externes dans le système connecté, puis exécutez de nouveau l’importation complète.</value>
+  </data>
+  <data name="ObjectsCountOne" xml:space="preserve">
+    <value>{0} objet</value>
+  </data>
+  <data name="ObjectsCountOther" xml:space="preserve">
+    <value>{0} objets</value>
+  </data>
+  <data name="ExternalIdsUnreadable" xml:space="preserve">
+    <value>Le type d’objet « {0} » n’a pas été vérifié pour les objets supprimés, car l’ID externe de {1} n’a pas pu être lu et JIM n’a pas pu déterminer de quels objets il s’agissait. Aucun de ses objets n’a été marqué comme supprimé. {2}</value>
+  </data>
+  <data name="ExternalIdsMissingOne" xml:space="preserve">
+    <value>Le type d’objet « {0} » n’a pas été vérifié pour les objets supprimés, car 1 objet est arrivé sans ID externe et JIM n’a pas pu déterminer de quel objet il s’agissait. Aucun de ses objets n’a été marqué comme supprimé. {1}</value>
+  </data>
+  <data name="ExternalIdsMissingOther" xml:space="preserve">
+    <value>Le type d’objet « {0} » n’a pas été vérifié pour les objets supprimés, car {2} objets sont arrivés sans ID externe et JIM n’a pas pu déterminer de quels objets il s’agissait. Aucun de ses objets n’a été marqué comme supprimé. {1}</value>
+  </data>
+  <data name="ExternalIdsMissingNextDeltaOne" xml:space="preserve">
+    <value>Donnez-lui un ID externe dans le système connecté. Chaque importation delta lira tous les objets et vérifiera de nouveau jusqu’à ce que chaque objet en ait un.</value>
+  </data>
+  <data name="ExternalIdsMissingNextDeltaOther" xml:space="preserve">
+    <value>Donnez-leur un ID externe dans le système connecté. Chaque importation delta lira tous les objets et vérifiera de nouveau jusqu’à ce que chaque objet en ait un.</value>
+  </data>
+  <data name="ExternalIdsMissingNextFullOne" xml:space="preserve">
+    <value>Donnez-lui un ID externe dans le système connecté, puis exécutez de nouveau l’importation complète.</value>
+  </data>
+  <data name="ExternalIdsMissingNextFullOther" xml:space="preserve">
+    <value>Donnez-leur un ID externe dans le système connecté, puis exécutez de nouveau l’importation complète.</value>
+  </data>
+  <data name="ExternalIdMissing" xml:space="preserve">
+    <value>L’objet n’a aucune valeur pour son attribut d’ID externe « {0} » ; JIM ne peut donc pas déterminer de quel objet il s’agit, et il n’a pas été importé. Donnez-lui une valeur dans le système connecté, puis exécutez de nouveau l’importation.</value>
+  </data>
+  <data name="AmbiguousReferencesWarning" xml:space="preserve">
+    <value>{0} valeur(s) de référence correspondaient à des objets de plusieurs types d’objet et n’ont pas pu être résolues. Déclarez le type d’objet cible de chaque attribut de référence dans la configuration du schéma du système connecté si le connecteur le permet.</value>
+  </data>
+  <data name="UnresolvedReferencesWarning" xml:space="preserve">
+    <value>{0} valeur(s) de référence n’ont pas pu être résolues vers des objets de système connecté. Les objets référencés se trouvent peut-être en dehors de la portée du conteneur configurée, ou dans un conteneur qu’elle exclut. Consultez les objets de système connecté concernés pour plus de détails.</value>
+  </data>
+  <data name="ThroughputCompletion" xml:space="preserve">
+    <value> en {0} (moyenne : {1} obj/s)</value>
+  </data>
+  <data name="DurationSeconds" xml:space="preserve">
+    <value>{0} s</value>
+  </data>
+  <data name="DurationMinutesSeconds" xml:space="preserve">
+    <value>{0} min {1} s</value>
+  </data>
+  <data name="DurationMinutes" xml:space="preserve">
+    <value>{0} min</value>
+  </data>
+  <data name="DurationHoursMinutes" xml:space="preserve">
+    <value>{0} h {1} min</value>
+  </data>
+  <data name="DurationHours" xml:space="preserve">
+    <value>{0} h</value>
+  </data>
+  <data name="SyncComplete" xml:space="preserve">
+    <value>Synchronisation terminée : {0} objets{1}</value>
+  </data>
+  <data name="NoChangesToProcess" xml:space="preserve">
+    <value>Aucun changement à traiter</value>
+  </data>
+  <data name="NoExportsToProcess" xml:space="preserve">
+    <value>Aucune exportation à traiter</value>
+  </data>
+  <data name="ExportCancelledBeforeStart" xml:space="preserve">
+    <value>Annulée avant l’exportation</value>
+  </data>
+  <data name="ExportCancelled" xml:space="preserve">
+    <value>Exportation annulée</value>
+  </data>
+  <data name="ExportComplete" xml:space="preserve">
+    <value>Exportation terminée : {0} réussie(s), {1} en échec, {2} différée(s){3}</value>
+  </data>
+  <data name="ExportCompleteWithPartial" xml:space="preserve">
+    <value>Exportation terminée : {0} réussie(s) ({1} écrite(s) en partie, en attente de références), {2} en échec, {3} différée(s){4}</value>
+  </data>
+  <data name="PreviewComplete" xml:space="preserve">
+    <value>Aperçu terminé : {0} exportation(s) seraient traitée(s)</value>
+  </data>
+  <data name="ConnectorDoesNotSupportExport" xml:space="preserve">
+    <value>Le connecteur {0} ne prend pas en charge les opérations d’exportation</value>
+  </data>
+  <data name="ExportFailedAfterAttempts" xml:space="preserve">
+    <value>Échec de l’exportation après {0} tentatives : {1}</value>
+  </data>
+  <data name="ExportFailed" xml:space="preserve">
+    <value>Échec de l’exportation : {0}</value>
+  </data>
+  <data name="ExportWithheldCreatesOne" xml:space="preserve">
+    <value>Le maximum de créations est de {0}, mais 1 création était en attente ; elle n’a donc pas été tentée et reste en attente. Vérifiez ce qui l’a préparée, puis relevez ou supprimez la limite de ce profil d’exécution, ou exécutez un profil d’exécution d’exportation sans limite.</value>
+  </data>
+  <data name="ExportWithheldCreatesOther" xml:space="preserve">
+    <value>Le maximum de créations est de {0}, mais {1} créations étaient en attente ; aucune n’a donc été tentée et les {1} restent en attente. Vérifiez ce qui les a préparées, puis relevez ou supprimez la limite de ce profil d’exécution, ou exécutez un profil d’exécution d’exportation sans limite.</value>
+  </data>
+  <data name="ExportWithheldUpdatesOne" xml:space="preserve">
+    <value>Le maximum de mises à jour est de {0}, mais 1 mise à jour était en attente ; elle n’a donc pas été tentée et reste en attente. Vérifiez ce qui l’a préparée, puis relevez ou supprimez la limite de ce profil d’exécution, ou exécutez un profil d’exécution d’exportation sans limite.</value>
+  </data>
+  <data name="ExportWithheldUpdatesOther" xml:space="preserve">
+    <value>Le maximum de mises à jour est de {0}, mais {1} mises à jour étaient en attente ; aucune n’a donc été tentée et les {1} restent en attente. Vérifiez ce qui les a préparées, puis relevez ou supprimez la limite de ce profil d’exécution, ou exécutez un profil d’exécution d’exportation sans limite.</value>
+  </data>
+  <data name="ExportWithheldDeletesOne" xml:space="preserve">
+    <value>Le maximum de suppressions est de {0}, mais 1 suppression ou désactivation était en attente ; elle n’a donc pas été tentée et reste en attente. Vérifiez ce qui l’a préparée, puis relevez ou supprimez la limite de ce profil d’exécution, ou exécutez un profil d’exécution d’exportation sans limite.</value>
+  </data>
+  <data name="ExportWithheldDeletesOther" xml:space="preserve">
+    <value>Le maximum de suppressions est de {0}, mais {1} suppressions et désactivations étaient en attente ; aucune n’a donc été tentée et les {1} restent en attente. Vérifiez ce qui les a préparées, puis relevez ou supprimez la limite de ce profil d’exécution, ou exécutez un profil d’exécution d’exportation sans limite.</value>
+  </data>
+  <data name="ExportWithdrawnOne" xml:space="preserve">
+    <value>1 modification en file d’attente a été retirée au lieu d’être exportée, car aucune règle de synchronisation ni aucun flux d’attributs activés ne l’autorisaient plus, ou l’objet n’était plus joint{1}</value>
+  </data>
+  <data name="ExportWithdrawnOther" xml:space="preserve">
+    <value>{0} modifications en file d’attente ont été retirées au lieu d’être exportées, car aucune règle de synchronisation ni aucun flux d’attributs activés ne les autorisaient plus, ou l’objet n’était plus joint{1}</value>
+  </data>
+  <data name="ExportWithdrawnEnd" xml:space="preserve">
+    <value>.</value>
+  </data>
+  <data name="ExportWithdrawnRemovalOne" xml:space="preserve">
+    <value> ; 1 exportation en attente laissée vide a été supprimée.</value>
+  </data>
+  <data name="ExportWithdrawnRemovalOther" xml:space="preserve">
+    <value> ; {0} exportations en attente laissées vides ont été supprimées.</value>
+  </data>
+  <data name="ExportUnrecordedOne" xml:space="preserve">
+    <value>1 exportation a été écrite, mais JIM n’a pas pu enregistrer les valeurs écrites ; elle a donc été laissée non confirmée et la prochaine exécution d’exportation l’enverra de nouveau. Le journal du service nomme la cause.</value>
+  </data>
+  <data name="ExportUnrecordedOther" xml:space="preserve">
+    <value>{0} exportations ont été écrites, mais JIM n’a pas pu enregistrer les valeurs écrites ; elles ont donc été laissées non confirmées et la prochaine exécution d’exportation les enverra de nouveau. Le journal du service nomme la cause.</value>
+  </data>
+  <data name="InitialPasswordsNotStagedOne" xml:space="preserve">
+    <value>1 compte nouvellement provisionné pourrait attendre un mot de passe initial que JIM n’a pas pu enregistrer ; aucun ne lui sera donc remis, et une nouvelle exportation n’en mettra pas un en file d’attente. Définissez son mot de passe avec l’action de définition du mot de passe sur son objet de système connecté ; le journal du service nomme le compte et la cause.</value>
+  </data>
+  <data name="InitialPasswordsNotStagedOther" xml:space="preserve">
+    <value>{0} comptes nouvellement provisionnés pourraient attendre un mot de passe initial que JIM n’a pas pu enregistrer ; aucun ne leur sera donc remis, et une nouvelle exportation n’en mettra pas un en file d’attente. Définissez le mot de passe de chacun avec l’action de définition du mot de passe sur son objet de système connecté ; le journal du service nomme les comptes et la cause.</value>
+  </data>
+  <data name="ExchangeChangesNotStagedOne" xml:space="preserve">
+    <value>1 objet exporté déclare un état de destinataire Exchange que JIM n’a pas pu mettre en file d’attente ni signaler ; rien n’atteindra donc Exchange pour lui tant que son état déclaré n’aura pas été exporté de nouveau. Le journal du service nomme l’objet et la cause.</value>
+  </data>
+  <data name="ExchangeChangesNotStagedOther" xml:space="preserve">
+    <value>{0} objets exportés déclarent un état de destinataire Exchange que JIM n’a pas pu mettre en file d’attente ni signaler ; rien n’atteindra donc Exchange pour eux tant que leur état déclaré n’aura pas été exporté de nouveau. Le journal du service nomme les objets et la cause.</value>
+  </data>
+  <data name="PartitionsNotRecordedOne" xml:space="preserve">
+    <value>1 objet qu’une exportation a créé ou renommé a été écrit, mais JIM n’a pas pu enregistrer dans quelle partition il se trouve ; une importation ciblant une partition ne peut donc pas l’y voir tant que la prochaine importation qui le lit n’a pas enregistré où il se trouve. Le journal du service nomme l’objet et la cause.</value>
+  </data>
+  <data name="PartitionsNotRecordedOther" xml:space="preserve">
+    <value>{0} objets qu’une exportation a créés ou renommés ont été écrits, mais JIM n’a pas pu enregistrer dans quelle partition ils se trouvent ; une importation ciblant une partition ne peut donc pas les y voir tant que la prochaine importation qui les lit n’a pas enregistré où ils se trouvent. Le journal du service nomme les objets et la cause.</value>
+  </data>
+  <data name="InitialPasswordMarkingFailedOne" xml:space="preserve">
+    <value>1 compte a vu son état activé écrit par cette exportation, mais JIM n’a pas pu vérifier si un mot de passe initial lui est encore dû. Si c’est le cas, sa remise pourrait suivre sa règle de synchronisation plutôt que le flux d’attributs ; le journal du service nomme le compte, et Opérations &gt; Mots de passe indique si un mot de passe l’attend.</value>
+  </data>
+  <data name="InitialPasswordMarkingFailedOther" xml:space="preserve">
+    <value>{0} comptes ont vu leur état activé écrit par cette exportation, mais JIM n’a pas pu vérifier si un mot de passe initial est encore dû à l’un d’eux. Lorsque c’est le cas, sa remise pourrait suivre sa règle de synchronisation plutôt que le flux d’attributs ; le journal du service nomme les comptes, et Opérations &gt; Mots de passe indique lesquels ont un mot de passe en attente.</value>
+  </data>
+  <data name="UnresolvableReferencesWarning" xml:space="preserve">
+    <value>{0} valeur(s) de référence n’ont pas pu être écrites, car l’objet Metaverse référencé n’a aucun objet de système connecté dans ce système connecté. Les objets référencés sont hors périmètre de toutes les règles de synchronisation vers ce système, ou n’ont pas encore été provisionnés ; consultez les exportations en attente concernées pour plus de détails.</value>
+  </data>
+  <data name="UnreadableSingleValue" xml:space="preserve">
+    <value>Impossible de {0} une valeur de {1}{2} : {3} JIM a laissé {1} tel qu’il le détenait déjà. Corrigez la valeur dans le système connecté, puis exécutez de nouveau l’importation.</value>
+  </data>
 </root>
