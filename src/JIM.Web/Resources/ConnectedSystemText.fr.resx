@@ -398,4 +398,226 @@
   <data name="ScimKeyNotDeleted" xml:space="preserve">
     <value>La clé n’a pas été supprimée : {0}</value>
   </data>
+  <data name="ConnectedSystemTerm" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="DetailPageTitle" xml:space="preserve">
+    <value>Système connecté : {0}</value>
+  </data>
+  <data name="DetailTitleLabel" xml:space="preserve">
+    <value>Système connecté :</value>
+  </data>
+  <data name="DetailInfoBody" xml:space="preserve">
+    <value>Un système connecté est un système depuis lequel JIM importe des données ou vers lequel il en exporte, avec ses paramètres de connexion, son schéma, ses profils d’exécution et les objets que JIM conserve pour lui.</value>
+  </data>
+  <data name="DetailConnectorSpace" xml:space="preserve">
+    <value>Espace connecteur</value>
+  </data>
+  <data name="DetailPendingExports" xml:space="preserve">
+    <value>Exportations en attente</value>
+  </data>
+  <data name="DetailFailingExports" xml:space="preserve">
+    <value>Exportations en échec</value>
+  </data>
+  <data name="DetailFailingLeadOne" xml:space="preserve">
+    <value>1 exportation en attente est en échec.</value>
+  </data>
+  <data name="DetailFailingLeadOther" xml:space="preserve">
+    <value>{0} exportations en attente sont en échec.</value>
+  </data>
+  <data name="DetailFailingTooltipOldest" xml:space="preserve">
+    <value>{0} La plus ancienne a commencé à échouer {1}. JIM les retente à chaque exécution d’exportation ; ouvrez-les pour voir ce que le système connecté a refusé.</value>
+  </data>
+  <data name="DetailFailingTooltip" xml:space="preserve">
+    <value>{0} JIM les retente à chaque exécution d’exportation ; ouvrez-les pour voir ce que le système connecté a refusé.</value>
+  </data>
+  <data name="DetailUnresolvedReferences" xml:space="preserve">
+    <value>Références non résolues</value>
+  </data>
+  <data name="DetailWithheldLead" xml:space="preserve">
+    <value>La dernière exportation a retenu {0} :</value>
+  </data>
+  <data name="DetailWithheldOne" xml:space="preserve">
+    <value>{0} en attente</value>
+  </data>
+  <data name="DetailWithheldMany" xml:space="preserve">
+    <value>toutes les {0} {1} en attente</value>
+  </data>
+  <data name="DetailWithheldRest" xml:space="preserve">
+    <value>. Elles restent en attente jusqu’à ce que la limite soit relevée ou supprimée, ou qu’un profil d’exécution d’exportation sans cette limite s’exécute.</value>
+  </data>
+  <data name="DetailNounCreateOne" xml:space="preserve">
+    <value>création</value>
+  </data>
+  <data name="DetailNounCreateOther" xml:space="preserve">
+    <value>créations</value>
+  </data>
+  <data name="DetailNounUpdateOne" xml:space="preserve">
+    <value>mise à jour</value>
+  </data>
+  <data name="DetailNounUpdateOther" xml:space="preserve">
+    <value>mises à jour</value>
+  </data>
+  <data name="DetailNounDeleteOne" xml:space="preserve">
+    <value>suppression</value>
+  </data>
+  <data name="DetailNounDeleteOther" xml:space="preserve">
+    <value>suppressions</value>
+  </data>
+  <data name="DetailNounChangeOne" xml:space="preserve">
+    <value>modification</value>
+  </data>
+  <data name="DetailNounChangeOther" xml:space="preserve">
+    <value>modifications</value>
+  </data>
+  <data name="DetailMaxLimit" xml:space="preserve">
+    <value>Limite pour les {0} : {1}</value>
+  </data>
+  <data name="DetailLimitReason" xml:space="preserve">
+    <value>{1} pour {0}</value>
+  </data>
+  <data name="DetailLimitChanged" xml:space="preserve">
+    <value>La limite de {0} a été modifiée depuis, la prochaine exécution décidera donc de nouveau.</value>
+  </data>
+  <data name="DetailDeprovisioningInProgress" xml:space="preserve">
+    <value>Déprovisionnement en cours.</value>
+  </data>
+  <data name="DetailDeprovisioningDetail" xml:space="preserve">
+    <value>Ce système est en cours de suppression par synchronisation ; il est exclu des exécutions planifiées, et sa configuration est en lecture seule jusqu’à la fin de l’exécution.</value>
+  </data>
+  <data name="DetailObjectsProcessed" xml:space="preserve">
+    <value>{0} objets sur {1} traités.</value>
+  </data>
+  <data name="DetailDeletionInProgress" xml:space="preserve">
+    <value>Suppression en cours.</value>
+  </data>
+  <data name="DetailDeletionDetail" xml:space="preserve">
+    <value>Ce système est en cours de suppression ; il est exclu des exécutions planifiées, et sa configuration est en lecture seule jusqu’à la fin de la suppression.</value>
+  </data>
+  <data name="DetailDeprovisioningStopped" xml:space="preserve">
+    <value>Le déprovisionnement s’est arrêté avant son terme.</value>
+  </data>
+  <data name="DetailDeprovisioningStoppedDetail" xml:space="preserve">
+    <value>Une exécution de déprovisionnement synchronisé ne s’est pas achevée : ce système reste isolé et exclu des exécutions planifiées, et le travail déjà effectué est conservé. Supprimer de nouveau le système avec {0} reprend là où l’exécution s’était arrêtée ; {1} termine la suppression immédiatement.</value>
+  </data>
+  <data name="ConnectedSystemDeprovisionThroughSynchronisation" xml:space="preserve">
+    <value>Déprovisionner par synchronisation</value>
+  </data>
+  <data name="ConnectedSystemDeleteImmediatelyKeepData" xml:space="preserve">
+    <value>Supprimer immédiatement et conserver les données contribuées</value>
+  </data>
+  <data name="DetailImportIncompleteLead" xml:space="preserve">
+    <value>Une importation s’est arrêtée en cours de route.</value>
+  </data>
+  <data name="DetailImportIncompleteDetail" xml:space="preserve">
+    <value>Une importation de ce système connecté a commencé à enregistrer ce qu’elle avait lu le {0} UTC et ne s’est pas achevée ; l’espace connecteur ne contient donc qu’une partie des données. Les synchronisations complète et delta de ce système connecté ne s’exécuteront pas tant qu’il ne sera pas complet.</value>
+  </data>
+  <data name="DetailObsoleteOne" xml:space="preserve">
+    <value>1 objet de système connecté est obsolète. Il n’a pas été renvoyé par la dernière importation complète ; le prochain profil d’exécution de synchronisation de ce système le déconnectera de ses objets Metaverse et le supprimera.</value>
+  </data>
+  <data name="DetailObsoleteMany" xml:space="preserve">
+    <value>{0} objets de système connecté sont obsolètes. Ils n’ont pas été renvoyés par la dernière importation complète ; le prochain profil d’exécution de synchronisation de ce système les déconnectera de leurs objets Metaverse et les supprimera.</value>
+  </data>
+  <data name="DetailReview" xml:space="preserve">
+    <value>Examiner</value>
+  </data>
+  <data name="DetailSweepArmedReady" xml:space="preserve">
+    <value>Un balayage des valeurs orphelines est armé : l’espace connecteur a été vidé le {0} UTC et une importation complète s’est achevée le {1} UTC. La prochaine synchronisation complète de ce système connecté rappellera les valeurs contribuées par les objets qui n’ont pas été renvoyés.</value>
+  </data>
+  <data name="DetailSweepArmedWaiting" xml:space="preserve">
+    <value>Un balayage des valeurs orphelines est armé : l’espace connecteur a été vidé le {0} UTC. Il s’exécutera lors de la première synchronisation complète qui suit une importation complète réussie de ce système connecté ; une synchronisation complète exécutée avant ne fait rien au-delà de la synchronisation ordinaire.</value>
+  </data>
+  <data name="DetailDriftOneDated" xml:space="preserve">
+    <value>1 modification de configuration a été effectuée depuis la dernière synchronisation complète ({0}).</value>
+  </data>
+  <data name="DetailDriftOneUndated" xml:space="preserve">
+    <value>1 modification de configuration a été effectuée depuis la dernière synchronisation complète.</value>
+  </data>
+  <data name="DetailDriftManyDated" xml:space="preserve">
+    <value>{0} modifications de configuration ont été effectuées depuis la dernière synchronisation complète ({1}).</value>
+  </data>
+  <data name="DetailDriftManyUndated" xml:space="preserve">
+    <value>{0} modifications de configuration ont été effectuées depuis la dernière synchronisation complète.</value>
+  </data>
+  <data name="DetailDriftGuidanceDestructiveOne" xml:space="preserve">
+    <value>Il est destructif et peut entraîner en cascade des suppressions ou un déprovisionnement massif dès son application. Examinez-le avant d’exécuter une synchronisation complète.</value>
+  </data>
+  <data name="DetailDriftGuidanceDestructiveMany" xml:space="preserve">
+    <value>Au moins l’une d’elles est destructive et peut entraîner en cascade des suppressions ou un déprovisionnement massif dès son application. Examinez-les avant d’exécuter une synchronisation complète.</value>
+  </data>
+  <data name="DetailDriftGuidanceOne" xml:space="preserve">
+    <value>Exécutez une synchronisation complète pour qu’elle prenne effet.</value>
+  </data>
+  <data name="DetailDriftGuidanceMany" xml:space="preserve">
+    <value>Exécutez une synchronisation complète pour qu’elles prennent effet.</value>
+  </data>
+  <data name="DetailPreviewFullSync" xml:space="preserve">
+    <value>Prévisualiser la synchronisation complète</value>
+  </data>
+  <data name="DetailReviewChanges" xml:space="preserve">
+    <value>Examiner les modifications</value>
+  </data>
+  <data name="DetailNeverSynchronised" xml:space="preserve">
+    <value>Ce système connecté n’a encore jamais terminé de synchronisation complète : sa configuration n’a donc jamais été appliquée intégralement.</value>
+  </data>
+  <data name="DetailTrackingOff" xml:space="preserve">
+    <value>Le suivi des modifications de configuration est désactivé : JIM ne peut donc pas savoir si ce système connecté a des modifications de configuration en attente d’une synchronisation complète.</value>
+  </data>
+  <data name="DetailTabDetails" xml:space="preserve">
+    <value>Détails</value>
+  </data>
+  <data name="DetailTabScim" xml:space="preserve">
+    <value>SCIM</value>
+  </data>
+  <data name="DetailTabSettings" xml:space="preserve">
+    <value>Paramètres</value>
+  </data>
+  <data name="DetailTabSchema" xml:space="preserve">
+    <value>Schéma</value>
+  </data>
+  <data name="DetailTabScope" xml:space="preserve">
+    <value>Périmètre</value>
+  </data>
+  <data name="DetailTabMatching" xml:space="preserve">
+    <value>Rapprochement</value>
+  </data>
+  <data name="DetailTabRunProfiles" xml:space="preserve">
+    <value>Profils d’exécution</value>
+  </data>
+  <data name="DetailTabPasswords" xml:space="preserve">
+    <value>Mots de passe</value>
+  </data>
+  <data name="DetailTabChanges" xml:space="preserve">
+    <value>Modifications</value>
+  </data>
+  <data name="DetailTabDangerZone" xml:space="preserve">
+    <value>Zone dangereuse</value>
+  </data>
+  <data name="DetailPartitionsAndContainers" xml:space="preserve">
+    <value>partitions et conteneurs</value>
+  </data>
+  <data name="DetailPartitionAndContainer" xml:space="preserve">
+    <value>partition et conteneur</value>
+  </data>
+  <data name="DetailPartitions" xml:space="preserve">
+    <value>partitions</value>
+  </data>
+  <data name="DetailPartition" xml:space="preserve">
+    <value>partition</value>
+  </data>
+  <data name="DetailBreadcrumbHome" xml:space="preserve">
+    <value>Accueil</value>
+  </data>
+  <data name="DetailBreadcrumbAdministration" xml:space="preserve">
+    <value>Administration</value>
+  </data>
+  <data name="DetailBreadcrumbConnectedSystems" xml:space="preserve">
+    <value>Systèmes connectés</value>
+  </data>
+  <data name="DetailViewActivity" xml:space="preserve">
+    <value>Voir l’activité</value>
+  </data>
+  <data name="DetailEditRunProfile" xml:space="preserve">
+    <value>Modifier le profil d’exécution</value>
+  </data>
 </root>

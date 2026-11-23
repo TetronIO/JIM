@@ -29,4 +29,64 @@
   <data name="ScimEndpointInfo" xml:space="preserve">
     <value>Give your identity provider this base URL and one of the keys below. The Users and Groups it sends are kept here and reach the Metaverse at the next import and synchronization of this Connected System.</value>
   </data>
+  <data name="DetailInfoBody" xml:space="preserve">
+    <value>A Connected System is one system JIM imports from or exports to, with its connection settings, schema, Run Profiles and the objects JIM holds for it.</value>
+  </data>
+  <data name="DetailDeprovisioningDetail" xml:space="preserve">
+    <value>This system is being deleted through synchronization and is excluded from scheduled runs; configuration is read-only until the run completes.</value>
+  </data>
+  <data name="DetailDeprovisioningStoppedDetail" xml:space="preserve">
+    <value>A Synchronized Deprovisioning run did not finish, so this system remains fenced and excluded from scheduled runs; the work already done stands. Deleting the system again with {0} resumes from where the run stopped; {1} finishes the deletion at once.</value>
+  </data>
+  <data name="DetailImportIncompleteDetail" xml:space="preserve">
+    <value>An import of this Connected System began saving what it read on {0} UTC and did not finish, so the Connector Space holds only part of it. Full and Delta Synchronization of this Connected System will not run until it is whole again.</value>
+  </data>
+  <data name="DetailObsoleteOne" xml:space="preserve">
+    <value>1 Connected System Object is obsolete. It was not returned by the last Full Import, so the next Synchronization Run Profile on this system will disconnect it from their Metaverse Objects and delete it.</value>
+  </data>
+  <data name="DetailObsoleteMany" xml:space="preserve">
+    <value>{0} Connected System Objects are obsolete. They were not returned by the last Full Import, so the next Synchronization Run Profile on this system will disconnect them from their Metaverse Objects and delete them.</value>
+  </data>
+  <data name="DetailSweepArmedReady" xml:space="preserve">
+    <value>A stranded-value sweep is armed: the Connector Space was cleared on {0} UTC and a Full Import completed on {1} UTC. The next Full Synchronization of this Connected System will recall values contributed by objects that did not return.</value>
+  </data>
+  <data name="DetailSweepArmedWaiting" xml:space="preserve">
+    <value>A stranded-value sweep is armed: the Connector Space was cleared on {0} UTC. It will run at the first Full Synchronization after a Full Import of this Connected System completes successfully; a Full Synchronization run before then does nothing beyond ordinary synchronization.</value>
+  </data>
+  <data name="DetailDriftOneDated" xml:space="preserve">
+    <value>1 configuration change has been made since the last Full Synchronization ({0}).</value>
+  </data>
+  <data name="DetailDriftOneUndated" xml:space="preserve">
+    <value>1 configuration change has been made since the last Full Synchronization.</value>
+  </data>
+  <data name="DetailDriftManyDated" xml:space="preserve">
+    <value>{0} configuration changes have been made since the last Full Synchronization ({1}).</value>
+  </data>
+  <data name="DetailDriftManyUndated" xml:space="preserve">
+    <value>{0} configuration changes have been made since the last Full Synchronization.</value>
+  </data>
+  <data name="DetailDriftGuidanceDestructiveOne" xml:space="preserve">
+    <value>It is destructive and can cascade deletions or mass deprovisioning the moment it is applied. Review it before running a Full Synchronization.</value>
+  </data>
+  <data name="DetailDriftGuidanceDestructiveMany" xml:space="preserve">
+    <value>At least one of them is destructive and can cascade deletions or mass deprovisioning the moment it is applied. Review them before running a Full Synchronization.</value>
+  </data>
+  <data name="DetailDriftGuidanceOne" xml:space="preserve">
+    <value>Run a Full Synchronization for it to take effect.</value>
+  </data>
+  <data name="DetailDriftGuidanceMany" xml:space="preserve">
+    <value>Run a Full Synchronization for them to take effect.</value>
+  </data>
+  <data name="DetailPreviewFullSync" xml:space="preserve">
+    <value>Preview Full Synchronization</value>
+  </data>
+  <data name="DetailNeverSynchronised" xml:space="preserve">
+    <value>This Connected System has never completed a Full Synchronization, so its configuration has never been applied in full.</value>
+  </data>
+  <data name="DetailTrackingOff" xml:space="preserve">
+    <value>Configuration change tracking is switched off, so JIM cannot tell whether this Connected System has configuration changes waiting for a Full Synchronization.</value>
+  </data>
+  <data name="ConnectedSystemDeprovisionThroughSynchronisation" xml:space="preserve">
+    <value>Deprovision through synchronization</value>
+  </data>
 </root>

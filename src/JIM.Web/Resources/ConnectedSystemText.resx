@@ -526,4 +526,300 @@
     <value>The key was not deleted: {0}</value>
     <comment>Snackbar when a key could not be deleted; {0} is the reason</comment>
   </data>
+  <data name="ConnectedSystemTerm" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Name of the Connected System; used as a page-info title and as the object label on the Changes tab</comment>
+  </data>
+  <data name="DetailPageTitle" xml:space="preserve">
+    <value>Connected System: {0}</value>
+    <comment>Browser page title; {0} is the Connected System's name</comment>
+  </data>
+  <data name="DetailTitleLabel" xml:space="preserve">
+    <value>Connected System:</value>
+    <comment>Label before the Connected System's name in the page heading</comment>
+  </data>
+  <data name="DetailInfoBody" xml:space="preserve">
+    <value>A Connected System is one system JIM imports from or exports to, with its connection settings, schema, Run Profiles and the objects JIM holds for it.</value>
+    <comment>Page-info text under the Connected System heading</comment>
+  </data>
+  <data name="DetailConnectorSpace" xml:space="preserve">
+    <value>Connector Space</value>
+    <comment>Data view button in the page heading</comment>
+  </data>
+  <data name="DetailPendingExports" xml:space="preserve">
+    <value>Pending Exports</value>
+    <comment>Data view button in the page heading</comment>
+  </data>
+  <data name="DetailFailingExports" xml:space="preserve">
+    <value>Failing Exports</value>
+    <comment>Button shown while Pending Exports are failing</comment>
+  </data>
+  <data name="DetailFailingLeadOne" xml:space="preserve">
+    <value>1 Pending Export is failing.</value>
+    <comment>Opening sentence of the failing-exports tooltip when there is one</comment>
+  </data>
+  <data name="DetailFailingLeadOther" xml:space="preserve">
+    <value>{0} Pending Exports are failing.</value>
+    <comment>Opening sentence of the failing-exports tooltip; {0} is the count</comment>
+  </data>
+  <data name="DetailFailingTooltipOldest" xml:space="preserve">
+    <value>{0} The longest began failing {1}. JIM attempts each again at every export run; open them to see what the Connected System refused.</value>
+    <comment>Failing-exports tooltip with the age of the longest failure; {0} is the opening sentence, {1} how long ago it began</comment>
+  </data>
+  <data name="DetailFailingTooltip" xml:space="preserve">
+    <value>{0} JIM attempts each again at every export run; open them to see what the Connected System refused.</value>
+    <comment>Failing-exports tooltip without an age; {0} is the opening sentence</comment>
+  </data>
+  <data name="DetailUnresolvedReferences" xml:space="preserve">
+    <value>Unresolved References</value>
+    <comment>Button shown while the Connector Space has unresolved references</comment>
+  </data>
+  <data name="DetailWithheldLead" xml:space="preserve">
+    <value>The last export withheld {0}:</value>
+    <comment>Start of the notice that an export withheld changes; {0} is the quantity phrase. The reason in bold follows it</comment>
+  </data>
+  <data name="DetailWithheldOne" xml:space="preserve">
+    <value>the 1 pending {0}</value>
+    <comment>Quantity phrase for one withheld change; {0} is the noun, singular</comment>
+  </data>
+  <data name="DetailWithheldMany" xml:space="preserve">
+    <value>all {0} pending {1}</value>
+    <comment>Quantity phrase for several withheld changes; {0} is the count, {1} the noun, plural</comment>
+  </data>
+  <data name="DetailWithheldRest" xml:space="preserve">
+    <value>. They stay pending until the limit is raised or cleared, or an Export Run Profile without the limit runs.</value>
+    <comment>Closes the withheld notice after the reason in bold; begins with a full stop</comment>
+  </data>
+  <data name="DetailNounCreateOne" xml:space="preserve">
+    <value>create</value>
+    <comment>Noun for a withheld create, singular</comment>
+  </data>
+  <data name="DetailNounCreateOther" xml:space="preserve">
+    <value>creates</value>
+    <comment>Noun for withheld creates, plural</comment>
+  </data>
+  <data name="DetailNounUpdateOne" xml:space="preserve">
+    <value>update</value>
+    <comment>Noun for a withheld update, singular</comment>
+  </data>
+  <data name="DetailNounUpdateOther" xml:space="preserve">
+    <value>updates</value>
+    <comment>Noun for withheld updates, plural</comment>
+  </data>
+  <data name="DetailNounDeleteOne" xml:space="preserve">
+    <value>delete</value>
+    <comment>Noun for a withheld delete, singular</comment>
+  </data>
+  <data name="DetailNounDeleteOther" xml:space="preserve">
+    <value>deletes</value>
+    <comment>Noun for withheld deletes, plural</comment>
+  </data>
+  <data name="DetailNounChangeOne" xml:space="preserve">
+    <value>change</value>
+    <comment>Noun for a withheld change of mixed kinds, singular</comment>
+  </data>
+  <data name="DetailNounChangeOther" xml:space="preserve">
+    <value>changes</value>
+    <comment>Noun for withheld changes of mixed kinds, plural</comment>
+  </data>
+  <data name="DetailMaxLimit" xml:space="preserve">
+    <value>Max {0} is {1}</value>
+    <comment>One Run Profile limit in the withheld notice; {0} is the plural noun, {1} the limit</comment>
+  </data>
+  <data name="DetailLimitReason" xml:space="preserve">
+    <value>{0}'s {1}</value>
+    <comment>Reason the withheld changes were held; {0} is the Run Profile name, {1} the limits</comment>
+  </data>
+  <data name="DetailLimitChanged" xml:space="preserve">
+    <value>{0}'s limit has since been changed, so the next run will decide again</value>
+    <comment>Reason when the limit has since been removed; {0} is the Run Profile name</comment>
+  </data>
+  <data name="DetailDeprovisioningInProgress" xml:space="preserve">
+    <value>Deprovisioning in progress.</value>
+    <comment>Bold lead of the notice while a synchronised deprovisioning runs</comment>
+  </data>
+  <data name="DetailDeprovisioningDetail" xml:space="preserve">
+    <value>This system is being deleted through synchronisation and is excluded from scheduled runs; configuration is read-only until the run completes.</value>
+    <comment>Detail of the deprovisioning notice</comment>
+  </data>
+  <data name="DetailObjectsProcessed" xml:space="preserve">
+    <value>{0} of {1} objects processed.</value>
+    <comment>Progress of a synchronised deprovisioning; both are counts</comment>
+  </data>
+  <data name="DetailDeletionInProgress" xml:space="preserve">
+    <value>Deletion in progress.</value>
+    <comment>Bold lead of the notice while the Connected System is being deleted</comment>
+  </data>
+  <data name="DetailDeletionDetail" xml:space="preserve">
+    <value>This system is being deleted and is excluded from scheduled runs; configuration is read-only until the deletion completes.</value>
+    <comment>Detail of the deletion notice</comment>
+  </data>
+  <data name="DetailDeprovisioningStopped" xml:space="preserve">
+    <value>Deprovisioning stopped before completing.</value>
+    <comment>Bold lead of the warning when a synchronised deprovisioning stopped</comment>
+  </data>
+  <data name="DetailDeprovisioningStoppedDetail" xml:space="preserve">
+    <value>A Synchronised Deprovisioning run did not finish, so this system remains fenced and excluded from scheduled runs; the work already done stands. Deleting the system again with {0} resumes from where the run stopped; {1} finishes the deletion at once.</value>
+    <comment>Detail of the stopped deprovisioning warning; {0} and {1} are the two deletion options, named as in the delete dialog</comment>
+  </data>
+  <data name="ConnectedSystemDeprovisionThroughSynchronisation" xml:space="preserve">
+    <value>Deprovision through synchronisation</value>
+    <comment>Name of the delete option that resumes a synchronised deprovisioning; the same words appear on the delete dialog and in the Danger Zone</comment>
+  </data>
+  <data name="ConnectedSystemDeleteImmediatelyKeepData" xml:space="preserve">
+    <value>Delete immediately and keep contributed data</value>
+    <comment>Name of the delete option that finishes a deletion at once; the same words appear on the delete dialog and in the Danger Zone</comment>
+  </data>
+  <data name="DetailImportIncompleteLead" xml:space="preserve">
+    <value>An import stopped part-way.</value>
+    <comment>Bold lead of the notice when an import did not finish saving</comment>
+  </data>
+  <data name="DetailImportIncompleteDetail" xml:space="preserve">
+    <value>An import of this Connected System began saving what it read on {0} UTC and did not finish, so the Connector Space holds only part of it. Full and Delta Synchronisation of this Connected System will not run until it is whole again.</value>
+    <comment>Notice when an import stopped part-way; {0} is the date and time it began saving</comment>
+  </data>
+  <data name="DetailObsoleteOne" xml:space="preserve">
+    <value>1 Connected System Object is obsolete. It was not returned by the last Full Import, so the next Synchronisation Run Profile on this system will disconnect it from their Metaverse Objects and delete it.</value>
+    <comment>Notice for one obsolete Connected System Object</comment>
+  </data>
+  <data name="DetailObsoleteMany" xml:space="preserve">
+    <value>{0} Connected System Objects are obsolete. They were not returned by the last Full Import, so the next Synchronisation Run Profile on this system will disconnect them from their Metaverse Objects and delete them.</value>
+    <comment>Notice for several obsolete Connected System Objects; {0} is the count</comment>
+  </data>
+  <data name="DetailReview" xml:space="preserve">
+    <value>Review</value>
+    <comment>Button that opens the objects awaiting deprovisioning</comment>
+  </data>
+  <data name="DetailSweepArmedReady" xml:space="preserve">
+    <value>A stranded-value sweep is armed: the Connector Space was cleared on {0} UTC and a Full Import completed on {1} UTC. The next Full Synchronisation of this Connected System will recall values contributed by objects that did not return.</value>
+    <comment>Notice that the stranded-value sweep will run at the next Full Synchronisation; {0} is when the Connector Space was cleared, {1} when the Full Import completed</comment>
+  </data>
+  <data name="DetailSweepArmedWaiting" xml:space="preserve">
+    <value>A stranded-value sweep is armed: the Connector Space was cleared on {0} UTC. It will run at the first Full Synchronisation after a Full Import of this Connected System completes successfully; a Full Synchronisation run before then does nothing beyond ordinary synchronisation.</value>
+    <comment>Notice that the stranded-value sweep is waiting for a Full Import; {0} is when the Connector Space was cleared</comment>
+  </data>
+  <data name="DetailDriftOneDated" xml:space="preserve">
+    <value>1 configuration change has been made since the last Full Synchronisation ({0}).</value>
+    <comment>Configuration drift lead for one change, with the date of the last Full Synchronisation; {0} is that date</comment>
+  </data>
+  <data name="DetailDriftOneUndated" xml:space="preserve">
+    <value>1 configuration change has been made since the last Full Synchronisation.</value>
+    <comment>Configuration drift lead for one change, with no Full Synchronisation yet</comment>
+  </data>
+  <data name="DetailDriftManyDated" xml:space="preserve">
+    <value>{0} configuration changes have been made since the last Full Synchronisation ({1}).</value>
+    <comment>Configuration drift lead for several changes; {0} is the count, {1} the date of the last Full Synchronisation</comment>
+  </data>
+  <data name="DetailDriftManyUndated" xml:space="preserve">
+    <value>{0} configuration changes have been made since the last Full Synchronisation.</value>
+    <comment>Configuration drift lead for several changes, with no Full Synchronisation yet; {0} is the count</comment>
+  </data>
+  <data name="DetailDriftGuidanceDestructiveOne" xml:space="preserve">
+    <value>It is destructive and can cascade deletions or mass deprovisioning the moment it is applied. Review it before running a Full Synchronisation.</value>
+    <comment>Guidance after one destructive configuration change</comment>
+  </data>
+  <data name="DetailDriftGuidanceDestructiveMany" xml:space="preserve">
+    <value>At least one of them is destructive and can cascade deletions or mass deprovisioning the moment it is applied. Review them before running a Full Synchronisation.</value>
+    <comment>Guidance after several configuration changes, at least one destructive</comment>
+  </data>
+  <data name="DetailDriftGuidanceOne" xml:space="preserve">
+    <value>Run a Full Synchronisation for it to take effect.</value>
+    <comment>Guidance after one non-destructive configuration change</comment>
+  </data>
+  <data name="DetailDriftGuidanceMany" xml:space="preserve">
+    <value>Run a Full Synchronisation for them to take effect.</value>
+    <comment>Guidance after several non-destructive configuration changes</comment>
+  </data>
+  <data name="DetailPreviewFullSync" xml:space="preserve">
+    <value>Preview Full Synchronisation</value>
+    <comment>Button that previews a Full Synchronisation</comment>
+  </data>
+  <data name="DetailReviewChanges" xml:space="preserve">
+    <value>Review changes</value>
+    <comment>Button that opens the Changes tab</comment>
+  </data>
+  <data name="DetailNeverSynchronised" xml:space="preserve">
+    <value>This Connected System has never completed a Full Synchronisation, so its configuration has never been applied in full.</value>
+    <comment>Notice for a Connected System never fully synchronised</comment>
+  </data>
+  <data name="DetailTrackingOff" xml:space="preserve">
+    <value>Configuration change tracking is switched off, so JIM cannot tell whether this Connected System has configuration changes waiting for a Full Synchronisation.</value>
+    <comment>Notice when configuration change tracking is switched off</comment>
+  </data>
+  <data name="DetailTabDetails" xml:space="preserve">
+    <value>Details</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="DetailTabScim" xml:space="preserve">
+    <value>SCIM</value>
+    <comment>Tab name for the SCIM endpoint; SCIM is a standard name</comment>
+  </data>
+  <data name="DetailTabSettings" xml:space="preserve">
+    <value>Settings</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="DetailTabSchema" xml:space="preserve">
+    <value>Schema</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="DetailTabScope" xml:space="preserve">
+    <value>Scope</value>
+    <comment>Tab name for choosing partitions and containers to manage</comment>
+  </data>
+  <data name="DetailTabMatching" xml:space="preserve">
+    <value>Matching</value>
+    <comment>Tab name for Object Matching Rules</comment>
+  </data>
+  <data name="DetailTabRunProfiles" xml:space="preserve">
+    <value>Run Profiles</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="DetailTabPasswords" xml:space="preserve">
+    <value>Passwords</value>
+    <comment>Tab name for password synchronisation</comment>
+  </data>
+  <data name="DetailTabChanges" xml:space="preserve">
+    <value>Changes</value>
+    <comment>Tab name for configuration change history; the count appears as a badge</comment>
+  </data>
+  <data name="DetailTabDangerZone" xml:space="preserve">
+    <value>Danger Zone</value>
+    <comment>Tab name for deleting the Connected System</comment>
+  </data>
+  <data name="DetailPartitionsAndContainers" xml:space="preserve">
+    <value>partitions and containers</value>
+    <comment>Fragment naming what a Connected System manages, when it has partitions and containers</comment>
+  </data>
+  <data name="DetailPartitionAndContainer" xml:space="preserve">
+    <value>partition and container</value>
+    <comment>Fragment, singular, naming what a Connected System manages</comment>
+  </data>
+  <data name="DetailPartitions" xml:space="preserve">
+    <value>partitions</value>
+    <comment>Fragment naming what a Connected System manages, when it has partitions alone</comment>
+  </data>
+  <data name="DetailPartition" xml:space="preserve">
+    <value>partition</value>
+    <comment>Fragment, singular, naming what a Connected System manages when it has partitions alone</comment>
+  </data>
+  <data name="DetailBreadcrumbHome" xml:space="preserve">
+    <value>Home</value>
+    <comment>Breadcrumb link to the home page</comment>
+  </data>
+  <data name="DetailBreadcrumbAdministration" xml:space="preserve">
+    <value>Administration</value>
+    <comment>Breadcrumb link to the administration index</comment>
+  </data>
+  <data name="DetailBreadcrumbConnectedSystems" xml:space="preserve">
+    <value>Connected Systems</value>
+    <comment>Breadcrumb link to the Connected Systems list</comment>
+  </data>
+  <data name="DetailViewActivity" xml:space="preserve">
+    <value>View Activity</value>
+    <comment>Button that opens an Activity from a notice</comment>
+  </data>
+  <data name="DetailEditRunProfile" xml:space="preserve">
+    <value>Edit Run Profile</value>
+    <comment>Button that opens the Run Profile to change its limits</comment>
+  </data>
 </root>

@@ -19,14 +19,14 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Connected System: @_connectedSystem?.Name</PageTitle>
+<PageTitle>@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailPageTitle, _connectedSystem?.Name)</PageTitle>
 @* The title row carries the page's data views (the Connected System's data, as distinct from the configuration tabs
    below) as page actions on its right. A row of their own left a gap under the audit chips; the tab bar has no room
    to take them without scrolling further. They wrap under the title on a narrow screen. *@
 <div class="d-flex justify-space-between align-center flex-wrap gap-3">
-    <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System:</span> <span class="mud-primary-text">@_connectedSystem?.Name</span>
-        <PageInfo Title="Connected System" DocsPage="configuration/connected-systems.md">
-            A Connected System is one system JIM imports from or exports to, with its connection settings, schema, Run Profiles and the objects JIM holds for it.
+    <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@ConnectedSystemText.DetailTitleLabel</span> <span class="mud-primary-text">@_connectedSystem?.Name</span>
+        <PageInfo Title="@ConnectedSystemText.ConnectedSystemTerm" DocsPage="configuration/connected-systems.md">
+            @ConnectedSystemText.DetailInfoBody
         </PageInfo>
     </MudText>
     @if (_connectedSystem != null)
@@ -37,7 +37,7 @@
                        DropShadow="false"
                        Size="Size.Small"
                        Href="@($"/admin/connected-systems/{_connectedSystem.Id}/connector-space")">
-                Connector Space
+                @ConnectedSystemText.DetailConnectorSpace
                 <span class="jim-nav-count">@_connectedSystemObjectCount.ToString("N0")</span>
             </MudButton>
             <MudButton Variant="Variant.Filled"
@@ -45,7 +45,7 @@
                        DropShadow="false"
                        Size="Size.Small"
                        Href="@($"/admin/connected-systems/{_connectedSystem.Id}/pending-exports")">
-                Pending Exports
+                @ConnectedSystemText.DetailPendingExports
                 <span class="@(_pendingExportCount > 0 ? "jim-nav-count jim-nav-count-warning" : "jim-nav-count")">@_pendingExportCount.ToString("N0")</span>
             </MudButton>
             @* Failing Pending Exports (#2119), shown only while there are some. JIM never gives up on a Pending Export: each
@@ -54,18 +54,20 @@
                cause is nearly always something to fix in the Connected System: a permission, a schema rule. *@
             @if (_pendingExportFailures is { FailingCount: > 0 } failures)
             {
-                var oldestText = failures.OldestFailingSince is { } oldest
-                    ? $" The longest began failing {oldest.ToLocalTime().ToRelativeTime()}."
-                    : string.Empty;
-                var failingText = failures.FailingCount == 1 ? "1 Pending Export is failing." : $"{failures.FailingCount:N0} Pending Exports are failing.";
+                var failingLead = failures.FailingCount == 1
+                    ? ConnectedSystemText.DetailFailingLeadOne
+                    : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailFailingLeadOther, failures.FailingCount.ToString("N0", System.Globalization.CultureInfo.CurrentCulture));
+                var failingTooltip = failures.OldestFailingSince is { } oldest
+                    ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailFailingTooltipOldest, failingLead, oldest.ToLocalTime().ToRelativeTime())
+                    : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailFailingTooltip, failingLead);
                 <MudTooltip Arrow="true" Placement="Placement.Top"
-                            Text="@($"{failingText}{oldestText} JIM attempts each again at every export run; open them to see what the Connected System refused.")">
+                            Text="@failingTooltip">
                     <MudButton Variant="Variant.Filled"
                                StartIcon="@Icons.Material.Filled.ErrorOutline"
                                DropShadow="false"
                                Size="Size.Small"
                                Href="@($"/admin/connected-systems/{_connectedSystem.Id}/pending-exports?failing=true")">
-                        Failing Exports
+                        @ConnectedSystemText.DetailFailingExports
                         <span class="jim-nav-count jim-nav-count-error">@failures.FailingCount.ToString("N0")</span>
                     </MudButton>
                 </MudTooltip>
@@ -84,7 +86,7 @@
                                    DropShadow="false"
                                    Size="Size.Small"
                                    Href="@UnresolvedReferenceDisplay.ConnectorSpaceHref(_connectedSystem.Id)">
-                            Unresolved References
+                            @ConnectedSystemText.DetailUnresolvedReferences
                             <span class="@(amber ? "jim-nav-count jim-nav-count-warning" : "jim-nav-count")">@unresolvedReferences.ReferenceCount.ToString("N0")</span>
                         </MudButton>
                     </ChildContent>
@@ -122,34 +124,33 @@
     if ((exportActivity.ExportDeletesWithheld ?? 0) > 0)
         withheldByType.Add(("deletes", exportActivity.ExportDeletesWithheld!.Value, exportRunProfile?.MaxDeletes));
 
-    var changeNoun = withheldByType.Count == 1
-        ? (totalWithheld == 1 ? withheldByType[0].Noun.TrimEnd('s') : withheldByType[0].Noun)
-        : "changes";
+    var changeNoun = withheldByType.Count == 1 ? NounFor(withheldByType[0].Noun, totalWithheld) : ConnectedSystemText.DetailNounChangeOther;
     // The limit may have been raised or cleared since that run, in which case the Run Profile no longer
     // carries one to name; say so rather than rendering an empty clause. The notice clears itself on the
     // next completed export either way.
     var limitsText = string.Join(", ", withheldByType
         .Where(w => w.Limit.HasValue)
-        .Select(w => $"Max {w.Noun} is {w.Limit!.Value:N0}"));
+        .Select(w => string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailMaxLimit, NounFor(w.Noun, 2), w.Limit!.Value.ToString("N0", System.Globalization.CultureInfo.CurrentCulture))));
     var reasonText = limitsText.Length > 0
-        ? $"{exportActivity.TargetName}'s {limitsText}"
-        : $"{exportActivity.TargetName}'s limit has since been changed, so the next run will decide again";
-    var quantityText = totalWithheld == 1 ? "the 1 pending" : $"all {totalWithheld:N0} pending";
+        ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailLimitReason, exportActivity.TargetName, limitsText)
+        : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailLimitChanged, exportActivity.TargetName);
+    var withheldQuantity = totalWithheld == 1
+        ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailWithheldOne, changeNoun)
+        : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailWithheldMany, totalWithheld.ToString("N0", System.Globalization.CultureInfo.CurrentCulture), changeNoun);
 
     <MudAlert Severity="Severity.Warning" Class="mt-2 mb-6">
         <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Justify="Justify.SpaceBetween" Class="flex-grow-1">
             <span>
-                The last export withheld @quantityText @changeNoun: <strong>@reasonText</strong>.
-                They stay pending until the limit is raised or cleared, or an Export Run Profile without the limit runs.
+                @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailWithheldLead, withheldQuantity) <strong>@reasonText</strong>@ConnectedSystemText.DetailWithheldRest
             </span>
             <MudStack Row Spacing="2">
                 <AlertButton Severity="Severity.Warning" Secondary="true"
                              Href="@($"/activity/{exportActivity.Id}")">
-                    View Activity
+                    @ConnectedSystemText.DetailViewActivity
                 </AlertButton>
                 <AlertButton Severity="Severity.Warning"
                              Href="@($"/admin/connected-systems/{_connectedSystem.Id}?t=run-profiles")">
-                    Edit Run Profile
+                    @ConnectedSystemText.DetailEditRunProfile
                 </AlertButton>
             </MudStack>
         </MudStack>
@@ -170,21 +171,19 @@
                 <span>
                     @if (_deletionTask.SynchronisedDeprovisioning)
                     {
-                        <strong>Deprovisioning in progress.</strong>
-                        <text> This system is being deleted through synchronisation and is excluded from scheduled runs;
-                        configuration is read-only until the run completes.</text>
+                        <strong>@ConnectedSystemText.DetailDeprovisioningInProgress</strong>
+                        <text> @ConnectedSystemText.DetailDeprovisioningDetail</text>
                         @if (deletionActivity is { ObjectsToProcess: > 0 } progressActivity)
                         {
                             var objectsProcessed = progressActivity.ObjectsProcessed;
                             var objectsToProcess = progressActivity.ObjectsToProcess;
-                            <text> @objectsProcessed.ToString("N0") of @objectsToProcess.ToString("N0") objects processed.</text>
+                            <text> @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailObjectsProcessed, objectsProcessed.ToString("N0", System.Globalization.CultureInfo.CurrentCulture), objectsToProcess.ToString("N0", System.Globalization.CultureInfo.CurrentCulture))</text>
                         }
                     }
                     else
                     {
-                        <strong>Deletion in progress.</strong>
-                        <text> This system is being deleted and is excluded from scheduled runs; configuration is
-                        read-only until the deletion completes.</text>
+                        <strong>@ConnectedSystemText.DetailDeletionInProgress</strong>
+                        <text> @ConnectedSystemText.DetailDeletionDetail</text>
                     }
                 </span>
                 @if (deletionActivity is { } linkActivity)
@@ -192,7 +191,7 @@
                     var deletionActivityId = linkActivity.Id;
                     <AlertButton Severity="Severity.Info"
                                  Href="@($"/activity/{deletionActivityId}")">
-                        View Activity
+                        @ConnectedSystemText.DetailViewActivity
                     </AlertButton>
                 }
             </MudStack>
@@ -201,10 +200,7 @@
     else
     {
         <MudAlert Severity="Severity.Warning" Class="mt-2 mb-6">
-            <strong>Deprovisioning stopped before completing.</strong> A Synchronised Deprovisioning run did not finish,
-            so this system remains fenced and excluded from scheduled runs; the work already done stands. Deleting the
-            system again with Deprovision through synchronisation resumes from where the run stopped; Delete immediately
-            and keep contributed data finishes the deletion at once.
+            <strong>@ConnectedSystemText.DetailDeprovisioningStopped</strong> @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailDeprovisioningStoppedDetail, ConnectedSystemText.ConnectedSystemDeprovisionThroughSynchronisation, ConnectedSystemText.ConnectedSystemDeleteImmediatelyKeepData)
         </MudAlert>
     }
 }
@@ -215,9 +211,7 @@
 @if (_connectedSystem != null && _connectedSystem.ImportIncompleteSince is { } importIncompleteSince)
 {
     <MudAlert Severity="Severity.Warning" Class="mt-2 mb-6" data-testid="jim-import-incomplete-notice">
-        <strong>An import stopped part-way.</strong> An import of this Connected System began saving what it read on
-        @importIncompleteSince.ToFriendlyDate() UTC and did not finish, so the Connector Space holds only part of it.
-        Full and Delta Synchronisation of this Connected System will not run until it is whole again.
+        <strong>@ConnectedSystemText.DetailImportIncompleteLead</strong> @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailImportIncompleteDetail, importIncompleteSince.ToFriendlyDate())
         @ImportCompleteness.DescribeRemedy(_connectedSystem)
     </MudAlert>
 }
@@ -230,21 +224,15 @@
    system that is imported and never synchronised accumulates them in silence (#1527). *@
 @if (_connectedSystem != null && _obsoleteConnectedSystemObjectCount > 0)
 {
-    var obsoleteLead = _obsoleteConnectedSystemObjectCount == 1
-        ? "1 Connected System Object is obsolete."
-        : $"{_obsoleteConnectedSystemObjectCount:N0} Connected System Objects are obsolete.";
-    var obsoleteSubject = _obsoleteConnectedSystemObjectCount == 1 ? "It was" : "They were";
-    var obsoletePronoun = _obsoleteConnectedSystemObjectCount == 1 ? "it" : "them";
+    var obsoleteText = _obsoleteConnectedSystemObjectCount == 1
+        ? ConnectedSystemText.DetailObsoleteOne
+        : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailObsoleteMany, _obsoleteConnectedSystemObjectCount.ToString("N0", System.Globalization.CultureInfo.CurrentCulture));
     <MudAlert Severity="Severity.Info" Class="mt-2 mb-6">
         <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Justify="Justify.SpaceBetween" Class="flex-grow-1">
-            <span>
-                @obsoleteLead @obsoleteSubject not returned by the last Full Import, so the next Synchronisation
-                Run Profile on this system will disconnect @obsoletePronoun from their Metaverse Objects and
-                delete @obsoletePronoun.
-            </span>
+            <span>@obsoleteText</span>
             <AlertButton Severity="Severity.Info"
                          Href="@($"/admin/connected-systems/{_connectedSystem.Id}/connector-space?status=Obsolete")">
-                Review
+                @ConnectedSystemText.DetailReview
             </AlertButton>
         </MudStack>
     </MudAlert>
@@ -263,18 +251,13 @@
         {
             var lastImportAt = lastImport!.Value;
             <span>
-                A stranded-value sweep is armed: the Connector Space was cleared on @armedAt.ToFriendlyDate() UTC
-                and a Full Import completed on @lastImportAt.ToFriendlyDate() UTC. The next Full Synchronisation
-                of this Connected System will recall values contributed by objects that did not return.
+                @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailSweepArmedReady, armedAt.ToFriendlyDate(), lastImportAt.ToFriendlyDate())
             </span>
         }
         else
         {
             <span>
-                A stranded-value sweep is armed: the Connector Space was cleared on @armedAt.ToFriendlyDate() UTC.
-                It will run at the first Full Synchronisation after a Full Import of this Connected System
-                completes successfully; a Full Synchronisation run before then does nothing beyond ordinary
-                synchronisation.
+                @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailSweepArmedWaiting, armedAt.ToFriendlyDate())
             </span>
         }
     </MudAlert>
@@ -288,17 +271,18 @@
     var driftClass = _drift.HighestChangeClass;
     var driftCount = _drift.ChangeCount;
     var lastSync = _drift.LastFullSynchronisation;
-    var driftWhen = lastSync.HasValue ? $" ({lastSync.Value.ToLocalTime().ToFriendlyDate()})" : string.Empty;
-    var driftLead = driftCount == 1
-        ? $"1 configuration change has been made since the last Full Synchronisation{driftWhen}."
-        : $"{driftCount:N0} configuration changes have been made since the last Full Synchronisation{driftWhen}.";
+    var driftWhen = lastSync.HasValue ? lastSync.Value.ToLocalTime().ToFriendlyDate() : null;
+    var driftCountText = driftCount.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
+    var driftLead = (driftCount == 1, driftWhen) switch
+    {
+        (true, not null) => string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailDriftOneDated, driftWhen),
+        (true, null) => ConnectedSystemText.DetailDriftOneUndated,
+        (false, not null) => string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailDriftManyDated, driftCountText, driftWhen),
+        (false, null) => string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DetailDriftManyUndated, driftCountText),
+    };
     var driftGuidance = driftClass == ConfigurationChangeClass.Destructive
-        ? driftCount == 1
-            ? "It is destructive and can cascade deletions or mass deprovisioning the moment it is applied. Review it before running a Full Synchronisation."
-            : "At least one of them is destructive and can cascade deletions or mass deprovisioning the moment it is applied. Review them before running a Full Synchronisation."
-        : driftCount == 1
-            ? "Run a Full Synchronisation for it to take effect."
-            : "Run a Full Synchronisation for them to take effect.";
+        ? (driftCount == 1 ? ConnectedSystemText.DetailDriftGuidanceDestructiveOne : ConnectedSystemText.DetailDriftGuidanceDestructiveMany)
+        : (driftCount == 1 ? ConnectedSystemText.DetailDriftGuidanceOne : ConnectedSystemText.DetailDriftGuidanceMany);
     var driftSeverity = driftClass == ConfigurationChangeClass.Destructive ? Severity.Error : Severity.Warning;
     <MudAlert Severity="@driftSeverity"
               Class="mt-2 mb-6" data-testid="jim-configuration-drift-notice">
@@ -310,11 +294,11 @@
                 <AlertButton Severity="@driftSeverity"
                              StartIcon="@Icons.Material.Filled.Visibility" OnClick="@(() => RequestFullSynchronisationPreview())"
                            data-testid="jim-drift-preview-full-synchronisation">
-                    Preview Full Synchronisation
+                    @ConnectedSystemText.DetailPreviewFullSync
                 </AlertButton>
             }
             <AlertButton Severity="@driftSeverity" Secondary="true" Href="@($"/admin/connected-systems/{Id}?t=changes")">
-                Review changes
+                @ConnectedSystemText.DetailReviewChanges
             </AlertButton>
         </div>
     </MudAlert>
@@ -323,15 +307,14 @@ else if (_drift is { NeverFullySynchronised: true })
 {
     <MudAlert Severity="Severity.Info" Class="mt-2 mb-6">
         <span>
-            This Connected System has never completed a Full Synchronisation, so its configuration has never been applied
-            in full.
+            @ConnectedSystemText.DetailNeverSynchronised
         </span>
         @if (HasFullSynchronisationRunProfile)
         {
             <div class="mt-2">
                 <AlertButton Severity="Severity.Info"
                              StartIcon="@Icons.Material.Filled.Visibility" OnClick="@(() => RequestFullSynchronisationPreview())">
-                    Preview Full Synchronisation
+                    @ConnectedSystemText.DetailPreviewFullSync
                 </AlertButton>
             </div>
         }
@@ -340,8 +323,7 @@ else if (_drift is { NeverFullySynchronised: true })
 else if (_drift is { TrackingDisabled: true })
 {
     <MudAlert Severity="Severity.Info" Class="mt-2 mb-6">
-        Configuration change tracking is switched off, so JIM cannot tell whether this Connected System has
-        configuration changes waiting for a Full Synchronisation.
+        @ConnectedSystemText.DetailTrackingOff
     </MudAlert>
 }
 
@@ -363,7 +345,7 @@ else if (_drift is { TrackingDisabled: true })
 {
     <NavigableMudTabs TabPanelsClass="pt-6" Class="mt-2">
 
-        <MudTabPanel Text="Details">
+        <MudTabPanel Text="@ConnectedSystemText.DetailTabDetails">
             @* The Full Synchronisation preview (#1530): started from the notice above or a Run Profile, and found again here. *@
             <ConnectedSystemFullSynchronisationPreview ConnectedSystem="_connectedSystem"
                                                        StartRequest="_fullSynchronisationPreviewRequest"
@@ -375,18 +357,18 @@ else if (_drift is { TrackingDisabled: true })
            Connector has one. *@
         @if (_hasScimEndpoint)
         {
-            <MudTabPanel Text="SCIM">
+            <MudTabPanel Text="@ConnectedSystemText.DetailTabScim">
                 <ConnectedSystemScimTab ConnectedSystem="_connectedSystem" />
             </MudTabPanel>
         }
 
-        <MudTabPanel Text="Settings">
+        <MudTabPanel Text="@ConnectedSystemText.DetailTabSettings">
             <ConnectedSystemSettingsTab ConnectedSystem="_connectedSystem"
                                         SettingCategories="_settingCategories!"
                                         OnConnectedSystemChanged="ReloadConnectedSystemAsync" />
         </MudTabPanel>
 
-        <MudTabPanel Text="Schema" Disabled="@AreSettingDependentTabsDisabled()">
+        <MudTabPanel Text="@ConnectedSystemText.DetailTabSchema" Disabled="@AreSettingDependentTabsDisabled()">
             <ConnectedSystemSchemaTab ConnectedSystem="_connectedSystem"
                                       LatestAuxiliaryClassDiscoveryRun="_latestAuxiliaryClassDiscoveryRun"
                                       OnConnectedSystemChanged="ReloadConnectedSystemAsync" />
@@ -397,7 +379,7 @@ else if (_drift is { TrackingDisabled: true })
             @* "Scope" rather than "Partitions & Containers": the tab is where an administrator chooses what JIM manages
                in this system, and the name holds whether the Connector offers partitions alone or partitions with
                containers, where "hierarchy" or "containers" would each be wrong for one of them. *@
-            <MudTabPanel Text="Scope" Disabled="@AreSettingDependentTabsDisabled()">
+            <MudTabPanel Text="@ConnectedSystemText.DetailTabScope" Disabled="@AreSettingDependentTabsDisabled()">
                 <ConnectedSystemPartitionsTab ConnectedSystem="_connectedSystem"
                                               PartitionsAndHierarchiesText="@_partitionsAndHierarchiesText"
                                               PartitionAndHierarchyText="@_partitionAndHierarchyText"
@@ -406,13 +388,13 @@ else if (_drift is { TrackingDisabled: true })
             </MudTabPanel>
         }
 
-        <MudTabPanel Text="Matching" Disabled="@IsObjectMatchingTabDisabled()">
+        <MudTabPanel Text="@ConnectedSystemText.DetailTabMatching" Disabled="@IsObjectMatchingTabDisabled()">
             <ConnectedSystemObjectMatchingTab ConnectedSystem="_connectedSystem"
                                               MetaverseAttributes="_metaverseAttributes!"
                                               MetaverseObjectTypes="_metaverseObjectTypes!" />
         </MudTabPanel>
 
-        <MudTabPanel Text="Run Profiles" Disabled="@IsRunProfilesTabDisabled()">
+        <MudTabPanel Text="@ConnectedSystemText.DetailTabRunProfiles" Disabled="@IsRunProfilesTabDisabled()">
             <ConnectedSystemRunProfilesTab ConnectedSystem="_connectedSystem"
                                            OnPreviewRequested="@(runProfile => RequestFullSynchronisationPreview(runProfile.Id))" />
         </MudTabPanel>
@@ -421,17 +403,17 @@ else if (_drift is { TrackingDisabled: true })
             configure at all, and a disabled tab reads as something that could be switched on. *@
         @if (_connectedSystem.ConnectorDefinition.SupportsPasswordSet)
         {
-            <MudTabPanel Text="Passwords" Disabled="@AreSettingDependentTabsDisabled()">
+            <MudTabPanel Text="@ConnectedSystemText.DetailTabPasswords" Disabled="@AreSettingDependentTabsDisabled()">
                 <ConnectedSystemPasswordSynchronisationTab ConnectedSystem="_connectedSystem"
                                                            OnConnectedSystemChanged="ReloadConnectedSystemAsync" />
             </MudTabPanel>
         }
 
-        <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
-            <ConfigurationChangesTab TargetType="ActivityTargetType.ConnectedSystem" ObjectId="_connectedSystem.Id" ObjectTypeLabel="Connected System" />
+        <MudTabPanel Text="@ConnectedSystemText.DetailTabChanges" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
+            <ConfigurationChangesTab TargetType="ActivityTargetType.ConnectedSystem" ObjectId="_connectedSystem.Id" ObjectTypeLabel="@ConnectedSystemText.ConnectedSystemTerm" />
         </MudTabPanel>
 
-        <MudTabPanel Text="Danger Zone" Icon="@Icons.Material.Filled.Warning" BadgeColor="Color.Error" ID="@("danger-zone")">
+        <MudTabPanel Text="@ConnectedSystemText.DetailTabDangerZone" Icon="@Icons.Material.Filled.Warning" BadgeColor="Color.Error" ID="@("danger-zone")">
             <ConnectedSystemDangerZoneTab ConnectedSystem="_connectedSystem" />
         </MudTabPanel>
 
@@ -542,9 +524,9 @@ else if (_drift is { TrackingDisabled: true })
 
         _breadcrumbs =
         [
-            new BreadcrumbItem("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new BreadcrumbItem("Administration", href: "/admin"),
-            new BreadcrumbItem("Connected Systems", href: "/admin/connected-systems/"),
+            new BreadcrumbItem(ConnectedSystemText.DetailBreadcrumbHome, href: "/", icon: Icons.Material.Filled.Home),
+            new BreadcrumbItem(ConnectedSystemText.DetailBreadcrumbAdministration, href: "/admin"),
+            new BreadcrumbItem(ConnectedSystemText.DetailBreadcrumbConnectedSystems, href: "/admin/connected-systems/"),
             new BreadcrumbItem(_connectedSystem.Name, href: null, disabled: true)
         ];
 
@@ -557,13 +539,13 @@ else if (_drift is { TrackingDisabled: true })
 
         if (_connectedSystem.ConnectorDefinition is { SupportsPartitions: true, SupportsPartitionContainers: true })
         {
-            _partitionsAndHierarchiesText = "partitions and containers";
-            _partitionAndHierarchyText = "partition and container";
+            _partitionsAndHierarchiesText = ConnectedSystemText.DetailPartitionsAndContainers;
+            _partitionAndHierarchyText = ConnectedSystemText.DetailPartitionAndContainer;
         }
         else if (_connectedSystem.ConnectorDefinition.SupportsPartitions)
         {
-            _partitionsAndHierarchiesText = "partitions";
-            _partitionAndHierarchyText = "partition";
+            _partitionsAndHierarchiesText = ConnectedSystemText.DetailPartitions;
+            _partitionAndHierarchyText = ConnectedSystemText.DetailPartition;
         }
 
         // Resolve the live deletion task for a fenced system, so the fence notice can link its Activity
@@ -644,6 +626,19 @@ else if (_drift is { TrackingDisabled: true })
             _ => 99
         };
     }
+
+    /// <summary>
+    /// The noun for a kind of withheld change ("creates", "updates", "deletes") in the count's grammatical number.
+    /// </summary>
+    private static string NounFor(string kind, int count) => (kind, count == 1) switch
+    {
+        ("creates", true) => ConnectedSystemText.DetailNounCreateOne,
+        ("creates", false) => ConnectedSystemText.DetailNounCreateOther,
+        ("updates", true) => ConnectedSystemText.DetailNounUpdateOne,
+        ("updates", false) => ConnectedSystemText.DetailNounUpdateOther,
+        (_, true) => ConnectedSystemText.DetailNounDeleteOne,
+        _ => ConnectedSystemText.DetailNounDeleteOther
+    };
 
     private bool IsRunProfilesTabDisabled()
     {
