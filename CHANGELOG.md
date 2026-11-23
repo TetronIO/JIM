@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- ✨ The REST API and `Get-JIMConnectedSystem -Id` now return a Connected System's setting values, so a script can check a configuration before changing it; an encrypted setting reports only whether a value is held.
+
 ### Changed
 
 - 🔄 `Register-JIMIdentityProvider -Provider EntraId` signs you in through your browser, so it works in tenants whose Conditional Access blocks device code sign-in, as Microsoft recommends; add `-UseDeviceCode` on a computer with no browser. (#3021)
