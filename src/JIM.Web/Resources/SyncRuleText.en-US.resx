@@ -110,4 +110,55 @@
   <data name="NoRulesYetHint" xml:space="preserve">
     <value>Use the Create Synchronization Rule button to define your first flow.</value>
   </data>
+  <data name="SyncRuleTitle" xml:space="preserve">
+    <value>Synchronization Rule: {0}</value>
+  </data>
+  <data name="SyncRuleLabel" xml:space="preserve">
+    <value>Synchronization Rule:</value>
+  </data>
+  <data name="SyncRuleInfo" xml:space="preserve">
+    <value>A Synchronization Rule says how objects of one type flow between a Connected System and the Metaverse: which objects are in scope, how they match, and which attributes flow.</value>
+  </data>
+  <data name="LoadingSyncRule" xml:space="preserve">
+    <value>Loading Synchronization Rule...</value>
+  </data>
+  <data name="DangerDeleteText" xml:space="preserve">
+    <value>Deleting this Synchronization Rule is permanent and cannot be undone. All configuration and Attribute Flow mappings will be lost. If this rule contributed Metaverse attribute values, you will choose whether they are recalled or kept.</value>
+  </data>
+  <data name="DeleteSyncRuleButton" xml:space="preserve">
+    <value>Delete Synchronization Rule</value>
+  </data>
+  <data name="UpdateSyncRuleButton" xml:space="preserve">
+    <value>Update Synchronization Rule</value>
+  </data>
+  <data name="PreviewBehaviourButton" xml:space="preserve">
+    <value>Preview Behavior Impact</value>
+  </data>
+  <data name="StaleBehaviour" xml:space="preserve">
+    <value>The behavior toggles have been edited since this preview ran, so it no longer describes what saving would do. Preview again for an answer about the current settings.</value>
+  </data>
+  <data name="PreviewTitleBehaviour" xml:space="preserve">
+    <value>Preview: Behavior Impact</value>
+  </data>
+  <data name="DisableSyncRuleQuestion" xml:space="preserve">
+    <value>Disable Synchronization Rule?</value>
+  </data>
+  <data name="DisableSyncRuleChange" xml:space="preserve">
+    <value>disable this Synchronization Rule</value>
+  </data>
+  <data name="SyncRuleCreated" xml:space="preserve">
+    <value>Synchronization Rule created.</value>
+  </data>
+  <data name="DeleteSyncRuleQuestion" xml:space="preserve">
+    <value>Are you sure you want to delete this Synchronization Rule?</value>
+  </data>
+  <data name="DeleteSyncRuleTitle" xml:space="preserve">
+    <value>Delete Synchronization Rule?</value>
+  </data>
+  <data name="DeleteSyncRuleChange" xml:space="preserve">
+    <value>delete this Synchronization Rule</value>
+  </data>
+  <data name="SyncRuleDeletionQueued" xml:space="preserve">
+    <value>Synchronization Rule deletion queued: recalling values from {0:N0} Metaverse Object(s).</value>
+  </data>
 </root>

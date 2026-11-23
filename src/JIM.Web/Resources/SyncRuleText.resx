@@ -1077,4 +1077,168 @@
     <value>{0} selected</value>
     <comment>Summary of a multi-select with several values chosen. {0} is the count.</comment>
   </data>
+  <data name="SyncRuleTitle" xml:space="preserve">
+    <value>Synchronisation Rule: {0}</value>
+    <comment>Page title and heading. {0} is the rule's name, or New.</comment>
+  </data>
+  <data name="SyncRuleLabel" xml:space="preserve">
+    <value>Synchronisation Rule:</value>
+    <comment>Heading prefix before the rule's name.</comment>
+  </data>
+  <data name="SyncRuleInfo" xml:space="preserve">
+    <value>A Synchronisation Rule says how objects of one type flow between a Connected System and the Metaverse: which objects are in scope, how they match, and which attributes flow.</value>
+    <comment>Info popover on the Synchronisation Rule page.</comment>
+  </data>
+  <data name="LoadingSyncRule" xml:space="preserve">
+    <value>Loading Synchronisation Rule...</value>
+    <comment>Shown while the rule loads.</comment>
+  </data>
+  <data name="TabDetails" xml:space="preserve">
+    <value>Details</value>
+    <comment>Tab heading.</comment>
+  </data>
+  <data name="TabMatching" xml:space="preserve">
+    <value>Matching</value>
+    <comment>Tab heading: how objects are matched.</comment>
+  </data>
+  <data name="TabScope" xml:space="preserve">
+    <value>Scope</value>
+    <comment>Tab heading: which objects are in scope.</comment>
+  </data>
+  <data name="TabPasswords" xml:space="preserve">
+    <value>Passwords</value>
+    <comment>Tab heading: initial passwords.</comment>
+  </data>
+  <data name="TabTests" xml:space="preserve">
+    <value>Tests</value>
+    <comment>Tab heading: configuration test cases.</comment>
+  </data>
+  <data name="TabChanges" xml:space="preserve">
+    <value>Changes</value>
+    <comment>Tab heading: the configuration change history.</comment>
+  </data>
+  <data name="TabDangerZone" xml:space="preserve">
+    <value>Danger Zone</value>
+    <comment>Tab heading for deletion.</comment>
+  </data>
+  <data name="DangerDeleteText" xml:space="preserve">
+    <value>Deleting this Synchronisation Rule is permanent and cannot be undone. All configuration and Attribute Flow mappings will be lost. If this rule contributed Metaverse attribute values, you will choose whether they are recalled or kept.</value>
+    <comment>Warning in the Danger Zone.</comment>
+  </data>
+  <data name="DeleteSyncRuleButton" xml:space="preserve">
+    <value>Delete Synchronisation Rule</value>
+    <comment>Button deleting the rule.</comment>
+  </data>
+  <data name="IssuesHeading" xml:space="preserve">
+    <value>There are issues:</value>
+    <comment>Heading of the validation issues list.</comment>
+  </data>
+  <data name="UpdateSyncRuleButton" xml:space="preserve">
+    <value>Update Synchronisation Rule</value>
+    <comment>Button saving an existing rule.</comment>
+  </data>
+  <data name="PreviewDeprovisioningButton" xml:space="preserve">
+    <value>Preview Deprovisioning Impact</value>
+    <comment>Button previewing the deprovisioning toggles.</comment>
+  </data>
+  <data name="PreviewScopeButton" xml:space="preserve">
+    <value>Preview Scope Impact</value>
+    <comment>Button previewing a Scoping Criteria edit.</comment>
+  </data>
+  <data name="PreviewAttributeFlowButton" xml:space="preserve">
+    <value>Preview Attribute Flow Impact</value>
+    <comment>Button previewing an Attribute Flow edit.</comment>
+  </data>
+  <data name="PreviewBehaviourButton" xml:space="preserve">
+    <value>Preview Behaviour Impact</value>
+    <comment>Button previewing the behaviour toggles.</comment>
+  </data>
+  <data name="StaleDeprovisioning" xml:space="preserve">
+    <value>The Deprovisioning Action or Out-of-Scope Action has been edited since this preview ran, so it no longer describes what saving would do. Preview again for an answer about the current settings.</value>
+    <comment>Warning above a stale deprovisioning preview.</comment>
+  </data>
+  <data name="PreviewTitleDeprovisioning" xml:space="preserve">
+    <value>Preview: Deprovisioning Impact</value>
+    <comment>Title of the deprovisioning preview panel.</comment>
+  </data>
+  <data name="StaleScope" xml:space="preserve">
+    <value>The Scoping Criteria have been edited since this preview ran, so it no longer describes what saving would do. Preview again for an answer about the current criteria.</value>
+    <comment>Warning above a stale scope preview.</comment>
+  </data>
+  <data name="PreviewTitleScope" xml:space="preserve">
+    <value>Preview: Scope Impact</value>
+    <comment>Title of the scope preview panel.</comment>
+  </data>
+  <data name="StaleBehaviour" xml:space="preserve">
+    <value>The behaviour toggles have been edited since this preview ran, so it no longer describes what saving would do. Preview again for an answer about the current settings.</value>
+    <comment>Warning above a stale behaviour preview.</comment>
+  </data>
+  <data name="PreviewTitleBehaviour" xml:space="preserve">
+    <value>Preview: Behaviour Impact</value>
+    <comment>Title of the behaviour preview panel.</comment>
+  </data>
+  <data name="StaleAttributeFlow" xml:space="preserve">
+    <value>The Attribute Flow has been edited since this preview ran, so it no longer describes what saving would do. Preview again for an answer about the current mappings.</value>
+    <comment>Warning above a stale Attribute Flow preview.</comment>
+  </data>
+  <data name="PreviewTitleAttributeFlow" xml:space="preserve">
+    <value>Preview: Attribute Flow Impact</value>
+    <comment>Title of the Attribute Flow preview panel.</comment>
+  </data>
+  <data name="NewLabel" xml:space="preserve">
+    <value>New</value>
+    <comment>The name of a rule not yet saved, in the title and breadcrumb.</comment>
+  </data>
+  <data name="PreviewStartFailed" xml:space="preserve">
+    <value>Failed to start the preview: {0}</value>
+    <comment>Snackbar. {0} is the error message.</comment>
+  </data>
+  <data name="DisableSyncRuleQuestion" xml:space="preserve">
+    <value>Disable Synchronisation Rule?</value>
+    <comment>Title of the confirmation before disabling a rule.</comment>
+  </data>
+  <data name="DisableSyncRuleChange" xml:space="preserve">
+    <value>disable this Synchronisation Rule</value>
+    <comment>Confirmation sentence fragment, lower case, after 'Do you want to'.</comment>
+  </data>
+  <data name="SyncRuleCreated" xml:space="preserve">
+    <value>Synchronisation Rule created.</value>
+    <comment>Snackbar after creating a rule.</comment>
+  </data>
+  <data name="ChangesSaved" xml:space="preserve">
+    <value>Changes saved.</value>
+    <comment>Snackbar after saving a rule.</comment>
+  </data>
+  <data name="SaveProblem" xml:space="preserve">
+    <value>There was a problem saving your changes. Please check the details and try again.</value>
+    <comment>Snackbar when a save fails.</comment>
+  </data>
+  <data name="SequenceSkippedAhead" xml:space="preserve">
+    <value>{0}: the counter skipped ahead from {1} to {2}. Numbers in between will never be assigned.</value>
+    <comment>Snackbar after a Start again or a raised start. {0} attribute, {1} from, {2} to.</comment>
+  </data>
+  <data name="DeleteSyncRuleQuestion" xml:space="preserve">
+    <value>Are you sure you want to delete this Synchronisation Rule?</value>
+    <comment>Confirmation before deleting a rule with nothing else at stake.</comment>
+  </data>
+  <data name="DeleteConfirmButton" xml:space="preserve">
+    <value>Delete!</value>
+    <comment>Button confirming the deletion of a rule.</comment>
+  </data>
+  <data name="DeleteSyncRuleTitle" xml:space="preserve">
+    <value>Delete Synchronisation Rule?</value>
+    <comment>Title of the confirmation before deleting a rule that others depend on.</comment>
+  </data>
+  <data name="DeleteSyncRuleChange" xml:space="preserve">
+    <value>delete this Synchronisation Rule</value>
+    <comment>Confirmation sentence fragment, lower case.</comment>
+  </data>
+  <data name="SyncRuleDeletionQueued" xml:space="preserve">
+    <value>Synchronisation Rule deletion queued: recalling values from {0:N0} Metaverse Object(s).</value>
+    <comment>Snackbar when a deletion waits for a recall. {0} is the number of objects.</comment>
+  </data>
+  <data name="ViewActivityAction" xml:space="preserve">
+    <value>View Activity</value>
+    <comment>Snackbar action opening the Activity.</comment>
+  </data>
 </root>

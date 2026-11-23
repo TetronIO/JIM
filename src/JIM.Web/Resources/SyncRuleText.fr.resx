@@ -827,4 +827,127 @@
   <data name="SelectedCount" xml:space="preserve">
     <value>{0} sélectionnés</value>
   </data>
+  <data name="SyncRuleTitle" xml:space="preserve">
+    <value>Règle de synchronisation : {0}</value>
+  </data>
+  <data name="SyncRuleLabel" xml:space="preserve">
+    <value>Règle de synchronisation :</value>
+  </data>
+  <data name="SyncRuleInfo" xml:space="preserve">
+    <value>Une règle de synchronisation indique comment les objets d’un type circulent entre un système connecté et le Metaverse : quels objets sont dans le périmètre, comment ils correspondent et quels attributs circulent.</value>
+  </data>
+  <data name="LoadingSyncRule" xml:space="preserve">
+    <value>Chargement de la règle de synchronisation…</value>
+  </data>
+  <data name="TabDetails" xml:space="preserve">
+    <value>Détails</value>
+  </data>
+  <data name="TabMatching" xml:space="preserve">
+    <value>Correspondance</value>
+  </data>
+  <data name="TabScope" xml:space="preserve">
+    <value>Périmètre</value>
+  </data>
+  <data name="TabPasswords" xml:space="preserve">
+    <value>Mots de passe</value>
+  </data>
+  <data name="TabTests" xml:space="preserve">
+    <value>Tests</value>
+  </data>
+  <data name="TabChanges" xml:space="preserve">
+    <value>Modifications</value>
+  </data>
+  <data name="TabDangerZone" xml:space="preserve">
+    <value>Zone dangereuse</value>
+  </data>
+  <data name="DangerDeleteText" xml:space="preserve">
+    <value>La suppression de cette règle de synchronisation est définitive et irréversible. Toute la configuration et tous les mappages de flux d’attributs seront perdus. Si cette règle a contribué à des valeurs d’attributs Metaverse, vous choisirez de les rappeler ou de les conserver.</value>
+  </data>
+  <data name="DeleteSyncRuleButton" xml:space="preserve">
+    <value>Supprimer la règle de synchronisation</value>
+  </data>
+  <data name="IssuesHeading" xml:space="preserve">
+    <value>Il y a des problèmes :</value>
+  </data>
+  <data name="UpdateSyncRuleButton" xml:space="preserve">
+    <value>Mettre à jour la règle de synchronisation</value>
+  </data>
+  <data name="PreviewDeprovisioningButton" xml:space="preserve">
+    <value>Aperçu de l’impact du déprovisionnement</value>
+  </data>
+  <data name="PreviewScopeButton" xml:space="preserve">
+    <value>Aperçu de l’impact du périmètre</value>
+  </data>
+  <data name="PreviewAttributeFlowButton" xml:space="preserve">
+    <value>Aperçu de l’impact du flux d’attributs</value>
+  </data>
+  <data name="PreviewBehaviourButton" xml:space="preserve">
+    <value>Aperçu de l’impact du comportement</value>
+  </data>
+  <data name="StaleDeprovisioning" xml:space="preserve">
+    <value>L’action de déprovisionnement ou l’action hors périmètre a été modifiée depuis l’exécution de cet aperçu : il ne décrit donc plus ce que l’enregistrement ferait. Relancez l’aperçu pour obtenir une réponse sur les paramètres actuels.</value>
+  </data>
+  <data name="PreviewTitleDeprovisioning" xml:space="preserve">
+    <value>Aperçu : impact du déprovisionnement</value>
+  </data>
+  <data name="StaleScope" xml:space="preserve">
+    <value>Les critères de périmètre ont été modifiés depuis l’exécution de cet aperçu : il ne décrit donc plus ce que l’enregistrement ferait. Relancez l’aperçu pour obtenir une réponse sur les critères actuels.</value>
+  </data>
+  <data name="PreviewTitleScope" xml:space="preserve">
+    <value>Aperçu : impact du périmètre</value>
+  </data>
+  <data name="StaleBehaviour" xml:space="preserve">
+    <value>Les commutateurs de comportement ont été modifiés depuis l’exécution de cet aperçu : il ne décrit donc plus ce que l’enregistrement ferait. Relancez l’aperçu pour obtenir une réponse sur les paramètres actuels.</value>
+  </data>
+  <data name="PreviewTitleBehaviour" xml:space="preserve">
+    <value>Aperçu : impact du comportement</value>
+  </data>
+  <data name="StaleAttributeFlow" xml:space="preserve">
+    <value>Le flux d’attributs a été modifié depuis l’exécution de cet aperçu : il ne décrit donc plus ce que l’enregistrement ferait. Relancez l’aperçu pour obtenir une réponse sur les mappages actuels.</value>
+  </data>
+  <data name="PreviewTitleAttributeFlow" xml:space="preserve">
+    <value>Aperçu : impact du flux d’attributs</value>
+  </data>
+  <data name="NewLabel" xml:space="preserve">
+    <value>Nouvelle</value>
+  </data>
+  <data name="PreviewStartFailed" xml:space="preserve">
+    <value>Échec du démarrage de l’aperçu : {0}</value>
+  </data>
+  <data name="DisableSyncRuleQuestion" xml:space="preserve">
+    <value>Désactiver la règle de synchronisation ?</value>
+  </data>
+  <data name="DisableSyncRuleChange" xml:space="preserve">
+    <value>désactiver cette règle de synchronisation</value>
+  </data>
+  <data name="SyncRuleCreated" xml:space="preserve">
+    <value>Règle de synchronisation créée.</value>
+  </data>
+  <data name="ChangesSaved" xml:space="preserve">
+    <value>Modifications enregistrées.</value>
+  </data>
+  <data name="SaveProblem" xml:space="preserve">
+    <value>Un problème est survenu lors de l’enregistrement de vos modifications. Vérifiez les détails et réessayez.</value>
+  </data>
+  <data name="SequenceSkippedAhead" xml:space="preserve">
+    <value>{0} : le compteur a sauté de {1} à {2}. Les numéros intermédiaires ne seront jamais attribués.</value>
+  </data>
+  <data name="DeleteSyncRuleQuestion" xml:space="preserve">
+    <value>Voulez-vous vraiment supprimer cette règle de synchronisation ?</value>
+  </data>
+  <data name="DeleteConfirmButton" xml:space="preserve">
+    <value>Supprimer !</value>
+  </data>
+  <data name="DeleteSyncRuleTitle" xml:space="preserve">
+    <value>Supprimer la règle de synchronisation ?</value>
+  </data>
+  <data name="DeleteSyncRuleChange" xml:space="preserve">
+    <value>supprimer cette règle de synchronisation</value>
+  </data>
+  <data name="SyncRuleDeletionQueued" xml:space="preserve">
+    <value>Suppression de la règle de synchronisation mise en file d’attente : rappel des valeurs de {0:N0} objet Metaverse(s).</value>
+  </data>
+  <data name="ViewActivityAction" xml:space="preserve">
+    <value>Voir l’activité</value>
+  </data>
 </root>
