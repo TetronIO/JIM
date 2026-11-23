@@ -88,6 +88,8 @@ RUN if [ -n "$EXTRA_CA_CERTS_BASE64" ]; then \
     fi
 WORKDIR /src
 COPY ["Directory.Build.props", "./"]
+# Generates the typed accessors for each project's Resources/*.resx (#3030); without it the build cannot find them.
+COPY ["Directory.Build.targets", "./"]
 COPY ["VERSION", "./"]
 COPY ["src/JIM.Web/JIM.Web.csproj", "JIM.Web/"]
 COPY ["src/JIM.Web/packages.lock.json", "JIM.Web/"]

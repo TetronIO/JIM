@@ -47,7 +47,7 @@ Select your name at the bottom of the navigation menu, then **Language**, and th
 Some text is not part of the portal's wording, and reads the same in every language:
 
 - **Your own data and configuration.** Object names and attribute values, and the names and descriptions you give to Connected Systems, Synchronisation Rules, Schedules and everything else you create.
-- **Activity messages recorded before this version.** JIM now records the messages and names it writes to an Activity so they can be shown in each reader's language; those recorded by an earlier version were stored as English and stay that way.
+- **Activity messages recorded by JIM 1.0.** JIM records the messages and names it writes to an Activity so they can be shown in each reader's language. Activities recorded by JIM 1.0 releases were stored as English and stay that way.
 - **Other systems' own words.** An error a directory, a database or an identity provider returns is shown as that system worded it.
 - **The REST API and the PowerShell module.** Their field names, values and messages are a fixed contract that scripts and integrations depend on, so they do not change with anyone's language. A client's `Accept-Language` header has no effect on them.
 - **This documentation site,** which is written in British English.
