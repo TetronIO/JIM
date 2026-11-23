@@ -1,7 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Connectors.Resources;
 using JIM.Models.Connectors;
+using JIM.Models.Localisation;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -87,10 +89,16 @@ public static class ServerCertificateDiagnosis
                 diagnostic.FailureReason, LogSanitiser.Sanitise(diagnostic.Subject), LogSanitiser.Sanitise(diagnostic.Issuer),
                 LogSanitiser.Sanitise(diagnostic.Thumbprint), diagnostic.ValidTo);
 
-            return new ServerCertificateRejectedException(
-                $"The {endpoint.ServerDescription}'s certificate was rejected: {diagnostic.Remediation}",
-                diagnostic,
-                originalException);
+            // Held as a message where the probe wrote the remediation as one, so the portal can show it in the viewer's language.
+            return diagnostic.RemediationDetail is { } remediation
+                ? new ServerCertificateRejectedException(
+                    JimMessage.Create(ConnectorMessageCatalogues.Connectors, nameof(ConnectorMessages.CertRejected), ServerNoun.For(endpoint.ServerDescription), remediation),
+                    diagnostic,
+                    originalException)
+                : new ServerCertificateRejectedException(
+                    $"The {endpoint.ServerDescription}'s certificate was rejected: {diagnostic.Remediation}",
+                    diagnostic,
+                    originalException);
         }
         finally
         {

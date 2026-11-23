@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LdapConnectivityMissingValues" xml:space="preserve">
+    <value>Unable to test connectivity due to missing directory server, port, username and/or password values</value>
+    <comment>Shown when the LDAP Connector's settings are saved without what it needs to connect.</comment>
+  </data>
+  <data name="LdapConnectivityFailed" xml:space="preserve">
+    <value>Unable to connect. Message: {0}</value>
+    <comment>{0} is the error the directory or the network gave, in its own words (usually English).</comment>
+  </data>
+  <data name="LdapExchangeDirectoryTypeRefusal" xml:space="preserve">
+    <value>Exchange recipients can be managed only on Active Directory, and this directory is {0}. Turn off {1}, or connect to an Active Directory domain controller.</value>
+    <comment>{0} is a directory kind (Samba AD, OpenLDAP, 389 Directory Server, or the phrase for one JIM does not recognise); {1} is the name of the Manage Exchange recipients setting, shown as that setting's label.</comment>
+  </data>
+  <data name="LdapDirectoryKindSambaAD" xml:space="preserve">
+    <value>Samba AD</value>
+    <comment>A product name.</comment>
+  </data>
+  <data name="LdapDirectoryKindOpenLDAP" xml:space="preserve">
+    <value>OpenLDAP</value>
+    <comment>A product name.</comment>
+  </data>
+  <data name="LdapDirectoryKindDirectoryServer389" xml:space="preserve">
+    <value>389 Directory Server</value>
+    <comment>A product name.</comment>
+  </data>
+  <data name="LdapDirectoryKindUnrecognised" xml:space="preserve">
+    <value>not one JIM recognises</value>
+    <comment>Completes: this directory is ...</comment>
+  </data>
+  <data name="LdapExchangeRefusedRemotePowerShell" xml:space="preserve">
+    <value>Exchange refused {0}: {1} The account signed in to the domain, but Exchange does not let it use remote PowerShell. Add it to Exchange's Recipient Management role group, and check its remote PowerShell access is not turned off.</value>
+    <comment>{0} is the account; {1} is what Exchange said, in its own words, ended as a sentence.</comment>
+  </data>
+  <data name="LdapExchangeUnreachable" xml:space="preserve">
+    <value>JIM could not reach Exchange at {0}: {1} Check the Exchange server's name, and that this server can reach it on port {2}.</value>
+    <comment>{0} is the address; {1} is the network error in its own words, ended as a sentence; {2} is a port number.</comment>
+  </data>
+  <data name="LdapExchangeTimedOut" xml:space="preserve">
+    <value>Exchange at {0} did not answer: {1} Check the server is running, and that nothing between this server and it is holding the connection.</value>
+    <comment>{0} is the address; {1} is the network error in its own words, ended as a sentence.</comment>
+  </data>
+  <data name="LdapExchangeCertificateUntrusted" xml:space="preserve">
+    <value>JIM does not trust Exchange's certificate at {0}: {1} Add the certificate authority that issued it in Certificates, and use the server's name as its certificate gives it.</value>
+    <comment>{0} is the address; {1} is the error in its own words, ended as a sentence.</comment>
+  </data>
+  <data name="LdapExchangeSessionRefused" xml:space="preserve">
+    <value>Exchange at {0} refused the session: {1}</value>
+    <comment>{1} is what Exchange said, in its own words.</comment>
+  </data>
+  <data name="LdapKerberosClockSkew" xml:space="preserve">
+    <value>This server's clock differs from the domain's by more than five minutes, so Kerberos refused the sign-in. Correct the time on this server, or on the domain controller {0}, then save again.</value>
+    <comment>{0} is a domain controller's name.</comment>
+  </data>
+  <data name="LdapKerberosPasswordRefused" xml:space="preserve">
+    <value>The domain refused the password for {0}. Check the Password above: JIM signs in to Exchange with the directory account.</value>
+    <comment>{0} is the account. "the Password above" refers to the Password setting.</comment>
+  </data>
+  <data name="LdapKerberosAccountUnknown" xml:space="preserve">
+    <value>The domain controller {0} does not know the account {1}, so it cannot sign in to Exchange.</value>
+    <comment>{0} is a domain controller; {1} is the account.</comment>
+  </data>
+  <data name="LdapKerberosServiceUnknown" xml:space="preserve">
+    <value>The domain has no service principal HTTP/{0}, so Kerberos cannot sign in to it. Use the Exchange server's own DNS name, not an alias or an IP address, as the Exchange server.</value>
+    <comment>{0} is a host name. "the Exchange server" refers to the Exchange server setting.</comment>
+  </data>
+  <data name="LdapKerberosAccountDisabled" xml:space="preserve">
+    <value>The account {0} is disabled or locked out, so the domain refused the sign-in.</value>
+    <comment>{0} is the account.</comment>
+  </data>
+  <data name="LdapKerberosPasswordExpired" xml:space="preserve">
+    <value>The account {0} cannot sign in because its password has expired. Set a new one, and enter it as the Password above.</value>
+    <comment>{0} is the account. "the Password above" refers to the Password setting.</comment>
+  </data>
+  <data name="LdapKerberosDomainControllerUnreachable" xml:space="preserve">
+    <value>JIM could not reach the domain controller {0} on port 88 to sign in to Exchange with Kerberos. Check this server can reach it.</value>
+    <comment>{0} is a domain controller.</comment>
+  </data>
+  <data name="LdapKerberosRefused" xml:space="preserve">
+    <value>Kerberos refused the sign-in for {0} through {1}: {2}</value>
+    <comment>{2} is the Kerberos library's own words.</comment>
+  </data>
+  <data name="LdapExchangeCommandsMissing" xml:space="preserve">
+    <value>The account {0} cannot run {1} in Exchange, so JIM cannot manage these recipient types: {2}. Their changes will fail for insufficient permissions until it can. Add the account to Exchange's Recipient Management role group, or give it a role that includes those commands.</value>
+    <comment>{0} is the account; {1} is a list of Exchange command names; {2} is a comma-separated list of recipient types.</comment>
+  </data>
+  <data name="ListOr" xml:space="preserve">
+    <value>{0} or {1}</value>
+    <comment>Joins the last two items of a list of command names; {0} is the earlier items already separated by commas.</comment>
+  </data>
+  <data name="LdapExchangeGetCommandFailed" xml:space="preserve">
+    <value>JIM signed in to Exchange as {0}, but could not tell which commands the account may run, because Get-Command failed: {1}</value>
+    <comment>{0} is the account; {1} is the error in its own words.</comment>
+  </data>
+  <data name="GraphTenantAlias" xml:space="preserve">
+    <value>'{0}' is a multi-tenant sign-in alias, not a tenant. Supply the tenant's ID (a GUID) or one of its verified domain names, shown as Directory (tenant) ID on the app registration's Overview page.</value>
+    <comment>{0} is what the administrator typed.</comment>
+  </data>
+  <data name="GraphTenantInvalid" xml:space="preserve">
+    <value>The {0} must be the tenant's ID (a GUID) or one of its verified domain names, i.e. contoso.onmicrosoft.com. Supply the value on its own, not a sign-in URL.</value>
+    <comment>{0} is the Tenant ID setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="GraphClientIdInvalid" xml:space="preserve">
+    <value>The {0} must be the app registration's Application (client) ID, a GUID such as 00000000-0000-0000-0000-000000000000, shown on its Overview page.</value>
+    <comment>{0} is the Client ID setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="GraphCloudUnknown" xml:space="preserve">
+    <value>'{0}' is not a cloud this Connector knows. Choose one of: {1}.</value>
+    <comment>{0} is the value given; {1} is a comma-separated list of the clouds the Connector offers.</comment>
+  </data>
+  <data name="GraphNumberOutOfRange" xml:space="preserve">
+    <value>{0} must be from {1} to {2}.</value>
+    <comment>{0} is a setting name; {1} and {2} are whole numbers. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="GraphManagedIdentityIdInvalid" xml:space="preserve">
+    <value>The {0} must be the managed identity's client id, a GUID shown on its Overview page in the Azure portal.</value>
+    <comment>{0} is the setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="GraphSettingNotDecrypted" xml:space="preserve">
+    <value>The {0} setting could not be decrypted.</value>
+    <comment>{0} is the setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="GraphTestRequestRefused" xml:space="preserve">
+    <value>Authenticated, but Microsoft Graph refused the test request: {0}</value>
+    <comment>{0} is Microsoft Graph's own explanation.</comment>
+  </data>
+  <data name="GraphCouldNotConnect" xml:space="preserve">
+    <value>Could not connect to Microsoft Entra ID or Microsoft Graph. Check that JIM can reach them on HTTPS (port 443). Where a proxy inspects TLS traffic, add its CA certificate to JIM's certificate store under Admin &gt; Certificates.</value>
+    <comment>Admin &gt; Certificates is the portal's Certificates page.</comment>
+  </data>
+  <data name="EntraRefusedKnown" xml:space="preserve">
+    <value>Microsoft Entra ID refused the token request (AADSTS{0}). {1}</value>
+    <comment>{0} is Entra ID's error number; {1} says what to do about it.</comment>
+  </data>
+  <data name="EntraRefusedWithDetail" xml:space="preserve">
+    <value>Microsoft Entra ID refused the token request with HTTP {0} ({1}). Check the {2}, {3} and credential settings.</value>
+    <comment>{0} is an HTTP status number; {1} is Entra ID's error keyword and codes; {2} and {3} are setting names.</comment>
+  </data>
+  <data name="EntraRefusedWithStatus" xml:space="preserve">
+    <value>Microsoft Entra ID refused the token request with HTTP {0}. Check the {1}, {2} and credential settings.</value>
+    <comment>{0} is an HTTP status number; {1} and {2} are setting names.</comment>
+  </data>
+  <data name="EntraSecretInvalid" xml:space="preserve">
+    <value>The {0} is not valid. Supply the secret's Value from Certificates &amp; secrets on the app registration, not its Secret ID.</value>
+    <comment>{0} is the Client Secret setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="EntraSecretExpired" xml:space="preserve">
+    <value>The {0} has expired. Create a new client secret on the app registration and supply it here.</value>
+    <comment>{0} is the Client Secret setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="EntraApplicationNotFound" xml:space="preserve">
+    <value>No application with this {0} was found in the tenant. Check the {0}, and that the app registration belongs to the tenant named in {1}.</value>
+    <comment>{0} is the Client ID setting's name; {1} is the Tenant ID setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="EntraTenantNotFound" xml:space="preserve">
+    <value>The tenant named in {0} was not found. Check it, and check the {1} setting: a tenant in a national cloud is not found on the global endpoints, nor the other way round.</value>
+    <comment>{0} is the Tenant ID setting's name; {1} is the Cloud setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="EntraTenantIdInvalid" xml:space="preserve">
+    <value>The {0} is not a valid tenant identifier. Supply the tenant's ID (a GUID) or one of its verified domain names.</value>
+    <comment>{0} is the Tenant ID setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="EntraAssertionNotVerified" xml:space="preserve">
+    <value>Microsoft Entra ID could not verify the assertion signed with the {0}. Check that the same certificate is uploaded under Certificates &amp; secrets on the app registration. One uploaded in the last few minutes can still be refused while Entra ID applies it; if so, try again shortly.</value>
+    <comment>{0} is the Certificate setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="EntraAssertionOutOfTime" xml:space="preserve">
+    <value>The client assertion was outside its valid time range. Check that the clock on the JIM server is correct.</value>
+  </data>
+  <data name="EntraApplicationDisabled" xml:space="preserve">
+    <value>The application is disabled in the tenant. Enable its enterprise application (service principal) and try again.</value>
+  </data>
+  <data name="EntraFederatedMismatch" xml:space="preserve">
+    <value>The workload identity's token matches no federated credential on the app registration. Under Certificates &amp; secrets &gt; Federated credentials, add one for the managed identity named in {0}, for this cloud.</value>
+    <comment>{0} is the Managed Identity Client ID setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="EntraGraphNotFound" xml:space="preserve">
+    <value>Microsoft Graph was not found in the tenant. Check that the {0} setting matches the cloud the tenant is in.</value>
+    <comment>{0} is the Cloud setting's name. A setting name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="ScimUrlInvalid" xml:space="preserve">
+    <value>The '{0}' setting is not a valid absolute URL.</value>
+    <comment>{0} is a setting's name. A setting's name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="ScimUrlInvalidWithExample" xml:space="preserve">
+    <value>The '{0}' setting is not a valid absolute URL. Supply the full address, i.e. {1}.</value>
+    <comment>{0} is a setting's name; {1} is an example address. A setting's name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="ScimUrlNotHttps" xml:space="preserve">
+    <value>The '{0}' setting must use HTTPS. HTTP is only permitted for loopback addresses when testing locally, because {1} is sent to this address.</value>
+    <comment>{0} is a setting's name; {1} says what is sent there (a nested message). A setting's name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="ScimPayloadIdentityData" xml:space="preserve">
+    <value>identity data</value>
+    <comment>What is sent to the SCIM service provider; completes: because ... is sent to this address.</comment>
+  </data>
+  <data name="ScimPayloadClientSecret" xml:space="preserve">
+    <value>the Client Secret</value>
+    <comment>What is sent to the token endpoint; completes: because ... is sent to this address.</comment>
+  </data>
+  <data name="ScimNoDiscoveryAnswer" xml:space="preserve">
+    <value>Connected to '{0}', but it did not answer on any SCIM discovery endpoint ({1}, {2} or {3}). Check the Base URL points at the root of the SCIM service, not at a resource endpoint such as /Users.</value>
+    <comment>{0} is the address; {1}, {2} and {3} are SCIM endpoint paths.</comment>
+  </data>
+  <data name="ScimCouldNotAuthenticate" xml:space="preserve">
+    <value>Could not authenticate with the SCIM service provider: {0}</value>
+    <comment>{0} says why, as a message or the error's own words.</comment>
+  </data>
+  <data name="ScimCouldNotConnect" xml:space="preserve">
+    <value>Could not connect to the SCIM service provider: {0}</value>
+    <comment>{0} is the network error in its own words.</comment>
+  </data>
+  <data name="SqlTimeZoneUnknown" xml:space="preserve">
+    <value>{0} '{1}' is not a time zone this deployment recognises. Enter UTC, or an IANA time zone name such as Europe/London or America/New_York.</value>
+    <comment>{0} is the Database Time Zone setting's name; {1} is the value given. A setting's name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="SqlChooseDatabaseType" xml:space="preserve">
+    <value>Choose a {0} before testing connectivity.</value>
+    <comment>{0} is the Database Type setting's name. A setting's name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="SqlMissingConnectionValues" xml:space="preserve">
+    <value>Unable to test connectivity until {0}, {1} and {2} have been supplied.</value>
+    <comment>{0}, {1} and {2} are setting names (Host, Username, Password). A setting's name; it is shown as that setting's label.</comment>
+  </data>
+  <data name="SqlConnectFailed" xml:space="preserve">
+    <value>Unable to connect. Message: {0}</value>
+    <comment>{0} is the database driver's own account of the failure.</comment>
+  </data>
+  <data name="FileNotFound" xml:space="preserve">
+    <value>File not found: '{0}'. For {1} mode, the file must exist. Check the path and ensure it maps to a Docker Volume.</value>
+    <comment>{0} is the path; {1} is the mode, as the Mode setting stores it (Import Only, Bidirectional).</comment>
+  </data>
+  <data name="FileExportDirectoryNotCreated" xml:space="preserve">
+    <value>Export directory could not be created: '{0}'. Error: {1}</value>
+    <comment>{0} is the directory; {1} is the system's own error.</comment>
+  </data>
+  <data name="CertServerScimServiceProvider" xml:space="preserve">
+    <value>SCIM service provider</value>
+    <comment>A noun completing sentences about a certificate, e.g. 'Renew it on the ...'. French: masculine, no article; the sentence supplies it.</comment>
+  </data>
+  <data name="CertServerDirectoryServer" xml:space="preserve">
+    <value>directory server</value>
+    <comment>A noun completing sentences about a certificate. French: masculine, no article.</comment>
+  </data>
+  <data name="CertServerDatabaseServer" xml:space="preserve">
+    <value>database server</value>
+    <comment>A noun completing sentences about a certificate. French: masculine, no article.</comment>
+  </data>
+  <data name="CertNoCertificate" xml:space="preserve">
+    <value>The {0} offered no certificate. Check that it is configured for {1} on this port.</value>
+    <comment>{0} is a server noun (a nested message); {1} is HTTPS, LDAPS, TCPS or TLS.</comment>
+  </data>
+  <data name="CertExpired" xml:space="preserve">
+    <value>The certificate expired. Renew it on the {0}; trusting its issuer does not waive the expiry date.</value>
+    <comment>{0} is a server noun (a nested message).</comment>
+  </data>
+  <data name="CertNotYetValid" xml:space="preserve">
+    <value>The certificate is not valid yet, which usually means the clocks on JIM and the {0} disagree.</value>
+    <comment>{0} is a server noun (a nested message).</comment>
+  </data>
+  <data name="CertNameMismatch" xml:space="preserve">
+    <value>The certificate was not issued for '{0}'. Adding it to the JIM certificate store will not help; connect using a name the certificate carries, giving the JIM containers a host entry for it if that name cannot be resolved.</value>
+    <comment>{0} is the host name connected to.</comment>
+  </data>
+  <data name="CertChainProblem" xml:space="preserve">
+    <value>{0} Trusting a certificate in JIM does not get past this; the certificate chain has to be fixed on the {1}.</value>
+    <comment>{0} is what is wrong with the chain (a nested message); {1} is a server noun (a nested message).</comment>
+  </data>
+  <data name="CertSelfSigned" xml:space="preserve">
+    <value>The certificate is self-signed and not trusted. Add this certificate to the JIM certificate store (Admin &gt; Certificates) to trust this {0}.</value>
+    <comment>{0} is a server noun (a nested message).</comment>
+  </data>
+  <data name="CertNothingTrustedWithRoot" xml:space="preserve">
+    <value>Nothing in the certificate chain is trusted. Add '{0}', the root of the chain, to the JIM certificate store (Admin &gt; Certificates) so that renewals of everything beneath it are trusted too. Any other certificate in the chain also works, until it is renewed.</value>
+    <comment>{0} is the root certificate's common name.</comment>
+  </data>
+  <data name="CertNothingTrustedIssuerMissing" xml:space="preserve">
+    <value>Nothing in the certificate chain is trusted, and JIM could not find '{0}', the certificate authority that issued '{1}'. Trust a certificate JIM did find, or add '{0}' to the JIM certificate store (Admin &gt; Certificates) so that renewals are trusted too.</value>
+    <comment>{0} and {1} are certificate common names.</comment>
+  </data>
+  <data name="CertRootNotTrusted" xml:space="preserve">
+    <value>The root of the chain is not trusted. Add '{0}' to the JIM certificate store (Admin &gt; Certificates). This connection accepts only the root: an intermediate or the {1}'s own certificate in the store does not make it work.</value>
+    <comment>{0} is the root certificate's common name; {1} is a server noun (a nested message).</comment>
+  </data>
+  <data name="CertRootNotTrustedIssuerMissing" xml:space="preserve">
+    <value>The root of the chain is not trusted, and JIM could not find '{0}', the certificate authority above '{1}'. Get the root certificate from whoever runs your PKI and add it to the JIM certificate store (Admin &gt; Certificates). This connection accepts only the root.</value>
+    <comment>{0} and {1} are certificate common names.</comment>
+  </data>
+  <data name="CertChainExpired" xml:space="preserve">
+    <value>{0} expired on {1}. A chain through an expired certificate authority is never valid; it needs renewing.</value>
+    <comment>{0} is a certificate's name; {1} is a date.</comment>
+  </data>
+  <data name="CertChainNotYetValid" xml:space="preserve">
+    <value>{0} is not valid until {1}.</value>
+    <comment>{0} is a certificate's name; {1} is a date.</comment>
+  </data>
+  <data name="CertChainNotAuthority" xml:space="preserve">
+    <value>{0} is not marked as a certificate authority, so it cannot vouch for the certificate below it.</value>
+    <comment>{0} is a certificate's name.</comment>
+  </data>
+  <data name="CertChainBadSignature" xml:space="preserve">
+    <value>The signature {0} made on the certificate below it does not verify.</value>
+    <comment>{0} is a certificate's name.</comment>
+  </data>
+  <data name="CertRejected" xml:space="preserve">
+    <value>The {0}'s certificate was rejected: {1}</value>
+    <comment>{0} is a server noun (a nested message); {1} says why.</comment>
+  </data>
+</root>

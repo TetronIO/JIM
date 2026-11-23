@@ -2,7 +2,9 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Connectors.Sql;
+using JIM.Connectors.Resources;
 using JIM.Models.Connectors;
+using JIM.Models.Localisation;
 using JIM.Utilities;
 using Serilog;
 using System.Net.Security;
@@ -193,17 +195,15 @@ public static class ServerCertificateProbe
 
     private static ServerCertificateReading DescribeWithoutCertificate(string host, int port, string serverDescription, string secureTransportName, bool trustAnchorMustBeRoot)
     {
-        return new ServerCertificateReading
+        var diagnostic = new ServerCertificateDiagnostic
         {
-            Diagnostic = new ServerCertificateDiagnostic
-            {
-                Host = host,
-                Port = port,
-                TrustAnchorMustBeRoot = trustAnchorMustBeRoot,
-                FailureReason = ServerCertificateFailureReason.NoCertificatePresented,
-                Remediation = $"The {serverDescription} offered no certificate. Check that it is configured for {secureTransportName} on this port."
-            }
+            Host = host,
+            Port = port,
+            TrustAnchorMustBeRoot = trustAnchorMustBeRoot,
+            FailureReason = ServerCertificateFailureReason.NoCertificatePresented
         };
+        diagnostic.SetRemediation(Message(nameof(ConnectorMessages.CertNoCertificate), ServerNoun.For(serverDescription), secureTransportName));
+        return new ServerCertificateReading { Diagnostic = diagnostic };
     }
 
     /// <summary>
@@ -285,21 +285,21 @@ public static class ServerCertificateProbe
         if (diagnostic.ValidTo.HasValue && diagnostic.ValidTo.Value < now)
         {
             diagnostic.FailureReason = ServerCertificateFailureReason.Expired;
-            diagnostic.Remediation = $"The certificate expired. Renew it on the {serverDescription}; trusting its issuer does not waive the expiry date.";
+            diagnostic.SetRemediation(Message(nameof(ConnectorMessages.CertExpired), ServerNoun.For(serverDescription)));
             return diagnostic;
         }
 
         if (diagnostic.ValidFrom.HasValue && diagnostic.ValidFrom.Value > now)
         {
             diagnostic.FailureReason = ServerCertificateFailureReason.NotYetValid;
-            diagnostic.Remediation = $"The certificate is not valid yet, which usually means the clocks on JIM and the {serverDescription} disagree.";
+            diagnostic.SetRemediation(Message(nameof(ConnectorMessages.CertNotYetValid), ServerNoun.For(serverDescription)));
             return diagnostic;
         }
 
         if (!certificate.MatchesHostname(host, false, false))
         {
             diagnostic.FailureReason = ServerCertificateFailureReason.NameMismatch;
-            diagnostic.Remediation = $"The certificate was not issued for '{host}'. Adding it to the JIM certificate store will not help; connect using a name the certificate carries, giving the JIM containers a host entry for it if that name cannot be resolved.";
+            diagnostic.SetRemediation(Message(nameof(ConnectorMessages.CertNameMismatch), host));
             return diagnostic;
         }
 
@@ -308,14 +308,14 @@ public static class ServerCertificateProbe
             if (chain.Problem != null)
             {
                 diagnostic.FailureReason = ServerCertificateFailureReason.InvalidChain;
-                diagnostic.Remediation = $"{chain.Problem} Trusting a certificate in JIM does not get past this; the certificate chain has to be fixed on the {serverDescription}.";
+                diagnostic.SetRemediation(Message(nameof(ConnectorMessages.CertChainProblem), chain.ProblemMessage!, ServerNoun.For(serverDescription)));
                 return diagnostic;
             }
 
             diagnostic.FailureReason = ServerCertificateFailureReason.UntrustedIssuer;
-            diagnostic.Remediation = trustAnchorMustBeRoot
+            diagnostic.SetRemediation(trustAnchorMustBeRoot
                 ? DescribeRootToTrust(diagnostic, chain, serverDescription)
-                : DescribeWhatToTrust(diagnostic, chain, serverDescription);
+                : DescribeWhatToTrust(diagnostic, chain, serverDescription));
             return diagnostic;
         }
 
@@ -329,32 +329,37 @@ public static class ServerCertificateProbe
     /// <summary>
     /// What to trust to accept the server, most durable first: the root survives the renewal of everything beneath it.
     /// </summary>
-    private static string DescribeWhatToTrust(ServerCertificateDiagnostic diagnostic, AssembledCertificateChain chain, string serverDescription)
+    private static JimMessage DescribeWhatToTrust(ServerCertificateDiagnostic diagnostic, AssembledCertificateChain chain, string serverDescription)
     {
         if (diagnostic.IsSelfSigned)
-            return $"The certificate is self-signed and not trusted. Add this certificate to the JIM certificate store (Admin > Certificates) to trust this {serverDescription}.";
+            return Message(nameof(ConnectorMessages.CertSelfSigned), ServerNoun.For(serverDescription));
 
         if (chain.Root != null)
-            return $"Nothing in the certificate chain is trusted. Add '{PresentedServerCertificate.CommonNameOf(chain.Root.Subject)}', the root of the chain, to the JIM certificate store (Admin > Certificates) so that renewals of everything beneath it are trusted too. Any other certificate in the chain also works, until it is renewed.";
+            return Message(nameof(ConnectorMessages.CertNothingTrustedWithRoot), PresentedServerCertificate.CommonNameOf(chain.Root.Subject));
 
         var highest = chain.Elements[^1].Certificate;
-        return $"Nothing in the certificate chain is trusted, and JIM could not find '{PresentedServerCertificate.CommonNameOf(chain.MissingIssuer)}', the certificate authority that issued '{PresentedServerCertificate.CommonNameOf(highest.Subject)}'. Trust a certificate JIM did find, or add '{PresentedServerCertificate.CommonNameOf(chain.MissingIssuer)}' to the JIM certificate store (Admin > Certificates) so that renewals are trusted too.";
+        return Message(nameof(ConnectorMessages.CertNothingTrustedIssuerMissing),
+            PresentedServerCertificate.CommonNameOf(chain.MissingIssuer), PresentedServerCertificate.CommonNameOf(highest.Subject));
     }
 
     /// <summary>
     /// What to trust to accept the server where the connection accepts only a root: the root, which this connection
     /// cannot do without, whatever else is in the store.
     /// </summary>
-    private static string DescribeRootToTrust(ServerCertificateDiagnostic diagnostic, AssembledCertificateChain chain, string serverDescription)
+    private static JimMessage DescribeRootToTrust(ServerCertificateDiagnostic diagnostic, AssembledCertificateChain chain, string serverDescription)
     {
         if (diagnostic.IsSelfSigned)
-            return $"The certificate is self-signed and not trusted. Add this certificate to the JIM certificate store (Admin > Certificates) to trust this {serverDescription}.";
+            return Message(nameof(ConnectorMessages.CertSelfSigned), ServerNoun.For(serverDescription));
 
         if (chain.Root != null)
-            return $"The root of the chain is not trusted. Add '{PresentedServerCertificate.CommonNameOf(chain.Root.Subject)}' to the JIM certificate store (Admin > Certificates). This connection accepts only the root: an intermediate or the {serverDescription}'s own certificate in the store does not make it work.";
+            return Message(nameof(ConnectorMessages.CertRootNotTrusted), PresentedServerCertificate.CommonNameOf(chain.Root.Subject), ServerNoun.For(serverDescription));
 
-        return $"The root of the chain is not trusted, and JIM could not find '{PresentedServerCertificate.CommonNameOf(chain.MissingIssuer)}', the certificate authority above '{PresentedServerCertificate.CommonNameOf(chain.Elements[^1].Certificate.Subject)}'. Get the root certificate from whoever runs your PKI and add it to the JIM certificate store (Admin > Certificates). This connection accepts only the root.";
+        return Message(nameof(ConnectorMessages.CertRootNotTrustedIssuerMissing),
+            PresentedServerCertificate.CommonNameOf(chain.MissingIssuer), PresentedServerCertificate.CommonNameOf(chain.Elements[^1].Certificate.Subject));
     }
+
+    private static JimMessage Message(string key, params MessageArgument[] arguments) =>
+        JimMessage.Create(ConnectorMessageCatalogues.Connectors, key, arguments);
 
     /// <summary>
     /// Reads the names the certificate was issued for out of its subject alternative name extension.

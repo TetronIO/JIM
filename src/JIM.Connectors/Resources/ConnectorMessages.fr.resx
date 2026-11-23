@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LdapConnectivityMissingValues" xml:space="preserve">
+    <value>Impossible de tester la connectivité : le serveur d’annuaire, le port, le nom d’utilisateur ou le mot de passe est manquant.</value>
+  </data>
+  <data name="LdapConnectivityFailed" xml:space="preserve">
+    <value>Connexion impossible. Message : {0}</value>
+  </data>
+  <data name="LdapExchangeDirectoryTypeRefusal" xml:space="preserve">
+    <value>Les destinataires Exchange ne peuvent être gérés que sur Active Directory, et cet annuaire est {0}. Désactivez {1}, ou connectez-vous à un contrôleur de domaine Active Directory.</value>
+  </data>
+  <data name="LdapDirectoryKindSambaAD" xml:space="preserve">
+    <value>Samba AD</value>
+  </data>
+  <data name="LdapDirectoryKindOpenLDAP" xml:space="preserve">
+    <value>OpenLDAP</value>
+  </data>
+  <data name="LdapDirectoryKindDirectoryServer389" xml:space="preserve">
+    <value>389 Directory Server</value>
+  </data>
+  <data name="LdapDirectoryKindUnrecognised" xml:space="preserve">
+    <value>un annuaire que JIM ne reconnaît pas</value>
+  </data>
+  <data name="LdapExchangeRefusedRemotePowerShell" xml:space="preserve">
+    <value>Exchange a refusé {0} : {1} Le compte s’est connecté au domaine, mais Exchange ne l’autorise pas à utiliser PowerShell distant. Ajoutez-le au groupe de rôles Recipient Management d’Exchange, et vérifiez que son accès à PowerShell distant n’est pas désactivé.</value>
+  </data>
+  <data name="LdapExchangeUnreachable" xml:space="preserve">
+    <value>JIM n’a pas pu joindre Exchange à l’adresse {0} : {1} Vérifiez le nom du serveur Exchange, et que ce serveur peut l’atteindre sur le port {2}.</value>
+  </data>
+  <data name="LdapExchangeTimedOut" xml:space="preserve">
+    <value>Exchange à l’adresse {0} n’a pas répondu : {1} Vérifiez que le serveur est en cours d’exécution, et que rien entre ce serveur et lui ne retient la connexion.</value>
+  </data>
+  <data name="LdapExchangeCertificateUntrusted" xml:space="preserve">
+    <value>JIM ne fait pas confiance au certificat d’Exchange à l’adresse {0} : {1} Ajoutez dans Certificats l’autorité de certification qui l’a émis, et utilisez le nom du serveur tel que son certificat le donne.</value>
+  </data>
+  <data name="LdapExchangeSessionRefused" xml:space="preserve">
+    <value>Exchange à l’adresse {0} a refusé la session : {1}</value>
+  </data>
+  <data name="LdapKerberosClockSkew" xml:space="preserve">
+    <value>L’horloge de ce serveur diffère de celle du domaine de plus de cinq minutes : Kerberos a donc refusé la connexion. Corrigez l’heure de ce serveur, ou du contrôleur de domaine {0}, puis enregistrez de nouveau.</value>
+  </data>
+  <data name="LdapKerberosPasswordRefused" xml:space="preserve">
+    <value>Le domaine a refusé le mot de passe de {0}. Vérifiez le mot de passe ci-dessus : JIM se connecte à Exchange avec le compte de l’annuaire.</value>
+  </data>
+  <data name="LdapKerberosAccountUnknown" xml:space="preserve">
+    <value>Le contrôleur de domaine {0} ne connaît pas le compte {1} : il ne peut donc pas se connecter à Exchange.</value>
+  </data>
+  <data name="LdapKerberosServiceUnknown" xml:space="preserve">
+    <value>Le domaine n’a pas de nom de principal de service HTTP/{0} : Kerberos ne peut donc pas s’y connecter. Utilisez le nom DNS propre du serveur Exchange, et non un alias ou une adresse IP, comme serveur Exchange.</value>
+  </data>
+  <data name="LdapKerberosAccountDisabled" xml:space="preserve">
+    <value>Le compte {0} est désactivé ou verrouillé : le domaine a donc refusé la connexion.</value>
+  </data>
+  <data name="LdapKerberosPasswordExpired" xml:space="preserve">
+    <value>Le compte {0} ne peut pas se connecter, car son mot de passe a expiré. Définissez-en un nouveau, et saisissez-le comme mot de passe ci-dessus.</value>
+  </data>
+  <data name="LdapKerberosDomainControllerUnreachable" xml:space="preserve">
+    <value>JIM n’a pas pu joindre le contrôleur de domaine {0} sur le port 88 pour se connecter à Exchange avec Kerberos. Vérifiez que ce serveur peut l’atteindre.</value>
+  </data>
+  <data name="LdapKerberosRefused" xml:space="preserve">
+    <value>Kerberos a refusé la connexion de {0} via {1} : {2}</value>
+  </data>
+  <data name="LdapExchangeCommandsMissing" xml:space="preserve">
+    <value>Le compte {0} ne peut pas exécuter {1} dans Exchange : JIM ne peut donc pas gérer ces types de destinataires : {2}. Leurs modifications échoueront faute d’autorisations suffisantes tant qu’il ne le pourra pas. Ajoutez le compte au groupe de rôles Recipient Management d’Exchange, ou attribuez-lui un rôle qui inclut ces commandes.</value>
+  </data>
+  <data name="ListOr" xml:space="preserve">
+    <value>{0} ou {1}</value>
+  </data>
+  <data name="LdapExchangeGetCommandFailed" xml:space="preserve">
+    <value>JIM s’est connecté à Exchange en tant que {0}, mais n’a pas pu déterminer quelles commandes le compte peut exécuter, car Get-Command a échoué : {1}</value>
+  </data>
+  <data name="GraphTenantAlias" xml:space="preserve">
+    <value>« {0} » est un alias de connexion multilocataire, et non un locataire. Indiquez l’ID du locataire (un GUID) ou l’un de ses noms de domaine vérifiés, affiché sous le nom Directory (tenant) ID sur la page Vue d’ensemble de l’inscription d’application.</value>
+  </data>
+  <data name="GraphTenantInvalid" xml:space="preserve">
+    <value>Le paramètre {0} doit être l’ID du locataire (un GUID) ou l’un de ses noms de domaine vérifiés, par exemple contoso.onmicrosoft.com. Indiquez la valeur seule, et non une URL de connexion.</value>
+  </data>
+  <data name="GraphClientIdInvalid" xml:space="preserve">
+    <value>Le paramètre {0} doit être l’ID d’application (client) de l’inscription d’application, un GUID tel que 00000000-0000-0000-0000-000000000000, affiché sur sa page Vue d’ensemble.</value>
+  </data>
+  <data name="GraphCloudUnknown" xml:space="preserve">
+    <value>« {0} » n’est pas un cloud que ce connecteur connaît. Choisissez parmi : {1}.</value>
+  </data>
+  <data name="GraphNumberOutOfRange" xml:space="preserve">
+    <value>Le paramètre {0} doit être compris entre {1} et {2}.</value>
+  </data>
+  <data name="GraphManagedIdentityIdInvalid" xml:space="preserve">
+    <value>Le paramètre {0} doit être l’ID client de l’identité managée, un GUID affiché sur sa page Vue d’ensemble dans le portail Azure.</value>
+  </data>
+  <data name="GraphSettingNotDecrypted" xml:space="preserve">
+    <value>Le paramètre {0} n’a pas pu être déchiffré.</value>
+  </data>
+  <data name="GraphTestRequestRefused" xml:space="preserve">
+    <value>Authentification réussie, mais Microsoft Graph a refusé la requête de test : {0}</value>
+  </data>
+  <data name="GraphCouldNotConnect" xml:space="preserve">
+    <value>Impossible de se connecter à Microsoft Entra ID ou à Microsoft Graph. Vérifiez que JIM peut les joindre en HTTPS (port 443). Si un proxy inspecte le trafic TLS, ajoutez son certificat d’autorité de certification au magasin de certificats de JIM, dans Admin &gt; Certificats.</value>
+  </data>
+  <data name="EntraRefusedKnown" xml:space="preserve">
+    <value>Microsoft Entra ID a refusé la demande de jeton (AADSTS{0}). {1}</value>
+  </data>
+  <data name="EntraRefusedWithDetail" xml:space="preserve">
+    <value>Microsoft Entra ID a refusé la demande de jeton avec le code HTTP {0} ({1}). Vérifiez les paramètres {2} et {3} ainsi que ceux des identifiants.</value>
+  </data>
+  <data name="EntraRefusedWithStatus" xml:space="preserve">
+    <value>Microsoft Entra ID a refusé la demande de jeton avec le code HTTP {0}. Vérifiez les paramètres {1} et {2} ainsi que ceux des identifiants.</value>
+  </data>
+  <data name="EntraSecretInvalid" xml:space="preserve">
+    <value>Le paramètre {0} n’est pas valide. Indiquez la valeur (Value) du secret, sous Certificats et secrets sur l’inscription d’application, et non son ID de secret.</value>
+  </data>
+  <data name="EntraSecretExpired" xml:space="preserve">
+    <value>Le paramètre {0} a expiré. Créez un nouveau secret client sur l’inscription d’application et indiquez-le ici.</value>
+  </data>
+  <data name="EntraApplicationNotFound" xml:space="preserve">
+    <value>Aucune application correspondant au paramètre {0} n’a été trouvée dans le locataire. Vérifiez le paramètre {0}, et que l’inscription d’application appartient au locataire indiqué dans le paramètre {1}.</value>
+  </data>
+  <data name="EntraTenantNotFound" xml:space="preserve">
+    <value>Le locataire indiqué dans le paramètre {0} est introuvable. Vérifiez-le, et vérifiez le paramètre {1} : un locataire d’un cloud national est introuvable sur les points de terminaison globaux, et inversement.</value>
+  </data>
+  <data name="EntraTenantIdInvalid" xml:space="preserve">
+    <value>Le paramètre {0} n’est pas un identifiant de locataire valide. Indiquez l’ID du locataire (un GUID) ou l’un de ses noms de domaine vérifiés.</value>
+  </data>
+  <data name="EntraAssertionNotVerified" xml:space="preserve">
+    <value>Microsoft Entra ID n’a pas pu vérifier l’assertion signée avec le paramètre {0}. Vérifiez que le même certificat est téléversé sous Certificats et secrets sur l’inscription d’application. Un certificat téléversé depuis quelques minutes peut encore être refusé le temps qu’Entra ID l’applique ; dans ce cas, réessayez dans un instant.</value>
+  </data>
+  <data name="EntraAssertionOutOfTime" xml:space="preserve">
+    <value>L’assertion client était en dehors de sa plage de validité. Vérifiez que l’horloge du serveur JIM est correcte.</value>
+  </data>
+  <data name="EntraApplicationDisabled" xml:space="preserve">
+    <value>L’application est désactivée dans le locataire. Activez son application d’entreprise (principal de service) et réessayez.</value>
+  </data>
+  <data name="EntraFederatedMismatch" xml:space="preserve">
+    <value>Le jeton de l’identité de charge de travail ne correspond à aucune information d’identification fédérée de l’inscription d’application. Sous Certificats et secrets &gt; Informations d’identification fédérées, ajoutez-en une pour l’identité managée indiquée dans le paramètre {0}, pour ce cloud.</value>
+  </data>
+  <data name="EntraGraphNotFound" xml:space="preserve">
+    <value>Microsoft Graph est introuvable dans le locataire. Vérifiez que le paramètre {0} correspond au cloud dans lequel se trouve le locataire.</value>
+  </data>
+  <data name="ScimUrlInvalid" xml:space="preserve">
+    <value>Le paramètre « {0} » n’est pas une URL absolue valide.</value>
+  </data>
+  <data name="ScimUrlInvalidWithExample" xml:space="preserve">
+    <value>Le paramètre « {0} » n’est pas une URL absolue valide. Indiquez l’adresse complète, par exemple {1}.</value>
+  </data>
+  <data name="ScimUrlNotHttps" xml:space="preserve">
+    <value>Le paramètre « {0} » doit utiliser HTTPS. HTTP n’est autorisé que pour les adresses de bouclage lors de tests en local, car {1} est envoyé à cette adresse.</value>
+  </data>
+  <data name="ScimPayloadIdentityData" xml:space="preserve">
+    <value>les données d’identité</value>
+  </data>
+  <data name="ScimPayloadClientSecret" xml:space="preserve">
+    <value>le secret client</value>
+  </data>
+  <data name="ScimNoDiscoveryAnswer" xml:space="preserve">
+    <value>Connexion établie à « {0} », mais aucun point de découverte SCIM n’a répondu ({1}, {2} ou {3}). Vérifiez que l’URL de base pointe vers la racine du service SCIM, et non vers un point de terminaison de ressource tel que /Users.</value>
+  </data>
+  <data name="ScimCouldNotAuthenticate" xml:space="preserve">
+    <value>Impossible de s’authentifier auprès du fournisseur de services SCIM : {0}</value>
+  </data>
+  <data name="ScimCouldNotConnect" xml:space="preserve">
+    <value>Impossible de se connecter au fournisseur de services SCIM : {0}</value>
+  </data>
+  <data name="SqlTimeZoneUnknown" xml:space="preserve">
+    <value>{0} « {1} » n’est pas un fuseau horaire reconnu par ce déploiement. Saisissez UTC, ou un nom de fuseau horaire IANA tel que Europe/London ou America/New_York.</value>
+  </data>
+  <data name="SqlChooseDatabaseType" xml:space="preserve">
+    <value>Choisissez un {0} avant de tester la connectivité.</value>
+  </data>
+  <data name="SqlMissingConnectionValues" xml:space="preserve">
+    <value>Impossible de tester la connectivité tant que {0}, {1} et {2} n’ont pas été renseignés.</value>
+  </data>
+  <data name="SqlConnectFailed" xml:space="preserve">
+    <value>Connexion impossible. Message : {0}</value>
+  </data>
+  <data name="FileNotFound" xml:space="preserve">
+    <value>Fichier introuvable : « {0} ». En mode {1}, le fichier doit exister. Vérifiez le chemin et assurez-vous qu’il correspond à un volume Docker.</value>
+  </data>
+  <data name="FileExportDirectoryNotCreated" xml:space="preserve">
+    <value>Le répertoire d’exportation n’a pas pu être créé : « {0} ». Erreur : {1}</value>
+  </data>
+  <data name="CertServerScimServiceProvider" xml:space="preserve">
+    <value>fournisseur de services SCIM</value>
+  </data>
+  <data name="CertServerDirectoryServer" xml:space="preserve">
+    <value>serveur d’annuaire</value>
+  </data>
+  <data name="CertServerDatabaseServer" xml:space="preserve">
+    <value>serveur de base de données</value>
+  </data>
+  <data name="CertNoCertificate" xml:space="preserve">
+    <value>Le {0} n’a présenté aucun certificat. Vérifiez qu’il est configuré pour {1} sur ce port.</value>
+  </data>
+  <data name="CertExpired" xml:space="preserve">
+    <value>Le certificat a expiré. Renouvelez-le sur le {0} ; faire confiance à son émetteur n’annule pas la date d’expiration.</value>
+  </data>
+  <data name="CertNotYetValid" xml:space="preserve">
+    <value>Le certificat n’est pas encore valide, ce qui signifie généralement que les horloges de JIM et du {0} ne concordent pas.</value>
+  </data>
+  <data name="CertNameMismatch" xml:space="preserve">
+    <value>Le certificat n’a pas été émis pour « {0} ». L’ajouter au magasin de certificats de JIM n’y changera rien ; connectez-vous avec un nom que porte le certificat, en donnant aux conteneurs de JIM une entrée d’hôte pour ce nom s’il ne peut pas être résolu.</value>
+  </data>
+  <data name="CertChainProblem" xml:space="preserve">
+    <value>{0} Faire confiance à un certificat dans JIM n’y change rien ; la chaîne de certificats doit être corrigée sur le {1}.</value>
+  </data>
+  <data name="CertSelfSigned" xml:space="preserve">
+    <value>Le certificat est auto-signé et n’est pas approuvé. Ajoutez ce certificat au magasin de certificats de JIM (Admin &gt; Certificats) pour approuver ce {0}.</value>
+  </data>
+  <data name="CertNothingTrustedWithRoot" xml:space="preserve">
+    <value>Rien dans la chaîne de certificats n’est approuvé. Ajoutez « {0} », la racine de la chaîne, au magasin de certificats de JIM (Admin &gt; Certificats) afin que les renouvellements de tout ce qui se trouve en dessous soient eux aussi approuvés. Tout autre certificat de la chaîne fonctionne également, jusqu’à son renouvellement.</value>
+  </data>
+  <data name="CertNothingTrustedIssuerMissing" xml:space="preserve">
+    <value>Rien dans la chaîne de certificats n’est approuvé, et JIM n’a pas trouvé « {0} », l’autorité de certification qui a émis « {1} ». Approuvez un certificat que JIM a trouvé, ou ajoutez « {0} » au magasin de certificats de JIM (Admin &gt; Certificats) afin que les renouvellements soient eux aussi approuvés.</value>
+  </data>
+  <data name="CertRootNotTrusted" xml:space="preserve">
+    <value>La racine de la chaîne n’est pas approuvée. Ajoutez « {0} » au magasin de certificats de JIM (Admin &gt; Certificats). Cette connexion n’accepte que la racine : un certificat intermédiaire, ou celui du {1}, dans le magasin ne la fait pas fonctionner.</value>
+  </data>
+  <data name="CertRootNotTrustedIssuerMissing" xml:space="preserve">
+    <value>La racine de la chaîne n’est pas approuvée, et JIM n’a pas trouvé « {0} », l’autorité de certification au-dessus de « {1} ». Obtenez le certificat racine auprès de la personne qui gère votre PKI et ajoutez-le au magasin de certificats de JIM (Admin &gt; Certificats). Cette connexion n’accepte que la racine.</value>
+  </data>
+  <data name="CertChainExpired" xml:space="preserve">
+    <value>{0} a expiré le {1}. Une chaîne qui passe par une autorité de certification expirée n’est jamais valide ; elle doit être renouvelée.</value>
+  </data>
+  <data name="CertChainNotYetValid" xml:space="preserve">
+    <value>{0} n’est pas valide avant le {1}.</value>
+  </data>
+  <data name="CertChainNotAuthority" xml:space="preserve">
+    <value>{0} n’est pas marqué comme autorité de certification : il ne peut donc pas se porter garant du certificat situé en dessous.</value>
+  </data>
+  <data name="CertChainBadSignature" xml:space="preserve">
+    <value>La signature que {0} a apposée sur le certificat situé en dessous n’est pas vérifiable.</value>
+  </data>
+  <data name="CertRejected" xml:space="preserve">
+    <value>Le certificat du {0} a été rejeté : {1}</value>
+  </data>
+</root>

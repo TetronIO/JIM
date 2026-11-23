@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Connectors;
+using JIM.Models.Localisation;
 
 namespace JIM.Models.Exceptions;
 
@@ -18,4 +19,18 @@ public class ServerCertificateRejectedException : Exception
     {
         Diagnostic = diagnostic;
     }
+
+    /// <summary>
+    /// A rejection whose words are held as a message, so the portal can show them in the viewer's language (#3030);
+    /// <see cref="Exception.Message"/> is its British English, which Activities and logs keep reading.
+    /// </summary>
+    public ServerCertificateRejectedException(JimMessage detail, ServerCertificateDiagnostic diagnostic, Exception? innerException = null)
+        : base(detail.ToEnglish(), innerException)
+    {
+        Diagnostic = diagnostic;
+        Detail = detail;
+    }
+
+    /// <summary>The rejection as a message the portal can render in the viewer's language; null where only English text exists.</summary>
+    public JimMessage? Detail { get; }
 }

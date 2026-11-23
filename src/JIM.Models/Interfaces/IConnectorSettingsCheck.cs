@@ -20,7 +20,7 @@ public interface IConnectorSettingsCheck
     /// <param name="logger">Logger for diagnostics. Never log a secret.</param>
     /// <param name="cancellationToken">Cancels the check, for example when the administrator leaves the page.</param>
     /// <returns>
-    /// The findings: errors refuse the save, warnings (<see cref="ConnectorSettingValueValidationResult.Warning"/>) do
+    /// The findings: errors refuse the save, warnings (<see cref="ConnectorSettingValueValidationResult.Warning(JIM.Models.Staging.ConnectedSystemSettingValue, string)"/>) do
     /// not. A failure the Connector can explain is a finding, never an exception.
     /// </returns>
     public Task<ConnectorSettingsCheckResult> CheckSettingsAsync(List<ConnectedSystemSettingValue> settings, ILogger logger, CancellationToken cancellationToken);

@@ -3,6 +3,8 @@
 
 using System.Globalization;
 using System.Text.RegularExpressions;
+using JIM.Models.Localisation;
+using JIM.Models.Staging;
 using JIM.Web.Resources;
 
 namespace JIM.Web.Localisation;
@@ -58,6 +60,41 @@ public static partial class ConnectorSettingDisplay
         return ConnectorSchemaText.ResourceManager.GetString($"Graph_{Slug(objectTypeName)}_{Slug(attributeName)}", CultureInfo.CurrentUICulture) ?? stored;
     }
 
+    /// <summary>
+    /// What a validation or check finding says, in the viewer's language: its message where it carries one, else the
+    /// English text it was given (another system's words, or a message not yet converted). Where the message names
+    /// settings (the settings validator's do), each name is shown as its label, so "Please supply a value for Port" reads
+    /// with the same words as the field beside it.
+    /// </summary>
+    public static string Describe(this ConnectorSettingValueValidationResult result, string? definitionName) =>
+        result.ErrorDetail is { } detail ? RelabelSettingNames(detail, definitionName).ToCurrentLanguage() : result.ErrorMessage ?? string.Empty;
+
+    private static JimMessage RelabelSettingNames(JimMessage message, string? definitionName)
+    {
+        if (string.IsNullOrEmpty(definitionName))
+            return message;
+
+        // the settings validator joins names into quoted lists; every other message passes a setting's name on its own
+        var quotedLists = message.Catalogue == JIM.Models.Localisation.MessageCatalogues.SettingValidation;
+        var arguments = message.Arguments
+            .Select(argument =>
+                argument.Text is { } text ? new MessageArgument { Text = SettingNamesRelabelled(text, definitionName, quotedLists) }
+                : argument.Message is { } inner ? new MessageArgument { Message = RelabelSettingNames(inner, definitionName) }
+                : argument)
+            .ToList();
+        return message with { Arguments = arguments };
+    }
+
+    private static string SettingNamesRelabelled(string text, string definitionName, bool quotedLists)
+    {
+        if (Lookup(definitionName, text, "Label") is { } label)
+            return label;
+
+        return quotedLists
+            ? QuotedName().Replace(text, match => "'" + (Lookup(definitionName, match.Groups[1].Value, "Label") ?? match.Groups[1].Value) + "'")
+            : text;
+    }
+
     /// <summary>The resource key for a setting's text, for tests and tools.</summary>
     public static string KeyFor(string definitionName, string settingName, string part) =>
         $"{Slug(definitionName)}_{Slug(settingName)}_{part}";
@@ -69,6 +106,9 @@ public static partial class ConnectorSettingDisplay
 
     private static string? Find(string key) =>
         ConnectorSettingText.ResourceManager.GetString(key, CultureInfo.CurrentUICulture);
+
+    [GeneratedRegex("'([^']+)'")]
+    private static partial Regex QuotedName();
 
     [GeneratedRegex("[^A-Za-z0-9]+")]
     private static partial Regex NonAlphanumeric();
