@@ -3,6 +3,9 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Utility;
+using JIM.Web.Resources;
+using System.Globalization;
+using JIM.Web.Localisation;
 
 namespace JIM.Web.Causality;
 
@@ -181,11 +184,21 @@ public sealed class CausalityEvent
     public string? AttributeRowsCaption => OutcomeType switch
     {
         ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued
-            or ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => "Target identified by",
+            or ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => CausalityText.EventTargetIdentifiedBy,
         // The rows are the changes taken off the queue (#2001), not changes made, so they are captioned as such.
-        ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn => "Withdrawn from the Pending Export",
+        ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn => CausalityText.EventWithdrawnFromPendingExport,
         _ => null
     };
+
+    /// <summary>
+    /// What a collapsed attribute detail says about the event's rows: the caption where the event has one, otherwise
+    /// how many attributes it carries.
+    /// </summary>
+    public string AttributeRowsText => AttributeRowsCaption
+        ?? string.Format(
+            CultureInfo.CurrentCulture,
+            PluralRules.Choose(AttributeRowCount, CausalityText.EventAttributeCountOne, CausalityText.EventAttributeCountOther),
+            AttributeRowCount.ToString("N0", CultureInfo.InvariantCulture));
 
     /// <summary>
     /// Child events ordered by Ordinal.

@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Web.Resources;
+
 namespace JIM.Web.Causality;
 
 /// <summary>
@@ -22,7 +24,8 @@ public static class CausalitySourceLabels
     /// </summary>
     public static string Verb(bool isSpeculative = false, bool subjectIsMetaverseObject = false)
     {
-        var subject = subjectIsMetaverseObject ? "Metaverse Object" : "Connected System Object";
-        return isSpeculative ? $"{subject} would be processed" : $"{subject} processed";
+        return subjectIsMetaverseObject
+            ? isSpeculative ? CausalityText.SourceVerbMvoWouldBeProcessed : CausalityText.SourceVerbMvoProcessed
+            : isSpeculative ? CausalityText.SourceVerbCsoWouldBeProcessed : CausalityText.SourceVerbCsoProcessed;
     }
 }

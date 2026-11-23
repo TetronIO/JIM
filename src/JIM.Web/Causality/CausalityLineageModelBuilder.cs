@@ -5,6 +5,7 @@ using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Web.Models;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Causality;
 
@@ -263,7 +264,7 @@ public static partial class CausalityLineageModelBuilder
                     Title = followUp.Title,
                     Text = followUp.Detail,
                     Occurred = followUp.Created,
-                    LinkText = "View Activity",
+                    LinkText = CausalityText.LineageViewActivity,
                     LinkHref = followUp.ActivityHref
                 }, int.MaxValue));
             }
@@ -349,7 +350,7 @@ public static partial class CausalityLineageModelBuilder
             Members = soleMember != null
                 ? []
                 : cohort.Members.Select(m => new CausalityLineageChainHopMember(
-                    string.IsNullOrWhiteSpace(m.DisplayName) ? "Unnamed object" : m.DisplayName!,
+                    string.IsNullOrWhiteSpace(m.DisplayName) ? CausalityText.LineageUnnamedObject : m.DisplayName!,
                     GetActivityItemHref(m, effectItemId, links))).ToList()
         };
     }
@@ -358,7 +359,9 @@ public static partial class CausalityLineageModelBuilder
     /// What a link to carry on past the walk's bound says (#2100).
     /// </summary>
     internal static string ContinueFromText(string? farthestName) =>
-        string.IsNullOrWhiteSpace(farthestName) ? "Continue from the last item" : $"Continue from {farthestName}";
+        string.IsNullOrWhiteSpace(farthestName)
+            ? CausalityText.LineageContinueFromLastItem
+            : Format(CausalityText.LineageContinueFrom, farthestName);
 
     /// <summary>
     /// The kind of run that recorded a cause, where the hop's seam pins one: a derived import hop was
@@ -372,18 +375,18 @@ public static partial class CausalityLineageModelBuilder
         // otherwise fall into the switch below. A projection or join was decided by a synchronisation; a
         // direct create was not synchronised into existence at all, so it states no run kind.
         if (cohort.MetaverseChangeType != null)
-            return cohort.MetaverseChangeType == ObjectChangeType.Created ? null : "Synchronisation run";
+            return cohort.MetaverseChangeType == ObjectChangeType.Created ? null : CausalityText.LineageRunKindSynchronisation;
 
         if (cohort.SourceImportChangeType != null)
-            return "Import run";
+            return CausalityText.LineageRunKindImport;
 
         return cohort.EdgeType switch
         {
-            CausalEdgeType.ExportCausedImportConfirmation => "Export run",
-            CausalEdgeType.PendingExportQueueingCausedExportExecution => "Synchronisation run",
+            CausalEdgeType.ExportCausedImportConfirmation => CausalityText.LineageRunKindExport,
+            CausalEdgeType.PendingExportQueueingCausedExportExecution => CausalityText.LineageRunKindSynchronisation,
             // Unique Value Generation (#242): the cause is the export run whose rejection triggered the
             // revision, exactly as ExportCausedImportConfirmation's cause is the export it confirms.
-            CausalEdgeType.ExportRejectionCausedGeneratedValueRevision => "Export run",
+            CausalEdgeType.ExportRejectionCausedGeneratedValueRevision => CausalityText.LineageRunKindExport,
             _ => null
         };
     }
@@ -439,11 +442,11 @@ public static partial class CausalityLineageModelBuilder
                 break;
             case CausalityLineageColumnKind.Record:
                 head = state.IsConsequenceObject
-                    ? state.ConsequenceHead ?? new ColumnHead(state.SystemName ?? "Connected System Object", IsRoleHead: false, Href: null, ObjectTypeName: null)
+                    ? state.ConsequenceHead ?? new ColumnHead(state.SystemName ?? CausalityText.LineageConnectedSystemObjectFallback, IsRoleHead: false, Href: null, ObjectTypeName: null)
                     : GetRecordHead(state, context);
                 break;
             default:
-                head = new ColumnHead("Earlier causes", IsRoleHead: false, Href: null, ObjectTypeName: null);
+                head = new ColumnHead(CausalityText.LineageEarlierCauses, IsRoleHead: false, Href: null, ObjectTypeName: null);
                 break;
         }
 
@@ -473,18 +476,20 @@ public static partial class CausalityLineageModelBuilder
     {
         var running = followUps.Where(f => f.IsRunning).ToList();
         var sentences = (summary?.StateSentences ?? [])
-            .Where(s => s is not ("Every branch has run to its end." or "Nothing followed from this run."))
+            .Where(s => s != CausalityText.LineageEveryBranchEnded && s != CausalityText.LineageNothingFollowedFromRun)
             .ToList();
         if (running.Count > 0)
         {
-            var which = string.Join("; ", running.Select(f => $"{f.Title}, {f.StateLabel.ToLowerInvariant()}"));
-            sentences.Add(running.Count == 1
-                ? $"1 follow-up is still running: {which}."
-                : $"{running.Count} follow-ups are still running: {which}.");
+            var which = running
+                .Select(f => Format(CausalityText.LineageFollowUpTitleState, f.Title, f.StateLabel.ToLowerInvariant()))
+                .Aggregate((joined, next) => Format(CausalityText.LineageFollowUpListJoin, joined, next));
+            sentences.Add(Format(
+                running.Count == 1 ? CausalityText.LineageFollowUpsRunningOne : CausalityText.LineageFollowUpsRunningOther,
+                running.Count, which));
         }
         else if (sentences.Count == 0)
         {
-            sentences.Add("Every branch has run to its end.");
+            sentences.Add(CausalityText.LineageEveryBranchEnded);
         }
 
         return new CausalityLineageConsequenceSummary
@@ -544,7 +549,7 @@ public static partial class CausalityLineageModelBuilder
     private static ColumnHead GetIdentityHead(ColumnState state, CausalChain? chain, CausalityPageContext context)
     {
         if (context.SubjectMetaverseObjectId != null)
-            return new ColumnHead(context.SubjectMetaverseObjectName ?? "Metaverse Object", IsRoleHead: false,
+            return new ColumnHead(context.SubjectMetaverseObjectName ?? CausalityText.LineageMetaverseObjectFallback, IsRoleHead: false,
                 context.SubjectMetaverseObjectHref, ObjectTypeName: null);
 
         var identityLink = state.ThisRunEvents
@@ -564,7 +569,7 @@ public static partial class CausalityLineageModelBuilder
             .Select(h => h.Hop.Cohort)
             .FirstOrDefault(c => c.MemberCount > 1);
         if (pluralCohort != null)
-            return new ColumnHead(pluralCohort.ObjectNoun ?? "Metaverse Objects", IsRoleHead: true, Href: null, ObjectTypeName: null);
+            return new ColumnHead(pluralCohort.ObjectNoun ?? CausalityText.LineageMetaverseObjectsFallback, IsRoleHead: true, Href: null, ObjectTypeName: null);
 
         if (chain != null && FirstSoleMemberName(chain.Cohorts) is { } chainName)
             return new ColumnHead(chainName, IsRoleHead: false, Href: null, ObjectTypeName: null);
@@ -577,7 +582,7 @@ public static partial class CausalityLineageModelBuilder
         if (consequenceIdentityLink != null)
             return new ColumnHead(consequenceIdentityLink.Label, IsRoleHead: false, consequenceIdentityLink.Href, ObjectTypeName: null);
 
-        return new ColumnHead("Metaverse Object", IsRoleHead: false, Href: null, ObjectTypeName: null);
+        return new ColumnHead(CausalityText.LineageMetaverseObjectFallback, IsRoleHead: false, Href: null, ObjectTypeName: null);
     }
 
     /// <summary>
@@ -594,7 +599,7 @@ public static partial class CausalityLineageModelBuilder
                 ? context.Links.ConnectedSystemObjectHref(systemId, csoId)
                 : null;
             return new ColumnHead(
-                ObjectDescription.ChipName(context.CsoDisplayName, context.CsoExternalId) ?? "Connected System Object",
+                ObjectDescription.ChipName(context.CsoDisplayName, context.CsoExternalId) ?? CausalityText.LineageConnectedSystemObjectFallback,
                 IsRoleHead: false, href, context.CsoObjectTypeName);
         }
 
@@ -608,13 +613,13 @@ public static partial class CausalityLineageModelBuilder
         if (soleNames.Count == 1)
             return new ColumnHead(soleNames[0], IsRoleHead: false, Href: null, ObjectTypeName: null);
         if (soleNames.Count > 1)
-            return new ColumnHead("Connected System Objects", IsRoleHead: true, Href: null, ObjectTypeName: null);
+            return new ColumnHead(CausalityText.LineageConnectedSystemObjectsFallback, IsRoleHead: true, Href: null, ObjectTypeName: null);
 
         var pluralCohort = state.Hops.OrderBy(h => h.Sequence)
             .Select(h => h.Hop.Cohort)
             .FirstOrDefault(c => c.MemberCount > 1);
         if (pluralCohort != null)
-            return new ColumnHead(pluralCohort.ObjectNoun ?? "Connected System Objects", IsRoleHead: true, Href: null, ObjectTypeName: null);
+            return new ColumnHead(pluralCohort.ObjectNoun ?? CausalityText.LineageConnectedSystemObjectsFallback, IsRoleHead: true, Href: null, ObjectTypeName: null);
 
         // A staging target holds this run's provisioning events and nothing chain-derived: the Connected
         // System Object is the story's subject arriving in the target system, linked where the run recorded it.
@@ -625,7 +630,7 @@ public static partial class CausalityLineageModelBuilder
         // Where the item names no record of its own (an export scope review), the target is named by its own link.
         return new ColumnHead(
             ObjectDescription.ChipName(context.CsoDisplayName, context.CsoExternalId) ?? recordLink?.Label ?? state.SystemName
-            ?? "Connected System Object",
+            ?? CausalityText.LineageConnectedSystemObjectFallback,
             IsRoleHead: false, recordLink?.Href, ObjectTypeName: recordLink?.ObjectTypeName);
     }
 
@@ -674,9 +679,9 @@ public static partial class CausalityLineageModelBuilder
         {
             var hasPageRecord = left.Any(state => state.IsPageRecord);
             if (hasPageRecord && hasProjected)
-                return "projected";
+                return CausalityText.LineageJoinProjected;
             if (hasPageRecord && hasJoined)
-                return "joined";
+                return CausalityText.LineageJoinJoined;
 
             // An earlier-run projection or join is still the truth about this join even when nothing on
             // the page's own item names it: the Identity column's creation cohort (#1495 follow-up)
@@ -690,21 +695,21 @@ public static partial class CausalityLineageModelBuilder
                     .Select(h => h.Hop.Cohort)
                     .Where(c => c.MetaverseChangeType is ObjectChangeType.Projected or ObjectChangeType.Joined
                         && c.ConnectedSystemId == left[0].SystemId)
-                    .Select(c => c.MetaverseChangeType == ObjectChangeType.Projected ? "projected" : "joined")
+                    .Select(c => c.MetaverseChangeType == ObjectChangeType.Projected ? CausalityText.LineageJoinProjected : CausalityText.LineageJoinJoined)
                     .FirstOrDefault();
                 if (earlierRunLabel != null)
                     return earlierRunLabel;
             }
 
-            return "imported";
+            return CausalityText.LineageJoinImported;
         }
 
         if (left[0].Kind == CausalityLineageColumnKind.Identity && right[0].Kind == CausalityLineageColumnKind.Record)
         {
             if (right.All(WasProvisioned))
-                return "provisioned";
+                return CausalityText.LineageJoinProvisioned;
             // A Disconnect exports nothing: the account stays in the target system, unmanaged (#1966, #1982).
-            return right.All(WasDisconnected) ? "disconnected" : "exported";
+            return right.All(WasDisconnected) ? CausalityText.LineageJoinDisconnected : CausalityText.LineageJoinExported;
         }
 
         return null;

@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Web.Resources;
+
 namespace JIM.Web.Causality;
 
 /// <summary>
@@ -14,7 +16,7 @@ namespace JIM.Web.Causality;
 public sealed record CausalityExplorerLinks(CausalityTrail Trail, CausalityFocus Current) : ICausalityLinks
 {
     /// <inheritdoc />
-    public string ItemLinkText => "Explore from here";
+    public string ItemLinkText => CausalityText.ItemLinkExploreFromHere;
 
     /// <inheritdoc />
     public string ItemHref(Guid runProfileExecutionItemId) =>

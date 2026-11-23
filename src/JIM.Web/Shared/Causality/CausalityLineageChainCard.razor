@@ -61,7 +61,7 @@
     }
 
     <div class="ln-when">
-        <span class="ln-runchip">@(Hop.RunKind ?? "Earlier run")</span>
+        <span class="ln-runchip">@(Hop.RunKind ?? CausalityText.LineageEarlierRun)</span>
         @if (Hop.Occurred != default)
         {
             @* Relative in the text with the full value on hover, matching the summary band above: every time on

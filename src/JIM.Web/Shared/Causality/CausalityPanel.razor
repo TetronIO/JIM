@@ -27,8 +27,7 @@
     {
         <div class="pa-4">
             <MudAlert Severity="Severity.Info">
-                Outcome tracking was not enabled when this activity was recorded.
-                Only the operation type is available.
+                @CausalityText.PanelNoTracking
             </MudAlert>
         </div>
     }
@@ -37,21 +36,21 @@
         @if (_model.IsSpeculative)
         {
             <div class="preview-band">
-                <span class="preview-pill">Preview</span>
+                <span class="preview-pill">@CausalityText.PanelPreviewPill</span>
                 <span class="preview-text">
-                    <strong>Nothing has been changed.</strong>
+                    <strong>@CausalityText.PanelPreviewNothingChanged</strong>
                     @if ((Context.CsoConnectedSystemName ?? Context.ConnectedSystemName) is { } previewSystemName)
                     {
-                        <text>&#32;What a Full Synchronisation of @previewSystemName would do to this object now.</text>
+                        <text>&#32;@string.Format(System.Globalization.CultureInfo.CurrentCulture, CausalityText.PanelPreviewFullSynchronisation, previewSystemName)</text>
                     }
                     else
                     {
-                        <text>&#32;What every enabled export Synchronisation Rule would do with this Metaverse Object as it stands now.</text>
+                        <text>&#32;@CausalityText.PanelPreviewExportRules</text>
                     }
                 </span>
                 @if (OnClose.HasDelegate)
                 {
-                    <button type="button" class="preview-close" aria-label="Close preview" @onclick="OnClose">&#x2715;</button>
+                    <button type="button" class="preview-close" aria-label="@CausalityText.PanelClosePreview" @onclick="OnClose">&#x2715;</button>
                 }
             </div>
         }
@@ -66,12 +65,12 @@
                     {
                         <MudButton Variant="Variant.Filled" DropShadow="false"
                                    StartIcon="@Icons.Material.Filled.Hub" Href="@ExplorerHref"
-                                   Class="jim-causality-open-explorer">Open in explorer</MudButton>
+                                   Class="jim-causality-open-explorer">@CausalityText.PanelOpenInExplorer</MudButton>
                     }
                     @if (AvailableViews.Count > 1)
                     {
                         <SegmentedToggle TValue="CausalityView" Options="ViewOptions" Value="_view" ValueChanged="SelectViewAsync"
-                                         AriaLabel="Causality view" Class="seg" />
+                                         AriaLabel="@CausalityText.PanelViewSwitcher" Class="seg" />
                     }
                 </Actions>
             </CausalitySummaryBand>
@@ -106,7 +105,7 @@
                     <div class="drawer-head">
                         <span class="drawer-title">@selectedEvent.Label</span>
                         <span class="drawer-sub">@GetDrawerSubtitle(selectedEvent)</span>
-                        <button type="button" class="drawer-close" aria-label="Close detail"
+                        <button type="button" class="drawer-close" aria-label="@CausalityText.PanelCloseDetail"
                                 @onclick="CloseDrawer">&#x2715;</button>
                     </div>
                     @* Keyed on the event so the detail's filter state resets when another card is selected *@
@@ -418,10 +417,13 @@
         // A queued deprovision's rows identify the target rather than change it, so the drawer says what
         // they are rather than calling them changes; see CausalityEvent.AttributeRowsCaption.
         var subtitle = selectedEvent.AttributeRowsCaption
-                       ?? $"{count.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)} attribute change{(count == 1 ? "" : "s")}";
+                       ?? string.Format(
+                           System.Globalization.CultureInfo.CurrentCulture,
+                           PluralRules.Choose(count, CausalityText.PanelAttributeChangesOne, CausalityText.PanelAttributeChangesOther),
+                           count.ToString("N0", System.Globalization.CultureInfo.InvariantCulture));
         return string.IsNullOrWhiteSpace(selectedEvent.SystemName)
             ? subtitle
-            : $"{subtitle} · {selectedEvent.SystemName}";
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, CausalityText.PanelDrawerSubtitle, subtitle, selectedEvent.SystemName);
     }
 
     private CausalityTone GetStatusTone()
@@ -440,9 +442,9 @@
     {
         return view switch
         {
-            CausalityView.Lineage => "Lineage",
-            CausalityView.Table => "Table",
-            _ => "Timeline"
+            CausalityView.Lineage => CausalityText.PanelViewLineage,
+            CausalityView.Table => CausalityText.PanelViewTable,
+            _ => CausalityText.PanelViewTimeline
         };
     }
 }

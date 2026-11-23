@@ -18,28 +18,22 @@
    this page on itself, carrying the trail back. Re-centring is ordinary navigation to another of this page's
    addresses, so the router re-parameterises this instance and back and forward step through the foci. *@
 
-<PageTitle>@(_focus == null ? "Causality Explorer" : $"Causality Explorer: {CausalityFocusLabel.For(_focus, _labels)}")</PageTitle>
+<PageTitle>@(_focus == null ? CausalityText.ExplorerTitle : string.Format(System.Globalization.CultureInfo.CurrentCulture, CausalityText.ExplorerTitleWithFocus, CausalityFocusLabel.For(_focus, _labels)))</PageTitle>
 
 <MudText Typo="Typo.h3" Class="mb-2">
-    <MudIcon Icon="@Icons.Material.Filled.Hub" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Causality Explorer
-    <PageInfo Title="Causality Explorer" DocsPage="configuration/causality.md">
-        Follows why things happened and what they went on to cause, from one focus to the next, without leaving the page.
-        An execution item shows its Lineage; a Connected System Object or Metaverse Object shows what happened to it. The
-        trail leads back through everything followed.
+    <MudIcon Icon="@Icons.Material.Filled.Hub" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@CausalityText.ExplorerTitle
+    <PageInfo Title="@CausalityText.ExplorerTitle" DocsPage="configuration/causality.md">
+        @CausalityText.ExplorerPageInfo
     </PageInfo>
 </MudText>
 
-<MudBreadcrumbs Items="_breadcrumbs" Class="pl-0" />
+<MudBreadcrumbs Items="Breadcrumbs" Class="pl-0" />
 
 @if (_focus is not { } focus)
 {
     <MudPaper Outlined="true" Class="pa-4 mt-2 jim-causality-start">
-        <MudText Typo="Typo.h6" Class="mb-2">Start from what you want to explain</MudText>
-        <MudText>
-            Open the explorer from where the question arises: <strong>Explore causality</strong> on a Connected System Object
-            or a Metaverse Object, <strong>Explore</strong> beside a run in a Pending Export's <strong>Queued by</strong>
-            panel, or <strong>Open in explorer</strong> on an execution item's causality panel.
-        </MudText>
+        <MudText Typo="Typo.h6" Class="mb-2">@CausalityText.ExplorerStartTitle</MudText>
+        <MudText>@StartText()</MudText>
     </MudPaper>
 }
 else
@@ -79,7 +73,7 @@ else
                                      TotalCount="timeline.TotalCount"
                                      Links="links"
                                      MetaverseObjectChangesNotRecorded="timeline.MetaverseObjectChangesNotRecorded"
-                                     Header="timeline.Header"
+                                     Header="@timeline.Header"
                                      FollowUps="_followUps"
                                      Loading="_loadingMore"
                                      OnShowMore="ShowMoreAsync" />
@@ -106,12 +100,32 @@ else
     [Parameter]
     public Guid? MetaverseObjectId { get; set; }
 
-    private readonly List<BreadcrumbItem> _breadcrumbs =
+    private static List<BreadcrumbItem> Breadcrumbs =>
     [
-        new("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new("Activity", href: "/activity"),
-        new("Causality Explorer", href: null, disabled: true)
+        new(LayoutText.NavHome, href: "/", icon: Icons.Material.Filled.Home),
+        new(LayoutText.NavActivity, href: "/activity"),
+        new(CausalityText.ExplorerTitle, href: null, disabled: true)
     ];
+
+    /// <summary>
+    /// The start paragraph, with the names of the buttons and panel it points at in bold wherever the language places them.
+    /// </summary>
+    private static RenderFragment StartText() => builder =>
+    {
+        var template = CausalityText.ExplorerStartText;
+        string[] names = [CausalityText.ExplorerStartExploreCausality, CausalityText.ObjectTimelineExplore, CausalityText.QueuedByTitle, CausalityText.PanelOpenInExplorer];
+        var position = 0;
+        foreach (var match in System.Text.RegularExpressions.Regex.Matches(template, @"\{(\d)\}").Cast<System.Text.RegularExpressions.Match>())
+        {
+            builder.AddContent(0, template[position..match.Index]);
+            builder.OpenElement(1, "strong");
+            builder.AddContent(2, names[int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture)]);
+            builder.CloseElement();
+            position = match.Index + match.Length;
+        }
+
+        builder.AddContent(3, template[position..]);
+    };
 
     private CausalityFocus? _focus;
     private CausalityTrail _trail = CausalityTrail.Empty;
