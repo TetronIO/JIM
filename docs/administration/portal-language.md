@@ -35,6 +35,7 @@ answers:
 | English (United Kingdom) | English (UK) | The default, and what any other English-speaking region sees (Australia, Ireland, India and so on). |
 | English (United States) | English (US) | American spelling: "Synchronization Rule", "authorization", "color" <!-- conformance: allow LANG-2 "examples of the American spelling this language uses" -->. |
 | French | Français | One French for every French-speaking region (France, Belgium, Canada, Switzerland and so on). |
+| German | Deutsch | One German for every German-speaking region (Germany, Austria, Switzerland and so on), in the formal *Sie*. |
 
 JIM offers a language only once every part of the portal has been translated into it, so nobody is shown a page that is partly in one language and partly in another.
 
