@@ -206,4 +206,10 @@
   <data name="MatchingRuleNowCaseInsensitive" xml:space="preserve">
     <value>Matching rule is now case-insensitive. Remember to save the Synchronization Rule.</value>
   </data>
+  <data name="ScopeDefaultExport" xml:space="preserve">
+    <value>By default, all Metaverse Objects of type {0} will be in scope of this Synchronization Rule, though to have it apply to a subset of those objects, use a filter. i.e. you might only want this rule to apply to Staff, not Contractors.</value>
+  </data>
+  <data name="ScopeDefaultImport" xml:space="preserve">
+    <value>By default, all Connected System Objects of type {0} will be in scope of this Synchronization Rule. Use a filter to import only specific objects, e.g. only Active users, not Disabled.</value>
+  </data>
 </root>

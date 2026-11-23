@@ -1912,4 +1912,60 @@
     <value>a Container above</value>
     <comment>Stands in for the deciding Container when its name is not known.</comment>
   </data>
+  <data name="ScopeChooseFirst" xml:space="preserve">
+    <value>Choose the Connected System, direction and object types on the &lt;strong&gt;Details&lt;/strong&gt; tab first; scoping then applies to objects of those types.</value>
+    <comment>Markup: strong is intentional.</comment>
+  </data>
+  <data name="ScopingHeading" xml:space="preserve">
+    <value>Scoping</value>
+    <comment>Heading of the scoping section.</comment>
+  </data>
+  <data name="ScopeDefaultExport" xml:space="preserve">
+    <value>By default, all Metaverse Objects of type {0} will be in scope of this Synchronisation Rule, though to have it apply to a subset of those objects, use a filter. i.e. you might only want this rule to apply to Staff, not Contractors.</value>
+    <comment>{0} is the object type name in code formatting.</comment>
+  </data>
+  <data name="ScopeDefaultImport" xml:space="preserve">
+    <value>By default, all Connected System Objects of type {0} will be in scope of this Synchronisation Rule. Use a filter to import only specific objects, e.g. only Active users, not Disabled.</value>
+    <comment>{0} is the object type name in code formatting.</comment>
+  </data>
+  <data name="ScopeAllObjects" xml:space="preserve">
+    <value>All Objects</value>
+    <comment>Option: every object of the type is in scope.</comment>
+  </data>
+  <data name="ScopeFiltered" xml:space="preserve">
+    <value>Filtered</value>
+    <comment>Option: only the objects a filter selects are in scope.</comment>
+  </data>
+  <data name="ScopeFallOutLabel" xml:space="preserve">
+    <value>When objects fall out of scope</value>
+    <comment>Label of the out of scope action field.</comment>
+  </data>
+  <data name="ScopeDisconnectOption" xml:space="preserve">
+    <value>Disconnect from Metaverse</value>
+    <comment>Out of scope action: disconnect from the Metaverse Object.</comment>
+  </data>
+  <data name="ScopeRemainJoined" xml:space="preserve">
+    <value>Remain joined (stop Attribute Flow)</value>
+    <comment>Out of scope action: stay joined, stop the Attribute Flow.</comment>
+  </data>
+  <data name="ScopeDisconnectExplanation" xml:space="preserve">
+    <value>Objects that fall out of scope will be disconnected from their Metaverse Object. Whether attributes contributed by this Connected System are also recalled depends on the Connected System object type's "Remove contributed attributes on obsoletion" setting, the Metaverse Object Type's deletion grace period, and whether the Metaverse Object is slated for immediate deletion. If this was the last connector, the Metaverse Object Type's deletion rule may also fire.</value>
+    <comment>Explains the disconnect option.</comment>
+  </data>
+  <data name="ScopeRemainJoinedExplanation" xml:space="preserve">
+    <value>Objects that fall out of scope will remain joined but Attribute Flow will stop. Use this for "once managed, always managed" scenarios.</value>
+    <comment>Explains the remain joined option.</comment>
+  </data>
+  <data name="ScopeAddCriteriaGroup" xml:space="preserve">
+    <value>Add Criteria Group</value>
+    <comment>Button, and dialog title, for adding a criteria group.</comment>
+  </data>
+  <data name="ScopeChooseGroupType" xml:space="preserve">
+    <value>Please choose a group type</value>
+    <comment>Label of the group type field.</comment>
+  </data>
+  <data name="ScopeAddGroup" xml:space="preserve">
+    <value>Add Group</value>
+    <comment>Button adding the criteria group.</comment>
+  </data>
 </root>

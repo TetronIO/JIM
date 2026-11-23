@@ -1457,4 +1457,46 @@
   <data name="PickerContainerAbove" xml:space="preserve">
     <value>un conteneur supérieur</value>
   </data>
+  <data name="ScopeChooseFirst" xml:space="preserve">
+    <value>Choisissez d’abord le système connecté, le sens et les types d’objets dans l’onglet &lt;strong&gt;Détails&lt;/strong&gt; ; le périmètre s’applique ensuite aux objets de ces types.</value>
+  </data>
+  <data name="ScopingHeading" xml:space="preserve">
+    <value>Périmètre</value>
+  </data>
+  <data name="ScopeDefaultExport" xml:space="preserve">
+    <value>Par défaut, tous les objets Metaverse de type {0} sont dans le périmètre de cette règle de synchronisation ; pour qu’elle ne s’applique qu’à un sous-ensemble de ces objets, utilisez un filtre. Par exemple, vous pourriez vouloir que cette règle ne s’applique qu’au personnel, et non aux prestataires.</value>
+  </data>
+  <data name="ScopeDefaultImport" xml:space="preserve">
+    <value>Par défaut, tous les objets de système connecté de type {0} sont dans le périmètre de cette règle de synchronisation. Utilisez un filtre pour n’importer que des objets précis, par exemple uniquement les utilisateurs actifs, et non les désactivés.</value>
+  </data>
+  <data name="ScopeAllObjects" xml:space="preserve">
+    <value>Tous les objets</value>
+  </data>
+  <data name="ScopeFiltered" xml:space="preserve">
+    <value>Filtrés</value>
+  </data>
+  <data name="ScopeFallOutLabel" xml:space="preserve">
+    <value>Lorsque des objets sortent du périmètre</value>
+  </data>
+  <data name="ScopeDisconnectOption" xml:space="preserve">
+    <value>Déconnecter du Metaverse</value>
+  </data>
+  <data name="ScopeRemainJoined" xml:space="preserve">
+    <value>Rester rattaché (arrêter le flux d’attributs)</value>
+  </data>
+  <data name="ScopeDisconnectExplanation" xml:space="preserve">
+    <value>Les objets qui sortent du périmètre seront déconnectés de leur objet Metaverse. Le fait que les attributs apportés par ce système connecté soient aussi rappelés dépend du réglage « Supprimer les attributs apportés lors de l’obsolescence » du type d’objets de système connecté, du délai de grâce de suppression du type d’objet Metaverse, et du fait que l’objet Metaverse est ou non programmé pour une suppression immédiate. Si c’était le dernier connecteur, la règle de suppression du type d’objet Metaverse peut aussi se déclencher.</value>
+  </data>
+  <data name="ScopeRemainJoinedExplanation" xml:space="preserve">
+    <value>Les objets qui sortent du périmètre resteront rattachés, mais le flux d’attributs s’arrêtera. Utilisez cette option pour les scénarios « une fois géré, toujours géré ».</value>
+  </data>
+  <data name="ScopeAddCriteriaGroup" xml:space="preserve">
+    <value>Ajouter un groupe de critères</value>
+  </data>
+  <data name="ScopeChooseGroupType" xml:space="preserve">
+    <value>Veuillez choisir un type de groupe</value>
+  </data>
+  <data name="ScopeAddGroup" xml:space="preserve">
+    <value>Ajouter le groupe</value>
+  </data>
 </root>
