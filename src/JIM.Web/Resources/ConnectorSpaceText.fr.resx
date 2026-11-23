@@ -134,4 +134,151 @@
   <data name="DeletedMvoNotFound" xml:space="preserve">
     <value>Aucun enregistrement de suppression n’a été trouvé pour cet objet Metaverse.</value>
   </data>
+  <data name="CsoLoadingTitle" xml:space="preserve">
+    <value>Chargement…</value>
+  </data>
+  <data name="CsoPageTitle" xml:space="preserve">
+    <value>Objet de système connecté : {0}</value>
+  </data>
+  <data name="CsoStillLoading" xml:space="preserve">
+    <value>Chargement en cours. Les objets volumineux peuvent prendre quelques secondes à récupérer.</value>
+  </data>
+  <data name="CsoHeadingLabel" xml:space="preserve">
+    <value>Objet de système connecté :</value>
+  </data>
+  <data name="CsoTerm" xml:space="preserve">
+    <value>Objet de système connecté</value>
+  </data>
+  <data name="CsoPageInfo" xml:space="preserve">
+    <value>Une vue de cet objet telle qu’elle est préparée dans JIM. Elle comprend les valeurs d’attributs importées du système connecté, ainsi que les exportations en attente qui doivent encore être exportées.</value>
+  </data>
+  <data name="CsoLabelType" xml:space="preserve">
+    <value>Type :</value>
+  </data>
+  <data name="CsoLabelStatus" xml:space="preserve">
+    <value>Statut :</value>
+  </data>
+  <data name="CsoLabelCreated" xml:space="preserve">
+    <value>Créé :</value>
+  </data>
+  <data name="CsoLabelUpdated" xml:space="preserve">
+    <value>Mis à jour :</value>
+  </data>
+  <data name="CsoLabelMetaverseObject" xml:space="preserve">
+    <value>Objet Metaverse :</value>
+  </data>
+  <data name="CsoLabelJoinType" xml:space="preserve">
+    <value>Type de jointure :</value>
+  </data>
+  <data name="CsoPreviewing" xml:space="preserve">
+    <value>Prévisualisation…</value>
+  </data>
+  <data name="CsoPreviewSync" xml:space="preserve">
+    <value>Prévisualiser la synchronisation</value>
+  </data>
+  <data name="CsoExploreCausality" xml:space="preserve">
+    <value>Explorer la causalité</value>
+  </data>
+  <data name="CsoSetPassword" xml:space="preserve">
+    <value>Définir le mot de passe</value>
+  </data>
+  <data name="CsoPendingExportsTitle" xml:space="preserve">
+    <value>Exportations en attente</value>
+  </data>
+  <data name="CsoPendingExportsIntro" xml:space="preserve">
+    <value>Les modifications d’attributs suivantes sont en attente pour ce système connecté. Elles peuvent attendre d’être exportées, ou avoir déjà été exportées et attendre une confirmation lors d’une importation ultérieure. Une fois confirmées, ces modifications seront reflétées dans les valeurs d’attributs de l’objet de système connecté ci-dessous.</value>
+  </data>
+  <data name="CsoSearchPendingExports" xml:space="preserve">
+    <value>Rechercher dans les exportations en attente...</value>
+  </data>
+  <data name="CsoChangeSingular" xml:space="preserve">
+    <value>Modification</value>
+  </data>
+  <data name="CsoChangePlural" xml:space="preserve">
+    <value>Modifications</value>
+  </data>
+  <data name="CsoColumnAttribute" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="CsoColumnChangeType" xml:space="preserve">
+    <value>Type de modification</value>
+  </data>
+  <data name="CsoColumnValue" xml:space="preserve">
+    <value>Valeur</value>
+  </data>
+  <data name="CsoColumnExportAttempts" xml:space="preserve">
+    <value>Tentatives d’exportation</value>
+  </data>
+  <data name="CsoColumnLastExported" xml:space="preserve">
+    <value>Dernière exportation</value>
+  </data>
+  <data name="CsoPendingNoSearchMatch" xml:space="preserve">
+    <value>Aucune modification en file d’attente ne correspond à « {0} »</value>
+  </data>
+  <data name="CsoPendingNoneQueued" xml:space="preserve">
+    <value>Aucune modification n’est en file d’attente pour cet objet</value>
+  </data>
+  <data name="CsoPendingNoneQueuedHint" xml:space="preserve">
+    <value>Les modifications apparaissent ici tant qu’une exportation en attente attend d’être exportée, et sont effacées une fois que le système connecté les a confirmées.</value>
+  </data>
+  <data name="CsoTabAttributes" xml:space="preserve">
+    <value>Attributs</value>
+  </data>
+  <data name="CsoTabChangeHistory" xml:space="preserve">
+    <value>Historique des modifications</value>
+  </data>
+  <data name="CsoColumnPlurality" xml:space="preserve">
+    <value>Pluralité</value>
+  </data>
+  <data name="CsoColumnExternalIdQuestion" xml:space="preserve">
+    <value>ID externe ?</value>
+  </data>
+  <data name="CsoChipSecondaryId" xml:space="preserve">
+    <value>ID secondaire</value>
+  </data>
+  <data name="CsoPluralityMulti" xml:space="preserve">
+    <value>Multivalué</value>
+  </data>
+  <data name="CsoPluralitySingle" xml:space="preserve">
+    <value>Monovalué</value>
+  </data>
+  <data name="CsoChipUnmanaged" xml:space="preserve">
+    <value>Non géré</value>
+  </data>
+  <data name="CsoUnmanagedTooltip" xml:space="preserve">
+    <value>Exportation initiale uniquement : JIM a défini cet attribut lors du provisionnement initial (s’il a provisionné l’objet) et n’exporte plus de modifications pour lui ; le système connecté est propriétaire de la valeur.</value>
+  </data>
+  <data name="CsoChipCreateOnly" xml:space="preserve">
+    <value>Défini à la création uniquement</value>
+  </data>
+  <data name="CsoNoAttributeValues" xml:space="preserve">
+    <value>Cet objet ne possède aucune valeur d’attribut</value>
+  </data>
+  <data name="CsoNoAttributeValuesHint" xml:space="preserve">
+    <value>Les valeurs apparaissent ici une fois qu’une importation les a récupérées depuis le système connecté.</value>
+  </data>
+  <data name="CsoNoChangeHistory" xml:space="preserve">
+    <value>Aucun historique des modifications n’a été enregistré pour cet objet.</value>
+  </data>
+  <data name="CsoLoadMore" xml:space="preserve">
+    <value>Charger plus ({0} restants)</value>
+  </data>
+  <data name="CsoPreviewBlocking" xml:space="preserve">
+    <value>L’aperçu de synchronisation a relevé un élément qui empêcherait la synchronisation ; voir les détails ci-dessous.</value>
+  </data>
+  <data name="CsoPreviewFailed" xml:space="preserve">
+    <value>L’aperçu de synchronisation a échoué : {0}</value>
+  </data>
+  <data name="CsoAttributeFallback" xml:space="preserve">
+    <value>Attribut {0}</value>
+  </data>
+  <data name="CsoFullSynchronisation" xml:space="preserve">
+    <value>Synchronisation complète</value>
+  </data>
+  <data name="CsoBreadcrumbConnectedSystems" xml:space="preserve">
+    <value>Systèmes connectés</value>
+  </data>
+  <data name="CsoBreadcrumbConnectorSpace" xml:space="preserve">
+    <value>Espace connecteur</value>
+  </data>
 </root>

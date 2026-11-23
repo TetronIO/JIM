@@ -174,4 +174,200 @@
     <value>No deletion record was found for that Metaverse Object.</value>
     <comment>Snackbar for a deep link</comment>
   </data>
+  <data name="CsoLoadingTitle" xml:space="preserve">
+    <value>Loading…</value>
+    <comment>Page title while the object loads</comment>
+  </data>
+  <data name="CsoPageTitle" xml:space="preserve">
+    <value>Connected System Object: {0}</value>
+    <comment>{0} is the object's external ID or identifier</comment>
+  </data>
+  <data name="CsoStillLoading" xml:space="preserve">
+    <value>Still loading. Large objects can take a few seconds to retrieve.</value>
+    <comment>Shown after a long load</comment>
+  </data>
+  <data name="CsoHeadingLabel" xml:space="preserve">
+    <value>Connected System Object:</value>
+    <comment>Page heading label, followed by the object's identifier</comment>
+  </data>
+  <data name="CsoTerm" xml:space="preserve">
+    <value>Connected System Object</value>
+    <comment>Page info title</comment>
+  </data>
+  <data name="CsoPageInfo" xml:space="preserve">
+    <value>A view of this object as staged within JIM. This includes any attribute values imported from the Connected System, as well as any Pending Export changes awaiting export.</value>
+    <comment>Page info body</comment>
+  </data>
+  <data name="CsoLabelType" xml:space="preserve">
+    <value>Type:</value>
+    <comment>Info row label</comment>
+  </data>
+  <data name="CsoLabelStatus" xml:space="preserve">
+    <value>Status:</value>
+    <comment>Info row label</comment>
+  </data>
+  <data name="CsoLabelCreated" xml:space="preserve">
+    <value>Created:</value>
+    <comment>Info row label</comment>
+  </data>
+  <data name="CsoLabelUpdated" xml:space="preserve">
+    <value>Updated:</value>
+    <comment>Info row label</comment>
+  </data>
+  <data name="CsoLabelMetaverseObject" xml:space="preserve">
+    <value>Metaverse Object:</value>
+    <comment>Info row label</comment>
+  </data>
+  <data name="CsoLabelJoinType" xml:space="preserve">
+    <value>Join Type:</value>
+    <comment>Info row label</comment>
+  </data>
+  <data name="CsoPreviewing" xml:space="preserve">
+    <value>Previewing…</value>
+    <comment>Button while a Sync Preview runs</comment>
+  </data>
+  <data name="CsoPreviewSync" xml:space="preserve">
+    <value>Preview Sync</value>
+    <comment>Button</comment>
+  </data>
+  <data name="CsoExploreCausality" xml:space="preserve">
+    <value>Explore causality</value>
+    <comment>Button</comment>
+  </data>
+  <data name="CsoSetPassword" xml:space="preserve">
+    <value>Set Password</value>
+    <comment>Button and dialog title</comment>
+  </data>
+  <data name="CsoPendingExportsTitle" xml:space="preserve">
+    <value>Pending Exports</value>
+    <comment>Panel heading</comment>
+  </data>
+  <data name="CsoPendingExportsIntro" xml:space="preserve">
+    <value>The following attribute changes are pending for this Connected System. These may be awaiting export, or have already been exported and are awaiting confirmation via a subsequent import. Once confirmed, these changes will be reflected in the Connected System Object attribute values below.</value>
+    <comment>Panel intro</comment>
+  </data>
+  <data name="CsoSearchPendingExports" xml:space="preserve">
+    <value>Search Pending Exports...</value>
+    <comment>Grid search placeholder</comment>
+  </data>
+  <data name="CsoChangeSingular" xml:space="preserve">
+    <value>Change</value>
+    <comment>Grid item name, singular</comment>
+  </data>
+  <data name="CsoChangePlural" xml:space="preserve">
+    <value>Changes</value>
+    <comment>Grid item name, plural</comment>
+  </data>
+  <data name="CsoColumnAttribute" xml:space="preserve">
+    <value>Attribute</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="CsoColumnChangeType" xml:space="preserve">
+    <value>Change Type</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="CsoColumnValue" xml:space="preserve">
+    <value>Value</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="CsoColumnExportAttempts" xml:space="preserve">
+    <value>Export Attempts</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="CsoColumnLastExported" xml:space="preserve">
+    <value>Last Exported</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="CsoPendingNoSearchMatch" xml:space="preserve">
+    <value>No queued changes match "{0}"</value>
+    <comment>{0} is the search text</comment>
+  </data>
+  <data name="CsoPendingNoneQueued" xml:space="preserve">
+    <value>No changes are queued for this object</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="CsoPendingNoneQueuedHint" xml:space="preserve">
+    <value>Changes appear here while a Pending Export waits to be exported, and are cleared once the Connected System confirms them.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="CsoTabAttributes" xml:space="preserve">
+    <value>Attributes</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="CsoTabChangeHistory" xml:space="preserve">
+    <value>Change History</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="CsoColumnPlurality" xml:space="preserve">
+    <value>Plurality</value>
+    <comment>Attribute table column header</comment>
+  </data>
+  <data name="CsoColumnExternalIdQuestion" xml:space="preserve">
+    <value>External ID?</value>
+    <comment>Attribute table column header</comment>
+  </data>
+  <data name="CsoChipSecondaryId" xml:space="preserve">
+    <value>Secondary ID</value>
+    <comment>Attribute table chip</comment>
+  </data>
+  <data name="CsoPluralityMulti" xml:space="preserve">
+    <value>Multi</value>
+    <comment>Attribute plurality, shown in the table</comment>
+  </data>
+  <data name="CsoPluralitySingle" xml:space="preserve">
+    <value>Single</value>
+    <comment>Attribute plurality, shown in the table</comment>
+  </data>
+  <data name="CsoChipUnmanaged" xml:space="preserve">
+    <value>Unmanaged</value>
+    <comment>Chip on an attribute the Connected System owns</comment>
+  </data>
+  <data name="CsoUnmanagedTooltip" xml:space="preserve">
+    <value>Initial Export Only: JIM set this attribute at initial provisioning (if it provisioned the object) and no longer exports changes to it; the Connected System owns the value</value>
+    <comment>Tooltip on the Unmanaged chip</comment>
+  </data>
+  <data name="CsoChipCreateOnly" xml:space="preserve">
+    <value>Set on creation only</value>
+    <comment>Chip on an attribute only settable on creation</comment>
+  </data>
+  <data name="CsoNoAttributeValues" xml:space="preserve">
+    <value>This object has no attribute values</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="CsoNoAttributeValuesHint" xml:space="preserve">
+    <value>Values appear here once an Import brings them in from the Connected System.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="CsoNoChangeHistory" xml:space="preserve">
+    <value>No change history recorded for this object.</value>
+    <comment>Change History tab empty state</comment>
+  </data>
+  <data name="CsoLoadMore" xml:space="preserve">
+    <value>Load more ({0} remaining)</value>
+    <comment>{0} is the number of changes not yet loaded, already formatted</comment>
+  </data>
+  <data name="CsoPreviewBlocking" xml:space="preserve">
+    <value>The Sync Preview found something that would stop the synchronisation; see the details below.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="CsoPreviewFailed" xml:space="preserve">
+    <value>The Sync Preview failed: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="CsoAttributeFallback" xml:space="preserve">
+    <value>Attribute {0}</value>
+    <comment>Shown when an attribute's name is not loaded; {0} is its id</comment>
+  </data>
+  <data name="CsoFullSynchronisation" xml:space="preserve">
+    <value>Full Synchronisation</value>
+    <comment>Run Profile name shown on the causality preview chip</comment>
+  </data>
+  <data name="CsoBreadcrumbConnectedSystems" xml:space="preserve">
+    <value>Connected Systems</value>
+    <comment>Breadcrumb</comment>
+  </data>
+  <data name="CsoBreadcrumbConnectorSpace" xml:space="preserve">
+    <value>Connector Space</value>
+    <comment>Breadcrumb</comment>
+  </data>
 </root>
