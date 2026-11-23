@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Serilog;
 
 namespace JIM.Connectors.Http;
 
@@ -28,6 +29,7 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
     private readonly Func<DateTimeOffset> _utcNow;
     private readonly Func<HttpStatusCode, string?, string>? _describeFailure;
     private readonly OAuthStillBeingAppliedRetry? _stillBeingApplied;
+    private readonly ILogger? _logger;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
 
     // One acquisition at a time: parallel export means many callers arrive together, and without this
@@ -67,6 +69,7 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
     /// refusal is retried.
     /// </param>
     /// <param name="delay">Waiting seam, so the retry is testable without waiting.</param>
+    /// <param name="logger">Where each wait for a credential still being applied is logged; nothing is logged when null.</param>
     public OAuthClientCredentialsAuthentication(
         HttpClient tokenClient,
         Uri tokenEndpoint,
@@ -76,7 +79,8 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
         Func<DateTimeOffset>? utcNow = null,
         Func<HttpStatusCode, string?, string>? describeFailure = null,
         OAuthStillBeingAppliedRetry? stillBeingApplied = null,
-        Func<TimeSpan, CancellationToken, Task>? delay = null)
+        Func<TimeSpan, CancellationToken, Task>? delay = null,
+        ILogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(tokenClient);
         ArgumentNullException.ThrowIfNull(tokenEndpoint);
@@ -97,6 +101,7 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
         _describeFailure = describeFailure;
         _stillBeingApplied = stillBeingApplied;
         _delay = delay ?? Task.Delay;
+        _logger = logger;
     }
 
     public async Task ApplyAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -173,6 +178,9 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
             // one yet to apply the credential.
             if (attempt < delays.Count && _stillBeingApplied!.IsStillBeingApplied(refusal!.Value.Status, refusal.Value.Body))
             {
+                // The described refusal, never the body: authorisation servers echo request parameters in theirs.
+                _logger?.Warning("The token endpoint refused the credential, which it may still be applying; asking again in {DelaySeconds}s (wait {Wait} of {Waits}). {Refusal}",
+                    delays[attempt].TotalSeconds, attempt + 1, delays.Count, DescribeRefusal(refusal.Value.Status, refusal.Value.ReasonPhrase, refusal.Value.Body).Message);
                 await _delay(delays[attempt], cancellationToken);
                 continue;
             }

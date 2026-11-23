@@ -3,6 +3,16 @@
 
 namespace JIM.Connectors.Graph;
 
+/// <summary>What a Microsoft Graph client is for, which decides how long it waits for Entra ID to apply a new certificate.</summary>
+internal enum GraphClientPurpose
+{
+    /// <summary>An import, export or password operation, which nobody is waiting on.</summary>
+    Run,
+
+    /// <summary>The connectivity test run when settings are saved, which an administrator is waiting on.</summary>
+    ConnectionTest
+}
+
 /// <summary>What a <see cref="GraphExportStep"/> does, which decides how its answer is read.</summary>
 internal enum GraphExportStepKind
 {

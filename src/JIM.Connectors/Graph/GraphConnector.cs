@@ -422,13 +422,14 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
     /// Builds a client for the given Connected System, with JIM's trusted certificates. Overridden by tests to stub
     /// the transport.
     /// </summary>
-    internal virtual async Task<GraphHttpClient> CreateClientAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    internal virtual async Task<GraphHttpClient> CreateClientAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger,
+        GraphClientPurpose purpose = GraphClientPurpose.Run)
     {
         var trustedCertificates = _certificateProvider != null
             ? await _certificateProvider.GetTrustedCertificatesAsync()
             : [];
 
-        return GraphHttpClientFactory.Create(settingValues, trustedCertificates, _credentialProtection, logger);
+        return GraphHttpClientFactory.Create(settingValues, trustedCertificates, _credentialProtection, logger, purpose);
     }
 
     /// <summary>
@@ -447,7 +448,7 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
             // from Blazor Server circuits, which have one, and blocking on it directly would deadlock the circuit.
             return Task.Run(async () =>
             {
-                using var client = await CreateClientAsync(settingValues, logger);
+                using var client = await CreateClientAsync(settingValues, logger, GraphClientPurpose.ConnectionTest);
                 var token = await client.GetAccessTokenAsync(CancellationToken.None);
                 var permissions = GraphPermissions.Check(GraphAccessToken.ReadRoles(token), TracksSourceOfAuthority(settingValues));
                 if (permissions.Error != null)

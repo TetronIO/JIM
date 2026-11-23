@@ -52,6 +52,21 @@ public class GraphConnectorConnectivityTests
     }
 
     [Test]
+    public void ValidateSettingValues_CertificateStillBeingAppliedThroughout_ReportsItAfterTheConnectionTestsWaits()
+    {
+        var handler = new StubHttpMessageHandler(_ => GraphTestTokens.TokenRefusal(700027));
+        var connector = new StubbedTransportGraphConnector(handler);
+
+        var results = connector.ValidateSettingValues(Settings(), _logger);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results.Single().ErrorMessage, Does.Contain("AADSTS700027"));
+            Assert.That(connector.TokenWaits, Is.EqualTo(EntraTokenFailure.StillBeingAppliedRetryFor(GraphClientPurpose.ConnectionTest).Delays));
+        }
+    }
+
+    [Test]
     public void ValidateSettingValues_TokenRefused_IsAnErrorDescribingEntraIdsReason()
     {
         var handler = new StubHttpMessageHandler(_ => GraphTestTokens.TokenRefusal(7000215));

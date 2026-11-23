@@ -59,6 +59,29 @@ public class GraphHttpClientFactoryTests
         }
     }
 
+    // By name: the purpose is internal, and an NUnit test method must be public.
+    [TestCase(nameof(GraphClientPurpose.Run))]
+    [TestCase(nameof(GraphClientPurpose.ConnectionTest))]
+    public void CreateAuthentication_CertificateStillBeingApplied_WaitsThePurposesDelaysBeforeReportingIt(string purposeName)
+    {
+        var purpose = Enum.Parse<GraphClientPurpose>(purposeName);
+        using var tokenClient = new HttpClient(new StubHttpMessageHandler(_ => GraphTestTokens.TokenRefusal(700027)));
+        var settings = Settings(authenticationMethod: GraphConnectorConstants.AuthMethodCertificate, clientSecret: null,
+            certificate: GraphTestCertificates.RsaPfx(), certificatePassword: GraphTestCertificates.Password);
+        var waits = new List<TimeSpan>();
+
+        var authentication = GraphHttpClientFactory.CreateAuthentication(settings, null, tokenClient, out var owned, purpose: purpose,
+            delay: (wait, _) => { waits.Add(wait); return Task.CompletedTask; });
+        var exception = Assert.ThrowsAsync<HttpAuthenticationException>(() => ApplyAsync(authentication));
+        owned?.Dispose();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exception!.Message, Does.Contain("AADSTS700027"));
+            Assert.That(waits, Is.EqualTo(EntraTokenFailure.StillBeingAppliedRetryFor(purpose).Delays));
+        }
+    }
+
     [Test]
     public void CreateAuthentication_UnusableCertificate_ThrowsWithTheReason()
     {
