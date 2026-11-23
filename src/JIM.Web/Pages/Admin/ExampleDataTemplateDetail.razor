@@ -489,7 +489,7 @@
         catch (ExampleDataTemplateException ex)
         {
             // a built-in template, which the server refuses; the delete action is hidden for those, so this is a stale page.
-            Snackbar.Add(ex.Message, Severity.Error);
+            Snackbar.Add(ex.ToDisplayText(), Severity.Error);
             return;
         }
 

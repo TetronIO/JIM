@@ -509,7 +509,7 @@
             }
             catch (Exception ex)
             {
-                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.SettingsUpdateFailed, ex.Message), Severity.Error);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.SettingsUpdateFailed, ex.ToDisplayText()), Severity.Error);
             }
         }
     }
@@ -554,7 +554,7 @@
             }
             catch (Exception ex)
             {
-                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.SettingsRevertFailed, ex.Message), Severity.Error);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.SettingsRevertFailed, ex.ToDisplayText()), Severity.Error);
             }
         }
     }

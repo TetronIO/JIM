@@ -1,7 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Connectors;
+using JIM.Models.Localisation;
 using JIM.Models.Activities;
 using JIM.Models.Connectors;
 using JIM.Models.Core;
@@ -109,7 +112,7 @@ public class CertificateServer : ICertificateProvider
             var thumbprint = x509Cert.Thumbprint;
 
             if (await Application.Repository.TrustedCertificates.ExistsByThumbprintAsync(thumbprint))
-                throw new InvalidOperationException($"A certificate with thumbprint {thumbprint} already exists in the store.");
+                throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.CertificateThumbprintExists), thumbprint));
 
             var certificate = new TrustedCertificate
             {
@@ -188,14 +191,14 @@ public class CertificateServer : ICertificateProvider
         {
             // Validate the file path exists and load the certificate
             if (!File.Exists(filePath))
-                throw new FileNotFoundException($"Certificate file not found: {filePath}");
+                throw LocalisedExceptions.FileNotFound(ServerMessage.Create(nameof(ServerMessages.CertificateFileNotFound), filePath));
 
             var certificateData = await File.ReadAllBytesAsync(filePath);
             var x509Cert = ParseCertificate(certificateData);
             var thumbprint = x509Cert.Thumbprint;
 
             if (await Application.Repository.TrustedCertificates.ExistsByThumbprintAsync(thumbprint))
-                throw new InvalidOperationException($"A certificate with thumbprint {thumbprint} already exists in the store.");
+                throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.CertificateThumbprintExists), thumbprint));
 
             var certificate = new TrustedCertificate
             {
@@ -262,7 +265,7 @@ public class CertificateServer : ICertificateProvider
             RequirePurpose(trustedFor.Value);
 
         var certificate = await Application.Repository.TrustedCertificates.GetByIdAsync(id)
-            ?? throw new InvalidOperationException($"Certificate with ID {id} not found.");
+            ?? throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.CertificateNotFound), id.ToString()));
 
         var activity = new Activity
         {
@@ -373,7 +376,7 @@ public class CertificateServer : ICertificateProvider
     public async Task<CertificateValidationResult> ValidateAsync(Guid id)
     {
         var certificate = await Application.Repository.TrustedCertificates.GetByIdAsync(id)
-            ?? throw new InvalidOperationException($"Certificate with ID {id} not found.");
+            ?? throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.CertificateNotFound), id.ToString()));
 
         var result = new CertificateValidationResult();
 
@@ -425,7 +428,7 @@ public class CertificateServer : ICertificateProvider
     {
         var (_, endpoint, outcome, message) = await ResolveSecureEndpointAsync(connectedSystemId, draftSettingValues);
         if (endpoint == null)
-            return new ServerCertificateReadResult { Outcome = outcome, Message = message };
+            return new ServerCertificateReadResult { Outcome = outcome, Detail = message };
 
         var reading = await ReadEndpointAsync(endpoint);
         if (reading == null)
@@ -433,7 +436,7 @@ public class CertificateServer : ICertificateProvider
             return new ServerCertificateReadResult
             {
                 Outcome = ServerCertificateReadOutcome.ServerUnreachable,
-                Message = $"{endpoint.Host}:{endpoint.Port} could not be reached, so JIM could not read its certificate. This is a connectivity problem rather than a certificate one."
+                Detail = ServerMessage.Create(nameof(ServerMessages.ServerCertificateUnreachable), endpoint.Host, endpoint.Port.ToString())
             };
         }
 
@@ -523,7 +526,7 @@ public class CertificateServer : ICertificateProvider
 
         var (connectedSystem, endpoint, readOutcome, message) = await ResolveSecureEndpointAsync(connectedSystemId, draftSettingValues);
         if (endpoint == null || connectedSystem == null)
-            return new ServerCertificateTrustResult { Outcome = ToTrustOutcome(readOutcome), Message = message };
+            return new ServerCertificateTrustResult { Outcome = ToTrustOutcome(readOutcome), Detail = message };
 
         var reading = await ReadEndpointAsync(endpoint);
         if (reading?.Chain == null)
@@ -676,21 +679,21 @@ public class CertificateServer : ICertificateProvider
     /// Connected System already opens a connection to whatever address its settings name, so the same role can
     /// already make JIM connect anywhere.
     /// </remarks>
-    private async Task<(ConnectedSystem? System, SecureEndpoint? Endpoint, ServerCertificateReadOutcome Outcome, string? Message)> ResolveSecureEndpointAsync(
+    private async Task<(ConnectedSystem? System, SecureEndpoint? Endpoint, ServerCertificateReadOutcome Outcome, JimMessage? Detail)> ResolveSecureEndpointAsync(
         int connectedSystemId,
         IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues)
     {
         // Loaded without change tracking, so applying the drafts below cannot reach the database.
         var connectedSystem = await Application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return (null, null, ServerCertificateReadOutcome.ConnectedSystemNotFound, $"Connected System {connectedSystemId} was not found.");
+            return (null, null, ServerCertificateReadOutcome.ConnectedSystemNotFound, ServerMessage.Create(nameof(ServerMessages.SecureEndpointSystemNotFound), connectedSystemId.ToString()));
 
         if (draftSettingValues is { Count: > 0 })
             ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues, Application.ConnectedSystems.ResolveCredentialProtection);
 
         var connectorName = connectedSystem.ConnectorDefinition?.Name;
         if (string.IsNullOrEmpty(connectorName))
-            return (connectedSystem, null, ServerCertificateReadOutcome.NotConfiguredForSecureConnection, $"The '{connectedSystem.Name}' Connected System has no Connector Definition, so JIM cannot tell where it connects.");
+            return (connectedSystem, null, ServerCertificateReadOutcome.NotConfiguredForSecureConnection, ServerMessage.Create(nameof(ServerMessages.SecureEndpointNoConnectorDefinition), connectedSystem.Name));
 
         IConnector connector;
         try
@@ -700,17 +703,17 @@ public class CertificateServer : ICertificateProvider
         catch (NotSupportedException ex)
         {
             Log.Warning(ex, "Could not create the {ConnectorName} connector to resolve where Connected System {ConnectedSystemId} connects", LogSanitiser.Sanitise(connectorName), connectedSystemId);
-            return (connectedSystem, null, ServerCertificateReadOutcome.NotConfiguredForSecureConnection, $"The '{connectorName}' connector is not available, so JIM cannot tell where this Connected System connects.");
+            return (connectedSystem, null, ServerCertificateReadOutcome.NotConfiguredForSecureConnection, ServerMessage.Create(nameof(ServerMessages.SecureEndpointConnectorUnavailable), connectorName));
         }
 
         using var connectorDisposable = connector as IDisposable;
 
         if (connector is not IConnectorSecureEndpoint secureEndpointConnector)
-            return (connectedSystem, null, ServerCertificateReadOutcome.NotConfiguredForSecureConnection, $"The '{connectorName}' connector does not make encrypted connections, so there is no server certificate to look at.");
+            return (connectedSystem, null, ServerCertificateReadOutcome.NotConfiguredForSecureConnection, ServerMessage.Create(nameof(ServerMessages.SecureEndpointConnectorNotEncrypted), connectorName));
 
         var endpoint = secureEndpointConnector.ResolveSecureEndpoint(connectedSystem.SettingValues);
         if (endpoint == null)
-            return (connectedSystem, null, ServerCertificateReadOutcome.NotConfiguredForSecureConnection, $"The '{connectedSystem.Name}' Connected System is not configured to make an encrypted connection, so there is no server certificate to look at.");
+            return (connectedSystem, null, ServerCertificateReadOutcome.NotConfiguredForSecureConnection, ServerMessage.Create(nameof(ServerMessages.SecureEndpointNotConfigured), connectedSystem.Name));
 
         return (connectedSystem, endpoint, ServerCertificateReadOutcome.Read, null);
     }
@@ -888,7 +891,7 @@ public class CertificateServer : ICertificateProvider
     {
         const CertificateTrustPurpose known = CertificateTrustPurpose.Connectors | CertificateTrustPurpose.SignIn;
         if (trustedFor == CertificateTrustPurpose.None || (trustedFor & ~known) != 0)
-            throw new ArgumentException("A certificate must be trusted for Connectors, sign-in, or both.", nameof(trustedFor));
+            throw LocalisedExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.CertificateTrustPurposeRequired)), nameof(trustedFor));
     }
 
     /// <summary>

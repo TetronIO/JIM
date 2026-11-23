@@ -27,6 +27,10 @@ public static class LocalisedExceptions
     public static InvalidOperationException InvalidOperation(JimMessage detail) =>
         Attach(new InvalidOperationException(detail.ToEnglish()), detail);
 
+    /// <summary>A <see cref="FileNotFoundException"/> whose message is <paramref name="detail"/>'s English, carrying it.</summary>
+    public static FileNotFoundException FileNotFound(JimMessage detail) =>
+        Attach(new FileNotFoundException(detail.ToEnglish()), detail);
+
     /// <summary>Holds <paramref name="detail"/> on an exception, so <see cref="DetailOf"/> finds it.</summary>
     public static TException Attach<TException>(TException exception, JimMessage detail) where TException : Exception
     {
@@ -38,6 +42,6 @@ public static class LocalisedExceptions
     /// The message an exception carries for the reader: its <see cref="IJimMessageCarrier.Detail"/>, or the one held by
     /// <see cref="Attach"/>; null for an exception with only English text.
     /// </summary>
-    public static JimMessage? DetailOf(Exception exception) =>
+    public static JimMessage? DetailOf(this Exception exception) =>
         exception is IJimMessageCarrier { Detail: { } detail } ? detail : exception.Data[DataKey] as JimMessage;
 }

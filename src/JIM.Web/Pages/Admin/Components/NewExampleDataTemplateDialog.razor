@@ -133,7 +133,7 @@
         catch (InvalidOperationException ex)
         {
             // the only conflict a create raises is the name.
-            _nameError = ex.Message;
+            _nameError = ex.ToDisplayText();
         }
         catch (KeyNotFoundException)
         {
@@ -141,11 +141,11 @@
         }
         catch (ExampleDataTemplateException ex)
         {
-            _saveError = ex.Message;
+            _saveError = ex.ToDisplayText();
         }
         catch (ExampleDataTemplateAttributeException ex)
         {
-            _saveError = ex.Message;
+            _saveError = ex.ToDisplayText();
         }
         finally
         {

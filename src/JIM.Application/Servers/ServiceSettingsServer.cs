@@ -2,7 +2,10 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Security.Cryptography;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Models.Activities;
+using JIM.Models.Localisation;
 using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.Application.Utilities;
@@ -569,10 +572,10 @@ namespace JIM.Application.Servers
         {
             var setting = await GetSettingAsync(key);
             if (setting == null)
-                throw new InvalidOperationException($"Setting with key '{key}' not found.");
+                throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.SettingNotFound), key));
 
             if (setting.IsReadOnly)
-                throw new InvalidOperationException($"Setting '{setting.DisplayName}' is read-only and cannot be modified.");
+                throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.SettingReadOnly), setting.DisplayName));
 
             // Encrypt encrypted string values before storing
             if (setting.ValueType == ServiceSettingValueType.StringEncrypted &&
@@ -599,10 +602,10 @@ namespace JIM.Application.Servers
         {
             var setting = await GetSettingAsync(key);
             if (setting == null)
-                throw new InvalidOperationException($"Setting with key '{key}' not found.");
+                throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.SettingNotFound), key));
 
             if (setting.IsReadOnly)
-                throw new InvalidOperationException($"Setting '{setting.DisplayName}' is read-only and cannot be modified.");
+                throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.SettingReadOnly), setting.DisplayName));
 
             setting.Value = null; // null means use default
 

@@ -168,7 +168,7 @@
                                 <span class="jim-inspector-source-type">· @ValueOriginGrouping.GeneratedValueLabel</span>
                             }
                         </span>
-                        <MudTooltip Text="@(source.Note ?? StateLabel(source.State))" Arrow="true" Placement="Placement.Top" Class="jim-inspector-state">
+                        <MudTooltip Text="@(MessageDisplay.Show(source.NoteDetail, source.Note) ?? StateLabel(source.State))" Arrow="true" Placement="Placement.Top" Class="jim-inspector-state">
                             <MudChip T="string" Variant="Variant.Text" Color="@StateColour(source.State)" Class="ma-0">@StateLabel(source.State)</MudChip>
                         </MudTooltip>
                         <span class="jim-inspector-candidate">

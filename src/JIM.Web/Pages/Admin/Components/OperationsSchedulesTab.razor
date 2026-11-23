@@ -633,7 +633,7 @@
         {
             // A step JIM refused to queue: the message is written for administrators, and the Failed execution
             // it names is now in the list.
-            Snackbar.Add(ex.Message, Severity.Error);
+            Snackbar.Add(ex.ToDisplayText(), Severity.Error);
             await RefreshSchedulesAsync();
             return;
         }

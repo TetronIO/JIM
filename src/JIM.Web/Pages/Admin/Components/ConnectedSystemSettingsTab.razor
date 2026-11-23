@@ -682,7 +682,7 @@
             if (result.Outcome == ServerCertificateReadOutcome.Read)
                 _fetchedCertificate = result.Diagnostic;
             else
-                _certificateFetchMessage = result.Message ?? ConnectedSystemText.SettingsTabCertificateUnreadable;
+                _certificateFetchMessage = MessageDisplay.Show(result.Detail, result.Message) ?? ConnectedSystemText.SettingsTabCertificateUnreadable;
         }
         finally
         {

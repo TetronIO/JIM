@@ -155,7 +155,7 @@
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.DeleteObjectTypeFailed, ex.Message), Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.DeleteObjectTypeFailed, ex.ToDisplayText()), Severity.Error);
             return false;
         }
 

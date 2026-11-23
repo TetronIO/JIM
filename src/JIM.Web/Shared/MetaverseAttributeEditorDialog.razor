@@ -547,7 +547,7 @@
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.AttrEditorSaveFailed, ex.Message), Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.AttrEditorSaveFailed, ex.ToDisplayText()), Severity.Error);
             return;
         }
 

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NeverStarted" xml:space="preserve">
+    <value>Never started</value>
+  </data>
+  <data name="NoHeartbeat" xml:space="preserve">
+    <value>No heartbeat for {0}</value>
+    <comment>{0} is a length of time such as "4 minutes".</comment>
+  </data>
+  <data name="Stalled" xml:space="preserve">
+    <value>Stalled: no progress on {0} for {1}</value>
+    <comment>{0} is the work in hand; {1} is a length of time.</comment>
+  </data>
+  <data name="MemoryLow" xml:space="preserve">
+    <value>Memory low: {0} of {1} in use</value>
+    <comment>{0} is a percentage; {1} a size such as "62 GB".</comment>
+  </data>
+  <data name="HeartbeatOverdue" xml:space="preserve">
+    <value>Heartbeat overdue: last seen {0} ago, expected every {1} seconds</value>
+    <comment>{0} is a length of time; {1} a number of seconds.</comment>
+  </data>
+  <data name="Heartbeating" xml:space="preserve">
+    <value>Heartbeat {0} ago</value>
+    <comment>{0} is a length of time.</comment>
+  </data>
+  <data name="DurationSecondsOne" xml:space="preserve">
+    <value>{0} second</value>
+  </data>
+  <data name="DurationSecondsOther" xml:space="preserve">
+    <value>{0} seconds</value>
+  </data>
+  <data name="DurationMinutesOne" xml:space="preserve">
+    <value>{0} minute</value>
+  </data>
+  <data name="DurationMinutesOther" xml:space="preserve">
+    <value>{0} minutes</value>
+  </data>
+  <data name="DurationHoursOne" xml:space="preserve">
+    <value>{0} hour</value>
+  </data>
+  <data name="DurationHoursOther" xml:space="preserve">
+    <value>{0} hours</value>
+  </data>
+  <data name="DurationDaysOne" xml:space="preserve">
+    <value>{0} day</value>
+  </data>
+  <data name="DurationDaysOther" xml:space="preserve">
+    <value>{0} days</value>
+  </data>
+</root>

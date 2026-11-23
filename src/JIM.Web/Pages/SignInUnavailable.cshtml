@@ -2,6 +2,7 @@
 @model JIM.Web.Pages.SignInUnavailableModel
 @using System.Globalization
 @using JIM.Models.Security
+@using JIM.Web.Localisation
 @using JIM.Web.Resources
 @{
     Layout = "_ErrorPageLayout";
@@ -50,7 +51,7 @@
 }
 
 <h1 class="jim-error-title" id="sign-in-title">@(Model.IsAvailable ? SignInText.UnavailableTitleAvailable : SignInText.UnavailableTitleUnavailable)</h1>
-<p class="jim-error-subtitle" id="sign-in-message">@status.Message</p>
+<p class="jim-error-subtitle" id="sign-in-message">@MessageDisplay.Show(status.Detail, status.Message)</p>
 
 @if (status.PresentedChain.Count > 0 && !Model.IsAvailable)
 {
