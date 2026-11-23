@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Activities
 @using JIM.Models.Scheduling
 @using JIM.Models.Scheduling.DTOs
@@ -22,43 +23,43 @@
                      DefaultSortBy="name"
                      LoadWindow="LoadScheduleWindowAsync"
                      RowClicked="HandleRowClicked"
-                     SingularName="Schedule"
-                     PluralName="Schedules"
-                     SearchPlaceholder="Search by name or description">
+                     SingularName="@OperationsText.SchedulesSingularName"
+                     PluralName="@OperationsText.SchedulesPluralName"
+                     SearchPlaceholder="@OperationsText.SchedulesSearchPlaceholder">
     <ToolBarExtras>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
                    StartIcon="@Icons.Material.Filled.Add" OnClick="HandleCreateScheduleAsync">
-            New Schedule
+            @OperationsText.ScheduleEditorNewTitle
         </MudButton>
     </ToolBarExtras>
     <Columns>
         @* Name is the fill column: it takes the width the other columns leave and clips the description after the name,
            so a long description can never wrap the row (a virtualised row is a fixed height). Its minimum width is
            what lets the list go compact, collapsing Trigger and Outcome, before the name is squeezed away. *@
-        <TemplateColumn T="ScheduleHeader" Title="Name" Sortable="false"
+        <TemplateColumn T="ScheduleHeader" Title="@CommonText.ColumnName" Sortable="false"
                         HeaderClass="jim-fill-column jim-schedule-name-column" CellClass="jim-fill-column jim-schedule-name-column">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Name" Name="name" />
+                <VirtualisedSortHeader Title="@CommonText.ColumnName" Name="name" />
             </HeaderTemplate>
             <CellTemplate>
                 @{ var schedule = context.Item; }
                 <OneLineText Text="@schedule.Name" Secondary="@schedule.Description" />
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="ScheduleHeader" Title="Steps" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn T="ScheduleHeader" Title="@OperationsText.ScheduleEditorStepsTab" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <MudText Typo="Typo.button">Steps</MudText>
+                <MudText Typo="Typo.button">@OperationsText.ScheduleEditorStepsTab</MudText>
             </HeaderTemplate>
             <CellTemplate>
                 @{ var schedule = context.Item; }
                 <MudChip T="string" Variant="Variant.Text" Color="Color.Default">
-                    @schedule.StepCount step@(schedule.StepCount != 1 ? "s" : "")
+                    @string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(schedule.StepCount, OperationsText.SchedulesStepOne, OperationsText.SchedulesStepOther), schedule.StepCount)
                 </MudChip>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="ScheduleHeader" Title="Trigger" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn T="ScheduleHeader" Title="@OperationsText.ScheduleEditorTriggerTab" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <MudText Typo="Typo.button">Trigger</MudText>
+                <MudText Typo="Typo.button">@OperationsText.ScheduleEditorTriggerTab</MudText>
             </HeaderTemplate>
             <CellTemplate>
                 @{ var schedule = context.Item; }
@@ -75,18 +76,18 @@
                 }
                 else
                 {
-                    <MudTooltip Text="Manual: runs only when started" Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="@OperationsText.SchedulesManualTooltip" Arrow="true" Placement="Placement.Top">
                         <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Class="jim-compact-chip"
                                  Icon="@Icons.Material.Filled.TouchApp">
-                            <span class="jim-compact-hide">Manual</span>
+                            <span class="jim-compact-hide">@OperationsText.SchedulesManual</span>
                         </MudChip>
                     </MudTooltip>
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="ScheduleHeader" Title="Next Run" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn T="ScheduleHeader" Title="@OperationsText.SchedulesColNextRun" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Next Run" Name="nextruntime" />
+                <VirtualisedSortHeader Title="@OperationsText.SchedulesColNextRun" Name="nextruntime" />
             </HeaderTemplate>
             <CellTemplate>
                 @{ var schedule = context.Item; }
@@ -103,9 +104,9 @@
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="ScheduleHeader" Title="Last Run" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn T="ScheduleHeader" Title="@OperationsText.SchedulesColLastRun" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Last Run" Name="lastruntime" />
+                <VirtualisedSortHeader Title="@OperationsText.SchedulesColLastRun" Name="lastruntime" />
             </HeaderTemplate>
             <CellTemplate>
                 @{ var schedule = context.Item; }
@@ -118,7 +119,7 @@
                 }
                 else
                 {
-                    <MudText Typo="Typo.body1" Class="mud-text-disabled jim-nowrap">Never</MudText>
+                    <MudText Typo="Typo.body1" Class="mud-text-disabled jim-nowrap">@CommonText.Never</MudText>
                 }
             </CellTemplate>
         </TemplateColumn>
@@ -127,9 +128,9 @@
            failures (Complete With Error) names the steps that failed. Its own column, rather than
            sharing the Last Run cell, because a virtualised row is a fixed height and a stacked chip is clipped
            on exactly the rows that have run. *@
-        <TemplateColumn T="ScheduleHeader" Title="Outcome" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn T="ScheduleHeader" Title="@OperationsText.SchedulesColOutcome" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <MudText Typo="Typo.button">Outcome</MudText>
+                <MudText Typo="Typo.button">@OperationsText.SchedulesColOutcome</MudText>
             </HeaderTemplate>
             <CellTemplate>
                 @{ var schedule = context.Item; }
@@ -151,66 +152,66 @@
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="ScheduleHeader" Title="Status" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn T="ScheduleHeader" Title="@CommonText.ColumnStatus" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Status" Name="status" />
+                <VirtualisedSortHeader Title="@CommonText.ColumnStatus" Name="status" />
             </HeaderTemplate>
             <CellTemplate>
                 @{ var schedule = context.Item; }
                 @if (schedule.IsEnabled)
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Success">
-                        Enabled
+                        @CommonText.Enabled
                     </MudChip>
                 }
                 else
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Default">
-                        Disabled
+                        @CommonText.Disabled
                     </MudChip>
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="ScheduleHeader" Title="Actions" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn T="ScheduleHeader" Title="@CommonText.ColumnActions" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <MudText Typo="Typo.button">Actions</MudText>
+                <MudText Typo="Typo.button">@CommonText.ColumnActions</MudText>
             </HeaderTemplate>
             <CellTemplate>
                 @{ var schedule = context.Item; }
                 <div @onclick:stopPropagation="true">
                     <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
-                        <MudTooltip Text="Show this Schedule's executions" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@OperationsText.SchedulesShowExecutions" Arrow="true" Placement="Placement.Top">
                             <MudIconButton Icon="@Icons.Material.Filled.History" Size="Size.Small"
                                            OnClick="@(() => OpenExecutionsDialog(schedule))" />
                         </MudTooltip>
                         @if (schedule.IsEnabled)
                         {
-                            <MudTooltip Text="Disable" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@OperationsText.SchedulesDisable" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Filled.Pause" Size="Size.Small"
                                                OnClick="@(() => HandleToggleEnabledAsync(schedule))" />
                             </MudTooltip>
                         }
                         else
                         {
-                            <MudTooltip Text="Enable" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@OperationsText.SchedulesEnable" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small"
                                                OnClick="@(() => HandleToggleEnabledAsync(schedule))" />
                             </MudTooltip>
                         }
-                        <MudTooltip Text="Run Now" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@OperationsText.SchedulesRunNow" Arrow="true" Placement="Placement.Top">
                             <MudIconButton Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small" Color="Color.Primary"
                                            OnClick="@(() => HandleRunNowAsync(schedule))"
                                            Disabled="@(schedule.StepCount == 0)" />
                         </MudTooltip>
                         @if (schedule.BuiltIn)
                         {
-                            <MudTooltip Text="Built-in schedule; cannot be deleted" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@OperationsText.SchedulesBuiltInLocked" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Disabled="true" />
                             </MudTooltip>
                         }
                         else
                         {
-                            <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@CommonText.Delete" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                                OnClick="@(() => HandleDeleteAsync(schedule))" />
                             </MudTooltip>
@@ -224,17 +225,17 @@
         @if (!string.IsNullOrWhiteSpace(grid.SearchText))
         {
             <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                             PrimaryText="@($"No Schedules match \"{grid.SearchText}\"")"
-                             SecondaryText="Try a different search term, or clear the search."
-                             ActionText="Clear Search"
+                             PrimaryText="@string.Format(CultureInfo.CurrentCulture, OperationsText.SchedulesNoSearchMatch, grid.SearchText)"
+                             SecondaryText="@OperationsText.CompletedSearchHint"
+                             ActionText="@CommonText.ClearSearch"
                              OnAction="@(() => grid.ClearSearchAsync())" />
         }
         else
         {
             <TableEmptyState Icon="@Icons.Material.Outlined.Schedule"
-                             PrimaryText="No Schedules have been created yet"
-                             SecondaryText="A Schedule runs a sequence of Run Profiles on a trigger you choose, or on demand."
-                             ActionText="Create Your First Schedule"
+                             PrimaryText="@OperationsText.SchedulesNoneYet"
+                             SecondaryText="@OperationsText.SchedulesNoneYetHint"
+                             ActionText="@OperationsText.SchedulesCreateFirst"
                              OnAction="HandleCreateScheduleAsync" />
         }
     </EmptyContent>
@@ -251,7 +252,7 @@
     <TitleContent>
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-3" />
-            @(_executionsSchedule?.Name ?? "Schedule")
+            @(_executionsSchedule?.Name ?? OperationsText.SchedulesSingularName)
         </MudText>
     </TitleContent>
     <DialogContent>
@@ -266,13 +267,13 @@
                                  DefaultSortBy="queuedAt"
                                  DefaultSortDescending="true"
                                  LoadWindow="LoadExecutionWindowAsync"
-                                 SingularName="Schedule Execution"
-                                 PluralName="Schedule Executions"
-                                 SearchPlaceholder="Search by initiator">
+                                 SingularName="@OperationsText.SchedulesExecSingularName"
+                                 PluralName="@OperationsText.SchedulesExecPluralName"
+                                 SearchPlaceholder="@OperationsText.SchedulesExecSearchPlaceholder">
                 <Columns>
-                    <TemplateColumn T="ScheduleExecution" Title="Started" Sortable="false">
+                    <TemplateColumn T="ScheduleExecution" Title="@OperationsText.SchedulesExecStarted" Sortable="false">
                         <HeaderTemplate>
-                            <VirtualisedSortHeader Title="Started" Name="startedAt" />
+                            <VirtualisedSortHeader Title="@OperationsText.SchedulesExecStarted" Name="startedAt" />
                         </HeaderTemplate>
                         <CellTemplate>
                             @if (context.Item.StartedAt.HasValue)
@@ -288,20 +289,20 @@
                             }
                         </CellTemplate>
                     </TemplateColumn>
-                    <TemplateColumn T="ScheduleExecution" Title="Outcome" Sortable="false">
+                    <TemplateColumn T="ScheduleExecution" Title="@OperationsText.SchedulesColOutcome" Sortable="false">
                         <HeaderTemplate>
-                            <VirtualisedSortHeader Title="Outcome" Name="status" />
+                            <VirtualisedSortHeader Title="@OperationsText.SchedulesColOutcome" Name="status" />
                         </HeaderTemplate>
                         <CellTemplate>
                             <MudChip T="string" Variant="Variant.Text" Class="ml-0"
                                      Color="Helpers.GetScheduleExecutionMudBlazorColorForStatus(context.Item.Status)">
-                                @context.Item.Status.ToString().SplitOnCapitalLetters()
+                                @ScheduleExecutionDisplay.StatusLabel(context.Item.Status)
                             </MudChip>
                         </CellTemplate>
                     </TemplateColumn>
-                    <TemplateColumn T="ScheduleExecution" Title="Duration" Sortable="false">
+                    <TemplateColumn T="ScheduleExecution" Title="@OperationsText.CompletedColDuration" Sortable="false">
                         <HeaderTemplate>
-                            <VirtualisedSortHeader Title="Duration" Name="completedAt" />
+                            <VirtualisedSortHeader Title="@OperationsText.CompletedColDuration" Name="completedAt" />
                         </HeaderTemplate>
                         <CellTemplate>
                             @{ var duration = GetExecutionDuration(context.Item); }
@@ -316,14 +317,14 @@
                             }
                         </CellTemplate>
                     </TemplateColumn>
-                    <TemplateColumn T="ScheduleExecution" Title="Steps" Sortable="false">
+                    <TemplateColumn T="ScheduleExecution" Title="@OperationsText.ScheduleEditorStepsTab" Sortable="false">
                         <HeaderTemplate>
-                            <MudText Typo="Typo.button">Steps</MudText>
+                            <MudText Typo="Typo.button">@OperationsText.ScheduleEditorStepsTab</MudText>
                         </HeaderTemplate>
                         <CellTemplate>
                             @if (context.Item.TotalSteps > 0)
                             {
-                                <span>@(Math.Min(context.Item.CurrentStepIndex + 1, context.Item.TotalSteps)) of @context.Item.TotalSteps</span>
+                                <span>@string.Format(CultureInfo.CurrentCulture, OperationsText.ScheduleExecOfTotal, Math.Min(context.Item.CurrentStepIndex + 1, context.Item.TotalSteps), context.Item.TotalSteps)</span>
                             }
                             else
                             {
@@ -331,9 +332,9 @@
                             }
                         </CellTemplate>
                     </TemplateColumn>
-                    <TemplateColumn T="ScheduleExecution" Title="Initiated By" Sortable="false">
+                    <TemplateColumn T="ScheduleExecution" Title="@OperationsText.CompletedColInitiatedBy" Sortable="false">
                         <HeaderTemplate>
-                            <MudText Typo="Typo.button">Initiated By</MudText>
+                            <MudText Typo="Typo.button">@OperationsText.CompletedColInitiatedBy</MudText>
                         </HeaderTemplate>
                         <CellTemplate>
                             <AuditPrincipalLink PrincipalType="context.Item.InitiatedByType"
@@ -344,7 +345,7 @@
                     <TemplateColumn T="ScheduleExecution" Sortable="false">
                         <HeaderTemplate></HeaderTemplate>
                         <CellTemplate>
-                            <MudLink Href="@($"/admin/operations/schedule-executions/{context.Item.Id}")">View Schedule Execution</MudLink>
+                            <MudLink Href="@($"/admin/operations/schedule-executions/{context.Item.Id}")">@OperationsText.SchedulesViewExecution</MudLink>
                         </CellTemplate>
                     </TemplateColumn>
                 </Columns>
@@ -352,23 +353,23 @@
                     @if (!string.IsNullOrWhiteSpace(grid.SearchText))
                     {
                         <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                         PrimaryText="@($"No Schedule Executions match \"{grid.SearchText}\"")"
-                                         SecondaryText="Try a different search term, or clear the search."
-                                         ActionText="Clear Search"
+                                         PrimaryText="@string.Format(CultureInfo.CurrentCulture, OperationsText.SchedulesExecNoSearchMatch, grid.SearchText)"
+                                         SecondaryText="@OperationsText.CompletedSearchHint"
+                                         ActionText="@CommonText.ClearSearch"
                                          OnAction="@(() => grid.ClearSearchAsync())" />
                     }
                     else
                     {
                         <TableEmptyState Icon="@Icons.Material.Outlined.Schedule"
-                                         PrimaryText="This Schedule has not run yet"
-                                         SecondaryText="Executions appear here once the Schedule's trigger fires, or once it is run with the Run Now action." />
+                                         PrimaryText="@OperationsText.SchedulesExecNone"
+                                         SecondaryText="@OperationsText.SchedulesExecNoneHint" />
                     }
                 </EmptyContent>
             </VirtualisedDataGrid>
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="@(() => _executionsDialogVisible = false)" DropShadow="false">Close</MudButton>
+        <MudButton OnClick="@(() => _executionsDialogVisible = false)" DropShadow="false">@CommonText.Close</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -452,7 +453,7 @@
     private bool RefuseInDemoMode()
     {
         if (DemoMode)
-            Snackbar.Add("Not available in demo mode: these Schedules are sample data.", Severity.Info);
+            Snackbar.Add(OperationsText.SchedulesDemoRefused, Severity.Info);
         return DemoMode;
     }
 
@@ -544,7 +545,7 @@
         };
 
         var dialog = await DialogService.ShowAsync<ScheduleEditorDialog>(
-            scheduleId.HasValue ? "Edit Schedule" : "New Schedule",
+            scheduleId.HasValue ? OperationsText.ScheduleEditorEditTitle : OperationsText.ScheduleEditorNewTitle,
             parameters,
             options);
 
@@ -567,7 +568,7 @@
         var schedule = await jim.Scheduler.GetScheduleAsync(header.Id);
         if (schedule == null)
         {
-            Snackbar.Add($"Schedule '{header.Name}' no longer exists.", Severity.Warning);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, OperationsText.SchedulesNoLongerExists, header.Name), Severity.Warning);
             await RefreshSchedulesAsync();
             return;
         }
@@ -583,8 +584,7 @@
 
         await jim.Scheduler.UpdateScheduleAsync(schedule, ActivityInitiatorType.User, user.Id, user.NameOrId);
 
-        var action = schedule.IsEnabled ? "enabled" : "disabled";
-        Snackbar.Add($"Schedule '{schedule.Name}' has been {action}.", Severity.Success);
+        Snackbar.Add(string.Format(CultureInfo.CurrentCulture, schedule.IsEnabled ? OperationsText.SchedulesEnabledNotice : OperationsText.SchedulesDisabledNotice, schedule.Name), Severity.Success);
 
         await RefreshSchedulesAsync();
     }
@@ -596,15 +596,15 @@
 
         if (header.StepCount == 0)
         {
-            Snackbar.Add("Cannot run a schedule with no steps.", Severity.Warning);
+            Snackbar.Add(OperationsText.SchedulesNoStepsToRun, Severity.Warning);
             return;
         }
 
         var confirmed = await DialogService.ShowMessageBoxAsync(
-            "Run Schedule Now",
-            $"Are you sure you want to run '{header.Name}' now? This will queue all steps for execution.",
-            yesText: "Run Now",
-            cancelText: "Cancel");
+            OperationsText.SchedulesRunConfirmTitle,
+            string.Format(CultureInfo.CurrentCulture, OperationsText.SchedulesRunConfirmMessage, header.Name),
+            yesText: OperationsText.SchedulesRunNow,
+            cancelText: CommonText.Cancel);
 
         if (confirmed != true)
             return;
@@ -616,7 +616,7 @@
         var scheduleWithSteps = await jim.Scheduler.GetScheduleWithStepsAsync(header.Id);
         if (scheduleWithSteps == null)
         {
-            Snackbar.Add("Schedule not found.", Severity.Error);
+            Snackbar.Add(OperationsText.ScheduleEditorNotFound, Severity.Error);
             return;
         }
 
@@ -639,18 +639,18 @@
         }
         catch (Exception)
         {
-            Snackbar.Add($"Schedule '{header.Name}' could not start. Open its latest execution for the reason.", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, OperationsText.SchedulesCouldNotStart, header.Name), Severity.Error);
             await RefreshSchedulesAsync();
             return;
         }
 
         if (execution != null)
         {
-            Snackbar.Add($"Schedule '{header.Name}' has been queued for execution.", Severity.Success);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, OperationsText.SchedulesQueued, header.Name), Severity.Success);
         }
         else
         {
-            Snackbar.Add($"Failed to start schedule '{header.Name}'. It may have no steps.", Severity.Warning);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, OperationsText.SchedulesFailedToStart, header.Name), Severity.Warning);
         }
 
         await RefreshSchedulesAsync();
@@ -665,21 +665,21 @@
         // defence-in-depth guard so the application layer never throws into the circuit).
         if (header.BuiltIn)
         {
-            Snackbar.Add($"The built-in schedule '{header.Name}' cannot be deleted.", Severity.Warning);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, OperationsText.SchedulesBuiltInDelete, header.Name), Severity.Warning);
             return;
         }
 
         var confirmed = await DialogService.ShowMessageBoxAsync(
-            "Delete Schedule",
-            $"Are you sure you want to delete '{header.Name}'? This action cannot be undone.",
-            yesText: "Delete",
-            cancelText: "Cancel");
+            OperationsText.SchedulesDeleteConfirmTitle,
+            string.Format(CultureInfo.CurrentCulture, OperationsText.SchedulesDeleteConfirmMessage, header.Name),
+            yesText: CommonText.Delete,
+            cancelText: CommonText.Cancel);
 
         if (confirmed != true)
             return;
 
         // offer an optional reason for the configuration change history; cancelling aborts the delete
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, CommonText.Delete);
         if (cancelled)
             return;
 
@@ -689,14 +689,14 @@
         var schedule = await jim.Scheduler.GetScheduleAsync(header.Id);
         if (schedule == null)
         {
-            Snackbar.Add($"Schedule '{header.Name}' no longer exists.", Severity.Warning);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, OperationsText.SchedulesNoLongerExists, header.Name), Severity.Warning);
             await RefreshSchedulesAsync();
             return;
         }
 
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         await jim.Scheduler.DeleteScheduleAsync(schedule, ActivityInitiatorType.User, user.Id, user.NameOrId, changeReason);
-        Snackbar.Add($"Schedule '{schedule.Name}' has been deleted.", Severity.Success);
+        Snackbar.Add(string.Format(CultureInfo.CurrentCulture, OperationsText.SchedulesDeleted, schedule.Name), Severity.Success);
         await RefreshSchedulesAsync();
     }
 }

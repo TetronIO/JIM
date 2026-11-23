@@ -106,6 +106,7 @@
         {
             var from = (index * degreesPerTask).ToString("0.##", CultureInfo.InvariantCulture);
             var to = ((index + 1) * degreesPerTask).ToString("0.##", CultureInfo.InvariantCulture);
+            // i18n: exempt - a CSS conic-gradient colour stop, not user-visible text
             return $"{WedgeColour(status)} {from}deg {to}deg";
         });
 

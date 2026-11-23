@@ -1,0 +1,1418 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ScheduleEditorEditTitle" xml:space="preserve">
+    <value>Modifier la planification</value>
+  </data>
+  <data name="ScheduleEditorNewTitle" xml:space="preserve">
+    <value>Nouvelle planification</value>
+  </data>
+  <data name="ScheduleEditorBuiltInNotice" xml:space="preserve">
+    <value>Il s’agit d’une planification intégrée. Vous pouvez modifier son moment d’exécution, l’activer ou la désactiver, mais son nom ne peut pas être modifié et elle ne peut pas être supprimée.</value>
+  </data>
+  <data name="ScheduleEditorDetailsTab" xml:space="preserve">
+    <value>Détails</value>
+  </data>
+  <data name="ScheduleEditorNameRequired" xml:space="preserve">
+    <value>Le nom est obligatoire</value>
+  </data>
+  <data name="ScheduleEditorNameBuiltInHelp" xml:space="preserve">
+    <value>Il s’agit d’une planification intégrée ; son nom ne peut pas être modifié.</value>
+  </data>
+  <data name="ScheduleEditorNameHelp" xml:space="preserve">
+    <value>Un nom descriptif pour cette planification</value>
+  </data>
+  <data name="ScheduleEditorDescriptionHelp" xml:space="preserve">
+    <value>Description facultative de l’action de cette planification</value>
+  </data>
+  <data name="ScheduleEditorEnabledOn" xml:space="preserve">
+    <value>La planification est activée</value>
+  </data>
+  <data name="ScheduleEditorEnabledOff" xml:space="preserve">
+    <value>La planification est désactivée</value>
+  </data>
+  <data name="ScheduleEditorTriggerTab" xml:space="preserve">
+    <value>Déclencheur</value>
+  </data>
+  <data name="ScheduleEditorScheduled" xml:space="preserve">
+    <value>Planifiée</value>
+  </data>
+  <data name="ScheduleEditorScheduledHelp" xml:space="preserve">
+    <value>Exécuter automatiquement selon une planification</value>
+  </data>
+  <data name="ScheduleEditorManualOnly" xml:space="preserve">
+    <value>Manuelle uniquement</value>
+  </data>
+  <data name="ScheduleEditorManualOnlyHelp" xml:space="preserve">
+    <value>Exécuter uniquement lorsqu’elle est déclenchée manuellement</value>
+  </data>
+  <data name="ScheduleEditorConfigurationTitle" xml:space="preserve">
+    <value>Configuration de la planification</value>
+  </data>
+  <data name="ScheduleEditorRunPattern" xml:space="preserve">
+    <value>Mode d’exécution</value>
+  </data>
+  <data name="ScheduleEditorPatternSpecificTimes" xml:space="preserve">
+    <value>À des heures précises</value>
+  </data>
+  <data name="ScheduleEditorPatternInterval" xml:space="preserve">
+    <value>À intervalles réguliers</value>
+  </data>
+  <data name="ScheduleEditorPatternCustom" xml:space="preserve">
+    <value>Personnalisé (expression cron)</value>
+  </data>
+  <data name="ScheduleEditorDays" xml:space="preserve">
+    <value>Jours</value>
+  </data>
+  <data name="ScheduleEditorEveryDay" xml:space="preserve">
+    <value>Tous les jours</value>
+  </data>
+  <data name="ScheduleEditorWeekdays" xml:space="preserve">
+    <value>Jours ouvrés</value>
+  </data>
+  <data name="ScheduleEditorWeekends" xml:space="preserve">
+    <value>Week-ends</value>
+  </data>
+  <data name="ScheduleEditorTimes" xml:space="preserve">
+    <value>Heures</value>
+  </data>
+  <data name="ScheduleEditorAddTime" xml:space="preserve">
+    <value>Ajouter une heure</value>
+  </data>
+  <data name="ScheduleEditorAddTimeRequired" xml:space="preserve">
+    <value>Ajoutez au moins une heure d’exécution</value>
+  </data>
+  <data name="ScheduleEditorInterval" xml:space="preserve">
+    <value>Intervalle</value>
+  </data>
+  <data name="ScheduleEditorEvery" xml:space="preserve">
+    <value>Toutes les</value>
+  </data>
+  <data name="ScheduleEditorUnitMinutes" xml:space="preserve">
+    <value>minutes</value>
+  </data>
+  <data name="ScheduleEditorUnitHours" xml:space="preserve">
+    <value>heures</value>
+  </data>
+  <data name="ScheduleEditorRestrictWindow" xml:space="preserve">
+    <value>Limiter à une plage horaire</value>
+  </data>
+  <data name="ScheduleEditorStartTime" xml:space="preserve">
+    <value>Heure de début</value>
+  </data>
+  <data name="ScheduleEditorEndTime" xml:space="preserve">
+    <value>Heure de fin</value>
+  </data>
+  <data name="ScheduleEditorCronExpression" xml:space="preserve">
+    <value>Expression cron</value>
+  </data>
+  <data name="ScheduleEditorCronHelp" xml:space="preserve">
+    <value>Format : minute heure jour-du-mois mois jour-de-la-semaine (par exemple, 0 9,12,15,18 * * 1-5)</value>
+  </data>
+  <data name="ScheduleEditorAdvancedCron" xml:space="preserve">
+    <value>Avancé : expression cron</value>
+  </data>
+  <data name="ScheduleEditorCronGenerated" xml:space="preserve">
+    <value>Générée à partir de la configuration de la planification ci-dessus</value>
+  </data>
+  <data name="ScheduleEditorStepsTab" xml:space="preserve">
+    <value>Étapes</value>
+  </data>
+  <data name="ScheduleEditorAddStep" xml:space="preserve">
+    <value>Ajouter une étape</value>
+  </data>
+  <data name="ScheduleEditorEditStepHeading" xml:space="preserve">
+    <value>Modifier l’étape</value>
+  </data>
+  <data name="ScheduleEditorEditStep" xml:space="preserve">
+    <value>Modifier l’étape</value>
+  </data>
+  <data name="ScheduleEditorStepType" xml:space="preserve">
+    <value>Type d’étape</value>
+  </data>
+  <data name="ScheduleEditorRunProfile" xml:space="preserve">
+    <value>Profil d’exécution</value>
+  </data>
+  <data name="ScheduleEditorSelectConnectedSystem" xml:space="preserve">
+    <value>-- Sélectionner un système connecté --</value>
+  </data>
+  <data name="ScheduleEditorConnectedSystem" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="ScheduleEditorSelectRunProfile" xml:space="preserve">
+    <value>-- Sélectionner un profil d’exécution --</value>
+  </data>
+  <data name="ScheduleEditorStepTypePowerShellSoon" xml:space="preserve">
+    <value>Script PowerShell (bientôt disponible)</value>
+  </data>
+  <data name="ScheduleEditorStepTypePowerShell" xml:space="preserve">
+    <value>Script PowerShell</value>
+  </data>
+  <data name="ScheduleEditorStepTypeExecutableSoon" xml:space="preserve">
+    <value>Exécutable (bientôt disponible)</value>
+  </data>
+  <data name="ScheduleEditorStepTypeExecutable" xml:space="preserve">
+    <value>Exécutable</value>
+  </data>
+  <data name="ScheduleEditorStepTypeSqlSoon" xml:space="preserve">
+    <value>Script SQL (bientôt disponible)</value>
+  </data>
+  <data name="ScheduleEditorStepTypeSql" xml:space="preserve">
+    <value>Script SQL</value>
+  </data>
+  <data name="ScheduleEditorStepTypeTemporal" xml:space="preserve">
+    <value>Réconciliation du périmètre temporel</value>
+  </data>
+  <data name="ScheduleEditorStepTypeHistory" xml:space="preserve">
+    <value>Nettoyage de la rétention de l’historique</value>
+  </data>
+  <data name="ScheduleEditorStepName" xml:space="preserve">
+    <value>Nom de l’étape</value>
+  </data>
+  <data name="ScheduleEditorStepNameHelp" xml:space="preserve">
+    <value>Un nom descriptif pour cette étape</value>
+  </data>
+  <data name="ScheduleEditorStepNameRequired" xml:space="preserve">
+    <value>Le nom est obligatoire pour ce type d’étape</value>
+  </data>
+  <data name="ScheduleEditorOnFailure" xml:space="preserve">
+    <value>En cas d’échec de cette étape</value>
+  </data>
+  <data name="ScheduleEditorOnFailureHelp" xml:space="preserve">
+    <value>Suivre la planification, sauf si cette étape doit se comporter différemment.</value>
+  </data>
+  <data name="ScheduleEditorSaveStep" xml:space="preserve">
+    <value>Enregistrer l’étape</value>
+  </data>
+  <data name="ScheduleEditorBuiltInSteps" xml:space="preserve">
+    <value>Il s’agit d’une planification intégrée ; ses étapes sont gérées par JIM et ne peuvent être ajoutées, modifiées, réordonnées ni supprimées.</value>
+  </data>
+  <data name="ScheduleEditorOnFailureLabel" xml:space="preserve">
+    <value>En cas d’échec d’une étape</value>
+  </data>
+  <data name="ScheduleEditorBuiltInFailure" xml:space="preserve">
+    <value>Il s’agit d’une planification intégrée ; JIM gère la conduite à tenir en cas d’échec de l’une de ses étapes.</value>
+  </data>
+  <data name="ScheduleEditorFailureApplies" xml:space="preserve">
+    <value>S’applique à chaque étape, sauf si une étape définit la sienne.</value>
+  </data>
+  <data name="ScheduleEditorNoSteps" xml:space="preserve">
+    <value>Aucune étape n’a encore été ajoutée. Cliquez sur « Ajouter une étape » pour créer la première étape.</value>
+  </data>
+  <data name="ScheduleEditorStepNumber" xml:space="preserve">
+    <value>Étape {0}</value>
+  </data>
+  <data name="ScheduleEditorStepNumberParallel" xml:space="preserve">
+    <value>Étape {0} : parallèle</value>
+  </data>
+  <data name="ScheduleEditorStepsRunTogether" xml:space="preserve">
+    <value>{0} étapes exécutées ensemble</value>
+  </data>
+  <data name="ScheduleEditorRunInParallel" xml:space="preserve">
+    <value>Exécuter en parallèle avec cette étape</value>
+  </data>
+  <data name="ScheduleEditorMoveUp" xml:space="preserve">
+    <value>Monter</value>
+  </data>
+  <data name="ScheduleEditorMoveDown" xml:space="preserve">
+    <value>Descendre</value>
+  </data>
+  <data name="ScheduleEditorDeleteStep" xml:space="preserve">
+    <value>Supprimer l’étape</value>
+  </data>
+  <data name="ScheduleEditorDeleteGroup" xml:space="preserve">
+    <value>Supprimer tout le groupe</value>
+  </data>
+  <data name="ScheduleEditorAddParallelStep" xml:space="preserve">
+    <value>Ajouter une étape parallèle</value>
+  </data>
+  <data name="ScheduleEditorRemoveFromGroup" xml:space="preserve">
+    <value>Retirer du groupe</value>
+  </data>
+  <data name="ScheduleEditorRunProfileDisabled" xml:space="preserve">
+    <value>Ce profil d’exécution est désactivé ; cette étape échouera donc à l’exécution de la planification. {0}</value>
+  </data>
+  <data name="ScheduleEditorChanges" xml:space="preserve">
+    <value>Modifications</value>
+  </data>
+  <data name="ScheduleEditorObjectTypeLabel" xml:space="preserve">
+    <value>Planification</value>
+  </data>
+  <data name="ScheduleEditorSaving" xml:space="preserve">
+    <value>Enregistrement en cours</value>
+  </data>
+  <data name="ScheduleEditorEnterCron" xml:space="preserve">
+    <value>Saisissez une expression cron valide</value>
+  </data>
+  <data name="ScheduleEditorCustomPreview" xml:space="preserve">
+    <value>Planification personnalisée : {0}</value>
+  </data>
+  <data name="ScheduleEditorSelectDay" xml:space="preserve">
+    <value>Sélectionnez au moins un jour</value>
+  </data>
+  <data name="ScheduleEditorDaysEveryDay" xml:space="preserve">
+    <value>tous les jours</value>
+  </data>
+  <data name="ScheduleEditorDaysWeekdays" xml:space="preserve">
+    <value>jours ouvrés</value>
+  </data>
+  <data name="ScheduleEditorDaysWeekends" xml:space="preserve">
+    <value>week-ends</value>
+  </data>
+  <data name="ScheduleEditorPreviewRunsAt" xml:space="preserve">
+    <value>S’exécute {0} à {1}</value>
+  </data>
+  <data name="ScheduleEditorIntervalMinutesOne" xml:space="preserve">
+    <value>toutes les {0} minute</value>
+  </data>
+  <data name="ScheduleEditorIntervalMinutesOther" xml:space="preserve">
+    <value>toutes les {0} minutes</value>
+  </data>
+  <data name="ScheduleEditorIntervalHoursOne" xml:space="preserve">
+    <value>toutes les {0} heure</value>
+  </data>
+  <data name="ScheduleEditorIntervalHoursOther" xml:space="preserve">
+    <value>toutes les {0} heures</value>
+  </data>
+  <data name="ScheduleEditorPreviewInterval" xml:space="preserve">
+    <value>S’exécute {0}, {1}</value>
+  </data>
+  <data name="ScheduleEditorPreviewIntervalWindow" xml:space="preserve">
+    <value>S’exécute {0}, {1} entre {2} et {3}</value>
+  </data>
+  <data name="ScheduleEditorNotConfigured" xml:space="preserve">
+    <value>Planification non configurée</value>
+  </data>
+  <data name="ScheduleEditorNameMissing" xml:space="preserve">
+    <value>Saisissez un nom pour la planification.</value>
+  </data>
+  <data name="ScheduleEditorDayMissing" xml:space="preserve">
+    <value>Sélectionnez au moins un jour.</value>
+  </data>
+  <data name="ScheduleEditorTimeMissing" xml:space="preserve">
+    <value>Ajoutez au moins une heure d’exécution.</value>
+  </data>
+  <data name="ScheduleEditorNotFound" xml:space="preserve">
+    <value>Planification introuvable.</value>
+  </data>
+  <data name="ScheduleEditorUpdated" xml:space="preserve">
+    <value>Planification mise à jour.</value>
+  </data>
+  <data name="ScheduleEditorCreated" xml:space="preserve">
+    <value>Planification créée.</value>
+  </data>
+  <data name="ScheduleEditorSaveFailed" xml:space="preserve">
+    <value>Échec de l’enregistrement de la planification : {0}</value>
+  </data>
+  <data name="ScheduleEditorConnectedSystemRequired" xml:space="preserve">
+    <value>Sélectionnez un système connecté et un profil d’exécution.</value>
+  </data>
+  <data name="ScheduleEditorStepNameMissing" xml:space="preserve">
+    <value>Saisissez un nom pour cette étape.</value>
+  </data>
+  <data name="ScheduleEditorUnknownSystem" xml:space="preserve">
+    <value>Système inconnu</value>
+  </data>
+  <data name="ScheduleEditorUnknownProfile" xml:space="preserve">
+    <value>Profil inconnu</value>
+  </data>
+  <data name="CompletedHeading" xml:space="preserve">
+    <value>Terminées</value>
+  </data>
+  <data name="CompletedCollapse" xml:space="preserve">
+    <value>Replier Terminées</value>
+  </data>
+  <data name="CompletedExpand" xml:space="preserve">
+    <value>Déplier Terminées</value>
+  </data>
+  <data name="CompletedSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher une cible ou un initiateur</value>
+  </data>
+  <data name="CompletedResumeRefresh" xml:space="preserve">
+    <value>Reprendre l’actualisation automatique</value>
+  </data>
+  <data name="CompletedPauseRefresh" xml:space="preserve">
+    <value>Suspendre l’actualisation automatique</value>
+  </data>
+  <data name="CompletedColResult" xml:space="preserve">
+    <value>Résultat</value>
+  </data>
+  <data name="CompletedColConnectedSystem" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="CompletedColRunProfile" xml:space="preserve">
+    <value>Profil d’exécution</value>
+  </data>
+  <data name="CompletedColOutcomes" xml:space="preserve">
+    <value>Bilan</value>
+  </data>
+  <data name="CompletedColInitiatedBy" xml:space="preserve">
+    <value>Initié par</value>
+  </data>
+  <data name="CompletedColExecuted" xml:space="preserve">
+    <value>Exécutée</value>
+  </data>
+  <data name="CompletedColDuration" xml:space="preserve">
+    <value>Durée</value>
+  </data>
+  <data name="CompletedNoChanges" xml:space="preserve">
+    <value>Aucune modification</value>
+  </data>
+  <data name="CompletedStatusNotSet" xml:space="preserve">
+    <value>Non défini</value>
+  </data>
+  <data name="CompletedStatusInProgress" xml:space="preserve">
+    <value>En cours</value>
+  </data>
+  <data name="CompletedStatusComplete" xml:space="preserve">
+    <value>Terminé</value>
+  </data>
+  <data name="CompletedStatusCompleteWithWarning" xml:space="preserve">
+    <value>Terminé avec avertissement</value>
+  </data>
+  <data name="CompletedStatusCompleteWithError" xml:space="preserve">
+    <value>Terminé avec erreur</value>
+  </data>
+  <data name="CompletedStatusFailedWithError" xml:space="preserve">
+    <value>Échec avec erreur</value>
+  </data>
+  <data name="CompletedStatusCancelled" xml:space="preserve">
+    <value>Annulé</value>
+  </data>
+  <data name="CompletedOpExecute" xml:space="preserve">
+    <value>Exécuter</value>
+  </data>
+  <data name="CompletedOpClear" xml:space="preserve">
+    <value>Vider</value>
+  </data>
+  <data name="CompletedStatAdded" xml:space="preserve">
+    <value>Objets de systèmes connectés ajoutés</value>
+  </data>
+  <data name="CompletedStatUpdated" xml:space="preserve">
+    <value>Objets de systèmes connectés mis à jour</value>
+  </data>
+  <data name="CompletedStatDeletionsDetected" xml:space="preserve">
+    <value>Suppressions d’objets de systèmes connectés détectées</value>
+  </data>
+  <data name="CompletedStatProjected" xml:space="preserve">
+    <value>Objets Metaverse projetés</value>
+  </data>
+  <data name="CompletedStatJoined" xml:space="preserve">
+    <value>Objets de systèmes connectés joints</value>
+  </data>
+  <data name="CompletedStatAttributeFlow" xml:space="preserve">
+    <value>Objets Metaverse avec flux d’attributs</value>
+  </data>
+  <data name="CompletedStatDisconnected" xml:space="preserve">
+    <value>Objets de systèmes connectés déconnectés</value>
+  </data>
+  <data name="CompletedStatDisconnectedOutOfScope" xml:space="preserve">
+    <value>Objets de systèmes connectés déconnectés (hors périmètre)</value>
+  </data>
+  <data name="CompletedStatOutOfScopeRetainJoin" xml:space="preserve">
+    <value>Objets de systèmes connectés hors périmètre (jointure conservée)</value>
+  </data>
+  <data name="CompletedStatDeleted" xml:space="preserve">
+    <value>Objets de systèmes connectés supprimés</value>
+  </data>
+  <data name="CompletedStatDriftCorrected" xml:space="preserve">
+    <value>Dérives d’objets de systèmes connectés corrigées</value>
+  </data>
+  <data name="CompletedStatProvisioned" xml:space="preserve">
+    <value>Objets de systèmes connectés provisionnés</value>
+  </data>
+  <data name="CompletedStatPendingExports" xml:space="preserve">
+    <value>Exportations en attente d’objets de systèmes connectés</value>
+  </data>
+  <data name="CompletedStatExported" xml:space="preserve">
+    <value>Objets de systèmes connectés exportés</value>
+  </data>
+  <data name="CompletedStatDeprovisioned" xml:space="preserve">
+    <value>Objets de systèmes connectés déprovisionnés</value>
+  </data>
+  <data name="CompletedStatErrors" xml:space="preserve">
+    <value>Erreurs</value>
+  </data>
+  <data name="CompletedSideAdded" xml:space="preserve">
+    <value>Objets de systèmes connectés ajoutés</value>
+  </data>
+  <data name="CompletedSideUpdated" xml:space="preserve">
+    <value>Objets de systèmes connectés mis à jour</value>
+  </data>
+  <data name="CompletedSideDeletionsDetected" xml:space="preserve">
+    <value>Suppressions d’objets de systèmes connectés détectées</value>
+  </data>
+  <data name="CompletedSideJoined" xml:space="preserve">
+    <value>Objets de systèmes connectés joints</value>
+  </data>
+  <data name="CompletedSideProjected" xml:space="preserve">
+    <value>Objets Metaverse projetés</value>
+  </data>
+  <data name="CompletedSideProvisioned" xml:space="preserve">
+    <value>Objets de systèmes connectés provisionnés</value>
+  </data>
+  <data name="CompletedSideDisconnected" xml:space="preserve">
+    <value>Objets de systèmes connectés déconnectés</value>
+  </data>
+  <data name="CompletedSideDeleted" xml:space="preserve">
+    <value>Objets de systèmes connectés supprimés</value>
+  </data>
+  <data name="CompletedSideDriftCorrected" xml:space="preserve">
+    <value>Dérives d’objets de systèmes connectés corrigées</value>
+  </data>
+  <data name="CompletedSideExported" xml:space="preserve">
+    <value>Objets de systèmes connectés exportés</value>
+  </data>
+  <data name="CompletedSideDeprovisioned" xml:space="preserve">
+    <value>Objets de systèmes connectés déprovisionnés</value>
+  </data>
+  <data name="CompletedNoSearchMatch" xml:space="preserve">
+    <value>Aucune exécution ne correspond à « {0} »</value>
+  </data>
+  <data name="CompletedSearchHint" xml:space="preserve">
+    <value>Essayez un autre terme de recherche, ou effacez la recherche.</value>
+  </data>
+  <data name="CompletedNoFilterMatch" xml:space="preserve">
+    <value>Aucune exécution terminée ne correspond aux filtres actuels</value>
+  </data>
+  <data name="CompletedFilterHint" xml:space="preserve">
+    <value>Modifiez ou effacez les filtres ci-dessus pour afficher davantage d’exécutions.</value>
+  </data>
+  <data name="CompletedClearFilters" xml:space="preserve">
+    <value>Effacer les filtres</value>
+  </data>
+  <data name="CompletedNothingFinished" xml:space="preserve">
+    <value>Aucune exécution n’est encore terminée</value>
+  </data>
+  <data name="CompletedNothingFinishedHint" xml:space="preserve">
+    <value>Les exécutions de profil d’exécution apparaissent ici une fois terminées, qu’elles aient été mises en file depuis cet onglet, par une planification ou par l’API.</value>
+  </data>
+  <data name="CompletedExecutionDetails" xml:space="preserve">
+    <value>Détails de l’exécution</value>
+  </data>
+  <data name="CompletedTarget" xml:space="preserve">
+    <value>Cible</value>
+  </data>
+  <data name="CompletedSyncRule" xml:space="preserve">
+    <value>Règle de synchronisation</value>
+  </data>
+  <data name="CompletedMetaverseObject" xml:space="preserve">
+    <value>Objet Metaverse</value>
+  </data>
+  <data name="CompletedDataGeneration" xml:space="preserve">
+    <value>Génération de données</value>
+  </data>
+  <data name="CompletedTrustedCertificate" xml:space="preserve">
+    <value>Certificat de confiance</value>
+  </data>
+  <data name="CompletedMetaverseAttribute" xml:space="preserve">
+    <value>Attribut Metaverse</value>
+  </data>
+  <data name="CompletedObjectMatchingRule" xml:space="preserve">
+    <value>Règle de correspondance d’objets</value>
+  </data>
+  <data name="CompletedSystemTask" xml:space="preserve">
+    <value>Tâche système</value>
+  </data>
+  <data name="CompletedServiceSetting" xml:space="preserve">
+    <value>Paramètre de service</value>
+  </data>
+  <data name="CompletedOperation" xml:space="preserve">
+    <value>Opération</value>
+  </data>
+  <data name="CompletedStatistics" xml:space="preserve">
+    <value>Statistiques</value>
+  </data>
+  <data name="CompletedTiming" xml:space="preserve">
+    <value>Chronologie</value>
+  </data>
+  <data name="CompletedErrorDetails" xml:space="preserve">
+    <value>Détails de l’erreur</value>
+  </data>
+  <data name="CompletedViewDetails" xml:space="preserve">
+    <value>Afficher tous les détails</value>
+  </data>
+  <data name="SchedulesSingularName" xml:space="preserve">
+    <value>Planification</value>
+  </data>
+  <data name="SchedulesPluralName" xml:space="preserve">
+    <value>Planifications</value>
+  </data>
+  <data name="SchedulesSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher par nom ou description</value>
+  </data>
+  <data name="SchedulesManual" xml:space="preserve">
+    <value>Manuelle</value>
+  </data>
+  <data name="SchedulesManualTooltip" xml:space="preserve">
+    <value>Manuelle : ne s’exécute que lorsqu’elle est lancée</value>
+  </data>
+  <data name="SchedulesColNextRun" xml:space="preserve">
+    <value>Prochaine exécution</value>
+  </data>
+  <data name="SchedulesColLastRun" xml:space="preserve">
+    <value>Dernière exécution</value>
+  </data>
+  <data name="SchedulesColOutcome" xml:space="preserve">
+    <value>Bilan</value>
+  </data>
+  <data name="SchedulesStepOne" xml:space="preserve">
+    <value>{0} étape</value>
+  </data>
+  <data name="SchedulesStepOther" xml:space="preserve">
+    <value>{0} étapes</value>
+  </data>
+  <data name="SchedulesShowExecutions" xml:space="preserve">
+    <value>Afficher les exécutions de cette planification</value>
+  </data>
+  <data name="SchedulesDisable" xml:space="preserve">
+    <value>Désactiver</value>
+  </data>
+  <data name="SchedulesEnable" xml:space="preserve">
+    <value>Activer</value>
+  </data>
+  <data name="SchedulesRunNow" xml:space="preserve">
+    <value>Exécuter maintenant</value>
+  </data>
+  <data name="SchedulesBuiltInLocked" xml:space="preserve">
+    <value>Planification intégrée ; ne peut pas être supprimée</value>
+  </data>
+  <data name="SchedulesNoSearchMatch" xml:space="preserve">
+    <value>Aucune planification ne correspond à « {0} »</value>
+  </data>
+  <data name="SchedulesNoneYet" xml:space="preserve">
+    <value>Aucune planification n’a encore été créée</value>
+  </data>
+  <data name="SchedulesNoneYetHint" xml:space="preserve">
+    <value>Une planification exécute une suite de profils d’exécution selon un déclencheur de votre choix, ou à la demande.</value>
+  </data>
+  <data name="SchedulesCreateFirst" xml:space="preserve">
+    <value>Créer votre première planification</value>
+  </data>
+  <data name="SchedulesExecStarted" xml:space="preserve">
+    <value>Démarrage</value>
+  </data>
+  <data name="SchedulesViewExecution" xml:space="preserve">
+    <value>Voir l’exécution de planification</value>
+  </data>
+  <data name="SchedulesExecSingularName" xml:space="preserve">
+    <value>Exécution de planification</value>
+  </data>
+  <data name="SchedulesExecPluralName" xml:space="preserve">
+    <value>Exécutions de planification</value>
+  </data>
+  <data name="SchedulesExecSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher par initiateur</value>
+  </data>
+  <data name="SchedulesExecNoSearchMatch" xml:space="preserve">
+    <value>Aucune exécution de planification ne correspond à « {0} »</value>
+  </data>
+  <data name="SchedulesExecNone" xml:space="preserve">
+    <value>Cette planification ne s’est pas encore exécutée</value>
+  </data>
+  <data name="SchedulesExecNoneHint" xml:space="preserve">
+    <value>Les exécutions apparaissent ici lorsque le déclencheur de la planification se déclenche, ou une fois qu’elle est lancée avec l’action Exécuter maintenant.</value>
+  </data>
+  <data name="SchedulesDemoRefused" xml:space="preserve">
+    <value>Non disponible en mode démonstration : ces planifications sont des données d’exemple.</value>
+  </data>
+  <data name="SchedulesNoLongerExists" xml:space="preserve">
+    <value>La planification « {0} » n’existe plus.</value>
+  </data>
+  <data name="SchedulesEnabledNotice" xml:space="preserve">
+    <value>La planification « {0} » a été activée.</value>
+  </data>
+  <data name="SchedulesDisabledNotice" xml:space="preserve">
+    <value>La planification « {0} » a été désactivée.</value>
+  </data>
+  <data name="SchedulesNoStepsToRun" xml:space="preserve">
+    <value>Impossible d’exécuter une planification sans étape.</value>
+  </data>
+  <data name="SchedulesRunConfirmTitle" xml:space="preserve">
+    <value>Exécuter la planification maintenant</value>
+  </data>
+  <data name="SchedulesRunConfirmMessage" xml:space="preserve">
+    <value>Voulez-vous vraiment exécuter « {0} » maintenant ? Toutes les étapes seront mises en file d’attente pour exécution.</value>
+  </data>
+  <data name="SchedulesQueued" xml:space="preserve">
+    <value>La planification « {0} » a été mise en file d’attente pour exécution.</value>
+  </data>
+  <data name="SchedulesCouldNotStart" xml:space="preserve">
+    <value>La planification « {0} » n’a pas pu démarrer. Ouvrez sa dernière exécution pour en connaître la raison.</value>
+  </data>
+  <data name="SchedulesFailedToStart" xml:space="preserve">
+    <value>Échec du démarrage de la planification « {0} ». Elle ne contient peut-être aucune étape.</value>
+  </data>
+  <data name="SchedulesBuiltInDelete" xml:space="preserve">
+    <value>La planification intégrée « {0} » ne peut pas être supprimée.</value>
+  </data>
+  <data name="SchedulesDeleteConfirmTitle" xml:space="preserve">
+    <value>Supprimer la planification</value>
+  </data>
+  <data name="SchedulesDeleteConfirmMessage" xml:space="preserve">
+    <value>Voulez-vous vraiment supprimer « {0} » ? Cette action est irréversible.</value>
+  </data>
+  <data name="SchedulesDeleted" xml:space="preserve">
+    <value>La planification « {0} » a été supprimée.</value>
+  </data>
+  <data name="ScheduleExecQueued" xml:space="preserve">
+    <value>En file d’attente</value>
+  </data>
+  <data name="ScheduleExecFailed" xml:space="preserve">
+    <value>Échec</value>
+  </data>
+  <data name="ScheduleExecPaused" xml:space="preserve">
+    <value>En pause</value>
+  </data>
+  <data name="ScheduleExecFailedOnStep" xml:space="preserve">
+    <value>Échec à l’étape {0}</value>
+  </data>
+  <data name="ScheduleExecCompleteWithErrorOnStep" xml:space="preserve">
+    <value>Terminé avec erreur à l’étape {0}</value>
+  </data>
+  <data name="ScheduleExecCompleteWithErrorOnSteps" xml:space="preserve">
+    <value>Terminé avec erreur aux étapes {0} et {1}</value>
+  </data>
+  <data name="ScheduleExecCompleteWithErrorFallback" xml:space="preserve">
+    <value>La planification s’est terminée, mais une ou plusieurs étapes ont échoué. Elles sont configurées pour laisser la planification se poursuivre ; les états des étapes ci-dessous indiquent lesquelles.</value>
+  </data>
+  <data name="PasswordsQueueHeading" xml:space="preserve">
+    <value>File d’attente de synchronisation des mots de passe</value>
+  </data>
+  <data name="PasswordsQueueIntro" xml:space="preserve">
+    <value>Modifications de mot de passe en attente d’atteindre un système connecté. Une modification quitte cette file une fois livrée ; tout ce qui figure ici reste dû, ou n’est plus tenté.</value>
+  </data>
+  <data name="PasswordsStatusWaiting" xml:space="preserve">
+    <value>En attente</value>
+  </data>
+  <data name="PasswordsDueNow" xml:space="preserve">
+    <value>{0} à traiter maintenant</value>
+  </data>
+  <data name="PasswordsWaitingTooltip" xml:space="preserve">
+    <value>Le nombre de modifications en attente qu’une passe de livraison tenterait maintenant. Les autres attendent la fin de leur délai avant nouvelle tentative. Un grand nombre en attente sans rien à traiter signifie qu’une file parcourt ses délais ; un grand nombre à traiter signifie qu’une file ne se vide pas.</value>
+  </data>
+  <data name="PasswordsStatusParked" xml:space="preserve">
+    <value>Suspendue</value>
+  </data>
+  <data name="PasswordsParkedTooltip" xml:space="preserve">
+    <value>La cible a refusé ces modifications, ou elles ont épuisé leurs tentatives. JIM a cessé d’essayer : elles attendent une intervention humaine. Traitez la cause, puis relancez-les.</value>
+  </data>
+  <data name="PasswordsStatusExpired" xml:space="preserve">
+    <value>Expirée</value>
+  </data>
+  <data name="PasswordsExpiredTooltip" xml:space="preserve">
+    <value>Ces modifications ont dépassé la durée de vie de leur système connecté. Le mot de passe qu’elles portaient n’existe plus : rien ne peut donc les livrer. Un mot de passe doit être défini par d’autres moyens.</value>
+  </data>
+  <data name="PasswordsCancelledTooltip" xml:space="preserve">
+    <value>Un administrateur a arrêté la livraison de ces modifications. Elles sont comptées plutôt que masquées, car le mot de passe de l’objet Metaverse diverge toujours sur ce système, et ce compte est la seule indication de cet écart.</value>
+  </data>
+  <data name="PasswordsShowingNarrowed" xml:space="preserve">
+    <value>Affichage des modifications de mot de passe en file d’attente d’un seul objet Metaverse. Les totaux ci-dessus concernent toute la file.</value>
+  </data>
+  <data name="PasswordsShowWhole" xml:space="preserve">
+    <value>Afficher toute la file</value>
+  </data>
+  <data name="PasswordsFailureReasonLabel" xml:space="preserve">
+    <value>Motif de l’échec</value>
+  </data>
+  <data name="PasswordsSingularName" xml:space="preserve">
+    <value>modification de mot de passe en file d’attente</value>
+  </data>
+  <data name="PasswordsPluralName" xml:space="preserve">
+    <value>modifications de mot de passe en file d’attente</value>
+  </data>
+  <data name="PasswordsSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher des objets Metaverse et des systèmes connectés…</value>
+  </data>
+  <data name="PasswordsRetryShown" xml:space="preserve">
+    <value>Relancer les éléments affichés</value>
+  </data>
+  <data name="PasswordsCancelShown" xml:space="preserve">
+    <value>Annuler les éléments affichés</value>
+  </data>
+  <data name="PasswordsIdentityTooltip" xml:space="preserve">
+    <value>La file contient une modification par objet Metaverse et par système connecté. L’objet Metaverse est ce que vous recherchez ; la ligne l’ouvre, où la même modification est visible pour chacun de ses objets de systèmes connectés.</value>
+  </data>
+  <data name="PasswordsColAttempts" xml:space="preserve">
+    <value>Tentatives</value>
+  </data>
+  <data name="PasswordsColNextAttempt" xml:space="preserve">
+    <value>Prochaine tentative</value>
+  </data>
+  <data name="PasswordsNextAttemptTooltip" xml:space="preserve">
+    <value>Date d’échéance de la prochaine tentative de livraison. Lisez-la avec le nombre de tentatives : deux tentatives avec une relance programmée signifient un système en difficulté passagère ; six tentatives sans relance signifient un système qui a abandonné.</value>
+  </data>
+  <data name="PasswordsHeldTooltip" xml:space="preserve">
+    <value>La synchronisation des mots de passe est désactivée sur ce système connecté : la modification est conservée sans être tentée. L’activer livre tout ce qui s’est accumulé, sauf si cela expire d’abord.</value>
+  </data>
+  <data name="PasswordsHeld" xml:space="preserve">
+    <value>Retenue</value>
+  </data>
+  <data name="PasswordsDeliveringNow" xml:space="preserve">
+    <value>Livraison en cours</value>
+  </data>
+  <data name="PasswordsDueNowLabel" xml:space="preserve">
+    <value>À traiter maintenant</value>
+  </data>
+  <data name="PasswordsRetryOneAria" xml:space="preserve">
+    <value>Relancer cette modification de mot de passe</value>
+  </data>
+  <data name="PasswordsCancelOneAria" xml:space="preserve">
+    <value>Annuler cette modification de mot de passe</value>
+  </data>
+  <data name="PasswordsCancelOneTooltip" xml:space="preserve">
+    <value>Arrêter la livraison de cette modification. Elle reste, marquée « Annulé », car le mot de passe de l’objet Metaverse diverge toujours sur ce système.</value>
+  </data>
+  <data name="PasswordsNoSearchMatch" xml:space="preserve">
+    <value>Aucune modification de mot de passe en file d’attente ne correspond à « {0} »</value>
+  </data>
+  <data name="PasswordsNoFilterMatch" xml:space="preserve">
+    <value>Aucune modification de mot de passe en file d’attente ne correspond à ces filtres</value>
+  </data>
+  <data name="PasswordsNoFilterHint" xml:space="preserve">
+    <value>Effacez les filtres pour voir toute la file.</value>
+  </data>
+  <data name="PasswordsEmptyTitle" xml:space="preserve">
+    <value>Aucune modification n’attend d’être livrée</value>
+  </data>
+  <data name="PasswordsEmptyHint" xml:space="preserve">
+    <value>Les modifications de mot de passe apparaissent ici pendant leur acheminement vers un système connecté, et quittent la file dès leur arrivée.</value>
+  </data>
+  <data name="PasswordsDescribeOne" xml:space="preserve">
+    <value>1 modification de mot de passe</value>
+  </data>
+  <data name="PasswordsDescribeOther" xml:space="preserve">
+    <value>{0} modifications de mot de passe</value>
+  </data>
+  <data name="PasswordsRetryShownConfirm" xml:space="preserve">
+    <value>Relancer la livraison de tout ce qui est affiché ({0}) ?</value>
+  </data>
+  <data name="PasswordsCancelShownConfirm" xml:space="preserve">
+    <value>Arrêter la livraison de tout ce qui est affiché ({0}) ? Chacune de ces personnes conserve son ancien mot de passe sur le système cible jusqu’à la synchronisation d’une nouvelle modification. Toute modification qui est le premier mot de passe d’un objet de système connecté provisionné par JIM laisse cet objet de système connecté sans mot de passe fourni par JIM.</value>
+  </data>
+  <data name="PasswordsRetryTitle" xml:space="preserve">
+    <value>Relancer les modifications de mot de passe</value>
+  </data>
+  <data name="PasswordsCancelTitle" xml:space="preserve">
+    <value>Annuler les modifications de mot de passe</value>
+  </data>
+  <data name="PasswordsRetryYes" xml:space="preserve">
+    <value>Relancer</value>
+  </data>
+  <data name="PasswordsCancelDeliveryYes" xml:space="preserve">
+    <value>Arrêter la livraison</value>
+  </data>
+  <data name="PasswordsNothingRetried" xml:space="preserve">
+    <value>Aucune modification relancée : aucune modification de mot de passe en file d’attente ne correspond.</value>
+  </data>
+  <data name="PasswordsNothingCancelled" xml:space="preserve">
+    <value>Aucune modification annulée : aucune modification de mot de passe en file d’attente ne correspond.</value>
+  </data>
+  <data name="PasswordsAttemptedAgain" xml:space="preserve">
+    <value>Une nouvelle tentative de livraison sera effectuée pour {0}.</value>
+  </data>
+  <data name="PasswordsNotDelivered" xml:space="preserve">
+    <value>La livraison de {0} est arrêtée.</value>
+  </data>
+  <data name="PasswordsRetryPending" xml:space="preserve">
+    <value>Tenter la livraison maintenant plutôt que d’attendre la prochaine tentative prévue.</value>
+  </data>
+  <data name="PasswordsRetryCancelled" xml:space="preserve">
+    <value>Remettre cette modification dans la file et tenter la livraison. Elle n’est livrée que si elle n’a pas expiré entre-temps.</value>
+  </data>
+  <data name="PasswordsRetryDefault" xml:space="preserve">
+    <value>Tenter à nouveau la livraison. Traitez d’abord la cause du refus par la cible, sinon la modification sera à nouveau suspendue.</value>
+  </data>
+  <data name="ExchangeQueueHeading" xml:space="preserve">
+    <value>File d’attente Exchange</value>
+  </data>
+  <data name="ExchangeQueueIntro" xml:space="preserve">
+    <value>Modifications de destinataires que JIM a mises en file pour Exchange. Une modification quitte cette file une fois qu’Exchange l’a appliquée ou qu’elle n’est plus voulue ; tout ce qui figure ici reste dû ou attend une intervention humaine.</value>
+  </data>
+  <data name="ExchangeQueuedTooltip" xml:space="preserve">
+    <value>Modifications en attente de leur première tentative, ou en cours d’application par Exchange. Personne n’a rien à faire.</value>
+  </data>
+  <data name="ExchangeBeingApplied" xml:space="preserve">
+    <value>{0} en cours d’application</value>
+  </data>
+  <data name="ExchangeHeldOne" xml:space="preserve">
+    <value>1 de plus en attente</value>
+  </data>
+  <data name="ExchangeHeldOther" xml:space="preserve">
+    <value>{0} de plus en attente</value>
+  </data>
+  <data name="ExchangeHeldTooltip" xml:space="preserve">
+    <value>Ces systèmes connectés ne gèrent plus les destinataires Exchange : leurs modifications attendent sans être tentées. Elles sont livrées dès que chacun gère de nouveau les destinataires Exchange.</value>
+  </data>
+  <data name="ExchangeRetrying" xml:space="preserve">
+    <value>Nouvelle tentative</value>
+  </data>
+  <data name="ExchangeRetryingTooltip" xml:space="preserve">
+    <value>Une tentative a échoué d’une manière susceptible de se résorber d’elle-même, par exemple une réplication en cours ou un serveur qui n’a pas répondu. JIM réessaie à intervalles croissants, et suspend la modification si l’échec persiste au-delà de 24 heures.</value>
+  </data>
+  <data name="ExchangeParkedTooltip" xml:space="preserve">
+    <value>Exchange a refusé ces modifications, JIM n’a pas la permission de les effectuer, ou elles ont continué d’échouer pendant 24 heures. JIM a cessé d’essayer : elles attendent une intervention humaine. Traitez la cause donnée par Exchange, puis relancez-les.</value>
+  </data>
+  <data name="ExchangeRefused" xml:space="preserve">
+    <value>Refusée</value>
+  </data>
+  <data name="ExchangeRefusedTooltip" xml:space="preserve">
+    <value>JIM n’a pas demandé à Exchange d’effectuer ces modifications, car ce qui est déclaré ne peut pas être effectué, par exemple une boîte aux lettres sur un contact, ou il s’agit d’un changement de type de destinataire que JIM n’effectue pas. Une nouvelle tentative ne peut rien y changer. Corrigez ce qui est déclaré pour le compte : la prochaine synchronisation remplacera la modification.</value>
+  </data>
+  <data name="ExchangeNotMadeOne" xml:space="preserve">
+    <value>1 est un changement de type de destinataire non effectué</value>
+  </data>
+  <data name="ExchangeNotMadeOther" xml:space="preserve">
+    <value>{0} sont des changements de type de destinataire non effectués</value>
+  </data>
+  <data name="ExchangeShowingNarrowed" xml:space="preserve">
+    <value>Affichage des modifications Exchange en file d’attente d’un seul objet Metaverse. Les totaux ci-dessus concernent toute la file.</value>
+  </data>
+  <data name="ExchangeSingularName" xml:space="preserve">
+    <value>modification Exchange en file d’attente</value>
+  </data>
+  <data name="ExchangePluralName" xml:space="preserve">
+    <value>modifications Exchange en file d’attente</value>
+  </data>
+  <data name="ExchangeColChange" xml:space="preserve">
+    <value>Modification</value>
+  </data>
+  <data name="ExchangeStatusTooltip" xml:space="preserve">
+    <value>État de la modification et de ce qu’elle attend. Triée par prochaine tentative : les modifications sur le point d’être tentées viennent en premier.</value>
+  </data>
+  <data name="ExchangeColReason" xml:space="preserve">
+    <value>Motif</value>
+  </data>
+  <data name="ExchangeReasonTooltip" xml:space="preserve">
+    <value>Pourquoi la modification n’a pas été effectuée, dans les mots d’Exchange lorsqu’Exchange en a donné. La solution se trouve en général hors de JIM : une permission, une stratégie ou une valeur déjà utilisée.</value>
+  </data>
+  <data name="ExchangeRetryOneAria" xml:space="preserve">
+    <value>Relancer cette modification Exchange</value>
+  </data>
+  <data name="ExchangeNoSearchMatch" xml:space="preserve">
+    <value>Aucune modification Exchange en file d’attente ne correspond à « {0} »</value>
+  </data>
+  <data name="ExchangeNoFilterMatch" xml:space="preserve">
+    <value>Aucune modification Exchange en file d’attente ne correspond à ces filtres</value>
+  </data>
+  <data name="ExchangeEmptyTitle" xml:space="preserve">
+    <value>Aucune modification n’attend Exchange</value>
+  </data>
+  <data name="ExchangeEmptyHint" xml:space="preserve">
+    <value>Les modifications de destinataires apparaissent ici pendant leur acheminement vers Exchange, et quittent la file une fois qu’Exchange les a appliquées.</value>
+  </data>
+  <data name="ExchangeDescribeOne" xml:space="preserve">
+    <value>1 modification Exchange</value>
+  </data>
+  <data name="ExchangeDescribeOther" xml:space="preserve">
+    <value>{0} modifications Exchange</value>
+  </data>
+  <data name="ExchangeRetryShownConfirm" xml:space="preserve">
+    <value>Relancer tout ce qui est affiché ({0}) ? Les modifications suspendues et en nouvelle tentative sont relancées ; les autres sont déjà dues, en cours d’application, ou attendent une modification de ce qui est déclaré.</value>
+  </data>
+  <data name="ExchangeRetryTitle" xml:space="preserve">
+    <value>Relancer les modifications Exchange</value>
+  </data>
+  <data name="ExchangeNothingRetried" xml:space="preserve">
+    <value>Aucune relance : aucune modification correspondante n’est suspendue ou en nouvelle tentative.</value>
+  </data>
+  <data name="ExchangeAttemptedAgain" xml:space="preserve">
+    <value>Une nouvelle tentative sera effectuée dans quelques secondes pour {0}.</value>
+  </data>
+  <data name="ExchangeRetryNow" xml:space="preserve">
+    <value>Tenter la modification maintenant plutôt que d’attendre la prochaine tentative prévue.</value>
+  </data>
+  <data name="ExchangeRetryDefault" xml:space="preserve">
+    <value>Tenter à nouveau la modification, avec ses tentatives et son délai de 24 heures remis à zéro. Traitez d’abord la cause donnée par Exchange, sinon elle sera à nouveau suspendue.</value>
+  </data>
+  <data name="QueueNothingMatches" xml:space="preserve">
+    <value>Aucun élément en file ne correspond aux filtres.</value>
+  </data>
+  <data name="QueueNothingQueued" xml:space="preserve">
+    <value>Rien n’est en file d’attente.</value>
+  </data>
+  <data name="QueueNextAtBottom" xml:space="preserve">
+    <value>Prochaine exécution en bas, près des tâches en cours</value>
+  </data>
+  <data name="QueueNothingRunningMatches" xml:space="preserve">
+    <value>Aucune tâche en cours ne correspond aux filtres.</value>
+  </data>
+  <data name="QueueNothingRunning" xml:space="preserve">
+    <value>Aucune tâche n’est en cours.</value>
+  </data>
+  <data name="QueueColRuns" xml:space="preserve">
+    <value>Ordre</value>
+  </data>
+  <data name="QueueColEstStart" xml:space="preserve">
+    <value>Début estimé</value>
+  </data>
+  <data name="QueueColEstFinish" xml:space="preserve">
+    <value>Fin estimée</value>
+  </data>
+  <data name="QueueColProgress" xml:space="preserve">
+    <value>Progression</value>
+  </data>
+  <data name="QueueEstStartTooltip" xml:space="preserve">
+    <value>Moment où chaque tâche devrait démarrer. Estimé à partir de la médiane des cinq dernières exécutions réussies de chaque profil d’exécution qui la précède. Vide lorsqu’il n’y a rien à estimer.</value>
+  </data>
+  <data name="QueueEstFinishTooltip" xml:space="preserve">
+    <value>Moment où chaque exécution devrait se terminer. Estimé à partir de la médiane des cinq dernières exécutions réussies du profil d’exécution, et jamais plus tôt que ne l’exige son étape en cours. Vide lorsqu’il n’y a rien à estimer.</value>
+  </data>
+  <data name="QueueSameTimeQueued" xml:space="preserve">
+    <value>Démarre en même temps que les autres tâches de son étape de planification</value>
+  </data>
+  <data name="QueueSameTimeRunning" xml:space="preserve">
+    <value>En cours en même temps que les autres tâches de son étape de planification</value>
+  </data>
+  <data name="QueueWaitingPrevious" xml:space="preserve">
+    <value>En attente de l’étape précédente</value>
+  </data>
+  <data name="QueueProcessing" xml:space="preserve">
+    <value>En traitement</value>
+  </data>
+  <data name="QueueCancelling" xml:space="preserve">
+    <value>Annulation en cours</value>
+  </data>
+  <data name="QueueShowFewer" xml:space="preserve">
+    <value>Afficher moins</value>
+  </data>
+  <data name="QueueShowMore" xml:space="preserve">
+    <value>Afficher {0} de plus</value>
+  </data>
+  <data name="QueueCollapseSection" xml:space="preserve">
+    <value>Replier « {0} »</value>
+  </data>
+  <data name="QueueExpandSection" xml:space="preserve">
+    <value>Déplier « {0} »</value>
+  </data>
+  <data name="QueueCancelTask" xml:space="preserve">
+    <value>Annuler la tâche</value>
+  </data>
+  <data name="QueueKeepIt" xml:space="preserve">
+    <value>Conserver</value>
+  </data>
+  <data name="QueueCancelTaskConfirm" xml:space="preserve">
+    <value>Voulez-vous vraiment annuler la tâche « {0} » ?</value>
+  </data>
+  <data name="QueueCancelRequested" xml:space="preserve">
+    <value>Annulation de la tâche demandée.</value>
+  </data>
+  <data name="QueueCancelExecTitle" xml:space="preserve">
+    <value>Annuler l’exécution de planification</value>
+  </data>
+  <data name="QueueThisExecution" xml:space="preserve">
+    <value>cette exécution de planification</value>
+  </data>
+  <data name="QueueCancelExecConfirm" xml:space="preserve">
+    <value>Voulez-vous vraiment annuler « {0} » ? Toutes les tâches seront annulées immédiatement, y compris celles en cours de traitement.</value>
+  </data>
+  <data name="QueueCancelExec" xml:space="preserve">
+    <value>Annuler l’exécution</value>
+  </data>
+  <data name="QueueKeepRunning" xml:space="preserve">
+    <value>Laisser en cours</value>
+  </data>
+  <data name="QueueExecCancelled" xml:space="preserve">
+    <value>Exécution de planification annulée.</value>
+  </data>
+  <data name="QueueExecCancelFailed" xml:space="preserve">
+    <value>Impossible d’annuler l’exécution ; elle est peut-être déjà terminée.</value>
+  </data>
+  <data name="QueueTasksCount" xml:space="preserve">
+    <value>{0} tâches</value>
+  </data>
+  <data name="QueueStepOf" xml:space="preserve">
+    <value>Étape {0} sur {1}</value>
+  </data>
+  <data name="QueueTasksAcross" xml:space="preserve">
+    <value>{0} tâches réparties sur {1} étapes</value>
+  </data>
+  <data name="ScheduleExecTitle" xml:space="preserve">
+    <value>Exécution de planification</value>
+  </data>
+  <data name="ScheduleExecTitleNamed" xml:space="preserve">
+    <value>Exécution de planification : {0}</value>
+  </data>
+  <data name="ScheduleExecLabel" xml:space="preserve">
+    <value>Exécution de planification :</value>
+  </data>
+  <data name="ScheduleExecNotFoundName" xml:space="preserve">
+    <value>Introuvable</value>
+  </data>
+  <data name="ScheduleExecInfo" xml:space="preserve">
+    <value>Une exécution d’une planification : chacune de ses étapes, l’activité démarrée par chaque étape, et la façon dont l’exécution s’est terminée.</value>
+  </data>
+  <data name="ScheduleExecSchedule" xml:space="preserve">
+    <value>Planification :</value>
+  </data>
+  <data name="ScheduleExecQueuedLabel" xml:space="preserve">
+    <value>Mise en file :</value>
+  </data>
+  <data name="ScheduleExecStartedLabel" xml:space="preserve">
+    <value>Démarrage :</value>
+  </data>
+  <data name="ScheduleExecCompletedLabel" xml:space="preserve">
+    <value>Terminée :</value>
+  </data>
+  <data name="ScheduleExecDurationLabel" xml:space="preserve">
+    <value>Durée :</value>
+  </data>
+  <data name="ScheduleExecInitiatedLabel" xml:space="preserve">
+    <value>Initiée par :</value>
+  </data>
+  <data name="ScheduleExecFailedNoMessage" xml:space="preserve">
+    <value>L’exécution a échoué. Aucun message d’erreur n’a été enregistré ; les états des étapes ci-dessous indiquent où elle s’est arrêtée.</value>
+  </data>
+  <data name="ScheduleExecCancelFailed" xml:space="preserve">
+    <value>Impossible d’annuler l’exécution ; elle est peut-être déjà terminée.</value>
+  </data>
+  <data name="ScheduleExecStepSingular" xml:space="preserve">
+    <value>Étape</value>
+  </data>
+  <data name="ScheduleExecSearchSteps" xml:space="preserve">
+    <value>Rechercher des étapes</value>
+  </data>
+  <data name="ScheduleExecParallel" xml:space="preserve">
+    <value>Parallèle</value>
+  </data>
+  <data name="ScheduleExecParallelTooltip" xml:space="preserve">
+    <value>Étape parallèle ; s’exécute en même temps que les autres étapes à cette position</value>
+  </data>
+  <data name="ScheduleExecColActivity" xml:space="preserve">
+    <value>Activité</value>
+  </data>
+  <data name="ScheduleExecViewActivity" xml:space="preserve">
+    <value>Voir l’activité</value>
+  </data>
+  <data name="ScheduleExecNoStepMatch" xml:space="preserve">
+    <value>Aucune étape ne correspond à « {0} »</value>
+  </data>
+  <data name="ScheduleExecNoSteps" xml:space="preserve">
+    <value>Cette exécution ne comporte aucune étape à afficher</value>
+  </data>
+  <data name="ScheduleExecNoStepsHint" xml:space="preserve">
+    <value>Sa planification a été supprimée : les définitions des étapes ne sont plus disponibles.</value>
+  </data>
+  <data name="ScheduleExecNotFound" xml:space="preserve">
+    <value>Exécution de planification introuvable.</value>
+  </data>
+  <data name="ScheduleExecBackToOps" xml:space="preserve">
+    <value>Retour aux opérations</value>
+  </data>
+  <data name="HealthStripTitle" xml:space="preserve">
+    <value>État des services</value>
+  </data>
+  <data name="HealthStripLive" xml:space="preserve">
+    <value>Mis à jour en direct</value>
+  </data>
+  <data name="HealthStripReconnecting" xml:space="preserve">
+    <value>Reconnexion des mises à jour en direct</value>
+  </data>
+  <data name="HealthStripLiveOn" xml:space="preserve">
+    <value>Les notifications de la base de données atteignent directement les pages ouvertes.</value>
+  </data>
+  <data name="HealthStripLiveOff" xml:space="preserve">
+    <value>L’écouteur des notifications de la base de données n’est pas connecté ; les pages se rafraîchissent entre-temps à intervalles réguliers.</value>
+  </data>
+  <data name="HealthStripShow" xml:space="preserve">
+    <value>Afficher les services</value>
+  </data>
+  <data name="HealthStripHide" xml:space="preserve">
+    <value>Masquer les services</value>
+  </data>
+  <data name="HealthStripNext" xml:space="preserve">
+    <value>Prochaine :</value>
+  </data>
+  <data name="HealthStripNoSchedules" xml:space="preserve">
+    <value>Aucune planification à venir</value>
+  </data>
+  <data name="HealthStripActivityNext" xml:space="preserve">
+    <value>{0} · Prochaine : {1} {2}</value>
+  </data>
+  <data name="HealthStripActivityNone" xml:space="preserve">
+    <value>{0} · aucune planification à venir</value>
+  </data>
+  <data name="HealthStripDetails" xml:space="preserve">
+    <value>Détails</value>
+  </data>
+  <data name="HealthStripNeverReported" xml:space="preserve">
+    <value>Ce service n’a encore jamais signalé d’activité, il n’y a donc aucune instance à identifier.</value>
+  </data>
+  <data name="HealthStripHost" xml:space="preserve">
+    <value>Hôte</value>
+  </data>
+  <data name="HealthStripVersion" xml:space="preserve">
+    <value>Version</value>
+  </data>
+  <data name="HealthStripMemory" xml:space="preserve">
+    <value>Mémoire</value>
+  </data>
+  <data name="HealthStripInstance" xml:space="preserve">
+    <value>Instance</value>
+  </data>
+  <data name="HealthStripSkew" xml:space="preserve">
+    <value>diffère du portail</value>
+  </data>
+  <data name="HealthStripSkewTooltip" xml:space="preserve">
+    <value>Ce service s’exécute avec une autre version que le portail web ; mettez-les à niveau ensemble.</value>
+  </data>
+  <data name="HealthStripWhatHost" xml:space="preserve">
+    <value>hôte</value>
+  </data>
+  <data name="HealthStripWhatVersion" xml:space="preserve">
+    <value>version</value>
+  </data>
+  <data name="HealthStripWhatInstance" xml:space="preserve">
+    <value>instance</value>
+  </data>
+  <data name="HealthStripCopyTooltip" xml:space="preserve">
+    <value>Copier : {0}</value>
+  </data>
+  <data name="HealthStripCopyAria" xml:space="preserve">
+    <value>Copier {0}</value>
+  </data>
+  <data name="HealthStripNoClipboard" xml:space="preserve">
+    <value>L’accès au presse-papiers nécessite une connexion HTTPS</value>
+  </data>
+  <data name="HealthStripCopied" xml:space="preserve">
+    <value>{0} copié dans le presse-papiers.</value>
+  </data>
+  <data name="HealthStripCopyFailed" xml:space="preserve">
+    <value>Échec de la copie : {0}. Sélectionnez-le et copiez-le à la main.</value>
+  </data>
+  <data name="HealthStripStarted" xml:space="preserve">
+    <value>Démarré {0}</value>
+  </data>
+  <data name="HealthStripConditionTitle" xml:space="preserve">
+    <value>{0}. {1}</value>
+  </data>
+  <data name="GenValTitle" xml:space="preserve">
+    <value>Valeurs générées en attente d’une décision</value>
+  </data>
+  <data name="GenValIntro" xml:space="preserve">
+    <value>Une cible a refusé ces valeurs générées, car elles étaient déjà utilisées, et JIM n’a pas pu les corriger en toute sécurité. Leurs exportations sont suspendues jusqu’à ce que vous autorisiez le renommage ou que vous retentiez la même valeur.</value>
+  </data>
+  <data name="GenValNeedsDecision" xml:space="preserve">
+    <value>Décision requise</value>
+  </data>
+  <data name="GenValExportsHeld" xml:space="preserve">
+    <value>Exportations suspendues jusqu’à votre action</value>
+  </data>
+  <data name="GenValRenameAllowed" xml:space="preserve">
+    <value>Renommage autorisé</value>
+  </data>
+  <data name="GenValRenamedNext" xml:space="preserve">
+    <value>Renommée à la prochaine exportation</value>
+  </data>
+  <data name="GenValCorrectedTitle" xml:space="preserve">
+    <value>Corrigées, 7 derniers jours</value>
+  </data>
+  <data name="GenValCorrectedTooltip" xml:space="preserve">
+    <value>Valeurs qu’une cible a refusées car déjà utilisées, et que JIM a corrigées seule depuis le {0}. L’historique de chacune figure sur son objet Metaverse.</value>
+  </data>
+  <data name="GenValNoAction" xml:space="preserve">
+    <value>Aucune action requise</value>
+  </data>
+  <data name="GenValAll" xml:space="preserve">
+    <value>Tous</value>
+  </data>
+  <data name="GenValColAttribute" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="GenValColValue" xml:space="preserve">
+    <value>Valeur</value>
+  </data>
+  <data name="GenValColWhy" xml:space="preserve">
+    <value>Motif de la mise en attente</value>
+  </data>
+  <data name="GenValColSince" xml:space="preserve">
+    <value>Depuis</value>
+  </data>
+  <data name="GenValSingular" xml:space="preserve">
+    <value>valeur en attente</value>
+  </data>
+  <data name="GenValPlural" xml:space="preserve">
+    <value>valeurs en attente</value>
+  </data>
+  <data name="GenValTryAllCount" xml:space="preserve">
+    <value>Réessayer toutes les {0}</value>
+  </data>
+  <data name="GenValAllowRename" xml:space="preserve">
+    <value>Autoriser le renommage…</value>
+  </data>
+  <data name="GenValTryAgain" xml:space="preserve">
+    <value>Réessayer</value>
+  </data>
+  <data name="GenValNoFilterMatch" xml:space="preserve">
+    <value>Aucune valeur en attente ne correspond à ces filtres</value>
+  </data>
+  <data name="GenValNoFilterHint" xml:space="preserve">
+    <value>Effacez les filtres pour voir toutes les valeurs en attente.</value>
+  </data>
+  <data name="GenValEmptyTitle" xml:space="preserve">
+    <value>Aucune décision n’est requise</value>
+  </data>
+  <data name="GenValEmptyHint" xml:space="preserve">
+    <value>Une valeur générée apparaît ici lorsqu’une cible la refuse car elle est déjà utilisée et que JIM ne peut pas la corriger en toute sécurité.</value>
+  </data>
+  <data name="OpsFilters" xml:space="preserve">
+    <value>Filtres</value>
+  </data>
+  <data name="OpsClear" xml:space="preserve">
+    <value>Effacer</value>
+  </data>
+  <data name="OpsQueueRunProfile" xml:space="preserve">
+    <value>Mettre un profil d’exécution en file</value>
+  </data>
+  <data name="OpsHasChildren" xml:space="preserve">
+    <value>Avec des activités enfants</value>
+  </data>
+  <data name="OpsScheduledOnly" xml:space="preserve">
+    <value>Planifiées uniquement</value>
+  </data>
+  <data name="OpsSelectedCount" xml:space="preserve">
+    <value>{0} sélectionnés</value>
+  </data>
+  <data name="QueueDialogNoSystemBefore" xml:space="preserve">
+    <value>Veuillez d’abord créer un</value>
+  </data>
+  <data name="QueueDialogNoSystemAfter" xml:space="preserve">
+    <value>.</value>
+  </data>
+  <data name="QueueDialogIntro" xml:space="preserve">
+    <value>L’exécution rejoint la fin de la file. Si rien d’autre n’est en file ni en cours, elle démarre immédiatement.</value>
+  </data>
+  <data name="QueueDialogSelectSystem" xml:space="preserve">
+    <value>Sélectionnez un système connecté</value>
+  </data>
+  <data name="QueueDialogProfileRequired" xml:space="preserve">
+    <value>Un profil d’exécution est obligatoire</value>
+  </data>
+  <data name="QueueDialogDisabled" xml:space="preserve">
+    <value>{0} (désactivé)</value>
+  </data>
+  <data name="QueueDialogQueue" xml:space="preserve">
+    <value>Mettre en file</value>
+  </data>
+  <data name="QueueDialogFailed" xml:space="preserve">
+    <value>Échec de la création de la tâche.</value>
+  </data>
+  <data name="QueueDialogAdded" xml:space="preserve">
+    <value>Tâche de synchronisation ajoutée.</value>
+  </data>
+  <data name="OpsPageInfo" xml:space="preserve">
+    <value>Ce que JIM fait actuellement, ce qu’il a fait et ce qui est planifié. La synchronisation et la livraison des mots de passe remontent ici.</value>
+  </data>
+  <data name="OpsDemoMode" xml:space="preserve">
+    <value>Mode démonstration : chaque section ci-dessous affiche des données d’exemple, et les actions qui modifieraient quoi que ce soit sont désactivées.</value>
+  </data>
+  <data name="OpsTabPasswords" xml:space="preserve">
+    <value>Mots de passe</value>
+  </data>
+  <data name="OpsTabExchange" xml:space="preserve">
+    <value>Exchange</value>
+  </data>
+  <data name="OpsTabGenerated" xml:space="preserve">
+    <value>Valeurs générées</value>
+  </data>
+  <data name="ExStopTitle" xml:space="preserve">
+    <value>Arrêter le provisionnement des destinataires Exchange ?</value>
+  </data>
+  <data name="ExStopIntroOne" xml:space="preserve">
+    <value>Cela supprime le {0} flux d’attributs qui définissent des attributs Exchange sur</value>
+  </data>
+  <data name="ExStopIntroOther" xml:space="preserve">
+    <value>Cela supprime les {0} flux d’attributs qui définissent des attributs Exchange sur</value>
+  </data>
+  <data name="ExStopThisRule" xml:space="preserve">
+    <value>cette règle de synchronisation</value>
+  </data>
+  <data name="ExStopIntroTail" xml:space="preserve">
+    <value>, une fois la règle enregistrée.</value>
+  </data>
+  <data name="ExStopAlertHead" xml:space="preserve">
+    <value>Les destinataires existants sont conservés en l’état.</value>
+  </data>
+  <data name="ExStopAlertBody" xml:space="preserve">
+    <value>Les objets déjà provisionnés conservent leurs destinataires : leur type de destinataire déclaré devient « Aucun », ce qui est signalé pour chaque objet et n’est pas appliqué dans Exchange. Les objets provisionnés à partir de maintenant n’ont aucun destinataire.</value>
+  </data>
+  <data name="ExStopConfirmOne" xml:space="preserve">
+    <value>Supprimer {0} flux d’attributs</value>
+  </data>
+  <data name="ExStopConfirmOther" xml:space="preserve">
+    <value>Supprimer {0} flux d’attributs</value>
+  </data>
+  <data name="QueueHeaderOpenTooltip" xml:space="preserve">
+    <value>Ouvrir cette exécution de planification : durées par étape, erreurs et activité produite par chaque étape</value>
+  </data>
+  <data name="QueueHeaderViewExecution" xml:space="preserve">
+    <value>Voir l’exécution</value>
+  </data>
+  <data name="QueueHeaderCancelSchedule" xml:space="preserve">
+    <value>Annuler la planification</value>
+  </data>
+  <data name="OpsChipConnectedSystem" xml:space="preserve">
+    <value>Système connecté : {0}</value>
+  </data>
+  <data name="OpsChipRunProfile" xml:space="preserve">
+    <value>Profil d’exécution : {0}</value>
+  </data>
+  <data name="OpsChipSchedule" xml:space="preserve">
+    <value>Planification : {0}</value>
+  </data>
+  <data name="OpsChipUnknownSchedule" xml:space="preserve">
+    <value>Planification inconnue</value>
+  </data>
+  <data name="OpsChipResult" xml:space="preserve">
+    <value>Résultat : {0}</value>
+  </data>
+  <data name="FailContinueSchedule" xml:space="preserve">
+    <value>Poursuivre la planification</value>
+  </data>
+  <data name="FailStopSchedule" xml:space="preserve">
+    <value>Arrêter la planification</value>
+  </data>
+  <data name="FailFollowSchedule" xml:space="preserve">
+    <value>Suivre la planification (actuellement : {0})</value>
+  </data>
+  <data name="FailWordContinue" xml:space="preserve">
+    <value>poursuivre</value>
+  </data>
+  <data name="FailWordStop" xml:space="preserve">
+    <value>arrêter</value>
+  </data>
+  <data name="FailEffectiveContinues" xml:space="preserve">
+    <value>Se poursuit en cas d’échec</value>
+  </data>
+  <data name="FailEffectiveStops" xml:space="preserve">
+    <value>S’arrête en cas d’échec</value>
+  </data>
+  <data name="FailFromSchedule" xml:space="preserve">
+    <value>Depuis la planification</value>
+  </data>
+  <data name="FailSetOnStep" xml:space="preserve">
+    <value>Défini sur cette étape</value>
+  </data>
+  <data name="FailContinuedFromSchedule" xml:space="preserve">
+    <value>Cette étape suit la planification, qui est configurée pour se poursuivre en cas d’échec d’une étape.</value>
+  </data>
+  <data name="FailContinuedOnStep" xml:space="preserve">
+    <value>Cette étape est configurée pour laisser la planification se poursuivre en cas d’échec.</value>
+  </data>
+  <data name="ScheduleExecOfTotal" xml:space="preserve">
+    <value>{0} sur {1}</value>
+  </data>
+</root>

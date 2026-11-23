@@ -19,37 +19,49 @@ public static class OperationsSchedulesDemoData
     public static NextDueSchedule NextDue(DateTime now) => new()
     {
         Id = Guid.NewGuid(),
+        // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
         Name = "Business Hours Delta Cycle",
         NextRunTime = now.AddMinutes(14)
     };
 
     public static List<ScheduleHeader> Build(DateTime now) =>
     [
+        // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
         Schedule("Nightly Full Sync", now, steps: 5, description: "Full import and synchronisation of every system, then exports.",
             pattern: SchedulePatternType.SpecificTimes, runTimes: "02:00", nextRun: now.Date.AddDays(1).AddHours(2),
             last: ScheduleExecutionStatus.Complete, lastRun: now.Date.AddHours(2)),
+        // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
         Schedule("Business Hours Delta Cycle", now, steps: 8,
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             description: "Delta imports from HR and both directories every 15 minutes during the working day, synchronising each "
+                // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
                 + "and exporting the results, so joiners can sign in within the hour and leavers lose access before they reach the car park.",
             pattern: SchedulePatternType.Interval, daysOfWeek: "1,2,3,4,5", interval: 15, unit: ScheduleIntervalUnit.Minutes,
             windowStart: "07:00", windowEnd: "19:00", nextRun: now.AddMinutes(14),
             last: ScheduleExecutionStatus.InProgress, lastRun: now.AddMinutes(-2), currentStep: 3),
+        // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
         Schedule("Weekend Reconciliation", now, steps: 3, description: null,
             pattern: SchedulePatternType.SpecificTimes, daysOfWeek: "0,6", runTimes: "06:00,12:00,18:00", nextRun: now.Date.AddDays(1).AddHours(6),
             last: ScheduleExecutionStatus.CompleteWithError, lastRun: now.AddDays(-5), failedSteps: [1]),
+        // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
         Schedule("Cloud Provisioning", now, steps: 3, description: "Exports to the cloud directory.",
             pattern: SchedulePatternType.Interval, interval: 2, unit: ScheduleIntervalUnit.Hours, nextRun: now.AddMinutes(48),
             last: ScheduleExecutionStatus.Failed, lastRun: now.AddMinutes(-72), currentStep: 1,
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             error: "Step 2 failed: the service refused the connection."),
+        // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
         Schedule("Month-End Audit Export", now, steps: 2, description: "Runs at 23:00 on the last day of each month.",
             pattern: SchedulePatternType.Custom, cron: "0 23 L * *", nextRun: now.Date.AddDays(24).AddHours(23),
             last: ScheduleExecutionStatus.Cancelled, lastRun: now.AddDays(-6)),
+        // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
         Schedule("Directory Restructure", now, steps: 4, description: "Moves accounts into the new OU structure.",
             pattern: SchedulePatternType.SpecificTimes, runTimes: "22:00", nextRun: null, enabled: false,
             last: ScheduleExecutionStatus.Paused, lastRun: now.AddDays(-1), currentStep: 2),
+        // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
         Schedule("Ad Hoc HR Catch-Up", now, steps: 2, description: "Started by hand when HR sends a late batch.",
             trigger: ScheduleTriggerType.Manual, nextRun: null,
             last: ScheduleExecutionStatus.Queued, lastRun: now.AddMinutes(-1)),
+        // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
         Schedule("New Starter Mailboxes", now, steps: 1, description: "Created this week; has not run yet.",
             pattern: SchedulePatternType.SpecificTimes, daysOfWeek: "1,2,3,4,5", runTimes: "08:30", nextRun: now.Date.AddDays(1).AddHours(8).AddMinutes(30)),
     ];
