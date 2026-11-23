@@ -54,8 +54,11 @@
 #             results to the metrics API (as for every integration run); unset, results stay local
 #
 # Timing: 01:23 UTC. The non-functional requirement is a full nightly inside four hours (a 1 to 2 minute revert per
-# scenario per domain controller at the Medium template), so it is finished well before the working day, and the
-# job's timeout is a little over that. ad-lab-rebuild.yml (after Patch Tuesday) shares the concurrency group.
+# scenario per domain controller at the Medium template), so it is finished well before the working day. A full run
+# over four hours is reported, not stopped: "Summarise the run" warns, naming the time. The job's timeout (six hours)
+# is there to stop a run that has hung. Until November 2026 the timeout was five hours and doubled as the target,
+# and the nightly of 23 November (45144900858), slowed by a toolbox rebuild, was cancelled at 300 minutes with most
+# of its scenarios passed and nothing reported. ad-lab-rebuild.yml (after Patch Tuesday) shares the concurrency group.
 # The minute is deliberately off the hour: GitHub delays scheduled runs under load, most at the top of the hour, and at
 # '0 2 * * *' the nightly was created between 06:31 and 07:16 UTC every day, finishing mid-morning. At '23 1 * * *' it
 # fared no better (created between 07:16 and 09:17 UTC through November 2026), so the lab host starts the nightly
@@ -145,7 +148,7 @@ jobs:
     if: ${{ !cancelled() && (needs.nightly.result != 'success' || needs.nightly.outputs.run == 'true') && (github.event_name != 'schedule' || github.ref == 'refs/heads/main') }}
     runs-on: [self-hosted, jim-ad-lab]
     environment: jim-ad-lab
-    timeout-minutes: 300
+    timeout-minutes: 360
     # One lab run at a time, and never cancelled: a run cancelled part way leaves the domain controllers reverted
     # to a checkpoint mid-scenario (or, for the rebuild, the live set switched off), and the next run's revert
     # would find them in whatever state the interruption left. A newer run waits its turn instead. The rebuild
@@ -174,6 +177,10 @@ jobs:
       JIM_AD_LAB_EXCHANGE_SOURCE_ADDRESS: ${{ vars.JIM_AD_LAB_EXCHANGE_SOURCE_ADDRESS }}
 
     steps:
+      # For the four-hour check in "Summarise the run" (see Timing above).
+      - name: Note when the run started
+        run: '"JIM_AD_LAB_RUN_STARTED=$([DateTime]::UtcNow.ToString(''o''))" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8'
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
       # Fail in one place, naming what is missing, rather than a dozen steps later with a harness error.
@@ -449,6 +456,7 @@ jobs:
           SIGN_IN_OUTCOME: ${{ steps.sign_in.outcome }}
           ENTRA_OUTCOME: ${{ steps.entra.outcome }}
           ENTRA_CONNECTOR_OUTCOME: ${{ steps.entra_connector.outcome }}
+          SCENARIO_INPUT: ${{ inputs.scenario }}
         run: |
           Import-Module ./test/integration/ad-lab/guest/LabDomainController.psm1 -Force
           $results = Join-Path (Get-Location) 'test/integration/results'
@@ -471,6 +479,19 @@ jobs:
           }
           $lines += ''
           $lines += "Suite: $env:SUITE_OUTCOME. Probes: $env:PROBES_OUTCOME. AD FS sign-in checks: $env:SIGN_IN_OUTCOME. Entra ID sign-in checks: $env:ENTRA_OUTCOME. Entra ID Connector checks: $env:ENTRA_CONNECTOR_OUTCOME."
+
+          # The four-hour target (see Timing), for full runs only: one scenario run by hand has no target.
+          if ($env:JIM_AD_LAB_RUN_STARTED -and ($env:GITHUB_EVENT_NAME -eq 'schedule' -or $env:SCENARIO_INPUT -in @('', 'All'))) {
+            $minutes = [int]([DateTime]::UtcNow - [DateTime]::Parse($env:JIM_AD_LAB_RUN_STARTED, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind)).TotalMinutes
+            $lines += ''
+            if ($minutes -gt 240) {
+              Write-Host "::warning title=The nightly is over its four-hour target::This run took $minutes minutes to reach its summary; the target is 240 and the job's timeout 360. See 'Timing' in ad-lab.yml."
+              $lines += "**Over target:** the run took $minutes minutes to reach this summary; the target is 240 (timeout 360)."
+            }
+            else {
+              $lines += "Run time to this summary: $minutes minutes (target 240)."
+            }
+          }
           $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
       # Artefacts are readable by anyone who can read the repository, and GitHub only masks secrets in the log, not

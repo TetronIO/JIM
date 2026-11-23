@@ -1927,9 +1927,23 @@ function Invoke-ActiveDirectoryLabToolbox {
     if ($Action -eq "Up") {
         # The certificates folder is bind-mounted into the toolbox; create it first, or Docker creates it as root.
         New-Item -ItemType Directory -Path (Join-Path $scriptRoot "ad-lab-certs") -Force | Out-Null
-        # --build, as the SCIM provider: the lab runner keeps its images between runs, so without it a change to
-        # the toolbox's Dockerfile (kpasswd, #2286) would never reach the image. Unchanged, the build is cached.
-        $toolboxResult = docker compose @script:IntegrationComposeArgs --profile ad-lab up -d --build ldap-toolbox 2>&1
+        # Built once per run, with the JIM images: the lab runner keeps its images between runs, so without a build a
+        # change to the toolbox's Dockerfile (kpasswd, #2286) would never reach the image. The scenarios after the
+        # first arrive with -SkipBuild and reuse it. It used to be rebuilt before every scenario; cached that cost
+        # about 25 seconds each, and when the cache missed, every scenario repeated the apt and PowerShell downloads
+        # (nightly 45144900858 lost about 75 minutes that way and ran out of time). The output is shown so a slow
+        # build can be diagnosed from the log. Under -SkipBuild, "up" still builds the image if it does not exist.
+        if (-not $SkipBuild) {
+            $buildStart = Get-Date
+            $buildResult = docker compose @script:IntegrationComposeArgs --profile ad-lab build ldap-toolbox 2>&1
+            $buildExit = $LASTEXITCODE
+            Write-Host "${GRAY}$($buildResult | Out-String)${NC}"
+            if ($buildExit -ne 0) {
+                throw "Could not build the LDAP toolbox (jim-ldap-toolbox): $($buildResult | Out-String)"
+            }
+            Write-Host ("${GRAY}  LDAP toolbox image built in {0:N0}s${NC}" -f ((Get-Date) - $buildStart).TotalSeconds)
+        }
+        $toolboxResult = docker compose @script:IntegrationComposeArgs --profile ad-lab up -d ldap-toolbox 2>&1
     }
     else {
         $toolboxResult = docker compose @script:IntegrationComposeArgs --profile ad-lab stop ldap-toolbox 2>&1
