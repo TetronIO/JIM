@@ -1026,4 +1026,260 @@
     <value>Your hierarchy changes have been saved.</value>
     <comment>Success snackbar.</comment>
   </data>
+  <data name="PreviewTitle" xml:space="preserve">
+    <value>Schema Refresh Preview</value>
+    <comment>Panel heading.</comment>
+  </data>
+  <data name="PreviewIntro" xml:space="preserve">
+    <value>The Connected System reported the changes below. {0}; review them, then decide how to proceed.</value>
+    <comment>Panel intro. {0} is the emphasised 'Nothing has been applied yet' (markup).</comment>
+  </data>
+  <data name="PreviewNothingApplied" xml:space="preserve">
+    <value>Nothing has been applied yet</value>
+    <comment>Emphasised in the panel intro.</comment>
+  </data>
+  <data name="PreviewDiscoveryText" xml:space="preserve">
+    <value>The Connector could not discover everything and worked around the gaps below. A partial read can make Object Types or Attributes appear removed when they are not; check these before applying.</value>
+    <comment>Text after the Discovery warnings label.</comment>
+  </data>
+  <data name="PreviewCredentialExplain" xml:space="preserve">
+    <value>These hold credential material and are never managed by JIM.</value>
+    <comment>Explains blocked credential attributes.</comment>
+  </data>
+  <data name="PreviewAdditions" xml:space="preserve">
+    <value>Additions: safe to apply</value>
+    <comment>Heading above the additions table.</comment>
+  </data>
+  <data name="PreviewAdditionsRenames" xml:space="preserve">
+    <value>Additions and renames: safe to apply</value>
+    <comment>Heading above the additions table when there are renames.</comment>
+  </data>
+  <data name="PreviewClassificationHeading" xml:space="preserve">
+    <value>Object Type classification: review before applying</value>
+    <comment>Heading above the classification changes.</comment>
+  </data>
+  <data name="PreviewReclassifiedBody" xml:space="preserve">
+    <value>Applying this refresh can change {0}. By default, each object that would change Object Type is refused at the next import and reported as an {1} error; JIM keeps it exactly as it is, so nothing is deprovisioned. If the change is intended, run a Full Import Run Profile with {2} enabled to carry it out. Cancelling keeps the current classification.</value>
+    <comment>Warning body with three emphasised names (markup). Canceling is the US spelling.</comment>
+  </data>
+  <data name="PreviewReclassifiedWhich" xml:space="preserve">
+    <value>which Object Type existing entries resolve to</value>
+    <comment>Emphasised in the reclassified warning.</comment>
+  </data>
+  <data name="PreviewObjectTypeChangedError" xml:space="preserve">
+    <value>Object Type Changed</value>
+    <comment>Emphasised error name in the reclassified warning.</comment>
+  </data>
+  <data name="PreviewAllowObjectTypeChanges" xml:space="preserve">
+    <value>Allow Object Type Changes</value>
+    <comment>Emphasised option name in the reclassified warning.</comment>
+  </data>
+  <data name="PreviewLearnMore" xml:space="preserve">
+    <value>Learn more</value>
+    <comment>Link beside the reclassified warning.</comment>
+  </data>
+  <data name="PreviewDestructiveHeading" xml:space="preserve">
+    <value>Destructive: review before proceeding</value>
+    <comment>Heading above the removals table.</comment>
+  </data>
+  <data name="PreviewDependentsHeading" xml:space="preserve">
+    <value>Configuration that depends on these changes</value>
+    <comment>Heading above the dependents list.</comment>
+  </data>
+  <data name="PreviewSyncRuleWord" xml:space="preserve">
+    <value>Synchronisation Rule</value>
+    <comment>The noun before a Synchronisation Rule's link.</comment>
+  </data>
+  <data name="PreviewRuleBoundTo" xml:space="preserve">
+    <value>is bound to Object Type {0}, with {1}.</value>
+    <comment>Dependent list line after the rule's link. {0} is the Object Type name, {1} the mapping count.</comment>
+  </data>
+  <data name="PreviewMappingsOne" xml:space="preserve">
+    <value>{0} mapping</value>
+    <comment>Mapping count phrase, one. Plural rule: one form.</comment>
+  </data>
+  <data name="PreviewMappingsOther" xml:space="preserve">
+    <value>{0} mappings</value>
+    <comment>Mapping count phrase, several.</comment>
+  </data>
+  <data name="PreviewMappingWord" xml:space="preserve">
+    <value>Mapping</value>
+    <comment>Start of a dependent mapping line.</comment>
+  </data>
+  <data name="PreviewOnWord" xml:space="preserve">
+    <value>on</value>
+    <comment>Within a dependent mapping line.</comment>
+  </data>
+  <data name="PreviewMappingDisabled" xml:space="preserve">
+    <value>disabled.</value>
+    <comment>End of a disabled mapping line.</comment>
+  </data>
+  <data name="PreviewMappingDeleted" xml:space="preserve">
+    <value>deleted.</value>
+    <comment>End of a deleted mapping line.</comment>
+  </data>
+  <data name="PreviewRuleDisabledSuffix" xml:space="preserve">
+    <value>disabled, with its {0}.</value>
+    <comment>Follows the rule's link in the disable plan. {0} is the mapping count phrase.</comment>
+  </data>
+  <data name="PreviewRuleDeletedSuffix" xml:space="preserve">
+    <value>deleted, with its {0}.</value>
+    <comment>Follows the rule's link in the remove plan. {0} is the mapping count phrase.</comment>
+  </data>
+  <data name="PreviewMatchingRule" xml:space="preserve">
+    <value>Object Matching Rule on {0}: {1}</value>
+    <comment>A matching rule that depends on a removed attribute. {0} is its context, {1} the reason.</comment>
+  </data>
+  <data name="PreviewReaderLine" xml:space="preserve">
+    <value>{0} reads an attribute the Connected System no longer reports.</value>
+    <comment>A configuration item that reads a removed attribute.</comment>
+  </data>
+  <data name="PreviewOpen" xml:space="preserve">
+    <value>Open</value>
+    <comment>Link to a configuration item that reads a removed attribute.</comment>
+  </data>
+  <data name="PreviewRemovalUnavailable" xml:space="preserve">
+    <value>Apply &amp; Remove is unavailable.</value>
+    <comment>Emphasised lead of the removal-refused notice.</comment>
+  </data>
+  <data name="PreviewRemovalRefused" xml:space="preserve">
+    <value>{0} It would delete attributes that {1} still read, and JIM does not remove those for you: a Scoping Criterion left reading nothing takes objects out of scope. Change them first, or use {2}, which keeps the attributes.</value>
+    <comment>Removal-refused notice. {0} is the emphasised lead, {1} the reader count phrase, {2} the disable option's name.</comment>
+  </data>
+  <data name="PreviewReaderCountOne" xml:space="preserve">
+    <value>{0} configuration item above</value>
+    <comment>Count phrase for the removal-refused notice, one item. Plural rule: one form.</comment>
+  </data>
+  <data name="PreviewReaderCountOther" xml:space="preserve">
+    <value>{0} configuration items above</value>
+    <comment>Count phrase for the removal-refused notice, several items.</comment>
+  </data>
+  <data name="PreviewRetainedBody" xml:space="preserve">
+    <value>Object Types and Attributes the Connected System no longer reports are {0} in JIM when you apply; nothing is deleted, but their values stop refreshing, and objects of a removed Object Type will be obsoleted by the next Full Import whether or not you apply. Attribute definition changes are applied, and a mapping validated against the old definition may no longer behave as intended.</value>
+    <comment>Warning. {0} is the emphasised word 'retained' (markup).</comment>
+  </data>
+  <data name="PreviewRetainedWord" xml:space="preserve">
+    <value>retained</value>
+    <comment>Emphasised in the retained warning.</comment>
+  </data>
+  <data name="PreviewActionRequiredText" xml:space="preserve">
+    <value>Some attributes that are no longer reported are still referenced by Synchronisation Rules. Please update your Synchronisation Rules to remove references to these attributes.</value>
+    <comment>Warning after the preview when attributes are still referenced.</comment>
+  </data>
+  <data name="PreviewApplyButton" xml:space="preserve">
+    <value>Apply Schema Changes</value>
+    <comment>Button: apply without removals.</comment>
+  </data>
+  <data name="PreviewApplyDisableButton" xml:space="preserve">
+    <value>Apply &amp; Disable Dependents…</value>
+    <comment>Button: opens the disable plan.</comment>
+  </data>
+  <data name="PreviewApplyRemoveButton" xml:space="preserve">
+    <value>Apply &amp; Remove…</value>
+    <comment>Button: opens the remove plan.</comment>
+  </data>
+  <data name="PreviewApplyDisableName" xml:space="preserve">
+    <value>Apply &amp; Disable Dependents</value>
+    <comment>The option's name, inside a sentence.</comment>
+  </data>
+  <data name="PreviewApplyRemoveName" xml:space="preserve">
+    <value>Apply &amp; Remove</value>
+    <comment>The option's name, inside a sentence.</comment>
+  </data>
+  <data name="PreviewDisableDialogTitle" xml:space="preserve">
+    <value>Apply schema and disable dependents?</value>
+    <comment>Disable plan dialog title.</comment>
+  </data>
+  <data name="PreviewDisableIntro" xml:space="preserve">
+    <value>The new schema is recorded, and everything below is {0} with the stated reason so nothing runs against entries the Connected System no longer reports. No objects or values are touched. Re-enabling is a manual choice per rule or mapping.</value>
+    <comment>Disable plan intro. {0} is the emphasised word 'disabled' (markup).</comment>
+  </data>
+  <data name="PreviewDisabledWord" xml:space="preserve">
+    <value>disabled</value>
+    <comment>Emphasised in the disable plan intro.</comment>
+  </data>
+  <data name="PreviewMatchingNoDisabled" xml:space="preserve">
+    <value>Object Matching has no disabled state, so these need your attention separately:</value>
+    <comment>Notice above the matching rules that cannot be disabled.</comment>
+  </data>
+  <data name="PreviewMatchingReason" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>A matching rule's context and reason. {0} is the context, {1} the reason.</comment>
+  </data>
+  <data name="PreviewBack" xml:space="preserve">
+    <value>Back</value>
+    <comment>Button closing a plan dialog.</comment>
+  </data>
+  <data name="PreviewApplyDisableConfirm" xml:space="preserve">
+    <value>Apply &amp; Disable</value>
+    <comment>Confirm button of the disable plan.</comment>
+  </data>
+  <data name="PreviewRemoveDialogTitle" xml:space="preserve">
+    <value>Apply schema and remove dependents?</value>
+    <comment>Remove plan dialog title.</comment>
+  </data>
+  <data name="PreviewDeletesLead" xml:space="preserve">
+    <value>This deletes configuration and identity data.</value>
+    <comment>Emphasised lead of the remove plan's warning.</comment>
+  </data>
+  <data name="PreviewDeletesBody" xml:space="preserve">
+    <value>The configuration below is deleted, and the data removal runs as a background task you can follow from the Operations queue.</value>
+    <comment>Body of the remove plan's warning.</comment>
+  </data>
+  <data name="PreviewConfigDeleted" xml:space="preserve">
+    <value>Configuration deleted</value>
+    <comment>Heading in the remove plan.</comment>
+  </data>
+  <data name="PreviewDataRemoved" xml:space="preserve">
+    <value>Data removed</value>
+    <comment>Heading in the remove plan.</comment>
+  </data>
+  <data name="PreviewObjectsObsoleteOne" xml:space="preserve">
+    <value>{0} Connected System Object of Object Type {1} marked Obsolete.</value>
+    <comment>Removal impact line. Plural rule: one form.</comment>
+  </data>
+  <data name="PreviewObjectsObsoleteOther" xml:space="preserve">
+    <value>{0} Connected System Objects of Object Type {1} marked Obsolete.</value>
+    <comment>Removal impact line. {0} is the count, {1} the Object Type name (markup).</comment>
+  </data>
+  <data name="PreviewStoredValuesOne" xml:space="preserve">
+    <value>{0} stored value of attribute {1} on {2} deleted.</value>
+    <comment>Removal impact line. Plural rule: one form.</comment>
+  </data>
+  <data name="PreviewStoredValuesOther" xml:space="preserve">
+    <value>{0} stored values of attribute {1} on {2} deleted.</value>
+    <comment>Removal impact line. {0} is the count (markup).</comment>
+  </data>
+  <data name="PreviewObsoletedBody" xml:space="preserve">
+    <value>Obsoleted objects flow through the standard deprovisioning pipeline on the next synchronisation run: disconnection, attribute recall, grace periods and Metaverse Deletion Rules all apply as configured.</value>
+    <comment>Explains what happens to obsoleted objects.</comment>
+  </data>
+  <data name="PreviewMatchingNotDeleted" xml:space="preserve">
+    <value>Object Matching Rules are not deleted by this option, so these need your attention separately:</value>
+    <comment>Notice above the matching rules the remove plan leaves in place.</comment>
+  </data>
+  <data name="PreviewApplyRemoveConfirm" xml:space="preserve">
+    <value>Apply &amp; Remove</value>
+    <comment>Confirm button of the remove plan.</comment>
+  </data>
+  <data name="PreviewCancelTitle" xml:space="preserve">
+    <value>Cancel without applying?</value>
+    <comment>Confirmation dialog title.</comment>
+  </data>
+  <data name="PreviewCancelBody" xml:space="preserve">
+    <value>Cancelling does not preserve the status quo. The next Full Import will find no objects of a removed Object Type and obsolete them regardless, and the source now sends redefined attributes in their new form, so mappings validated against the old definition may misbehave. You can re-run the refresh at any time to decide.</value>
+    <comment>Confirmation dialog body. Canceling is the US spelling.</comment>
+  </data>
+  <data name="PreviewCancelRefresh" xml:space="preserve">
+    <value>Cancel Refresh</value>
+    <comment>Confirm button of the cancel dialog.</comment>
+  </data>
+  <data name="PreviewKeepReviewing" xml:space="preserve">
+    <value>Keep Reviewing</value>
+    <comment>Cancel button of the cancel dialog.</comment>
+  </data>
+  <data name="PreviewViaExpression" xml:space="preserve">
+    <value> (read by its Expression)</value>
+    <comment>Suffix on a mapping line that is read by an Expression. Starts with a space.</comment>
+  </data>
 </root>

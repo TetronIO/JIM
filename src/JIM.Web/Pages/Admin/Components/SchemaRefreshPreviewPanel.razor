@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Staging.DTOs
 @inject IDialogService DialogService
 
@@ -10,32 +11,32 @@
           Icon="@Icons.Material.Filled.Preview"
           Class="mb-5 jim-alert-schema-refresh-preview">
     <MudText Typo="Typo.subtitle1" Class="mb-2">
-        <strong>Schema Refresh Preview</strong>
+        <strong>@SchemaText.PreviewTitle</strong>
     </MudText>
 
     @if (!Result.HasChanges)
     {
         <MudText Class="mb-2">
-            Found <strong>@Result.TotalObjectTypes.ToString("N0")</strong> object type(s) with <strong>@Result.TotalAttributes.ToString("N0")</strong> attribute(s).
+            @((MarkupString)string.Format(CultureInfo.CurrentCulture, SchemaText.FoundSummary, string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(Result.TotalObjectTypes, SchemaText.ObjectTypeCountOne, SchemaText.ObjectTypeCountOther), Result.TotalObjectTypes.ToString("N0", CultureInfo.CurrentCulture)), string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(Result.TotalAttributes, SchemaText.AttributeCountOne, SchemaText.AttributeCountOther), Result.TotalAttributes.ToString("N0", CultureInfo.CurrentCulture))))
         </MudText>
-        <MudText Color="Color.Success">No changes detected. The schema is up to date.</MudText>
+        <MudText Color="Color.Success">@SchemaText.NoChangesDetected</MudText>
         <MudButton data-testid="jim-close-schema-refresh"
                    Variant="Variant.Text"
                    Color="Color.Inherit"
                    DropShadow="false"
                    Class="mt-3"
-                   OnClick="@(() => OnDiscard.InvokeAsync())">Close</MudButton>
+                   OnClick="@(() => OnDiscard.InvokeAsync())">@CommonText.Close</MudButton>
     }
     else
     {
         <MudText Class="mb-2">
-            The Connected System reported the changes below. <strong>Nothing has been applied yet</strong>; review them, then decide how to proceed.
+            @((MarkupString)string.Format(CultureInfo.CurrentCulture, SchemaText.PreviewIntro, Strong(SchemaText.PreviewNothingApplied)))
         </MudText>
 
         @if (Result.DiscoveryWarnings.Count > 0)
         {
             <MudAlert Severity="Severity.Warning" Class="mt-2 mb-2">
-                <strong>Discovery warnings:</strong> the Connector could not discover everything and worked around the gaps below. A partial read can make Object Types or Attributes appear removed when they are not; check these before applying.
+                <strong>@SchemaText.DiscoveryWarningsLabel</strong> @SchemaText.PreviewDiscoveryText
                 <ul class="mt-1 mb-0">
                     @foreach (var warning in Result.DiscoveryWarnings)
                     {
@@ -48,24 +49,24 @@
         @if (Result.AttributesSelectedByConnector.Count > 0)
         {
             <MudAlert Severity="Severity.Info" Class="mt-2 mb-2">
-                <strong>Selected because the Connector requires them:</strong>
+                <strong>@SchemaText.SelectedByConnector</strong>
                 @(string.Join(", ", Result.AttributesSelectedByConnector.SelectMany(kvp => kvp.Value).Distinct())).
-                The Connector cannot work without these attributes' values, so they are always imported and cannot be unselected.
+                @SchemaText.SelectedByConnectorExplain
             </MudAlert>
         }
 
         @if (Result.BlockedCredentialAttributeCount > 0)
         {
             <MudAlert Severity="Severity.Info" Class="mt-2 mb-2">
-                <strong>@Result.BlockedCredentialAttributeCount credential attribute(s) blocked:</strong>
+                <strong>@string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(Result.BlockedCredentialAttributeCount, SchemaText.CredentialAttributesBlockedOne, SchemaText.CredentialAttributesBlockedOther), Result.BlockedCredentialAttributeCount)</strong>
                 @(string.Join(", ", Result.BlockedCredentialAttributes.SelectMany(kvp => kvp.Value).Distinct())).
-                These hold credential material and are never managed by JIM.
+                @SchemaText.PreviewCredentialExplain
             </MudAlert>
         }
 
         @if (HasAdditions)
         {
-            <MudText Typo="Typo.body1" Class="mt-3" Style="font-weight:600" Color="Color.Success">@(HasRenames ? "Additions and renames: safe to apply" : "Additions: safe to apply")</MudText>
+            <MudText Typo="Typo.body1" Class="mt-3" Style="font-weight:600" Color="Color.Success">@(HasRenames ? SchemaText.PreviewAdditionsRenames : SchemaText.PreviewAdditions)</MudText>
             <SchemaChangeTable Result="Result" Section="SchemaChangeTable.SchemaChangeSection.Additions" />
         }
 
@@ -74,49 +75,49 @@
             @* Neither safe nor destructive (#2049): applying can move entries between selected Object Types at the next
                import, while cancelling keeps the classification matching reads, so it needs a warning but not the
                three-way decision. *@
-            <MudText Typo="Typo.body1" Class="mt-4" Style="font-weight:600" Color="Color.Warning">Object Type classification: review before applying</MudText>
+            <MudText Typo="Typo.body1" Class="mt-4" Style="font-weight:600" Color="Color.Warning">@SchemaText.PreviewClassificationHeading</MudText>
             <SchemaChangeTable Result="Result" Section="SchemaChangeTable.SchemaChangeSection.Reclassified" />
 
             <MudAlert Severity="Severity.Warning" Class="mt-3" data-testid="jim-schema-refresh-reclassified-warning">
-                Applying this refresh can change <strong>which Object Type existing entries resolve to</strong>. By default, each object that would change Object Type is refused at the next import and reported as an <strong>Object Type Changed</strong> error; JIM keeps it exactly as it is, so nothing is deprovisioned. If the change is intended, run a Full Import Run Profile with <strong>Allow Object Type Changes</strong> enabled to carry it out. Cancelling keeps the current classification.
-                <MudLink Href="https://docs.junctional.io/configuration/connected-system-schema/#when-an-object-changes-object-type" Target="_blank">Learn more</MudLink>
+                @((MarkupString)string.Format(CultureInfo.CurrentCulture, SchemaText.PreviewReclassifiedBody, Strong(SchemaText.PreviewReclassifiedWhich), Strong(SchemaText.PreviewObjectTypeChangedError), Strong(SchemaText.PreviewAllowObjectTypeChanges)))
+                <MudLink Href="https://docs.junctional.io/configuration/connected-system-schema/#when-an-object-changes-object-type" Target="_blank">@SchemaText.PreviewLearnMore</MudLink>
             </MudAlert>
         }
 
         @if (Result.HasRemovalsOrDefinitionChanges)
         {
-            <MudText Typo="Typo.body1" Class="mt-4" Style="font-weight:600" Color="Color.Error">Destructive: review before proceeding</MudText>
+            <MudText Typo="Typo.body1" Class="mt-4" Style="font-weight:600" Color="Color.Error">@SchemaText.PreviewDestructiveHeading</MudText>
             <SchemaChangeTable Result="Result" Section="SchemaChangeTable.SchemaChangeSection.Destructive" />
 
             @if (Dependents is { HasAny: true })
             {
-                <MudText Typo="Typo.body1" Class="mt-3" Style="font-weight:600">Configuration that depends on these changes</MudText>
+                <MudText Typo="Typo.body1" Class="mt-3" Style="font-weight:600">@SchemaText.PreviewDependentsHeading</MudText>
                 <ul class="mt-1 mb-0">
                     @foreach (var rule in Dependents.InvalidatedSyncRules)
                     {
                         <li>
-                            Synchronisation Rule <MudLink Href="@SyncRuleUrl(rule.SyncRuleId)" Target="_blank">@rule.SyncRuleName</MudLink>
-                            is bound to Object Type <span class="jim-text-code">@rule.ObjectTypeName</span>, with @rule.MappingCount mapping(s).
+                            @SchemaText.PreviewSyncRuleWord <MudLink Href="@SyncRuleUrl(rule.SyncRuleId)" Target="_blank">@rule.SyncRuleName</MudLink>
+                            @((MarkupString)string.Format(CultureInfo.CurrentCulture, SchemaText.PreviewRuleBoundTo, Span(rule.ObjectTypeName), MappingCount(rule.MappingCount)))
                         </li>
                     }
                     @foreach (var mapping in Dependents.InvalidatedMappings)
                     {
                         <li>
-                            Mapping <span class="jim-text-code">@mapping.Description</span> on
-                            <MudLink Href="@SyncRuleUrl(mapping.SyncRuleId)" Target="_blank">@mapping.SyncRuleName</MudLink>@(mapping.ViaExpression ? " (read by its Expression)" : "").
+                            @SchemaText.PreviewMappingWord <span class="jim-text-code">@mapping.Description</span> @SchemaText.PreviewOnWord
+                            <MudLink Href="@SyncRuleUrl(mapping.SyncRuleId)" Target="_blank">@mapping.SyncRuleName</MudLink>@(mapping.ViaExpression ? SchemaText.PreviewViaExpression : "").
                         </li>
                     }
                     @foreach (var matchingRule in Dependents.ReferencedObjectMatchingRules)
                     {
-                        <li>Object Matching Rule on @matchingRule.Context: @matchingRule.Reason</li>
+                        <li>@string.Format(CultureInfo.CurrentCulture, SchemaText.PreviewMatchingRule, matchingRule.Context, matchingRule.Reason)</li>
                     }
                     @foreach (var reader in Dependents.RemovedAttributeReaders)
                     {
                         <li>
-                            @reader.Description reads an attribute the Connected System no longer reports.
+                            @string.Format(CultureInfo.CurrentCulture, SchemaText.PreviewReaderLine, reader.Description)
                             @if (Helpers.AttributeReaderHref(reader) is { } readerHref)
                             {
-                                <MudLink Href="@readerHref" Target="_blank" Class="ml-1">Open</MudLink>
+                                <MudLink Href="@readerHref" Target="_blank" Class="ml-1">@SchemaText.PreviewOpen</MudLink>
                             }
                         </li>
                     }
@@ -126,23 +127,20 @@
             @if (Dependents is { RemovalRefused: true })
             {
                 <MudAlert Severity="Severity.Info" Class="mt-3" data-testid="jim-schema-refresh-removal-refused">
-                    <strong>Apply &amp; Remove is unavailable.</strong> It would delete attributes that
-                    @Dependents.RemovedAttributeReaders.Count configuration item(s) above still read, and JIM does not
-                    remove those for you: a Scoping Criterion left reading nothing takes objects out of scope. Change
-                    them first, or use Apply &amp; Disable Dependents, which keeps the attributes.
+                    @((MarkupString)string.Format(CultureInfo.CurrentCulture, SchemaText.PreviewRemovalRefused, Strong(SchemaText.PreviewRemovalUnavailable), ReaderCount(Dependents.RemovedAttributeReaders.Count), System.Net.WebUtility.HtmlEncode(SchemaText.PreviewApplyDisableName)))
                 </MudAlert>
             }
 
             <MudAlert Severity="Severity.Warning" Class="mt-3">
-                Object Types and Attributes the Connected System no longer reports are <strong>retained</strong> in JIM when you apply; nothing is deleted, but their values stop refreshing, and objects of a removed Object Type will be obsoleted by the next Full Import whether or not you apply. Attribute definition changes are applied, and a mapping validated against the old definition may no longer behave as intended.
+                @((MarkupString)string.Format(CultureInfo.CurrentCulture, SchemaText.PreviewRetainedBody, Strong(SchemaText.PreviewRetainedWord)))
             </MudAlert>
         }
 
         @if (Result.ActionRequired)
         {
             <MudAlert Severity="Severity.Warning" Class="mt-3">
-                <strong>Action Required:</strong> Some attributes that are no longer reported are still referenced by Synchronisation Rules.
-                Please update your Synchronisation Rules to remove references to these attributes.
+                <strong>@SchemaText.ActionRequiredLabel</strong>
+                @SchemaText.PreviewActionRequiredText
             </MudAlert>
         }
 
@@ -152,7 +150,7 @@
                        Color="Color.Inherit"
                        DropShadow="false"
                        Disabled="@Busy"
-                       OnClick="HandleDiscardAsync">Cancel</MudButton>
+                       OnClick="HandleDiscardAsync">@CommonText.Cancel</MudButton>
             <MudSpacer />
             @if (Result.HasRemovalsOrDefinitionChanges)
             {
@@ -166,14 +164,14 @@
                                Color="Color.Warning"
                                DropShadow="false"
                                Disabled="@Busy"
-                               OnClick="@(() => _disablePlanDialogVisible = true)">Apply &amp; Disable Dependents…</MudButton>
+                               OnClick="@(() => _disablePlanDialogVisible = true)">@SchemaText.PreviewApplyDisableButton</MudButton>
                 }
                 <MudButton data-testid="jim-apply-remove-schema-refresh"
                            Variant="Variant.Outlined"
                            Color="Color.Error"
                            DropShadow="false"
                            Disabled="@(Busy || Dependents is { RemovalRefused: true })"
-                           OnClick="@(() => _removePlanDialogVisible = true)">Apply &amp; Remove…</MudButton>
+                           OnClick="@(() => _removePlanDialogVisible = true)">@SchemaText.PreviewApplyRemoveButton</MudButton>
             }
             else
             {
@@ -182,7 +180,7 @@
                            Color="Color.Primary"
                            DropShadow="false"
                            Disabled="@Busy"
-                           OnClick="@(() => OnApply.InvokeAsync())">Apply Schema Changes</MudButton>
+                           OnClick="@(() => OnApply.InvokeAsync())">@SchemaText.PreviewApplyButton</MudButton>
             }
         </div>
     }
@@ -192,12 +190,12 @@
 <MudDialog @bind-Visible="_disablePlanDialogVisible" Options="_dialogOptions">
     <TitleContent>
         <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.Shield" Class="mr-3" /> Apply schema and disable dependents?
+            <MudIcon Icon="@Icons.Material.Filled.Shield" Class="mr-3" /> @SchemaText.PreviewDisableDialogTitle
         </MudText>
     </TitleContent>
     <DialogContent>
         <MudText Class="mb-2">
-            The new schema is recorded, and everything below is <strong>disabled</strong> with the stated reason so nothing runs against entries the Connected System no longer reports. No objects or values are touched. Re-enabling is a manual choice per rule or mapping.
+            @((MarkupString)string.Format(CultureInfo.CurrentCulture, SchemaText.PreviewDisableIntro, Strong(SchemaText.PreviewDisabledWord)))
         </MudText>
         @if (Dependents != null)
         {
@@ -205,14 +203,14 @@
                 @foreach (var rule in Dependents.InvalidatedSyncRules)
                 {
                     <li class="mb-1">
-                        <strong><MudLink Href="@SyncRuleUrl(rule.SyncRuleId)" Target="_blank">@rule.SyncRuleName</MudLink></strong> disabled, with its @rule.MappingCount mapping(s).
+                        <strong><MudLink Href="@SyncRuleUrl(rule.SyncRuleId)" Target="_blank">@rule.SyncRuleName</MudLink></strong> @string.Format(CultureInfo.CurrentCulture, SchemaText.PreviewRuleDisabledSuffix, MappingCount(rule.MappingCount))
                         <br /><span class="mud-text-secondary">@rule.Reason</span>
                     </li>
                 }
                 @foreach (var mapping in Dependents.InvalidatedMappings)
                 {
                     <li class="mb-1">
-                        Mapping <span class="jim-text-code">@mapping.Description</span> on <MudLink Href="@SyncRuleUrl(mapping.SyncRuleId)" Target="_blank">@mapping.SyncRuleName</MudLink> disabled.
+                        @SchemaText.PreviewMappingWord <span class="jim-text-code">@mapping.Description</span> @SchemaText.PreviewOnWord <MudLink Href="@SyncRuleUrl(mapping.SyncRuleId)" Target="_blank">@mapping.SyncRuleName</MudLink> @SchemaText.PreviewMappingDisabled
                         <br /><span class="mud-text-secondary">@mapping.Reason</span>
                     </li>
                 }
@@ -220,11 +218,11 @@
             @if (Dependents.ReferencedObjectMatchingRules.Count > 0)
             {
                 <MudAlert Severity="Severity.Info" Class="mt-2">
-                    Object Matching has no disabled state, so these need your attention separately:
+                    @SchemaText.PreviewMatchingNoDisabled
                     <ul class="mt-1 mb-0">
                         @foreach (var matchingRule in Dependents.ReferencedObjectMatchingRules)
                         {
-                            <li>@matchingRule.Context: @matchingRule.Reason</li>
+                            <li>@string.Format(CultureInfo.CurrentCulture, SchemaText.PreviewMatchingReason, matchingRule.Context, matchingRule.Reason)</li>
                         }
                     </ul>
                 </MudAlert>
@@ -232,14 +230,14 @@
         }
     </DialogContent>
     <DialogActions>
-        <MudButton DropShadow="false" Variant="Variant.Text" OnClick="@(() => _disablePlanDialogVisible = false)" Class="ma-4">Back</MudButton>
+        <MudButton DropShadow="false" Variant="Variant.Text" OnClick="@(() => _disablePlanDialogVisible = false)" Class="ma-4">@SchemaText.PreviewBack</MudButton>
         <MudButton data-testid="jim-confirm-apply-disable"
                    DropShadow="false"
                    Variant="Variant.Filled"
                    Color="Color.Warning"
                    Disabled="@Busy"
                    OnClick="HandleConfirmApplyWithDisablesAsync"
-                   Class="ma-4">Apply &amp; Disable</MudButton>
+                   Class="ma-4">@SchemaText.PreviewApplyDisableConfirm</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -247,28 +245,28 @@
 <MudDialog @bind-Visible="_removePlanDialogVisible" Options="_dialogOptions">
     <TitleContent>
         <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.DeleteForever" Class="mr-3" /> Apply schema and remove dependents?
+            <MudIcon Icon="@Icons.Material.Filled.DeleteForever" Class="mr-3" /> @SchemaText.PreviewRemoveDialogTitle
         </MudText>
     </TitleContent>
     <DialogContent>
         <MudAlert Severity="Severity.Error" Class="mb-3">
-            <strong>This deletes configuration and identity data.</strong> The configuration below is deleted, and the data removal runs as a background task you can follow from the Operations queue.
+            <strong>@SchemaText.PreviewDeletesLead</strong> @SchemaText.PreviewDeletesBody
         </MudAlert>
         @if (Dependents is { HasAny: true })
         {
-            <MudText Typo="Typo.body1" Style="font-weight:600">Configuration deleted</MudText>
+            <MudText Typo="Typo.body1" Style="font-weight:600">@SchemaText.PreviewConfigDeleted</MudText>
             <ul class="mt-1 mb-3">
                 @foreach (var rule in Dependents.InvalidatedSyncRules)
                 {
                     <li class="mb-1">
-                        Synchronisation Rule <strong><MudLink Href="@SyncRuleUrl(rule.SyncRuleId)" Target="_blank">@rule.SyncRuleName</MudLink></strong> deleted, with its @rule.MappingCount mapping(s).
+                        @SchemaText.PreviewSyncRuleWord <strong><MudLink Href="@SyncRuleUrl(rule.SyncRuleId)" Target="_blank">@rule.SyncRuleName</MudLink></strong> @string.Format(CultureInfo.CurrentCulture, SchemaText.PreviewRuleDeletedSuffix, MappingCount(rule.MappingCount))
                         <br /><span class="mud-text-secondary">@rule.Reason</span>
                     </li>
                 }
                 @foreach (var mapping in Dependents.InvalidatedMappings)
                 {
                     <li class="mb-1">
-                        Mapping <span class="jim-text-code">@mapping.Description</span> on <MudLink Href="@SyncRuleUrl(mapping.SyncRuleId)" Target="_blank">@mapping.SyncRuleName</MudLink> deleted.
+                        @SchemaText.PreviewMappingWord <span class="jim-text-code">@mapping.Description</span> @SchemaText.PreviewOnWord <MudLink Href="@SyncRuleUrl(mapping.SyncRuleId)" Target="_blank">@mapping.SyncRuleName</MudLink> @SchemaText.PreviewMappingDeleted
                         <br /><span class="mud-text-secondary">@mapping.Reason</span>
                     </li>
                 }
@@ -276,47 +274,47 @@
         }
         @if (RemovalImpact != null && (RemovalImpact.RemovedObjectTypes.Count > 0 || RemovalImpact.RemovedAttributes.Count > 0))
         {
-            <MudText Typo="Typo.body1" Style="font-weight:600">Data removed</MudText>
+            <MudText Typo="Typo.body1" Style="font-weight:600">@SchemaText.PreviewDataRemoved</MudText>
             <ul class="mt-1 mb-2">
                 @foreach (var type in RemovalImpact.RemovedObjectTypes)
                 {
                     <li class="mb-1">
-                        <strong>@type.ConnectedSystemObjectCount.ToString("N0")</strong> Connected System Object(s) of Object Type <span class="jim-text-code">@type.ObjectTypeName</span> marked Obsolete.
+                        @((MarkupString)string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(type.ConnectedSystemObjectCount, SchemaText.PreviewObjectsObsoleteOne, SchemaText.PreviewObjectsObsoleteOther), Strong(type.ConnectedSystemObjectCount.ToString("N0", CultureInfo.CurrentCulture)), Span(type.ObjectTypeName)))
                     </li>
                 }
                 @foreach (var attributeImpact in RemovalImpact.RemovedAttributes)
                 {
                     <li class="mb-1">
-                        <strong>@attributeImpact.StoredValueCount.ToString("N0")</strong> stored value(s) of attribute <span class="jim-text-code">@attributeImpact.AttributeName</span> on <span class="jim-text-code">@attributeImpact.ObjectTypeName</span> deleted.
+                        @((MarkupString)string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(attributeImpact.StoredValueCount, SchemaText.PreviewStoredValuesOne, SchemaText.PreviewStoredValuesOther), Strong(attributeImpact.StoredValueCount.ToString("N0", CultureInfo.CurrentCulture)), Span(attributeImpact.AttributeName), Span(attributeImpact.ObjectTypeName)))
                     </li>
                 }
             </ul>
             <MudText Class="mb-2 mud-text-secondary">
-                Obsoleted objects flow through the standard deprovisioning pipeline on the next synchronisation run: disconnection, attribute recall, grace periods and Metaverse Deletion Rules all apply as configured.
+                @SchemaText.PreviewObsoletedBody
             </MudText>
         }
         @if (Dependents is { ReferencedObjectMatchingRules.Count: > 0 })
         {
             <MudAlert Severity="Severity.Info" Class="mt-2">
-                Object Matching Rules are not deleted by this option, so these need your attention separately:
+                @SchemaText.PreviewMatchingNotDeleted
                 <ul class="mt-1 mb-0">
                     @foreach (var matchingRule in Dependents.ReferencedObjectMatchingRules)
                     {
-                        <li>@matchingRule.Context: @matchingRule.Reason</li>
+                        <li>@string.Format(CultureInfo.CurrentCulture, SchemaText.PreviewMatchingReason, matchingRule.Context, matchingRule.Reason)</li>
                     }
                 </ul>
             </MudAlert>
         }
     </DialogContent>
     <DialogActions>
-        <MudButton DropShadow="false" Variant="Variant.Text" OnClick="@(() => _removePlanDialogVisible = false)" Class="ma-4">Back</MudButton>
+        <MudButton DropShadow="false" Variant="Variant.Text" OnClick="@(() => _removePlanDialogVisible = false)" Class="ma-4">@SchemaText.PreviewBack</MudButton>
         <MudButton data-testid="jim-confirm-apply-remove"
                    DropShadow="false"
                    Variant="Variant.Filled"
                    Color="Color.Error"
                    Disabled="@Busy"
                    OnClick="HandleConfirmApplyWithRemovalsAsync"
-                   Class="ma-4">Apply &amp; Remove</MudButton>
+                   Class="ma-4">@SchemaText.PreviewApplyRemoveConfirm</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -393,6 +391,18 @@
         Result.RenamedObjectTypes.Count > 0 ||
         Result.RenamedAttributes.Values.Sum(v => v.Count) > 0;
 
+    /// <summary>A phrase in emphasis, HTML-encoded: the text is a resource string, shown as markup.</summary>
+    private static string Strong(string text) => $"<strong>{System.Net.WebUtility.HtmlEncode(text)}</strong>";
+
+    /// <summary>A name in the portal's code style, HTML-encoded.</summary>
+    private static string Span(string? text) => $"<span class=\"jim-text-code\">{System.Net.WebUtility.HtmlEncode(text)}</span>";
+
+    private static string MappingCount(int count) =>
+        string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(count, SchemaText.PreviewMappingsOne, SchemaText.PreviewMappingsOther), count);
+
+    private static string ReaderCount(int count) =>
+        string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(count, SchemaText.PreviewReaderCountOne, SchemaText.PreviewReaderCountOther), count);
+
     private static string SyncRuleUrl(int syncRuleId) => $"/admin/sync-rules/{syncRuleId}";
 
     private async Task HandleConfirmApplyWithDisablesAsync()
@@ -419,13 +429,10 @@
         {
             var options = new MessageBoxOptions
             {
-                Title = "Cancel without applying?",
-                MarkupMessage = (MarkupString)(
-                    "Cancelling does not preserve the status quo. The next Full Import will find no objects of a removed Object Type and obsolete them regardless, " +
-                    "and the source now sends redefined attributes in their new form, so mappings validated against the old definition may misbehave. " +
-                    "You can re-run the refresh at any time to decide."),
-                YesText = "Cancel Refresh",
-                CancelText = "Keep Reviewing"
+                Title = SchemaText.PreviewCancelTitle,
+                MarkupMessage = (MarkupString)SchemaText.PreviewCancelBody,
+                YesText = SchemaText.PreviewCancelRefresh,
+                CancelText = SchemaText.PreviewKeepReviewing
             };
 
             var confirmed = await DialogService.ShowMessageBoxAsync(options);

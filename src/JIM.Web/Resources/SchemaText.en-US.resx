@@ -47,4 +47,19 @@
   <data name="RefreshCancelled" xml:space="preserve">
     <value>Hierarchy refresh canceled. Nothing was changed.</value>
   </data>
+  <data name="PreviewReclassifiedBody" xml:space="preserve">
+    <value>Applying this refresh can change {0}. By default, each object that would change Object Type is refused at the next import and reported as an {1} error; JIM keeps it exactly as it is, so nothing is deprovisioned. If the change is intended, run a Full Import Run Profile with {2} enabled to carry it out. Canceling keeps the current classification.</value>
+  </data>
+  <data name="PreviewSyncRuleWord" xml:space="preserve">
+    <value>Synchronization Rule</value>
+  </data>
+  <data name="PreviewActionRequiredText" xml:space="preserve">
+    <value>Some attributes that are no longer reported are still referenced by Synchronization Rules. Please update your Synchronization Rules to remove references to these attributes.</value>
+  </data>
+  <data name="PreviewObsoletedBody" xml:space="preserve">
+    <value>Obsoleted objects flow through the standard deprovisioning pipeline on the next synchronization run: disconnection, attribute recall, grace periods and Metaverse Deletion Rules all apply as configured.</value>
+  </data>
+  <data name="PreviewCancelBody" xml:space="preserve">
+    <value>Canceling does not preserve the status quo. The next Full Import will find no objects of a removed Object Type and obsolete them regardless, and the source now sends redefined attributes in their new form, so mappings validated against the old definition may misbehave. You can re-run the refresh at any time to decide.</value>
+  </data>
 </root>

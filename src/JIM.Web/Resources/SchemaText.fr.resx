@@ -773,4 +773,196 @@
   <data name="HierarchySaved" xml:space="preserve">
     <value>Vos modifications de hiérarchie ont été enregistrées.</value>
   </data>
+  <data name="PreviewTitle" xml:space="preserve">
+    <value>Aperçu de l’actualisation du schéma</value>
+  </data>
+  <data name="PreviewIntro" xml:space="preserve">
+    <value>Le système connecté a signalé les modifications ci-dessous. {0} ; examinez-les, puis décidez de la suite.</value>
+  </data>
+  <data name="PreviewNothingApplied" xml:space="preserve">
+    <value>Rien n’a encore été appliqué</value>
+  </data>
+  <data name="PreviewDiscoveryText" xml:space="preserve">
+    <value>Le connecteur n’a pas tout découvert et a contourné les lacunes ci-dessous. Une lecture partielle peut faire apparaître des types d’objets ou des attributs comme supprimés alors qu’ils ne le sont pas ; vérifiez-les avant d’appliquer.</value>
+  </data>
+  <data name="PreviewCredentialExplain" xml:space="preserve">
+    <value>Ils contiennent des éléments d’identification et ne sont jamais gérés par JIM.</value>
+  </data>
+  <data name="PreviewAdditions" xml:space="preserve">
+    <value>Ajouts : applicables sans risque</value>
+  </data>
+  <data name="PreviewAdditionsRenames" xml:space="preserve">
+    <value>Ajouts et renommages : applicables sans risque</value>
+  </data>
+  <data name="PreviewClassificationHeading" xml:space="preserve">
+    <value>Classification des types d’objets : à examiner avant d’appliquer</value>
+  </data>
+  <data name="PreviewReclassifiedBody" xml:space="preserve">
+    <value>Applique l’actualisation peut modifier {0}. Par défaut, chaque objet dont le type d’objet changerait est refusé lors de la prochaine importation et signalé par une erreur {1} ; JIM le conserve exactement tel quel, de sorte que rien n’est déprovisionné. Si la modification est voulue, exécutez un profil d’exécution d’importation complète avec {2} activé pour la réaliser. L’annulation conserve la classification actuelle.</value>
+  </data>
+  <data name="PreviewReclassifiedWhich" xml:space="preserve">
+    <value>à quel type d’objet résolvent les entrées existantes</value>
+  </data>
+  <data name="PreviewObjectTypeChangedError" xml:space="preserve">
+    <value>Type d’objet modifié</value>
+  </data>
+  <data name="PreviewAllowObjectTypeChanges" xml:space="preserve">
+    <value>Autoriser les modifications de type d’objet</value>
+  </data>
+  <data name="PreviewLearnMore" xml:space="preserve">
+    <value>En savoir plus</value>
+  </data>
+  <data name="PreviewDestructiveHeading" xml:space="preserve">
+    <value>Destructif : à examiner avant de continuer</value>
+  </data>
+  <data name="PreviewDependentsHeading" xml:space="preserve">
+    <value>Configuration qui dépend de ces modifications</value>
+  </data>
+  <data name="PreviewSyncRuleWord" xml:space="preserve">
+    <value>Règle de synchronisation</value>
+  </data>
+  <data name="PreviewRuleBoundTo" xml:space="preserve">
+    <value>est liée au type d’objet {0}, avec {1}.</value>
+  </data>
+  <data name="PreviewMappingsOne" xml:space="preserve">
+    <value>{0} mappage</value>
+  </data>
+  <data name="PreviewMappingsOther" xml:space="preserve">
+    <value>{0} mappages</value>
+  </data>
+  <data name="PreviewMappingWord" xml:space="preserve">
+    <value>Mappage</value>
+  </data>
+  <data name="PreviewOnWord" xml:space="preserve">
+    <value>sur</value>
+  </data>
+  <data name="PreviewMappingDisabled" xml:space="preserve">
+    <value>désactivé.</value>
+  </data>
+  <data name="PreviewMappingDeleted" xml:space="preserve">
+    <value>supprimé.</value>
+  </data>
+  <data name="PreviewRuleDisabledSuffix" xml:space="preserve">
+    <value>désactivée, avec {0}.</value>
+  </data>
+  <data name="PreviewRuleDeletedSuffix" xml:space="preserve">
+    <value>supprimée, avec {0}.</value>
+  </data>
+  <data name="PreviewMatchingRule" xml:space="preserve">
+    <value>Règle de correspondance d’objets sur {0} : {1}</value>
+  </data>
+  <data name="PreviewReaderLine" xml:space="preserve">
+    <value>{0} lit un attribut que le système connecté ne signale plus.</value>
+  </data>
+  <data name="PreviewOpen" xml:space="preserve">
+    <value>Ouvrir</value>
+  </data>
+  <data name="PreviewRemovalUnavailable" xml:space="preserve">
+    <value>Appliquer et supprimer est indisponible.</value>
+  </data>
+  <data name="PreviewRemovalRefused" xml:space="preserve">
+    <value>{0} Elle supprimerait des attributs que {1} lisent encore, et JIM ne les retire pas à votre place : un critère de périmètre qui ne lit plus rien fait sortir des objets du périmètre. Modifiez-les d’abord, ou utilisez {2}, qui conserve les attributs.</value>
+  </data>
+  <data name="PreviewReaderCountOne" xml:space="preserve">
+    <value>{0} élément de configuration ci-dessus</value>
+  </data>
+  <data name="PreviewReaderCountOther" xml:space="preserve">
+    <value>{0} éléments de configuration ci-dessus</value>
+  </data>
+  <data name="PreviewRetainedBody" xml:space="preserve">
+    <value>Les types d’objets et les attributs que le système connecté ne signale plus sont {0} dans JIM lorsque vous appliquez ; rien n’est supprimé, mais leurs valeurs cessent d’être actualisées, et les objets d’un type d’objet supprimé seront rendus obsolètes par la prochaine importation complète, que vous appliquiez ou non. Les modifications de définition des attributs sont appliquées, et un mappage validé sur l’ancienne définition peut ne plus se comporter comme prévu.</value>
+  </data>
+  <data name="PreviewRetainedWord" xml:space="preserve">
+    <value>conservés</value>
+  </data>
+  <data name="PreviewActionRequiredText" xml:space="preserve">
+    <value>Certains attributs que le système connecté ne signale plus sont encore référencés par des règles de synchronisation. Mettez à jour vos règles de synchronisation pour supprimer les références à ces attributs.</value>
+  </data>
+  <data name="PreviewApplyButton" xml:space="preserve">
+    <value>Appliquer les modifications du schéma</value>
+  </data>
+  <data name="PreviewApplyDisableButton" xml:space="preserve">
+    <value>Appliquer et désactiver les éléments dépendants…</value>
+  </data>
+  <data name="PreviewApplyRemoveButton" xml:space="preserve">
+    <value>Appliquer et supprimer…</value>
+  </data>
+  <data name="PreviewApplyDisableName" xml:space="preserve">
+    <value>Appliquer et désactiver les éléments dépendants</value>
+  </data>
+  <data name="PreviewApplyRemoveName" xml:space="preserve">
+    <value>Appliquer et supprimer</value>
+  </data>
+  <data name="PreviewDisableDialogTitle" xml:space="preserve">
+    <value>Appliquer le schéma et désactiver les éléments dépendants ?</value>
+  </data>
+  <data name="PreviewDisableIntro" xml:space="preserve">
+    <value>Le nouveau schéma est enregistré, et tout ce qui figure ci-dessous est {0} avec le motif indiqué, afin que rien ne s’exécute sur des entrées que le système connecté ne signale plus. Aucun objet ni aucune valeur n’est modifié. La réactivation se fait manuellement, règle par règle ou mappage par mappage.</value>
+  </data>
+  <data name="PreviewDisabledWord" xml:space="preserve">
+    <value>désactivés</value>
+  </data>
+  <data name="PreviewMatchingNoDisabled" xml:space="preserve">
+    <value>Object Matching n’a pas d’état désactivé : ces éléments nécessitent donc votre attention séparément :</value>
+  </data>
+  <data name="PreviewMatchingReason" xml:space="preserve">
+    <value>{0} : {1}</value>
+  </data>
+  <data name="PreviewBack" xml:space="preserve">
+    <value>Retour</value>
+  </data>
+  <data name="PreviewApplyDisableConfirm" xml:space="preserve">
+    <value>Appliquer et désactiver</value>
+  </data>
+  <data name="PreviewRemoveDialogTitle" xml:space="preserve">
+    <value>Appliquer le schéma et supprimer les éléments dépendants ?</value>
+  </data>
+  <data name="PreviewDeletesLead" xml:space="preserve">
+    <value>Cette opération supprime la configuration et les données d’identité.</value>
+  </data>
+  <data name="PreviewDeletesBody" xml:space="preserve">
+    <value>La configuration ci-dessous est supprimée, et la suppression des données s’exécute en tâche de fond que vous pouvez suivre depuis la file d’opérations.</value>
+  </data>
+  <data name="PreviewConfigDeleted" xml:space="preserve">
+    <value>Configuration supprimée</value>
+  </data>
+  <data name="PreviewDataRemoved" xml:space="preserve">
+    <value>Données supprimées</value>
+  </data>
+  <data name="PreviewObjectsObsoleteOne" xml:space="preserve">
+    <value>{0} objet de système connecté du type d’objet {1} marqué comme obsolète.</value>
+  </data>
+  <data name="PreviewObjectsObsoleteOther" xml:space="preserve">
+    <value>{0} objets de systèmes connectés du type d’objet {1} marqués comme obsolètes.</value>
+  </data>
+  <data name="PreviewStoredValuesOne" xml:space="preserve">
+    <value>{0} valeur stockée de l’attribut {1} sur {2} supprimée.</value>
+  </data>
+  <data name="PreviewStoredValuesOther" xml:space="preserve">
+    <value>{0} valeurs stockées de l’attribut {1} sur {2} supprimées.</value>
+  </data>
+  <data name="PreviewObsoletedBody" xml:space="preserve">
+    <value>Les objets rendus obsolètes suivent le processus de déprovisionnement standard lors de la prochaine exécution de synchronisation : déconnexion, rappel des attributs, délais de grâce et règles de suppression du Metaverse s’appliquent, selon la configuration.</value>
+  </data>
+  <data name="PreviewMatchingNotDeleted" xml:space="preserve">
+    <value>Les règles de correspondance d’objets ne sont pas supprimées par cette option ; ces éléments nécessitent donc votre attention séparément :</value>
+  </data>
+  <data name="PreviewApplyRemoveConfirm" xml:space="preserve">
+    <value>Appliquer et supprimer</value>
+  </data>
+  <data name="PreviewCancelTitle" xml:space="preserve">
+    <value>Annuler sans appliquer ?</value>
+  </data>
+  <data name="PreviewCancelBody" xml:space="preserve">
+    <value>Annuler ne préserve pas le statu quo. La prochaine importation complète ne trouvera aucun objet d’un type d’objet supprimé et les rendra obsolètes de toute façon, et la source envoie désormais des attributs redéfinis sous leur nouvelle forme : les mappages validés sur l’ancienne définition risquent donc de mal se comporter. Vous pouvez relancer l’actualisation à tout moment pour décider.</value>
+  </data>
+  <data name="PreviewCancelRefresh" xml:space="preserve">
+    <value>Annuler l’actualisation</value>
+  </data>
+  <data name="PreviewKeepReviewing" xml:space="preserve">
+    <value>Continuer l’examen</value>
+  </data>
+  <data name="PreviewViaExpression" xml:space="preserve">
+    <value> (lu par son expression)</value>
+  </data>
 </root>
