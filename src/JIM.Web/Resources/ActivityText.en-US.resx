@@ -47,4 +47,19 @@
   <data name="ActivityStatCsosDisconnectedIncluding" xml:space="preserve">
     <value>Connected System Objects Disconnected, including {0} that left an import Synchronization Rule's scope</value>
   </data>
+  <data name="ActivityTypeSynchronisationRule" xml:space="preserve">
+    <value>Synchronization Rule</value>
+  </data>
+  <data name="ActivityNoActivitiesYetMine" xml:space="preserve">
+    <value>Activities appear here as you initiate operations in JIM, such as synchronizations and configuration changes.</value>
+  </data>
+  <data name="ActivityCategorySynchronisation" xml:space="preserve">
+    <value>Synchronization</value>
+  </data>
+  <data name="ActivityMyActivityDescription" xml:space="preserve">
+    <value>View operations you have initiated, including synchronizations, configuration changes, and other actions.</value>
+  </data>
+  <data name="ActivityListDescription" xml:space="preserve">
+    <value>Monitor all activity across the system. View operations initiated by users or automated processes, including synchronizations, configuration changes, and system events.</value>
+  </data>
 </root>

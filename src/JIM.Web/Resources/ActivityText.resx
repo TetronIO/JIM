@@ -1074,4 +1074,396 @@
     <value>Connected System Objects Disconnected, including {0} that left an import Synchronisation Rule's scope</value>
     <comment>Tooltip on the CSOs Disconnected count when some left an import Synchronisation Rule's scope; {0} is the count, formatted for the culture</comment>
   </data>
+  <data name="ActivityFilterCategory" xml:space="preserve">
+    <value>Category:</value>
+    <comment>Label before the category quick-filter chips</comment>
+  </data>
+  <data name="ActivityFilterAll" xml:space="preserve">
+    <value>All</value>
+    <comment>Category chip that clears the category filter</comment>
+  </data>
+  <data name="ActivityFilterInitiator" xml:space="preserve">
+    <value>Initiator</value>
+    <comment>Label of the initiator filter</comment>
+  </data>
+  <data name="ActivityColumnInitiatedBy" xml:space="preserve">
+    <value>Initiated By</value>
+    <comment>Column heading: who started an Activity</comment>
+  </data>
+  <data name="ActivityColumnCreated" xml:space="preserve">
+    <value>Created</value>
+    <comment>Column heading: when an Activity was created</comment>
+  </data>
+  <data name="ActivityOperationCreate" xml:space="preserve">
+    <value>Create</value>
+    <comment>Operation filter item</comment>
+  </data>
+  <data name="ActivityOperationRead" xml:space="preserve">
+    <value>Read</value>
+    <comment>Operation filter item</comment>
+  </data>
+  <data name="ActivityOperationUpdate" xml:space="preserve">
+    <value>Update</value>
+    <comment>Operation filter item</comment>
+  </data>
+  <data name="ActivityOperationDelete" xml:space="preserve">
+    <value>Delete</value>
+    <comment>Operation filter item</comment>
+  </data>
+  <data name="ActivityOperationClear" xml:space="preserve">
+    <value>Clear</value>
+    <comment>Operation filter item: clearing a Connected System</comment>
+  </data>
+  <data name="ActivityOperationExecute" xml:space="preserve">
+    <value>Execute</value>
+    <comment>Operation filter item</comment>
+  </data>
+  <data name="ActivityOperationImportHierarchy" xml:space="preserve">
+    <value>Import Hierarchy</value>
+    <comment>Operation filter item</comment>
+  </data>
+  <data name="ActivityOperationImportSchema" xml:space="preserve">
+    <value>Import Schema</value>
+    <comment>Operation filter item</comment>
+  </data>
+  <data name="ActivityOperationRevert" xml:space="preserve">
+    <value>Revert</value>
+    <comment>Operation filter item</comment>
+  </data>
+  <data name="ActivityOperationAuthenticate" xml:space="preserve">
+    <value>Authenticate</value>
+    <comment>Operation filter item</comment>
+  </data>
+  <data name="ActivityOutcomeAdded" xml:space="preserve">
+    <value>Added</value>
+    <comment>Outcome filter item</comment>
+  </data>
+  <data name="ActivityOutcomeUpdated" xml:space="preserve">
+    <value>Updated</value>
+    <comment>Outcome filter item</comment>
+  </data>
+  <data name="ActivityOutcomeDeleted" xml:space="preserve">
+    <value>Deleted</value>
+    <comment>Outcome filter item</comment>
+  </data>
+  <data name="ActivityOutcomeProjected" xml:space="preserve">
+    <value>Projected</value>
+    <comment>Outcome filter item</comment>
+  </data>
+  <data name="ActivityOutcomeJoined" xml:space="preserve">
+    <value>Joined</value>
+    <comment>Outcome filter item</comment>
+  </data>
+  <data name="ActivityOutcomeAttributeFlows" xml:space="preserve">
+    <value>Attribute Flows</value>
+    <comment>Outcome filter item</comment>
+  </data>
+  <data name="ActivityOutcomeDisconnected" xml:space="preserve">
+    <value>Disconnected</value>
+    <comment>Outcome filter item</comment>
+  </data>
+  <data name="ActivityOutcomeDriftCorrections" xml:space="preserve">
+    <value>Drift Corrections</value>
+    <comment>Outcome filter item</comment>
+  </data>
+  <data name="ActivityOutcomeProvisioned" xml:space="preserve">
+    <value>Provisioned</value>
+    <comment>Outcome filter item</comment>
+  </data>
+  <data name="ActivityOutcomeExported" xml:space="preserve">
+    <value>Exported</value>
+    <comment>Outcome filter item</comment>
+  </data>
+  <data name="ActivityOutcomeDeprovisioned" xml:space="preserve">
+    <value>Deprovisioned</value>
+    <comment>Outcome filter item</comment>
+  </data>
+  <data name="ActivityOutcomeCreated" xml:space="preserve">
+    <value>Created</value>
+    <comment>Outcome filter item</comment>
+  </data>
+  <data name="ActivityOutcomePendingExports" xml:space="preserve">
+    <value>Pending Exports</value>
+    <comment>Outcome filter item</comment>
+  </data>
+  <data name="ActivityOutcomeErrors" xml:space="preserve">
+    <value>Errors</value>
+    <comment>Outcome filter item and outcome chip label</comment>
+  </data>
+  <data name="ActivityTypeConnectedSystem" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Type filter item</comment>
+  </data>
+  <data name="ActivityTypeConnectedSystemRunProfile" xml:space="preserve">
+    <value>Connected System Run Profile</value>
+    <comment>Type filter item</comment>
+  </data>
+  <data name="ActivityTypeSynchronisationRule" xml:space="preserve">
+    <value>Synchronisation Rule</value>
+    <comment>Type filter item</comment>
+  </data>
+  <data name="ActivityTypeMetaverseObject" xml:space="preserve">
+    <value>Metaverse Object</value>
+    <comment>Type filter item</comment>
+  </data>
+  <data name="ActivityTypeConnectedSystemObject" xml:space="preserve">
+    <value>Connected System Object</value>
+    <comment>Type filter item</comment>
+  </data>
+  <data name="ActivityTypeMetaverseAttribute" xml:space="preserve">
+    <value>Metaverse Attribute</value>
+    <comment>Type filter item</comment>
+  </data>
+  <data name="ActivityTypeExampleDataTemplate" xml:space="preserve">
+    <value>Example Data Template</value>
+    <comment>Type filter item</comment>
+  </data>
+  <data name="ActivityTypeDataGeneration" xml:space="preserve">
+    <value>Data Generation</value>
+    <comment>Type filter item</comment>
+  </data>
+  <data name="ActivityTypeTrustedCertificate" xml:space="preserve">
+    <value>Trusted Certificate</value>
+    <comment>Type filter item</comment>
+  </data>
+  <data name="ActivityTypeObjectMatchingRule" xml:space="preserve">
+    <value>Object Matching Rule</value>
+    <comment>Type filter item</comment>
+  </data>
+  <data name="ActivityTypeServiceSetting" xml:space="preserve">
+    <value>Service Setting</value>
+    <comment>Type filter item</comment>
+  </data>
+  <data name="ActivityStatusFilterInProgress" xml:space="preserve">
+    <value>In Progress</value>
+    <comment>Status filter item</comment>
+  </data>
+  <data name="ActivityStatusFilterCompleteWithWarning" xml:space="preserve">
+    <value>Complete With Warning</value>
+    <comment>Status filter item</comment>
+  </data>
+  <data name="ActivityStatusFilterCompleteWithError" xml:space="preserve">
+    <value>Complete With Error</value>
+    <comment>Status filter item</comment>
+  </data>
+  <data name="ActivityStatusFilterFailedWithError" xml:space="preserve">
+    <value>Failed With Error</value>
+    <comment>Status filter item</comment>
+  </data>
+  <data name="ActivityInitiatorUser" xml:space="preserve">
+    <value>User</value>
+    <comment>Initiator filter item: a person</comment>
+  </data>
+  <data name="ActivityFilterCreatedBetween" xml:space="preserve">
+    <value>Created between</value>
+    <comment>Label of the creation date range filter</comment>
+  </data>
+  <data name="ActivityFilterHasChildActivities" xml:space="preserve">
+    <value>Has child activities</value>
+    <comment>Label of the filter for Activities with child Activities</comment>
+  </data>
+  <data name="ActivityResumeAutoRefresh" xml:space="preserve">
+    <value>Resume auto-refresh</value>
+    <comment>Tooltip on the button that resumes automatic refresh</comment>
+  </data>
+  <data name="ActivityPauseAutoRefresh" xml:space="preserve">
+    <value>Pause auto-refresh</value>
+    <comment>Tooltip on the button that pauses automatic refresh</comment>
+  </data>
+  <data name="ActivitySingularName" xml:space="preserve">
+    <value>Activity</value>
+    <comment>Singular name of an Activity, used in the grid's count</comment>
+  </data>
+  <data name="ActivityPluralName" xml:space="preserve">
+    <value>Activities</value>
+    <comment>Plural name of Activities, used in the grid's count</comment>
+  </data>
+  <data name="ActivitySearchTargetOrInitiator" xml:space="preserve">
+    <value>Search target or initiator</value>
+    <comment>Placeholder of the search box on the Activity grid</comment>
+  </data>
+  <data name="ActivityColumnOperation" xml:space="preserve">
+    <value>Operation</value>
+    <comment>Column heading and filter label: the operation an Activity performed</comment>
+  </data>
+  <data name="ActivityChipAdded" xml:space="preserve">
+    <value>Connected System Objects added</value>
+    <comment>Outcome chip label</comment>
+  </data>
+  <data name="ActivityChipUpdated" xml:space="preserve">
+    <value>Connected System Objects updated</value>
+    <comment>Outcome chip label</comment>
+  </data>
+  <data name="ActivityChipDeletionsDetected" xml:space="preserve">
+    <value>Connected System Object deletions detected</value>
+    <comment>Outcome chip label</comment>
+  </data>
+  <data name="ActivityChipProjected" xml:space="preserve">
+    <value>Metaverse Objects projected</value>
+    <comment>Outcome chip label</comment>
+  </data>
+  <data name="ActivityChipJoined" xml:space="preserve">
+    <value>Connected System Objects joined</value>
+    <comment>Outcome chip label</comment>
+  </data>
+  <data name="ActivityChipAttributeFlow" xml:space="preserve">
+    <value>Metaverse Objects with Attribute Flow</value>
+    <comment>Outcome chip label</comment>
+  </data>
+  <data name="ActivityChipDisconnected" xml:space="preserve">
+    <value>Connected System Objects disconnected</value>
+    <comment>Outcome chip label</comment>
+  </data>
+  <data name="ActivityChipDisconnectedOutOfScope" xml:space="preserve">
+    <value>Connected System Objects disconnected (out of scope)</value>
+    <comment>Outcome chip label</comment>
+  </data>
+  <data name="ActivityChipOutOfScopeRetainJoin" xml:space="preserve">
+    <value>Connected System Objects out of scope (join retained)</value>
+    <comment>Outcome chip label</comment>
+  </data>
+  <data name="ActivityChipDeleted" xml:space="preserve">
+    <value>Connected System Objects deleted</value>
+    <comment>Outcome chip label</comment>
+  </data>
+  <data name="ActivityChipDriftCorrected" xml:space="preserve">
+    <value>Connected System Objects drift corrected</value>
+    <comment>Outcome chip label</comment>
+  </data>
+  <data name="ActivityChipProvisioned" xml:space="preserve">
+    <value>Connected System Objects provisioned</value>
+    <comment>Outcome chip label</comment>
+  </data>
+  <data name="ActivityChipPendingExports" xml:space="preserve">
+    <value>Connected System Object Pending Exports</value>
+    <comment>Outcome chip label</comment>
+  </data>
+  <data name="ActivityChipExported" xml:space="preserve">
+    <value>Connected System Objects exported</value>
+    <comment>Outcome chip label</comment>
+  </data>
+  <data name="ActivityChipDeprovisioned" xml:space="preserve">
+    <value>Connected System Objects deprovisioned</value>
+    <comment>Outcome chip label</comment>
+  </data>
+  <data name="ActivityChipNoChanges" xml:space="preserve">
+    <value>No changes</value>
+    <comment>Chip on an Activity that completed with no changes</comment>
+  </data>
+  <data name="ActivityChipObjectsGenerated" xml:space="preserve">
+    <value>Objects Generated</value>
+    <comment>Chip on a data generation Activity</comment>
+  </data>
+  <data name="ActivityChipCsoChangesDeleted" xml:space="preserve">
+    <value>Connected System Object changes deleted</value>
+    <comment>Chip on a history clean-up Activity</comment>
+  </data>
+  <data name="ActivityChipMvoChangesDeleted" xml:space="preserve">
+    <value>Metaverse Object changes deleted</value>
+    <comment>Chip on a history clean-up Activity</comment>
+  </data>
+  <data name="ActivityChipActivitiesDeleted" xml:space="preserve">
+    <value>Activities Deleted</value>
+    <comment>Chip on a history clean-up Activity</comment>
+  </data>
+  <data name="ActivityChipNoRecordsToClean" xml:space="preserve">
+    <value>No records to clean up</value>
+    <comment>Chip on a history clean-up Activity with nothing to remove</comment>
+  </data>
+  <data name="ActivityChipFailedAttempts" xml:space="preserve">
+    <value>Failed Attempts</value>
+    <comment>Chip on an authentication Activity</comment>
+  </data>
+  <data name="ActivityChipResourcesCreated" xml:space="preserve">
+    <value>Resources created</value>
+    <comment>Chip on a SCIM requests Activity</comment>
+  </data>
+  <data name="ActivityChipResourcesReplaced" xml:space="preserve">
+    <value>Resources replaced or patched</value>
+    <comment>Chip on a SCIM requests Activity</comment>
+  </data>
+  <data name="ActivityChipResourcesDeleted" xml:space="preserve">
+    <value>Resources deleted</value>
+    <comment>Chip on a SCIM requests Activity</comment>
+  </data>
+  <data name="ActivityChipRequestsRejected" xml:space="preserve">
+    <value>Requests rejected</value>
+    <comment>Chip on a SCIM requests Activity</comment>
+  </data>
+  <data name="ActivityChildCountOne" xml:space="preserve">
+    <value>{0} child activity</value>
+    <comment>Tooltip on the child Activity count: one child</comment>
+  </data>
+  <data name="ActivityChildCountOther" xml:space="preserve">
+    <value>{0} child activities</value>
+    <comment>Tooltip on the child Activity count: several children; {0} is the count</comment>
+  </data>
+  <data name="ActivityNoActivitiesMatchSearch" xml:space="preserve">
+    <value>No Activities match "{0}"</value>
+    <comment>Empty state after a search; {0} is what was searched for</comment>
+  </data>
+  <data name="ActivityNoActivitiesMatchFilters" xml:space="preserve">
+    <value>No Activities match the current filters</value>
+    <comment>Empty state when filters match nothing</comment>
+  </data>
+  <data name="ActivityAdjustFiltersActivities" xml:space="preserve">
+    <value>Adjust or clear the filters above to see more Activities.</value>
+    <comment>Empty state secondary text when filters match nothing</comment>
+  </data>
+  <data name="ActivityNoActivitiesYet" xml:space="preserve">
+    <value>No Activities yet</value>
+    <comment>Empty state when there are no Activities</comment>
+  </data>
+  <data name="ActivityNoActivitiesYetMine" xml:space="preserve">
+    <value>Activities appear here as you initiate operations in JIM, such as synchronisations and configuration changes.</value>
+    <comment>Empty state on My Activity</comment>
+  </data>
+  <data name="ActivityNoActivitiesYetAll" xml:space="preserve">
+    <value>Activities appear here as operations run in JIM, whether initiated by users, automated processes, or the API.</value>
+    <comment>Empty state on the Activity list</comment>
+  </data>
+  <data name="ActivityCategoryConfiguration" xml:space="preserve">
+    <value>Configuration</value>
+    <comment>Category quick-filter chip</comment>
+  </data>
+  <data name="ActivityCategoryIdentity" xml:space="preserve">
+    <value>Identity</value>
+    <comment>Category quick-filter chip for identity data</comment>
+  </data>
+  <data name="ActivityCategorySynchronisation" xml:space="preserve">
+    <value>Synchronisation</value>
+    <comment>Category quick-filter chip for synchronisation runs</comment>
+  </data>
+  <data name="ActivityCategorySystem" xml:space="preserve">
+    <value>System</value>
+    <comment>Category quick-filter chip</comment>
+  </data>
+  <data name="ActivityCategorySecurity" xml:space="preserve">
+    <value>Security</value>
+    <comment>Category quick-filter chip</comment>
+  </data>
+  <data name="ActivityCategoryPasswords" xml:space="preserve">
+    <value>Passwords</value>
+    <comment>Category quick-filter chip for password synchronisation</comment>
+  </data>
+  <data name="ActivitySelectedCountOne" xml:space="preserve">
+    <value>{0} selected</value>
+    <comment>Summary of a multi-select filter with one value chosen; {0} is the count</comment>
+  </data>
+  <data name="ActivitySelectedCountOther" xml:space="preserve">
+    <value>{0} selected</value>
+    <comment>Summary of a multi-select filter with several values chosen; {0} is the count</comment>
+  </data>
+  <data name="ActivityMyActivityTitle" xml:space="preserve">
+    <value>My Activity</value>
+    <comment>Page title of the My Activity view</comment>
+  </data>
+  <data name="ActivityMyActivityDescription" xml:space="preserve">
+    <value>View operations you have initiated, including synchronisations, configuration changes, and other actions.</value>
+    <comment>Page info text on the My Activity view</comment>
+  </data>
+  <data name="ActivityListDescription" xml:space="preserve">
+    <value>Monitor all activity across the system. View operations initiated by users or automated processes, including synchronisations, configuration changes, and system events.</value>
+    <comment>Page info text on the Activity list</comment>
+  </data>
 </root>

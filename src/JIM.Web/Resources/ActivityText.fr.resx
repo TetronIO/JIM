@@ -809,4 +809,298 @@
   <data name="ActivityStatCsosDisconnectedIncluding" xml:space="preserve">
     <value>Objets de systèmes connectés déconnectés, dont {0} ayant quitté le périmètre d’une règle de synchronisation d’importation</value>
   </data>
+  <data name="ActivityFilterCategory" xml:space="preserve">
+    <value>Catégorie :</value>
+  </data>
+  <data name="ActivityFilterAll" xml:space="preserve">
+    <value>Tous</value>
+  </data>
+  <data name="ActivityFilterInitiator" xml:space="preserve">
+    <value>Initiateur</value>
+  </data>
+  <data name="ActivityColumnInitiatedBy" xml:space="preserve">
+    <value>Initié par</value>
+  </data>
+  <data name="ActivityColumnCreated" xml:space="preserve">
+    <value>Créé</value>
+  </data>
+  <data name="ActivityOperationCreate" xml:space="preserve">
+    <value>Créer</value>
+  </data>
+  <data name="ActivityOperationRead" xml:space="preserve">
+    <value>Lire</value>
+  </data>
+  <data name="ActivityOperationUpdate" xml:space="preserve">
+    <value>Mettre à jour</value>
+  </data>
+  <data name="ActivityOperationDelete" xml:space="preserve">
+    <value>Supprimer</value>
+  </data>
+  <data name="ActivityOperationClear" xml:space="preserve">
+    <value>Vider</value>
+  </data>
+  <data name="ActivityOperationExecute" xml:space="preserve">
+    <value>Exécuter</value>
+  </data>
+  <data name="ActivityOperationImportHierarchy" xml:space="preserve">
+    <value>Importer la hiérarchie</value>
+  </data>
+  <data name="ActivityOperationImportSchema" xml:space="preserve">
+    <value>Importer le schéma</value>
+  </data>
+  <data name="ActivityOperationRevert" xml:space="preserve">
+    <value>Rétablir</value>
+  </data>
+  <data name="ActivityOperationAuthenticate" xml:space="preserve">
+    <value>Authentifier</value>
+  </data>
+  <data name="ActivityOutcomeAdded" xml:space="preserve">
+    <value>Ajoutés</value>
+  </data>
+  <data name="ActivityOutcomeUpdated" xml:space="preserve">
+    <value>Mis à jour</value>
+  </data>
+  <data name="ActivityOutcomeDeleted" xml:space="preserve">
+    <value>Supprimés</value>
+  </data>
+  <data name="ActivityOutcomeProjected" xml:space="preserve">
+    <value>Projetés</value>
+  </data>
+  <data name="ActivityOutcomeJoined" xml:space="preserve">
+    <value>Rattachés</value>
+  </data>
+  <data name="ActivityOutcomeAttributeFlows" xml:space="preserve">
+    <value>Flux d’attributs</value>
+  </data>
+  <data name="ActivityOutcomeDisconnected" xml:space="preserve">
+    <value>Déconnectés</value>
+  </data>
+  <data name="ActivityOutcomeDriftCorrections" xml:space="preserve">
+    <value>Corrections de dérive</value>
+  </data>
+  <data name="ActivityOutcomeProvisioned" xml:space="preserve">
+    <value>Provisionnés</value>
+  </data>
+  <data name="ActivityOutcomeExported" xml:space="preserve">
+    <value>Exportés</value>
+  </data>
+  <data name="ActivityOutcomeDeprovisioned" xml:space="preserve">
+    <value>Déprovisionnés</value>
+  </data>
+  <data name="ActivityOutcomeCreated" xml:space="preserve">
+    <value>Créés</value>
+  </data>
+  <data name="ActivityOutcomePendingExports" xml:space="preserve">
+    <value>Exportations en attente</value>
+  </data>
+  <data name="ActivityOutcomeErrors" xml:space="preserve">
+    <value>Erreurs</value>
+  </data>
+  <data name="ActivityTypeConnectedSystem" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="ActivityTypeConnectedSystemRunProfile" xml:space="preserve">
+    <value>Profil d’exécution de système connecté</value>
+  </data>
+  <data name="ActivityTypeSynchronisationRule" xml:space="preserve">
+    <value>Règle de synchronisation</value>
+  </data>
+  <data name="ActivityTypeMetaverseObject" xml:space="preserve">
+    <value>Objet Metaverse</value>
+  </data>
+  <data name="ActivityTypeConnectedSystemObject" xml:space="preserve">
+    <value>Objet de système connecté</value>
+  </data>
+  <data name="ActivityTypeMetaverseAttribute" xml:space="preserve">
+    <value>Attribut Metaverse</value>
+  </data>
+  <data name="ActivityTypeExampleDataTemplate" xml:space="preserve">
+    <value>Modèle de données d’exemple</value>
+  </data>
+  <data name="ActivityTypeDataGeneration" xml:space="preserve">
+    <value>Génération de données</value>
+  </data>
+  <data name="ActivityTypeTrustedCertificate" xml:space="preserve">
+    <value>Certificat approuvé</value>
+  </data>
+  <data name="ActivityTypeObjectMatchingRule" xml:space="preserve">
+    <value>Règle de correspondance d’objets</value>
+  </data>
+  <data name="ActivityTypeServiceSetting" xml:space="preserve">
+    <value>Paramètre de service</value>
+  </data>
+  <data name="ActivityStatusFilterInProgress" xml:space="preserve">
+    <value>En cours</value>
+  </data>
+  <data name="ActivityStatusFilterCompleteWithWarning" xml:space="preserve">
+    <value>Terminée avec un avertissement</value>
+  </data>
+  <data name="ActivityStatusFilterCompleteWithError" xml:space="preserve">
+    <value>Terminée avec une erreur</value>
+  </data>
+  <data name="ActivityStatusFilterFailedWithError" xml:space="preserve">
+    <value>Échec avec une erreur</value>
+  </data>
+  <data name="ActivityInitiatorUser" xml:space="preserve">
+    <value>Utilisateur</value>
+  </data>
+  <data name="ActivityFilterCreatedBetween" xml:space="preserve">
+    <value>Créé entre</value>
+  </data>
+  <data name="ActivityFilterHasChildActivities" xml:space="preserve">
+    <value>A des activités enfants</value>
+  </data>
+  <data name="ActivityResumeAutoRefresh" xml:space="preserve">
+    <value>Reprendre l’actualisation automatique</value>
+  </data>
+  <data name="ActivityPauseAutoRefresh" xml:space="preserve">
+    <value>Suspendre l’actualisation automatique</value>
+  </data>
+  <data name="ActivitySingularName" xml:space="preserve">
+    <value>activité</value>
+  </data>
+  <data name="ActivityPluralName" xml:space="preserve">
+    <value>activités</value>
+  </data>
+  <data name="ActivitySearchTargetOrInitiator" xml:space="preserve">
+    <value>Rechercher par cible ou initiateur</value>
+  </data>
+  <data name="ActivityColumnOperation" xml:space="preserve">
+    <value>Opération</value>
+  </data>
+  <data name="ActivityChipAdded" xml:space="preserve">
+    <value>Objets de systèmes connectés ajoutés</value>
+  </data>
+  <data name="ActivityChipUpdated" xml:space="preserve">
+    <value>Objets de systèmes connectés mis à jour</value>
+  </data>
+  <data name="ActivityChipDeletionsDetected" xml:space="preserve">
+    <value>Suppressions d’objets de systèmes connectés détectées</value>
+  </data>
+  <data name="ActivityChipProjected" xml:space="preserve">
+    <value>Objets Metaverse projetés</value>
+  </data>
+  <data name="ActivityChipJoined" xml:space="preserve">
+    <value>Objets de systèmes connectés rattachés</value>
+  </data>
+  <data name="ActivityChipAttributeFlow" xml:space="preserve">
+    <value>Objets Metaverse avec flux d’attributs</value>
+  </data>
+  <data name="ActivityChipDisconnected" xml:space="preserve">
+    <value>Objets de systèmes connectés déconnectés</value>
+  </data>
+  <data name="ActivityChipDisconnectedOutOfScope" xml:space="preserve">
+    <value>Objets de systèmes connectés déconnectés (hors périmètre)</value>
+  </data>
+  <data name="ActivityChipOutOfScopeRetainJoin" xml:space="preserve">
+    <value>Objets de systèmes connectés hors périmètre (jointure conservée)</value>
+  </data>
+  <data name="ActivityChipDeleted" xml:space="preserve">
+    <value>Objets de systèmes connectés supprimés</value>
+  </data>
+  <data name="ActivityChipDriftCorrected" xml:space="preserve">
+    <value>Objets de systèmes connectés corrigés en cas de dérive</value>
+  </data>
+  <data name="ActivityChipProvisioned" xml:space="preserve">
+    <value>Objets de systèmes connectés provisionnés</value>
+  </data>
+  <data name="ActivityChipPendingExports" xml:space="preserve">
+    <value>Exportations en attente d’objets de systèmes connectés</value>
+  </data>
+  <data name="ActivityChipExported" xml:space="preserve">
+    <value>Objets de systèmes connectés exportés</value>
+  </data>
+  <data name="ActivityChipDeprovisioned" xml:space="preserve">
+    <value>Objets de systèmes connectés déprovisionnés</value>
+  </data>
+  <data name="ActivityChipNoChanges" xml:space="preserve">
+    <value>Aucune modification</value>
+  </data>
+  <data name="ActivityChipObjectsGenerated" xml:space="preserve">
+    <value>Objets générés</value>
+  </data>
+  <data name="ActivityChipCsoChangesDeleted" xml:space="preserve">
+    <value>Modifications d’objets de systèmes connectés supprimées</value>
+  </data>
+  <data name="ActivityChipMvoChangesDeleted" xml:space="preserve">
+    <value>Modifications d’objets Metaverse supprimées</value>
+  </data>
+  <data name="ActivityChipActivitiesDeleted" xml:space="preserve">
+    <value>Activités supprimées</value>
+  </data>
+  <data name="ActivityChipNoRecordsToClean" xml:space="preserve">
+    <value>Aucun enregistrement à nettoyer</value>
+  </data>
+  <data name="ActivityChipFailedAttempts" xml:space="preserve">
+    <value>Tentatives échouées</value>
+  </data>
+  <data name="ActivityChipResourcesCreated" xml:space="preserve">
+    <value>Ressources créées</value>
+  </data>
+  <data name="ActivityChipResourcesReplaced" xml:space="preserve">
+    <value>Ressources remplacées ou corrigées</value>
+  </data>
+  <data name="ActivityChipResourcesDeleted" xml:space="preserve">
+    <value>Ressources supprimées</value>
+  </data>
+  <data name="ActivityChipRequestsRejected" xml:space="preserve">
+    <value>Requêtes rejetées</value>
+  </data>
+  <data name="ActivityChildCountOne" xml:space="preserve">
+    <value>{0} activité enfant</value>
+  </data>
+  <data name="ActivityChildCountOther" xml:space="preserve">
+    <value>{0} activités enfants</value>
+  </data>
+  <data name="ActivityNoActivitiesMatchSearch" xml:space="preserve">
+    <value>Aucune activité ne correspond à « {0} »</value>
+  </data>
+  <data name="ActivityNoActivitiesMatchFilters" xml:space="preserve">
+    <value>Aucune activité ne correspond aux filtres actuels</value>
+  </data>
+  <data name="ActivityAdjustFiltersActivities" xml:space="preserve">
+    <value>Modifiez ou effacez les filtres ci-dessus pour voir davantage d’activités.</value>
+  </data>
+  <data name="ActivityNoActivitiesYet" xml:space="preserve">
+    <value>Aucune activité pour l’instant</value>
+  </data>
+  <data name="ActivityNoActivitiesYetMine" xml:space="preserve">
+    <value>Les activités apparaissent ici lorsque vous lancez des opérations dans JIM, comme des synchronisations ou des modifications de configuration.</value>
+  </data>
+  <data name="ActivityNoActivitiesYetAll" xml:space="preserve">
+    <value>Les activités apparaissent ici au fur et à mesure que les opérations s’exécutent dans JIM, qu’elles soient lancées par des utilisateurs, des processus automatisés ou l’API.</value>
+  </data>
+  <data name="ActivityCategoryConfiguration" xml:space="preserve">
+    <value>Configuration</value>
+  </data>
+  <data name="ActivityCategoryIdentity" xml:space="preserve">
+    <value>Identité</value>
+  </data>
+  <data name="ActivityCategorySynchronisation" xml:space="preserve">
+    <value>Synchronisation</value>
+  </data>
+  <data name="ActivityCategorySystem" xml:space="preserve">
+    <value>Système</value>
+  </data>
+  <data name="ActivityCategorySecurity" xml:space="preserve">
+    <value>Sécurité</value>
+  </data>
+  <data name="ActivityCategoryPasswords" xml:space="preserve">
+    <value>Mots de passe</value>
+  </data>
+  <data name="ActivitySelectedCountOne" xml:space="preserve">
+    <value>{0} sélectionné</value>
+  </data>
+  <data name="ActivitySelectedCountOther" xml:space="preserve">
+    <value>{0} sélectionnés</value>
+  </data>
+  <data name="ActivityMyActivityTitle" xml:space="preserve">
+    <value>Mon activité</value>
+  </data>
+  <data name="ActivityMyActivityDescription" xml:space="preserve">
+    <value>Affiche les opérations que vous avez lancées, y compris les synchronisations, les modifications de configuration et les autres actions.</value>
+  </data>
+  <data name="ActivityListDescription" xml:space="preserve">
+    <value>Surveillez toutes les activités du système. Affichez les opérations lancées par des utilisateurs ou par des processus automatisés, y compris les synchronisations, les modifications de configuration et les événements système.</value>
+  </data>
 </root>
