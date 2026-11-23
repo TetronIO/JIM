@@ -163,7 +163,7 @@
 
     private string PaperClass => string.IsNullOrEmpty(Class)
         ? "jim-attribute-values-not-imported"
-        : $"jim-attribute-values-not-imported {Class}";
+        : $"jim-attribute-values-not-imported {Class}"; // i18n: exempt - CSS class names, not text
 
     private Task<VirtualisedWindow<ImportedAttributeValueError>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken cancellationToken) =>
         Task.FromResult(AttributeValueErrorDisplay.Matching(Errors.Values, request.SearchText).ToWindow(request));

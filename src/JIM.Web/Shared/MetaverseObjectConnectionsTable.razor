@@ -240,7 +240,7 @@ else if (IsLoaded)
     private static string GetRoleSortKey(MetaverseObjectConnectionExplanation connection) =>
         (connection.IsSource, connection.IsTarget) switch
         {
-            (true, true) => "1 source and target",
+            (true, true) => "1 source and target", // i18n: exempt - sort key, never shown to a reader
             (true, false) => "0 source",
             (false, true) => "2 target",
             _ => "3 none"

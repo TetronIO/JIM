@@ -26,4 +26,121 @@
   <data name="SubjectThisSyncRule" xml:space="preserve">
     <value>this Synchronization Rule</value>
   </data>
+  <data name="MvotDeprovisioningIntro" xml:space="preserve">
+    <value>When a Metaverse Object of this type is deleted (or leaves an export Synchronization Rule's scope), each export Synchronization Rule's Deprovisioning Action determines what happens to the corresponding object in its Connected System: Disconnect leaves it in place; Delete removes it. Disabled Synchronization Rules do not apply during synchronization.</value>
+  </data>
+  <data name="PwdNeverSet" xml:space="preserve">
+    <value>JIM has never set or synchronized a password for this {0}.</value>
+  </data>
+  <data name="TvPreviewSyncHint" xml:space="preserve">
+    <value>To preview synchronizing one of its connections, use that row's Preview Sync.</value>
+  </data>
+  <data name="MvcLastSynchronised" xml:space="preserve">
+    <value>Last synchronized</value>
+  </data>
+  <data name="PsiEnabledTooltip" xml:space="preserve">
+    <value>{0} receives synchronized password changes. Each one is queued and delivered on its own clock, with retries, so the system being unavailable delays a password rather than losing it.</value>
+  </data>
+  <data name="PhmCancelledByAdmin" xml:space="preserve">
+    <value>canceled by an administrator.</value>
+  </data>
+  <data name="PhmCancelledBy" xml:space="preserve">
+    <value>canceled by {0}.</value>
+  </data>
+  <data name="PhmSuffixCancelled" xml:space="preserve">
+    <value>canceled</value>
+  </data>
+  <data name="ErpReviewTooltip" xml:space="preserve">
+    <value>Reviewed against every export rule at the next synchronization of any Connected System.</value>
+  </data>
+  <data name="ErpbChanged" xml:space="preserve">
+    <value>Changed outside synchronization: {0}.</value>
+  </data>
+  <data name="ErpbReviewChanged" xml:space="preserve">
+    <value>The next synchronization of any Connected System reviews this Metaverse Object against every export rule and sends the changed values to the accounts it already has.</value>
+  </data>
+  <data name="ErpbReview" xml:space="preserve">
+    <value>The next synchronization of any Connected System reviews this Metaverse Object against every export rule.</value>
+  </data>
+  <data name="MvotNoContributingSystems" xml:space="preserve">
+    <value>No contributing systems found. Create inbound Synchronization Rules for this object type to enable authoritative source selection.</value>
+  </data>
+  <data name="MvotNoExportRulesMatch" xml:space="preserve">
+    <value>No export Synchronization Rules match "{0}"</value>
+  </data>
+  <data name="MvotNoExportRulesForType" xml:space="preserve">
+    <value>No export Synchronization Rules target this Metaverse Object Type</value>
+  </data>
+  <data name="MvotNoExportRulesForTypeHint" xml:space="preserve">
+    <value>When Metaverse Objects of this type are deleted, no objects in Connected Systems are affected. Create an export Synchronization Rule for this type to change that.</value>
+  </data>
+  <data name="MvotContributorsTooltip" xml:space="preserve">
+    <value>The number of Synchronization Rules that contribute this attribute inbound. More than one means an Attribute Priority order determines which wins.</value>
+  </data>
+  <data name="MvotAttributePriorityIntro" xml:space="preserve">
+    <value>Multiple Synchronization Rules can contribute this attribute. Drag to set which wins when more than one supplies a value; the highest priority is at the top. The first to supply a value wins (unless {0} is selected). Disabled rules hold their position but never contribute.</value>
+  </data>
+  <data name="MvotRuleNotFound" xml:space="preserve">
+    <value>The Synchronization Rule could not be found. It may have been deleted.</value>
+  </data>
+  <data name="MvotRuleUpdateFailed" xml:space="preserve">
+    <value>Failed to update Synchronization Rule '{0}'.</value>
+  </data>
+  <data name="MvotRuleUpdateFailedDetail" xml:space="preserve">
+    <value>Failed to update the Synchronization Rule: {0}</value>
+  </data>
+  <data name="SpdEnableIntro" xml:space="preserve">
+    <value>These apply to this account now. Where a Synchronization Rule flows &lt;code&gt;userAccountControl&lt;/code&gt; with Enforce State on, the next export puts its value back. Left off, a Connected System Object still waiting for its first password is enabled as its Synchronization Rule's Initial Password says.</value>
+  </data>
+  <data name="SpdHeld" xml:space="preserve">
+    <value>{0} will take it once Password Synchronization is switched on there.</value>
+  </data>
+  <data name="PwdRecordedNoTargets" xml:space="preserve">
+    <value>Recorded, but queued for no Connected System: none that this {0} has a Connected System Object in was enabled for Password Synchronization at the time.</value>
+  </data>
+  <data name="TvPreviewExportsIntro" xml:space="preserve">
+    <value>What JIM would export for this Metaverse Object as it stands: where it would be provisioned, updated or deprovisioned under each enabled export Synchronization Rule. Nothing is imported first.</value>
+  </data>
+  <data name="TvFullSynchronisation" xml:space="preserve">
+    <value>Full Synchronization</value>
+  </data>
+  <data name="MvaNoValuesHint" xml:space="preserve">
+    <value>Values arrive here from a Connected System through an Inbound Synchronization Rule.</value>
+  </data>
+  <data name="PsiDisabledTooltip" xml:space="preserve">
+    <value>Password Synchronization is configured for {0} but switched off. Changes still accumulate for it and are delivered when it is switched back on; they are not discarded in the meantime.</value>
+  </data>
+  <data name="IpaParkedOneSystem" xml:space="preserve">
+    <value>1 account is waiting on a change to the initial password settings of the Synchronization Rules that provisioned them into {0}. The target refused the password these settings produced, so JIM has stopped trying. Correcting the settings and saving releases them, and they are attempted again by the Password Delivery Service within seconds.</value>
+  </data>
+  <data name="IpaParkedOtherSystem" xml:space="preserve">
+    <value>{0} accounts are waiting on a change to the initial password settings of the Synchronization Rules that provisioned them into {1}. The target refused the password these settings produced, so JIM has stopped trying. Correcting the settings and saving releases them, and they are attempted again by the Password Delivery Service within seconds.</value>
+  </data>
+  <data name="PhmHeld" xml:space="preserve">
+    <value>held until Password Synchronization is switched on for this Connected System.</value>
+  </data>
+  <data name="SrcTitleRuleDeleted" xml:space="preserve">
+    <value>{0}. Synchronization Rule: deleted</value>
+  </data>
+  <data name="SrcTitleRule" xml:space="preserve">
+    <value>{0}. Synchronization Rule: {1}</value>
+  </data>
+  <data name="SrcAriaRule" xml:space="preserve">
+    <value>Synchronization Rule {0}</value>
+  </data>
+  <data name="McdOpenRule" xml:space="preserve">
+    <value>Open Synchronization Rule</value>
+  </data>
+  <data name="McdNoScoping" xml:space="preserve">
+    <value>No enabled Synchronization Rule applies to this connection, so there is no scoping to evaluate.</value>
+  </data>
+  <data name="PctHeld" xml:space="preserve">
+    <value>Held until Password Synchronization is switched on for this Connected System</value>
+  </data>
+  <data name="PctCancelled" xml:space="preserve">
+    <value>Canceled</value>
+  </data>
+  <data name="EhcConsequence3" xml:space="preserve">
+    <value>A schema refresh while it is off reports the Exchange attributes as removed: apply it plainly to keep them, or the Synchronization Rules that declare recipients stop.</value>
+  </data>
 </root>

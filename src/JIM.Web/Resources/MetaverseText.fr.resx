@@ -299,7 +299,7 @@
   <data name="SpdIntroAny" xml:space="preserve">
     <value>Définit le &lt;b&gt;même mot de passe&lt;/b&gt; sur les objets de systèmes connectés que vous choisissez. JIM ne conserve le mot de passe chiffré que jusqu'à ce que chaque système l'ait reçu, et garde celui qu'un système a refusé pour pouvoir terminer la tâche.</value>
   </data>
-  <data name="SpdIntroOne" xml:space="preserve">
+  <data name="SpdIntroSingle" xml:space="preserve">
     <value>Définit le mot de passe sur &lt;b&gt;{0}&lt;/b&gt; dans &lt;b&gt;{1}&lt;/b&gt;. JIM ne conserve le mot de passe chiffré que jusqu'à ce que le système l'ait reçu, et garde celui qu'il a refusé pour pouvoir terminer la tâche.</value>
   </data>
   <data name="SpdNoneSettable" xml:space="preserve">
@@ -1546,5 +1546,221 @@
   </data>
   <data name="WvCharacterOther" xml:space="preserve">
     <value>caractères</value>
+  </data>
+  <data name="McdHowJoined" xml:space="preserve">
+    <value>Comment il a été relié</value>
+  </data>
+  <data name="McdFromHistory" xml:space="preserve">
+    <value>Extrait de l'historique des activités</value>
+  </data>
+  <data name="McdViewActivity" xml:space="preserve">
+    <value>Voir dans l'activité</value>
+  </data>
+  <data name="McdOpenRule" xml:space="preserve">
+    <value>Ouvrir la règle de synchronisation</value>
+  </data>
+  <data name="McdEvaluatedAt" xml:space="preserve">
+    <value>Évalué maintenant, selon les valeurs actuelles, le {0}</value>
+  </data>
+  <data name="McdNoScoping" xml:space="preserve">
+    <value>Aucune règle de synchronisation activée ne s'applique à cette connexion : il n'y a donc aucun périmètre à évaluer.</value>
+  </data>
+  <data name="McdConflicts" xml:space="preserve">
+    <value>Conflits de types d'objets</value>
+  </data>
+  <data name="CvnSearch" xml:space="preserve">
+    <value>Rechercher des valeurs...</value>
+  </data>
+  <data name="CvnValueChange" xml:space="preserve">
+    <value>Modification de valeur</value>
+  </data>
+  <data name="CvnValueChanges" xml:space="preserve">
+    <value>Modifications de valeurs</value>
+  </data>
+  <data name="CvnChange" xml:space="preserve">
+    <value>Modification</value>
+  </data>
+  <data name="AtNoMatch" xml:space="preserve">
+    <value>Aucun élément {0} ne correspond à « {1} ».</value>
+  </data>
+  <data name="AtSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher un nom ou une valeur d'attribut</value>
+  </data>
+  <data name="AcMetaverseAttribute" xml:space="preserve">
+    <value>Attribut Metaverse</value>
+  </data>
+  <data name="AcConnectedSystemAttribute" xml:space="preserve">
+    <value>Attribut de système connecté</value>
+  </data>
+  <data name="ErpReviewTooltip" xml:space="preserve">
+    <value>Vérifié par rapport à chaque règle d'exportation lors de la prochaine synchronisation de n'importe quel système connecté.</value>
+  </data>
+  <data name="ErpChipLabel" xml:space="preserve">
+    <value>Revue d'exportation en attente : {0}</value>
+  </data>
+  <data name="CvcNone" xml:space="preserve">
+    <value>(aucun)</value>
+  </data>
+  <data name="RgvObjectDeleted" xml:space="preserve">
+    <value>Objet supprimé</value>
+  </data>
+  <data name="RgvSuperseded" xml:space="preserve">
+    <value>Plus généré</value>
+  </data>
+  <data name="RgvRecalled" xml:space="preserve">
+    <value>Flux supprimé</value>
+  </data>
+  <data name="RgvRegenerated" xml:space="preserve">
+    <value>Régénérée</value>
+  </data>
+  <data name="RgvTipObjectDeleted" xml:space="preserve">
+    <value>L'objet qui détenait cette valeur a été supprimé.</value>
+  </data>
+  <data name="RgvTipSuperseded" xml:space="preserve">
+    <value>Un autre flux d'attributs fournit désormais cet attribut à l'objet ; JIM a donc cessé de gérer la valeur générée.</value>
+  </data>
+  <data name="RgvTipRecalled" xml:space="preserve">
+    <value>Le flux d'attributs qui a généré cette valeur a été supprimé.</value>
+  </data>
+  <data name="RgvTipRegenerated" xml:space="preserve">
+    <value>JIM a attribué à l'objet une autre valeur à la place de celle-ci.</value>
+  </data>
+  <data name="AvdText" xml:space="preserve">
+    <value>Texte</value>
+  </data>
+  <data name="AvdWholeNumber" xml:space="preserve">
+    <value>Un nombre entier</value>
+  </data>
+  <data name="AvdDecimal" xml:space="preserve">
+    <value>Un nombre décimal</value>
+  </data>
+  <data name="AvdDateTime" xml:space="preserve">
+    <value>Une date et une heure</value>
+  </data>
+  <data name="AvdBoolean" xml:space="preserve">
+    <value>Vrai ou faux</value>
+  </data>
+  <data name="AvdGuid" xml:space="preserve">
+    <value>Un GUID</value>
+  </data>
+  <data name="AvdBinary" xml:space="preserve">
+    <value>Données binaires</value>
+  </data>
+  <data name="AvdReference" xml:space="preserve">
+    <value>Une référence à un autre objet</value>
+  </data>
+  <data name="AvdConnector" xml:space="preserve">
+    <value>Connecteur</value>
+  </data>
+  <data name="PctPasswordSet" xml:space="preserve">
+    <value>Mot de passe défini</value>
+  </data>
+  <data name="PctDelivering" xml:space="preserve">
+    <value>Envoi en cours</value>
+  </data>
+  <data name="PctQueued" xml:space="preserve">
+    <value>En file d'attente ; le service de livraison des mots de passe le prendra en charge dans un instant</value>
+  </data>
+  <data name="PctRetrying" xml:space="preserve">
+    <value>Nouvelle tentative</value>
+  </data>
+  <data name="PctHeld" xml:space="preserve">
+    <value>En attente que la synchronisation des mots de passe soit activée pour ce système connecté</value>
+  </data>
+  <data name="PctExpired" xml:space="preserve">
+    <value>Expirée avant d'avoir pu être envoyée</value>
+  </data>
+  <data name="PctCancelled" xml:space="preserve">
+    <value>Annulée</value>
+  </data>
+  <data name="EhcTitle" xml:space="preserve">
+    <value>Arrêter de gérer les destinataires Exchange ?</value>
+  </data>
+  <data name="EhcConfirm" xml:space="preserve">
+    <value>Suspendre l'envoi vers Exchange</value>
+  </data>
+  <data name="EhcConsequence1" xml:space="preserve">
+    <value>Les modifications déjà mises en file pour Exchange attendent, suspendues, et sont envoyées dès que ce système connecté gère de nouveau les destinataires Exchange.</value>
+  </data>
+  <data name="EhcConsequence2" xml:space="preserve">
+    <value>Les exportations continuent de mettre des modifications en file, qui sont suspendues de la même manière.</value>
+  </data>
+  <data name="EhcConsequence3" xml:space="preserve">
+    <value>Pendant la désactivation, une actualisation du schéma signale les attributs Exchange comme supprimés : appliquez-la simplement pour les conserver, sans quoi les règles de synchronisation qui déclarent des destinataires cessent de fonctionner.</value>
+  </data>
+  <data name="ErfRecipientType" xml:space="preserve">
+    <value>Non défini : les objets ne sont pas des destinataires</value>
+  </data>
+  <data name="ErfAlias" xml:space="preserve">
+    <value>Non défini : mailNickname est utilisé</value>
+  </data>
+  <data name="ErfDatabase" xml:space="preserve">
+    <value>Non défini : Exchange choisit</value>
+  </data>
+  <data name="ErfPrimarySmtp" xml:space="preserve">
+    <value>Non défini : les stratégies d'adresses de messagerie s'appliquent</value>
+  </data>
+  <data name="ErfExternalAddress" xml:space="preserve">
+    <value>Non défini ; les utilisateurs et les contacts de messagerie en ont besoin d'un</value>
+  </data>
+  <data name="EstOutstanding" xml:space="preserve">
+    <value>1 modification en attente</value>
+  </data>
+  <data name="EstChangeState" xml:space="preserve">
+    <value>Modification : {0}</value>
+  </data>
+  <data name="EstInStep" xml:space="preserve">
+    <value>Synchronisé</value>
+  </data>
+  <data name="EstAwaitingImport" xml:space="preserve">
+    <value>En attente d'importation</value>
+  </data>
+  <data name="PccTitle" xml:space="preserve">
+    <value>Annuler le changement de mot de passe</value>
+  </data>
+  <data name="PccConfirm" xml:space="preserve">
+    <value>Annuler l'envoi</value>
+  </data>
+  <data name="EcrbAria" xml:space="preserve">
+    <value>Relancer cette modification Exchange</value>
+  </data>
+  <data name="EcrbRetryNow" xml:space="preserve">
+    <value>Relancer maintenant</value>
+  </data>
+  <data name="EcrbNothing" xml:space="preserve">
+    <value>Rien n'a été relancé : la modification n'est plus suspendue ni en nouvelle tentative.</value>
+  </data>
+  <data name="EcrbWillRetry" xml:space="preserve">
+    <value>La modification sera de nouveau tentée dans quelques secondes.</value>
+  </data>
+  <data name="ErpbTitle" xml:space="preserve">
+    <value>En attente de revue d'exportation</value>
+  </data>
+  <data name="ErpbChanged" xml:space="preserve">
+    <value>Modifié en dehors de la synchronisation : {0}.</value>
+  </data>
+  <data name="ErpbReviewChanged" xml:space="preserve">
+    <value>La prochaine synchronisation de n'importe quel système connecté vérifie cet objet Metaverse par rapport à chaque règle d'exportation et envoie les valeurs modifiées aux comptes qu'il possède déjà.</value>
+  </data>
+  <data name="ErpbReview" xml:space="preserve">
+    <value>La prochaine synchronisation de n'importe quel système connecté vérifie cet objet Metaverse par rapport à chaque règle d'exportation.</value>
+  </data>
+  <data name="MpPages" xml:space="preserve">
+    <value>Pages</value>
+  </data>
+  <data name="MpPrevious" xml:space="preserve">
+    <value>Précédent</value>
+  </data>
+  <data name="MpNext" xml:space="preserve">
+    <value>Suivant</value>
+  </data>
+  <data name="MpPageOf" xml:space="preserve">
+    <value>Page {0} sur {1}</value>
+  </data>
+  <data name="SpdStillDelivering" xml:space="preserve">
+    <value>Envoi en cours. Le mot de passe est en sécurité dans la file d'attente et sera relancé si un système est indisponible ; suivez-le dans l'onglet Mots de passe de cet objet Metaverse, ou dans</value>
+  </data>
+  <data name="SpdPasswordsTabOperations" xml:space="preserve">
+    <value>l'onglet Mots de passe des Opérations</value>
   </data>
 </root>

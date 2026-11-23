@@ -1,7 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Exchange;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -19,16 +21,16 @@ public static class ExchangeRecipientStateDisplay
         ArgumentNullException.ThrowIfNull(state);
 
         if (state.QueuedChange is { IsSettled: false })
-            return ("1 change outstanding", "warn");
+            return (MetaverseText.EstOutstanding, "warn");
 
         // A settled change still on the queue is one JIM has stopped on: parked, refused or not made.
         if (state.QueuedChange is { } stopped && stopped.State is not (JIM.Models.Transactional.DTOs.ExchangeChangeState.Delivered
                 or JIM.Models.Transactional.DTOs.ExchangeChangeState.Withdrawn or JIM.Models.Transactional.DTOs.ExchangeChangeState.Replaced))
         {
             var (label, modifier, _) = ExchangeChangeOutcomeDisplay.Pill(stopped.State);
-            return ($"Change {label.ToLowerInvariant()}", modifier);
+            return (string.Format(CultureInfo.CurrentCulture, MetaverseText.EstChangeState, label.ToLowerInvariant()), modifier);
         }
 
-        return state.IsInStep ? ("In step", "ok") : ("Awaiting import", "neutral");
+        return state.IsInStep ? (MetaverseText.EstInStep, "ok") : (MetaverseText.EstAwaitingImport, "neutral");
     }
 }

@@ -394,7 +394,7 @@
     <value>Sets the &lt;b&gt;same password&lt;/b&gt; on the Connected System Objects you choose. JIM holds the password encrypted only until each system has it, and keeps a refused one so it can finish the job.</value>
     <comment>Intro when several accounts can be chosen. Contains &lt;b&gt; tags; keep them.</comment>
   </data>
-  <data name="SpdIntroOne" xml:space="preserve">
+  <data name="SpdIntroSingle" xml:space="preserve">
     <value>Sets the password on &lt;b&gt;{0}&lt;/b&gt; in &lt;b&gt;{1}&lt;/b&gt;. JIM holds the password encrypted only until the system has it, and keeps a refused one so it can finish the job.</value>
     <comment>Intro for one account. {0} is the account identifier, {1} the Connected System's name; both are HTML-encoded before insertion. Contains &lt;b&gt; tags; keep them.</comment>
   </data>
@@ -2057,5 +2057,293 @@
   <data name="WvCharacterOther" xml:space="preserve">
     <value>characters</value>
     <comment>Counted noun, plural.</comment>
+  </data>
+  <data name="McdHowJoined" xml:space="preserve">
+    <value>How it joined</value>
+    <comment>Section heading.</comment>
+  </data>
+  <data name="McdFromHistory" xml:space="preserve">
+    <value>Taken from Activity history</value>
+    <comment>Shown when the join is derived from history rather than recorded.</comment>
+  </data>
+  <data name="McdViewActivity" xml:space="preserve">
+    <value>View in Activity</value>
+    <comment>Link to the Activity.</comment>
+  </data>
+  <data name="McdOpenRule" xml:space="preserve">
+    <value>Open Synchronisation Rule</value>
+    <comment>Link to the rule that joined the object.</comment>
+  </data>
+  <data name="McdEvaluatedAt" xml:space="preserve">
+    <value>Evaluated now, against current values, at {0}</value>
+    <comment>Caption. {0} is the evaluation date.</comment>
+  </data>
+  <data name="McdNoScoping" xml:space="preserve">
+    <value>No enabled Synchronisation Rule applies to this connection, so there is no scoping to evaluate.</value>
+    <comment>Shown when no rule applies.</comment>
+  </data>
+  <data name="McdConflicts" xml:space="preserve">
+    <value>Object Type conflicts</value>
+    <comment>Section heading.</comment>
+  </data>
+  <data name="CvnSearch" xml:space="preserve">
+    <value>Search values...</value>
+    <comment>Search box placeholder in a nested value table.</comment>
+  </data>
+  <data name="CvnValueChange" xml:space="preserve">
+    <value>Value Change</value>
+    <comment>Grid's singular name.</comment>
+  </data>
+  <data name="CvnValueChanges" xml:space="preserve">
+    <value>Value Changes</value>
+    <comment>Grid's plural name.</comment>
+  </data>
+  <data name="CvnChange" xml:space="preserve">
+    <value>Change</value>
+    <comment>Column heading: the kind of change.</comment>
+  </data>
+  <data name="AtNoMatch" xml:space="preserve">
+    <value>No {0} match "{1}"</value>
+    <comment>Empty table. {0} is the plural name in lower case; {1} the search text typed.</comment>
+  </data>
+  <data name="AtSearchPlaceholder" xml:space="preserve">
+    <value>Search attribute name or value</value>
+    <comment>Default search box placeholder.</comment>
+  </data>
+  <data name="AcMetaverseAttribute" xml:space="preserve">
+    <value>Metaverse Attribute</value>
+    <comment>Tooltip on an attribute chip for the Metaverse side.</comment>
+  </data>
+  <data name="AcConnectedSystemAttribute" xml:space="preserve">
+    <value>Connected System attribute</value>
+    <comment>Tooltip on an attribute chip for a Connected System.</comment>
+  </data>
+  <data name="ErpReviewTooltip" xml:space="preserve">
+    <value>Reviewed against every export rule at the next synchronisation of any Connected System.</value>
+    <comment>Tooltip on the export review chip.</comment>
+  </data>
+  <data name="ErpChipLabel" xml:space="preserve">
+    <value>Export review pending: {0}</value>
+    <comment>Chip label. {0} is the count of objects flagged.</comment>
+  </data>
+  <data name="CvcNone" xml:space="preserve">
+    <value>(none)</value>
+    <comment>Shown in place of a reference value that is missing.</comment>
+  </data>
+  <data name="RgvObjectDeleted" xml:space="preserve">
+    <value>Object deleted</value>
+    <comment>Label of a retired generated value: its object was deleted.</comment>
+  </data>
+  <data name="RgvSuperseded" xml:space="preserve">
+    <value>No longer generated</value>
+    <comment>Label of a retired generated value: another flow supplies the attribute now.</comment>
+  </data>
+  <data name="RgvRecalled" xml:space="preserve">
+    <value>Flow removed</value>
+    <comment>Label of a retired generated value: the flow that generated it was removed.</comment>
+  </data>
+  <data name="RgvRegenerated" xml:space="preserve">
+    <value>Regenerated</value>
+    <comment>Label of a retired generated value: JIM issued a different value.</comment>
+  </data>
+  <data name="RgvTipObjectDeleted" xml:space="preserve">
+    <value>The object that held this value was deleted.</value>
+    <comment>Tooltip for the Object deleted label.</comment>
+  </data>
+  <data name="RgvTipSuperseded" xml:space="preserve">
+    <value>Another Attribute Flow now supplies this attribute for the object, so JIM stopped managing the generated value.</value>
+    <comment>Tooltip for the No longer generated label.</comment>
+  </data>
+  <data name="RgvTipRecalled" xml:space="preserve">
+    <value>The Attribute Flow that generated this value was removed.</value>
+    <comment>Tooltip for the Flow removed label.</comment>
+  </data>
+  <data name="RgvTipRegenerated" xml:space="preserve">
+    <value>JIM issued the object a different value in place of this one.</value>
+    <comment>Tooltip for the Regenerated label.</comment>
+  </data>
+  <data name="AvdText" xml:space="preserve">
+    <value>Text</value>
+    <comment>Expected type of an imported value.</comment>
+  </data>
+  <data name="AvdWholeNumber" xml:space="preserve">
+    <value>A whole number</value>
+    <comment>Expected type of an imported value.</comment>
+  </data>
+  <data name="AvdDecimal" xml:space="preserve">
+    <value>A decimal number</value>
+    <comment>Expected type of an imported value.</comment>
+  </data>
+  <data name="AvdDateTime" xml:space="preserve">
+    <value>A date and time</value>
+    <comment>Expected type of an imported value.</comment>
+  </data>
+  <data name="AvdBoolean" xml:space="preserve">
+    <value>True or false</value>
+    <comment>Expected type of an imported value.</comment>
+  </data>
+  <data name="AvdGuid" xml:space="preserve">
+    <value>A GUID</value>
+    <comment>Expected type of an imported value.</comment>
+  </data>
+  <data name="AvdBinary" xml:space="preserve">
+    <value>Binary data</value>
+    <comment>Expected type of an imported value.</comment>
+  </data>
+  <data name="AvdReference" xml:space="preserve">
+    <value>A reference to another object</value>
+    <comment>Expected type of an imported value.</comment>
+  </data>
+  <data name="AvdConnector" xml:space="preserve">
+    <value>Connector</value>
+    <comment>Who found an unreadable value: the Connector.</comment>
+  </data>
+  <data name="PctPasswordSet" xml:space="preserve">
+    <value>Password set</value>
+    <comment>Words for a target that set the password.</comment>
+  </data>
+  <data name="PctDelivering" xml:space="preserve">
+    <value>Delivering now</value>
+    <comment>Words for a target being delivered to.</comment>
+  </data>
+  <data name="PctQueued" xml:space="preserve">
+    <value>Queued; the Password Delivery Service will pick it up in a moment</value>
+    <comment>Words for a queued target.</comment>
+  </data>
+  <data name="PctRetrying" xml:space="preserve">
+    <value>Retrying</value>
+    <comment>Words for a retrying target with no reason recorded.</comment>
+  </data>
+  <data name="PctHeld" xml:space="preserve">
+    <value>Held until Password Synchronisation is switched on for this Connected System</value>
+    <comment>Words for a held target.</comment>
+  </data>
+  <data name="PctExpired" xml:space="preserve">
+    <value>Expired before it could be delivered</value>
+    <comment>Words for an expired target.</comment>
+  </data>
+  <data name="PctCancelled" xml:space="preserve">
+    <value>Cancelled</value>
+    <comment>Words for a cancelled target.</comment>
+  </data>
+  <data name="EhcTitle" xml:space="preserve">
+    <value>Stop managing Exchange recipients?</value>
+    <comment>Dialog title.</comment>
+  </data>
+  <data name="EhcConfirm" xml:space="preserve">
+    <value>Hold Exchange Delivery</value>
+    <comment>Confirm button.</comment>
+  </data>
+  <data name="EhcConsequence1" xml:space="preserve">
+    <value>Changes already queued for Exchange wait, held, and are delivered once this Connected System manages Exchange recipients again.</value>
+    <comment>Consequence in the confirmation dialog.</comment>
+  </data>
+  <data name="EhcConsequence2" xml:space="preserve">
+    <value>Exports go on queueing changes, which are held the same way.</value>
+    <comment>Consequence in the confirmation dialog.</comment>
+  </data>
+  <data name="EhcConsequence3" xml:space="preserve">
+    <value>A schema refresh while it is off reports the Exchange attributes as removed: apply it plainly to keep them, or the Synchronisation Rules that declare recipients stop.</value>
+    <comment>Consequence in the confirmation dialog.</comment>
+  </data>
+  <data name="ErfRecipientType" xml:space="preserve">
+    <value>Not set, so objects are not recipients</value>
+    <comment>Explains the flow row for the recipient type.</comment>
+  </data>
+  <data name="ErfAlias" xml:space="preserve">
+    <value>Not set, so mailNickname is used</value>
+    <comment>Explains the flow row for the alias.</comment>
+  </data>
+  <data name="ErfDatabase" xml:space="preserve">
+    <value>Not set, so Exchange chooses</value>
+    <comment>Explains the flow row for the database.</comment>
+  </data>
+  <data name="ErfPrimarySmtp" xml:space="preserve">
+    <value>Not set, so Email Address Policies apply</value>
+    <comment>Explains the flow row for the primary address.</comment>
+  </data>
+  <data name="ErfExternalAddress" xml:space="preserve">
+    <value>Not set; mail users and mail contacts need one</value>
+    <comment>Explains the flow row for the external address.</comment>
+  </data>
+  <data name="EstOutstanding" xml:space="preserve">
+    <value>1 change outstanding</value>
+    <comment>Exchange state chip.</comment>
+  </data>
+  <data name="EstChangeState" xml:space="preserve">
+    <value>Change {0}</value>
+    <comment>Exchange state chip. {0} is the pill label, lower case.</comment>
+  </data>
+  <data name="EstInStep" xml:space="preserve">
+    <value>In step</value>
+    <comment>Exchange state chip.</comment>
+  </data>
+  <data name="EstAwaitingImport" xml:space="preserve">
+    <value>Awaiting import</value>
+    <comment>Exchange state chip.</comment>
+  </data>
+  <data name="PccTitle" xml:space="preserve">
+    <value>Cancel password change</value>
+    <comment>Confirmation dialog title.</comment>
+  </data>
+  <data name="PccConfirm" xml:space="preserve">
+    <value>Cancel delivery</value>
+    <comment>Confirmation button.</comment>
+  </data>
+  <data name="EcrbAria" xml:space="preserve">
+    <value>Retry this Exchange change</value>
+    <comment>Accessible name of the retry button.</comment>
+  </data>
+  <data name="EcrbRetryNow" xml:space="preserve">
+    <value>Retry now</value>
+    <comment>Button when the change is retrying.</comment>
+  </data>
+  <data name="EcrbNothing" xml:space="preserve">
+    <value>Nothing was retried: the change is no longer parked or retrying.</value>
+    <comment>Snackbar when there was nothing to retry.</comment>
+  </data>
+  <data name="EcrbWillRetry" xml:space="preserve">
+    <value>The change will be attempted again within seconds.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="ErpbTitle" xml:space="preserve">
+    <value>Awaiting export review</value>
+    <comment>Banner title.</comment>
+  </data>
+  <data name="ErpbChanged" xml:space="preserve">
+    <value>Changed outside synchronisation: {0}.</value>
+    <comment>Banner. {0} is the names of the attributes changed.</comment>
+  </data>
+  <data name="ErpbReviewChanged" xml:space="preserve">
+    <value>The next synchronisation of any Connected System reviews this Metaverse Object against every export rule and sends the changed values to the accounts it already has.</value>
+    <comment>Banner text when attributes changed.</comment>
+  </data>
+  <data name="ErpbReview" xml:space="preserve">
+    <value>The next synchronisation of any Connected System reviews this Metaverse Object against every export rule.</value>
+    <comment>Banner text.</comment>
+  </data>
+  <data name="MpPages" xml:space="preserve">
+    <value>Pages</value>
+    <comment>Accessible name of the pagination.</comment>
+  </data>
+  <data name="MpPrevious" xml:space="preserve">
+    <value>Previous</value>
+    <comment>Pagination link.</comment>
+  </data>
+  <data name="MpNext" xml:space="preserve">
+    <value>Next</value>
+    <comment>Pagination link.</comment>
+  </data>
+  <data name="MpPageOf" xml:space="preserve">
+    <value>Page {0} of {1}</value>
+    <comment>Pagination status. {0} is the current page; {1} the total.</comment>
+  </data>
+  <data name="SpdStillDelivering" xml:space="preserve">
+    <value>Still delivering. The password is safely queued and will be retried if a system is unavailable; follow it on this Metaverse Object's Password tab, or on the</value>
+    <comment>Start of the alert sentence. The link to the Operations queue follows it, then a full stop.</comment>
+  </data>
+  <data name="SpdPasswordsTabOperations" xml:space="preserve">
+    <value>Passwords tab of Operations</value>
+    <comment>Link text in the alert, to the queue on the Operations page.</comment>
   </data>
 </root>
