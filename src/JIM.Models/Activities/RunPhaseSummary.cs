@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text.Json.Serialization;
+
 namespace JIM.Models.Activities;
 
 /// <summary>
@@ -33,6 +35,11 @@ public class RunPhaseSummary
     /// The key of the running step (<see cref="RunPhaseKeys"/>), which the portal translates the name by. Null
     /// whenever <see cref="CurrentStepName"/> is.
     /// </summary>
+    /// <remarks>
+    /// Not serialised: this type reaches the REST API through the worker task list, and the key was added for the
+    /// portal's translation only (#3030), not as a change to the API's response.
+    /// </remarks>
+    [JsonIgnore]
     public string? CurrentStepKey { get; set; }
 
     /// <summary>
