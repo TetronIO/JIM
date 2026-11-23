@@ -120,9 +120,23 @@ The scenario, its registration with the runner, and the `ad-lab.yml` step, which
 
 ### Phase 4: Scenario 038 ([#3029](https://github.com/TetronIO/JIM/issues/3029))
 
-### Phase 5: scale (optional)
+### Phase 5: scale ([#3053](https://github.com/TetronIO/JIM/issues/3053))
 
-Import and a paced export of a few thousand users, measuring real throughput against the write pacing (Maximum Writes Per Second). Needs permanent deletion, so it needs a decision on the identity that may permanently delete.
+Decided 2026-11-23: test up to the tenant's limit, in two parts.
+
+**Part 1: Scenario 039, against the test tenant.** Implemented.
+- **Shape:** the template's population is provisioned, changed, partly deprovisioned and imported again, and every step is timed.
+- **Sizing:** the run first checks the template fits in the tenant's object limit with a tenth free.
+- **Cleanup:** the CI app purges the run's users afterwards. It was granted `User.DeleteRestore.All` and `Organization.Read.All` for this.
+- **The tenant:**
+  - Its limit is 300,000 objects, after `tetronjim.tetron.io` was verified. A subdomain of a domain verified in another tenant can be verified with a TXT record of its own.
+  - Measured: a purged user still counts for a quarter for 30 days.
+  - Groups cannot be purged with an application permission, so runs keep groups to the template's few hundred.
+- **Running it:** on request only, from `entra-connector.yml`.
+
+**Part 2: Scenario 040, against a stand-in Microsoft Graph service, at every template up to Scale1m.** Planned. It measures JIM's side without Graph's rate limits.
+- **How JIM reaches it:** the integration network resolves `login.microsoftonline.com` and `graph.microsoft.com` to the stand-in, whose certificate JIM's certificate store trusts, so JIM runs unchanged.
+- **One implementation:** the stand-in and the unit tests' simulated tenant (`FakeGraphTenant`) become one implementation, re-indexed for a million objects, as the SCIM test provider shares `MockScimProvider` with the unit suite.
 
 ## Success Criteria
 

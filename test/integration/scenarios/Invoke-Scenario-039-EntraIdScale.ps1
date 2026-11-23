@@ -225,7 +225,10 @@ function Invoke-EntraExportAndConfirm {
         }
         $importLabel = "Entra ID $ConfirmWith ($Label, round $round)"
         if ($round -lt $MaximumRounds) {
-            Invoke-TimedRun -Label $importLabel -System $entraSystem -RunProfile $ConfirmWith -AllowedWarningTypes @('ExportNotConfirmed')
+            # Both are Graph catching up: an object the import has yet to see (sent again next round), and a group just
+            # created whose members Graph cannot yet read (404; the Connector keeps what it held, and the next round
+            # reads them). The last round allows neither.
+            Invoke-TimedRun -Label $importLabel -System $entraSystem -RunProfile $ConfirmWith -AllowedWarningTypes @('ExportNotConfirmed', 'ImportAttributeValueError')
         }
         else { Invoke-TimedRun -Label $importLabel -System $entraSystem -RunProfile $ConfirmWith }
         $synchronisation = if ($ConfirmWith -eq 'Delta Import') { 'Delta Synchronisation' } else { 'Full Synchronisation' }
