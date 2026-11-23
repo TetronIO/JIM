@@ -224,4 +224,16 @@
   <data name="ContributedFlowInfo" xml:space="preserve">
     <value>Your choice takes effect when you save the Synchronization Rule.</value>
   </data>
+  <data name="DerivedRunsAfterOwnSyncNamed" xml:space="preserve">
+    <value>from the Metaverse. JIM runs it after {0}, in {1}'s own synchronization.</value>
+  </data>
+  <data name="DerivedRunsAfterOwnSyncFallback" xml:space="preserve">
+    <value>from the Metaverse. JIM runs it after {0}, in this Connected System's own synchronization.</value>
+  </data>
+  <data name="DerivedSequencingNamed" xml:space="preserve">
+    <value>When another Connected System changes {0}, JIM marks this object so {1}'s next synchronization picks it up. Synchronize the source first for the value to be right in the same cycle.</value>
+  </data>
+  <data name="DerivedSequencingFallback" xml:space="preserve">
+    <value>When another Connected System changes {0}, JIM marks this object so this Connected System's next synchronization picks it up. Synchronize the source first for the value to be right in the same cycle.</value>
+  </data>
 </root>

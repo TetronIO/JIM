@@ -2352,4 +2352,112 @@
     <value>Remove Attribute Mapping</value>
     <comment>Dialog title and confirm button for removing an Attribute Flow.</comment>
   </data>
+  <data name="ListOr" xml:space="preserve">
+    <value> or </value>
+    <comment>Joins the last two items of a list with 'or'. Spaces are intentional.</comment>
+  </data>
+  <data name="DerivedChipStep" xml:space="preserve">
+    <value>Derived · step {0}</value>
+    <comment>Chip label of a derived flow with a step. {0} is the step number.</comment>
+  </data>
+  <data name="DerivedChipPlain" xml:space="preserve">
+    <value>Derived</value>
+    <comment>Chip label of a derived flow that has no step (it is on a loop).</comment>
+  </data>
+  <data name="DerivedReads" xml:space="preserve">
+    <value>Reads {0} from the Metaverse.</value>
+    <comment>Tooltip sentence. {0} is the list of attributes read.</comment>
+  </data>
+  <data name="DerivedRunsInStep" xml:space="preserve">
+    <value>Runs in step {0} of {1}, after {2}.</value>
+    <comment>Tooltip sentence. {0} step, {1} step count, {2} the resolved phrase.</comment>
+  </data>
+  <data name="DerivedNoStep" xml:space="preserve">
+    <value>{0} It has no step because it is part of a loop of Attribute Flows that read each other.</value>
+    <comment>Tooltip sentence for a flow on a loop. {0} is the reads sentence.</comment>
+  </data>
+  <data name="DerivedResolvedOne" xml:space="preserve">
+    <value>{0} is resolved</value>
+    <comment>One attribute is resolved. {0} is its name.</comment>
+  </data>
+  <data name="DerivedResolvedOther" xml:space="preserve">
+    <value>{0} are resolved</value>
+    <comment>Several attributes are resolved. {0} is the list of names.</comment>
+  </data>
+  <data name="DerivedCycleLink" xml:space="preserve">
+    <value>{0}, from {1} ({2})</value>
+    <comment>One link of a loop. {0} the attribute, {1} the attribute read, {2} where it is defined.</comment>
+  </data>
+  <data name="DerivedCycleThisFlow" xml:space="preserve">
+    <value>this flow, {0}</value>
+    <comment>Where a loop link is defined when it is the flow being edited. {0} is the rule name.</comment>
+  </data>
+  <data name="DerivedReadsVia" xml:space="preserve">
+    <value>{0} (via {1})</value>
+    <comment>A dependant's indirect input. {0} the first attribute, {1} the chain.</comment>
+  </data>
+  <data name="DependantsOneOne" xml:space="preserve">
+    <value>After you {0}, nothing else contributes {1}. This Derived Attribute Flow reads it, so it will have no input:</value>
+    <comment>Sentence above the dependants list: one dependant, one lost attribute. {0} is the change, {1} the attribute.</comment>
+  </data>
+  <data name="DependantsOneMany" xml:space="preserve">
+    <value>After you {0}, nothing else contributes {1}. This Derived Attribute Flow reads them, so it will have no input:</value>
+    <comment>Sentence above the dependants list: one dependant, several lost attributes.</comment>
+  </data>
+  <data name="DependantsManyOne" xml:space="preserve">
+    <value>After you {0}, nothing else contributes {1}. These Derived Attribute Flows read it, so they will have no input:</value>
+    <comment>Sentence above the dependants list: several dependants, one lost attribute.</comment>
+  </data>
+  <data name="DependantsManyMany" xml:space="preserve">
+    <value>After you {0}, nothing else contributes {1}. These Derived Attribute Flows read them, so they will have no input:</value>
+    <comment>Sentence above the dependants list: several dependants, several lost attributes.</comment>
+  </data>
+  <data name="DerivedPanelHeading" xml:space="preserve">
+    <value>Derived Attribute Flow</value>
+    <comment>Heading of the derived flow panel.</comment>
+  </data>
+  <data name="DerivedStepOf" xml:space="preserve">
+    <value>step {0} of {1}</value>
+    <comment>Chip in the derived flow panel. {0} the step, {1} the step count.</comment>
+  </data>
+  <data name="DerivedReadsLabel" xml:space="preserve">
+    <value>Reads</value>
+    <comment>Label before the attributes a derived flow reads.</comment>
+  </data>
+  <data name="DerivedFromMetaverse" xml:space="preserve">
+    <value>from the Metaverse.</value>
+    <comment>End of the reads sentence when the flow has no step.</comment>
+  </data>
+  <data name="DerivedRunsAfterOwnSyncNamed" xml:space="preserve">
+    <value>from the Metaverse. JIM runs it after {0}, in {1}'s own synchronisation.</value>
+    <comment>{0} is the resolved phrase, {1} the Connected System name.</comment>
+  </data>
+  <data name="DerivedRunsAfterOwnSyncFallback" xml:space="preserve">
+    <value>from the Metaverse. JIM runs it after {0}, in this Connected System's own synchronisation.</value>
+    <comment>{0} is the resolved phrase. Used when the Connected System's name is not known.</comment>
+  </data>
+  <data name="DerivedSequencingNamed" xml:space="preserve">
+    <value>When another Connected System changes {0}, JIM marks this object so {1}'s next synchronisation picks it up. Synchronise the source first for the value to be right in the same cycle.</value>
+    <comment>{0} is the list of attributes, {1} the Connected System name.</comment>
+  </data>
+  <data name="DerivedSequencingFallback" xml:space="preserve">
+    <value>When another Connected System changes {0}, JIM marks this object so this Connected System's next synchronisation picks it up. Synchronise the source first for the value to be right in the same cycle.</value>
+    <comment>{0} is the list of attributes. Used when the Connected System's name is not known.</comment>
+  </data>
+  <data name="DerivedCanStillSave" xml:space="preserve">
+    <value>You can still save it.</value>
+    <comment>Shown under the warnings of a derived flow.</comment>
+  </data>
+  <data name="DerivedLoopHeading" xml:space="preserve">
+    <value>&lt;strong&gt;This Attribute Flow cannot be saved because it creates a loop.&lt;/strong&gt;</value>
+    <comment>Markup: strong is intentional. Opens the loop error.</comment>
+  </data>
+  <data name="DerivedLoopExplain" xml:space="preserve">
+    <value>Each attribute below is worked out from the one before it, so none can be calculated first:</value>
+    <comment>Explains a loop, above its links.</comment>
+  </data>
+  <data name="DerivedLoopChange" xml:space="preserve">
+    <value>Change one of these expressions so it stops reading the next attribute in the loop.</value>
+    <comment>Tells the administrator how to break a loop.</comment>
+  </data>
 </root>

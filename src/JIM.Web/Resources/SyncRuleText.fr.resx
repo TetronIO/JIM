@@ -1787,4 +1787,85 @@
   <data name="ContributedRemoveMapping" xml:space="preserve">
     <value>Supprimer le mappage d’attribut</value>
   </data>
+  <data name="ListOr" xml:space="preserve">
+    <value> ou </value>
+  </data>
+  <data name="DerivedChipStep" xml:space="preserve">
+    <value>Dérivé · étape {0}</value>
+  </data>
+  <data name="DerivedChipPlain" xml:space="preserve">
+    <value>Dérivé</value>
+  </data>
+  <data name="DerivedReads" xml:space="preserve">
+    <value>Lit {0} depuis le Metaverse.</value>
+  </data>
+  <data name="DerivedRunsInStep" xml:space="preserve">
+    <value>S’exécute à l’étape {0} sur {1}, une fois que {2}.</value>
+  </data>
+  <data name="DerivedNoStep" xml:space="preserve">
+    <value>{0} Elle n’a pas d’étape, car elle fait partie d’une boucle de flux d’attributs qui se lisent mutuellement.</value>
+  </data>
+  <data name="DerivedResolvedOne" xml:space="preserve">
+    <value>{0} est résolu</value>
+  </data>
+  <data name="DerivedResolvedOther" xml:space="preserve">
+    <value>{0} sont résolus</value>
+  </data>
+  <data name="DerivedCycleLink" xml:space="preserve">
+    <value>{0}, depuis {1} ({2})</value>
+  </data>
+  <data name="DerivedCycleThisFlow" xml:space="preserve">
+    <value>ce flux, {0}</value>
+  </data>
+  <data name="DerivedReadsVia" xml:space="preserve">
+    <value>{0} (via {1})</value>
+  </data>
+  <data name="DependantsOneOne" xml:space="preserve">
+    <value>Après avoir {0}, plus rien d’autre ne contribue à {1}. Ce flux d’attributs dérivé le lit, il n’aura donc plus d’entrée :</value>
+  </data>
+  <data name="DependantsOneMany" xml:space="preserve">
+    <value>Après avoir {0}, plus rien d’autre ne contribue à {1}. Ce flux d’attributs dérivé les lit, il n’aura donc plus d’entrée :</value>
+  </data>
+  <data name="DependantsManyOne" xml:space="preserve">
+    <value>Après avoir {0}, plus rien d’autre ne contribue à {1}. Ces flux d’attributs dérivés le lisent, ils n’auront donc plus d’entrée :</value>
+  </data>
+  <data name="DependantsManyMany" xml:space="preserve">
+    <value>Après avoir {0}, plus rien d’autre ne contribue à {1}. Ces flux d’attributs dérivés les lisent, ils n’auront donc plus d’entrée :</value>
+  </data>
+  <data name="DerivedPanelHeading" xml:space="preserve">
+    <value>Flux d’attributs dérivé</value>
+  </data>
+  <data name="DerivedStepOf" xml:space="preserve">
+    <value>étape {0} sur {1}</value>
+  </data>
+  <data name="DerivedReadsLabel" xml:space="preserve">
+    <value>Lit</value>
+  </data>
+  <data name="DerivedFromMetaverse" xml:space="preserve">
+    <value>depuis le Metaverse.</value>
+  </data>
+  <data name="DerivedRunsAfterOwnSyncNamed" xml:space="preserve">
+    <value>depuis le Metaverse. JIM l’exécute après que {0}, dans la synchronisation propre à {1}.</value>
+  </data>
+  <data name="DerivedRunsAfterOwnSyncFallback" xml:space="preserve">
+    <value>depuis le Metaverse. JIM l’exécute après que {0}, dans la synchronisation propre au système connecté.</value>
+  </data>
+  <data name="DerivedSequencingNamed" xml:space="preserve">
+    <value>Lorsqu’un autre système connecté modifie {0}, JIM marque cet objet afin que la prochaine synchronisation de {1} le prenne en compte. Synchronisez d’abord la source pour que la valeur soit correcte dans le même cycle.</value>
+  </data>
+  <data name="DerivedSequencingFallback" xml:space="preserve">
+    <value>Lorsqu’un autre système connecté modifie {0}, JIM marque cet objet afin que la prochaine synchronisation du système connecté le prenne en compte. Synchronisez d’abord la source pour que la valeur soit correcte dans le même cycle.</value>
+  </data>
+  <data name="DerivedCanStillSave" xml:space="preserve">
+    <value>Vous pouvez encore l’enregistrer.</value>
+  </data>
+  <data name="DerivedLoopHeading" xml:space="preserve">
+    <value>&lt;strong&gt;Ce flux d’attributs ne peut pas être enregistré car il crée une boucle.&lt;/strong&gt;</value>
+  </data>
+  <data name="DerivedLoopExplain" xml:space="preserve">
+    <value>Chaque attribut ci-dessous est calculé à partir de celui qui le précède, de sorte qu’aucun ne peut être calculé en premier :</value>
+  </data>
+  <data name="DerivedLoopChange" xml:space="preserve">
+    <value>Modifiez l’une de ces expressions pour qu’elle ne lise plus l’attribut suivant de la boucle.</value>
+  </data>
 </root>
