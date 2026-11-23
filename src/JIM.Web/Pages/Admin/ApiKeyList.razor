@@ -78,7 +78,7 @@
                    roles; the first is shown and the rest open in a dialog. *@
                 <OverflowList TItem="Role" Items="@context.Item.Roles" Title="@AdminText.ApiKeyRoles">
                     <ItemTemplate Context="role">
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="mr-1">@role.Name</MudChip>
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="mr-1">@BuiltInDisplay.RoleName(role.Name, role.BuiltIn)</MudChip>
                     </ItemTemplate>
                     <EmptyContent>
                         <span class="mud-text-secondary">@AdminText.ApiKeyNoRoles</span>
@@ -212,7 +212,7 @@
         @foreach (var role in _availableRoles)
         {
             <MudCheckBox T="bool" Value="@_createSelectedRoleIds.Contains(role.Id)"
-                ValueChanged="@(value => ToggleRole(role.Id, value))" Label="@role.Name" Class="ml-n2" />
+                ValueChanged="@(value => ToggleRole(role.Id, value))" Label="@BuiltInDisplay.RoleName(role.Name, role.BuiltIn)" Class="ml-n2" />
         }
         <MudDatePicker @bind-Date="_createExpiresAt" Label="@AdminText.ApiKeyExpiresOptional" Variant="Variant.Outlined" Class="mt-4"
             HelperText="@AdminText.ApiKeyNoExpiryHint" Clearable="true" />
@@ -278,7 +278,7 @@
         @foreach (var role in _availableRoles)
         {
             <MudCheckBox T="bool" Value="@_editSelectedRoleIds.Contains(role.Id)"
-                ValueChanged="@(value => ToggleEditRole(role.Id, value))" Label="@role.Name" Class="ml-n2" />
+                ValueChanged="@(value => ToggleEditRole(role.Id, value))" Label="@BuiltInDisplay.RoleName(role.Name, role.BuiltIn)" Class="ml-n2" />
         }
         <MudDatePicker @bind-Date="_editExpiresAt" Label="@AdminText.ApiKeyExpiresOptional" Variant="Variant.Outlined" Class="mt-4"
             HelperText="@AdminText.ApiKeyNoExpiryHint" Clearable="true" />

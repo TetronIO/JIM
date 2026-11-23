@@ -30,6 +30,12 @@ public class RunPhaseSummary
     public string? CurrentStepName { get; set; }
 
     /// <summary>
+    /// The key of the running step (<see cref="RunPhaseKeys"/>), which the portal translates the name by. Null
+    /// whenever <see cref="CurrentStepName"/> is.
+    /// </summary>
+    public string? CurrentStepKey { get; set; }
+
+    /// <summary>
     /// Where the running step sits among the run's own steps, 1-based so it reads as "step 3 of 8".
     /// Null whenever <see cref="CurrentStepName"/> is.
     /// </summary>
@@ -70,6 +76,7 @@ public class RunPhaseSummary
         return new RunPhaseSummary
         {
             CurrentStepName = current?.Name,
+            CurrentStepKey = current?.Key,
             CurrentStepNumber = RunPhaseReading.PositionOf(phaseList, current),
             TotalSteps = steps.Count,
             Steps = steps.Select(p => new RunPhaseStep

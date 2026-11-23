@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="History_ConfigurationChangeRetentionPeriod_Description" xml:space="preserve">
+    <value>The duration for which configuration change history (versioned Connected System, Synchronization Rule, and Schedule snapshots) is retained. Kept separately from, and typically much longer than, the history retention period. Format: d.hh:mm:ss (e.g., '3650.00:00:00' for ~10 years).</value>
+  </data>
+  <data name="History_PasswordEventRetentionPeriod" xml:space="preserve">
+    <value>Password Synchronization retention period</value>
+  </data>
+  <data name="History_PasswordEventRetentionPeriod_Description" xml:space="preserve">
+    <value>The duration for which Password Synchronization history is kept: the Activities recording what happened to each password change, and the queue rows that reached a terminal state (parked, expired, or canceled). Changes still owed to a Connected System are never removed, however old. Shorten this to bound how long JIM holds an encrypted password it can no longer deliver. Format: d.hh:mm:ss (e.g., '365.00:00:00' for ~1 year).</value>
+  </data>
+  <data name="ChangeTracking_ConfigurationChanges_Enabled_Description" xml:space="preserve">
+    <value>When enabled, a redacted, versioned configuration snapshot is recorded on the Activity for every configuration create/update/delete (Synchronization Rules, Connected Systems). Disable to stop capturing configuration change history.</value>
+  </data>
+  <data name="ChangeTracking_SyncOutcomes_Level_Description" xml:space="preserve">
+    <value>Controls how much detail is recorded for sync outcome graphs on each Run Profile execution item. None: no outcome tracking (legacy behavior). Standard: root-level outcomes (enables stat chips). Detailed: full causal chain with nested outcomes (default). Higher levels provide richer audit trails but increase storage usage.</value>
+  </data>
+</root>

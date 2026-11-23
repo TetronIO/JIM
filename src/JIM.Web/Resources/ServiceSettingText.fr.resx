@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="SSO_Authority" xml:space="preserve">
+    <value>Autorité SSO</value>
+  </data>
+  <data name="SSO_Authority_Description" xml:space="preserve">
+    <value>L’URL de l’autorité OIDC pour l’authentification unique.</value>
+  </data>
+  <data name="SSO_ClientId" xml:space="preserve">
+    <value>Identifiant client SSO</value>
+  </data>
+  <data name="SSO_ClientId_Description" xml:space="preserve">
+    <value>L’identifiant client OIDC de JIM.</value>
+  </data>
+  <data name="SSO_Secret" xml:space="preserve">
+    <value>Secret SSO</value>
+  </data>
+  <data name="SSO_Secret_Description" xml:space="preserve">
+    <value>Le secret client OIDC de JIM.</value>
+  </data>
+  <data name="SSO_ApiScope" xml:space="preserve">
+    <value>Étendue d’API SSO</value>
+  </data>
+  <data name="SSO_ApiScope_Description" xml:space="preserve">
+    <value>L’étendue d’API OIDC requise pour accéder à JIM.</value>
+  </data>
+  <data name="SSO_ClaimType" xml:space="preserve">
+    <value>Type de revendication SSO</value>
+  </data>
+  <data name="SSO_ClaimType_Description" xml:space="preserve">
+    <value>Le type de revendication utilisé pour identifier l’utilisateur dans les jetons SSO.</value>
+  </data>
+  <data name="SSO_MvAttribute" xml:space="preserve">
+    <value>Attribut Metaverse SSO</value>
+  </data>
+  <data name="SSO_MvAttribute_Description" xml:space="preserve">
+    <value>L’attribut Metaverse utilisé pour faire correspondre les revendications SSO aux utilisateurs de JIM.</value>
+  </data>
+  <data name="SSO_EnableLogOut" xml:space="preserve">
+    <value>Activer la déconnexion SSO</value>
+  </data>
+  <data name="SSO_EnableLogOut_Description" xml:space="preserve">
+    <value>Lorsque cette option est activée, les utilisateurs peuvent se déconnecter de JIM et être redirigés vers le point de terminaison de déconnexion du fournisseur SSO.</value>
+  </data>
+  <data name="Sync_PartitionValidationMode" xml:space="preserve">
+    <value>Validation des partitions du profil d’exécution</value>
+  </data>
+  <data name="Sync_PartitionValidationMode_Description" xml:space="preserve">
+    <value>Détermine le comportement de JIM lorsqu’un profil d’exécution est lancé pour un système connecté qui prend en charge les partitions mais n’en a sélectionné aucune. « Error » bloque l’exécution ; « Warning » l’autorise et consigne un avertissement.</value>
+  </data>
+  <data name="History_RetentionPeriod" xml:space="preserve">
+    <value>Durée de conservation de l’historique</value>
+  </data>
+  <data name="History_RetentionPeriod_Description" xml:space="preserve">
+    <value>La durée de conservation de l’historique des activités et des audits. Format : d.hh:mm:ss (par exemple « 90.00:00:00 » pour 90 jours).</value>
+  </data>
+  <data name="History_ConfigurationChangeRetentionPeriod" xml:space="preserve">
+    <value>Durée de conservation des modifications de configuration</value>
+  </data>
+  <data name="History_ConfigurationChangeRetentionPeriod_Description" xml:space="preserve">
+    <value>La durée de conservation de l’historique des modifications de configuration (instantanés versionnés des systèmes connectés, des règles de synchronisation et des planifications). Distincte de la durée de conservation de l’historique et généralement bien plus longue. Format : d.hh:mm:ss (par exemple « 3650.00:00:00 » pour environ 10 ans).</value>
+  </data>
+  <data name="History_CleanupBatchSize" xml:space="preserve">
+    <value>Taille des lots de nettoyage de l’historique</value>
+  </data>
+  <data name="History_CleanupBatchSize_Description" xml:space="preserve">
+    <value>Nombre maximal d’enregistrements supprimés par lot de nettoyage pendant la maintenance. Des valeurs basses réduisent la charge sur la base de données, mais allongent le nettoyage des grands volumes ; des valeurs élevées sont plus rapides, mais peuvent provoquer une baisse temporaire des performances.</value>
+  </data>
+  <data name="History_SecurityEventRetentionPeriod" xml:space="preserve">
+    <value>Durée de conservation des événements de sécurité</value>
+  </data>
+  <data name="History_SecurityEventRetentionPeriod_Description" xml:space="preserve">
+    <value>La durée de conservation des activités d’audit des événements de sécurité (connexions interactives réussies ou échouées, et authentifications échouées par clé d’API ou jeton d’accès SSO). Elle est distincte des durées de conservation de l’historique et des modifications de configuration. Format : d.hh:mm:ss (par exemple « 365.00:00:00 » pour environ 1 an).</value>
+  </data>
+  <data name="History_PasswordEventRetentionPeriod" xml:space="preserve">
+    <value>Durée de conservation de la synchronisation des mots de passe</value>
+  </data>
+  <data name="History_PasswordEventRetentionPeriod_Description" xml:space="preserve">
+    <value>La durée de conservation de l’historique de la synchronisation des mots de passe : les activités qui décrivent le traitement de chaque changement de mot de passe, et les lignes de file d’attente ayant atteint un état final (suspendues, expirées ou annulées). Les changements encore dus à un système connecté ne sont jamais supprimés, quel que soit leur âge. Réduisez cette valeur pour limiter la durée pendant laquelle JIM conserve un mot de passe chiffré qu’il ne peut plus transmettre. Format : d.hh:mm:ss (par exemple « 365.00:00:00 » pour environ 1 an).</value>
+  </data>
+  <data name="ChangeTracking_CsoChanges_Enabled" xml:space="preserve">
+    <value>Suivre les modifications des objets de systèmes connectés</value>
+  </data>
+  <data name="ChangeTracking_CsoChanges_Enabled_Description" xml:space="preserve">
+    <value>Lorsque cette option est activée, l’historique des modifications est enregistré pour toutes les opérations de création, de mise à jour et de suppression des objets de systèmes connectés. Désactivez-la pour améliorer les performances au détriment de la piste d’audit.</value>
+  </data>
+  <data name="ChangeTracking_MvoChanges_Enabled" xml:space="preserve">
+    <value>Suivre les modifications des objets Metaverse</value>
+  </data>
+  <data name="ChangeTracking_MvoChanges_Enabled_Description" xml:space="preserve">
+    <value>Lorsque cette option est activée, l’historique des modifications est enregistré pour toutes les opérations de création, de mise à jour et de suppression des objets Metaverse. Désactivez-la pour améliorer les performances au détriment de la piste d’audit.</value>
+  </data>
+  <data name="ChangeTracking_ConfigurationChanges_Enabled" xml:space="preserve">
+    <value>Suivre les modifications de configuration</value>
+  </data>
+  <data name="ChangeTracking_ConfigurationChanges_Enabled_Description" xml:space="preserve">
+    <value>Lorsque cette option est activée, un instantané de configuration versionné et expurgé est enregistré dans l’activité pour chaque création, mise à jour et suppression de configuration (règles de synchronisation, systèmes connectés). Désactivez-la pour cesser de capturer l’historique des modifications de configuration.</value>
+  </data>
+  <data name="ChangeTracking_SyncOutcomes_Level" xml:space="preserve">
+    <value>Niveau de suivi des résultats de synchronisation</value>
+  </data>
+  <data name="ChangeTracking_SyncOutcomes_Level_Description" xml:space="preserve">
+    <value>Définit le niveau de détail enregistré pour les graphes de résultats de synchronisation de chaque élément d’exécution d’un profil d’exécution. Aucun : pas de suivi des résultats (comportement hérité). Standard : résultats de premier niveau (active les indicateurs statistiques). Détaillé : chaîne causale complète avec résultats imbriqués (par défaut). Les niveaux supérieurs fournissent des pistes d’audit plus riches, mais augmentent l’espace de stockage utilisé.</value>
+  </data>
+  <data name="Worker_StaleTaskTimeout" xml:space="preserve">
+    <value>Délai d’expiration des tâches inactives</value>
+  </data>
+  <data name="Worker_StaleTaskTimeout_Description" xml:space="preserve">
+    <value>Durée pendant laquelle une tâche de Worker en cours peut rester sans signal de vie (heartbeat) avant que JIM ne considère son Worker comme en panne. Le Scheduler marque alors l’activité de la tâche comme échouée et supprime la tâche, afin que le travail puisse être relancé. Format : d.hh:mm:ss.</value>
+  </data>
+  <data name="Sync_PageSize" xml:space="preserve">
+    <value>Taille de page de synchronisation</value>
+  </data>
+  <data name="Sync_PageSize_Description" xml:space="preserve">
+    <value>Nombre maximal d’objets de systèmes connectés traités par page de base de données pendant les opérations de synchronisation. Une page se termine aussi lorsque ses objets totalisent 100 000 valeurs d’attribut, afin que les très grands groupes ne partagent jamais une page. Des valeurs plus élevées améliorent le débit en réduisant les allers-retours avec la base de données. Les indicateurs de progression sont mis à jour tous les 100 objets, quelle que soit la taille de page. Plage recommandée : 200 à 1000.</value>
+  </data>
+  <data name="Sync_PostClearReconciliation_MaxMissingPercent" xml:space="preserve">
+    <value>Réconciliation après vidage : part manquante maximale</value>
+  </data>
+  <data name="Sync_PostClearReconciliation_MaxMissingPercent_Description" xml:space="preserve">
+    <value>Part maximale, en pourcentage, des objets enregistrés lors d’un vidage de l’espace connecteur qui peuvent encore manquer à une nouvelle jointure avant que la vérification de réconciliation après vidage refuse de s’exécuter. Au-delà, la vérification suppose que la réimportation a échoué (modification d’un filtre ou du DN de base) plutôt qu’un départ massif réel, et refuse jusqu’à ce que vous réimportiez le système connecté ou augmentiez ce paramètre.</value>
+  </data>
+  <data name="Preview_WorkerThreshold" xml:space="preserve">
+    <value>Seuil d’aperçu confié au Worker</value>
+  </data>
+  <data name="Preview_WorkerThreshold_Description" xml:space="preserve">
+    <value>Nombre estimé d’objets affectés au-delà duquel un aperçu de modification de configuration est évalué par JIM.Worker plutôt que dans le processus du portail. Les aperçus plus petits s’exécutent dans le processus, afin de répondre sans attendre le Worker. Les deux chemins produisent des résultats identiques.</value>
+  </data>
+  <data name="Preview_FullDataSetPromptThreshold" xml:space="preserve">
+    <value>Seuil de demande de l’ensemble complet de données d’aperçu</value>
+  </data>
+  <data name="Preview_FullDataSetPromptThreshold_Description" xml:space="preserve">
+    <value>Nombre estimé de lignes au niveau objet au-delà duquel un aperçu de modification de configuration demande s’il faut conserver l’ensemble complet de données ou seulement un échantillon de chaque groupe de synthèse. En dessous de ce seuil, les aperçus conservent un échantillon sans demander. Les totaux de synthèse sont exacts dans les deux cas ; le choix n’affecte que le niveau de détail consultable et l’espace de stockage utilisé.</value>
+  </data>
+  <data name="Security_EncryptionKeyPath" xml:space="preserve">
+    <value>Emplacement de stockage des clés de chiffrement</value>
+  </data>
+  <data name="Security_EncryptionKeyPath_Description" xml:space="preserve">
+    <value>Chemin du système de fichiers où les clés de chiffrement sont stockées. Défini par la variable d’environnement JIM_ENCRYPTION_KEY_PATH. S’il n’est pas défini, la valeur par défaut est /data/keys (Docker) ou le répertoire de données de l’application.</value>
+  </data>
+  <data name="Security_RateLimiting_Enabled" xml:space="preserve">
+    <value>Limitation du débit de l’API activée</value>
+  </data>
+  <data name="Security_RateLimiting_Enabled_Description" xml:space="preserve">
+    <value>Lorsque cette option est activée, les requêtes de l’API REST sont limitées par client (voir les limites de requêtes authentifiées et non authentifiées ci-dessous). Lorsqu’elle est désactivée, aucune limitation n’est appliquée aux requêtes de l’API.</value>
+  </data>
+  <data name="Security_RateLimiting_AuthenticatedRequestsPerMinute" xml:space="preserve">
+    <value>Requêtes d’API authentifiées par minute</value>
+  </data>
+  <data name="Security_RateLimiting_AuthenticatedRequestsPerMinute_Description" xml:space="preserve">
+    <value>Nombre maximal de requêtes de l’API REST qu’un client authentifié (un utilisateur connecté ou une clé d’API) peut effectuer par minute glissante. Chaque principal authentifié est limité indépendamment.</value>
+  </data>
+  <data name="Security_RateLimiting_UnauthenticatedRequestsPerMinute" xml:space="preserve">
+    <value>Requêtes d’API non authentifiées par minute</value>
+  </data>
+  <data name="Security_RateLimiting_UnauthenticatedRequestsPerMinute_Description" xml:space="preserve">
+    <value>Nombre maximal de requêtes de l’API REST qu’un client non authentifié peut effectuer par fenêtre d’une minute, identifié par son adresse IP. S’applique aux points de terminaison anonymes et aux requêtes ayant échoué à l’authentification par clé d’API.</value>
+  </data>
+  <data name="Security_RateLimiting_ScimServiceProviderRequestsPerMinute" xml:space="preserve">
+    <value>Requêtes SCIM au fournisseur de service par minute</value>
+  </data>
+  <data name="Security_RateLimiting_ScimServiceProviderRequestsPerMinute_Description" xml:space="preserve">
+    <value>Nombre maximal de requêtes que les clients SCIM d’un système connecté peuvent adresser par minute glissante à son point de terminaison fournisseur de service SCIM 2.0. Partagé par toutes les clés de ce système connecté.</value>
+  </data>
+  <data name="UI_ProgressUpdateInterval" xml:space="preserve">
+    <value>Intervalle de mise à jour de la progression</value>
+  </data>
+  <data name="UI_ProgressUpdateInterval_Description" xml:space="preserve">
+    <value>Fréquence à laquelle JIM signale la progression pendant la génération de données d’exemple à partir d’un modèle. Format : d.hh:mm:ss.</value>
+  </data>
+  <data name="Instance_Name" xml:space="preserve">
+    <value>Nom du service</value>
+  </data>
+  <data name="Instance_Name_Description" xml:space="preserve">
+    <value>Nom convivial et modifiable de cette instance de JIM. Il apparaît dans la barre latérale, le titre de l’onglet du navigateur et le pied de page, pour distinguer les instances entre elles.</value>
+  </data>
+  <data name="Instance_Id" xml:space="preserve">
+    <value>Identifiant du service</value>
+  </data>
+  <data name="Instance_Id_Description" xml:space="preserve">
+    <value>Identifiant stable et immuable, généré une seule fois lors de la création de cette instance de JIM. Utilisé par les outils, les journaux et la télémétrie pour identifier cette instance. Ne peut pas être modifié.</value>
+  </data>
+</root>

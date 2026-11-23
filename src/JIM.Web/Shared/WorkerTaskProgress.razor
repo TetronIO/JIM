@@ -15,7 +15,9 @@
 
 @if (Status == WorkerTaskStatus.Processing)
 {
-    var stepName = Steps?.CurrentStepName;
+    var stepName = Steps is { CurrentStepName: { } englishStepName, CurrentStepKey: { } stepKey }
+        ? RunPhaseDisplay.Name(stepKey, englishStepName)
+        : Steps?.CurrentStepName;
 
     <div class="jim-queue-progress">
         @if (Steps != null)

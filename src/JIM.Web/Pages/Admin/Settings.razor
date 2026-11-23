@@ -80,7 +80,7 @@
                        chance to clip. *@
                     <div class="d-flex align-center gap-2" style="min-width: 0;">
                         <div style="min-width: 0; flex: 1 1 auto;">
-                            <OneLineText Text="@context.Item.DisplayName" Secondary="@context.Item.Description" />
+                            <OneLineText Text="@ServiceSettingDisplay.Name(context.Item.Key, context.Item.DisplayName)" Secondary="@ServiceSettingDisplay.Description(context.Item.Key, context.Item.Description)" />
                         </div>
                         @if (flagTier == FeatureFlagTier.Preview)
                         {
@@ -94,7 +94,7 @@
                 }
                 else
                 {
-                    <OneLineText Text="@context.Item.DisplayName" Secondary="@context.Item.Description" />
+                    <OneLineText Text="@ServiceSettingDisplay.Name(context.Item.Key, context.Item.DisplayName)" Secondary="@ServiceSettingDisplay.Description(context.Item.Key, context.Item.Description)" />
                 }
             </CellTemplate>
         </TemplateColumn>
@@ -472,7 +472,7 @@
         };
 
         var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
-        var dialog = await DialogService.ShowAsync<EditSettingDialog>(string.Format(CultureInfo.CurrentCulture, AdminText.SettingsEditTitle, setting.DisplayName), parameters, options);
+        var dialog = await DialogService.ShowAsync<EditSettingDialog>(string.Format(CultureInfo.CurrentCulture, AdminText.SettingsEditTitle, ServiceSettingDisplay.Name(setting.Key, setting.DisplayName)), parameters, options);
         var result = await dialog.Result;
 
         if (result is { Canceled: false, Data: string newValue })
@@ -485,7 +485,7 @@
                 // synchronisation are acknowledged first.
                 var preflight = await jim.ConfigurationChangePreflight.EvaluateServiceSettingAsync(WithValue(setting, newValue));
                 if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
-                        AdminText.ServiceSettingNounSingular, setting.DisplayName))
+                        AdminText.ServiceSettingNounSingular, ServiceSettingDisplay.Name(setting.Key, setting.DisplayName)))
                     return;
 
                 // offer an optional reason for the configuration change history; cancelling aborts the save
@@ -505,7 +505,7 @@
                     await jim.ServiceSettings.UpdateSettingValueAsync(setting.Key, newValue, user, changeReason);
 
                 await ReloadListAsync();
-                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.SettingsUpdatedSuccess, setting.DisplayName), Severity.Success);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.SettingsUpdatedSuccess, ServiceSettingDisplay.Name(setting.Key, setting.DisplayName)), Severity.Success);
             }
             catch (Exception ex)
             {
@@ -518,7 +518,7 @@
     {
         var confirm = await DialogService.ShowMessageBoxAsync(
             AdminText.SettingsRevertToDefault,
-            string.Format(CultureInfo.CurrentCulture, AdminText.SettingsRevertConfirm, setting.DisplayName),
+            string.Format(CultureInfo.CurrentCulture, AdminText.SettingsRevertConfirm, ServiceSettingDisplay.Name(setting.Key, setting.DisplayName)),
             yesText: AdminText.SettingsRevert, cancelText: CommonText.Cancel);
 
         if (confirm == true)
@@ -531,7 +531,7 @@
                 // A null value is the setting's own way of saying "use the default", matching what the revert stores.
                 var preflight = await jim.ConfigurationChangePreflight.EvaluateServiceSettingAsync(WithValue(setting, null));
                 if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
-                        AdminText.ServiceSettingNounSingular, setting.DisplayName))
+                        AdminText.ServiceSettingNounSingular, ServiceSettingDisplay.Name(setting.Key, setting.DisplayName)))
                     return;
 
                 // offer an optional reason for the configuration change history; cancelling aborts the revert
@@ -550,7 +550,7 @@
                     await jim.ServiceSettings.RevertSettingToDefaultAsync(setting.Key, user, changeReason);
 
                 await ReloadListAsync();
-                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.SettingsRevertedSuccess, setting.DisplayName), Severity.Success);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.SettingsRevertedSuccess, ServiceSettingDisplay.Name(setting.Key, setting.DisplayName)), Severity.Success);
             }
             catch (Exception ex)
             {
@@ -562,7 +562,7 @@
     private async Task ShowHistoryDialogAsync(ServiceSetting setting)
     {
         await ConfigurationChangeHistoryDialog.ShowAsync(DialogService, ActivityTargetType.ServiceSetting,
-            setting.Key, AdminText.ServiceSettingNounSingular, setting.DisplayName);
+            setting.Key, AdminText.ServiceSettingNounSingular, ServiceSettingDisplay.Name(setting.Key, setting.DisplayName));
     }
 
     private async Task CopyToClipboardAsync(string value)

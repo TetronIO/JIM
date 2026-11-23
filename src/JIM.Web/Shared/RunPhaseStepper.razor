@@ -22,7 +22,7 @@
             <ChildContent>
                 @foreach (var phase in TopLevelPhases)
                 {
-                    <MudStep Title="@phase.Name"
+                    <MudStep Title="@RunPhaseDisplay.Name(phase.Key, phase.Name)"
                              Completed="@(phase.Status == ActivityPhaseStatus.Completed)"
                              Skipped="@(phase.Status == ActivityPhaseStatus.Skipped)"
                              HasError="@(phase.Status == ActivityPhaseStatus.Failed)" />
@@ -80,7 +80,12 @@
         return Task.CompletedTask;
     }
 
-    private ActivityPhase? PhaseFor(IStepContext step) => TopLevelPhases.FirstOrDefault(p => p.Name == step.Title);
+    /// <summary>
+    /// The phase a step draws. Steps carry the phase's name in the viewer's language, so the match is made on the
+    /// same translated name the step was given.
+    /// </summary>
+    private ActivityPhase? PhaseFor(IStepContext step) =>
+        TopLevelPhases.FirstOrDefault(p => RunPhaseDisplay.Name(p.Key, p.Name) == step.Title);
 
     private RenderFragment<IStepContext> LabelTemplate => step => __builder =>
     {
