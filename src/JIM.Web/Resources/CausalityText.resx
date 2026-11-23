@@ -1750,10 +1750,10 @@
     <value>No attributes were set</value>
   </data>
   <data name="AttributeDetailNoneAdd" xml:space="preserve">
-    <value>No attributes were add</value>
+    <value>No attributes were added</value>
   </data>
   <data name="AttributeDetailNoneRemove" xml:space="preserve">
-    <value>No attributes were remove</value>
+    <value>No attributes were removed</value>
   </data>
   <data name="AttributeDetailChooseAll" xml:space="preserve">
     <value>Choose All to see every attribute this event touched.</value>

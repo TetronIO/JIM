@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="SSO_Authority" xml:space="preserve">
+    <value>SSO-Authority</value>
+  </data>
+  <data name="SSO_Authority_Description" xml:space="preserve">
+    <value>Die OIDC-Authority-URL für die Single-Sign-on-Authentifizierung.</value>
+  </data>
+  <data name="SSO_ClientId" xml:space="preserve">
+    <value>SSO-Client-ID</value>
+  </data>
+  <data name="SSO_ClientId_Description" xml:space="preserve">
+    <value>Der OIDC-Clientbezeichner für JIM.</value>
+  </data>
+  <data name="SSO_Secret" xml:space="preserve">
+    <value>SSO-Geheimnis</value>
+  </data>
+  <data name="SSO_Secret_Description" xml:space="preserve">
+    <value>Das OIDC-Clientgeheimnis für JIM.</value>
+  </data>
+  <data name="SSO_ApiScope" xml:space="preserve">
+    <value>SSO-API-Scope</value>
+  </data>
+  <data name="SSO_ApiScope_Description" xml:space="preserve">
+    <value>Der OIDC-API-Scope, der für den Zugriff auf JIM erforderlich ist.</value>
+  </data>
+  <data name="SSO_ClaimType" xml:space="preserve">
+    <value>SSO-Claim-Typ</value>
+  </data>
+  <data name="SSO_ClaimType_Description" xml:space="preserve">
+    <value>Der Claim-Typ, mit dem der Benutzer in SSO-Token identifiziert wird.</value>
+  </data>
+  <data name="SSO_MvAttribute" xml:space="preserve">
+    <value>Metaverse-Attribut für SSO</value>
+  </data>
+  <data name="SSO_MvAttribute_Description" xml:space="preserve">
+    <value>Das Metaverse-Attribut, mit dem SSO-Claims JIM-Benutzern zugeordnet werden.</value>
+  </data>
+  <data name="SSO_EnableLogOut" xml:space="preserve">
+    <value>SSO-Abmeldung aktivieren</value>
+  </data>
+  <data name="SSO_EnableLogOut_Description" xml:space="preserve">
+    <value>Wenn aktiviert, können sich Benutzer von JIM abmelden und werden zum Abmelde-Endpunkt des SSO-Anbieters weitergeleitet.</value>
+  </data>
+  <data name="Sync_PartitionValidationMode" xml:space="preserve">
+    <value>Partitionsvalidierung des Ausführungsprofils</value>
+  </data>
+  <data name="Sync_PartitionValidationMode_Description" xml:space="preserve">
+    <value>Steuert das Verhalten von JIM, wenn ein Ausführungsprofil für ein verbundenes System ausgeführt wird, das Partitionen unterstützt, aber keine ausgewählt hat. „Error“ blockiert die Ausführung; „Warning“ erlaubt die Ausführung, protokolliert aber eine Warnung.</value>
+  </data>
+  <data name="History_RetentionPeriod" xml:space="preserve">
+    <value>Aufbewahrungsfrist des Verlaufs</value>
+  </data>
+  <data name="History_RetentionPeriod_Description" xml:space="preserve">
+    <value>Der Zeitraum, für den Aktivitäts- und Auditverlauf aufbewahrt wird. Format: d.hh:mm:ss (z. B. „90.00:00:00“ für 90 Tage).</value>
+  </data>
+  <data name="History_ConfigurationChangeRetentionPeriod" xml:space="preserve">
+    <value>Aufbewahrungsfrist für Konfigurationsänderungen</value>
+  </data>
+  <data name="History_ConfigurationChangeRetentionPeriod_Description" xml:space="preserve">
+    <value>Der Zeitraum, für den der Konfigurationsänderungsverlauf (versionierte Snapshots verbundener Systeme, Synchronisierungsregeln und Zeitpläne) aufbewahrt wird. Wird getrennt von der Aufbewahrungsfrist des Verlaufs geführt und ist in der Regel deutlich länger. Format: d.hh:mm:ss (z. B. „3650.00:00:00“ für etwa 10 Jahre).</value>
+  </data>
+  <data name="History_CleanupBatchSize" xml:space="preserve">
+    <value>Batchgröße der Verlaufsbereinigung</value>
+  </data>
+  <data name="History_CleanupBatchSize_Description" xml:space="preserve">
+    <value>Maximale Anzahl der Datensätze, die pro Bereinigungsbatch bei der Wartung gelöscht werden. Niedrigere Werte verringern die Datenbanklast, dauern bei großen Datenmengen aber länger. Höhere Werte sind schneller, können aber vorübergehend die Leistung beeinträchtigen.</value>
+  </data>
+  <data name="History_SecurityEventRetentionPeriod" xml:space="preserve">
+    <value>Aufbewahrungsfrist für Sicherheitsereignisse</value>
+  </data>
+  <data name="History_SecurityEventRetentionPeriod_Description" xml:space="preserve">
+    <value>Der Zeitraum, für den Aktivitäten zu Sicherheitsauditereignissen (erfolgreiche und fehlgeschlagene interaktive Anmeldung sowie fehlgeschlagene Authentifizierung mit API-Schlüssel oder SSO-Zugriffstoken) aufbewahrt werden. Wird getrennt von den Aufbewahrungsfristen für Verlauf und Konfigurationsänderungen geführt. Format: d.hh:mm:ss (z. B. „365.00:00:00“ für etwa 1 Jahr).</value>
+  </data>
+  <data name="History_PasswordEventRetentionPeriod" xml:space="preserve">
+    <value>Aufbewahrungsfrist der Kennwortsynchronisierung</value>
+  </data>
+  <data name="History_PasswordEventRetentionPeriod_Description" xml:space="preserve">
+    <value>Der Zeitraum, für den der Verlauf der Kennwortsynchronisierung aufbewahrt wird: die Aktivitäten, die festhalten, was mit jeder Kennwortänderung geschehen ist, und die Warteschlangenzeilen, die einen Endzustand erreicht haben (angehalten, abgelaufen oder abgebrochen). Änderungen, die einem verbundenen System noch zugestellt werden müssen, werden nie entfernt, egal wie alt sie sind. Verkürzen Sie ihn, um zu begrenzen, wie lange JIM ein verschlüsseltes Kennwort hält, das es nicht mehr zustellen kann. Format: d.hh:mm:ss (z. B. „365.00:00:00“ für etwa 1 Jahr).</value>
+  </data>
+  <data name="ChangeTracking_CsoChanges_Enabled" xml:space="preserve">
+    <value>CSO-Änderungen verfolgen</value>
+  </data>
+  <data name="ChangeTracking_CsoChanges_Enabled_Description" xml:space="preserve">
+    <value>Wenn aktiviert, wird für alle Vorgänge zum Erstellen, Aktualisieren und Löschen von Objekten im verbundenen System ein Änderungsverlauf erfasst. Deaktivieren Sie die Option, um die Leistung auf Kosten des Prüfpfads zu verbessern.</value>
+  </data>
+  <data name="ChangeTracking_MvoChanges_Enabled" xml:space="preserve">
+    <value>MVO-Änderungen verfolgen</value>
+  </data>
+  <data name="ChangeTracking_MvoChanges_Enabled_Description" xml:space="preserve">
+    <value>Wenn aktiviert, wird für alle Vorgänge zum Erstellen, Aktualisieren und Löschen von Metaverse-Objekten ein Änderungsverlauf erfasst. Deaktivieren Sie die Option, um die Leistung auf Kosten des Prüfpfads zu verbessern.</value>
+  </data>
+  <data name="ChangeTracking_ConfigurationChanges_Enabled" xml:space="preserve">
+    <value>Konfigurationsänderungen verfolgen</value>
+  </data>
+  <data name="ChangeTracking_ConfigurationChanges_Enabled_Description" xml:space="preserve">
+    <value>Wenn aktiviert, wird für jedes Erstellen, Aktualisieren und Löschen einer Konfiguration (Synchronisierungsregeln, verbundene Systeme) ein bereinigter, versionierter Konfigurations-Snapshot an der Aktivität erfasst. Deaktivieren Sie die Option, um die Erfassung des Konfigurationsänderungsverlaufs zu beenden.</value>
+  </data>
+  <data name="ChangeTracking_SyncOutcomes_Level" xml:space="preserve">
+    <value>Verfolgungsebene für Synchronisierungsergebnisse</value>
+  </data>
+  <data name="ChangeTracking_SyncOutcomes_Level_Description" xml:space="preserve">
+    <value>Steuert, wie detailliert Ergebnisgraphen der Synchronisierung für jedes Ausführungselement des Ausführungsprofils erfasst werden. None: keine Ergebnisverfolgung (Altverhalten). Standard: Ergebnisse auf Stammebene (aktiviert die Statistik-Chips). Detailed: vollständige Kausalkette mit verschachtelten Ergebnissen (Voreinstellung). Höhere Ebenen liefern umfassendere Prüfpfade, erhöhen aber den Speicherbedarf.</value>
+  </data>
+  <data name="Worker_StaleTaskTimeout" xml:space="preserve">
+    <value>Zeitlimit für veraltete Aufgaben</value>
+  </data>
+  <data name="Worker_StaleTaskTimeout_Description" xml:space="preserve">
+    <value>Wie lange eine laufende Worker-Aufgabe ohne Heartbeat bleiben darf, bevor JIM ihren Worker als abgestürzt behandelt: Der Scheduler lässt dann die Aktivität der Aufgabe fehlschlagen und entfernt die Aufgabe, sodass die Arbeit erneut ausgeführt werden kann. Format: d.hh:mm:ss.</value>
+  </data>
+  <data name="Sync_PageSize" xml:space="preserve">
+    <value>Seitengröße der Synchronisierung</value>
+  </data>
+  <data name="Sync_PageSize_Description" xml:space="preserve">
+    <value>Die maximale Anzahl an Objekten im verbundenen System, die bei Synchronisierungsvorgängen pro Datenbankseite verarbeitet werden. Eine Seite endet auch, sobald ihre Objekte 100.000 Attributwerte enthalten, sodass sehr große Gruppen sich nie eine Seite teilen. Größere Werte verbessern den Durchsatz, weil weniger Datenbankzugriffe nötig sind. Fortschrittsaktualisierungen in der Oberfläche erfolgen unabhängig von der Seitengröße alle 100 Objekte. Empfohlener Bereich: 200 bis 1000.</value>
+  </data>
+  <data name="Sync_PostClearReconciliation_MaxMissingPercent" xml:space="preserve">
+    <value>Abgleich nach dem Leeren: maximaler Anteil fehlender Objekte</value>
+  </data>
+  <data name="Sync_PostClearReconciliation_MaxMissingPercent_Description" xml:space="preserve">
+    <value>Der maximale Anteil (in Prozent) der beim Leeren eines Connectorbereichs erfassten Objekte, die noch ohne erneute Verknüpfung sein dürfen, bevor der Abgleichslauf nach dem Leeren die Ausführung verweigert. Darüber nimmt der Lauf an, dass der erneute Import fehlerhaft war (Änderung eines Filters oder der Basis-DN) und kein echter Massenabgang vorliegt, und verweigert die Ausführung, bis Sie das verbundene System erneut importieren oder diese Einstellung erhöhen.</value>
+  </data>
+  <data name="Preview_WorkerThreshold" xml:space="preserve">
+    <value>Worker-Schwellenwert für Vorschauen</value>
+  </data>
+  <data name="Preview_WorkerThreshold_Description" xml:space="preserve">
+    <value>Die geschätzte Anzahl betroffener Objekte, ab der eine Konfigurationsänderungsvorschau von JIM.Worker statt im eigenen Prozess des Portals ausgewertet wird. Kleinere Vorschauen laufen im eigenen Prozess und liefern ihr Ergebnis, ohne darauf zu warten, dass der Worker sie übernimmt. Beide Wege liefern identische Ergebnisse.</value>
+  </data>
+  <data name="Preview_FullDataSetPromptThreshold" xml:space="preserve">
+    <value>Schwellenwert für die Abfrage des vollständigen Datensatzes der Vorschau</value>
+  </data>
+  <data name="Preview_FullDataSetPromptThreshold_Description" xml:space="preserve">
+    <value>Die geschätzte Anzahl von Zeilen auf Objektebene, ab der eine Konfigurationsänderungsvorschau fragt, ob der vollständige Datensatz oder nur eine Stichprobe jeder Zusammenfassungsgruppe aufbewahrt werden soll. Darunter behalten Vorschauen ohne Nachfrage eine Stichprobe. Die Zusammenfassungszahlen sind in beiden Fällen exakt; die Wahl wirkt sich nur darauf aus, wie tief man in die Details einsteigen kann und wie viel Speicher die Vorschau belegt.</value>
+  </data>
+  <data name="Security_EncryptionKeyPath" xml:space="preserve">
+    <value>Speicherpfad der Verschlüsselungsschlüssel</value>
+  </data>
+  <data name="Security_EncryptionKeyPath_Description" xml:space="preserve">
+    <value>Der Dateisystempfad, in dem Verschlüsselungsschlüssel gespeichert werden. Wird über die Umgebungsvariable JIM_ENCRYPTION_KEY_PATH festgelegt. Ist sie nicht gesetzt, gilt standardmäßig /data/keys (Docker) oder das Anwendungsdatenverzeichnis.</value>
+  </data>
+  <data name="Security_RateLimiting_Enabled" xml:space="preserve">
+    <value>API-Ratenbegrenzung aktiviert</value>
+  </data>
+  <data name="Security_RateLimiting_Enabled_Description" xml:space="preserve">
+    <value>Wenn aktiviert, werden REST-API-Anfragen pro Client gedrosselt (siehe die Limits für authentifizierte und nicht authentifizierte Anfragen unten). Wenn deaktiviert, wird keine Begrenzung auf API-Anfragen angewendet.</value>
+  </data>
+  <data name="Security_RateLimiting_AuthenticatedRequestsPerMinute" xml:space="preserve">
+    <value>Authentifizierte API-Anfragen pro Minute</value>
+  </data>
+  <data name="Security_RateLimiting_AuthenticatedRequestsPerMinute_Description" xml:space="preserve">
+    <value>Die maximale Anzahl an REST-API-Anfragen, die ein authentifizierter Client (ein angemeldeter Benutzer oder ein API-Schlüssel) pro gleitender Minute stellen darf. Jeder authentifizierte Prinzipal wird unabhängig begrenzt.</value>
+  </data>
+  <data name="Security_RateLimiting_UnauthenticatedRequestsPerMinute" xml:space="preserve">
+    <value>Nicht authentifizierte API-Anfragen pro Minute</value>
+  </data>
+  <data name="Security_RateLimiting_UnauthenticatedRequestsPerMinute_Description" xml:space="preserve">
+    <value>Die maximale Anzahl an REST-API-Anfragen, die ein nicht authentifizierter Client, identifiziert über seine Client-IP-Adresse, pro Ein-Minuten-Fenster stellen darf. Gilt für anonyme Endpunkte und für Anfragen, deren Authentifizierung mit API-Schlüssel fehlgeschlagen ist.</value>
+  </data>
+  <data name="Security_RateLimiting_ScimServiceProviderRequestsPerMinute" xml:space="preserve">
+    <value>SCIM-Dienstanbieter-Anfragen pro Minute</value>
+  </data>
+  <data name="Security_RateLimiting_ScimServiceProviderRequestsPerMinute_Description" xml:space="preserve">
+    <value>Die maximale Anzahl an Anfragen, die die SCIM-Clients eines verbundenen Systems pro gleitender Minute an dessen SCIM-2.0-Dienstanbieter-Endpunkt stellen dürfen. Gilt gemeinsam für alle Schlüssel dieses verbundenen Systems.</value>
+  </data>
+  <data name="UI_ProgressUpdateInterval" xml:space="preserve">
+    <value>Intervall der Fortschrittsaktualisierung</value>
+  </data>
+  <data name="UI_ProgressUpdateInterval_Description" xml:space="preserve">
+    <value>Wie oft JIM den Fortschritt meldet, während es Beispieldaten aus einer Vorlage generiert. Format: d.hh:mm:ss.</value>
+  </data>
+  <data name="Instance_Name" xml:space="preserve">
+    <value>Dienstname</value>
+  </data>
+  <data name="Instance_Name_Description" xml:space="preserve">
+    <value>Ein verständlicher, bearbeitbarer Name für diese JIM-Instanz. Er erscheint in der Seitenleiste, im Titel des Browser-Tabs und in der Fußzeile, damit Sie Instanzen unterscheiden können.</value>
+  </data>
+  <data name="Instance_Id" xml:space="preserve">
+    <value>Dienst-ID</value>
+  </data>
+  <data name="Instance_Id_Description" xml:space="preserve">
+    <value>Ein stabiler, unveränderlicher Bezeichner, der einmalig bei der Erstellung dieser JIM-Instanz erzeugt wurde. Er wird von Werkzeugen, Protokollen und der Telemetrie genutzt, um diese Instanz zu identifizieren. Er kann nicht geändert werden.</value>
+  </data>
+  <data name="Security_ConfigurationChangeHashKey" xml:space="preserve">
+    <value>Hashschlüssel für Konfigurationsänderungen</value>
+  </data>
+  <data name="Security_ConfigurationChangeHashKey_Description" xml:space="preserve">
+    <value>Vom Server gehaltener Schlüssel, mit dem Änderungen an geheimen Konfigurationswerten im Änderungsverlauf erkannt werden, ohne die Werte zu speichern. Wird automatisch erzeugt; wird nie angezeigt oder bearbeitet.</value>
+  </data>
+</root>

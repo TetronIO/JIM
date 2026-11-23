@@ -1431,7 +1431,7 @@
     <value>Ce conteneur contient directement {0:N0} objets, ce qu’importe Ce niveau. Toute sa branche en contient {1:N0}.</value>
   </data>
   <data name="PickerSubtreeLead" xml:space="preserve">
-    <value>Ce conteneur et tout ce qui se trouve en dessous contiennent {0:N0} objets, ce qu’importe Ce niveau et en dessous.</value>
+    <value>Ce conteneur et tout ce qui se trouve en dessous contiennent {0:N0} objets, ce qu’importe Sous-arborescence complète.</value>
   </data>
   <data name="PickerSubtreeDirectOne" xml:space="preserve">
     <value>{0:N0} objet s’y trouve directement.</value>

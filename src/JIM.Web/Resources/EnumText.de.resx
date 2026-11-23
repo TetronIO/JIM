@@ -1,0 +1,813 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ActivityStatus_NotSet" xml:space="preserve">
+    <value>Nicht festgelegt</value>
+  </data>
+  <data name="ActivityStatus_InProgress" xml:space="preserve">
+    <value>In Bearbeitung</value>
+  </data>
+  <data name="ActivityStatus_Complete" xml:space="preserve">
+    <value>Abgeschlossen</value>
+  </data>
+  <data name="ActivityStatus_CompleteWithWarning" xml:space="preserve">
+    <value>Abgeschlossen mit Warnung</value>
+  </data>
+  <data name="ActivityStatus_CompleteWithError" xml:space="preserve">
+    <value>Abgeschlossen mit Fehler</value>
+  </data>
+  <data name="ActivityStatus_FailedWithError" xml:space="preserve">
+    <value>Fehlgeschlagen mit Fehler</value>
+  </data>
+  <data name="ActivityStatus_Cancelled" xml:space="preserve">
+    <value>Abgebrochen</value>
+  </data>
+  <data name="ConnectedSystemSettingCategory_Connectivity" xml:space="preserve">
+    <value>Konnektivität</value>
+  </data>
+  <data name="ConnectedSystemSettingCategory_General" xml:space="preserve">
+    <value>Allgemein</value>
+  </data>
+  <data name="ConnectedSystemSettingCategory_Capabilities" xml:space="preserve">
+    <value>Funktionen</value>
+  </data>
+  <data name="ConnectedSystemSettingCategory_Schema" xml:space="preserve">
+    <value>Schema</value>
+  </data>
+  <data name="ConnectedSystemSettingCategory_Import" xml:space="preserve">
+    <value>Import</value>
+  </data>
+  <data name="ConnectedSystemSettingCategory_Export" xml:space="preserve">
+    <value>Export</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_NotSet" xml:space="preserve">
+    <value>Nicht festgelegt</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_AmbiguousMatch" xml:space="preserve">
+    <value>Mehrdeutiger Treffer</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_CouldNotMatchObjectType" xml:space="preserve">
+    <value>Objekttyp nicht zuordenbar</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_CouldNotJoinDueToExistingJoin" xml:space="preserve">
+    <value>Verknüpfung wegen bestehender Verknüpfung nicht möglich</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_DuplicateImportedAttributes" xml:space="preserve">
+    <value>Doppelt importierte Attribute</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_MissingExternalIdAttributeValue" xml:space="preserve">
+    <value>Fehlender Wert des Attributs der externen ID</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_UnexpectedAttribute" xml:space="preserve">
+    <value>Unerwartetes Attribut</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_UnresolvedReference" xml:space="preserve">
+    <value>Nicht aufgelöster Verweis</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_UnsupportedExternalIdAttributeType" xml:space="preserve">
+    <value>Nicht unterstützter Attributtyp der externen ID</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_ExportNotConfirmed" xml:space="preserve">
+    <value>Export nicht bestätigt</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_ExportConfirmationFailed" xml:space="preserve">
+    <value>Exportbestätigung fehlgeschlagen</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_CsoCreationFailed" xml:space="preserve">
+    <value>Erstellung des Objekts im verbundenen System fehlgeschlagen</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_DuplicateObject" xml:space="preserve">
+    <value>Doppeltes Objekt</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_InvalidGeneratedExternalId" xml:space="preserve">
+    <value>Ungültige generierte externe ID</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_UnhandledError" xml:space="preserve">
+    <value>Nicht behandelter Fehler</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_ExpressionEvaluationError" xml:space="preserve">
+    <value>Fehler bei der Ausdrucksauswertung</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_ExpressionMissingInput" xml:space="preserve">
+    <value>Fehlende Eingabe für Ausdruck</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_MultiValuedToSingleValued" xml:space="preserve">
+    <value>Mehrwertig zu einwertig</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_DeltaImportFallbackToFullImport" xml:space="preserve">
+    <value>Rückfall vom Deltaimport auf den vollständigen Import</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_ImportHashVerificationFailed" xml:space="preserve">
+    <value>Hashprüfung beim Import fehlgeschlagen</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_ImportAttributeValueError" xml:space="preserve">
+    <value>Fehler beim Attributwert des Imports</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_ConnectorConfigurationError" xml:space="preserve">
+    <value>Fehler bei der Connectorkonfiguration</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_CouldNotExportDueToExistingConnectedSystemObject" xml:space="preserve">
+    <value>Export wegen vorhandenem Objekt im verbundenen System nicht möglich</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_ClassMembershipRequirementsNotMet" xml:space="preserve">
+    <value>Anforderungen an die Klassenmitgliedschaft nicht erfüllt</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_GeneratedValueExhausted" xml:space="preserve">
+    <value>Generierter Wert erschöpft</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_GeneratedValueWidthExceeded" xml:space="preserve">
+    <value>Breite des generierten Werts überschritten</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_GeneratedValueCollisionUnresolved" xml:space="preserve">
+    <value>Entscheidung erforderlich</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_UniqueValueAlreadyInUse" xml:space="preserve">
+    <value>Eindeutiger Wert bereits in Verwendung</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_ObjectMatchingRuleFailed" xml:space="preserve">
+    <value>Objektabgleichsregel fehlgeschlagen</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_ObjectTypeChanged" xml:space="preserve">
+    <value>Objekttyp geändert</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_PasswordRequiredToEnableAccount" xml:space="preserve">
+    <value>Kennwort zum Aktivieren des Kontos erforderlich</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_AmbiguousProvisioningMatch" xml:space="preserve">
+    <value>Mehrdeutiger Provisionierungsabgleich</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_ScopingCriterionFailed" xml:space="preserve">
+    <value>Geltungsbereichskriterium fehlgeschlagen</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_DatesCollapseAtTargetResolution" xml:space="preserve">
+    <value>Datumswerte fallen bei der Zielauflösung zusammen</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_OutsideManagedScope" xml:space="preserve">
+    <value>Außerhalb des verwalteten Geltungsbereichs</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_AccessDenied" xml:space="preserve">
+    <value>Zugriff verweigert</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_RejectedByConnectedSystem" xml:space="preserve">
+    <value>Vom verbundenen System abgelehnt</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_PlaceholderMemberConstraintViolation" xml:space="preserve">
+    <value>Verletzung der Einschränkung für Platzhalter-Mitglieder</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_MissingDependency" xml:space="preserve">
+    <value>Fehlende Abhängigkeit</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_ConcurrencyConflict" xml:space="preserve">
+    <value>Nebenläufigkeitskonflikt</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_CredentialAttributeNotExported" xml:space="preserve">
+    <value>Anmeldeinformationsattribut nicht exportiert</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_ExportRuleOverlap" xml:space="preserve">
+    <value>Überlappung von Exportregeln</value>
+  </data>
+  <data name="ActivityRunProfileExecutionItemErrorType_ProjectionTypeConflict" xml:space="preserve">
+    <value>Konflikt beim Projektionstyp</value>
+  </data>
+  <data name="ActivityTargetCategory_Configuration" xml:space="preserve">
+    <value>Konfiguration</value>
+  </data>
+  <data name="ActivityTargetCategory_IdentityData" xml:space="preserve">
+    <value>Identitätsdaten</value>
+  </data>
+  <data name="ActivityTargetCategory_SyncRuns" xml:space="preserve">
+    <value>Synchronisierungsläufe</value>
+  </data>
+  <data name="ActivityTargetCategory_System" xml:space="preserve">
+    <value>System</value>
+  </data>
+  <data name="ActivityTargetCategory_Security" xml:space="preserve">
+    <value>Sicherheit</value>
+  </data>
+  <data name="ActivityTargetCategory_PasswordSynchronisation" xml:space="preserve">
+    <value>Kennwortsynchronisierung</value>
+  </data>
+  <data name="ActivityTargetOperationType_Create" xml:space="preserve">
+    <value>Erstellen</value>
+  </data>
+  <data name="ActivityTargetOperationType_Read" xml:space="preserve">
+    <value>Lesen</value>
+  </data>
+  <data name="ActivityTargetOperationType_Update" xml:space="preserve">
+    <value>Aktualisieren</value>
+  </data>
+  <data name="ActivityTargetOperationType_Delete" xml:space="preserve">
+    <value>Löschen</value>
+  </data>
+  <data name="ActivityTargetOperationType_Clear" xml:space="preserve">
+    <value>Leeren</value>
+  </data>
+  <data name="ActivityTargetOperationType_Execute" xml:space="preserve">
+    <value>Ausführen</value>
+  </data>
+  <data name="ActivityTargetOperationType_ImportHierarchy" xml:space="preserve">
+    <value>Hierarchie importieren</value>
+  </data>
+  <data name="ActivityTargetOperationType_ImportSchema" xml:space="preserve">
+    <value>Schema importieren</value>
+  </data>
+  <data name="ActivityTargetOperationType_Revert" xml:space="preserve">
+    <value>Rückgängig machen</value>
+  </data>
+  <data name="ActivityTargetOperationType_Reset" xml:space="preserve">
+    <value>Zurücksetzen</value>
+  </data>
+  <data name="ActivityTargetOperationType_Authenticate" xml:space="preserve">
+    <value>Authentifizieren</value>
+  </data>
+  <data name="ActivityTargetOperationType_Preview" xml:space="preserve">
+    <value>Vorschau</value>
+  </data>
+  <data name="ActivityTargetOperationType_SetPassword" xml:space="preserve">
+    <value>Kennwort festlegen</value>
+  </data>
+  <data name="ActivityTargetOperationType_SchemaRefreshRemoval" xml:space="preserve">
+    <value>Entfernung bei Schemaaktualisierung</value>
+  </data>
+  <data name="ActivityTargetOperationType_RetryPasswordDelivery" xml:space="preserve">
+    <value>Kennwortzustellung wiederholen</value>
+  </data>
+  <data name="ActivityTargetOperationType_CancelPasswordDelivery" xml:space="preserve">
+    <value>Kennwortzustellung abbrechen</value>
+  </data>
+  <data name="ActivityTargetOperationType_DiscoverAuxiliaryClasses" xml:space="preserve">
+    <value>Hilfsklassen ermitteln</value>
+  </data>
+  <data name="ActivityTargetOperationType_RecallAttributeValues" xml:space="preserve">
+    <value>Attributwerte zurückrufen</value>
+  </data>
+  <data name="ActivityTargetOperationType_Deprovision" xml:space="preserve">
+    <value>Deprovisionieren</value>
+  </data>
+  <data name="ActivityTargetOperationType_RestartGeneratedValues" xml:space="preserve">
+    <value>Generierte Werte neu starten</value>
+  </data>
+  <data name="ActivityTargetOperationType_AllowGeneratedValueRename" xml:space="preserve">
+    <value>Umbenennung des generierten Werts zulassen</value>
+  </data>
+  <data name="ActivityTargetOperationType_RetryGeneratedValue" xml:space="preserve">
+    <value>Generierten Wert wiederholen</value>
+  </data>
+  <data name="ActivityTargetOperationType_Receive" xml:space="preserve">
+    <value>Empfangen</value>
+  </data>
+  <data name="ActivityTargetOperationType_SetExchangeRecipient" xml:space="preserve">
+    <value>Exchange-Empfänger festlegen</value>
+  </data>
+  <data name="ActivityTargetOperationType_WithdrawExchangeRecipient" xml:space="preserve">
+    <value>Exchange-Empfänger zurückziehen</value>
+  </data>
+  <data name="ActivityTargetOperationType_ReplaceExchangeRecipient" xml:space="preserve">
+    <value>Exchange-Empfänger ersetzen</value>
+  </data>
+  <data name="ActivityTargetOperationType_RetryExchangeRecipient" xml:space="preserve">
+    <value>Exchange-Empfänger erneut versuchen</value>
+  </data>
+  <data name="ActivityTargetType_NotSet" xml:space="preserve">
+    <value>Nicht festgelegt</value>
+  </data>
+  <data name="ActivityTargetType_ExampleDataTemplate" xml:space="preserve">
+    <value>Beispieldatenvorlage</value>
+  </data>
+  <data name="ActivityTargetType_ConnectedSystem" xml:space="preserve">
+    <value>Verbundenes System</value>
+  </data>
+  <data name="ActivityTargetType_ConnectedSystemRunProfile" xml:space="preserve">
+    <value>Ausführungsprofil des verbundenen Systems</value>
+  </data>
+  <data name="ActivityTargetType_SynchronisationRule" xml:space="preserve">
+    <value>Synchronisierungsregel</value>
+  </data>
+  <data name="ActivityTargetType_MetaverseObject" xml:space="preserve">
+    <value>Metaverse-Objekt</value>
+  </data>
+  <data name="ActivityTargetType_TrustedCertificate" xml:space="preserve">
+    <value>Vertrauenswürdiges Zertifikat</value>
+  </data>
+  <data name="ActivityTargetType_ObjectMatchingRule" xml:space="preserve">
+    <value>Objektabgleichsregel</value>
+  </data>
+  <data name="ActivityTargetType_MetaverseAttribute" xml:space="preserve">
+    <value>Metaverse-Attribut</value>
+  </data>
+  <data name="ActivityTargetType_ServiceSetting" xml:space="preserve">
+    <value>Diensteinstellung</value>
+  </data>
+  <data name="ActivityTargetType_HistoryRetentionCleanup" xml:space="preserve">
+    <value>Bereinigung der Verlaufsaufbewahrung</value>
+  </data>
+  <data name="ActivityTargetType_MetaverseObjectType" xml:space="preserve">
+    <value>Metaverse-Objekttyp</value>
+  </data>
+  <data name="ActivityTargetType_System" xml:space="preserve">
+    <value>System</value>
+  </data>
+  <data name="ActivityTargetType_Schedule" xml:space="preserve">
+    <value>Zeitplan</value>
+  </data>
+  <data name="ActivityTargetType_TemporalScopeReconciliation" xml:space="preserve">
+    <value>Abgleich des zeitlichen Geltungsbereichs</value>
+  </data>
+  <data name="ActivityTargetType_ApiKey" xml:space="preserve">
+    <value>API-Schlüssel</value>
+  </data>
+  <data name="ActivityTargetType_Role" xml:space="preserve">
+    <value>Rolle</value>
+  </data>
+  <data name="ActivityTargetType_PredefinedSearch" xml:space="preserve">
+    <value>Vordefinierte Suche</value>
+  </data>
+  <data name="ActivityTargetType_ConnectorDefinition" xml:space="preserve">
+    <value>Connector-Definition</value>
+  </data>
+  <data name="ActivityTargetType_ExampleDataSet" xml:space="preserve">
+    <value>Beispieldatensatz</value>
+  </data>
+  <data name="ActivityTargetType_SystemInitialisation" xml:space="preserve">
+    <value>Systeminitialisierung</value>
+  </data>
+  <data name="ActivityTargetType_DataGeneration" xml:space="preserve">
+    <value>Datengenerierung</value>
+  </data>
+  <data name="ActivityTargetType_Authentication" xml:space="preserve">
+    <value>Authentifizierung</value>
+  </data>
+  <data name="ActivityTargetType_MetaverseObjectHousekeeping" xml:space="preserve">
+    <value>Wartung von Metaverse-Objekten</value>
+  </data>
+  <data name="ActivityTargetType_ConnectedSystemObject" xml:space="preserve">
+    <value>Objekt im verbundenen System</value>
+  </data>
+  <data name="ActivityTargetType_PasswordSynchronisation" xml:space="preserve">
+    <value>Kennwortsynchronisierung</value>
+  </data>
+  <data name="ActivityTargetType_ScimRequests" xml:space="preserve">
+    <value>SCIM-Anfragen</value>
+  </data>
+  <data name="ActivityTargetType_ExchangeRecipient" xml:space="preserve">
+    <value>Exchange-Empfänger</value>
+  </data>
+  <data name="AttributeDataType_NotSet" xml:space="preserve">
+    <value>Nicht festgelegt</value>
+  </data>
+  <data name="AttributeDataType_Text" xml:space="preserve">
+    <value>Text</value>
+  </data>
+  <data name="AttributeDataType_Number" xml:space="preserve">
+    <value>Zahl</value>
+  </data>
+  <data name="AttributeDataType_DateTime" xml:space="preserve">
+    <value>Datum/Uhrzeit</value>
+  </data>
+  <data name="AttributeDataType_Binary" xml:space="preserve">
+    <value>Binär</value>
+  </data>
+  <data name="AttributeDataType_Reference" xml:space="preserve">
+    <value>Verweis</value>
+  </data>
+  <data name="AttributeDataType_Guid" xml:space="preserve">
+    <value>GUID</value>
+  </data>
+  <data name="AttributeDataType_Boolean" xml:space="preserve">
+    <value>Boolesch</value>
+  </data>
+  <data name="AttributeDataType_LongNumber" xml:space="preserve">
+    <value>Lange Zahl</value>
+  </data>
+  <data name="AttributeDataType_Decimal" xml:space="preserve">
+    <value>Dezimalzahl</value>
+  </data>
+  <data name="AttributeStandard_NotSet" xml:space="preserve">
+    <value>Nicht festgelegt</value>
+  </data>
+  <data name="AttributeStandard_Scim" xml:space="preserve">
+    <value>SCIM 2.0</value>
+  </data>
+  <data name="AttributeStandard_Ldap" xml:space="preserve">
+    <value>LDAP/AD</value>
+  </data>
+  <data name="AttributeStandard_Jim" xml:space="preserve">
+    <value>JIM</value>
+  </data>
+  <data name="AttributeWritability_Writable" xml:space="preserve">
+    <value>Beschreibbar</value>
+  </data>
+  <data name="AttributeWritability_ReadOnly" xml:space="preserve">
+    <value>Schreibgeschützt</value>
+  </data>
+  <data name="AttributeWritability_WritableOnCreate" xml:space="preserve">
+    <value>Nur bei der Erstellung festgelegt</value>
+  </data>
+  <data name="MetaverseObjectDeletionRule_Manual" xml:space="preserve">
+    <value>Manuell</value>
+  </data>
+  <data name="MetaverseObjectDeletionRule_WhenLastConnectorDisconnected" xml:space="preserve">
+    <value>Wenn der letzte Connector getrennt wird</value>
+  </data>
+  <data name="MetaverseObjectDeletionRule_WhenAuthoritativeSourceDisconnected" xml:space="preserve">
+    <value>Wenn die maßgebliche Quelle getrennt wird</value>
+  </data>
+  <data name="MetaverseObjectOrigin_Projected" xml:space="preserve">
+    <value>Projiziert</value>
+  </data>
+  <data name="MetaverseObjectOrigin_Internal" xml:space="preserve">
+    <value>Intern</value>
+  </data>
+  <data name="MetaverseObjectStatus_Normal" xml:space="preserve">
+    <value>Normal</value>
+  </data>
+  <data name="MetaverseObjectStatus_Obsolete" xml:space="preserve">
+    <value>Veraltet</value>
+  </data>
+  <data name="OutboundDeprovisionAction_Disconnect" xml:space="preserve">
+    <value>Trennen</value>
+  </data>
+  <data name="OutboundDeprovisionAction_Delete" xml:space="preserve">
+    <value>Löschen</value>
+  </data>
+  <data name="OutboundDeprovisionAction_Disable" xml:space="preserve">
+    <value>Deaktivieren</value>
+  </data>
+  <data name="NoChangeReason_NotSet" xml:space="preserve">
+    <value>Nicht festgelegt</value>
+  </data>
+  <data name="NoChangeReason_MvoNoAttributeChanges" xml:space="preserve">
+    <value>MVO ohne Attributänderungen</value>
+  </data>
+  <data name="NoChangeReason_CsoAlreadyCurrent" xml:space="preserve">
+    <value>CSO bereits aktuell</value>
+  </data>
+  <data name="ObjectChangeType_NotSet" xml:space="preserve">
+    <value>Nicht festgelegt</value>
+  </data>
+  <data name="ObjectChangeType_Added" xml:space="preserve">
+    <value>Hinzugefügt</value>
+  </data>
+  <data name="ObjectChangeType_Updated" xml:space="preserve">
+    <value>Aktualisiert</value>
+  </data>
+  <data name="ObjectChangeType_Deleted" xml:space="preserve">
+    <value>Gelöscht</value>
+  </data>
+  <data name="ObjectChangeType_Projected" xml:space="preserve">
+    <value>Projiziert</value>
+  </data>
+  <data name="ObjectChangeType_Joined" xml:space="preserve">
+    <value>Verknüpft</value>
+  </data>
+  <data name="ObjectChangeType_AttributeFlow" xml:space="preserve">
+    <value>Attributfluss</value>
+  </data>
+  <data name="ObjectChangeType_Disconnected" xml:space="preserve">
+    <value>Getrennt</value>
+  </data>
+  <data name="ObjectChangeType_DisconnectedOutOfScope" xml:space="preserve">
+    <value>Getrennt außerhalb des Geltungsbereichs</value>
+  </data>
+  <data name="ObjectChangeType_OutOfScopeRetainJoin" xml:space="preserve">
+    <value>Außerhalb des Geltungsbereichs, Verknüpfung beibehalten</value>
+  </data>
+  <data name="ObjectChangeType_DriftCorrection" xml:space="preserve">
+    <value>Driftkorrektur</value>
+  </data>
+  <data name="ObjectChangeType_Exported" xml:space="preserve">
+    <value>Exportiert</value>
+  </data>
+  <data name="ObjectChangeType_Deprovisioned" xml:space="preserve">
+    <value>Deprovisioniert</value>
+  </data>
+  <data name="ObjectChangeType_NoChange" xml:space="preserve">
+    <value>Keine Änderung</value>
+  </data>
+  <data name="ObjectChangeType_PendingExport" xml:space="preserve">
+    <value>Ausstehender Export</value>
+  </data>
+  <data name="ObjectChangeType_PendingExportConfirmed" xml:space="preserve">
+    <value>Ausstehender Export bestätigt</value>
+  </data>
+  <data name="ObjectChangeType_Created" xml:space="preserve">
+    <value>Erstellt</value>
+  </data>
+  <data name="ObjectChangeType_ExportScopeReview" xml:space="preserve">
+    <value>Prüfung des Exportgeltungsbereichs</value>
+  </data>
+  <data name="AttributeFlowValueProcessingStep_TrimWhitespace" xml:space="preserve">
+    <value>Leerraum entfernen</value>
+  </data>
+  <data name="AttributeFlowValueProcessingStep_CollapseInternalWhitespace" xml:space="preserve">
+    <value>Internen Leerraum zusammenfassen</value>
+  </data>
+  <data name="AttributeFlowValueProcessingStep_UpperCase" xml:space="preserve">
+    <value>Großbuchstaben</value>
+  </data>
+  <data name="AttributeFlowValueProcessingStep_LowerCase" xml:space="preserve">
+    <value>Kleinbuchstaben</value>
+  </data>
+  <data name="AttributeFlowValueProcessingStep_TitleCase" xml:space="preserve">
+    <value>Wortanfänge großschreiben</value>
+  </data>
+  <data name="AttributeFlowValueProcessingStep_TreatWhitespaceAsNoValue" xml:space="preserve">
+    <value>Leerraum als keinen Wert behandeln</value>
+  </data>
+  <data name="SyncRuleDirection_NotSet" xml:space="preserve">
+    <value>Nicht festgelegt</value>
+  </data>
+  <data name="SyncRuleDirection_Import" xml:space="preserve">
+    <value>Import</value>
+  </data>
+  <data name="SyncRuleDirection_Export" xml:space="preserve">
+    <value>Export</value>
+  </data>
+  <data name="ScheduleExecutionStatus_Queued" xml:space="preserve">
+    <value>In Warteschlange</value>
+  </data>
+  <data name="ScheduleExecutionStatus_InProgress" xml:space="preserve">
+    <value>In Bearbeitung</value>
+  </data>
+  <data name="ScheduleExecutionStatus_Complete" xml:space="preserve">
+    <value>Abgeschlossen</value>
+  </data>
+  <data name="ScheduleExecutionStatus_Failed" xml:space="preserve">
+    <value>Fehlgeschlagen</value>
+  </data>
+  <data name="ScheduleExecutionStatus_Cancelled" xml:space="preserve">
+    <value>Abgebrochen</value>
+  </data>
+  <data name="ScheduleExecutionStatus_Paused" xml:space="preserve">
+    <value>Angehalten</value>
+  </data>
+  <data name="ScheduleExecutionStatus_CompleteWithError" xml:space="preserve">
+    <value>Abgeschlossen mit Fehler</value>
+  </data>
+  <data name="ScimStoreOperation_Created" xml:space="preserve">
+    <value>Erstellt</value>
+  </data>
+  <data name="ScimStoreOperation_Replaced" xml:space="preserve">
+    <value>Ersetzt</value>
+  </data>
+  <data name="ScimStoreOperation_Patched" xml:space="preserve">
+    <value>Gepatcht</value>
+  </data>
+  <data name="ScimStoreOperation_Deleted" xml:space="preserve">
+    <value>Gelöscht</value>
+  </data>
+  <data name="ScimStoreOperation_ReferenceRemovedByDeletion" xml:space="preserve">
+    <value>Verweis durch Löschung entfernt</value>
+  </data>
+  <data name="RelativeDateUnit_Hours" xml:space="preserve">
+    <value>Stunden</value>
+  </data>
+  <data name="RelativeDateUnit_Days" xml:space="preserve">
+    <value>Tage</value>
+  </data>
+  <data name="RelativeDateUnit_Weeks" xml:space="preserve">
+    <value>Wochen</value>
+  </data>
+  <data name="RelativeDateUnit_Months" xml:space="preserve">
+    <value>Monate</value>
+  </data>
+  <data name="RelativeDateUnit_Years" xml:space="preserve">
+    <value>Jahre</value>
+  </data>
+  <data name="SearchComparisonType_NotSet" xml:space="preserve">
+    <value>Nicht festgelegt</value>
+  </data>
+  <data name="SearchComparisonType_Equals" xml:space="preserve">
+    <value>Gleich</value>
+  </data>
+  <data name="SearchComparisonType_NotEquals" xml:space="preserve">
+    <value>Ungleich</value>
+  </data>
+  <data name="SearchComparisonType_StartsWith" xml:space="preserve">
+    <value>Beginnt mit</value>
+  </data>
+  <data name="SearchComparisonType_NotStartsWith" xml:space="preserve">
+    <value>Beginnt nicht mit</value>
+  </data>
+  <data name="SearchComparisonType_EndsWith" xml:space="preserve">
+    <value>Endet mit</value>
+  </data>
+  <data name="SearchComparisonType_NotEndsWith" xml:space="preserve">
+    <value>Endet nicht mit</value>
+  </data>
+  <data name="SearchComparisonType_Contains" xml:space="preserve">
+    <value>Enthält</value>
+  </data>
+  <data name="SearchComparisonType_NotContains" xml:space="preserve">
+    <value>Enthält nicht</value>
+  </data>
+  <data name="SearchComparisonType_LessThan" xml:space="preserve">
+    <value>Kleiner als</value>
+  </data>
+  <data name="SearchComparisonType_LessThanOrEquals" xml:space="preserve">
+    <value>Kleiner oder gleich</value>
+  </data>
+  <data name="SearchComparisonType_GreaterThan" xml:space="preserve">
+    <value>Größer als</value>
+  </data>
+  <data name="SearchComparisonType_GreaterThanOrEquals" xml:space="preserve">
+    <value>Größer oder gleich</value>
+  </data>
+  <data name="SearchComparisonType_HasValue" xml:space="preserve">
+    <value>Hat einen Wert</value>
+  </data>
+  <data name="SearchComparisonType_HasNoValue" xml:space="preserve">
+    <value>Hat keinen Wert</value>
+  </data>
+  <data name="SearchComparisonType_MatchesPattern" xml:space="preserve">
+    <value>Entspricht dem Muster</value>
+  </data>
+  <data name="SearchComparisonType_NotMatchesPattern" xml:space="preserve">
+    <value>Entspricht dem Muster nicht</value>
+  </data>
+  <data name="SearchGroupType_All" xml:space="preserve">
+    <value>Alle</value>
+  </data>
+  <data name="SearchGroupType_Any" xml:space="preserve">
+    <value>Beliebige</value>
+  </data>
+  <data name="ConnectedSystemObjectConnectionState_InSync" xml:space="preserve">
+    <value>Synchron</value>
+  </data>
+  <data name="ConnectedSystemObjectConnectionState_UpdatePending" xml:space="preserve">
+    <value>Aktualisierung ausstehend</value>
+  </data>
+  <data name="ConnectedSystemObjectConnectionState_ProvisioningExportPending" xml:space="preserve">
+    <value>Provisionierungsexport ausstehend</value>
+  </data>
+  <data name="ConnectedSystemObjectConnectionState_ProvisioningAwaitingConfirmation" xml:space="preserve">
+    <value>Provisionierung wartet auf Bestätigung</value>
+  </data>
+  <data name="ConnectedSystemObjectConnectionState_ExportNotConfirmed" xml:space="preserve">
+    <value>Export nicht bestätigt</value>
+  </data>
+  <data name="ConnectedSystemObjectConnectionState_ExportFailed" xml:space="preserve">
+    <value>Export fehlgeschlagen</value>
+  </data>
+  <data name="ConnectedSystemObjectConnectionState_DeletePending" xml:space="preserve">
+    <value>Löschung ausstehend</value>
+  </data>
+  <data name="ConnectedSystemObjectConnectionState_Obsolete" xml:space="preserve">
+    <value>Veraltet</value>
+  </data>
+  <data name="ConnectedSystemObjectConnectionState_DisablePending" xml:space="preserve">
+    <value>Deaktivierung ausstehend</value>
+  </data>
+  <data name="ConnectedSystemObjectJoinType_NotJoined" xml:space="preserve">
+    <value>Nicht verknüpft</value>
+  </data>
+  <data name="ConnectedSystemObjectJoinType_Projected" xml:space="preserve">
+    <value>Projiziert</value>
+  </data>
+  <data name="ConnectedSystemObjectJoinType_Provisioned" xml:space="preserve">
+    <value>Provisioniert</value>
+  </data>
+  <data name="ConnectedSystemObjectJoinType_Joined" xml:space="preserve">
+    <value>Verknüpft</value>
+  </data>
+  <data name="ConnectedSystemObjectStatus_Normal" xml:space="preserve">
+    <value>Normal</value>
+  </data>
+  <data name="ConnectedSystemObjectStatus_Obsolete" xml:space="preserve">
+    <value>Veraltet</value>
+  </data>
+  <data name="ConnectedSystemObjectStatus_PendingProvisioning" xml:space="preserve">
+    <value>Provisionierung ausstehend</value>
+  </data>
+  <data name="ConnectedSystemRunType_NotSet" xml:space="preserve">
+    <value>Nicht festgelegt</value>
+  </data>
+  <data name="ConnectedSystemRunType_FullImport" xml:space="preserve">
+    <value>Vollständiger Import</value>
+  </data>
+  <data name="ConnectedSystemRunType_DeltaImport" xml:space="preserve">
+    <value>Deltaimport</value>
+  </data>
+  <data name="ConnectedSystemRunType_FullSynchronisation" xml:space="preserve">
+    <value>Vollständige Synchronisierung</value>
+  </data>
+  <data name="ConnectedSystemRunType_DeltaSynchronisation" xml:space="preserve">
+    <value>Deltasynchronisierung</value>
+  </data>
+  <data name="ConnectedSystemRunType_Export" xml:space="preserve">
+    <value>Export</value>
+  </data>
+  <data name="SchemaAttributeChangeAspect_DataType" xml:space="preserve">
+    <value>Datentyp</value>
+  </data>
+  <data name="SchemaAttributeChangeAspect_Plurality" xml:space="preserve">
+    <value>Wertigkeit</value>
+  </data>
+  <data name="SchemaAttributeChangeAspect_Writability" xml:space="preserve">
+    <value>Schreibbarkeit</value>
+  </data>
+  <data name="NotConnectedReason_NotInScope" xml:space="preserve">
+    <value>Nicht im Geltungsbereich</value>
+  </data>
+  <data name="NotConnectedReason_ProvisioningDisabled" xml:space="preserve">
+    <value>Provisionierung deaktiviert</value>
+  </data>
+  <data name="NotConnectedReason_RuleMisconfigured" xml:space="preserve">
+    <value>Regel falsch konfiguriert</value>
+  </data>
+  <data name="NotConnectedReason_NotYetProvisioned" xml:space="preserve">
+    <value>Noch nicht provisioniert</value>
+  </data>
+  <data name="PasswordExpiryBehaviour_RequireChangeAtNextSignIn" xml:space="preserve">
+    <value>Änderung bei der nächsten Anmeldung erforderlich</value>
+  </data>
+  <data name="PasswordExpiryBehaviour_ExpiresAccordingToTargetPolicy" xml:space="preserve">
+    <value>Läuft gemäß der Richtlinie des Zielsystems ab</value>
+  </data>
+  <data name="PasswordExpiryBehaviour_NeverExpires" xml:space="preserve">
+    <value>Läuft nie ab</value>
+  </data>
+  <data name="ExchangeChangeFailureKind_ObjectNotFound" xml:space="preserve">
+    <value>Objekt nicht gefunden</value>
+  </data>
+  <data name="ExchangeChangeFailureKind_Refused" xml:space="preserve">
+    <value>Abgelehnt</value>
+  </data>
+  <data name="ExchangeChangeFailureKind_InsufficientPermissions" xml:space="preserve">
+    <value>Unzureichende Berechtigungen</value>
+  </data>
+  <data name="ExchangeChangeFailureKind_AuthenticationFailed" xml:space="preserve">
+    <value>Authentifizierung fehlgeschlagen</value>
+  </data>
+  <data name="ExchangeChangeFailureKind_Unreachable" xml:space="preserve">
+    <value>Nicht erreichbar</value>
+  </data>
+  <data name="PendingExportAttributeChangeStatus_Pending" xml:space="preserve">
+    <value>Ausstehend</value>
+  </data>
+  <data name="PendingExportAttributeChangeStatus_ExportedPendingConfirmation" xml:space="preserve">
+    <value>Exportiert, Bestätigung ausstehend</value>
+  </data>
+  <data name="PendingExportAttributeChangeStatus_ExportedNotConfirmed" xml:space="preserve">
+    <value>Exportiert, nicht bestätigt</value>
+  </data>
+  <data name="PendingExportChangeType_Create" xml:space="preserve">
+    <value>Erstellung</value>
+  </data>
+  <data name="PendingExportChangeType_Update" xml:space="preserve">
+    <value>Aktualisierung</value>
+  </data>
+  <data name="PendingExportChangeType_Delete" xml:space="preserve">
+    <value>Löschung</value>
+  </data>
+  <data name="PendingExportChangeType_Disable" xml:space="preserve">
+    <value>Deaktivierung</value>
+  </data>
+  <data name="PendingExportStatus_Pending" xml:space="preserve">
+    <value>Ausstehend</value>
+  </data>
+  <data name="PendingExportStatus_ExportNotConfirmed" xml:space="preserve">
+    <value>Export nicht bestätigt</value>
+  </data>
+  <data name="PendingExportStatus_Executing" xml:space="preserve">
+    <value>Wird ausgeführt</value>
+  </data>
+  <data name="PendingExportStatus_Exported" xml:space="preserve">
+    <value>Exportiert</value>
+  </data>
+  <data name="PendingExportStatus_Parked" xml:space="preserve">
+    <value>Zurückgestellt</value>
+  </data>
+  <data name="PendingExportStatus_Incomplete" xml:space="preserve">
+    <value>Unvollständig</value>
+  </data>
+  <data name="UnresolvedReferenceReason_Resolvable" xml:space="preserve">
+    <value>Auflösbar</value>
+  </data>
+  <data name="UnresolvedReferenceReason_AwaitingAnchor" xml:space="preserve">
+    <value>Wartet auf Anker</value>
+  </data>
+  <data name="UnresolvedReferenceReason_NotInTargetSystem" xml:space="preserve">
+    <value>Nicht im Zielsystem</value>
+  </data>
+  <data name="CausalityAttributeOperation_Set" xml:space="preserve">
+    <value>Festlegen</value>
+  </data>
+  <data name="CausalityAttributeOperation_Add" xml:space="preserve">
+    <value>Hinzufügen</value>
+  </data>
+  <data name="CausalityAttributeOperation_Remove" xml:space="preserve">
+    <value>Entfernen</value>
+  </data>
+</root>

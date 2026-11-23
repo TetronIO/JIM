@@ -1,0 +1,714 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="JIM_LDAP_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Ermöglicht die bidirektionale Synchronisierung mit LDAP-konformen Verzeichnissen, darunter Microsoft Active Directory, OpenLDAP und Samba AD.</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Directory_Server_Label" xml:space="preserve">
+    <value>Verzeichnisserver</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Directory_Server_Info_Label" xml:space="preserve">
+    <value>Verzeichnisserver-Informationen</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Directory_Server_Info_Description" xml:space="preserve">
+    <value>Geben Sie unten die Angaben zum Active-Directory-Domänencontroller oder LDAP-Server ein.</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Host_Label" xml:space="preserve">
+    <value>Host</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Host_Description" xml:space="preserve">
+    <value>Geben Sie den Hostnamen oder die IP-Adresse eines Verzeichnisservers bzw. Domänencontrollers an. Die IP-Adresse ist am schnellsten.</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Preferred_Domain_Controller_Label" xml:space="preserve">
+    <value>Bevorzugter Domänencontroller</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Preferred_Domain_Controller_Description" xml:space="preserve">
+    <value>Gilt für Active Directory und Samba AD. Der FQDN eines bestimmten Domänencontrollers, mit dem stets eine Verbindung hergestellt wird. Bleibt das Feld leer, ermittelt JIM den über den Wert von Host erreichten Domänencontroller automatisch und merkt ihn sich. Verwenden Sie für LDAPS einen Namen, der im Zertifikat des Domänencontrollers enthalten ist.</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Port_Label" xml:space="preserve">
+    <value>Port</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Port_Description" xml:space="preserve">
+    <value>Der Port, über den die Verbindung zum Verzeichnisdienst hergestellt wird. Verwenden Sie 389 für LDAP oder 636 für LDAPS.</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Use_Secure_Connection_LDAPS_Label" xml:space="preserve">
+    <value>Sichere Verbindung (LDAPS) verwenden?</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Use_Secure_Connection_LDAPS_Description" xml:space="preserve">
+    <value>Aktiviert LDAPS (SSL/TLS) für die verschlüsselte Kommunikation. Erfordert den passenden Port (in der Regel 636).</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Connection_Timeout_Label" xml:space="preserve">
+    <value>Verbindungszeitüberschreitung</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Connection_Timeout_Description" xml:space="preserve">
+    <value>Wie lange (in Sekunden) auf den Verbindungsaufbau gewartet wird, bevor der Versuch abgebrochen wird</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Global_Catalog_Server_Label" xml:space="preserve">
+    <value>Globaler-Katalog-Server</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Global_Catalog_Server_Description" xml:space="preserve">
+    <value>Gilt für Active Directory. Der Globale-Katalog-Server, den JIM durchsucht, wenn es prüft, ob ein Wert, der in der gesamten Gesamtstruktur eindeutig sein muss (userPrincipalName, servicePrincipalName, mail und proxyAddresses), bereits verwendet wird. So wird auch ein Wert gefunden, der in einer anderen Domäne vergeben ist. JIM verbindet sich über Port 3268, bei LDAPS über Port 3269, mit den unten angegebenen Anmeldeinformationen. Bleibt das Feld leer, verwendet JIM den Domänencontroller, mit dem es verbunden ist, sofern dieser ein Globaler Katalog ist und die Gesamtstruktur mehr als eine Domäne umfasst. Verwenden Sie für LDAPS einen Namen, der im Zertifikat des Servers enthalten ist.</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Credentials_Label" xml:space="preserve">
+    <value>Anmeldeinformationen</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Username_Label" xml:space="preserve">
+    <value>Benutzername</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Username_Description" xml:space="preserve">
+    <value>Mit welchem Benutzernamen des Dienstkontos soll die Verbindung zum Verzeichnisdienst hergestellt werden? Beispiel: corp\svc-jim-adc</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Password_Label" xml:space="preserve">
+    <value>Kennwort</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Password_Description" xml:space="preserve">
+    <value>Mit welchem Kennwort des Dienstkontos soll die Verbindung zum Verzeichnisdienst hergestellt werden?</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Authentication_Type_Label" xml:space="preserve">
+    <value>Authentifizierungstyp</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Authentication_Type_Description" xml:space="preserve">
+    <value>Welche Art der Authentifizierung ist für diese Anmeldeinformationen erforderlich?</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Authentication_Type_Option_Simple" xml:space="preserve">
+    <value>Einfach</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Authentication_Type_Option_NTLM" xml:space="preserve">
+    <value>NTLM</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Import_Settings_Label" xml:space="preserve">
+    <value>Importeinstellungen</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Search_Timeout_Label" xml:space="preserve">
+    <value>Suchzeitüberschreitung</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Search_Timeout_Description" xml:space="preserve">
+    <value>Maximale Wartezeit in Sekunden auf LDAP-Suchergebnisse. Der Standardwert ist 300 (5 Minuten).</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Import_Concurrency_Label" xml:space="preserve">
+    <value>Import-Parallelität</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Import_Concurrency_Description" xml:space="preserve">
+    <value>Maximale Anzahl paralleler LDAP-Verbindungen bei vollständigen Importen aus OpenLDAP, 389 Directory Server und generischen Verzeichnissen. Jede Verbindung verarbeitet unabhängig eine Kombination aus Container und Objekttyp, sodass die Einschränkungen der Paging-Cookies nach RFC 2696 keine Rolle spielen. Wird für Active Directory nicht verwendet. Der Standardwert ist 4. Empfohlener Bereich: 2 bis 8.</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Retry_Settings_Label" xml:space="preserve">
+    <value>Einstellungen für Wiederholungsversuche</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Maximum_Retries_Label" xml:space="preserve">
+    <value>Maximale Wiederholungsversuche</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Maximum_Retries_Description" xml:space="preserve">
+    <value>Maximale Anzahl an Wiederholungsversuchen bei vorübergehenden Fehlern. Der Standardwert ist 3.</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Retry_Delay_ms_Label" xml:space="preserve">
+    <value>Wiederholungsverzögerung (ms)</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Retry_Delay_ms_Description" xml:space="preserve">
+    <value>Anfängliche Wartezeit zwischen Wiederholungsversuchen in Millisekunden. Es wird ein exponentielles Backoff verwendet. Der Standardwert ist 1000 ms.</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Schema_Discovery_Label" xml:space="preserve">
+    <value>Schemaermittlung</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Include_Auxiliary_Classes_Label" xml:space="preserve">
+    <value>Hilfsklassen einbeziehen</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Include_Auxiliary_Classes_Description" xml:space="preserve">
+    <value>Gilt nur für Active Directory. Wenn aktiviert, werden bei der Schemaermittlung neben den strukturellen Klassen auch Hilfsobjektklassen (Auxiliary) berücksichtigt. Aktivieren Sie dies, wenn Sie Objekte importieren oder exportieren müssen, deren primäre Klasse im Verzeichnisschema als Hilfsklasse deklariert ist. Verzeichnisse nach RFC 4512 (OpenLDAP, 389 Directory Server) ermitteln Hilfsklassen immer, da JIM die von einem Administrator ausgewählten Hilfsklassen in den strukturellen Objekttyp einfügt, den sie erweitern.</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Container_Provisioning_Label" xml:space="preserve">
+    <value>Container-Provisionierung</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Create_containers_as_needed_Label" xml:space="preserve">
+    <value>Container bei Bedarf erstellen?</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Create_containers_as_needed_Description" xml:space="preserve">
+    <value>Das heißt: OUs bei Bedarf erstellen, wenn neue Objekte provisioniert werden.</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Hierarchy_Settings_Label" xml:space="preserve">
+    <value>Hierarchieeinstellungen</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Skip_Hidden_Partitions_Label" xml:space="preserve">
+    <value>Ausgeblendete Partitionen überspringen</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Skip_Hidden_Partitions_Description" xml:space="preserve">
+    <value>Überspringt beim Aktualisieren der Hierarchie ausgeblendete Partitionen (Konfiguration, Schema, DNS-Zonen). Verbessert die Leistung erheblich.</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Export_Settings_Label" xml:space="preserve">
+    <value>Exporteinstellungen</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Export_Concurrency_Label" xml:space="preserve">
+    <value>Export-Parallelität</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Export_Concurrency_Description" xml:space="preserve">
+    <value>Maximale Anzahl gleichzeitiger LDAP-Vorgänge während des Exports. Höhere Werte verbessern den Durchsatz, erhöhen aber die Last auf dem Zielverzeichnis. Bleibt der Wert bei der Standardeinstellung 4, erhöht JIM ihn beim Schemaimport: auf 16 für Active Directory und 389 Directory Server sowie auf 8 für OpenLDAP, das dann 4 statt 2 Batches gleichzeitig sendet. Samba AD und andere Verzeichnisse bleiben bei 4.</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Modify_Batch_Size_Label" xml:space="preserve">
+    <value>Batchgröße für Änderungen</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Modify_Batch_Size_Description" xml:space="preserve">
+    <value>Maximale Anzahl von Werten pro Änderung eines mehrwertigen Attributs in einer einzelnen LDAP-Anforderung. Beim Hinzufügen oder Entfernen vieler Werte eines mehrwertigen Attributs (z. B. Gruppenmitglieder) werden die Änderungen in Batches dieser Größe aufgeteilt. Niedrigere Werte verbessern die Kompatibilität mit eingeschränkten LDAP-Servern; höhere Werte verbessern den Durchsatz, insbesondere bei sehr großen Gruppen. Der Standardwert ist 1000. Empfohlener Bereich: 100 bis 2000.</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Exchange_Label" xml:space="preserve">
+    <value>Exchange</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Manage_Exchange_recipients_Label" xml:space="preserve">
+    <value>Exchange-Empfänger verwalten</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Manage_Exchange_recipients_Description" xml:space="preserve">
+    <value>Nur für Active Directory. Macht die Objekte, die dieses verbundene System provisioniert, zu Exchange-Empfängern (Postfächer, E-Mail-Benutzer, E-Mail-Kontakte und E-Mail-aktivierte Gruppen), entsprechend den Exchange-Attributen, die ihre Synchronisierungsregeln übertragen.</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Exchange_server_Label" xml:space="preserve">
+    <value>Exchange-Server</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Exchange_server_Description" xml:space="preserve">
+    <value>Der Exchange-Server, an dem JIM sich mit dem oben angegebenen Konto anmeldet, um Empfänger zu erstellen und zu aktualisieren: sein Hostname, etwa ex1.panoply.local, oder seine vollständige Remote-PowerShell-Adresse. Ein Hostname verwendet http, wobei Kerberos die Sitzung verschlüsselt; fügen Sie bei einer https://-Adresse unter „Zertifikate“ die Zertifizierungsstelle hinzu, die das Zertifikat des Servers ausgestellt hat. JIM leitet die Kerberos-Anmeldung aus den Verzeichniseinstellungen ab.</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Group_Membership_Label" xml:space="preserve">
+    <value>Gruppenmitgliedschaft</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Group_Placeholder_Member_DN_Label" xml:space="preserve">
+    <value>DN des Platzhalter-Gruppenmitglieds</value>
+  </data>
+  <data name="JIM_LDAP_Connector_Group_Placeholder_Member_DN_Description" xml:space="preserve">
+    <value>Platzhalter-DN eines Mitglieds für Gruppenobjektklassen, die mindestens ein Mitglied erfordern (z. B. groupOfNames). Hat eine Gruppe keine echten Mitglieder, wird dieser Wert hinzugefügt, um die Schemaeinschränkung zu erfüllen. Beim Import wird er automatisch herausgefiltert. Gilt nur für Verzeichnisse außer AD. Standard: cn=placeholder. Ist in Ihrem Verzeichnis die referenzielle Integrität aktiviert, legen Sie hier den DN eines vorhandenen Eintrags fest.</value>
+  </data>
+  <data name="JIM_File_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Ermöglicht die bidirektionale Synchronisierung mit Dateien, z. B. CSV.</value>
+  </data>
+  <data name="JIM_File_Connector_File_Path_Label" xml:space="preserve">
+    <value>Dateipfad</value>
+  </data>
+  <data name="JIM_File_Connector_File_Path_Description" xml:space="preserve">
+    <value>Pfad zur CSV-Datei. Wird je nach Modus für Import, Export oder beides verwendet. Beispiel: /connector-files/Users.csv</value>
+  </data>
+  <data name="JIM_File_Connector_Mode_Label" xml:space="preserve">
+    <value>Modus</value>
+  </data>
+  <data name="JIM_File_Connector_Mode_Description" xml:space="preserve">
+    <value>Nur Import: Aus der Datei lesen. Nur Export: In die Datei schreiben (automatisch bestätigt). Bidirektional: Export, danach bestätigender Import aus derselben Datei.</value>
+  </data>
+  <data name="JIM_File_Connector_Mode_Option_Import_Only" xml:space="preserve">
+    <value>Nur Import</value>
+  </data>
+  <data name="JIM_File_Connector_Mode_Option_Export_Only" xml:space="preserve">
+    <value>Nur Export</value>
+  </data>
+  <data name="JIM_File_Connector_Mode_Option_Bidirectional" xml:space="preserve">
+    <value>Bidirektional</value>
+  </data>
+  <data name="JIM_File_Connector_Object_Type_Column_Label" xml:space="preserve">
+    <value>Objekttypspalte</value>
+  </data>
+  <data name="JIM_File_Connector_Object_Type_Column_Description" xml:space="preserve">
+    <value>Die Spalte, die den Objekttyp enthält. Verwenden Sie sie, wenn die Datei mehr als einen Objekttyp enthält.</value>
+  </data>
+  <data name="JIM_File_Connector_Object_Type_Label" xml:space="preserve">
+    <value>Objekttyp</value>
+  </data>
+  <data name="JIM_File_Connector_Object_Type_Description" xml:space="preserve">
+    <value>Ein fester Objekttyp für den Fall, dass die Datei nur einen Objekttyp enthält, z. B. user.</value>
+  </data>
+  <data name="JIM_File_Connector_Stop_On_First_Error_Label" xml:space="preserve">
+    <value>Beim ersten Fehler anhalten</value>
+  </data>
+  <data name="JIM_File_Connector_Stop_On_First_Error_Description" xml:space="preserve">
+    <value>Beendet die Verarbeitung der Datei, sobald der erste Fehler auftritt. Nützlich zum Debuggen von Datenqualitätsproblemen, ohne viele Fehler zu erzeugen.</value>
+  </data>
+  <data name="JIM_File_Connector_Delimiter_Label" xml:space="preserve">
+    <value>Trennzeichen</value>
+  </data>
+  <data name="JIM_File_Connector_Delimiter_Description" xml:space="preserve">
+    <value>Welches Zeichen soll als Trennzeichen verwendet werden?</value>
+  </data>
+  <data name="JIM_File_Connector_Culture_Label" xml:space="preserve">
+    <value>Kultur</value>
+  </data>
+  <data name="JIM_File_Connector_Culture_Description" xml:space="preserve">
+    <value>Geben Sie optional eine Kultur (z. B. en-gb) für den Dateiinhalt an. Verwenden Sie dies, wenn mit der Standardeinstellung (invariante Kultur) Probleme auftreten.</value>
+  </data>
+  <data name="JIM_File_Connector_Multi_Value_Delimiter_Label" xml:space="preserve">
+    <value>Trennzeichen für mehrere Werte</value>
+  </data>
+  <data name="JIM_File_Connector_Multi_Value_Delimiter_Description" xml:space="preserve">
+    <value>Zeichen, das mehrere Werte innerhalb eines einzelnen Felds voneinander trennt. Standardmäßig der senkrechte Strich (|).</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Ermöglicht die bidirektionale Synchronisierung mit jedem System, das eine SCIM-2.0-Dienstanbieterschnittstelle bereitstellt. JIM fungiert als SCIM-Client und baut die Verbindung zum Dienstanbieter nach außen auf.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_SCIM_Service_Provider_Label" xml:space="preserve">
+    <value>SCIM-Dienstanbieter</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_SCIM_Service_Provider_Info_Label" xml:space="preserve">
+    <value>Informationen zum SCIM-Dienstanbieter</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_SCIM_Service_Provider_Info_Description" xml:space="preserve">
+    <value>Geben Sie die Angaben zum SCIM-2.0-Dienstanbieter ein, mit dem die Verbindung hergestellt werden soll.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Base_URL_Label" xml:space="preserve">
+    <value>Basis-URL</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Base_URL_Description" xml:space="preserve">
+    <value>Die Basis-URL des SCIM-2.0-Dienstanbieters, z. B. https://example.com/scim/v2. HTTPS ist erforderlich, außer bei Loopback-Adressen beim lokalen Testen.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Label" xml:space="preserve">
+    <value>Authentifizierung</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Method_Label" xml:space="preserve">
+    <value>Authentifizierungsmethode</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Method_Description" xml:space="preserve">
+    <value>Wie die Authentifizierung beim SCIM-Dienstanbieter erfolgt. OAuth 2.0 Client Credentials ist bei Cloudanbietern am gebräuchlichsten; Statisches Bearer-Token eignet sich für Anbieter, die langlebige Token ausstellen; Benutzerdefinierter Header eignet sich für Anbieter mit nicht standardmäßigen Authentifizierungsheadern.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Method_Option_OAuth_2_0_Client_Credentials" xml:space="preserve">
+    <value>OAuth 2.0 Client Credentials</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Method_Option_HTTP_Basic" xml:space="preserve">
+    <value>HTTP Basic</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Method_Option_Static_Bearer_Token" xml:space="preserve">
+    <value>Statisches Bearer-Token</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Method_Option_Custom_Header" xml:space="preserve">
+    <value>Benutzerdefinierter Header</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Token_Endpoint_URL_Label" xml:space="preserve">
+    <value>Token-Endpunkt-URL</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Token_Endpoint_URL_Description" xml:space="preserve">
+    <value>Die URL des OAuth-2.0-Token-Endpunkts, über den Zugriffstoken per Client-Credentials-Flow abgerufen werden. HTTPS ist erforderlich, außer bei Loopback-Adressen beim lokalen Testen, da das Client Secret an diese Adresse gesendet wird.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Client_ID_Label" xml:space="preserve">
+    <value>Client-ID</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Client_ID_Description" xml:space="preserve">
+    <value>Der OAuth-2.0-Client-Bezeichner.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Client_Secret_Label" xml:space="preserve">
+    <value>Clientgeheimnis</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Client_Secret_Description" xml:space="preserve">
+    <value>Das OAuth-2.0-Client-Geheimnis.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_OAuth_Scope_Label" xml:space="preserve">
+    <value>OAuth-Scope</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_OAuth_Scope_Description" xml:space="preserve">
+    <value>Optionale OAuth-2.0-Scopes, die angefordert werden, durch Leerzeichen getrennt. Wird nur mit der Authentifizierungsmethode OAuth 2.0 Client Credentials verwendet.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Username_Label" xml:space="preserve">
+    <value>Benutzername</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Username_Description" xml:space="preserve">
+    <value>Der Benutzername für die Authentifizierung bei Verwendung der HTTP-Basic-Authentifizierung.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Password_Label" xml:space="preserve">
+    <value>Kennwort</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Password_Description" xml:space="preserve">
+    <value>Das Kennwort für die Authentifizierung bei Verwendung der HTTP-Basic-Authentifizierung.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Bearer_Token_Label" xml:space="preserve">
+    <value>Bearer-Token</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Bearer_Token_Description" xml:space="preserve">
+    <value>Ein vorab erzeugtes, langlebiges Bearer-Token, das vom SCIM-Dienstanbieter ausgestellt wurde.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Header_Name_Label" xml:space="preserve">
+    <value>Name des Authentifizierungsheaders</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Header_Name_Description" xml:space="preserve">
+    <value>Der Name des HTTP-Headers, den der SCIM-Dienstanbieter für die Authentifizierung verwendet, z. B. X-Api-Key.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Header_Value_Label" xml:space="preserve">
+    <value>Wert des Authentifizierungsheaders</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Authentication_Header_Value_Description" xml:space="preserve">
+    <value>Der Wert, der im Authentifizierungsheader gesendet wird.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Transport_Security_Label" xml:space="preserve">
+    <value>Transportsicherheit</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Certificate_Validation_Label" xml:space="preserve">
+    <value>Zertifikatsvalidierung</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Certificate_Validation_Description" xml:space="preserve">
+    <value>Wie das TLS-Zertifikat des Dienstanbieters validiert wird. Vollständige Validierung verwendet den CA-Speicher des Systems sowie alle unter Admin &gt; Zertifikate hinzugefügten Zertifikate. Schlägt ein Verbindungstest wegen fehlenden Vertrauens fehl, zeigt JIM das vom Anbieter vorgelegte Zertifikat an, damit Sie es dort hinzufügen können: Damit wird genau dieses Zertifikat als vertrauenswürdig eingestuft, und das Vertrauen entfällt, sobald der Anbieter ein anderes vorlegt. Validierung überspringen vertraut allem, was vorgelegt wird, jetzt und künftig, und sollte nur der letzte Ausweg sein.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Certificate_Validation_Option_Full_Validation" xml:space="preserve">
+    <value>Vollständige Validierung</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Certificate_Validation_Option_Skip_Validation_Insecure" xml:space="preserve">
+    <value>Validierung überspringen (unsicher)</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Minimum_TLS_Version_Label" xml:space="preserve">
+    <value>Minimale TLS-Version</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Minimum_TLS_Version_Description" xml:space="preserve">
+    <value>Die minimale TLS-Protokollversion, die beim Verbinden mit dem SCIM-Dienstanbieter akzeptiert wird.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Minimum_TLS_Version_Option_TLS_1_2" xml:space="preserve">
+    <value>TLS 1.2</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Minimum_TLS_Version_Option_TLS_1_3" xml:space="preserve">
+    <value>TLS 1.3</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Connection_Timeout_Label" xml:space="preserve">
+    <value>Verbindungszeitüberschreitung</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Connection_Timeout_Description" xml:space="preserve">
+    <value>Wie lange (in Sekunden) auf eine Antwort des SCIM-Dienstanbieters gewartet wird, bevor der Versuch abgebrochen wird.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Import_Label" xml:space="preserve">
+    <value>Import</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Pagination_Mode_Label" xml:space="preserve">
+    <value>Paginierungsmodus</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Pagination_Mode_Description" xml:space="preserve">
+    <value>Wie die Ressourcen seitenweise abgerufen werden. Automatisch erkennen beginnt mit indexbasierter Paginierung (die jeder SCIM-2.0-Dienstanbieter unterstützt) und wechselt zu Cursorn, wenn der Anbieter solche bereitstellt. Wählen Sie Cursorbasiert für große oder sich häufig ändernde Anbieter: Indexbasierte Paginierung kann Objekte auslassen oder doppelt liefern, wenn sich die Daten während eines Imports ändern.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Pagination_Mode_Option_Auto_detect" xml:space="preserve">
+    <value>Automatisch erkennen</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Pagination_Mode_Option_Index_based" xml:space="preserve">
+    <value>Indexbasiert</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Pagination_Mode_Option_Cursor_based" xml:space="preserve">
+    <value>Cursorbasiert</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Excluded_Attributes_Label" xml:space="preserve">
+    <value>Ausgeschlossene Attribute</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Excluded_Attributes_Description" xml:space="preserve">
+    <value>Optionale, durch Kommas getrennte Liste von SCIM-Attributen, die der Dienstanbieter nicht zurückgeben soll, z. B. photos, x509Certificates. Nützlich bei großen Attributen, die JIM nicht benötigt. Die Attribute id und meta werden immer angefordert, da der Import ohne sie nicht funktioniert.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Change_Detection_Label" xml:space="preserve">
+    <value>Änderungserkennung</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Change_Detection_Description" xml:space="preserve">
+    <value>Wie ein Deltaimport ermittelt, was sich geändert hat. SCIM 2.0 kennt keinen Änderungsfeed, daher fragt JIM beim Dienstanbieter die Ressourcen ab, die seit dem letzten abgeschlossenen Import geändert wurden; dafür muss der Anbieter das Filtern unterstützen. Automatisch erkennen nutzt das Filtern, wenn der Anbieter es meldet; wählen Sie Filter nach letzter Änderung, um es trotzdem zu verwenden (manche Anbieter unterstützen das Filtern, ohne es zu melden), oder Vollständiger Scan, um jedes Mal alle Ressourcen zu lesen. Löschungen werden nur durch einen vollständigen Import erkannt.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Change_Detection_Option_Auto_detect" xml:space="preserve">
+    <value>Automatisch erkennen</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Change_Detection_Option_Last_Modified_Filter" xml:space="preserve">
+    <value>Filter nach letzter Änderung</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Change_Detection_Option_Full_Scan" xml:space="preserve">
+    <value>Vollständiger Scan</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Retry_Settings_Label" xml:space="preserve">
+    <value>Einstellungen für Wiederholungsversuche</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Maximum_Retries_Label" xml:space="preserve">
+    <value>Maximale Wiederholungsversuche</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Maximum_Retries_Description" xml:space="preserve">
+    <value>Maximale Anzahl an Wiederholungsversuchen bei vorübergehenden Fehlern (z. B. HTTP 429, 503, 504). Der Standardwert ist 3.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Retry_Delay_ms_Label" xml:space="preserve">
+    <value>Wiederholungsverzögerung (ms)</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Retry_Delay_ms_Description" xml:space="preserve">
+    <value>Anfängliche Wartezeit zwischen Wiederholungsversuchen in Millisekunden. Es wird ein exponentielles Backoff mit Jitter verwendet, und Retry-After-Antwortheader werden beachtet. Der Standardwert ist 1000 ms.</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Export_Settings_Label" xml:space="preserve">
+    <value>Exporteinstellungen</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Use_Bulk_Operations_Label" xml:space="preserve">
+    <value>Massenvorgänge verwenden</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Client_Connector_Use_Bulk_Operations_Description" xml:space="preserve">
+    <value>Sendet Exporte in Batches über den Bulk-Endpunkt des Dienstanbieters statt einer Anforderung pro Objekt, was bei hoher Latenz deutlich schneller ist. Wird nur verwendet, wenn der Dienstanbieter Bulk-Unterstützung meldet, und nur innerhalb der von ihm genannten Grenzen. Standardmäßig deaktiviert: Exporte pro Objekt sind immer korrekt, während bei einem Anbieter, dessen Bulk-Implementierung Ergebnisse ungenau meldet, JIM Änderungen als angewendet aufzeichnen würde, die es nicht waren. Aktivieren Sie die Option erst, nachdem Sie einen erfolgreichen Export gegen Ihren Anbieter gesehen haben.</value>
+  </data>
+  <data name="JIM_SQL_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Ermöglicht die bidirektionale Synchronisierung mit relationalen Datenbanken, darunter Microsoft SQL Server und Oracle Database.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Server_Label" xml:space="preserve">
+    <value>Datenbankserver</value>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Server_Info_Label" xml:space="preserve">
+    <value>Datenbankserver-Informationen</value>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Server_Info_Description" xml:space="preserve">
+    <value>Geben Sie die Angaben zum Datenbankserver ein, mit dem die Verbindung hergestellt werden soll. JIM erstellt die Verbindungszeichenfolge anhand dieser Werte selbst.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Type_Label" xml:space="preserve">
+    <value>Datenbanktyp</value>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Type_Description" xml:space="preserve">
+    <value>Auf welchem Datenbankserver dieses verbundene System läuft. Davon hängt ab, welche Angaben unten abgefragt werden und welchen Dialekt JIM spricht.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Type_Option_Microsoft_SQL_Server" xml:space="preserve">
+    <value>Microsoft SQL Server</value>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Type_Option_Oracle_Database" xml:space="preserve">
+    <value>Oracle Database</value>
+  </data>
+  <data name="JIM_SQL_Connector_Host_Label" xml:space="preserve">
+    <value>Host</value>
+  </data>
+  <data name="JIM_SQL_Connector_Host_Description" xml:space="preserve">
+    <value>Der Hostname oder die IP-Adresse des Datenbankservers. Verwenden Sie für eine benannte Microsoft-SQL-Server-Instanz die Form SERVER\INSTANCE.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Port_Label" xml:space="preserve">
+    <value>Port</value>
+  </data>
+  <data name="JIM_SQL_Connector_Port_Description" xml:space="preserve">
+    <value>Der Port, auf dem der Datenbankserver lauscht. Lassen Sie das Feld leer, um den Standard für den Datenbanktyp zu verwenden: 1433 für Microsoft SQL Server, 1521 für Oracle Database oder 2484 für Oracle Database mit aktivierter Verschlüsselung.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Name_Label" xml:space="preserve">
+    <value>Datenbankname</value>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Name_Description" xml:space="preserve">
+    <value>Die Datenbank, mit der auf diesem Server eine Verbindung hergestellt wird.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Database_Identified_By_Label" xml:space="preserve">
+    <value>Oracle Database identifiziert durch</value>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Database_Identified_By_Description" xml:space="preserve">
+    <value>Wie diese Oracle Database adressiert wird. Dienstname ist die moderne Form und sollte verwendet werden, sofern die Umgebung die Datenbank nicht noch über ihren System Identifier (SID) adressiert.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Database_Identified_By_Option_Service_Name" xml:space="preserve">
+    <value>Dienstname</value>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Database_Identified_By_Option_SID" xml:space="preserve">
+    <value>SID</value>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Service_Name_Label" xml:space="preserve">
+    <value>Oracle-Dienstname</value>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Service_Name_Description" xml:space="preserve">
+    <value>Der Oracle-Dienstname, z. B. HRPROD.example.com.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_SID_Label" xml:space="preserve">
+    <value>Oracle-SID</value>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_SID_Description" xml:space="preserve">
+    <value>Der Oracle System Identifier (SID), z. B. HRPROD.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Credentials_Label" xml:space="preserve">
+    <value>Anmeldeinformationen</value>
+  </data>
+  <data name="JIM_SQL_Connector_Username_Label" xml:space="preserve">
+    <value>Benutzername</value>
+  </data>
+  <data name="JIM_SQL_Connector_Username_Description" xml:space="preserve">
+    <value>Das Datenbankkonto, unter dem JIM die Verbindung herstellt. Vergeben Sie nur die geringsten Berechtigungen, die die Ausführungsprofile benötigen: schreibgeschützt bei einem verbundenen System, das nur importiert.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Password_Label" xml:space="preserve">
+    <value>Kennwort</value>
+  </data>
+  <data name="JIM_SQL_Connector_Password_Description" xml:space="preserve">
+    <value>Das Kennwort für dieses Datenbankkonto. Es wird verschlüsselt gespeichert und niemals in ein Protokoll oder einen Konfigurations-Snapshot geschrieben.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Transport_Security_Label" xml:space="preserve">
+    <value>Transportsicherheit</value>
+  </data>
+  <data name="JIM_SQL_Connector_Encrypt_Connection_Label" xml:space="preserve">
+    <value>Verbindung verschlüsseln</value>
+  </data>
+  <data name="JIM_SQL_Connector_Encrypt_Connection_Description" xml:space="preserve">
+    <value>Verschlüsselt die Verbindung zum Datenbankserver. Standardmäßig aktiviert, was in einer aktuellen SQL-Server-Umgebung ohnehin der Fall ist. Das Zertifikat des Servers wird immer validiert: anhand des Zertifikatpakets des Betriebssystems und anhand aller unter Admin &gt; Zertifikate hinzugefügten Zertifikate. Schlägt ein Verbindungstest wegen fehlenden Vertrauens fehl, zeigt JIM das vom Server vorgelegte Zertifikat an, damit Sie es dort hinzufügen können.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Encryption_Label" xml:space="preserve">
+    <value>Oracle-Verschlüsselung</value>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Encryption_Description" xml:space="preserve">
+    <value>Wie die Verbindung zu Oracle Database geschützt wird. Native Network Encryption verschlüsselt die Sitzung auf dem gewöhnlichen Listener ohne Zertifikat auf beiden Seiten und ist der übliche Weg, Clientdatenverkehr in Oracle-Umgebungen zu verschlüsseln. TCPS ist TLS und erfordert einen gesondert konfigurierten Listener (meist Port 2484) sowie ein Serverzertifikat. Ein Zertifikat Ihrer eigenen Zertifizierungsstelle funktioniert, sobald das Stammzertifikat seiner Kette unter Admin &gt; Zertifikate als vertrauenswürdig eingetragen ist: Der Oracle-Treiber akzeptiert nur das Stammzertifikat, weder ein Zwischenzertifikat noch das Zertifikat des Servers selbst.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Encryption_Option_Native_Network_Encryption" xml:space="preserve">
+    <value>Native Network Encryption</value>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Encryption_Option_TCPS_TLS" xml:space="preserve">
+    <value>TCPS (TLS)</value>
+  </data>
+  <data name="JIM_SQL_Connector_Oracle_Encryption_Option_None" xml:space="preserve">
+    <value>Keine</value>
+  </data>
+  <data name="JIM_SQL_Connector_Connection_Timeout_Label" xml:space="preserve">
+    <value>Verbindungszeitüberschreitung</value>
+  </data>
+  <data name="JIM_SQL_Connector_Connection_Timeout_Description" xml:space="preserve">
+    <value>Wie lange (in Sekunden) auf den Verbindungsaufbau gewartet wird, bevor der Versuch abgebrochen wird.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Date_and_Time_Label" xml:space="preserve">
+    <value>Datum und Uhrzeit</value>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Time_Zone_Label" xml:space="preserve">
+    <value>Zeitzone der Datenbank</value>
+  </data>
+  <data name="JIM_SQL_Connector_Database_Time_Zone_Description" xml:space="preserve">
+    <value>Die Zeitzone, in der Datums- und Uhrzeitspalten ohne Offset erfasst sind. JIM speichert jedes Datum mit Uhrzeit in UTC; mit dieser Zeitzone interpretiert es diese Spalten beim Import und rechnet sie beim Export zurück. Spalten mit Offset sind nicht betroffen. Geben Sie UTC oder einen IANA-Zeitzonennamen wie Europe/London ein.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Type_Mapping_Label" xml:space="preserve">
+    <value>Typzuordnung</value>
+  </data>
+  <data name="JIM_SQL_Connector_Treat_NUMBER_1_Columns_as_Boolean_Label" xml:space="preserve">
+    <value>NUMBER(1)-Spalten als Boolean behandeln</value>
+  </data>
+  <data name="JIM_SQL_Connector_Treat_NUMBER_1_Columns_as_Boolean_Description" xml:space="preserve">
+    <value>Oracle Database kennt keinen booleschen Spaltentyp, daher werden Kennzeichen meist als NUMBER(1) gespeichert. Aktivieren Sie die Option, wenn NUMBER(1)-Spalten in dieser Datenbank dies bedeuten; bleibt sie deaktiviert, werden sie als Zahlen importiert. Sie gilt für jede NUMBER(1)-Spalte im Schema, aktivieren Sie sie also nur, wenn das auf alle zutrifft.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Treat_RAW_16_Columns_as_Guid_Label" xml:space="preserve">
+    <value>RAW(16)-Spalten als Guid behandeln</value>
+  </data>
+  <data name="JIM_SQL_Connector_Treat_RAW_16_Columns_as_Guid_Description" xml:space="preserve">
+    <value>Oracle Database speichert GUIDs in RAW(16)-Spalten, doch dort liegen auch Hashwerte und andere Binärwerte, und der Katalog kann sie nicht unterscheiden. Aktivieren Sie die Option, wenn RAW(16)-Spalten in dieser Datenbank GUIDs enthalten; bleibt sie deaktiviert, werden sie als Binärwerte importiert.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Object_Type_Configuration_Label" xml:space="preserve">
+    <value>Objekttypkonfiguration</value>
+  </data>
+  <data name="JIM_SQL_Connector_Object_Types_Label" xml:space="preserve">
+    <value>Objekttypen</value>
+  </data>
+  <data name="JIM_SQL_Connector_Object_Types_Description" xml:space="preserve">
+    <value>Welche Objekttypen des verbundenen Systems diese Datenbank enthält und woher die Objekte der einzelnen Typen stammen, als JSON-Dokument. Jeder Objekttyp benötigt einen 'name' und 'anchorColumns' (die Spalte oder Spalten, deren Werte eine Zeile identifizieren) sowie genau eine Quelle: eine 'table' (eine Tabelle oder eine Sicht, optional mit einem 'schema' qualifiziert) oder eine 'select'-Anweisung, wenn keine Sicht erstellt werden kann. 'columns' deklariert, was der Typ einer Spalte nicht aussagen kann; derzeit heißt das, den Objekttyp zu benennen, auf den die Werte einer Spalte verweisen ('referencesObjectType'); JIM errät das nie aus einem Fremdschlüssel, schlägt aber einen vor, wo die Datenbank ihn deklariert. 'relatedTables' macht aus einer Tabelle mit einer Zeile pro Wert ein mehrwertiges Attribut: Benennen Sie das Attribut, seine 'valueColumn' und die 'joinColumns', die eine Zeile mit ihrem übergeordneten Objekt verknüpfen (eine pro Ankerspalte, in derselben Reihenfolge), sowie 'referencesObjectType', wenn diese Werte Referenzen sind, wie bei der Gruppenmitgliedschaft. Jede andere Spalte wird automatisch erkannt und typisiert. Das folgende Beispiel ist ein vollständiges Dokument als Ausgangspunkt.</value>
+  </data>
+  <data name="JIM_SQL_Connector_Delta_Import_Label" xml:space="preserve">
+    <value>Deltaimport</value>
+  </data>
+  <data name="JIM_SQL_Connector_Delta_Import_Mode_Label" xml:space="preserve">
+    <value>Deltaimport-Modus</value>
+  </data>
+  <data name="JIM_SQL_Connector_Delta_Import_Mode_Description" xml:space="preserve">
+    <value>Wie ein Deltaimport ermittelt, was sich geändert hat. Lassen Sie die Option leer, wenn dieses verbundene System nur vollständige Importe ausführt. 'Änderungsprotokolltabelle' liest eine von Ihrer Datenbank geführte Tabelle oder Sicht mit einer Zeile pro Änderung. Das ist der empfohlene Modus und der einzige, der eine Löschung erkennt. 'Wasserzeichenspalte' liest eine Spalte für die letzte Änderung oder die Version in jeder Tabelle. Dafür muss der Datenbank nichts hinzugefügt werden, doch es werden nur Erstellungen und Aktualisierungen erkannt, Löschungen also durch einen vollständigen Import. Jeder Objekttyp benennt dann auf seiner Karte oben seine Änderungsprotokolltabelle oder seine Wasserzeichenspalten (im Dokument „Objekttypen“ 'changeLog' oder 'watermarkColumn').</value>
+  </data>
+  <data name="JIM_SQL_Connector_Delta_Import_Mode_Option_Change_Log_Table" xml:space="preserve">
+    <value>Änderungsprotokolltabelle</value>
+  </data>
+  <data name="JIM_SQL_Connector_Delta_Import_Mode_Option_Watermark_Column" xml:space="preserve">
+    <value>Wasserzeichenspalte</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Ermöglicht die bidirektionale Synchronisierung von Benutzern und Gruppen mit Microsoft Entra ID über die Microsoft Graph API.</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Microsoft_Entra_ID_Tenant_Label" xml:space="preserve">
+    <value>Microsoft-Entra-ID-Mandant</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Microsoft_Entra_ID_Tenant_Info_Label" xml:space="preserve">
+    <value>Informationen zum Microsoft-Entra-ID-Mandanten</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Microsoft_Entra_ID_Tenant_Info_Description" xml:space="preserve">
+    <value>Geben Sie die Angaben zum Mandanten, mit dem synchronisiert werden soll, und zur App-Registrierung ein, als die sich JIM authentifiziert. Die App-Registrierung benötigt Anwendungsberechtigungen für Microsoft Graph, die mit Administratoreinwilligung erteilt wurden.</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Tenant_ID_Label" xml:space="preserve">
+    <value>Mandanten-ID</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Tenant_ID_Description" xml:space="preserve">
+    <value>Die ID des Mandanten (eine GUID) oder einer seiner verifizierten Domänennamen, z. B. contoso.onmicrosoft.com. Wird auf der Seite „Übersicht“ der App-Registrierung als Verzeichnis-ID (Mandant) angezeigt.</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Cloud_Label" xml:space="preserve">
+    <value>Cloud</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Cloud_Description" xml:space="preserve">
+    <value>Die Microsoft-Cloud, in der sich der Mandant befindet. Wählen Sie Global auch für Microsoft-365-GCC-(Moderate-)Mandanten, die die globalen Endpunkte verwenden.</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Cloud_Option_Global" xml:space="preserve">
+    <value>Global</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Cloud_Option_US_Government_L4_GCC_High" xml:space="preserve">
+    <value>US Government L4 (GCC High)</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Cloud_Option_US_Government_L5_DoD" xml:space="preserve">
+    <value>US Government L5 (DoD)</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Cloud_Option_China_operated_by_21Vianet" xml:space="preserve">
+    <value>China (betrieben von 21Vianet)</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Authentication_Label" xml:space="preserve">
+    <value>Authentifizierung</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Client_ID_Label" xml:space="preserve">
+    <value>Client-ID</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Client_ID_Description" xml:space="preserve">
+    <value>Die Anwendungs-ID (Client-ID) der App-Registrierung, eine GUID, die auf deren Seite „Übersicht“ angezeigt wird.</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Authentication_Method_Label" xml:space="preserve">
+    <value>Authentifizierungsmethode</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Authentication_Method_Description" xml:space="preserve">
+    <value>Wie JIM nachweist, dass es die App-Registrierung ist. Empfohlen wird ein Zertifikat, wie es Microsoft Entra Connect inzwischen verwendet: Sein privater Schlüssel verlässt JIM nie, während ein Clientgeheimnis mit jeder Tokenanforderung gesendet wird. Eine Verbundanmeldeinformation enthält überhaupt kein Geheimnis: Läuft JIM auf einem virtuellen Azure-Computer mit einer benutzerseitig zugewiesenen verwalteten Identität, vertraut die App-Registrierung stattdessen dem Token dieser Identität. Verwenden Sie ein Clientgeheimnis nur für einen schnellen Test.</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Authentication_Method_Option_Certificate" xml:space="preserve">
+    <value>Zertifikat</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Authentication_Method_Option_Federated_Credential" xml:space="preserve">
+    <value>Verbundanmeldeinformation</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Authentication_Method_Option_Client_Secret" xml:space="preserve">
+    <value>Clientgeheimnis</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Client_Secret_Label" xml:space="preserve">
+    <value>Clientgeheimnis</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Client_Secret_Description" xml:space="preserve">
+    <value>Ein Clientgeheimnis, das unter „Zertifikate und Geheimnisse“ der App-Registrierung erstellt wurde. Geben Sie den Wert des Geheimnisses an, nicht die Geheimnis-ID.</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Certificate_Label" xml:space="preserve">
+    <value>Zertifikat</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Certificate_Description" xml:space="preserve">
+    <value>Das Zertifikat samt privatem Schlüssel, als Base64-codierter Inhalt einer PFX-Datei, z. B. die Ausgabe von [Convert]::ToBase64String([IO.File]::ReadAllBytes('app.pfx')) in PowerShell. Laden Sie dasselbe Zertifikat (ohne privaten Schlüssel) unter „Zertifikate und Geheimnisse“ der App-Registrierung hoch. Es benötigt einen RSA-Schlüssel mit mindestens 2048 Bit.</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Managed_Identity_Client_ID_Label" xml:space="preserve">
+    <value>Client-ID der verwalteten Identität</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Managed_Identity_Client_ID_Description" xml:space="preserve">
+    <value>Die Client-ID (eine GUID) der benutzerseitig zugewiesenen verwalteten Identität, die dem virtuellen Azure-Computer zugeordnet ist, auf dem JIM läuft. Eine systemseitig zugewiesene Identität kann keine Verbundanmeldeinformation sein. Fügen Sie für diese Identität unter „Zertifikate und Geheimnisse“ der App-Registrierung eine Verbundanmeldeinformation hinzu.</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Certificate_Password_Label" xml:space="preserve">
+    <value>Zertifikatkennwort</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Certificate_Password_Description" xml:space="preserve">
+    <value>Das Kennwort, das die PFX-Datei schützt, falls sie eines hat. Wird nur mit der Authentifizierungsmethode Zertifikat verwendet.</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Connection_Timeout_Label" xml:space="preserve">
+    <value>Verbindungszeitüberschreitung</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Connection_Timeout_Description" xml:space="preserve">
+    <value>Wie lange (in Sekunden) auf die Antwort von Microsoft Graph oder dem Tokendienst gewartet wird, bevor die Anforderung abgebrochen wird. Bis zu 600.</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Rate_Limiting_Label" xml:space="preserve">
+    <value>Ratenbegrenzung</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Maximum_Writes_Per_Second_Label" xml:space="preserve">
+    <value>Maximale Schreibvorgänge pro Sekunde</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Maximum_Writes_Per_Second_Description" xml:space="preserve">
+    <value>Die maximale Anzahl an Schreibvorgängen, die JIM pro Sekunde an den Mandanten sendet, von 1 bis 20. Microsoft Graph erlaubt jeder Anwendung 20 Schreibvorgänge pro Sekunde in einem Mandanten, und alle Anwendungen im Mandanten teilen sich ein weiter gefasstes Limit, sodass der Standardwert 10 Spielraum für die anderen Anwendungen des Mandanten lässt. JIM drosselt sich zusätzlich selbst, solange Graph meldet, dass der Mandant nahe am Limit ist. Lesevorgänge werden hier nicht begrenzt; JIM wartet, wann immer Graph dazu auffordert.</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Maximum_Retries_Label" xml:space="preserve">
+    <value>Maximale Wiederholungsversuche</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Maximum_Retries_Description" xml:space="preserve">
+    <value>Wie oft eine Anforderung wiederholt wird, die aus einem vorübergehenden Grund fehlgeschlagen ist, etwa wegen Drosselung (HTTP 429) oder kurzzeitiger Nichtverfügbarkeit von Graph, von 0 bis 10. JIM wartet vor jedem Wiederholungsversuch so lange, wie Graph es verlangt.</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Source_of_Authority_Label" xml:space="preserve">
+    <value>Maßgebliche Quelle</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Track_Source_of_Authority_Changes_Label" xml:space="preserve">
+    <value>Änderungen der maßgeblichen Quelle verfolgen</value>
+  </data>
+  <data name="JIM_Microsoft_Entra_ID_Connector_Track_Source_of_Authority_Changes_Description" xml:space="preserve">
+    <value>Ob für jedes aus Active Directory synchronisierte Objekt gelesen wird, ob seine maßgebliche Quelle auf Entra ID umgestellt oder zurückgestellt wurde, sodass sourceOfAuthority anzeigt, wo es jetzt verwaltet wird. Aktivieren Sie die Option in einem Hybridmandanten, in dem die maßgebliche Quelle von Objekten umgestellt wird. Sie benötigt die Berechtigungen User-OnPremisesSyncBehavior.ReadWrite.All und Group-OnPremisesSyncBehavior.ReadWrite.All, die einzigen, die Microsoft zum Lesen anbietet und die auch das Ändern erlauben. Ist die Option deaktiviert, wird ein aus Active Directory synchronisiertes Objekt stets als onPremisesDirectory gelesen.</value>
+  </data>
+  <data name="JIM_File_Connector_Group_Object_Type" xml:space="preserve">
+    <value>Objekttyp</value>
+  </data>
+  <data name="JIM_SCIM_2_0_Service_Provider_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Ermöglicht SCIM-2.0-Clients die Provisionierung in JIM. JIM fungiert als SCIM-Dienstanbieter: Clients schreiben Benutzer und Gruppen an den eigenen SCIM-Endpunkt von JIM, und dieser Connector importiert, was sie geschrieben haben.</value>
+  </data>
+</root>

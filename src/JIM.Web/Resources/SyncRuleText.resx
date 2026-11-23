@@ -1877,7 +1877,7 @@
     <comment>Plural. {0} is the direct count, {1} the subtree count.</comment>
   </data>
   <data name="PickerSubtreeLead" xml:space="preserve">
-    <value>This Container and everything beneath it hold {0:N0} objects, which is what This and below imports.</value>
+    <value>This Container and everything beneath it hold {0:N0} objects, which is what Whole subtree imports.</value>
     <comment>{0} is the subtree count.</comment>
   </data>
   <data name="PickerSubtreeDirectOne" xml:space="preserve">
