@@ -1450,7 +1450,7 @@
     <value>Select at least one authoritative source. No source is selected, so this configuration cannot be saved.</value>
     <comment>Alert when no source is selected</comment>
   </data>
-  <data name="DtsAllOne" xml:space="preserve">
+  <data name="DtsAllSingle" xml:space="preserve">
     <value>A {0} will be {1} when {2} disconnects.</value>
     <comment>{0} is the Object Type, in bold; {1} is the fate; {2} is the source</comment>
   </data>
@@ -1462,7 +1462,7 @@
     <value>all</value>
     <comment>Used inside the sentence above</comment>
   </data>
-  <data name="DtsAnyOne" xml:space="preserve">
+  <data name="DtsAnySingle" xml:space="preserve">
     <value>A {0} will be {1} when {2} disconnects, regardless of other connectors.</value>
     <comment>{0} is the Object Type, {1} the fate, {2} the source</comment>
   </data>

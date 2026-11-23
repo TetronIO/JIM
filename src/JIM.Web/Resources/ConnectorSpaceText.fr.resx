@@ -1091,7 +1091,7 @@
   <data name="DtsNoSource" xml:space="preserve">
     <value>Sélectionnez au moins une source faisant autorité. Aucune source n’est sélectionnée : cette configuration ne peut donc pas être enregistrée.</value>
   </data>
-  <data name="DtsAllOne" xml:space="preserve">
+  <data name="DtsAllSingle" xml:space="preserve">
     <value>Un objet {0} sera {1} lorsque {2} se déconnectera.</value>
   </data>
   <data name="DtsAllMany" xml:space="preserve">
@@ -1100,7 +1100,7 @@
   <data name="DtsAllWord" xml:space="preserve">
     <value>tous</value>
   </data>
-  <data name="DtsAnyOne" xml:space="preserve">
+  <data name="DtsAnySingle" xml:space="preserve">
     <value>Un objet {0} sera {1} lorsque {2} se déconnectera, quels que soient les autres connecteurs.</value>
   </data>
   <data name="DtsAnyMany" xml:space="preserve">
