@@ -197,4 +197,196 @@
   <data name="BaseExpressionHint" xml:space="preserve">
     <value>Lit les attributs de l’objet source. Facultative pour un jeton de séquence ou aléatoire.</value>
   </data>
+  <data name="ListAnd" xml:space="preserve">
+    <value>{0} et {1}</value>
+  </data>
+  <data name="RefusalCorrected" xml:space="preserve">
+    <value>Correction de {0}</value>
+  </data>
+  <data name="RefusalKeepUniqueOff" xml:space="preserve">
+    <value>Erreur d’export (Conserver l’unicité désactivé)</value>
+  </data>
+  <data name="RefusalCollisionOff" xml:space="preserve">
+    <value>Erreur d’export (Traitement des collisions désactivé)</value>
+  </data>
+  <data name="RefusalBuiltFromSeveral" xml:space="preserve">
+    <value>Erreur d’export (construite à partir de plusieurs valeurs générées)</value>
+  </data>
+  <data name="HowBuiltAlsoFrom" xml:space="preserve">
+    <value>également construite à partir de {0}</value>
+  </data>
+  <data name="HowBuiltVia" xml:space="preserve">
+    <value>via {0}</value>
+  </data>
+  <data name="HowBuiltExpression" xml:space="preserve">
+    <value>Expression</value>
+  </data>
+  <data name="HowBuiltFrom" xml:space="preserve">
+    <value>à partir de {0}</value>
+  </data>
+  <data name="PanelTitle" xml:space="preserve">
+    <value>Valeurs construites à partir de {0}</value>
+  </data>
+  <data name="PanelHelperText" xml:space="preserve">
+    <value>JIM n’attribue {0} que si chaque valeur vérifiée avant attribution est également libre, afin qu’elles restent cohérentes. Si une cible en refuse malgré tout une, JIM corrige {1}, sauf si l’interrupteur « Conserver l’unicité » de la valeur est désactivé. Modifiez l’interrupteur d’une valeur sur son propre flux d’attributs.</value>
+  </data>
+  <data name="BeforeIssuingChecked" xml:space="preserve">
+    <value>Vérifiée</value>
+  </data>
+  <data name="BeforeIssuingNotChecked" xml:space="preserve">
+    <value>Non vérifiée</value>
+  </data>
+  <data name="BeforeIssuingRecords" xml:space="preserve">
+    <value>les enregistrements de JIM</value>
+  </data>
+  <data name="BeforeIssuingRecordsAndProbes" xml:space="preserve">
+    <value>les enregistrements de JIM et {0}</value>
+  </data>
+  <data name="BeforeIssuingOtherRule" xml:space="preserve">
+    <value>Construite sur {0}, qui ne s’exécute qu’une fois la personne présente dans ce système.</value>
+  </data>
+  <data name="MoveSuggestion" xml:space="preserve">
+    <value>Déplacez-la vers {0} pour qu’elle soit vérifiée en premier.</value>
+  </data>
+  <data name="BeforeIssuingKeepUniqueOff" xml:space="preserve">
+    <value>Conserver l’unicité est désactivé</value>
+  </data>
+  <data name="BeforeIssuingBuiltFromSeveral" xml:space="preserve">
+    <value>Construite à partir de plusieurs valeurs générées</value>
+  </data>
+  <data name="BeforeIssuingExcluded" xml:space="preserve">
+    <value>Son système connecté est exclu des vérifications de {0}</value>
+  </data>
+  <data name="NoBuiltValues" xml:space="preserve">
+    <value>Aucun flux d’attributs ne construit une valeur à partir de {0}.</value>
+  </data>
+  <data name="SwitchLabel" xml:space="preserve">
+    <value>Conserver l’unicité avec {0}</value>
+  </data>
+  <data name="SwitchKeepUniqueOff" xml:space="preserve">
+    <value>Si une cible refuse cette valeur, JIM signale une erreur d’export et laisse {0} inchangé.</value>
+  </data>
+  <data name="SwitchCorrected" xml:space="preserve">
+    <value>JIM corrige {0} et recalcule cette valeur à partir de la nouvelle.</value>
+  </data>
+  <data name="SwitchChecked" xml:space="preserve">
+    <value>Vérifiée avant l’attribution de {0} : JIM passe à la valeur suivante de {0} si cette valeur est déjà utilisée. Si une cible la refuse malgré tout, {1}</value>
+  </data>
+  <data name="SwitchNotCheckedOtherRule" xml:space="preserve">
+    <value>Non vérifiée avant l’attribution de {0}, car elle est construite sur {1}, une autre règle de synchronisation.{2} Si une cible la refuse, {3}</value>
+  </data>
+  <data name="SwitchNotCheckedExcluded" xml:space="preserve">
+    <value>Non vérifiée avant l’attribution de {0}, car son système connecté est exclu des vérifications de {0}. Si une cible la refuse, {1}</value>
+  </data>
+  <data name="NotInEffect" xml:space="preserve">
+    <value>Le traitement des collisions est désactivé sur le flux d’attributs {0}, donc rien construit à partir de {0} n’est corrigé et un refus de cette valeur est une erreur d’export. Vous pouvez toujours modifier l’interrupteur ; il prend effet lorsque le traitement des collisions est de nouveau activé.</value>
+  </data>
+  <data name="BuiltFromSeveral" xml:space="preserve">
+    <value>Cette valeur est construite à partir de {0}, donc JIM ne peut pas savoir laquelle corriger. Un refus est signalé comme erreur d’export.</value>
+  </data>
+  <data name="RenameTitle" xml:space="preserve">
+    <value>Autoriser le renommage</value>
+  </data>
+  <data name="RenameWorking" xml:space="preserve">
+    <value>Détermination de ce qui va changer...</value>
+  </data>
+  <data name="RenameRejectedFallback" xml:space="preserve">
+    <value>Un système connecté</value>
+  </data>
+  <data name="RenameIntro" xml:space="preserve">
+    <value>{0} a refusé la valeur {1} car elle est déjà utilisée{2}. Si vous autorisez le renommage, JIM choisit la prochaine valeur libre lors de la prochaine exportation et l’applique partout{3}.</value>
+  </data>
+  <data name="RenameAnchorClause" xml:space="preserve">
+    <value>, et {0} possède un compte avec cette valeur</value>
+  </data>
+  <data name="RenameRenameClause" xml:space="preserve">
+    <value>, en renommant le compte {0}</value>
+  </data>
+  <data name="RenameColumnConnectedSystem" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="RenameColumnChange" xml:space="preserve">
+    <value>Modification</value>
+  </data>
+  <data name="RenameColumnWhen" xml:space="preserve">
+    <value>Quand</value>
+  </data>
+  <data name="RenameNextExportRun" xml:space="preserve">
+    <value>Prochaine exécution d’export</value>
+  </data>
+  <data name="RenameNewValueHeading" xml:space="preserve">
+    <value>Nouvelle valeur</value>
+  </data>
+  <data name="RenameLikely" xml:space="preserve">
+    <value>Probable</value>
+  </data>
+  <data name="RenameDecided" xml:space="preserve">
+    <value>Décidée</value>
+  </data>
+  <data name="RenameDecidedAtNextExport" xml:space="preserve">
+    <value>Lors de la prochaine exportation, après une nouvelle vérification de chaque système</value>
+  </data>
+  <data name="RenameRecorded" xml:space="preserve">
+    <value>Consigné dans l’historique de {0} et comme une activité, selon votre autorisation.</value>
+  </data>
+  <data name="RenameTheObject" xml:space="preserve">
+    <value>l’objet</value>
+  </data>
+  <data name="RenameNoLongerExists" xml:space="preserve">
+    <value>Cette valeur générée n’existe plus.</value>
+  </data>
+  <data name="RenameAllowedDone" xml:space="preserve">
+    <value>Renommage autorisé. La prochaine exécution d’export choisit la nouvelle valeur.</value>
+  </data>
+  <data name="RenameNothingChanged" xml:space="preserve">
+    <value>Aucune modification ; la valeur n’attend plus de décision.</value>
+  </data>
+  <data name="RetiredTitle" xml:space="preserve">
+    <value>Valeurs retirées : {0}</value>
+  </data>
+  <data name="RetiredIntro" xml:space="preserve">
+    <value>JIM n’attribuera plus jamais ces valeurs pour {0}, quel que soit le flux d’attributs qui les génère. Une valeur est retirée lorsque l’objet qui la détenait est supprimé, ou lorsqu’elle cesse d’être gérée par JIM.</value>
+  </data>
+  <data name="RetiredColumnValue" xml:space="preserve">
+    <value>Valeur</value>
+  </data>
+  <data name="RetiredColumnRetired" xml:space="preserve">
+    <value>Retirée</value>
+  </data>
+  <data name="RetiredColumnWhy" xml:space="preserve">
+    <value>Motif</value>
+  </data>
+  <data name="RetiredColumnHeldBy" xml:space="preserve">
+    <value>Détenue par</value>
+  </data>
+  <data name="RetiredHeldByDeletedHint" xml:space="preserve">
+    <value>L’objet qui détenait cette valeur a été supprimé.</value>
+  </data>
+  <data name="RetiredHeldByDeleted" xml:space="preserve">
+    <value>{0} (supprimé)</value>
+  </data>
+  <data name="RetiredSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher des valeurs retirées</value>
+  </data>
+  <data name="RetiredValueSingular" xml:space="preserve">
+    <value>valeur retirée</value>
+  </data>
+  <data name="RetiredValuePlural" xml:space="preserve">
+    <value>valeurs retirées</value>
+  </data>
+  <data name="RetiredNoSearchMatch" xml:space="preserve">
+    <value>Aucune valeur retirée ne correspond à « {0} ».</value>
+  </data>
+  <data name="RetiredNoValuesForAttribute" xml:space="preserve">
+    <value>Aucune valeur de {0} n’a été retirée.</value>
+  </data>
+  <data name="RetiredEmptyHint" xml:space="preserve">
+    <value>Une valeur est retirée lorsque l’objet qui la détenait est supprimé, ou lorsque JIM cesse de la gérer.</value>
+  </data>
+  <data name="RetiredKeptPermanently" xml:space="preserve">
+    <value>Les valeurs retirées sont conservées indéfiniment. Pour un flux de séquence, Recommencer est la seule action qui les efface.</value>
+  </data>
+  <data name="StartAgainLabel" xml:space="preserve">
+    <value>Recommencer</value>
+  </data>
 </root>

@@ -234,4 +234,260 @@
   <data name="BaseExpressionHint" xml:space="preserve">
     <value>Reads the source object's attributes. Optional for a Sequence or Random token.</value>
   </data>
+  <data name="ListAnd" xml:space="preserve">
+    <value>{0} and {1}</value>
+    <comment>Joins the last item of a list to the rest</comment>
+  </data>
+  <data name="RefusalCorrected" xml:space="preserve">
+    <value>{0} is corrected</value>
+    <comment>Column text: the generated value is corrected</comment>
+  </data>
+  <data name="RefusalKeepUniqueOff" xml:space="preserve">
+    <value>Export error (Keep unique is off)</value>
+    <comment>Column text</comment>
+  </data>
+  <data name="RefusalCollisionOff" xml:space="preserve">
+    <value>Export error (Collision Remediation is off)</value>
+    <comment>Column text</comment>
+  </data>
+  <data name="RefusalBuiltFromSeveral" xml:space="preserve">
+    <value>Export error (built from more than one generated value)</value>
+    <comment>Column text</comment>
+  </data>
+  <data name="HowBuiltAlsoFrom" xml:space="preserve">
+    <value>also built from {0}</value>
+    <comment>{0} is a list of attribute names</comment>
+  </data>
+  <data name="HowBuiltVia" xml:space="preserve">
+    <value>via {0}</value>
+    <comment>{0} is a list of attribute names</comment>
+  </data>
+  <data name="HowBuiltExpression" xml:space="preserve">
+    <value>Expression</value>
+    <comment>How a value is built: by an export expression</comment>
+  </data>
+  <data name="HowBuiltFrom" xml:space="preserve">
+    <value>from {0}</value>
+    <comment>{0} is the generated attribute's name</comment>
+  </data>
+  <data name="PanelTitle" xml:space="preserve">
+    <value>Values built from {0}</value>
+    <comment>{0} is the generated attribute's name</comment>
+  </data>
+  <data name="PanelHelperText" xml:space="preserve">
+    <value>JIM issues {0} only when every value checked before issuing is free too, so they stay consistent. If a target refuses one anyway, JIM corrects {1}, unless the value's Keep unique switch is off. Change a value's switch on its own Attribute Flow.</value>
+    <comment>{0} and {1} are both the generated attribute's name</comment>
+  </data>
+  <data name="BeforeIssuingChecked" xml:space="preserve">
+    <value>Checked</value>
+    <comment>Column state</comment>
+  </data>
+  <data name="BeforeIssuingNotChecked" xml:space="preserve">
+    <value>Not checked</value>
+    <comment>Column state</comment>
+  </data>
+  <data name="BeforeIssuingRecords" xml:space="preserve">
+    <value>JIM's records</value>
+    <comment>Column detail: where a value is checked</comment>
+  </data>
+  <data name="BeforeIssuingRecordsAndProbes" xml:space="preserve">
+    <value>JIM's records and {0}</value>
+    <comment>{0} is a list of the places the value is probed</comment>
+  </data>
+  <data name="BeforeIssuingOtherRule" xml:space="preserve">
+    <value>Built on {0}, which runs only once the person is in that system.</value>
+    <comment>{0} is a Synchronisation Rule name</comment>
+  </data>
+  <data name="MoveSuggestion" xml:space="preserve">
+    <value> Move it to {0} to have it checked first.</value>
+    <comment>{0} is a Synchronisation Rule name; a leading space, appended after a sentence</comment>
+  </data>
+  <data name="BeforeIssuingKeepUniqueOff" xml:space="preserve">
+    <value>Keep unique is off</value>
+    <comment>Column detail</comment>
+  </data>
+  <data name="BeforeIssuingBuiltFromSeveral" xml:space="preserve">
+    <value>Built from more than one generated value</value>
+    <comment>Column detail</comment>
+  </data>
+  <data name="BeforeIssuingExcluded" xml:space="preserve">
+    <value>Its Connected System is excluded from {0}'s checks</value>
+    <comment>{0} is the generated attribute's name</comment>
+  </data>
+  <data name="NoBuiltValues" xml:space="preserve">
+    <value>No Attribute Flow builds a value from {0}.</value>
+    <comment>{0} is the generated attribute's name</comment>
+  </data>
+  <data name="SwitchLabel" xml:space="preserve">
+    <value>Keep unique with {0}</value>
+    <comment>Switch label; {0} is the generated attribute's name</comment>
+  </data>
+  <data name="SwitchKeepUniqueOff" xml:space="preserve">
+    <value>If a target refuses this value, JIM reports an export error and leaves {0} unchanged.</value>
+    <comment>{0} is the generated attribute's name</comment>
+  </data>
+  <data name="SwitchCorrected" xml:space="preserve">
+    <value>JIM corrects {0} and works this value out again from the new one.</value>
+    <comment>{0} is the generated attribute's name</comment>
+  </data>
+  <data name="SwitchChecked" xml:space="preserve">
+    <value>Checked before {0} is issued: JIM moves on to the next {0} if this value is already in use. If a target refuses it anyway, {1}</value>
+    <comment>{0} is the generated attribute's name; {1} is the correction sentence</comment>
+  </data>
+  <data name="SwitchNotCheckedOtherRule" xml:space="preserve">
+    <value>Not checked before {0} is issued, because it is built on {1}, a different Synchronisation Rule.{2} If a target refuses it, {3}</value>
+    <comment>{0} generated name; {1} rule name; {2} move suggestion or nothing; {3} correction sentence</comment>
+  </data>
+  <data name="SwitchNotCheckedExcluded" xml:space="preserve">
+    <value>Not checked before {0} is issued, because its Connected System is excluded from {0}'s checks. If a target refuses it, {1}</value>
+    <comment>{0} is the generated attribute's name; {1} is the correction sentence</comment>
+  </data>
+  <data name="NotInEffect" xml:space="preserve">
+    <value>Collision Remediation is off on the {0} Attribute Flow, so nothing built from {0} is corrected and a refusal of this value is an export error. You can still change the switch; it takes effect when Collision Remediation is turned back on.</value>
+    <comment>{0} is the generated attribute's name</comment>
+  </data>
+  <data name="BuiltFromSeveral" xml:space="preserve">
+    <value>This value is built from {0}, so JIM cannot tell which to correct. A refusal is reported as an export error.</value>
+    <comment>{0} is a list of generated attribute names</comment>
+  </data>
+  <data name="RenameTitle" xml:space="preserve">
+    <value>Allow the rename</value>
+    <comment>Dialog title and confirming button</comment>
+  </data>
+  <data name="RenameWorking" xml:space="preserve">
+    <value>Working out what will change...</value>
+    <comment>Shown while the preview loads</comment>
+  </data>
+  <data name="RenameRejectedFallback" xml:space="preserve">
+    <value>A Connected System</value>
+    <comment>Stands in when the rejecting system is not known</comment>
+  </data>
+  <data name="RenameIntro" xml:space="preserve">
+    <value>{0} rejected {1} as already in use{2}. If you allow the rename, JIM chooses the next free value at the next export and applies it everywhere{3}.</value>
+    <comment>{0} the rejecting Connected System; {1} the value, already in a code element; {2} and {3} are clauses that may be empty</comment>
+  </data>
+  <data name="RenameAnchorClause" xml:space="preserve">
+    <value>, and {0} has an account with that value</value>
+    <comment>{0} is a Connected System name</comment>
+  </data>
+  <data name="RenameRenameClause" xml:space="preserve">
+    <value>, renaming the {0} account</value>
+    <comment>{0} is a Connected System name</comment>
+  </data>
+  <data name="RenameColumnConnectedSystem" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Table column heading</comment>
+  </data>
+  <data name="RenameColumnChange" xml:space="preserve">
+    <value>Change</value>
+    <comment>Table column heading</comment>
+  </data>
+  <data name="RenameColumnWhen" xml:space="preserve">
+    <value>When</value>
+    <comment>Table column heading</comment>
+  </data>
+  <data name="RenameNextExportRun" xml:space="preserve">
+    <value>Next export run</value>
+    <comment>Table cell: when the change happens</comment>
+  </data>
+  <data name="RenameNewValueHeading" xml:space="preserve">
+    <value>New value</value>
+    <comment>Panel heading</comment>
+  </data>
+  <data name="RenameLikely" xml:space="preserve">
+    <value>Likely</value>
+    <comment>Definition term: the likely new value</comment>
+  </data>
+  <data name="RenameDecided" xml:space="preserve">
+    <value>Decided</value>
+    <comment>Definition term: when the value is decided</comment>
+  </data>
+  <data name="RenameDecidedAtNextExport" xml:space="preserve">
+    <value>At the next export, after checking every system again</value>
+    <comment>Definition detail</comment>
+  </data>
+  <data name="RenameRecorded" xml:space="preserve">
+    <value>Recorded in {0}'s history and as an Activity, as allowed by you.</value>
+    <comment>{0} is the Metaverse Object's display name</comment>
+  </data>
+  <data name="RenameTheObject" xml:space="preserve">
+    <value>the object</value>
+    <comment>Stands in for the object's name when it is not known</comment>
+  </data>
+  <data name="RenameNoLongerExists" xml:space="preserve">
+    <value>That generated value no longer exists.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="RenameAllowedDone" xml:space="preserve">
+    <value>Rename allowed. The next export run chooses the new value.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="RenameNothingChanged" xml:space="preserve">
+    <value>Nothing was changed; the value is no longer waiting on a decision.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="RetiredTitle" xml:space="preserve">
+    <value>Retired values: {0}</value>
+    <comment>Dialog title; {0} is the attribute name</comment>
+  </data>
+  <data name="RetiredIntro" xml:space="preserve">
+    <value>JIM will never issue these values for {0} again, whichever Attribute Flow generates it. A value is retired when the object that held it is deleted, or when the value stops being JIM's to manage.</value>
+    <comment>{0} is the attribute name</comment>
+  </data>
+  <data name="RetiredColumnValue" xml:space="preserve">
+    <value>Value</value>
+    <comment>Grid column heading</comment>
+  </data>
+  <data name="RetiredColumnRetired" xml:space="preserve">
+    <value>Retired</value>
+    <comment>Grid column heading: when the value was retired</comment>
+  </data>
+  <data name="RetiredColumnWhy" xml:space="preserve">
+    <value>Why</value>
+    <comment>Grid column heading: why the value was retired</comment>
+  </data>
+  <data name="RetiredColumnHeldBy" xml:space="preserve">
+    <value>Held by</value>
+    <comment>Grid column heading: the object that held the value</comment>
+  </data>
+  <data name="RetiredHeldByDeletedHint" xml:space="preserve">
+    <value>The object that held this value has been deleted.</value>
+    <comment>Tooltip on a deleted holder's name</comment>
+  </data>
+  <data name="RetiredHeldByDeleted" xml:space="preserve">
+    <value>{0} (deleted)</value>
+    <comment>{0} is the holder's last known name</comment>
+  </data>
+  <data name="RetiredSearchPlaceholder" xml:space="preserve">
+    <value>Search retired values</value>
+    <comment>Search box placeholder</comment>
+  </data>
+  <data name="RetiredValueSingular" xml:space="preserve">
+    <value>retired value</value>
+    <comment>Used in the count: 1 retired value</comment>
+  </data>
+  <data name="RetiredValuePlural" xml:space="preserve">
+    <value>retired values</value>
+    <comment>Used in the count: n retired values</comment>
+  </data>
+  <data name="RetiredNoSearchMatch" xml:space="preserve">
+    <value>No retired values match "{0}".</value>
+    <comment>{0} is the search text</comment>
+  </data>
+  <data name="RetiredNoValuesForAttribute" xml:space="preserve">
+    <value>No values of {0} have been retired.</value>
+    <comment>{0} is the attribute name</comment>
+  </data>
+  <data name="RetiredEmptyHint" xml:space="preserve">
+    <value>A value is retired when the object that held it is deleted, or when JIM stops managing it.</value>
+    <comment>Empty state detail</comment>
+  </data>
+  <data name="RetiredKeptPermanently" xml:space="preserve">
+    <value>Retired values are kept permanently. On a Sequence flow, Start again is the only thing that clears them.</value>
+    <comment>Footnote of the dialog; Start again is the action of the same name</comment>
+  </data>
+  <data name="StartAgainLabel" xml:space="preserve">
+    <value>Start again</value>
+    <comment>Action name, used in sentences and buttons</comment>
+  </data>
 </root>
