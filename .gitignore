@@ -506,3 +506,6 @@ apt-pin-pr-body.md
 
 # Left behind only if jim-web-watch is interrupted mid-probe (see _jim_file_events_work in .devcontainer/jim-aliases.sh)
 .jim-inotify-probe-*/
+
+# Scratch work lists written while converting portal text (#3030)
+scratch-i18n*.txt
