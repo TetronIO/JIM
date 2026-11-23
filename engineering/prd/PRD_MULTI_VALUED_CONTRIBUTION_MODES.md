@@ -179,15 +179,15 @@ flowchart TD
 **Configuration**
 
 1. Each multi-valued Metaverse attribute has a contribution mode: Priority (default), Merge or Accumulate. Single-valued attributes have no mode; the portal does not offer one and the API and PowerShell reject one.
-2. Accumulate is not available for Reference attributes (see Constraints for why); the refusal message points to recording the reference as text instead. Merge is available for every data type unless the implementation plan finds a reason to exclude references (Open Question 5).
+2. Accumulate is not available for Reference attributes (see Constraints for why); the refusal message points to recording the reference as text instead. Merge is not available for Reference attributes either, at first (resolved Question 5); allowing it later is additive.
 3. In Merge and Accumulate modes, the priority order for that attribute is not used. The portal shows the contributors without an order and says why; the priority endpoints and cmdlets report the mode, and reordering them is refused with a message that names the mode.
 4. In Merge and Accumulate modes, "Null is a value" has no effect on mappings to that attribute. The Attribute Flow editor disables it with an explanation, and saving a mapping with it set is accepted but recorded as having no effect (no error, so existing mappings keep saving).
 
 **Merge resolution**
 
-5. The resolved value set is the union of the values supplied by every contributor whose state is Connected With Value. Each value keeps the Synchronisation Rule that contributed it.
-6. When two contributors supply the same value, it appears once in the resolved set, on the portal, in the API and in exports. It is removed only when no contributor still supplies it.
-7. When a contributor stops supplying a value (the source value changed or was removed), only that contributor's copy of the value is removed.
+5. The resolved value set is the union of the values supplied by every contributor whose state is Connected With Value. Each value records one contributing Synchronisation Rule (resolved Question 2).
+6. When two contributors supply the same value, it appears once in the resolved set, on the portal, in the API and in exports. It is removed only when no contributor still supplies it. Values are compared exactly, so `Jo@corp.example` and `jo@corp.example` are two values; an administrator who wants them treated as one sets the mapping's inbound case normalisation.
+7. When a contributor stops supplying a value (the source value changed or was removed), the value is removed only if no other contributor supplies it. If another does, the value stays and is recorded against that contributor instead.
 8. When a contributor stops applying (out of scope, disconnected, rule disabled, Connected System Object obsoleted), its values are removed, following the same rules as recall today: `RemoveContributedAttributesOnObsoletion` turned off on the object type keeps them on obsoletion, and the grace-period freeze (#1570) still applies.
 9. Every recall path removes only the recalled contributor's values in a Merge attribute: Synchronisation Rule deletion, Attribute Flow removal, Connected System deletion, Connector Space clearing, stranded-value sweeps and contributor re-election.
 
@@ -195,7 +195,7 @@ flowchart TD
 
 10. Every value a contributor supplies is added to the set and kept, with its contributor recorded, even after that contributor stops supplying it.
 11. None of the recall paths in requirement 9, nor obsoletion, scope exit or disconnection, removes an Accumulate value. Previews of those actions (Synchronisation Rule deletion, Attribute Flow removal, Connected System deletion, Connector Space clearing) say that the attribute's values will be kept.
-12. A value already in the set is not added a second time when a later contributor supplies it; the set holds each distinct value once, keeping the first contributor recorded.
+12. A value already in the set is not added a second time when a later contributor supplies it; the set holds each distinct value once, keeping the first contributor recorded. Values are compared exactly, as in requirement 6.
 13. If a Synchronisation Rule that contributed Accumulate values is deleted, the values stay and keep their recorded Connected System (`ContributedBySystemId`), as provenance does today.
 
 **Precedence with recall settings**
@@ -211,7 +211,7 @@ Accumulate is therefore an exception to recall that is configured on the Metaver
 **Manual removal (Accumulate only)**
 
 14. An administrator can remove one or more entries from an Accumulate attribute on a Metaverse Object, from the portal, the REST API and PowerShell. The removal is recorded in the object's change history as a person's change (`ValueContributorKind.Person`), with who and when, and on an Activity.
-15. Removing an entry that a live contributor still supplies is refused with a message that names the contributor, because the next synchronisation would add it back. (Alternative in Open Question 3.)
+15. Removing an entry that a live contributor still supplies is refused with a message that names the contributor, because the next synchronisation would add it back (resolved Question 3).
 
 **Changing mode**
 
@@ -220,7 +220,7 @@ Accumulate is therefore an exception to recall that is configured on the Metaver
 
 **Visibility**
 
-18. The portal's Metaverse Object view, the provenance endpoint and `Get-JIMMetaverseObjectProvenance` show the contributor of each value in a Merge or Accumulate attribute, including Accumulate values whose contributor no longer supplies them.
+18. The portal's Metaverse Object view, the provenance endpoint and `Get-JIMMetaverseObjectProvenance` show the recorded contributor of each value in a Merge or Accumulate attribute, including Accumulate values whose contributor no longer supplies them. One contributor is recorded per value; where several supply it, the others are not stored (resolved Question 2).
 19. Sync Preview, Full Synchronisation preview, change history and Activities record each value added or removed with its contributor, as they do for value changes today.
 20. The Data Flow view's Multiple contributors filter shows the mode of each attribute it lists.
 
@@ -232,7 +232,7 @@ Accumulate is therefore an exception to recall that is configured on the Metaver
 
 - **Synchronisation integrity:** a Merge or Accumulate resolution that cannot determine a contributor's values (for example an undecidable scoping criterion, #2336) fails that object with an RPEI rather than removing values.
 - **Performance:** resolution must not add a per-value database round trip. A full synchronisation of 100,000 Metaverse Objects with a Merge attribute fed by three systems must run within 10% of the same run in Priority mode.
-- **Growth:** an Accumulate attribute grows without bound by design. The portal and API must remain usable with at least 500 values on one object's attribute (Open Question 4 covers a cap).
+- **Growth:** an Accumulate attribute grows without bound by design. The portal and API must remain usable with at least 500 values on one object's attribute (resolved Question 4: no hard cap).
 - **Upgrade:** additive only. A new mode column defaults to Priority; no existing value changes on upgrade.
 
 ## Examples and Scenarios
@@ -317,7 +317,7 @@ Account Audit Log (Accumulate)
 
 | Area | Impact |
 |------|--------|
-| Models | New `AttributeContributionMode` enum; mode stored alongside the priority configuration (see Open Question 1) |
+| Models | New `AttributeContributionMode` enum; `ContributionMode` column on `MetaverseAttribute` (resolved Question 1) |
 | Database | Migration adding the mode column, default Priority; possibly an index supporting per-contributor value lookup |
 | Application | `AttributePriorityService` gains Merge and Accumulate resolution; the sync engine's attribute flow persistence computes per-contributor diffs; every recall path (obsoletion, scope exit, Synchronisation Rule deletion recall, Attribute Flow removal, Connected System deletion, Connector Space clear, stranded-value sweep, `ContributorReElectionService`) honours the mode; manual removal server method |
 | Worker | Resolution runs inside existing synchronisation processors; no new task types expected beyond the mode-change impact report if it must run asynchronously |
@@ -341,15 +341,17 @@ Account Audit Log (Accumulate)
 
 ## Dependencies
 
-- None blocking. #614 (Internal MVO Management) would provide general value editing; this PRD needs only removal from an Accumulate attribute and should not wait for it (Open Question 3).
+- None blocking. #614 (Internal MVO Management) would provide general value editing; this PRD needs only removal from an Accumulate attribute and should not wait for it (resolved Question 3).
 
-## Open Questions
+## Resolved Questions
 
-1. **Where the mode lives.** Priority order is stored per Metaverse attribute and Metaverse Object Type. Recommendation: store the mode at the same level, so the Attribute Priority page is the one place contribution is configured, and the same attribute can be Accumulate on Person and Priority on Group. The alternative, one mode per Metaverse attribute, is simpler to explain.
-2. **Duplicate values in Merge.** Recommendation: one row per value and contributor internally, deduplicated everywhere it is read, so requirement 6 falls out naturally. The alternative (one row with a list of contributors) changes the value table's shape.
-3. **Removing an entry a live contributor still supplies.** Recommendation: refuse (requirement 15). The alternative is a suppression list so the value stays removed, which is more capable but is new state to manage.
-4. **A cap on Accumulate growth.** Recommendation: no hard cap; warn on the Metaverse Object view and in the attribute's health information above a configurable threshold.
-5. **Merge for Reference attributes.** Group membership from several systems is a plausible use; confirm during planning that reference recall and Merge combine cleanly before allowing it.
+Resolved while writing the implementation plan ([`MULTI_VALUED_CONTRIBUTION_MODES.md`](../plans/MULTI_VALUED_CONTRIBUTION_MODES.md)), which gives the code evidence for each.
+
+1. **Where the mode lives: one mode per Metaverse attribute.** Priority is not stored per Metaverse attribute and Metaverse Object Type, as this PRD first assumed; it is stored on each import mapping, and the order is computed from them. The link between an object type and its attributes holds no data, so a per-type mode would mean turning that link into an entity of its own. The mode is a column on `MetaverseAttribute`, the same on every object type that uses the attribute. An administrator who wants Accumulate on Person and Priority on Group creates two attributes.
+2. **Duplicate values in Merge: one row per distinct value, recording one contributor.** Export assumes each value is held in one row. With a row per contributor, a value one source dropped while another still held it would be removed at the target, and a new object would be sent the value twice. Instead, when the recorded contributor stops supplying a value, the value is recorded against another contributor that still supplies it, or removed if none does.
+3. **Removing an entry a live contributor still supplies: refused.** No suppression list.
+4. **A cap on Accumulate growth: none.** The Metaverse Object view pages an attribute's values. A warning threshold waits until a customer reports a real size.
+5. **Merge for Reference attributes: refused at first.** References already have their own recall and deletion rules (#1019), and no current scenario needs Merge on them. Allowing it later is additive.
 
 ## Acceptance Criteria
 
