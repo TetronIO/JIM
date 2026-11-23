@@ -47,7 +47,7 @@
     private RenderFragment RenderGroup(ScopingGroupExplanation group) => __builder =>
     {
         <div class="jim-scoping-group" data-testid="jim-scoping-group" data-path="@group.Path">
-            <div class="jim-scoping-group-heading">@group.Description</div>
+            <div class="jim-scoping-group-heading">@MessageDisplay.Show(group.DescriptionDetail, group.Description)</div>
             @foreach (var criterion in group.Criteria)
             {
                 var (icon, colour, label) = CriterionOutcome(criterion.Outcome);
@@ -56,8 +56,8 @@
                     <span role="img" aria-label="@label" title="@label" class="jim-scoping-criterion-icon">
                         <MudIcon Icon="@icon" Color="@colour" Size="Size.Small" aria-hidden="true" />
                     </span>
-                    <span class="jim-scoping-criterion-text">@criterion.Description</span>
-                    <span class="jim-scoping-criterion-actual">@criterion.ActualDescription</span>
+                    <span class="jim-scoping-criterion-text">@MessageDisplay.Show(criterion.DescriptionDetail, criterion.Description)</span>
+                    <span class="jim-scoping-criterion-actual">@MessageDisplay.Show(criterion.ActualDescriptionDetail, criterion.ActualDescription)</span>
                     @if (criterion.ExpressionInputs.Count > 0)
                     {
                         @* What an expression criterion was given, beside what it computed (#2054). *@

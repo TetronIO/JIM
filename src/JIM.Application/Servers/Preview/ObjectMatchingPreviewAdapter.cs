@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using JIM.Application.Expressions;
@@ -80,33 +83,26 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
 
         if (configuration.StoredProposal.DescribesSameMatchingAs(proposal))
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                "The proposed Object Matching Rules match the ones this Connected System already has, so no object " +
-                "would join differently and no impact is counted below.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingSameAsStored)),
                 nameof(ConnectedSystem.ObjectMatchingRuleMode)));
             return findings;
         }
 
         // Said first, and said on every matching preview: it is the single most common misreading of this change.
-        findings.Add(new PreviewValidationFinding(
+        findings.Add(PreviewValidationFinding.Of(
             PreviewValidationSeverity.Information,
-            "Object Matching Rules are evaluated only for objects that are not already joined to a Metaverse " +
-            "Object. Objects already joined keep the Metaverse Object they have, whatever this change does, so the " +
-            "impact below covers the unjoined population only.",
+            JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingOnlyUnjoined)),
             nameof(ConnectedSystem.ObjectMatchingRuleMode)));
 
         if (proposal.Mode != configuration.StoredProposal.Mode)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
                 proposal.Mode == ObjectMatchingRuleMode.SyncRule
-                    ? "The proposal switches this Connected System to Advanced matching, so the rules held against " +
-                      "each Connected System Object Type stop being used and each Synchronisation Rule's own rules " +
-                      "apply instead. A Synchronisation Rule carrying no rules of its own joins nothing."
-                    : "The proposal switches this Connected System to Simple matching, so each Synchronisation " +
-                      "Rule's own rules stop being used and the rules held against each Connected System Object " +
-                      "Type apply instead. An Object Type carrying no rules of its own joins nothing.",
+                    ? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingSwitchToAdvanced))
+                    : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingSwitchToSimple)),
                 nameof(ConnectedSystem.ObjectMatchingRuleMode)));
         }
 
@@ -126,12 +122,11 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
                      .Select(objectTypeId => objectTypeId!.Value)
                      .Distinct())
         {
-            var objectTypeName = configuration.ObjectTypesById.GetValueOrDefault(objectTypeId)?.Name ?? "this type";
-            findings.Add(new PreviewValidationFinding(
+            MessageArgument objectTypeName = configuration.ObjectTypesById.GetValueOrDefault(objectTypeId)?.Name
+                ?? (MessageArgument)JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingThisType));
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                $"The proposal leaves '{objectTypeName}' with no Object Matching Rule, so no object of that type " +
-                "would ever join an existing Metaverse Object. Every unjoined object would project a new identity " +
-                "instead, which is how duplicate identities are created.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingTypeLeftWithNoRule), objectTypeName),
                 nameof(ConnectedSystemObjectType.ObjectMatchingRules)));
         }
 
@@ -465,45 +460,51 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
             var where = DescribeRule(rule, configuration);
 
             if (proposal.Mode == ObjectMatchingRuleMode.ConnectedSystem && rule.MetaverseObjectTypeId == null)
-                yield return Blocking($"{where} names no Metaverse Object Type to search. Simple mode rules must name one; in Advanced mode the Synchronisation Rule supplies it.");
+                yield return Blocking(JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingNoMetaverseObjectType), where));
 
             var problem = DescribeComparisonProblem(rule, configuration);
             if (problem != null)
-                yield return Blocking($"{where}: {problem}");
+                yield return Blocking(JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingRuleProblem), where, problem));
         }
     }
 
     /// <summary>
     /// Why what <paramref name="rule"/> compares could never be worked out, or null when it can.
     /// </summary>
-    private static string? DescribeComparisonProblem(ObjectMatchingRuleProposal rule, MatchingConfiguration configuration)
+    private static JimMessage? DescribeComparisonProblem(ObjectMatchingRuleProposal rule, MatchingConfiguration configuration)
     {
         var materialised = Materialise(rule, configuration, fallback: null);
+
+        // The validator's reasons are English produced in JIM.Models, shown as they are until that is converted.
         var shape = materialised.DescribeComparisonInvalidity();
         if (shape != null)
-            return shape;
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), shape);
 
         if (materialised.TargetMetaverseAttribute is not { } target)
-            return "It targets a Metaverse Attribute that no longer exists.";
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingTargetAttributeGone));
 
-        return ObjectTypeOf(rule, configuration) is { } objectTypeId && configuration.ObjectTypesById.TryGetValue(objectTypeId, out var objectType)
-            ? Validator.DescribeProblem(materialised, objectType, target)
-            : "It belongs to a Connected System Object Type that is not part of this system's schema.";
+        if (ObjectTypeOf(rule, configuration) is { } objectTypeId && configuration.ObjectTypesById.TryGetValue(objectTypeId, out var objectType))
+        {
+            var problem = Validator.DescribeProblem(materialised, objectType, target);
+            return problem == null ? null : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), problem);
+        }
+
+        return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingTypeNotInSchema));
     }
 
-    private static PreviewValidationFinding Blocking(string message) =>
-        new(PreviewValidationSeverity.Blocking, message, nameof(ConnectedSystemObjectType.ObjectMatchingRules));
+    private static PreviewValidationFinding Blocking(JimMessage message) =>
+        PreviewValidationFinding.Of(PreviewValidationSeverity.Blocking, message, nameof(ConnectedSystemObjectType.ObjectMatchingRules));
 
     /// <summary>
     /// How a rule is named in a finding, so an administrator can find the one being complained about.
     /// </summary>
-    private static string DescribeRule(ObjectMatchingRuleProposal rule, MatchingConfiguration configuration)
+    private static JimMessage DescribeRule(ObjectMatchingRuleProposal rule, MatchingConfiguration configuration)
     {
-        var owner = rule.SyncRuleId is { } syncRuleId
-            ? configuration.SyncRules.FirstOrDefault(candidate => candidate.Id == syncRuleId)?.Name ?? "a Synchronisation Rule"
-            : configuration.ObjectTypesById.GetValueOrDefault(rule.ConnectedSystemObjectTypeId ?? 0)?.Name ?? "an Object Type";
+        MessageArgument owner = rule.SyncRuleId is { } syncRuleId
+            ? configuration.SyncRules.FirstOrDefault(candidate => candidate.Id == syncRuleId)?.Name ?? (MessageArgument)JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingOwnerSyncRule))
+            : configuration.ObjectTypesById.GetValueOrDefault(rule.ConnectedSystemObjectTypeId ?? 0)?.Name ?? (MessageArgument)JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingOwnerObjectType));
 
-        return $"Object Matching Rule {rule.Order + 1} on '{owner}'";
+        return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingRuleNamed), rule.Order + 1, owner);
     }
 
     #endregion

@@ -22,7 +22,7 @@
             <div class="d-flex flex-column">
                 @foreach (var error in PreviewResult.Errors)
                 {
-                    <span>@error.Detail</span>
+                    <span>@MessageDisplay.Show(error.LocalisedDetail, error.Detail)</span>
                 }
             </div>
         </MudAlert>
@@ -33,7 +33,7 @@
             <div class="d-flex flex-column">
                 @foreach (var warning in PreviewResult.Warnings)
                 {
-                    <span>@warning.Detail</span>
+                    <span>@MessageDisplay.Show(warning.LocalisedDetail, warning.Detail)</span>
                 }
             </div>
         </MudAlert>

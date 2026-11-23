@@ -15,11 +15,11 @@
             {
                 @if (segment.Kind == ExplanationSegmentKind.Text)
                 {
-                    @segment.Text
+                    @MessageDisplay.Show(segment.Message, segment.Text)
                 }
                 else
                 {
-                    <span class="@SegmentClass(segment.Kind)">@segment.Text</span>
+                    <span class="@SegmentClass(segment.Kind)">@MessageDisplay.Show(segment.Message, segment.Text)</span>
                 }
             }
         </li>

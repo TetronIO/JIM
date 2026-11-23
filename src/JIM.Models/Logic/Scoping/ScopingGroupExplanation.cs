@@ -3,6 +3,8 @@
 
 using JIM.Models.Search;
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Logic.Scoping;
 
 /// <summary>
@@ -40,4 +42,7 @@ public sealed class ScopingGroupExplanation
 
     /// <summary>The group's line in the tree, for example "Any one of these (none met)".</summary>
     public string Description { get; set; } = string.Empty;
+
+    /// <summary><see cref="Description"/> as a <see cref="JimMessage"/> (#3030); null when not yet described.</summary>
+    public JimMessage? DescriptionDetail { get; set; }
 }
