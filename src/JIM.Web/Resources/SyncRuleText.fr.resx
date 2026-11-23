@@ -2099,4 +2099,16 @@
   <data name="TestInputPlaceholderBinary" xml:space="preserve">
     <value>Base64</value>
   </data>
+  <data name="TestObjectSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher par nom</value>
+  </data>
+  <data name="TestObjectLoadAria" xml:space="preserve">
+    <value>Charger les valeurs depuis {0}</value>
+  </data>
+  <data name="TestObjectNoMatch" xml:space="preserve">
+    <value>Aucun objet ne correspond.</value>
+  </data>
+  <data name="TestObjectLoadedFrom" xml:space="preserve">
+    <value>Valeurs chargées depuis {0}. Modifiez-en une pour essayer une variante.</value>
+  </data>
 </root>

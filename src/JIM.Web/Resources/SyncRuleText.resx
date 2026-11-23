@@ -2768,4 +2768,20 @@
     <value>Base64</value>
     <comment>Placeholder for a Binary test input: the encoding it takes.</comment>
   </data>
+  <data name="TestObjectSearchPlaceholder" xml:space="preserve">
+    <value>Search by name</value>
+    <comment>Placeholder of the box that finds an object to load test values from.</comment>
+  </data>
+  <data name="TestObjectLoadAria" xml:space="preserve">
+    <value>Load values from {0}</value>
+    <comment>Accessible name of a found object's button. {0} is the object's name.</comment>
+  </data>
+  <data name="TestObjectNoMatch" xml:space="preserve">
+    <value>No objects match.</value>
+    <comment>Shown when a search for an object to load values from finds nothing.</comment>
+  </data>
+  <data name="TestObjectLoadedFrom" xml:space="preserve">
+    <value>Values loaded from {0}. Change any of them to try a variation.</value>
+    <comment>Shown once values are loaded from an object. {0} is the object's name, in bold.</comment>
+  </data>
 </root>
