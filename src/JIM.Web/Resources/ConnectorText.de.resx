@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Connectors" xml:space="preserve">
+    <value>Connectors</value>
+  </data>
+  <data name="Connector" xml:space="preserve">
+    <value>Connector</value>
+  </data>
+  <data name="ListPageInfo" xml:space="preserve">
+    <value>JIM verwendet Connectors, um sich mit externen Systemen zu verbinden und Daten zu importieren oder zu exportieren. Für gängige Systemtypen werden einige Connectors bereits als integrierte Connectors mitgeliefert; Sie können aber auch Connectors von Drittanbietern installieren. Hier sehen Sie, welche installiert sind und ob Updates verfügbar sind, die angewendet werden können.</value>
+  </data>
+  <data name="SiblingPagesAriaLabel" xml:space="preserve">
+    <value>Verbundene Systeme oder Connectors</value>
+  </data>
+  <data name="ColumnDescription" xml:space="preserve">
+    <value>Beschreibung</value>
+  </data>
+  <data name="ColumnBuiltIn" xml:space="preserve">
+    <value>Integriert?</value>
+  </data>
+  <data name="ColumnInUse" xml:space="preserve">
+    <value>In Verwendung?</value>
+  </data>
+  <data name="ColumnVersion" xml:space="preserve">
+    <value>Version</value>
+  </data>
+  <data name="Yes" xml:space="preserve">
+    <value>Ja</value>
+  </data>
+  <data name="No" xml:space="preserve">
+    <value>Nein</value>
+  </data>
+  <data name="NoConnectorsMatch" xml:space="preserve">
+    <value>Keine Connectors entsprechen „{0}“</value>
+  </data>
+  <data name="NoConnectorsInstalled" xml:space="preserve">
+    <value>Keine Connectors installiert</value>
+  </data>
+  <data name="NoConnectorsInstalledHint" xml:space="preserve">
+    <value>Integrierte Connectors erscheinen hier, sobald JIM initialisiert wurde.</value>
+  </data>
+  <data name="DetailHeading" xml:space="preserve">
+    <value>Connector:</value>
+  </data>
+  <data name="DetailPageTitle" xml:space="preserve">
+    <value>Connector: {0}</value>
+  </data>
+  <data name="DetailPageInfo" xml:space="preserve">
+    <value>Ein Connector ist die Art und Weise, wie JIM mit einer Art von System kommuniziert, etwa einem Verzeichnis oder einer Datenbank. Diese Seite zeigt, was er ist und was er kann.</value>
+  </data>
+  <data name="Details" xml:space="preserve">
+    <value>Details</value>
+  </data>
+  <data name="Changes" xml:space="preserve">
+    <value>Änderungen</value>
+  </data>
+  <data name="ConnectorDefinition" xml:space="preserve">
+    <value>Connector-Definition</value>
+  </data>
+  <data name="Url" xml:space="preserve">
+    <value>URL</value>
+  </data>
+  <data name="Capabilities" xml:space="preserve">
+    <value>Funktionen</value>
+  </data>
+  <data name="Import" xml:space="preserve">
+    <value>Import</value>
+  </data>
+  <data name="FullImport" xml:space="preserve">
+    <value>Vollständiger Import</value>
+  </data>
+  <data name="DeltaImport" xml:space="preserve">
+    <value>Deltaimport</value>
+  </data>
+  <data name="Export" xml:space="preserve">
+    <value>Export</value>
+  </data>
+  <data name="AutoConfirmExport" xml:space="preserve">
+    <value>Export automatisch bestätigen</value>
+  </data>
+  <data name="ParallelExport" xml:space="preserve">
+    <value>Paralleler Export</value>
+  </data>
+  <data name="Disable" xml:space="preserve">
+    <value>Deaktivieren</value>
+  </data>
+  <data name="Hierarchy" xml:space="preserve">
+    <value>Hierarchie</value>
+  </data>
+  <data name="Partitions" xml:space="preserve">
+    <value>Partitionen</value>
+  </data>
+  <data name="PartitionContainers" xml:space="preserve">
+    <value>Partitionscontainer</value>
+  </data>
+  <data name="DataHandling" xml:space="preserve">
+    <value>Datenverarbeitung</value>
+  </data>
+  <data name="FilePaths" xml:space="preserve">
+    <value>Dateipfade</value>
+  </data>
+  <data name="Paging" xml:space="preserve">
+    <value>Seitenweises Abrufen</value>
+  </data>
+  <data name="SecondaryExternalId" xml:space="preserve">
+    <value>Sekundäre externe ID</value>
+  </data>
+  <data name="UserSelectedExternalId" xml:space="preserve">
+    <value>Vom Benutzer gewählte externe ID</value>
+  </data>
+  <data name="UserSelectedAttributeTypes" xml:space="preserve">
+    <value>Vom Benutzer gewählte Attributtypen</value>
+  </data>
+  <data name="SearchFilesPlaceholder" xml:space="preserve">
+    <value>Dateien suchen</value>
+  </data>
+  <data name="Files" xml:space="preserve">
+    <value>Dateien</value>
+  </data>
+  <data name="ColumnFilename" xml:space="preserve">
+    <value>Dateiname</value>
+  </data>
+  <data name="ColumnFilesizeKb" xml:space="preserve">
+    <value>Dateigröße (KB)</value>
+  </data>
+  <data name="ColumnInterfaces" xml:space="preserve">
+    <value>Schnittstellen</value>
+  </data>
+  <data name="NoFilesMatch" xml:space="preserve">
+    <value>Keine Dateien entsprechen „{0}“</value>
+  </data>
+  <data name="NoFiles" xml:space="preserve">
+    <value>Keine Dateien</value>
+  </data>
+  <data name="NoFilesBuiltInHint" xml:space="preserve">
+    <value>Dies ist ein integrierter Connector; er ist Teil von JIM und wird nicht als hochgeladene Dateien bereitgestellt.</value>
+  </data>
+  <data name="NoFilesUploadHint" xml:space="preserve">
+    <value>Laden Sie die Assemblies des Connectors hoch, damit er funktionsfähig wird.</value>
+  </data>
+</root>
