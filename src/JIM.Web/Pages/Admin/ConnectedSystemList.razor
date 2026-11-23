@@ -11,27 +11,26 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Connected Systems</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Connected Systems
-    <PageInfo Title="Connected Systems" DocsPage="configuration/connected-systems.md">
-        JIM imports from and exports data to Connected Systems using Connectors.
+<PageTitle>@ConnectedSystemText.CsListHeading</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@ConnectedSystemText.CsListHeading
+    <PageInfo Title="@ConnectedSystemText.CsListHeading" DocsPage="configuration/connected-systems.md">
+        @ConnectedSystemText.CsListInfoBody
         @if (_connectedSystemHeaders == null || _connectedSystemHeaders.Count == 0)
         {
-            <span>Configure at least one Connected System to get going.</span>
+            <span>@ConnectedSystemText.CsListInfoEmpty</span>
         }
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 <SegmentedToggle TValue="string" Options="@SiblingPages.ConnectedSystems" Value="@("systems")"
-                 AriaLabel="Connected Systems or Connectors" Class="mt-3" />
+                 AriaLabel="@ConnectedSystemText.CsListToggleLabel" Class="mt-3" />
 
 @* Tracking off is a global condition, so it is stated once here rather than repeated on every row. *@
 @if (_drift != null && _drift.Values.Any(d => d.TrackingDisabled))
 {
     <MudAlert Severity="Severity.Info" Class="mt-5">
-        Configuration change tracking is switched off, so JIM cannot tell which Connected Systems have configuration
-        changes waiting for a Full Synchronisation.
+        @ConnectedSystemText.CsListTrackingOff
     </MudAlert>
 }
 
@@ -41,24 +40,24 @@
                      ContainerId="connected-system-list"
                      DefaultSortBy="name"
                      LoadWindow="LoadWindowAsync"
-                     SingularName="Connected System"
-                     PluralName="Connected Systems">
+                     SingularName="@ConnectedSystemText.CsListNounSingular"
+                     PluralName="@ConnectedSystemText.CsListNounPlural">
     <ToolBarExtras>
         <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Href="/admin/connected-systems/new"
-                   Color="Color.Primary" DropShadow="false">Create Connected System</MudButton>
+                   Color="Color.Primary" DropShadow="false">@ConnectedSystemText.CsListCreate</MudButton>
     </ToolBarExtras>
     <Columns>
-        <TemplateColumn Title="Name" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn Title="@CommonText.ColumnName" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Name" Name="name" />
+                <VirtualisedSortHeader Title="@CommonText.ColumnName" Name="name" />
             </HeaderTemplate>
             <CellTemplate>
                 <MudLink Href="@(Utilities.GetConnectedSystemHref(context.Item))">@context.Item.Name</MudLink>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Description" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+        <TemplateColumn Title="@CommonText.ColumnDescription" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Description" Name="description" />
+                <VirtualisedSortHeader Title="@CommonText.ColumnDescription" Name="description" />
             </HeaderTemplate>
             <CellTemplate>
                 @* A row in a virtualised grid is one line, so a long description is clipped rather than wrapped;
@@ -66,13 +65,13 @@
                 <OneLineText Text="@context.Item.Description" />
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Stats" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn Title="@ConnectedSystemText.CsListColumnStats" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <MudText Typo="Typo.button">Stats</MudText>
+                <MudText Typo="Typo.button">@ConnectedSystemText.CsListColumnStats</MudText>
             </HeaderTemplate>
             <CellTemplate>
                 <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                    <MudTooltip Text="Objects" Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="@ConnectedSystemText.CsListObjectsTooltip" Arrow="true" Placement="Placement.Top">
                         <MudChip T="string" Color="Color.Default" Variant="Variant.Text"
                                  Icon="@Icons.Material.Filled.Storage" Class="jim-stat-chip">
                             @context.Item.ObjectCount.ToString("N0")
@@ -80,7 +79,7 @@
                     </MudTooltip>
                     @if (context.Item.ConnectorsCount > 0)
                     {
-                        <MudTooltip Text="@($"Connected Objects ({GetPercentage(context.Item.ObjectCount, context.Item.ConnectorsCount)}%)")" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.CsListConnectedObjectsTooltip, GetPercentage(context.Item.ObjectCount, context.Item.ConnectorsCount))" Arrow="true" Placement="Placement.Top">
                             <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
                                      Icon="@Icons.Material.Filled.Link" Class="jim-stat-chip">
                                 @context.Item.ConnectorsCount.ToString("N0")
@@ -89,7 +88,7 @@
                     }
                     @if (context.Item.PendingExportObjectsCount > 0)
                     {
-                        <MudTooltip Text="@($"Pending Exports ({GetPercentage(context.Item.ObjectCount, context.Item.PendingExportObjectsCount)}%)")" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.CsListPendingExportsTooltip, GetPercentage(context.Item.ObjectCount, context.Item.PendingExportObjectsCount))" Arrow="true" Placement="Placement.Top">
                             <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
                                      Icon="@Icons.Material.Filled.Upload" Class="jim-stat-chip">
                                 @context.Item.PendingExportObjectsCount.ToString("N0")
@@ -103,11 +102,11 @@
         </TemplateColumn>
         @* Its own column rather than another chip in Stats, because unlike the counts beside it this one has a
            state as well as a size, and the column is what the sort header can hang off (requirement 26). *@
-        <TemplateColumn Title="Password Sync" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn Title="@ConnectedSystemText.CsListColumnPasswordSync" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 @* The page's only own filter narrows this one column, so it sits on the column's header rather
                    than crowding the toolbar's primary action or taking a filter row of its own. *@
-                <VirtualisedFilterHeader TValue="PasswordSynchronisationFilter" Title="Password Sync" Name="passwordsync"
+                <VirtualisedFilterHeader TValue="PasswordSynchronisationFilter" Title="@ConnectedSystemText.CsListColumnPasswordSync" Name="passwordsync"
                                          Options="PasswordSynchronisationFilterOptions"
                                          UnfilteredValue="PasswordSynchronisationFilter.Any"
                                          Value="_passwordSyncFilter"
@@ -121,17 +120,17 @@
                 </MudStack>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Connector" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn Title="@ConnectedSystemText.CsListColumnConnector" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Connector" Name="connector" />
+                <VirtualisedSortHeader Title="@ConnectedSystemText.CsListColumnConnector" Name="connector" />
             </HeaderTemplate>
             <CellTemplate>
                 @context.Item.ConnectorName
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Created" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn Title="@CommonText.ColumnCreated" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Created" Name="created" />
+                <VirtualisedSortHeader Title="@CommonText.ColumnCreated" Name="created" />
             </HeaderTemplate>
             <CellTemplate>
                 <MudTooltip Text="@context.Item.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -139,12 +138,12 @@
                 </MudTooltip>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Action" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn Title="@ConnectedSystemText.CsListColumnAction" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
-                <MudText Typo="Typo.button">Action</MudText>
+                <MudText Typo="Typo.button">@ConnectedSystemText.CsListColumnAction</MudText>
             </HeaderTemplate>
             <CellTemplate>
-                <MudTooltip Text="View Objects" Arrow="true" Placement="Placement.Top">
+                <MudTooltip Text="@ConnectedSystemText.CsListViewObjects" Arrow="true" Placement="Placement.Top">
                     <MudIconButton Href="@Utilities.GetConnectedSystemObjectsHref(context.Item)"
                                    Icon="@Icons.Material.Filled.List"
                                    Variant="Variant.Filled" />
@@ -156,16 +155,16 @@
         @if (!string.IsNullOrWhiteSpace(grid.SearchText))
         {
             <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                             PrimaryText="@($"No Connected Systems match \"{grid.SearchText}\"")"
-                             SecondaryText="Try a different search term, or clear the search."
-                             ActionText="Clear Search"
+                             PrimaryText="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.CsListNoMatch, grid.SearchText)"
+                             SecondaryText="@ConnectedSystemText.CsListNoMatchHint"
+                             ActionText="@CommonText.ClearSearch"
                              OnAction="@(() => grid.ClearSearchAsync())" />
         }
         else
         {
             <TableEmptyState Icon="@Icons.Material.Filled.Cable"
-                             PrimaryText="No Connected Systems yet"
-                             SecondaryText="Use the Create Connected System button to get going." />
+                             PrimaryText="@ConnectedSystemText.CsListNoneYet"
+                             SecondaryText="@ConnectedSystemText.CsListNoneYetHint" />
         }
     </EmptyContent>
 </VirtualisedDataGrid>
@@ -198,21 +197,21 @@
         NotSupported
     }
 
-    private static readonly IReadOnlyList<VirtualisedFilterOption<PasswordSynchronisationFilter>> PasswordSynchronisationFilterOptions =
+    private static IReadOnlyList<VirtualisedFilterOption<PasswordSynchronisationFilter>> PasswordSynchronisationFilterOptions =>
     [
-        new(PasswordSynchronisationFilter.Any, "Any"),
-        new(PasswordSynchronisationFilter.NeedsAttention, "Needs attention"),
-        new(PasswordSynchronisationFilter.Enabled, "Enabled"),
-        new(PasswordSynchronisationFilter.Disabled, "Switched off"),
-        new(PasswordSynchronisationFilter.NotConfigured, "Not configured"),
-        new(PasswordSynchronisationFilter.NotSupported, "Not supported")
+        new(PasswordSynchronisationFilter.Any, ConnectedSystemText.CsListFilterAny),
+        new(PasswordSynchronisationFilter.NeedsAttention, ConnectedSystemText.CsListFilterNeedsAttention),
+        new(PasswordSynchronisationFilter.Enabled, CommonText.Enabled),
+        new(PasswordSynchronisationFilter.Disabled, ConnectedSystemText.CsListFilterSwitchedOff),
+        new(PasswordSynchronisationFilter.NotConfigured, ConnectedSystemText.CsListFilterNotConfigured),
+        new(PasswordSynchronisationFilter.NotSupported, ConnectedSystemText.CsListFilterNotSupported)
     ];
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new()
     {
-        new("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new("Administration", href: "/admin"),
-        new("Connected Systems", href: null, disabled: true),
+        new(ConnectedSystemText.DetailBreadcrumbHome, href: "/", icon: Icons.Material.Filled.Home),
+        new(ConnectedSystemText.DetailBreadcrumbAdministration, href: "/admin"),
+        new(ConnectedSystemText.DetailBreadcrumbConnectedSystems, href: null, disabled: true),
     };
 
     protected override async Task OnInitializedAsync()

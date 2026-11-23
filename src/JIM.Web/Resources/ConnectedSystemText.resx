@@ -1394,4 +1394,396 @@
     <value>Your setting changes have been saved, with warnings.</value>
     <comment>Snackbar after settings save with warnings</comment>
   </data>
+  <data name="CsListHeading" xml:space="preserve">
+    <value>Connected Systems</value>
+    <comment>Page heading, page title and page-info title of the Connected Systems list</comment>
+  </data>
+  <data name="CsListInfoBody" xml:space="preserve">
+    <value>JIM imports from and exports data to Connected Systems using Connectors.</value>
+    <comment>Page-info text on the Connected Systems list</comment>
+  </data>
+  <data name="CsListInfoEmpty" xml:space="preserve">
+    <value>Configure at least one Connected System to get going.</value>
+    <comment>Page-info hint shown while no Connected System exists</comment>
+  </data>
+  <data name="CsListTrackingOff" xml:space="preserve">
+    <value>Configuration change tracking is switched off, so JIM cannot tell which Connected Systems have configuration changes waiting for a Full Synchronisation.</value>
+    <comment>Notice when configuration change tracking is switched off</comment>
+  </data>
+  <data name="CsListToggleLabel" xml:space="preserve">
+    <value>Connected Systems or Connectors</value>
+    <comment>Accessible label of the Connected Systems and Connectors switch</comment>
+  </data>
+  <data name="CsListCreate" xml:space="preserve">
+    <value>Create Connected System</value>
+    <comment>Toolbar button that creates a Connected System</comment>
+  </data>
+  <data name="CsListNounSingular" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Singular noun for counts in the list toolbar</comment>
+  </data>
+  <data name="CsListNounPlural" xml:space="preserve">
+    <value>Connected Systems</value>
+    <comment>Plural noun for counts in the list toolbar</comment>
+  </data>
+  <data name="CsListColumnConnector" xml:space="preserve">
+    <value>Connector</value>
+    <comment>Column heading for the Connector a Connected System uses</comment>
+  </data>
+  <data name="CsListColumnStats" xml:space="preserve">
+    <value>Stats</value>
+    <comment>Column heading for the object counts and indicators</comment>
+  </data>
+  <data name="CsListColumnPasswordSync" xml:space="preserve">
+    <value>Password Sync</value>
+    <comment>Column heading for password synchronisation state and filter</comment>
+  </data>
+  <data name="CsListColumnAction" xml:space="preserve">
+    <value>Action</value>
+    <comment>Column heading for the row action</comment>
+  </data>
+  <data name="CsListObjectsTooltip" xml:space="preserve">
+    <value>Objects</value>
+    <comment>Tooltip on the object count chip</comment>
+  </data>
+  <data name="CsListConnectedObjectsTooltip" xml:space="preserve">
+    <value>Connected Objects ({0}%)</value>
+    <comment>Tooltip on the connected objects chip; {0} is the percentage of objects connected</comment>
+  </data>
+  <data name="CsListPendingExportsTooltip" xml:space="preserve">
+    <value>Pending Exports ({0}%)</value>
+    <comment>Tooltip on the pending exports chip; {0} is the percentage of objects with a pending export</comment>
+  </data>
+  <data name="CsListViewObjects" xml:space="preserve">
+    <value>View Objects</value>
+    <comment>Tooltip on the button that opens a Connected System's objects</comment>
+  </data>
+  <data name="CsListNoMatch" xml:space="preserve">
+    <value>No Connected Systems match "{0}"</value>
+    <comment>Empty state when a search matches nothing; {0} is the search text</comment>
+  </data>
+  <data name="CsListNoMatchHint" xml:space="preserve">
+    <value>Try a different search term, or clear the search.</value>
+    <comment>Empty state hint under the no-match message</comment>
+  </data>
+  <data name="CsListNoneYet" xml:space="preserve">
+    <value>No Connected Systems yet</value>
+    <comment>Empty state when no Connected System exists</comment>
+  </data>
+  <data name="CsListNoneYetHint" xml:space="preserve">
+    <value>Use the Create Connected System button to get going.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="CsListFilterAny" xml:space="preserve">
+    <value>Any</value>
+    <comment>Password Sync filter option: no filter</comment>
+  </data>
+  <data name="CsListFilterNeedsAttention" xml:space="preserve">
+    <value>Needs attention</value>
+    <comment>Password Sync filter option: systems with queued password work waiting on a person</comment>
+  </data>
+  <data name="CsListFilterSwitchedOff" xml:space="preserve">
+    <value>Switched off</value>
+    <comment>Password Sync filter option: password synchronisation switched off</comment>
+  </data>
+  <data name="CsListFilterNotConfigured" xml:space="preserve">
+    <value>Not configured</value>
+    <comment>Password Sync filter option: password synchronisation not configured</comment>
+  </data>
+  <data name="CsListFilterNotSupported" xml:space="preserve">
+    <value>Not supported</value>
+    <comment>Password Sync filter option: the Connector cannot set passwords</comment>
+  </data>
+  <data name="CertEyebrow" xml:space="preserve">
+    <value>Certificate presented by {0}:{1}</value>
+    <comment>Line above the subject; {0} is the host and {1} the port</comment>
+  </data>
+  <data name="CertSelfSigned" xml:space="preserve">
+    <value>Self-signed</value>
+    <comment>Issuer line when the certificate signs itself</comment>
+  </data>
+  <data name="CertIssuedBy" xml:space="preserve">
+    <value>Issued by {0}</value>
+    <comment>Issuer line; {0} is the issuer's name</comment>
+  </data>
+  <data name="CertFieldIssuedFor" xml:space="preserve">
+    <value>Issued for</value>
+    <comment>Field label for the names the certificate covers</comment>
+  </data>
+  <data name="CertFieldValid" xml:space="preserve">
+    <value>Valid</value>
+    <comment>Field label for the validity period</comment>
+  </data>
+  <data name="CertValidRange" xml:space="preserve">
+    <value>{0} to {1}</value>
+    <comment>Validity period; {0} is the start date, {1} the end date</comment>
+  </data>
+  <data name="CertUnknownDate" xml:space="preserve">
+    <value>unknown</value>
+    <comment>Shown in place of a date the certificate does not give</comment>
+  </data>
+  <data name="CertFieldThumbprint" xml:space="preserve">
+    <value>Thumbprint</value>
+    <comment>Field label for the certificate thumbprint</comment>
+  </data>
+  <data name="CertFieldSignature" xml:space="preserve">
+    <value>Signature</value>
+    <comment>Field label for the signature algorithm</comment>
+  </data>
+  <data name="CertChainHeading" xml:space="preserve">
+    <value>Certificate chain</value>
+    <comment>Label above the list of certificates in the chain</comment>
+  </data>
+  <data name="CertChainMissing" xml:space="preserve">
+    <value>{0} and above</value>
+    <comment>Row for the issuer JIM could not find; {0} is its name</comment>
+  </data>
+  <data name="CertChainNotSent" xml:space="preserve">
+    <value>Not sent, and not downloadable</value>
+    <comment>Source of a missing issuer</comment>
+  </data>
+  <data name="CertChainNotFound" xml:space="preserve">
+    <value>Not found</value>
+    <comment>Role of a missing issuer</comment>
+  </data>
+  <data name="CertChainReferenceNote" xml:space="preserve">
+    <value>This connection accepts only the root, so the rest of the chain is shown for reference.</value>
+    <comment>Caption under a chain whose connection accepts only the root</comment>
+  </data>
+  <data name="CertSelfSignedBefore" xml:space="preserve">
+    <value>Self-signed, so there is no separate authority to trust. Adds this certificate alone to the</value>
+    <comment>Trust explanation for a self-signed certificate; the link to the store follows</comment>
+  </data>
+  <data name="CertSelfSignedAfter" xml:space="preserve">
+    <value>store; it will need trusting again when it is renewed.</value>
+    <comment>Trust explanation: continues after the store link</comment>
+  </data>
+  <data name="CertRootBefore" xml:space="preserve">
+    <value>Trusting the root keeps working through renewals of everything beneath it. JIM reads the chain from the server again first, adds the root to</value>
+    <comment>Trust explanation when the root must be trusted; the link to the store follows</comment>
+  </data>
+  <data name="CertAfterStoreLink" xml:space="preserve">
+    <value>, and records who trusted it and why.</value>
+    <comment>Trust explanation: ends after the store link</comment>
+  </data>
+  <data name="CertChoiceBefore" xml:space="preserve">
+    <value>Trust any certificate in this chain. Trusting the root keeps working through renewals of everything beneath it. JIM reads the chain from the server again first, adds your choice to</value>
+    <comment>Trust explanation when several certificates can be trusted; the link to the store follows</comment>
+  </data>
+  <data name="CertServerOnlyBefore" xml:space="preserve">
+    <value>JIM can only offer the server's own certificate, which needs trusting again when it is renewed. To trust its certificate authority instead, which survives renewals, add the authority's certificate under</value>
+    <comment>Trust explanation when only the server's own certificate can be trusted; the link to the store follows</comment>
+  </data>
+  <data name="CertServerOnlyAfter" xml:space="preserve">
+    <value>and test again.</value>
+    <comment>Trust explanation: ends after the store link</comment>
+  </data>
+  <data name="CertTrustedStore" xml:space="preserve">
+    <value>Trusted Certificates</value>
+    <comment>Name of the certificate store; the same name is the title of the store's page</comment>
+  </data>
+  <data name="CertReasonUntrusted" xml:space="preserve">
+    <value>Not trusted: nothing in this chain is in {0}</value>
+    <comment>Failure reason when the issuer is not trusted; {0} is the store's name</comment>
+  </data>
+  <data name="CertReasonInvalidChain" xml:space="preserve">
+    <value>Broken chain: a certificate authority in it cannot be relied on</value>
+    <comment>Failure reason for a broken chain</comment>
+  </data>
+  <data name="CertReasonNameMismatch" xml:space="preserve">
+    <value>Wrong name: this certificate was not issued for the host JIM connected to</value>
+    <comment>Failure reason for a name mismatch</comment>
+  </data>
+  <data name="CertReasonExpired" xml:space="preserve">
+    <value>Expired</value>
+    <comment>Failure reason for an expired certificate</comment>
+  </data>
+  <data name="CertReasonNotYetValid" xml:space="preserve">
+    <value>Not valid yet</value>
+    <comment>Failure reason for a certificate not yet valid</comment>
+  </data>
+  <data name="CertReasonNoCertificate" xml:space="preserve">
+    <value>No certificate was offered</value>
+    <comment>Failure reason when the server offered no certificate</comment>
+  </data>
+  <data name="CertReasonNone" xml:space="preserve">
+    <value>No problem found with this certificate</value>
+    <comment>Reason when the certificate is sound</comment>
+  </data>
+  <data name="CertReasonUnrecognised" xml:space="preserve">
+    <value>Refused for an unrecognised reason</value>
+    <comment>Failure reason when the reason is not known</comment>
+  </data>
+  <data name="CertTrustRoot" xml:space="preserve">
+    <value>Trust the root</value>
+    <comment>Button that trusts the root certificate</comment>
+  </data>
+  <data name="CertChooseTrust" xml:space="preserve">
+    <value>Choose what to trust</value>
+    <comment>Button that opens the choice of certificates to trust</comment>
+  </data>
+  <data name="CertTrustThis" xml:space="preserve">
+    <value>Trust this certificate</value>
+    <comment>Button that trusts the certificate</comment>
+  </data>
+  <data name="CertAlreadyTrusted" xml:space="preserve">
+    <value>That certificate was already in the {0} store.</value>
+    <comment>Snackbar when the certificate was already trusted; {0} is the store's name</comment>
+  </data>
+  <data name="CertTrusted" xml:space="preserve">
+    <value>Certificate trusted.</value>
+    <comment>Snackbar after a certificate is trusted</comment>
+  </data>
+  <data name="TrustChooseIntro" xml:space="preserve">
+    <value>Each choice makes this connection work. They differ in how long the decision lasts and in what else it covers.</value>
+    <comment>Intro of the choice step</comment>
+  </data>
+  <data name="TrustRecommended" xml:space="preserve">
+    <value>Recommended</value>
+    <comment>Chip on the recommended certificate</comment>
+  </data>
+  <data name="TrustDurabilityRoot" xml:space="preserve">
+    <value>Survives renewal of every certificate beneath it. Also trusts every other certificate issued under this root.</value>
+    <comment>How long trusting the root lasts</comment>
+  </data>
+  <data name="TrustDurabilityIntermediateDated" xml:space="preserve">
+    <value>Survives renewal of the server's certificate, until this certificate authority's own certificate is renewed, on {0}. Also trusts every certificate it issues.</value>
+    <comment>How long trusting an intermediate lasts, with its renewal date; {0} is the date</comment>
+  </data>
+  <data name="TrustDurabilityIntermediateUndated" xml:space="preserve">
+    <value>Survives renewal of the server's certificate, until this certificate authority's own certificate is renewed. Also trusts every certificate it issues.</value>
+    <comment>How long trusting an intermediate lasts, when its renewal date is unknown</comment>
+  </data>
+  <data name="TrustDurabilityServerDated" xml:space="preserve">
+    <value>This server only. Needs trusting again when its certificate is renewed, on {0}.</value>
+    <comment>How long trusting the server's own certificate lasts, with its renewal date; {0} is the date</comment>
+  </data>
+  <data name="TrustDurabilityServerUndated" xml:space="preserve">
+    <value>This server only. Needs trusting again when its certificate is renewed.</value>
+    <comment>How long trusting the server's own certificate lasts, when its renewal date is unknown</comment>
+  </data>
+  <data name="TrustSourceDownloadedBy" xml:space="preserve">
+    <value>Downloaded from {0}, the address in {1}'s certificate.</value>
+    <comment>Where a downloaded certificate came from and who named the address; {0} is the address, {1} the certificate's name</comment>
+  </data>
+  <data name="TrustSourceDownloaded" xml:space="preserve">
+    <value>Downloaded from {0}.</value>
+    <comment>Where a downloaded certificate came from; {0} is the address</comment>
+  </data>
+  <data name="TrustSourceStore" xml:space="preserve">
+    <value>Already in {0}.</value>
+    <comment>Where a certificate came from when it is already trusted; {0} is the store's name</comment>
+  </data>
+  <data name="TrustSourceOperatingSystem" xml:space="preserve">
+    <value>Found in the operating system's certificate store.</value>
+    <comment>Where a certificate came from when the operating system holds it</comment>
+  </data>
+  <data name="TrustSourceServer" xml:space="preserve">
+    <value>Sent by the server.</value>
+    <comment>Where a certificate came from when the server sent it</comment>
+  </data>
+  <data name="TrustAlsoStored" xml:space="preserve">
+    <value>JIM also adds {0}, which the server does not send, so connections can link {1} to the server's certificate.</value>
+    <comment>Note on certificates JIM stores beside the chosen one; {0} is the list of their names, {1} the chosen certificate's name</comment>
+  </data>
+  <data name="TrustListAnd" xml:space="preserve">
+    <value>and</value>
+    <comment>Word joining the last two names in a list</comment>
+  </data>
+  <data name="TrustWillTrustThis" xml:space="preserve">
+    <value>JIM will trust this certificate,</value>
+    <comment>First sentence when trusting the server's own certificate</comment>
+  </data>
+  <data name="TrustWillTrustEvery" xml:space="preserve">
+    <value>JIM will trust every certificate {0} issues,</value>
+    <comment>First sentence when trusting a certificate authority; {0} is its name</comment>
+  </data>
+  <data name="TrustUntilRemoveBefore" xml:space="preserve">
+    <value>until you remove it from</value>
+    <comment>Sentence before the link to the Trusted Certificates store</comment>
+  </data>
+  <data name="TrustUntilRemoveAfter" xml:space="preserve">
+    <value>.</value>
+    <comment>Closes the sentence after the store link</comment>
+  </data>
+  <data name="TrustCheckThumbprint" xml:space="preserve">
+    <value>Check the thumbprint against the one the server's administrator gives you before you continue.</value>
+    <comment>Last sentence of the confirmation</comment>
+  </data>
+  <data name="TrustTableTrusting" xml:space="preserve">
+    <value>Trusting</value>
+    <comment>Table row label naming the certificate being trusted</comment>
+  </data>
+  <data name="TrustPresentedBy" xml:space="preserve">
+    <value>Presented by</value>
+    <comment>Table row label naming the server that presents the certificate</comment>
+  </data>
+  <data name="TrustThumbprintToCheck" xml:space="preserve">
+    <value>Thumbprint to check</value>
+    <comment>Label of the thumbprint the administrator compares</comment>
+  </data>
+  <data name="TrustChangeReasonLabel" xml:space="preserve">
+    <value>Change reason</value>
+    <comment>Label of the change reason field</comment>
+  </data>
+  <data name="TrustChangeReasonHelp" xml:space="preserve">
+    <value>Recorded on the Activity alongside your name.</value>
+    <comment>Helper text of the change reason field</comment>
+  </data>
+  <data name="TrustRefusedBody" xml:space="preserve">
+    <value>{0} is presenting a different certificate from the one shown on this failure, so JIM has not trusted anything. This is expected if the certificate was renewed; investigate if it was not.</value>
+    <comment>Explanation when the server presents a different certificate; {0} is the host</comment>
+  </data>
+  <data name="TrustExpectedLabel" xml:space="preserve">
+    <value>The one you confirmed</value>
+    <comment>Label of the thumbprint the administrator confirmed</comment>
+  </data>
+  <data name="TrustPresentedLabel" xml:space="preserve">
+    <value>Presented now</value>
+    <comment>Label of the thumbprint the server presents now</comment>
+  </data>
+  <data name="TrustBusy" xml:space="preserve">
+    <value>Trusting</value>
+    <comment>Text beside the spinner while the certificate is trusted</comment>
+  </data>
+  <data name="TrustButton" xml:space="preserve">
+    <value>Trust certificate</value>
+    <comment>Button that trusts the certificate</comment>
+  </data>
+  <data name="TrustContinue" xml:space="preserve">
+    <value>Continue</value>
+    <comment>Button that moves from choosing to confirming</comment>
+  </data>
+  <data name="TrustTitleChoose" xml:space="preserve">
+    <value>Which certificate should JIM trust?</value>
+    <comment>Dialog heading on the choice step</comment>
+  </data>
+  <data name="TrustTitleRefused" xml:space="preserve">
+    <value>The certificate has changed</value>
+    <comment>Dialog heading when the certificate changed</comment>
+  </data>
+  <data name="TrustTitleFailed" xml:space="preserve">
+    <value>JIM could not trust this certificate</value>
+    <comment>Dialog heading when trusting failed</comment>
+  </data>
+  <data name="TrustTitleConfirm" xml:space="preserve">
+    <value>Trust {0}?</value>
+    <comment>Dialog heading on the confirmation step; {0} is the certificate's name</comment>
+  </data>
+  <data name="TrustFailedFallback" xml:space="preserve">
+    <value>JIM could not trust this certificate.</value>
+    <comment>Message when trusting failed without a reason</comment>
+  </data>
+  <data name="TrustReasonHost" xml:space="preserve">
+    <value>Unblocking the connection to {0}.</value>
+    <comment>Prefilled change reason when there is no Connected System name; {0} is the host</comment>
+  </data>
+  <data name="TrustReasonConnectedSystem" xml:space="preserve">
+    <value>Unblocking the connection test for the {0} Connected System.</value>
+    <comment>Prefilled change reason; {0} is the Connected System's name</comment>
+  </data>
+  <data name="TrustDialogTitle" xml:space="preserve">
+    <value>Trust this certificate?</value>
+    <comment>Accessible title of the trust dialog</comment>
+  </data>
 </root>

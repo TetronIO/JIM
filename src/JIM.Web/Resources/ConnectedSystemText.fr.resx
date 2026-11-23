@@ -1049,4 +1049,298 @@
   <data name="SettingsTabSavedWithWarningsSnackbar" xml:space="preserve">
     <value>Vos modifications de paramètres ont été enregistrées, avec des avertissements.</value>
   </data>
+  <data name="CsListHeading" xml:space="preserve">
+    <value>Systèmes connectés</value>
+  </data>
+  <data name="CsListInfoBody" xml:space="preserve">
+    <value>JIM importe des données depuis les systèmes connectés et en exporte vers eux, à l’aide de connecteurs.</value>
+  </data>
+  <data name="CsListInfoEmpty" xml:space="preserve">
+    <value>Configurez au moins un système connecté pour commencer.</value>
+  </data>
+  <data name="CsListTrackingOff" xml:space="preserve">
+    <value>Le suivi des modifications de configuration est désactivé : JIM ne peut donc pas savoir quels systèmes connectés ont des modifications de configuration en attente d’une synchronisation complète.</value>
+  </data>
+  <data name="CsListToggleLabel" xml:space="preserve">
+    <value>Systèmes connectés ou connecteurs</value>
+  </data>
+  <data name="CsListCreate" xml:space="preserve">
+    <value>Créer un système connecté</value>
+  </data>
+  <data name="CsListNounSingular" xml:space="preserve">
+    <value>système connecté</value>
+  </data>
+  <data name="CsListNounPlural" xml:space="preserve">
+    <value>systèmes connectés</value>
+  </data>
+  <data name="CsListColumnConnector" xml:space="preserve">
+    <value>Connecteur</value>
+  </data>
+  <data name="CsListColumnStats" xml:space="preserve">
+    <value>Statistiques</value>
+  </data>
+  <data name="CsListColumnPasswordSync" xml:space="preserve">
+    <value>Synchro. des mots de passe</value>
+  </data>
+  <data name="CsListColumnAction" xml:space="preserve">
+    <value>Action</value>
+  </data>
+  <data name="CsListObjectsTooltip" xml:space="preserve">
+    <value>Objets</value>
+  </data>
+  <data name="CsListConnectedObjectsTooltip" xml:space="preserve">
+    <value>Objets connectés ({0} %)</value>
+  </data>
+  <data name="CsListPendingExportsTooltip" xml:space="preserve">
+    <value>Exportations en attente ({0} %)</value>
+  </data>
+  <data name="CsListViewObjects" xml:space="preserve">
+    <value>Afficher les objets</value>
+  </data>
+  <data name="CsListNoMatch" xml:space="preserve">
+    <value>Aucun système connecté ne correspond à « {0} ».</value>
+  </data>
+  <data name="CsListNoMatchHint" xml:space="preserve">
+    <value>Essayez un autre terme de recherche, ou effacez la recherche.</value>
+  </data>
+  <data name="CsListNoneYet" xml:space="preserve">
+    <value>Aucun système connecté pour le moment</value>
+  </data>
+  <data name="CsListNoneYetHint" xml:space="preserve">
+    <value>Utilisez le bouton Créer un système connecté pour commencer.</value>
+  </data>
+  <data name="CsListFilterAny" xml:space="preserve">
+    <value>Tous</value>
+  </data>
+  <data name="CsListFilterNeedsAttention" xml:space="preserve">
+    <value>Nécessite une action</value>
+  </data>
+  <data name="CsListFilterSwitchedOff" xml:space="preserve">
+    <value>Désactivée</value>
+  </data>
+  <data name="CsListFilterNotConfigured" xml:space="preserve">
+    <value>Non configurée</value>
+  </data>
+  <data name="CsListFilterNotSupported" xml:space="preserve">
+    <value>Non prise en charge</value>
+  </data>
+  <data name="CertEyebrow" xml:space="preserve">
+    <value>Certificat présenté par {0}:{1}</value>
+  </data>
+  <data name="CertSelfSigned" xml:space="preserve">
+    <value>Auto-signé</value>
+  </data>
+  <data name="CertIssuedBy" xml:space="preserve">
+    <value>Émis par {0}</value>
+  </data>
+  <data name="CertFieldIssuedFor" xml:space="preserve">
+    <value>Émis pour</value>
+  </data>
+  <data name="CertFieldValid" xml:space="preserve">
+    <value>Validité</value>
+  </data>
+  <data name="CertValidRange" xml:space="preserve">
+    <value>du {0} au {1}</value>
+  </data>
+  <data name="CertUnknownDate" xml:space="preserve">
+    <value>inconnue</value>
+  </data>
+  <data name="CertFieldThumbprint" xml:space="preserve">
+    <value>Empreinte</value>
+  </data>
+  <data name="CertFieldSignature" xml:space="preserve">
+    <value>Signature</value>
+  </data>
+  <data name="CertChainHeading" xml:space="preserve">
+    <value>Chaîne de certificats</value>
+  </data>
+  <data name="CertChainMissing" xml:space="preserve">
+    <value>{0} et au-dessus</value>
+  </data>
+  <data name="CertChainNotSent" xml:space="preserve">
+    <value>Non envoyé, et non téléchargeable</value>
+  </data>
+  <data name="CertChainNotFound" xml:space="preserve">
+    <value>Introuvable</value>
+  </data>
+  <data name="CertChainReferenceNote" xml:space="preserve">
+    <value>Cette connexion n’accepte que la racine ; le reste de la chaîne est donc affiché à titre de référence.</value>
+  </data>
+  <data name="CertSelfSignedBefore" xml:space="preserve">
+    <value>Auto-signé : il n’existe donc aucune autorité distincte à approuver. Ajoute ce certificat seul au magasin</value>
+  </data>
+  <data name="CertSelfSignedAfter" xml:space="preserve">
+    <value>; il devra être approuvé de nouveau lors de son renouvellement.</value>
+  </data>
+  <data name="CertRootBefore" xml:space="preserve">
+    <value>Approuver la racine reste valable lors des renouvellements de tout ce qui se trouve en dessous. JIM relit d’abord la chaîne depuis le serveur, puis ajoute la racine au magasin</value>
+  </data>
+  <data name="CertAfterStoreLink" xml:space="preserve">
+    <value>, et consigne qui l’a approuvée et pourquoi.</value>
+  </data>
+  <data name="CertChoiceBefore" xml:space="preserve">
+    <value>Approuvez n’importe quel certificat de cette chaîne. Approuver la racine reste valable lors des renouvellements de tout ce qui se trouve en dessous. JIM relit d’abord la chaîne depuis le serveur, puis ajoute votre choix au magasin</value>
+  </data>
+  <data name="CertServerOnlyBefore" xml:space="preserve">
+    <value>JIM ne peut proposer que le certificat propre du serveur, qui devra être approuvé de nouveau lors de son renouvellement. Pour approuver plutôt son autorité de certification, qui survit aux renouvellements, ajoutez le certificat de l’autorité sous</value>
+  </data>
+  <data name="CertServerOnlyAfter" xml:space="preserve">
+    <value>puis testez de nouveau.</value>
+  </data>
+  <data name="CertTrustedStore" xml:space="preserve">
+    <value>Certificats approuvés</value>
+  </data>
+  <data name="CertReasonUntrusted" xml:space="preserve">
+    <value>Non approuvé : aucun élément de cette chaîne ne figure dans {0}</value>
+  </data>
+  <data name="CertReasonInvalidChain" xml:space="preserve">
+    <value>Chaîne rompue : une autorité de certification de cette chaîne ne peut pas être fiable</value>
+  </data>
+  <data name="CertReasonNameMismatch" xml:space="preserve">
+    <value>Mauvais nom : ce certificat n’a pas été émis pour l’hôte auquel JIM s’est connecté</value>
+  </data>
+  <data name="CertReasonExpired" xml:space="preserve">
+    <value>Expiré</value>
+  </data>
+  <data name="CertReasonNotYetValid" xml:space="preserve">
+    <value>Pas encore valide</value>
+  </data>
+  <data name="CertReasonNoCertificate" xml:space="preserve">
+    <value>Aucun certificat n’a été proposé</value>
+  </data>
+  <data name="CertReasonNone" xml:space="preserve">
+    <value>Aucun problème détecté avec ce certificat</value>
+  </data>
+  <data name="CertReasonUnrecognised" xml:space="preserve">
+    <value>Refusé pour une raison non reconnue</value>
+  </data>
+  <data name="CertTrustRoot" xml:space="preserve">
+    <value>Approuver la racine</value>
+  </data>
+  <data name="CertChooseTrust" xml:space="preserve">
+    <value>Choisir ce qu’il faut approuver</value>
+  </data>
+  <data name="CertTrustThis" xml:space="preserve">
+    <value>Approuver ce certificat</value>
+  </data>
+  <data name="CertAlreadyTrusted" xml:space="preserve">
+    <value>Ce certificat figurait déjà dans le magasin {0}.</value>
+  </data>
+  <data name="CertTrusted" xml:space="preserve">
+    <value>Certificat approuvé.</value>
+  </data>
+  <data name="TrustChooseIntro" xml:space="preserve">
+    <value>Chacun de ces choix permet à cette connexion de fonctionner. Ils diffèrent par la durée de la décision et par ce qu’elle couvre d’autre.</value>
+  </data>
+  <data name="TrustRecommended" xml:space="preserve">
+    <value>Recommandé</value>
+  </data>
+  <data name="TrustDurabilityRoot" xml:space="preserve">
+    <value>Reste valable lors du renouvellement de chaque certificat qui se trouve en dessous. Approuve aussi chaque autre certificat émis sous cette racine.</value>
+  </data>
+  <data name="TrustDurabilityIntermediateDated" xml:space="preserve">
+    <value>Reste valable lors du renouvellement du certificat du serveur, jusqu’au renouvellement du certificat de cette autorité de certification, le {0}. Approuve aussi chaque certificat qu’elle émet.</value>
+  </data>
+  <data name="TrustDurabilityIntermediateUndated" xml:space="preserve">
+    <value>Reste valable lors du renouvellement du certificat du serveur, jusqu’au renouvellement du certificat de cette autorité de certification. Approuve aussi chaque certificat qu’elle émet.</value>
+  </data>
+  <data name="TrustDurabilityServerDated" xml:space="preserve">
+    <value>Ce serveur uniquement. Devra être approuvé de nouveau lors du renouvellement de son certificat, le {0}.</value>
+  </data>
+  <data name="TrustDurabilityServerUndated" xml:space="preserve">
+    <value>Ce serveur uniquement. Devra être approuvé de nouveau lors du renouvellement de son certificat.</value>
+  </data>
+  <data name="TrustSourceDownloadedBy" xml:space="preserve">
+    <value>Téléchargé depuis {0}, l’adresse figurant dans le certificat de {1}.</value>
+  </data>
+  <data name="TrustSourceDownloaded" xml:space="preserve">
+    <value>Téléchargé depuis {0}.</value>
+  </data>
+  <data name="TrustSourceStore" xml:space="preserve">
+    <value>Déjà dans {0}.</value>
+  </data>
+  <data name="TrustSourceOperatingSystem" xml:space="preserve">
+    <value>Trouvé dans le magasin de certificats du système d’exploitation.</value>
+  </data>
+  <data name="TrustSourceServer" xml:space="preserve">
+    <value>Envoyé par le serveur.</value>
+  </data>
+  <data name="TrustAlsoStored" xml:space="preserve">
+    <value>JIM ajoute aussi {0}, que le serveur n’envoie pas, afin que les connexions puissent relier {1} au certificat du serveur.</value>
+  </data>
+  <data name="TrustListAnd" xml:space="preserve">
+    <value>et</value>
+  </data>
+  <data name="TrustWillTrustThis" xml:space="preserve">
+    <value>JIM approuvera ce certificat,</value>
+  </data>
+  <data name="TrustWillTrustEvery" xml:space="preserve">
+    <value>JIM approuvera chaque certificat émis par {0},</value>
+  </data>
+  <data name="TrustUntilRemoveBefore" xml:space="preserve">
+    <value>jusqu’à ce que vous le retiriez de</value>
+  </data>
+  <data name="TrustUntilRemoveAfter" xml:space="preserve">
+    <value>.</value>
+  </data>
+  <data name="TrustCheckThumbprint" xml:space="preserve">
+    <value>Comparez l’empreinte avec celle que vous donne l’administrateur du serveur avant de continuer.</value>
+  </data>
+  <data name="TrustTableTrusting" xml:space="preserve">
+    <value>Certificat approuvé</value>
+  </data>
+  <data name="TrustPresentedBy" xml:space="preserve">
+    <value>Présenté par</value>
+  </data>
+  <data name="TrustThumbprintToCheck" xml:space="preserve">
+    <value>Empreinte à vérifier</value>
+  </data>
+  <data name="TrustChangeReasonLabel" xml:space="preserve">
+    <value>Motif de la modification</value>
+  </data>
+  <data name="TrustChangeReasonHelp" xml:space="preserve">
+    <value>Consigné dans l’activité avec votre nom.</value>
+  </data>
+  <data name="TrustRefusedBody" xml:space="preserve">
+    <value>{0} présente un certificat différent de celui affiché lors de cet échec, si bien que JIM n’a rien approuvé. C’est normal si le certificat a été renouvelé ; à examiner dans le cas contraire.</value>
+  </data>
+  <data name="TrustExpectedLabel" xml:space="preserve">
+    <value>Celui que vous avez confirmé</value>
+  </data>
+  <data name="TrustPresentedLabel" xml:space="preserve">
+    <value>Présenté maintenant</value>
+  </data>
+  <data name="TrustBusy" xml:space="preserve">
+    <value>Approbation en cours…</value>
+  </data>
+  <data name="TrustButton" xml:space="preserve">
+    <value>Approuver le certificat</value>
+  </data>
+  <data name="TrustContinue" xml:space="preserve">
+    <value>Continuer</value>
+  </data>
+  <data name="TrustTitleChoose" xml:space="preserve">
+    <value>Quel certificat JIM doit-il approuver ?</value>
+  </data>
+  <data name="TrustTitleRefused" xml:space="preserve">
+    <value>Le certificat a changé</value>
+  </data>
+  <data name="TrustTitleFailed" xml:space="preserve">
+    <value>JIM n’a pas pu approuver ce certificat</value>
+  </data>
+  <data name="TrustTitleConfirm" xml:space="preserve">
+    <value>Approuver {0} ?</value>
+  </data>
+  <data name="TrustFailedFallback" xml:space="preserve">
+    <value>JIM n’a pas pu approuver ce certificat.</value>
+  </data>
+  <data name="TrustReasonHost" xml:space="preserve">
+    <value>Déblocage de la connexion à {0}.</value>
+  </data>
+  <data name="TrustReasonConnectedSystem" xml:space="preserve">
+    <value>Déblocage du test de connexion du système connecté {0}.</value>
+  </data>
+  <data name="TrustDialogTitle" xml:space="preserve">
+    <value>Approuver ce certificat ?</value>
+  </data>
 </root>

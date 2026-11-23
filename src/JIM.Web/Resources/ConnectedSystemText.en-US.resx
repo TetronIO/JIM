@@ -122,4 +122,7 @@
   <data name="SettingsTabPasswordsIntro" xml:space="preserve">
     <value>These apply to every password JIM sends to this Connected System, whether it is the first password on a Connected System Object JIM creates, one you set by hand, or a password change synchronized from elsewhere.</value>
   </data>
+  <data name="CsListTrackingOff" xml:space="preserve">
+    <value>Configuration change tracking is switched off, so JIM cannot tell which Connected Systems have configuration changes waiting for a Full Synchronization.</value>
+  </data>
 </root>

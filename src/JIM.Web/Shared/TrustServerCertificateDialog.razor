@@ -29,8 +29,7 @@
             case Step.Choose:
                 <MudStack Spacing="4">
                     <MudText Typo="Typo.body1">
-                        Each choice makes this connection work. They differ in how long the decision lasts and in what
-                        else it covers.
+                        @ConnectedSystemText.TrustChooseIntro
                     </MudText>
                     <MudRadioGroup T="string" @bind-Value="_selectedThumbprint">
                         @foreach (var option in _options)
@@ -41,7 +40,7 @@
                                         @option.CommonName
                                         @if (option.IsRecommended)
                                         {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text" Class="ml-1">Recommended</MudChip>
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text" Class="ml-1">@ConnectedSystemText.TrustRecommended</MudChip>
                                         }
                                     </div>
                                     <div class="jim-trust-option-note">@DescribeDurability(option)</div>
@@ -61,13 +60,13 @@
             case Step.Confirm:
                 <MudStack Spacing="4">
                     <MudText Typo="Typo.body1">
-                        JIM will trust @(Selected.Role == ServerCertificateChainRole.Server ? "this certificate" : $"every certificate {Selected.CommonName} issues"),
-                        until you remove it from <MudLink Href="/admin/certificates">Trusted Certificates</MudLink>.
+                        @(Selected.Role == ServerCertificateChainRole.Server ? ConnectedSystemText.TrustWillTrustThis : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.TrustWillTrustEvery, Selected.CommonName))
+                        @ConnectedSystemText.TrustUntilRemoveBefore <MudLink Href="/admin/certificates">@ConnectedSystemText.CertTrustedStore</MudLink>@ConnectedSystemText.TrustUntilRemoveAfter
                         @if (Selected.Role == ServerCertificateChainRole.Server)
                         {
                             <text>@DescribeDurability(Selected)</text>
                         }
-                        Check the thumbprint against the one the server's administrator gives you before you continue.
+                        @ConnectedSystemText.TrustCheckThumbprint
                     </MudText>
 
                     @if (Selected.AlsoStored.Count > 0)
@@ -78,11 +77,11 @@
                     <MudSimpleTable Dense="true" Elevation="0" Outlined="true">
                         <tbody>
                             <tr>
-                                <td class="mud-text-secondary">Trusting</td>
+                                <td class="mud-text-secondary">@ConnectedSystemText.TrustTableTrusting</td>
                                 <td>@Selected.CommonName</td>
                             </tr>
                             <tr>
-                                <td class="mud-text-secondary">Presented by</td>
+                                <td class="mud-text-secondary">@ConnectedSystemText.TrustPresentedBy</td>
                                 <td>@Diagnostic.Host:@Diagnostic.Port</td>
                             </tr>
                         </tbody>
@@ -91,29 +90,27 @@
                     @* The thumbprint gets its own full-width block: it is the value being compared by eye, and it
                        must not wrap for the comparison to be easy. *@
                     <div class="jim-trust-compare">
-                        <div class="jim-trust-compare-label">Thumbprint to check</div>
+                        <div class="jim-trust-compare-label">@ConnectedSystemText.TrustThumbprintToCheck</div>
                         <div class="jim-trust-compare-value">@CertificateDisplay.FormatThumbprint(_selectedThumbprint)</div>
                     </div>
 
-                    <MudTextField @bind-Value="_changeReason" Label="Change reason" Variant="Variant.Outlined"
+                    <MudTextField @bind-Value="_changeReason" Label="@ConnectedSystemText.TrustChangeReasonLabel" Variant="Variant.Outlined"
                                   Lines="2" MaxLines="6" Sizing="InputSizing.Auto"
-                                  HelperText="Recorded on the Activity alongside your name." />
+                                  HelperText="@ConnectedSystemText.TrustChangeReasonHelp" />
                 </MudStack>
                 break;
 
             case Step.Refused:
                 <MudStack Spacing="4">
                     <MudText Typo="Typo.body1">
-                        @Diagnostic.Host is presenting a different certificate from the one shown on this failure, so
-                        JIM has not trusted anything. This is expected if the certificate was renewed; investigate if
-                        it was not.
+                        @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.TrustRefusedBody, Diagnostic.Host)
                     </MudText>
                     <div class="jim-trust-compare">
-                        <div class="jim-trust-compare-label">The one you confirmed</div>
+                        <div class="jim-trust-compare-label">@ConnectedSystemText.TrustExpectedLabel</div>
                         <div class="jim-trust-compare-value">@CertificateDisplay.FormatThumbprint(_expectedThumbprint)</div>
                     </div>
                     <div class="jim-trust-compare jim-trust-compare-now">
-                        <div class="jim-trust-compare-label">Presented now</div>
+                        <div class="jim-trust-compare-label">@ConnectedSystemText.TrustPresentedLabel</div>
                         <div class="jim-trust-compare-value">@CertificateDisplay.FormatThumbprint(_presentedThumbprint)</div>
                     </div>
                 </MudStack>
@@ -125,11 +122,11 @@
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel" DropShadow="false">@(_step is Step.Refused or Step.Failed ? "Close" : "Cancel")</MudButton>
+        <MudButton OnClick="Cancel" DropShadow="false">@(_step is Step.Refused or Step.Failed ? CommonText.Close : CommonText.Cancel)</MudButton>
 
         @if (_step == Step.Choose)
         {
-            <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false" OnClick="Continue">Continue</MudButton>
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false" OnClick="Continue">@ConnectedSystemText.TrustContinue</MudButton>
         }
         else if (_step == Step.Confirm)
         {
@@ -137,11 +134,11 @@
                 @if (_busy)
                 {
                     <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                    <span class="ms-2">Trusting</span>
+                    <span class="ms-2">@ConnectedSystemText.TrustBusy</span>
                 }
                 else
                 {
-                    <text>Trust certificate</text>
+                    <text>@ConnectedSystemText.TrustButton</text>
                 }
             </MudButton>
         }
@@ -202,25 +199,27 @@
         _step = _options.Count > 1 ? Step.Choose : Step.Confirm;
 
         _changeReason = string.IsNullOrEmpty(ConnectedSystemName)
-            ? $"Unblocking the connection to {Diagnostic.Host}."
-            : $"Unblocking the connection test for the {ConnectedSystemName} Connected System.";
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.TrustReasonHost, Diagnostic.Host)
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.TrustReasonConnectedSystem, ConnectedSystemName);
     }
 
     private string Title => _step switch
     {
-        Step.Choose => "Which certificate should JIM trust?",
-        Step.Refused => "The certificate has changed",
-        Step.Failed => "JIM could not trust this certificate",
-        _ => $"Trust {Selected.CommonName}?"
+        Step.Choose => ConnectedSystemText.TrustTitleChoose,
+        Step.Refused => ConnectedSystemText.TrustTitleRefused,
+        Step.Failed => ConnectedSystemText.TrustTitleFailed,
+        _ => string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.TrustTitleConfirm, Selected.CommonName)
     };
 
     private static string DescribeDurability(ServerCertificateTrustOption option) => option.Role switch
     {
-        ServerCertificateChainRole.Root =>
-            "Survives renewal of every certificate beneath it. Also trusts every other certificate issued under this root.",
-        ServerCertificateChainRole.Intermediate =>
-            $"Survives renewal of the server's certificate, until this certificate authority's own certificate is renewed{FormatRenewal(option.Element.ValidTo)}. Also trusts every certificate it issues.",
-        _ => $"This server only. Needs trusting again when its certificate is renewed{FormatRenewal(option.Element.ValidTo)}."
+        ServerCertificateChainRole.Root => ConnectedSystemText.TrustDurabilityRoot,
+        ServerCertificateChainRole.Intermediate => RenewalDate(option.Element.ValidTo) is { } intermediateRenewal
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.TrustDurabilityIntermediateDated, intermediateRenewal)
+            : ConnectedSystemText.TrustDurabilityIntermediateUndated,
+        _ => RenewalDate(option.Element.ValidTo) is { } serverRenewal
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.TrustDurabilityServerDated, serverRenewal)
+            : ConnectedSystemText.TrustDurabilityServerUndated
     };
 
     /// <summary>
@@ -230,17 +229,19 @@
     private static string DescribeSource(ServerCertificateTrustOption option) => option.Element.Source switch
     {
         ServerCertificateChainElementSource.Downloaded when option.AddressGivenBy != null =>
-            $"Downloaded from {option.Element.DownloadedFrom}, the address in {option.AddressGivenBy}'s certificate.",
-        ServerCertificateChainElementSource.Downloaded => $"Downloaded from {option.Element.DownloadedFrom}.",
-        ServerCertificateChainElementSource.JimCertificateStore => "Already in Trusted Certificates.",
-        ServerCertificateChainElementSource.OperatingSystem => "Found in the operating system's certificate store.",
-        _ => "Sent by the server."
+            string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.TrustSourceDownloadedBy, option.Element.DownloadedFrom, option.AddressGivenBy),
+        ServerCertificateChainElementSource.Downloaded => string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.TrustSourceDownloaded, option.Element.DownloadedFrom),
+        ServerCertificateChainElementSource.JimCertificateStore => string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.TrustSourceStore, ConnectedSystemText.CertTrustedStore),
+        ServerCertificateChainElementSource.OperatingSystem => ConnectedSystemText.TrustSourceOperatingSystem,
+        _ => ConnectedSystemText.TrustSourceServer
     };
 
     private static string DescribeAlsoStored(ServerCertificateTrustOption option) =>
-        $"JIM also adds {string.Join(" and ", option.AlsoStored.Select(element => CertificateDisplay.FormatDistinguishedName(element.Subject)))}, which the server does not send, so connections can link {option.CommonName} to the server's certificate.";
+        string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.TrustAlsoStored,
+            string.Join($" {ConnectedSystemText.TrustListAnd} ", option.AlsoStored.Select(element => CertificateDisplay.FormatDistinguishedName(element.Subject))),
+            option.CommonName);
 
-    private static string FormatRenewal(DateTime validTo) => validTo == default ? string.Empty : $", on {validTo:d MMM yyyy}";
+    private static string? RenewalDate(DateTime validTo) => validTo == default ? null : validTo.ToString("d MMM yyyy", System.Globalization.CultureInfo.CurrentCulture);
 
     private void Continue() => MoveTo(Step.Confirm);
 
@@ -281,7 +282,7 @@
                     return;
 
                 default:
-                    _failureMessage = result.Message ?? "JIM could not trust this certificate.";
+                    _failureMessage = result.Message ?? ConnectedSystemText.TrustFailedFallback;
                     MoveTo(Step.Failed);
                     return;
             }
@@ -322,7 +323,7 @@
         };
 
         // The dialog renders its own heading, which changes between steps; this is the accessible fallback only.
-        var dialog = await dialogService.ShowAsync<TrustServerCertificateDialog>("Trust this certificate?", parameters, options);
+        var dialog = await dialogService.ShowAsync<TrustServerCertificateDialog>(ConnectedSystemText.TrustDialogTitle, parameters, options);
         var result = await dialog.Result;
 
         return result is null or { Canceled: true } ? null : result.Data as ServerCertificateTrustOutcome?;
