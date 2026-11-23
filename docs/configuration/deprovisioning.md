@@ -12,14 +12,14 @@ Provisioning's counterpart: each export rule's **Deprovisioning Action** determi
 ```jim-diagram
 archetype: lifecycle
 title: An export rule's scope, as two states
-desc: 'A Metaverse Object is either out of or in the scope of an export Synchronisation Rule. When it enters scope, JIM provisions an account in the target Connected System, if the rule provisions. When it leaves scope, or is deleted, the rule''s Deprovisioning Action applies: Disconnect breaks the join and leaves the account in place, returning the object to out of scope, and Delete removes the account from the target system on the next export run.'
+desc: 'A Metaverse Object is either out of or in the scope of an export Synchronisation Rule. When it enters scope, JIM provisions an account in the target Connected System, if the rule provisions. When it leaves scope, or is deleted, the rule''s Deprovisioning Action applies: Disconnect breaks the join and leaves the account in place, Disable disables the account and then breaks the join, both returning the object to out of scope, and Delete removes the account from the target system on the next export run.'
 start: {label: Metaverse Object}
 states:
 - {id: out, label: Out of scope, sub: no account owed}
 - {id: in, label: In scope, sub: 'account provisioned and kept current'}
 transitions:
 - {from: out, to: in, label: enters scope, note: provisioned if the rule provisions}
-- {from: in, to: out, label: 'leaves scope: Disconnect', note: 'join broken; account stays'}
+- {from: in, to: out, label: 'leaves: Disconnect, Disable', note: 'join broken; account stays'}
 end: {from: in, label: 'leaves scope: Delete', state: {label: Account deleted, sub: on the next export run}}
 ```
 
@@ -28,28 +28,33 @@ What happens on leaving depends first on whether JIM ever sent the account:
 ```jim-diagram
 archetype: decision
 title: What happens when a Metaverse Object leaves an export rule's scope
-desc: 'When a Metaverse Object leaves an export rule''s scope or is deleted, it matters first whether a Create was ever sent for its Connected System Object. If not, JIM cancels the provisioning: the unsent Create Pending Export and the Connected System Object are removed, and nothing is exported. If it was, the Deprovisioning Action decides, and Delete wins when several export rules cover the object. Disconnect, the default, breaks the join and leaves the object in place in the Connected System; Delete queues a delete that removes it on the next export run.'
+desc: 'When a Metaverse Object leaves an export rule''s scope or is deleted, it matters first whether a Create was ever sent for its Connected System Object. If not, JIM cancels the provisioning: the unsent Create Pending Export and the Connected System Object are removed, and nothing is exported. If it was, the Deprovisioning Action decides, and the strongest wins when several export rules cover the object: Delete, then Disable, then Disconnect. Disconnect, the default, breaks the join and leaves the object in place in the Connected System; Disable queues a disable, and once the next export run has disabled the object JIM breaks the join; Delete queues a delete that removes it on the next export run.'
 start: {label: Leaves scope or is deleted}
 questions:
 - {id: sent, label: 'Create sent?', sub: confirmed or not}
-- {id: action, label: Deprovisioning Action, sub: Delete wins across export rules}
+- {id: action, label: Deprovisioning Action, sub: the strongest wins across export rules}
 outcomes:
 - {id: cancelled, label: Provisioning cancelled, sub: unsent Create and object removed}
 - {id: disconnected, label: Disconnected, sub: join broken; object left in place}
+- {id: disabled, label: Disable queued, sub: disabled next export run; then disconnected}
 - {id: deleted, label: Delete queued, sub: removed on the next export run}
 answers:
 - {from: sent, to: cancelled, label: 'no: Pending Provisioning'}
 - {from: sent, to: action, label: 'yes'}
 - {from: action, to: disconnected, label: Disconnect (default)}
+- {from: action, to: disabled, label: Disable}
 - {from: action, to: deleted, label: Delete}
 ```
 
 - **Disconnect** (default): JIM breaks the join and leaves the object in place in the Connected System. Nothing is exported: a change queued for the object while it was in scope, and not yet exported, is withdrawn by the next export run rather than written to an object JIM no longer manages.
+- **Disable**: JIM queues a disable, and the next export run disables the object the way its Connected System disables an account; JIM then breaks the join and leaves the object in place, unable to sign in. If the person comes back into scope, an [Object Matching Rule](object-matching-rules.md) on the Connected System rejoins them to the disabled account, and the rule's Attribute Flows re-enable it where they flow its enabled state (`userAccountControl` on Active Directory, `accountEnabled` on Microsoft Entra ID); on OpenLDAP and 389 Directory Server, flow or clear the lock attribute, or the account stays locked. Only offered where the Connector can disable an account: the [LDAP Connector](../connectors/jim-ldap-connector.md) on Active Directory, Samba AD, 389 Directory Server and OpenLDAP, and the [Microsoft Entra ID Connector](../connectors/jim-graph-connector.md) for users. A group cannot be disabled, so a rule for groups deprovisions with Delete or Disconnect.
 - **Delete**: JIM queues a delete so the object is removed from the Connected System on the next export run.
 
-The action applies regardless of how the object came to be joined: it makes no difference whether JIM provisioned it or matched (joined) a pre-existing object. If several export rules cover the same object with different actions, Delete wins.
+A Run Profile's **Max Deletes** limit counts disables as well as deletes.
 
-**Changing the action** reaches objects that have already left the rule's scope at the next synchronisation (see [below](#when-a-change-to-an-export-rule-takes-effect)), not only future leavers. Switching from Delete to Disconnect withdraws each delete the rule queued that has not been exported yet, including one waiting to be retried after a failure, and disconnects the object instead, so its account stays. A delete already exported, or being exported at that moment, goes ahead: the account is removed as queued and the next import confirms it. Switching from Disconnect to Delete queues deletes for joined objects already outside the rule's scope.
+The action applies regardless of how the object came to be joined: it makes no difference whether JIM provisioned it or matched (joined) a pre-existing object. If several export rules cover the same object with different actions, the strongest wins: Delete, then Disable, then Disconnect.
+
+**Changing the action** reaches objects that have already left the rule's scope at the next synchronisation (see [below](#when-a-change-to-an-export-rule-takes-effect)), not only future leavers. Switching from Delete or Disable to Disconnect withdraws each delete or disable the rule queued that has not been exported yet, including one waiting to be retried after a failure, and disconnects the object instead, so its account stays as it is. One already exported, or being exported at that moment, goes ahead as queued. Switching between Delete and Disable replaces a queued delete or disable not yet exported with the other. Switching from Disconnect to Delete or Disable queues deletes or disables for joined objects already outside the rule's scope.
 
 One case sits outside the action altogether: provisioning that was **never exported**. If JIM has staged a new object for the Connected System (a Connected System Object in **Pending Provisioning** status, carrying a Create Pending Export) and the Metaverse Object leaves scope or is deleted before any export has run, there is nothing in the Connected System for either action to apply to. JIM cancels the provisioning instead: the unsent Create Pending Export and the Connected System Object are removed together, and nothing is exported. Once a Create has been sent, confirmed or not, the object may exist in the Connected System and the Deprovisioning Action applies as described above. The cancellation is reported on the Activity as a [**Provisioning cancelled**](activity-execution-items.md) outcome, so it is visible in the causality tree and Table view rather than only in logs.
 

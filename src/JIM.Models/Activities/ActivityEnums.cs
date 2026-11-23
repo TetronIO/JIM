@@ -461,7 +461,14 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// detail message names both rules. Recorded on the object's item beside any Update the covering rule stages; it queues
     /// nothing itself.
     /// </summary>
-    HandedToAnotherExportRule
+    HandedToAnotherExportRule,
+
+    /// <summary>
+    /// Preview only (#2085): the next synchronisation would stage a Pending Export of type Disable for this object,
+    /// disabling it in its target Connected System and then disconnecting it. The Disable sibling of
+    /// <see cref="WouldStageDeleteExport"/>, for an Outbound Deprovision Action of Disable.
+    /// </summary>
+    WouldStageDisableExport
 }
 
 /// <summary>

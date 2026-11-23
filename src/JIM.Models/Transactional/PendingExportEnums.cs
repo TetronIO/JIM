@@ -16,7 +16,13 @@ public enum PendingExportChangeType
     /// <summary>
     /// Delete an object in a Connected System.
     /// </summary>
-    Delete = 2
+    Delete = 2,
+    /// <summary>
+    /// Disable an account in a Connected System, keeping it, as an export Synchronisation Rule's Disable deprovisioning
+    /// action asks. Once the Connector reports it done, the Pending Export is complete and the Connected System Object
+    /// is disconnected.
+    /// </summary>
+    Disable = 3
 }
 
 public enum PendingExportAttributeChangeType
@@ -321,4 +327,16 @@ public enum ExportValueLoadFallbackReason
     /// A change of a kind the planner does not know how to put as a question.
     /// </summary>
     UnrecognisedChangeType = 5
+}
+
+/// <summary>Questions about a <see cref="PendingExportChangeType"/> asked in several places.</summary>
+public static class PendingExportChangeTypeExtensions
+{
+    /// <summary>
+    /// Whether the change deprovisions the object: a Delete, or a Disable (#2085). Both are queued by an export
+    /// Synchronisation Rule's Deprovisioning Action, supersede ordinary changes to the object, carry no attribute
+    /// values, and are withdrawn when the object comes back into scope before they are sent.
+    /// </summary>
+    public static bool IsDeprovisioning(this PendingExportChangeType changeType) =>
+        changeType is PendingExportChangeType.Delete or PendingExportChangeType.Disable;
 }

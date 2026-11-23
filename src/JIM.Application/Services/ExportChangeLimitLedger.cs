@@ -53,7 +53,17 @@ public sealed class ExportChangeLimitLedger
         {
             [PendingExportChangeType.Create] = executablePendingCountsByType.GetValueOrDefault(PendingExportChangeType.Create),
             [PendingExportChangeType.Update] = executablePendingCountsByType.GetValueOrDefault(PendingExportChangeType.Update),
-            [PendingExportChangeType.Delete] = executablePendingCountsByType.GetValueOrDefault(PendingExportChangeType.Delete)
+            [PendingExportChangeType.Delete] = executablePendingCountsByType.GetValueOrDefault(PendingExportChangeType.Delete),
+            [PendingExportChangeType.Disable] = executablePendingCountsByType.GetValueOrDefault(PendingExportChangeType.Disable)
+        };
+
+        // A Disable deprovisions as a Delete does, so the Run Profile's delete limit counts both (#2085): a mass
+        // disable shuts as many people out as a mass delete. Each type still reports its own withheld count.
+        var countsAgainstLimit = new Dictionary<PendingExportChangeType, int>
+        {
+            [PendingExportChangeType.Create] = _pendingCounts[PendingExportChangeType.Create],
+            [PendingExportChangeType.Update] = _pendingCounts[PendingExportChangeType.Update],
+            [PendingExportChangeType.Delete] = _pendingCounts[PendingExportChangeType.Delete] + _pendingCounts[PendingExportChangeType.Disable]
         };
 
         // Decided once: a limited type whose pending count exceeds its limit is withheld for the
@@ -61,7 +71,7 @@ public sealed class ExportChangeLimitLedger
         // positive count already exceeds 0. A type at or under its limit, or with no limit at all,
         // is not withheld, however large its count.
         _withheldTypes = _limits
-            .Where(limit => limit.Value.HasValue && _pendingCounts[limit.Key] > limit.Value.Value)
+            .Where(limit => limit.Value.HasValue && countsAgainstLimit[limit.Key] > limit.Value.Value)
             .Select(limit => limit.Key)
             .ToHashSet();
     }
@@ -70,7 +80,7 @@ public sealed class ExportChangeLimitLedger
     /// Whether <paramref name="type"/> is withheld for this run: it carries a limit that its pending
     /// count at the start of the run exceeded.
     /// </summary>
-    public bool IsWithheld(PendingExportChangeType type) => _withheldTypes.Contains(type);
+    public bool IsWithheld(PendingExportChangeType type) => _withheldTypes.Contains(LimitedAs(type));
 
     /// <summary>
     /// The per-hook-point guard every pass and every connector shape calls before attempting
@@ -98,7 +108,11 @@ public sealed class ExportChangeLimitLedger
     public int Withheld(PendingExportChangeType type) => IsWithheld(type) ? _pendingCounts[type] : 0;
 
     /// <summary>The configured limit for <paramref name="type"/>, or null when this run has no limit for it.</summary>
-    public int? Limit(PendingExportChangeType type) => _limits[type];
+    public int? Limit(PendingExportChangeType type) => _limits[LimitedAs(type)];
+
+    /// <summary>The limit a change type falls under: a Disable under the delete limit, everything else its own.</summary>
+    private static PendingExportChangeType LimitedAs(PendingExportChangeType type) =>
+        type == PendingExportChangeType.Disable ? PendingExportChangeType.Delete : type;
 
     /// <summary>True when any change type is withheld this run.</summary>
     public bool AnyWithheld => _withheldTypes.Count > 0;

@@ -172,6 +172,12 @@ public class ConnectorDefinition : IAuditable, IConnectorCapabilities
     public bool SupportsUniquenessRejectionClassification { get; set; }
 
     /// <summary>
+    /// Can the Connector disable an account rather than delete it? When true, an export Synchronisation Rule for a
+    /// Connected System using this Connector may deprovision with Disable.
+    /// </summary>
+    public bool SupportsDisable { get; set; }
+
+    /// <summary>
     /// Does an External ID identify one object across every Object Type of a Connected System using this Connector?
     /// When true, an import refuses to treat an object that has changed Object Type as a deletion plus a new object,
     /// unless the Full Import Run Profile allows Object Type changes (#2049).

@@ -113,6 +113,18 @@
                 <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">When a Metaverse Object leaves this Synchronisation
                     Rule's scope or is deleted, JIM breaks the join and leaves the object in place in the Connected System.</MudText>
             </div>
+            @* Disable is offered only where the Connector can disable an account (#2085); the server refuses it otherwise too. *@
+            @{
+                var connector = SyncRule.ConnectedSystem?.ConnectorDefinition;
+                var canDisable = connector?.SupportsDisable == true;
+            }
+            <div class="mt-2">
+                <MudRadio T="OutboundDeprovisionAction" Value="OutboundDeprovisionAction.Disable" Color="Color.Primary"
+                          Disabled="@(!canDisable)">Disable</MudRadio>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">When a Metaverse Object leaves this Synchronisation
+                    Rule's scope or is deleted, JIM disables the corresponding object in the Connected System, then breaks the
+                    join and leaves it in place.@(canDisable || connector == null ? "" : $" The {connector.Name} cannot disable an account.")</MudText>
+            </div>
             <div class="mt-2">
                 <MudRadio T="OutboundDeprovisionAction" Value="OutboundDeprovisionAction.Delete" Color="Color.Primary">Delete</MudRadio>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">When a Metaverse Object leaves this Synchronisation

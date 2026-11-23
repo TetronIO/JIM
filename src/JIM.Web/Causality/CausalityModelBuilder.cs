@@ -566,7 +566,8 @@ public static class CausalityModelBuilder
                 && c.EdgeType == CausalEdgeType.PendingExportQueueingCausedExportExecution
                 && c.ReasonCode is CausalReasonCode.ExportCreateStaged
                     or CausalReasonCode.ExportUpdateStaged
-                    or CausalReasonCode.ExportDeleteStaged)
+                    or CausalReasonCode.ExportDeleteStaged
+                    or CausalReasonCode.ExportDisableStaged)
             .ToList();
 
         var match = queueingCohorts.FirstOrDefault(c => c.EffectSyncOutcomeId == outcomeId)
@@ -633,6 +634,7 @@ public static class CausalityModelBuilder
                 // An account another export rule took over (#2822): the object it names is in the target system.
                 or ActivityRunProfileExecutionItemSyncOutcomeType.HandedToAnotherExportRule
                 or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport
+                or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDisableExport
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Exported
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed

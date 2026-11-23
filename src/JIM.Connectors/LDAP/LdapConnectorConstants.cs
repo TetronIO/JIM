@@ -34,10 +34,6 @@ internal static class LdapConnectorConstants
     /// </summary>
     internal const string SYSTEM_FLAGS_DOMAIN_PARTITION = "3";
 
-    // Export delete behaviour options
-    internal const string DELETE_BEHAVIOUR_DELETE = "Delete";
-    internal const string DELETE_BEHAVIOUR_DISABLE = "Disable";
-
     /// <summary>
     /// The Active Directory attribute holding an account's control flags, <see cref="UAC_ACCOUNTDISABLE"/> among them.
     /// </summary>

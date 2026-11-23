@@ -574,8 +574,6 @@ function Get-DirectoryConfig {
                     UserNameAttr     = "sAMAccountName"
                     ExternalIdAttr   = "objectGUID"
                     DepartmentAttr   = "department"
-                    DeleteBehaviour  = "Disable"
-                    DisableAttribute = "userAccountControl"
                     DnTemplate       = 'CN={displayName},OU=Users,OU=Corp,DC=panoply,DC=local'
                     Domain           = "panoply.local"
                     ShortDomain      = "PANOPLY"
@@ -611,8 +609,6 @@ function Get-DirectoryConfig {
                     UserNameAttr     = "sAMAccountName"
                     ExternalIdAttr   = "objectGUID"
                     DepartmentAttr   = "department"
-                    DeleteBehaviour  = "Disable"
-                    DisableAttribute = "userAccountControl"
                     DnTemplate       = 'CN={displayName},OU=Users,OU=Corp,DC=resurgam,DC=local'
                     Domain           = "resurgam.local"
                     ShortDomain      = "RESURGAM"
@@ -648,8 +644,6 @@ function Get-DirectoryConfig {
                     UserNameAttr     = "sAMAccountName"
                     ExternalIdAttr   = "objectGUID"
                     DepartmentAttr   = "department"
-                    DeleteBehaviour  = "Disable"
-                    DisableAttribute = "userAccountControl"
                     DnTemplate       = 'CN={displayName},OU=Users,OU=CorpManaged,DC=gentian,DC=local'
                     Domain           = "gentian.local"
                     ShortDomain      = "GENTIAN"
@@ -696,8 +690,6 @@ function Get-DirectoryConfig {
                     UserNameAttr     = "uid"
                     ExternalIdAttr   = "entryUUID"
                     DepartmentAttr   = "departmentNumber"
-                    DeleteBehaviour  = "Delete"
-                    DisableAttribute = $null
                     DnTemplate       = 'uid={uid},ou=People,dc=yellowstone,dc=local'
                     Domain           = "yellowstone.local"
                     ShortDomain      = $null
@@ -734,8 +726,6 @@ function Get-DirectoryConfig {
                     UserNameAttr     = "uid"
                     ExternalIdAttr   = "entryUUID"
                     DepartmentAttr   = "departmentNumber"
-                    DeleteBehaviour  = "Delete"
-                    DisableAttribute = $null
                     DnTemplate       = 'uid={uid},ou=People,dc=yellowstone,dc=local'
                     Domain           = "yellowstone.local"
                     ShortDomain      = $null
@@ -766,8 +756,6 @@ function Get-DirectoryConfig {
                     UserNameAttr     = "uid"
                     ExternalIdAttr   = "entryUUID"
                     DepartmentAttr   = "departmentNumber"
-                    DeleteBehaviour  = "Delete"
-                    DisableAttribute = $null
                     DnTemplate       = 'uid={uid},ou=People,dc=glitterband,dc=local'
                     Domain           = "glitterband.local"
                     ShortDomain      = $null
@@ -823,8 +811,6 @@ function Get-DirectoryConfig {
                     UserNameAttr     = "uid"
                     ExternalIdAttr   = "entryUUID"
                     DepartmentAttr   = "departmentNumber"
-                    DeleteBehaviour  = "Delete"
-                    DisableAttribute = $null
                     DnTemplate       = 'uid={uid},ou=People,dc=yellowstone,dc=local'
                     Domain           = "yellowstone.local"
                     ShortDomain      = $null
@@ -860,8 +846,6 @@ function Get-DirectoryConfig {
                     UserNameAttr     = "uid"
                     ExternalIdAttr   = "entryUUID"
                     DepartmentAttr   = "departmentNumber"
-                    DeleteBehaviour  = "Delete"
-                    DisableAttribute = $null
                     DnTemplate       = 'uid={uid},ou=People,dc=yellowstone,dc=local'
                     Domain           = "yellowstone.local"
                     ShortDomain      = $null
@@ -890,8 +874,6 @@ function Get-DirectoryConfig {
                     UserNameAttr     = "uid"
                     ExternalIdAttr   = "entryUUID"
                     DepartmentAttr   = "departmentNumber"
-                    DeleteBehaviour  = "Delete"
-                    DisableAttribute = $null
                     DnTemplate       = 'uid={uid},ou=People,dc=glitterband,dc=local'
                     Domain           = "glitterband.local"
                     ShortDomain      = $null

@@ -969,7 +969,7 @@ public class DriftDetectionService
 
         // One correction replaces the existing Pending Export; carried into more than one, its changes would be staged twice.
         var correction = drift.CorrectiveExports.FirstOrDefault();
-        if (correction == null || existingPendingExport.ChangeType == PendingExportChangeType.Delete)
+        if (correction == null || existingPendingExport.ChangeType.IsDeprovisioning())
             return;
 
         correction.AttributeValueChanges.AddRange(SyncEngine

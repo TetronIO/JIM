@@ -74,7 +74,13 @@ public enum ConnectedSystemObjectConnectionState
     /// The object was not returned by the last Full Import: it no longer exists in the Connected
     /// System.
     /// </summary>
-    Obsolete = 7
+    Obsolete = 7,
+
+    /// <summary>
+    /// A Disable Pending Export is queued or executing for this object: an export Synchronisation Rule is
+    /// deprovisioning it by disabling it (#2085), after which it is disconnected.
+    /// </summary>
+    DisablePending = 8
 }
 
 /// <summary>

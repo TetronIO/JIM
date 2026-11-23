@@ -510,6 +510,25 @@ public partial class SyncRepository : ISyncRepository
     public async Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId)
         => HideQueued(await _repo.ConnectedSystems.GetPendingExportsWithUnresolvedReferencesAsync(connectedSystemId));
 
+    public async Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesToAsync(int connectedSystemId,
+        IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        if (metaverseObjectIds.Count == 0)
+            return [];
+
+        // An unresolved reference holds the Metaverse Object's id as staged (Guid.ToString()).
+        var references = metaverseObjectIds.Select(id => id.ToString()).ToList();
+        return HideQueued(await _context.PendingExports
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId
+                      && pe.HasUnresolvedReferences
+                      && pe.AttributeValueChanges.Any(avc => avc.UnresolvedReferenceValue != null && references.Contains(avc.UnresolvedReferenceValue)))
+            .ToListAsync());
+    }
+
     public Task<int> GetPendingExportsCountAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetPendingExportsCountAsync(connectedSystemId);
 

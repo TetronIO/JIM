@@ -6302,7 +6302,7 @@ public abstract class SyncTaskProcessorBase
 
         var persistedPesByCsoId = await _syncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(candidateCsoIds);
         var staleDeletes = persistedPesByCsoId.Values
-            .Where(pe => pe.ChangeType == PendingExportChangeType.Delete &&
+            .Where(pe => pe.ChangeType.IsDeprovisioning() &&
                          pe.Status == PendingExportStatus.Pending)
             .ToList();
 

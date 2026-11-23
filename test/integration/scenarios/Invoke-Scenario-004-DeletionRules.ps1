@@ -120,8 +120,13 @@
         - Assert: delete Pending Export staged, directory account removed
     Test 11: Joined CSO + Disconnect action
         - Assert: no delete Pending Export, CSO disconnected, directory account left in place
+    Test 11b: Provisioned CSO + Disable action, then a rehire (issue #2085)
+        - Assert: Disable Pending Export staged; after export the directory account is kept and disabled
+          (userAccountControl, nsAccountLock or pwdAccountLockedTime by directory type), the CSO disconnected and
+          nothing left pending; re-adding the HR record rejoins the disabled account (and on Active Directory
+          the userAccountControl flow re-enables it)
 
-    The DeprovisionActions step runs Tests 8-11 together.
+    The DeprovisionActions step runs Tests 8-11b together.
 
     Tests 12-13: Authoritative Source Trigger Modes (issue #119)
         WhenAuthoritativeSourceDisconnected has a configurable trigger mode: AllSourcesDisconnect
@@ -189,6 +194,7 @@ param(
         "DeprovisionProvisionedDisconnect",
         "DeprovisionJoinedDelete",
         "DeprovisionJoinedDisconnect",
+        "DeprovisionProvisionedDisable",
         "DeprovisionActions",
         "AuthoritativeAllSources",
         "AuthoritativeRejoinCancellation",
@@ -687,7 +693,7 @@ function Set-ExportRuleDeprovisionAction {
         [hashtable]$Config,
 
         [Parameter(Mandatory=$true)]
-        [ValidateSet('Disconnect', 'Delete')]
+        [ValidateSet('Disconnect', 'Disable', 'Delete')]
         [string]$Action
     )
 
@@ -725,7 +731,7 @@ function Assert-DeletionOutcomeNamesDeprovisioningRule {
         [string]$DisplayName,
 
         [Parameter(Mandatory=$true)]
-        [ValidateSet('Disconnect', 'Delete')]
+        [ValidateSet('Disconnect', 'Disable', 'Delete')]
         [string]$DeprovisionAction,
 
         [Parameter(Mandatory=$true)]
@@ -744,9 +750,10 @@ function Assert-DeletionOutcomeNamesDeprovisioningRule {
         throw "Assert-DeletionOutcomeNamesDeprovisioningRule: display name '$DisplayName' is not a plain test name."
     }
 
-    # Ordinals pinned by SyncOutcomeTypeOrdinalTests: MvoDeleted 11, DeprovisionQueued 25, TargetDisconnected 55.
-    $expectedType = if ($DeprovisionAction -eq 'Delete') { 25 } else { 55 }
-    $expectedLabel = if ($DeprovisionAction -eq 'Delete') { 'Deprovision queued' } else { 'Disconnected from target system' }
+    # Ordinals pinned by SyncOutcomeTypeOrdinalTests: MvoDeleted 11, DeprovisionQueued 25, TargetDisconnected 55. A Disable
+    # is queued as a deprovisioning like a Delete (#2085).
+    $expectedType = if ($DeprovisionAction -in 'Delete', 'Disable') { 25 } else { 55 }
+    $expectedLabel = if ($DeprovisionAction -in 'Delete', 'Disable') { 'Deprovision queued' } else { 'Disconnected from target system' }
     $query = @"
 SELECT COALESCE(child."SyncRuleName", '')
 FROM "ActivityRunProfileExecutionItemSyncOutcomes" child
@@ -902,6 +909,36 @@ function Invoke-ProvisionJoinedUser {
 }
 
 # -----------------------------------------------------------------------------------------------------------------
+# Helper: whether the directory account is disabled, the way the LDAP Connector disables one (#2085): the
+# userAccountControl ACCOUNTDISABLE bit on Active Directory and Samba AD, nsAccountLock on 389 Directory Server, and
+# pwdAccountLockedTime on OpenLDAP. The latter two are operational attributes, so they are asked for by name.
+# -----------------------------------------------------------------------------------------------------------------
+function Test-DirectoryAccountDisabled {
+    param([Parameter(Mandatory=$true)][string]$SamAccountName)
+
+    # Resolved from the config as Get-LDAPUser resolves it; the search runs in its container, or the toolbox.
+    $containerName = if ($DirectoryConfig.ContainerName) { $DirectoryConfig.ContainerName } else { "samba-ad-primary" }
+    $raw = Invoke-LDAPSearch -DirectoryConfig $DirectoryConfig -ContainerName $containerName -Server "localhost" `
+        -Port $DirectoryConfig.LdapSearchPort -Scheme $DirectoryConfig.LdapSearchScheme -BaseDN $DirectoryConfig.BaseDN `
+        -BindDN $DirectoryConfig.BindDN -BindPassword $DirectoryConfig.BindPassword `
+        -Filter "($($DirectoryConfig.UserNameAttr)=$SamAccountName)" -Attributes @('userAccountControl', 'nsAccountLock', 'pwdAccountLockedTime')
+    # One entry, short single-valued attributes: no folded lines to unfold. Read line by line, by exact name.
+    $lines = @(($raw -join "`n") -split "`r?`n")
+    $value = {
+        param([string]$attributeName)
+        $prefix = "${attributeName}:"
+        $line = $lines | Where-Object { $_.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1
+        if ($line) { $line.Substring($prefix.Length).Trim() } else { $null }
+    }
+    switch ("$($DirectoryConfig.DirectoryType)") {
+        { $_ -in 'SambaAD', 'ActiveDirectory' } { $uac = & $value 'userAccountControl'; return ($null -ne $uac -and (([int]$uac -band 2) -ne 0)) }
+        'DirectoryServer389' { return ("$(& $value 'nsAccountLock')" -ieq 'TRUE') }
+        'OpenLDAP' { return ($null -ne (& $value 'pwdAccountLockedTime')) }
+        default { throw "Test-DirectoryAccountDisabled: no disable check for directory type '$($DirectoryConfig.DirectoryType)'." }
+    }
+}
+
+# -----------------------------------------------------------------------------------------------------------------
 # Helper: Run one Deprovisioning Action permutation test (issue #655)
 # Arranges a CSO of the requested origin, sets the export rule's action, deletes the MVO via
 # authoritative source disconnect (grace period 0), then asserts the action was honoured.
@@ -919,7 +956,7 @@ function Invoke-DeprovisionActionTest {
         [string]$CsoOrigin,
 
         [Parameter(Mandatory=$true)]
-        [ValidateSet('Disconnect', 'Delete')]
+        [ValidateSet('Disconnect', 'Disable', 'Delete')]
         [string]$DeprovisionAction,
 
         [Parameter(Mandatory=$true)]
@@ -990,6 +1027,61 @@ function Invoke-DeprovisionActionTest {
 
     $deletePesAfter = Get-DeletePendingExportCount -Config $Config
     Write-Host "  Delete Pending Exports after MVO deletion: $deletePesAfter" -ForegroundColor Gray
+
+    if ($DeprovisionAction -eq 'Disable') {
+        # #2085: the account is disabled the way the directory disables one, kept, and disconnected; nothing waits for
+        # a confirming import. A rehire is then rejoined to it by export matching.
+        $disables = @(Get-JIMPendingExport -ConnectedSystemId $Config.LDAPSystemId -All | Where-Object { "$($_.changeType)" -eq 'Disable' })
+        if ($disables.Count -lt 1) {
+            $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "No Disable Pending Export staged despite Disable action" }
+            throw "$TestName Assert 2 failed: expected a Disable Pending Export for the $CsoOrigin CSO (Disable action)"
+        }
+        Write-Host "  PASSED: Disable Pending Export staged for the $CsoOrigin CSO" -ForegroundColor Green
+
+        Assert-DeletionOutcomeNamesDeprovisioningRule -DisplayName $DisplayName -DeprovisionAction Disable `
+            -RuleName (Get-LdapExportSyncRule -Config $Config).name -TestName $TestName -StepName $StepName
+
+        $exportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
+        Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "LDAP Export ($TestName disable)"
+        Start-Sleep -Seconds 2
+
+        if (-not (Test-LDAPUserExists -UserIdentifier $SamAccountName -DirectoryConfig $DirectoryConfig)) {
+            $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "Directory account removed despite Disable action" }
+            throw "$TestName Assert 3 failed: directory account $SamAccountName was removed despite the Disable action"
+        }
+        if (-not (Test-DirectoryAccountDisabled -SamAccountName $SamAccountName)) {
+            $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "Directory account not disabled after Disable export" }
+            throw "$TestName Assert 3 failed: directory account $SamAccountName is not disabled after the Disable export"
+        }
+        Write-Host "  PASSED: Directory account kept and disabled" -ForegroundColor Green
+
+        $csoAfter = Get-LdapCsoHeader -Config $Config -DisplayName $DisplayName
+        $left = @(Get-JIMPendingExport -ConnectedSystemId $Config.LDAPSystemId -All | Where-Object { "$($_.changeType)" -eq 'Disable' })
+        if (-not $csoAfter -or "$($csoAfter.joinType)" -ne 'NotJoined' -or $left.Count -gt 0) {
+            $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "After the Disable: CSO join '$($csoAfter.joinType)', $($left.Count) Disable Pending Export(s) left" }
+            throw "$TestName Assert 4 failed: expected the CSO kept and NotJoined with no Disable left; join '$($csoAfter.joinType)', $($left.Count) left"
+        }
+        Write-Host "  PASSED: LDAP CSO kept and disconnected, nothing left pending" -ForegroundColor Green
+
+        # Rehire: export matching rejoins the disabled account rather than provisioning a second one.
+        Invoke-ProvisionUser -Config $Config -EmployeeId $EmployeeId -SamAccountName $SamAccountName `
+            -DisplayName $DisplayName -TestName "$TestName rehire" | Out-Null
+        $rehired = Get-LdapCsoHeader -Config $Config -DisplayName $DisplayName
+        if (-not $rehired -or "$($rehired.joinType)" -ne 'Joined') {
+            $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "Rehire did not rejoin the disabled account (join '$($rehired.joinType)')" }
+            throw "$TestName Assert 5 failed: the rehire did not rejoin the disabled account (join '$($rehired.joinType)')"
+        }
+        # Only Active Directory's userAccountControl flow re-enables in this lab's rules; the RFC directories' rules flow
+        # no lock attribute, so their accounts stay locked until an administrator or a flow clears it.
+        if ("$($DirectoryConfig.DirectoryType)" -in 'SambaAD', 'ActiveDirectory' -and (Test-DirectoryAccountDisabled -SamAccountName $SamAccountName)) {
+            $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "Rehired account still disabled" }
+            throw "$TestName Assert 5 failed: the rehired account $SamAccountName is still disabled"
+        }
+        Write-Host "  PASSED: Rehire rejoined the disabled account" -ForegroundColor Green
+
+        $testResults.Steps += @{ Name = $StepName; Success = $true }
+        return
+    }
 
     if ($DeprovisionAction -eq 'Delete') {
         # Assert 2: a delete Pending Export was staged for the CSO
@@ -2240,6 +2332,19 @@ try {
             -EmployeeId "DEPROV004" -SamAccountName "test.deprov.joindisc" `
             -DisplayName "Test Deprov JoinDisc" -TestName "Test11" `
             -StepName "DeprovisionJoinedDisconnect"
+    }
+
+    if ($Step -in @("DeprovisionProvisionedDisable", "DeprovisionActions", "All")) {
+        Write-TestSection "Test 11b: Deprovisioning Action - Provisioned CSO + Disable, then a rehire"
+        Write-Host "CSO origin: Provisioned, OutboundDeprovisionAction: Disable (#2085)" -ForegroundColor Gray
+        Write-Host "Expected: a Disable Pending Export, the account disabled and kept, the CSO disconnected; the rehire rejoins it" -ForegroundColor Gray
+        Write-Host ""
+
+        Invoke-DeprovisionActionTest -Config $config -UserObjectTypeId $userObjectType.id `
+            -CsoOrigin Provisioned -DeprovisionAction Disable `
+            -EmployeeId "DEPROV005" -SamAccountName "test.deprov.provdisable" `
+            -DisplayName "Test Deprov ProvDisable" -TestName "Test11b" `
+            -StepName "DeprovisionProvisionedDisable"
     }
 
     # =============================================================================================================

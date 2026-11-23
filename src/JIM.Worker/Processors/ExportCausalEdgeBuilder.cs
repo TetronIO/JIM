@@ -84,6 +84,7 @@ public static class ExportCausalEdgeBuilder
                 {
                     PendingExportChangeType.Create => CausalReasonCode.ExportCreateStaged,
                     PendingExportChangeType.Delete => CausalReasonCode.ExportDeleteStaged,
+                    PendingExportChangeType.Disable => CausalReasonCode.ExportDisableStaged,
                     _ => CausalReasonCode.ExportUpdateStaged
                 },
                 ConnectedSystemId = connectedSystem.Id,

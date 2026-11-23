@@ -50,7 +50,8 @@ public class ExportExecutionServer
     [
         PendingExportChangeType.Create,
         PendingExportChangeType.Update,
-        PendingExportChangeType.Delete
+        PendingExportChangeType.Delete,
+        PendingExportChangeType.Disable
     ];
 
     private JimApplication Application { get; }
@@ -287,7 +288,8 @@ public class ExportExecutionServer
         // Run Profile Safeguards (#1618): copy the ledger's final withheld counts onto the result.
         result.CreatesWithheld = changeLimitLedger.Withheld(PendingExportChangeType.Create);
         result.UpdatesWithheld = changeLimitLedger.Withheld(PendingExportChangeType.Update);
-        result.DeletesWithheld = changeLimitLedger.Withheld(PendingExportChangeType.Delete);
+        // Disables fall under the delete limit (#2085), so they are reported with the deletes they were withheld with.
+        result.DeletesWithheld = changeLimitLedger.Withheld(PendingExportChangeType.Delete) + changeLimitLedger.Withheld(PendingExportChangeType.Disable);
 
         result.CompletedAt = DateTime.UtcNow;
 
@@ -589,7 +591,7 @@ public class ExportExecutionServer
         // a Delete is an all-or-nothing operation. Once exported (status=Exported), the
         // delete was sent to the target system and should only be cleaned up during
         // import confirmation, not re-executed (which would fail if the object is already gone).
-        if (pendingExport.ChangeType == PendingExportChangeType.Delete &&
+        if (pendingExport.ChangeType.IsDeprovisioning() &&
             pendingExport.Status == PendingExportStatus.Exported)
         {
             return false;
@@ -2671,6 +2673,20 @@ public class ExportExecutionServer
     }
 
     /// <summary>
+    /// The refusal of a Disable Pending Export whose Connected System's Connector cannot disable an account, or null.
+    /// </summary>
+    internal static ConnectedSystemExportResult? UnsupportedDisableRefusal(PendingExport pendingExport, ConnectedSystem connectedSystem)
+    {
+        if (pendingExport.ChangeType != PendingExportChangeType.Disable || connectedSystem.ConnectorDefinition?.SupportsDisable == true)
+            return null;
+
+        return ConnectedSystemExportResult.Failed(
+            $"This object was to be disabled, but the {connectedSystem.ConnectorDefinition?.Name ?? "Connector"} that '{connectedSystem.Name}' uses " +
+            "cannot disable an account, so nothing was sent. Change the export Synchronisation Rule's Deprovisioning Action to Delete or Disconnect.",
+            ConnectedSystemExportErrorType.RejectedByConnectedSystem);
+    }
+
+    /// <summary>
     /// Sends a batch to the Connector, holding back any export that would leave an object invalid at the Connected
     /// System, or that carries more than one change for a single-valued attribute, and failing it with the attributes
     /// named. Results come back in the batch's own order either way, with the two kinds of refusal counted apart.
@@ -2693,13 +2709,17 @@ public class ExportExecutionServer
         var refusals = new Dictionary<int, ConnectedSystemExportResult>();
         var sendable = new List<PendingExport>();
         var contradictions = 0;
+        var unsupportedDisables = 0;
 
         for (var i = 0; i < batch.Count; i++)
         {
             // An export that contradicts itself over a single-valued attribute is refused first (#2182): it is a fault
             // in JIM rather than configuration, and no class check is meaningful over changes that cannot all apply.
             var contradiction = SingleValuedAttributeChangeValidator.Check(ForConnector(batch[i]));
-            var refusal = contradiction ?? ClassMembershipValidator.Check(batch[i], connectedSystem);
+            // A Disable for a Connector that cannot disable (#2085) is never sent: a Connector written before Disable
+            // existed could take it for an empty update, report success, and leave an account enabled that JIM then
+            // disconnects as disabled. Saving such a rule is refused; this covers one saved before its Connector changed.
+            var refusal = contradiction ?? UnsupportedDisableRefusal(batch[i], connectedSystem) ?? ClassMembershipValidator.Check(batch[i], connectedSystem);
             if (refusal == null)
             {
                 sendable.Add(batch[i]);
@@ -2709,6 +2729,8 @@ public class ExportExecutionServer
             refusals[i] = refusal;
             if (contradiction != null)
                 contradictions++;
+            else if (batch[i].ChangeType == PendingExportChangeType.Disable && refusal.ErrorType == ConnectedSystemExportErrorType.RejectedByConnectedSystem)
+                unsupportedDisables++;
         }
 
         if (refusals.Count == 0)
@@ -2716,14 +2738,14 @@ public class ExportExecutionServer
 
         Log.Warning("ExportBatchAsync: Refused {RefusedCount} of {BatchCount} export(s) on '{ConnectedSystem}' before sending them: " +
             "{ContradictionCount} carrying more than one change for a single-valued attribute, {ClassMembershipCount} adding a class whose required " +
-            "attributes have no value. The reason is recorded against each object.",
-            refusals.Count, batch.Count, connectedSystem.Name, contradictions, refusals.Count - contradictions);
+            "attributes have no value, {UnsupportedDisableCount} disabling an account the Connector cannot disable. The reason is recorded against each object.",
+            refusals.Count, batch.Count, connectedSystem.Name, contradictions, refusals.Count - contradictions - unsupportedDisables, unsupportedDisables);
 
         var sentResults = sendable.Count > 0
             ? await connector.ExportAsync(sendable.Select(ForConnector).ToList(), cancellationToken, connectorProgress)
             : [];
 
-        return (InBatchOrder(batch.Count, refusals, sentResults, cancellationToken), refusals.Count - contradictions, contradictions);
+        return (InBatchOrder(batch.Count, refusals, sentResults, cancellationToken), refusals.Count - contradictions - unsupportedDisables, contradictions);
     }
 
     /// <summary>
@@ -2776,6 +2798,72 @@ public class ExportExecutionServer
         cancellationToken.IsCancellationRequested
             ? ConnectedSystemExportResult.NotAttempted()
             : ConnectedSystemExportResult.Failed("The Connector returned no result for this change, so JIM cannot tell whether it was written; it will be sent again.");
+
+    /// <summary>
+    /// Finishes Disable Pending Exports the Connector carried out (#2085): each is removed and its Connected System Object
+    /// disconnected, the account kept in the Connected System, unable to sign in. A rehire is rejoined to it by the
+    /// Connected System's Object Matching Rules and re-enabled by the export rule's Attribute Flows.
+    /// </summary>
+    private static async Task CompleteDisablesAsync(List<PendingExport> completedDisables, ISyncRepository repository)
+    {
+        await repository.DeletePendingExportsAsync(completedDisables);
+        var resolved = await ResolveReferencesOwedToDisabledAccountsAsync(completedDisables, repository);
+        var csoIds = completedDisables.Where(pe => pe.ConnectedSystemObjectId.HasValue).Select(pe => pe.ConnectedSystemObjectId!.Value).Distinct().ToList();
+        await repository.DisconnectConnectedSystemObjectsAsync(csoIds);
+        Log.Information("CompleteDisablesAsync: {Count} Disable Pending Export(s) completed; {CsoCount} Connected System Object(s) disconnected and kept; " +
+            "{ResolvedCount} reference(s) other exports still owed to them resolved first", completedDisables.Count, csoIds.Count, resolved);
+    }
+
+    /// <summary>
+    /// Resolves, to the disabled accounts, every reference other Pending Exports in the Connected System still owe to the
+    /// people they belong to, before those accounts are disconnected (#2085). A leaver taken out of groups by the same
+    /// synchronisation is the usual case: each group's export names the leaver by Metaverse Object, resolved only when it
+    /// is sent, and it is sent in the deferred pass, after this. Once the account is disconnected nothing names it as the
+    /// leaver's, so the removal could never be written. The exports keep their unresolved-reference flag, so the deferred
+    /// pass of this run still sends them; one held back from this run is sent by the next, already resolved.
+    /// </summary>
+    /// <returns>How many references were resolved.</returns>
+    private static async Task<int> ResolveReferencesOwedToDisabledAccountsAsync(List<PendingExport> completedDisables, ISyncRepository repository)
+    {
+        // Read from the account's join, which is what is about to be cleared; the export's source is the fallback.
+        var metaverseObjectIds = completedDisables
+            .Select(pe => pe.ConnectedSystemObject?.MetaverseObjectId ?? pe.SourceMetaverseObjectId)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+        if (metaverseObjectIds.Count == 0)
+            return 0;
+
+        var connectedSystemId = completedDisables[0].ConnectedSystemId;
+        var referring = await repository.GetPendingExportsWithUnresolvedReferencesToAsync(connectedSystemId, metaverseObjectIds);
+        if (referring.Count == 0)
+            return 0;
+
+        var anchors = await repository.GetReferenceAnchorsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
+        var resolvedChanges = new List<PendingExportAttributeValueChange>();
+        var exportsResolved = new List<PendingExport>();
+        foreach (var export in referring)
+        {
+            var before = resolvedChanges.Count;
+            // Only the departing people's anchors are in hand, so any other reference the export owes stays as it is.
+            TryResolveReferencesFromLookup(export, anchors, resolvedChanges);
+            if (resolvedChanges.Count > before)
+                exportsResolved.Add(export);
+        }
+
+        if (resolvedChanges.Count > 0)
+            await repository.PersistResolvedReferencesAsync(exportsResolved, resolvedChanges);
+
+        var unresolved = metaverseObjectIds.Count(id => !anchors.TryGetValue(id, out var anchor) || anchor.AnchorValue == null);
+        if (unresolved > 0)
+        {
+            Log.Warning("ResolveReferencesOwedToDisabledAccountsAsync: {Count} disabled account(s) in Connected System {ConnectedSystemId} hold no anchor " +
+                "value, so references other exports owe them could not be resolved before they were disconnected", unresolved, connectedSystemId);
+        }
+
+        return resolvedChanges.Count;
+    }
 
     /// <summary>
     /// Decides whether a Delete export that just succeeded is the terminal step for a Connected System
@@ -2899,6 +2987,8 @@ public class ExportExecutionServer
         var successfulNonDeleteExports = new List<PendingExport>();
         var provisionedAccounts = new List<PendingExport>();
         var unconfirmedProvisioningCsoDeletes = new List<PendingExport>();
+        // Disables that succeeded (#2085): complete at once, their Pending Exports removed and their objects disconnected.
+        var completedDisables = new List<PendingExport>();
         var notAttempted = new List<PendingExport>();
         var notAttemptedWithoutCancellation = 0;
 
@@ -2999,6 +3089,18 @@ public class ExportExecutionServer
                 UnresolvedReferenceMessage = unresolvedReferenceNotes != null && unresolvedReferenceNotes.TryGetValue(export.Id, out var note) ? note : null,
                 ConnectedSystemObjectRemoved = isUnconfirmedProvisioningDelete
             }.WithCauseFrom(export));
+
+            if (export.ChangeType == PendingExportChangeType.Disable)
+            {
+                // A disabled object stays in the Connected System, so no confirming import could ever find it gone: the
+                // Connector's success is the confirmation, and the deprovisioning finishes here (#2085).
+                completedDisables.Add(export);
+                result.SuccessCount++;
+                result.OptimisticApplySkippedCount++;
+                Log.Debug("ProcessBatchSuccessAsync: Export {ExportId} disabled CSO {CsoId}; the Pending Export is complete and the CSO will be disconnected",
+                    export.Id, export.ConnectedSystemObjectId);
+                continue;
+            }
 
             if (isUnconfirmedProvisioningDelete)
             {
@@ -3156,6 +3258,9 @@ public class ExportExecutionServer
             {
                 await RemoveUnconfirmedProvisioningCsosAsync(unconfirmedProvisioningCsoDeletes, repository);
             }
+
+            if (completedDisables.Count > 0)
+                await CompleteDisablesAsync(completedDisables, repository);
 
             // #1121: runs AFTER BatchUpdateCsosAfterSuccessfulExportAsync (with the batch's results, above), because the delivery pass finds the
             // account in the Connected System by the external ID that call has just assigned; staging first would

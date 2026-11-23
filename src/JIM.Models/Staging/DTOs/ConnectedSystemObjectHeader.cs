@@ -133,7 +133,7 @@ public class ConnectedSystemObjectHeader
     public PendingExportStatus? PendingExportStatus { get; set; }
 
     /// <summary>
-    /// Whether the queued Pending Export creates, updates or deletes the object; null when there is none.
+    /// Whether the queued Pending Export creates, updates, deletes or disables the object; null when there is none.
     /// </summary>
     public PendingExportChangeType? PendingExportChangeType { get; set; }
 

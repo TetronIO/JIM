@@ -210,5 +210,7 @@ public class ConnectorCapabilityMirrorTests
         public AttributeStandard SchemaStandard => Get<AttributeStandard>(nameof(SchemaStandard));
 
         public bool ExternalIdsUniqueAcrossObjectTypes => Get<bool>(nameof(ExternalIdsUniqueAcrossObjectTypes));
+
+        public bool SupportsDisable => Get<bool>(nameof(SupportsDisable));
     }
 }

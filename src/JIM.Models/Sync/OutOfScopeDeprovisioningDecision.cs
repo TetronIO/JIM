@@ -23,6 +23,13 @@ public readonly struct OutOfScopeDeprovisioningDecision : IEquatable<OutOfScopeD
     public OutOfScopeDeprovisioningAction Action { get; init; }
 
     /// <summary>
+    /// For <see cref="OutOfScopeDeprovisioningAction.StageDeprovisioningExport"/>, the change the export makes:
+    /// <see cref="PendingExportChangeType.Delete"/>, or <see cref="PendingExportChangeType.Disable"/> when the rule says
+    /// Disable (#2085).
+    /// </summary>
+    public PendingExportChangeType ExportChangeType { get; init; }
+
+    /// <summary>
     /// An existing Delete Pending Export to reuse, when one is already attached to the CSO. PendingExports
     /// carries a unique index on ConnectedSystemObjectId, so creating a second would fail the insert.
     /// </summary>
@@ -39,14 +46,15 @@ public readonly struct OutOfScopeDeprovisioningDecision : IEquatable<OutOfScopeD
     /// must withdraw: the account stays in the Connected System, so exporting the Delete would remove an account the
     /// run reports keeping (#1970). Null when there is nothing to withdraw.
     /// </summary>
-    public PendingExport? ExistingDeleteToWithdraw { get; init; }
+    public PendingExport? ExistingDeprovisioningToWithdraw { get; init; }
 
     /// <inheritdoc />
     public bool Equals(OutOfScopeDeprovisioningDecision other) =>
         Action == other.Action &&
+        ExportChangeType == other.ExportChangeType &&
         ReferenceEquals(ExistingPendingExportToReuse, other.ExistingPendingExportToReuse) &&
         MustReplaceExistingPendingExport == other.MustReplaceExistingPendingExport &&
-        ReferenceEquals(ExistingDeleteToWithdraw, other.ExistingDeleteToWithdraw);
+        ReferenceEquals(ExistingDeprovisioningToWithdraw, other.ExistingDeprovisioningToWithdraw);
 
     /// <inheritdoc />
     public override bool Equals(object? obj) => obj is OutOfScopeDeprovisioningDecision other && Equals(other);

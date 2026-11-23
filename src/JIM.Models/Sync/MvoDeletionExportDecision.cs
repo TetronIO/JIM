@@ -24,7 +24,14 @@ public readonly struct MvoDeletionExportDecision : IEquatable<MvoDeletionExportD
     /// Whether a Delete export should be staged for the CSO. False always means disconnect-only, never "do
     /// nothing": disconnection is unconditional on MVO deletion.
     /// </summary>
-    public bool ShouldStageDeleteExport { get; init; }
+    public bool ShouldStageDeprovisioningExport { get; init; }
+
+    /// <summary>
+    /// The change the deprovisioning export makes when <see cref="ShouldStageDeprovisioningExport"/> is true:
+    /// <see cref="PendingExportChangeType.Delete"/>, or <see cref="PendingExportChangeType.Disable"/> when the winning
+    /// rule says Disable (#2085).
+    /// </summary>
+    public PendingExportChangeType ExportChangeType { get; init; }
 
     /// <summary>
     /// Why the verdict came out this way, in terms the orchestrator logs and a preview can display.
@@ -33,7 +40,7 @@ public readonly struct MvoDeletionExportDecision : IEquatable<MvoDeletionExportD
 
     /// <summary>
     /// The matching rule whose Deprovisioning Action decided the verdict: the rule whose Delete won when
-    /// <see cref="ShouldStageDeleteExport"/> is true, or the first matching rule when every one of them says Disconnect
+    /// <see cref="ShouldStageDeprovisioningExport"/> is true, or the first matching rule when every one of them says Disconnect
     /// (<see cref="MvoDeletionExportReason.MatchingRulesDeclineDeletion"/>). Null when no rule matched, since then no
     /// Deprovisioning Action decided anything.
     /// </summary>
@@ -80,14 +87,15 @@ public readonly struct MvoDeletionExportDecision : IEquatable<MvoDeletionExportD
     /// </summary>
     public static MvoDeletionExportDecision DisconnectOnly(MvoDeletionExportReason reason, int matchingRuleCount = 0) => new()
     {
-        ShouldStageDeleteExport = false,
+        ShouldStageDeprovisioningExport = false,
         Reason = reason,
         MatchingRuleCount = matchingRuleCount
     };
 
     /// <inheritdoc />
     public bool Equals(MvoDeletionExportDecision other) =>
-        ShouldStageDeleteExport == other.ShouldStageDeleteExport &&
+        ShouldStageDeprovisioningExport == other.ShouldStageDeprovisioningExport &&
+        ExportChangeType == other.ExportChangeType &&
         Reason == other.Reason &&
         ReferenceEquals(WinningRule, other.WinningRule) &&
         MatchingRuleCount == other.MatchingRuleCount &&
@@ -101,5 +109,5 @@ public readonly struct MvoDeletionExportDecision : IEquatable<MvoDeletionExportD
     public override bool Equals(object? obj) => obj is MvoDeletionExportDecision other && Equals(other);
 
     /// <inheritdoc />
-    public override int GetHashCode() => HashCode.Combine(ShouldStageDeleteExport, Reason, MatchingRuleCount);
+    public override int GetHashCode() => HashCode.Combine(ShouldStageDeprovisioningExport, Reason, MatchingRuleCount);
 }

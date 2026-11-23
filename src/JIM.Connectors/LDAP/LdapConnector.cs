@@ -179,6 +179,9 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
     public bool SupportsUniquenessRejectionClassification => true;
 
+    /// <summary>Disables an account the way its directory does: userAccountControl on Active Directory, nsAccountLock on 389 Directory Server, pwdAccountLockedTime on OpenLDAP.</summary>
+    public bool SupportsDisable => true;
+
     // objectGUID, entryUUID and nsUniqueId are each unique within a directory whatever class an entry has, so an
     // entry arriving under a different Object Type is the same object having changed type (#2049).
     public bool ExternalIdsUniqueAcrossObjectTypes => true;
@@ -214,8 +217,6 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     private readonly string _settingImportConcurrency = "Import Concurrency";
 
     // Export settings
-    private readonly string _settingDeleteBehaviour = "Delete Behaviour";
-    private readonly string _settingDisableAttribute = "Disable Attribute";
     private readonly string _settingExportConcurrency = "Export Concurrency";
     private readonly string _settingModifyBatchSize = "Modify Batch Size";
     private readonly string _settingGroupPlaceholderMemberDn = LdapConnectorConstants.SETTING_GROUP_PLACEHOLDER_MEMBER_DN;
@@ -257,8 +258,6 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
             // Export settings
             new() { Name = "Export Settings", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading },
-            new() { Name = _settingDeleteBehaviour, Required = false, Description = "How to handle object deletions: Delete removes the object from the directory; Disable keeps it and sets the Disable Attribute instead. Default is Delete.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE, LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE }, DefaultStringValue = LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE, Category = ConnectedSystemSettingCategory.Export },
-            new() { Name = _settingDisableAttribute, Required = false, RequiredWhenSetting = _settingDeleteBehaviour, RequiredWhenValue = LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE, Description = "Attribute to set when disabling objects (e.g., userAccountControl for AD). Only used when Delete Behaviour is 'Disable'.", DefaultStringValue = "userAccountControl", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String },
             new() { Name = _settingExportConcurrency, Required = false, Description = "Maximum number of concurrent LDAP operations during export. Higher values improve throughput but increase load on the target directory. Left at the default of 4, JIM raises it on schema import: to 16 for Active Directory and 389 Directory Server, and to 8 for OpenLDAP, which then sends 4 batches at once rather than 2. Samba AD and other directories stay at 4.", DefaultIntValue = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
             new() { Name = _settingModifyBatchSize, Required = false, Description = "Maximum number of values per multi-valued attribute modification in a single LDAP request. When adding or removing many values from a multi-valued attribute (e.g., group members), changes are split into batches of this size. Lower values improve compatibility with constrained LDAP servers; higher values improve throughput, especially for very large groups. Default is 1000. Recommended range: 100-2000.", DefaultIntValue = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
 

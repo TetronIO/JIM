@@ -32,6 +32,7 @@ public class ConnectedSystemDeletionPreviewAdapter : IConfigurationChangePreview
     [
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageUpdateExport,
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport,
+        ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDisableExport,
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject,
         ActivityRunProfileExecutionItemSyncOutcomeType.ProvisioningCancelled,
         ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn

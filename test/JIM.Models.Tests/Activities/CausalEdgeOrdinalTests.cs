@@ -51,7 +51,8 @@ public class CausalEdgeOrdinalTests
         [CausalReasonCode.NoConnectorRemainsStateConvergence] = 8,
         [CausalReasonCode.GeneratedValueAlreadyInUse] = 9,
         [CausalReasonCode.GeneratedValueAnchoredElsewhere] = 10,
-        [CausalReasonCode.GeneratedValueRenameAuthorised] = 11
+        [CausalReasonCode.GeneratedValueRenameAuthorised] = 11,
+        [CausalReasonCode.ExportDisableStaged] = 12
     };
 
     [Test]

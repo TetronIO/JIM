@@ -42,16 +42,14 @@ namespace JIM.Connectors.Graph;
 internal sealed class GraphConnectorExport
 {
     private readonly GraphHttpClient _client;
-    private readonly bool _disableUsersInsteadOfDeleting;
     private readonly ILogger _logger;
 
     /// <summary>How long to wait before each time a write refused for a reference Graph cannot find yet is sent again.</summary>
     internal static readonly TimeSpan[] MissingReferenceRetryDelays = GraphConnectorImport.NotFoundRetryDelays;
 
-    public GraphConnectorExport(GraphHttpClient client, bool disableUsersInsteadOfDeleting, ILogger logger)
+    public GraphConnectorExport(GraphHttpClient client, ILogger logger)
     {
         _client = client;
-        _disableUsersInsteadOfDeleting = disableUsersInsteadOfDeleting;
         _logger = logger;
     }
 
@@ -112,9 +110,17 @@ internal sealed class GraphConnectorExport
             case PendingExportChangeType.Create:
                 return [CreateStep(state)];
 
-            case PendingExportChangeType.Delete when state.IsUser && _disableUsersInsteadOfDeleting:
+            // An export Synchronisation Rule deprovisioning with Disable (#2085). Only a user can be disabled.
+            case PendingExportChangeType.Disable when state.IsUser:
                 return [new GraphExportStep(state, GraphExportStepKind.Disable,
                     new GraphBatchRequest(HttpMethod.Patch, ObjectPath(state), new JsonObject { ["accountEnabled"] = false }))];
+
+            case PendingExportChangeType.Disable:
+                state.Failure = ConnectedSystemExportResult.Failed(
+                    "A group cannot be disabled in Microsoft Entra ID, so it was left as it is. Change the export Synchronisation Rule for " +
+                    "groups to deprovision with Delete or Disconnect.",
+                    ConnectedSystemExportErrorType.RejectedByConnectedSystem);
+                return [];
 
             case PendingExportChangeType.Delete:
                 return [new GraphExportStep(state, GraphExportStepKind.Delete, new GraphBatchRequest(HttpMethod.Delete, ObjectPath(state)))];

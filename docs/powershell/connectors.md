@@ -111,6 +111,7 @@ The Connectors, or with `-Id` or `-Name` the one Connector, with its settings an
 | `SupportsPasswordPolicyDiscovery` | `bool` | Whether the Connector can read the password policy the Connected System enforces. |
 | `SupportsUniquenessProbe` | `bool` | Whether the Connector can search the Connected System for values already in use, so that generating a unique value can avoid one held by an account JIM has never imported. |
 | `SupportsUniquenessRejectionClassification` | `bool` | Whether the Connector reports an export refused because a value is already in use as that, rather than as an ordinary export failure, so that JIM can generate another value. |
+| `SupportsDisable` | `bool` | Whether the Connector can disable an account rather than delete it, so an export Synchronisation Rule may deprovision with Disable. |
 | `ExternalIdsUniqueAcrossObjectTypes` | `bool` | Whether an external ID identifies one object across every Object Type of a Connected System using the Connector. When true, an import refuses an object that has changed Object Type, rather than treating it as a deletion and a new object, unless the Full Import Run Profile allows Object Type changes. When false, a Run Profile's Allow Object Type Changes setting has no effect. |
 | `SchemaStandard` | `string` | Which standard's attribute names the Connector's schema follows, such as Scim or Ldap; NotSet when it follows none. JIM uses it to suggest Standard Mappings. |
 <!-- END GENERATED: Get-JIMConnectorDefinition -->

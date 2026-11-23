@@ -202,9 +202,14 @@ public enum OutboundDeprovisionAction
     /// <summary>
     /// Break the join AND delete the CSO from the Connected System.
     /// </summary>
-    Delete = 1
+    Delete = 1,
 
-    // Post-MVP: Disable = 2, MoveToArchiveOU = 3
+    /// <summary>
+    /// Disable the account in the Connected System, then break the join. The account stays, unable to sign in, for
+    /// audit or a rehire, whom an Object Matching Rule rejoins and the Account Enabled flow re-enables. Only offered
+    /// where the Connector can disable (<see cref="Interfaces.IConnectorCapabilities.SupportsDisable"/>).
+    /// </summary>
+    Disable = 2
 }
 
 /// <summary>

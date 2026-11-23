@@ -201,6 +201,7 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued] = Icons.Material.Filled.AutoDelete,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject] = Icons.Material.Filled.LinkOff,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport] = Icons.Material.Filled.AutoDelete,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDisableExport] = Icons.Material.Filled.Block,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldRemainJoined] = Icons.Material.Filled.Link,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction] = Icons.Material.Filled.SwapHoriz,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFailAttributeFlow] = Icons.Material.Filled.RuleFolder,

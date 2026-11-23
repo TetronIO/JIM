@@ -94,7 +94,8 @@ public partial class SyncEngine
         if (existingPendingExport == null)
             return new RecallPendingExportMergeResult { Outcome = RecallPendingExportMergeOutcome.Proceed };
 
-        if (existingPendingExport.ChangeType == PendingExportChangeType.Delete)
+        // A queued Disable supersedes the same way (#2085): merging would turn it into an Update and leave the account enabled.
+        if (existingPendingExport.ChangeType.IsDeprovisioning())
             return new RecallPendingExportMergeResult { Outcome = RecallPendingExportMergeOutcome.SkippedDeleteSupersedes };
 
         if (existingPendingExport.ChangeType == PendingExportChangeType.Create)

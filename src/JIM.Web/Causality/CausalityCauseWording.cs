@@ -97,6 +97,8 @@ public static class CausalityCauseWording
                         $"{Subject(cohort)}'s Metaverse Object changed{stagedBy}, so this run applied the changes to the Connected System Object",
                     CausalReasonCode.ExportDeleteStaged =>
                         $"The Metaverse Object {Subject(cohort)} was deleted, so this run deleted the Connected System Object",
+                    CausalReasonCode.ExportDisableStaged =>
+                        $"{Subject(cohort)} was deprovisioned, so this run disabled the Connected System Object",
                     _ when IsStagedBySeveralRuns(cohort) =>
                         $"{cohort.MemberCount} synchronisations of {Subject(cohort)} staged this change, and this run exported it",
                     _ => $"A synchronisation of {Subject(cohort)} staged this change, and this run exported it"
@@ -171,7 +173,7 @@ public static class CausalityCauseWording
         // create's provisioning decision, which reads on from the Synchronisation Rule chip as its subject.
         if (cohort.ReasonCode is CausalReasonCode.ExportCreateStaged)
             return cohort.SyncRuleId.HasValue ? "made the provisioning decision" : null;
-        if (cohort.ReasonCode is CausalReasonCode.ExportUpdateStaged or CausalReasonCode.ExportDeleteStaged)
+        if (cohort.ReasonCode is CausalReasonCode.ExportUpdateStaged or CausalReasonCode.ExportDeleteStaged or CausalReasonCode.ExportDisableStaged)
             return null;
 
         // Kept as one expression per code rather than a shared suffix: an administrator reads these, and a

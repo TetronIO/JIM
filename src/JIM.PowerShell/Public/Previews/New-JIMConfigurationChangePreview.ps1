@@ -155,8 +155,8 @@ function New-JIMConfigurationChangePreview {
 
     .PARAMETER OutboundDeprovisionAction
         The proposed action for a joined target object whose Metaverse Object leaves this export rule's
-        scope: Disconnect leaves the object in the target Connected System; Delete stages a Delete export
-        that removes it. Omitted previews the stored action. Read only by export Synchronisation Rules,
+        scope: Disconnect leaves the object in the target Connected System; Disable stages a Disable export
+        that disables it and then disconnects it; Delete stages a Delete export that removes it. Omitted previews the stored action. Read only by export Synchronisation Rules,
         and the preview says so when the rule is an import rule.
 
     .PARAMETER InboundOutOfScopeAction
@@ -526,7 +526,7 @@ function New-JIMConfigurationChangePreview {
         [int]$SyncRuleId,
 
         [Parameter(ParameterSetName = 'SyncRuleDestructiveToggles')]
-        [ValidateSet('Disconnect', 'Delete')]
+        [ValidateSet('Disconnect', 'Disable', 'Delete')]
         [string]$OutboundDeprovisionAction,
 
         [Parameter(ParameterSetName = 'SyncRuleDestructiveToggles')]

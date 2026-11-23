@@ -2631,6 +2631,17 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public virtual Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesToAsync(int connectedSystemId,
+        IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        var references = metaverseObjectIds.Select(id => id.ToString()).ToHashSet();
+        var result = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.HasUnresolvedReferences
+                      && pe.AttributeValueChanges.Any(avc => avc.UnresolvedReferenceValue != null && references.Contains(avc.UnresolvedReferenceValue)))
+            .ToList();
+        return Task.FromResult(result);
+    }
+
     public Task<int> GetPendingExportsCountAsync(int connectedSystemId)
     {
         var count = _pendingExportsByCs.TryGetValue(connectedSystemId, out var ids) ? ids.Count : 0;

@@ -94,6 +94,7 @@ public static class ConnectedSystemObjectConnectionStateResolver
             // Pending and Executing are collapsed to one state: from an administrator's perspective the
             // outcome is unknown either way until the delete is confirmed or fails.
             PendingExportChangeType.Delete => ConnectedSystemObjectConnectionState.DeletePending,
+            PendingExportChangeType.Disable => ConnectedSystemObjectConnectionState.DisablePending,
             _ => ConnectedSystemObjectConnectionState.UpdatePending
         };
     }

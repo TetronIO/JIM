@@ -47,13 +47,20 @@ public static class ConfigurationChangeConsequences
 
         return (objectType, parentKey, nodeKey) switch
         {
-            (ConfigurationSnapshotService.SyncRuleObjectType, _, "outboundDeprovisionAction") =>
-                newValue == nameof(OutboundDeprovisionAction.Delete)
-                    ? "Objects this rule deprovisions will be deleted in the Connected System rather than disconnected " +
-                      "from JIM. Deletion happens in the target system and re-running synchronisation will not bring " +
-                      "those objects back."
-                    : "Objects this rule deprovisions will be disconnected from JIM and left in place in the Connected " +
-                      "System, rather than deleted from it.",
+            (ConfigurationSnapshotService.SyncRuleObjectType, _, "outboundDeprovisionAction") => newValue switch
+            {
+                nameof(OutboundDeprovisionAction.Delete) =>
+                    "Objects this rule deprovisions will be deleted in the Connected System rather than disconnected " +
+                    "from JIM. Deletion happens in the target system and re-running synchronisation will not bring " +
+                    "those objects back.",
+                nameof(OutboundDeprovisionAction.Disable) =>
+                    "Objects this rule deprovisions will be disabled in the Connected System and then disconnected from " +
+                    "JIM, rather than deleted or left enabled. A person who comes back into scope is rejoined to their " +
+                    "disabled account by an Object Matching Rule and re-enabled by the rule's Attribute Flows.",
+                _ =>
+                    "Objects this rule deprovisions will be disconnected from JIM and left in place in the Connected " +
+                    "System, rather than deleted from it."
+            },
 
             (ConfigurationSnapshotService.SyncRuleObjectType, _, "inboundOutOfScopeAction") =>
                 newValue == nameof(InboundOutOfScopeAction.Disconnect)

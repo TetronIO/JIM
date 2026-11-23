@@ -83,6 +83,10 @@ The API uses URL path-based versioning. The current version is `v1`; all endpoin
 
 JIM follows semantic versioning from v1.0.0: a breaking change to the API comes only in a new major version, and anything it removes is first marked deprecated in an earlier minor release. Changes that affect existing integrations are called out here.
 
+**Unreleased**
+
+- **The LDAP Connector's `Delete Behaviour` and `Disable Attribute` settings are removed.** Whether a leaver's account is deleted or disabled is now the export Synchronisation Rule's choice: `outboundDeprovisionAction` accepts `Disable` beside `Disconnect` and `Delete`. Connected Systems no longer hold them; set the rule's action instead. Removed without a deprecation period, ahead of any production use.
+
 **v1.0.0**
 
 - **Signing in to the API through Microsoft Entra ID needs version 2 access tokens.** Version 1 tokens are refused; set `"requestedAccessTokenVersion": 2` in the application's manifest ([Upgrading](../administration/upgrading.md)).

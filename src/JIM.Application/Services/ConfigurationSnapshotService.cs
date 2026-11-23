@@ -1324,6 +1324,7 @@ public class ConfigurationSnapshotService
         Add(children, "supportsPasswordPolicyDiscovery", Render(definition.SupportsPasswordPolicyDiscovery), "Password policy discovery");
         Add(children, "supportsUniquenessProbe", Render(definition.SupportsUniquenessProbe), "Uniqueness probe");
         Add(children, "supportsUniquenessRejectionClassification", Render(definition.SupportsUniquenessRejectionClassification), "Uniqueness rejection classification");
+        Add(children, "supportsDisable", Render(definition.SupportsDisable), "Disable");
         Add(children, "externalIdsUniqueAcrossObjectTypes", Render(definition.ExternalIdsUniqueAcrossObjectTypes), "External IDs unique across Object Types");
         return ConfigurationSnapshotNode.ObjectNode("capabilities", children, "Capabilities");
     }

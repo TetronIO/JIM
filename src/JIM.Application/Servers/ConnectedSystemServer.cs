@@ -2495,6 +2495,29 @@ public partial class ConnectedSystemServer
         throw new ArgumentException(message);
     }
 
+    /// <summary>
+    /// Refuses an export Synchronisation Rule that deprovisions with Disable when its Connected System's Connector cannot
+    /// disable an account (<see cref="JIM.Models.Interfaces.IConnectorCapabilities.SupportsDisable"/>). Checked here, not
+    /// only in the portal, because the REST API and PowerShell reach this method directly.
+    /// </summary>
+    /// <exception cref="ArgumentException">The rule asks for Disable and the Connector cannot disable.</exception>
+    private async Task ThrowIfDeprovisionActionUnsupportedAsync(SyncRule syncRule)
+    {
+        if (syncRule.Direction != SyncRuleDirection.Export || syncRule.OutboundDeprovisionAction != OutboundDeprovisionAction.Disable)
+            return;
+
+        var connectedSystemId = syncRule.ConnectedSystemId != 0 ? syncRule.ConnectedSystemId : syncRule.ConnectedSystem?.Id ?? 0;
+        var connectedSystem = connectedSystemId == 0 ? null : await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        var connector = connectedSystem?.ConnectorDefinition;
+        if (connector == null || connector.SupportsDisable)
+            return;
+
+        var message = $"Synchronisation Rule '{syncRule.Name}' cannot deprovision with Disable: the {connector.Name} that " +
+                      $"'{connectedSystem!.Name}' uses cannot disable an account. Choose Delete or Disconnect.";
+        Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", LogSanitiser.Sanitise(message));
+        throw new ArgumentException(message);
+    }
+
     private static void ValidateConnectedSystemParameter(ConnectedSystem connectedSystem)
     {
         if (connectedSystem == null)
@@ -10703,6 +10726,8 @@ public partial class ConnectedSystemServer
         await ThrowIfEnabledOnDeselectedObjectTypeAsync(syncRule);
         // reject an Object Type change on a saved rule (#2265): everything it holds names attributes of its types.
         await ThrowIfSyncRuleObjectTypesChangedAsync(syncRule);
+        // reject Disable where the Connector cannot disable an account (#2085).
+        await ThrowIfDeprovisionActionUnsupportedAsync(syncRule);
 
         // The disabled reason describes why the rule is off (#1485); saving an enabled rule clears it, or a
         // re-enabled rule would carry a stale claim about a state that no longer holds.
@@ -10979,6 +11004,8 @@ public partial class ConnectedSystemServer
         await ThrowIfEnabledOnDeselectedObjectTypeAsync(syncRule);
         // reject an Object Type change on a saved rule (#2265): everything it holds names attributes of its types.
         await ThrowIfSyncRuleObjectTypesChangedAsync(syncRule);
+        // reject Disable where the Connector cannot disable an account (#2085).
+        await ThrowIfDeprovisionActionUnsupportedAsync(syncRule);
 
         // The disabled reason describes why the rule is off (#1485); saving an enabled rule clears it, or a
         // re-enabled rule would carry a stale claim about a state that no longer holds.

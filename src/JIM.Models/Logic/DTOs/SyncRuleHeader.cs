@@ -91,10 +91,16 @@ public class SyncRuleHeader
 
     /// <summary>
     /// For an export rule, what happens to a Connected System Object when its Metaverse Object leaves the rule's
-    /// scope or is deleted: Disconnect breaks the join and leaves the object in the Connected System, and Delete
-    /// removes it from there. Only meaningful on an export rule.
+    /// scope or is deleted: Disconnect breaks the join and leaves the object in the Connected System, Disable disables
+    /// it there and then breaks the join, and Delete removes it from there. Only meaningful on an export rule.
     /// </summary>
     public OutboundDeprovisionAction OutboundDeprovisionAction { get; set; }
+
+    /// <summary>
+    /// Whether the Connector of the rule's Connected System can disable an account, so the rule may deprovision with
+    /// Disable.
+    /// </summary>
+    public bool ConnectorSupportsDisable { get; set; }
 
     /// <summary>
     /// For an import rule, what happens when a Connected System Object leaves the rule's scope: Disconnect breaks
@@ -138,6 +144,7 @@ public class SyncRuleHeader
             Enabled = entity.Enabled,
             EnforceState = entity.EnforceState,
             OutboundDeprovisionAction = entity.OutboundDeprovisionAction,
+            ConnectorSupportsDisable = entity.ConnectedSystem?.ConnectorDefinition?.SupportsDisable ?? false,
             InboundOutOfScopeAction = entity.InboundOutOfScopeAction
         };
     }

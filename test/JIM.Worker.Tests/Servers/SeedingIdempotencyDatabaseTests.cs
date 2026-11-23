@@ -180,7 +180,7 @@ public class SeedingIdempotencyDatabaseTests
             var connectedSystem = new JIM.Models.Staging.ConnectedSystem { Name = "Yellowstone APAC", ConnectorDefinition = definition };
             foreach (var setting in definition.Settings)
                 connectedSystem.SettingValues.Add(new JIM.Models.Staging.ConnectedSystemSettingValue { Setting = setting, ConnectedSystem = connectedSystem });
-            connectedSystem.SettingValues.Single(v => v.Setting.Name == "Delete Behaviour").StringValue = null;
+            connectedSystem.SettingValues.Single(v => v.Setting.Name == "Group Placeholder Member DN").StringValue = null;
             connectedSystem.SettingValues.Single(v => v.Setting.Name == "Host").StringValue = "dc01.yellowstone.local";
             ctx.ConnectedSystems.Add(connectedSystem);
             await ctx.SaveChangesAsync();
@@ -204,7 +204,7 @@ public class SeedingIdempotencyDatabaseTests
             {
                 Assert.That(values.Where(v => v.Setting.Name == "Search Timeout").Select(v => v.IntValue), Is.EqualTo(new int?[] { 300 }),
                     "the missing setting must be added once, carrying its default");
-                Assert.That(values.Single(v => v.Setting.Name == "Delete Behaviour").StringValue, Is.EqualTo("Delete"),
+                Assert.That(values.Single(v => v.Setting.Name == "Group Placeholder Member DN").StringValue, Is.EqualTo("cn=placeholder"),
                     "the unset value must take the setting's declared default");
                 Assert.That(values.Single(v => v.Setting.Name == "Host").StringValue, Is.EqualTo("dc01.yellowstone.local"),
                     "a value the administrator set is never touched");

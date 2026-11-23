@@ -165,4 +165,42 @@ public class PendingExportUnresolvedReferencesDatabaseTests
             "AttributeValueChanges[].Attribute must be hydrated for TryResolveReferencesFromLookup and its logging.");
         Assert.That(loaded.AttributeValueChanges[0].Attribute.Name, Is.EqualTo("manager"));
     }
+
+    /// <summary>
+    /// #2085: the lookup a Disable makes before letting its account go returns exactly the Pending Exports of that Connected
+    /// System that still owe a reference to the given Metaverse Objects, whatever their status, with each change's attribute
+    /// hydrated for the resolver.
+    /// </summary>
+    [Test]
+    public async Task GetPendingExportsWithUnresolvedReferencesToAsync_ReturnsOnlyThoseOwingAReferenceToTheGivenObjectsAsync()
+    {
+        var (systemAId, systemBId, attributeAId) = await SeedTwoSystemsAsync();
+        var leaver = Guid.NewGuid();
+
+        var owesTheLeaver = BuildPendingExport(systemAId, PendingExportStatus.Pending, hasUnresolvedReferences: true, attributeAId);
+        owesTheLeaver.AttributeValueChanges[0].UnresolvedReferenceValue = leaver.ToString();
+        var owesTheLeaverWrittenInPart = BuildPendingExport(systemAId, PendingExportStatus.Exported, hasUnresolvedReferences: true, attributeAId);
+        owesTheLeaverWrittenInPart.AttributeValueChanges[0].UnresolvedReferenceValue = leaver.ToString();
+        var owesSomeoneElse = BuildPendingExport(systemAId, PendingExportStatus.Pending, hasUnresolvedReferences: true, attributeAId);
+        var otherSystemOwesTheLeaver = BuildPendingExport(systemBId, PendingExportStatus.Pending, hasUnresolvedReferences: true, attributeAId);
+        otherSystemOwesTheLeaver.AttributeValueChanges[0].UnresolvedReferenceValue = leaver.ToString();
+
+        await using (var seed = NewContext())
+        {
+            seed.PendingExports.AddRange(owesTheLeaver, owesTheLeaverWrittenInPart, owesSomeoneElse, otherSystemOwesTheLeaver);
+            await seed.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        var result = await repository.Sync.GetPendingExportsWithUnresolvedReferencesToAsync(systemAId, [leaver]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Select(pe => pe.Id), Is.EquivalentTo(new[] { owesTheLeaver.Id, owesTheLeaverWrittenInPart.Id }));
+            Assert.That(result.SelectMany(pe => pe.AttributeValueChanges).Select(c => c.Attribute?.Name), Is.All.EqualTo("manager"),
+                "each change's attribute is hydrated for the resolver");
+        }
+    }
 }

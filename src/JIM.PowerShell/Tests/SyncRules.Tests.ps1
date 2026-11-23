@@ -371,6 +371,7 @@ Describe 'New-JIMSyncRule' {
             $validateSet = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
             $validateSet | Should -Not -BeNullOrEmpty
             $validateSet.ValidValues | Should -Contain 'Disconnect'
+            $validateSet.ValidValues | Should -Contain 'Disable'
             $validateSet.ValidValues | Should -Contain 'Delete'
         }
     }

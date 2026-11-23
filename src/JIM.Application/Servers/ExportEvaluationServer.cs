@@ -803,7 +803,7 @@ public class ExportEvaluationServer
         var decision = _syncEngine.DecideOutOfScopeDeprovisioning(exportRule, existingPendingExport);
         switch (decision.Action)
         {
-            case OutOfScopeDeprovisioningAction.DeleteAlreadySent:
+            case OutOfScopeDeprovisioningAction.DeprovisioningAlreadySent:
                 // The account is gone or going from the target system; the join stays until the confirming import
                 // finishes the Delete, so nothing is reported as kept.
                 Log.Information("HandleOutboundDeprovisioningAsync: Not disconnecting CSO {CsoId} from MVO {MvoId}: the rule now says Disconnect, " +
@@ -817,7 +817,7 @@ public class ExportEvaluationServer
                     cso.Id, mvo.Id);
 
                 // The account stays, so a Delete still waiting to be sent must not remove it at the next export.
-                if (decision.ExistingDeleteToWithdraw is { } deleteToWithdraw)
+                if (decision.ExistingDeprovisioningToWithdraw is { } deleteToWithdraw)
                 {
                     await SyncRepo.DeletePendingExportAsync(deleteToWithdraw);
                     Log.Information("HandleOutboundDeprovisioningAsync: Withdrew Delete PendingExport {PendingExportId} (status: {Status}) for CSO {CsoId}, " +
@@ -848,14 +848,14 @@ public class ExportEvaluationServer
 
                 return null; // No Pending Export needed for disconnect
 
-            case OutOfScopeDeprovisioningAction.StageDeleteExport:
+            case OutOfScopeDeprovisioningAction.StageDeprovisioningExport:
                 // Create (or reclaim) a Delete PendingExport for this CSO. The helper handles
                 // the collision case where a previous export's PE is still attached to the CSO
                 // because the next confirming import hasn't run yet to reconcile it away.
                 Log.Information("HandleOutboundDeprovisioningAsync: Ensuring delete PendingExport for CSO {CsoId} (OutboundDeprovisionAction=Delete)",
                     cso.Id);
 
-                var deletePendingExport = await EnsureDeletePendingExportAsync(cso, mvo.Id, exportRule, workingSet);
+                var deletePendingExport = await EnsureDeprovisioningPendingExportAsync(cso, mvo.Id, exportRule, workingSet);
                 // Recorded once the Delete is persisted, so the scope exit's report can name the rule that queued it (#1811).
                 if (deletePendingExport != null)
                     workingSet.RecordDeprovisioningRule(cso.Id, exportRule);
@@ -1112,12 +1112,12 @@ public class ExportEvaluationServer
 
                 if (verdict.RulesConflicted)
                 {
-                    Log.Information("EvaluateMvoDeletionsAsync: {RuleCount} export Synchronisation Rules match CSO {CsoId} with conflicting deprovisioning actions; Delete wins via rule '{RuleName}'",
-                        verdict.MatchingRuleCount, cso.Id, LogSanitiser.Sanitise(verdict.WinningRule!.Name));
+                    Log.Information("EvaluateMvoDeletionsAsync: {RuleCount} export Synchronisation Rules match CSO {CsoId} with conflicting deprovisioning actions; {Action} wins via rule '{RuleName}'",
+                        verdict.MatchingRuleCount, cso.Id, verdict.ExportChangeType, LogSanitiser.Sanitise(verdict.WinningRule!.Name));
                 }
 
-                Log.Information("EvaluateMvoDeletionsAsync: Staging delete Pending Export for CSO {CsoId} (join type {JoinType}) per export Synchronisation Rule '{RuleName}'",
-                    cso.Id, cso.JoinType, LogSanitiser.Sanitise(verdict.WinningRule!.Name));
+                Log.Information("EvaluateMvoDeletionsAsync: Staging {ChangeType} Pending Export for CSO {CsoId} (join type {JoinType}) per export Synchronisation Rule '{RuleName}'",
+                    verdict.ExportChangeType, cso.Id, cso.JoinType, LogSanitiser.Sanitise(verdict.WinningRule!.Name));
                 csosToDelete.Add((cso, mvoId));
             }
         }
@@ -1127,7 +1127,7 @@ public class ExportEvaluationServer
             // Delete-PE collision policy, set-based. PendingExports has a unique index on
             // ConnectedSystemObjectId, so only one PE per CSO is allowed: an existing Delete PE
             // is reused; any other change type is deleted and replaced with a Delete PE (the same
-            // policy EnsureDeletePendingExportAsync applies on the singular path).
+            // policy EnsureDeprovisioningPendingExportAsync applies on the singular path).
             var existingPesByCsoId = await SyncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(
                 csosToDelete.Select(p => p.Cso.Id).ToList());
 
@@ -1158,8 +1158,8 @@ public class ExportEvaluationServer
 
                 if (decision.MustReplaceExistingPendingExport)
                 {
-                    Log.Information("EvaluateMvoDeletionsAsync: Replacing existing {ChangeType} PendingExport {ExistingPeId} for CSO {CsoId} with Delete PE",
-                        existingPe!.ChangeType, existingPe.Id, cso.Id);
+                    Log.Information("EvaluateMvoDeletionsAsync: Replacing existing {ChangeType} PendingExport {ExistingPeId} for CSO {CsoId} with a {NewChangeType} PE",
+                        existingPe!.ChangeType, existingPe.Id, cso.Id, decision.ExportChangeType);
                     replacedPeCsoIds.Add(cso.Id);
                 }
 
@@ -1190,13 +1190,13 @@ public class ExportEvaluationServer
                 }
 
                 // Only set the FK property (ConnectedSystemObjectId), NOT the navigation property,
-                // matching EnsureDeletePendingExportAsync.
+                // matching EnsureDeprovisioningPendingExportAsync.
                 var pendingExport = new PendingExport
                 {
                     Id = TimeOrderedIds.New(),
                     ConnectedSystemId = cso.ConnectedSystemId,
                     ConnectedSystemObjectId = cso.Id,
-                    ChangeType = PendingExportChangeType.Delete,
+                    ChangeType = decision.ExportChangeType,
                     Status = PendingExportStatus.Pending,
                     SourceMetaverseObjectId = mvoId,
                     CreatedAt = DateTime.UtcNow
@@ -1205,8 +1205,8 @@ public class ExportEvaluationServer
                     pendingExport.AttributeValueChanges.Add(avc);
 
                 newPendingExports.Add(pendingExport);
-                Log.Information("EvaluateMvoDeletionsAsync: Delete PendingExport {ExportId} staged for CSO {CsoId} in system {SystemId}",
-                    pendingExport.Id, cso.Id, cso.ConnectedSystemId);
+                Log.Information("EvaluateMvoDeletionsAsync: {ChangeType} PendingExport {ExportId} staged for CSO {CsoId} in system {SystemId}",
+                    pendingExport.ChangeType, pendingExport.Id, cso.Id, cso.ConnectedSystemId);
             }
 
             if (replacedPeCsoIds.Count > 0)
@@ -1287,7 +1287,7 @@ public class ExportEvaluationServer
     /// is detached from the MVO). Ignored when reusing an existing Delete PE.
     /// </param>
     /// <returns>The Delete PendingExport for the CSO — either the existing one reused, or a newly created one.</returns>
-    private async Task<PendingExport> EnsureDeletePendingExportAsync(
+    private async Task<PendingExport> EnsureDeprovisioningPendingExportAsync(
         ConnectedSystemObject cso,
         Guid sourceMetaverseObjectId,
         SyncRule exportRule,
@@ -1297,9 +1297,12 @@ public class ExportEvaluationServer
         // This run's own writes are answered from the working set: a Delete Pending Export staged earlier in
         // the run is by construction the reuse case, so the per-object read below is only paid for Pending
         // Exports that existed before the run began.
-        if (workingSet.TryGetStagedDeleteExport(cso.Id, out var stagedPe))
+        // A Delete staged by another rule this run stands whatever this rule says, as the stronger action; a Disable
+        // stands unless this rule says Delete, which then replaces it below (#2085).
+        if (workingSet.TryGetStagedDeleteExport(cso.Id, out var stagedPe) &&
+            (stagedPe.ChangeType == PendingExportChangeType.Delete || exportRule.OutboundDeprovisionAction != OutboundDeprovisionAction.Delete))
         {
-            Log.Information("EnsureDeletePendingExportAsync: Delete PendingExport {ExistingPeId} already staged for CSO {CsoId} this run (status: {Status}). Reusing without a database read.",
+            Log.Information("EnsureDeprovisioningPendingExportAsync: Delete PendingExport {ExistingPeId} already staged for CSO {CsoId} this run (status: {Status}). Reusing without a database read.",
                 stagedPe.Id, cso.Id, stagedPe.Status);
             return stagedPe;
         }
@@ -1320,7 +1323,7 @@ public class ExportEvaluationServer
 
         if (decision.ExistingPendingExportToReuse is { } reusedPe)
         {
-            Log.Information("EnsureDeletePendingExportAsync: Delete PendingExport {ExistingPeId} already exists for CSO {CsoId} (status: {Status}). Reusing.",
+            Log.Information("EnsureDeprovisioningPendingExportAsync: Delete PendingExport {ExistingPeId} already exists for CSO {CsoId} (status: {Status}). Reusing.",
                 reusedPe.Id, cso.Id, reusedPe.Status);
             workingSet.RecordStagedDeleteExport(cso.Id, reusedPe);
             return reusedPe;
@@ -1328,8 +1331,8 @@ public class ExportEvaluationServer
 
         if (decision.MustReplaceExistingPendingExport)
         {
-            Log.Information("EnsureDeletePendingExportAsync: Replacing existing {ChangeType} PendingExport {ExistingPeId} for CSO {CsoId} with Delete PE",
-                existingPe!.ChangeType, existingPe.Id, cso.Id);
+            Log.Information("EnsureDeprovisioningPendingExportAsync: Replacing existing {ChangeType} PendingExport {ExistingPeId} for CSO {CsoId} with a {NewChangeType} PE",
+                existingPe!.ChangeType, existingPe.Id, cso.Id, decision.ExportChangeType);
             await SyncRepo.DeletePendingExportAsync(existingPe);
         }
 
@@ -1340,7 +1343,7 @@ public class ExportEvaluationServer
             Id = TimeOrderedIds.New(),
             ConnectedSystemId = cso.ConnectedSystemId,
             ConnectedSystemObjectId = cso.Id,
-            ChangeType = PendingExportChangeType.Delete,
+            ChangeType = decision.ExportChangeType,
             Status = PendingExportStatus.Pending,
             SourceMetaverseObjectId = sourceMetaverseObjectId,
             CreatedAt = DateTime.UtcNow
@@ -1358,8 +1361,8 @@ public class ExportEvaluationServer
         // write left unpersisted.
         workingSet.RecordStagedDeleteExport(cso.Id, pendingExport);
 
-        Log.Information("EnsureDeletePendingExportAsync: Created delete PendingExport {ExportId} for CSO {CsoId} in system {SystemId}",
-            pendingExport.Id, cso.Id, cso.ConnectedSystemId);
+        Log.Information("EnsureDeprovisioningPendingExportAsync: Created {ChangeType} PendingExport {ExportId} for CSO {CsoId} in system {SystemId}",
+            pendingExport.ChangeType, pendingExport.Id, cso.Id, cso.ConnectedSystemId);
 
         return pendingExport;
     }
@@ -3046,7 +3049,8 @@ public class ExportEvaluationServer
                 // deprovisioned from the target, so a membership removal is moot; merging would
                 // replace the Delete with an Update and leave the object alive in the target
                 // forever (a pre-#1003 defect).
-                if (recallSemantics && dbPendingExport.ChangeType == PendingExportChangeType.Delete)
+                // A pending Disable wins the same way (#2085): merging would turn it into an Update and leave the account enabled.
+                if (recallSemantics && dbPendingExport.ChangeType.IsDeprovisioning())
                 {
                     Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: CSO {CsoId} has a pending Delete export; " +
                         "recall skipping {ChangeCount} change(s) (deprovisioning supersedes membership updates)",
@@ -3208,7 +3212,7 @@ public class ExportEvaluationServer
         // The replacement continues the export it replaces unless that was a Delete: an Update superseding a Delete
         // means the object came back into scope, so the Delete is withdrawn rather than merged, and neither its id
         // nor the run that queued it carries over (#1018, #2100).
-        var continuedPendingExport = replacedPendingExport is { ChangeType: not PendingExportChangeType.Delete }
+        var continuedPendingExport = replacedPendingExport != null && !replacedPendingExport.ChangeType.IsDeprovisioning()
             ? replacedPendingExport
             : null;
 

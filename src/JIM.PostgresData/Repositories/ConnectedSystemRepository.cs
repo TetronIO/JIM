@@ -8517,6 +8517,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             Enabled = sr.Enabled,
             EnforceState = sr.EnforceState,
             OutboundDeprovisionAction = sr.OutboundDeprovisionAction,
+            ConnectorSupportsDisable = sr.ConnectedSystem.ConnectorDefinition.SupportsDisable,
             InboundOutOfScopeAction = sr.InboundOutOfScopeAction
         }).ToListAsync();
     }

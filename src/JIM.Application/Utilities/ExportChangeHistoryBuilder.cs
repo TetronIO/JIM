@@ -33,7 +33,7 @@ public static class ExportChangeHistoryBuilder
     {
         var changeType = exportItem.ChangeType switch
         {
-            PendingExportChangeType.Delete => ObjectChangeType.Deprovisioned,
+            PendingExportChangeType.Delete or PendingExportChangeType.Disable => ObjectChangeType.Deprovisioned,
             _ => ObjectChangeType.Exported
         };
 

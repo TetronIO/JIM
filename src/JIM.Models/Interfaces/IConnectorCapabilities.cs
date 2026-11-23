@@ -156,4 +156,12 @@ public interface IConnectorCapabilities
     /// two delimited files' identifier columns can overlap by coincidence.
     /// </summary>
     public bool ExternalIdsUniqueAcrossObjectTypes => false;
+
+    /// <summary>
+    /// Can the Connector disable an account rather than delete it? When true, an export Synchronisation Rule for a
+    /// Connected System using this Connector may deprovision with <see cref="Core.OutboundDeprovisionAction.Disable"/>,
+    /// and the Connector is handed <see cref="Transactional.PendingExportChangeType.Disable"/> Pending Exports, which it
+    /// carries out the way its Connected System disables an account. When false, a rule asking for Disable is refused.
+    /// </summary>
+    public bool SupportsDisable => false;
 }

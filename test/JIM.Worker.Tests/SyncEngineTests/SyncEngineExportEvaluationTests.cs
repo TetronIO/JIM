@@ -37,7 +37,7 @@ public class SyncEngineExportEvaluationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(decision.ShouldStageDeleteExport, Is.False);
+            Assert.That(decision.ShouldStageDeprovisioningExport, Is.False);
             Assert.That(decision.Reason, Is.EqualTo(MvoDeletionExportReason.NoMatchingExportRule));
         }
     }
@@ -52,7 +52,7 @@ public class SyncEngineExportEvaluationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(decision.ShouldStageDeleteExport, Is.False);
+            Assert.That(decision.ShouldStageDeprovisioningExport, Is.False);
             Assert.That(decision.Reason, Is.EqualTo(MvoDeletionExportReason.NoMetaverseObjectType));
         }
     }
@@ -66,7 +66,7 @@ public class SyncEngineExportEvaluationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(decision.ShouldStageDeleteExport, Is.False);
+            Assert.That(decision.ShouldStageDeprovisioningExport, Is.False);
             Assert.That(decision.Reason, Is.EqualTo(MvoDeletionExportReason.MatchingRulesDeclineDeletion));
             Assert.That(decision.MatchingRuleCount, Is.EqualTo(1));
         }
@@ -108,7 +108,7 @@ public class SyncEngineExportEvaluationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(decision.ShouldStageDeleteExport, Is.True);
+            Assert.That(decision.ShouldStageDeprovisioningExport, Is.True);
             Assert.That(decision.Reason, Is.EqualTo(MvoDeletionExportReason.DeleteRuleWon));
             Assert.That(decision.WinningRule, Is.SameAs(deleteRule));
             Assert.That(decision.SecondaryExternalIdValue, Is.EqualTo("cn=alice,ou=People,dc=corp"));
@@ -132,10 +132,76 @@ public class SyncEngineExportEvaluationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(decision.ShouldStageDeleteExport, Is.True);
+            Assert.That(decision.ShouldStageDeprovisioningExport, Is.True);
             Assert.That(decision.WinningRule, Is.SameAs(deleteRule));
             Assert.That(decision.MatchingRuleCount, Is.EqualTo(2));
             Assert.That(decision.RulesConflicted, Is.True);
+        }
+    }
+
+    [Test]
+    public void DecideMvoDeletionExport_ADisableRuleMatches_StagesADisable()
+    {
+        var disableRule = ExportRule(1, 5, OutboundDeprovisionAction.Disable);
+
+        var decision = _engine.DecideMvoDeletionExport(Cso(), 100, RulesByMvoType(100, disableRule), existingPendingExport: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.ShouldStageDeprovisioningExport, Is.True);
+            Assert.That(decision.ExportChangeType, Is.EqualTo(PendingExportChangeType.Disable));
+            Assert.That(decision.Reason, Is.EqualTo(MvoDeletionExportReason.DisableRuleWon));
+            Assert.That(decision.WinningRule, Is.SameAs(disableRule));
+        }
+    }
+
+    [Test]
+    public void DecideMvoDeletionExport_DeleteAndDisableRulesConflict_DeleteWins()
+    {
+        var deleteRule = ExportRule(1, 5, OutboundDeprovisionAction.Delete);
+        var disableRule = ExportRule(1, 5, OutboundDeprovisionAction.Disable);
+
+        var decision = _engine.DecideMvoDeletionExport(Cso(), 100, RulesByMvoType(100, disableRule, deleteRule), existingPendingExport: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.ExportChangeType, Is.EqualTo(PendingExportChangeType.Delete));
+            Assert.That(decision.WinningRule, Is.SameAs(deleteRule));
+            Assert.That(decision.RulesConflicted, Is.True);
+        }
+    }
+
+    [Test]
+    public void DecideMvoDeletionExport_DisableAndDisconnectRulesConflict_DisableWins()
+    {
+        // The stronger action wins, as Delete beats Disconnect (#655): an account one rule wants unusable is not
+        // left enabled because another rule would only disconnect it.
+        var disconnectRule = ExportRule(1, 5, OutboundDeprovisionAction.Disconnect);
+        var disableRule = ExportRule(1, 5, OutboundDeprovisionAction.Disable);
+
+        var decision = _engine.DecideMvoDeletionExport(Cso(), 100, RulesByMvoType(100, disconnectRule, disableRule), existingPendingExport: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.ShouldStageDeprovisioningExport, Is.True);
+            Assert.That(decision.ExportChangeType, Is.EqualTo(PendingExportChangeType.Disable));
+            Assert.That(decision.WinningRule, Is.SameAs(disableRule));
+            Assert.That(decision.RulesConflicted, Is.True);
+        }
+    }
+
+    [Test]
+    public void DecideMvoDeletionExport_AnExistingDeleteWhenTheRuleSaysDisable_IsReplaced()
+    {
+        var existing = new PendingExport { Id = Guid.NewGuid(), ChangeType = PendingExportChangeType.Delete };
+
+        var decision = _engine.DecideMvoDeletionExport(
+            Cso(), 100, RulesByMvoType(100, ExportRule(1, 5, OutboundDeprovisionAction.Disable)), existing);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.ExistingPendingExportToReuse, Is.Null);
+            Assert.That(decision.MustReplaceExistingPendingExport, Is.True);
         }
     }
 
@@ -151,7 +217,7 @@ public class SyncEngineExportEvaluationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(decision.ShouldStageDeleteExport, Is.True);
+            Assert.That(decision.ShouldStageDeprovisioningExport, Is.True);
             Assert.That(decision.ExistingPendingExportToReuse, Is.SameAs(existing));
             Assert.That(decision.MustReplaceExistingPendingExport, Is.False);
         }
@@ -167,7 +233,7 @@ public class SyncEngineExportEvaluationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(decision.ShouldStageDeleteExport, Is.True);
+            Assert.That(decision.ShouldStageDeprovisioningExport, Is.True);
             Assert.That(decision.MustReplaceExistingPendingExport, Is.True);
             Assert.That(decision.ExistingPendingExportToReuse, Is.Null);
         }
@@ -184,7 +250,7 @@ public class SyncEngineExportEvaluationTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(decision.ShouldStageDeleteExport, Is.True);
+            Assert.That(decision.ShouldStageDeprovisioningExport, Is.True);
             Assert.That(decision.SecondaryExternalIdValue, Is.Null);
             Assert.That(decision.SecondaryExternalIdAttribute, Is.Null);
         }
@@ -199,7 +265,7 @@ public class SyncEngineExportEvaluationTests
 
         var decision = _engine.DecideMvoDeletionExport(Cso(), 100, RulesByMvoType(100, wrongTypeRule), existingPendingExport: null);
 
-        Assert.That(decision.ShouldStageDeleteExport, Is.False);
+        Assert.That(decision.ShouldStageDeprovisioningExport, Is.False);
     }
 
     [Test]
