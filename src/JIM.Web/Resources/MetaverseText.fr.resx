@@ -1,0 +1,827 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="MetaverseObjectTypeNoun" xml:space="preserve">
+    <value>type d'objets Metaverse</value>
+  </data>
+  <data name="MetaverseAttributeNoun" xml:space="preserve">
+    <value>attribut Metaverse</value>
+  </data>
+  <data name="SynchronisationRuleNoun" xml:space="preserve">
+    <value>règle de synchronisation</value>
+  </data>
+  <data name="SynchronisationRulesNoun" xml:space="preserve">
+    <value>règles de synchronisation</value>
+  </data>
+  <data name="ConnectedSystemNoun" xml:space="preserve">
+    <value>système connecté</value>
+  </data>
+  <data name="AttributeNoun" xml:space="preserve">
+    <value>attribut</value>
+  </data>
+  <data name="AttributesNoun" xml:space="preserve">
+    <value>attributs</value>
+  </data>
+  <data name="MvotPageTitle" xml:space="preserve">
+    <value>Type d'objets Metaverse : {0}</value>
+  </data>
+  <data name="MvotHeading" xml:space="preserve">
+    <value>Type d'objets Metaverse :</value>
+  </data>
+  <data name="MvotPageInfo" xml:space="preserve">
+    <value>Un type d'objets Metaverse est une catégorie d'objets que le Metaverse contient, comme un utilisateur ou un groupe : ses attributs, et ce qu'il advient de ses objets lorsqu'ils perdent leurs connexions.</value>
+  </data>
+  <data name="DetailsTab" xml:space="preserve">
+    <value>Détails</value>
+  </data>
+  <data name="MvotEditObjectType" xml:space="preserve">
+    <value>Modifier le type d'objets</value>
+  </data>
+  <data name="MvotEditObjectTypeAria" xml:space="preserve">
+    <value>modifier le type d'objets</value>
+  </data>
+  <data name="MvotBuiltInCannotRename" xml:space="preserve">
+    <value>Les types d'objets intégrés ne peuvent pas être renommés ni dotés d'une autre icône.</value>
+  </data>
+  <data name="MvotPluralName" xml:space="preserve">
+    <value>Nom au pluriel</value>
+  </data>
+  <data name="MvotBuiltInQuestion" xml:space="preserve">
+    <value>Intégré ?</value>
+  </data>
+  <data name="MvotIcon" xml:space="preserve">
+    <value>Icône</value>
+  </data>
+  <data name="MvotIconHelp" xml:space="preserve">
+    <value>Parcourez les icônes disponibles dans la &lt;a href="https://mudblazor.com/features/icons" target="_blank" class="mud-link"&gt;galerie d'icônes MudBlazor&lt;/a&gt;. Utilisez le nom de l'icône &lt;strong&gt;Filled&lt;/strong&gt; (par exemple « Person », « Groups », « Devices »).</value>
+  </data>
+  <data name="MvotDeletionRules" xml:space="preserve">
+    <value>Règles de suppression</value>
+  </data>
+  <data name="MvotDeletionRulesIntro" xml:space="preserve">
+    <value>Configurez quand les objets Metaverse de ce type doivent être supprimés automatiquement.</value>
+  </data>
+  <data name="MvotViewPendingDeletions" xml:space="preserve">
+    <value>Afficher les suppressions en attente</value>
+  </data>
+  <data name="MvotDeletionRule" xml:space="preserve">
+    <value>Règle de suppression</value>
+  </data>
+  <data name="MvotRuleManual" xml:space="preserve">
+    <value>Manuelle</value>
+  </data>
+  <data name="MvotRuleWhenLastConnectorDisconnected" xml:space="preserve">
+    <value>Lorsque le dernier connecteur est déconnecté</value>
+  </data>
+  <data name="MvotRuleWhenAuthoritativeSourceDisconnected" xml:space="preserve">
+    <value>Lorsque la source faisant autorité est déconnectée</value>
+  </data>
+  <data name="MvotDays" xml:space="preserve">
+    <value>Jours</value>
+  </data>
+  <data name="MvotHours" xml:space="preserve">
+    <value>Heures</value>
+  </data>
+  <data name="MvotMinutes" xml:space="preserve">
+    <value>Minutes</value>
+  </data>
+  <data name="MvotGracePeriod" xml:space="preserve">
+    <value>Délai de grâce</value>
+  </data>
+  <data name="MvotDeletionTrigger" xml:space="preserve">
+    <value>Déclencheur de suppression</value>
+  </data>
+  <data name="MvotAllSourcesDisconnect" xml:space="preserve">
+    <value>Toutes les sources sont déconnectées</value>
+  </data>
+  <data name="MvotAllSourcesDisconnectHint" xml:space="preserve">
+    <value>Supprimer uniquement une fois que toutes les sources sélectionnées sont déconnectées. Résiste à la défaillance ou à la reconstruction d'un seul système. Il s'agit de la valeur par défaut.</value>
+  </data>
+  <data name="MvotSpecificSourcesDisconnect" xml:space="preserve">
+    <value>Des sources précises sont déconnectées</value>
+  </data>
+  <data name="MvotSpecificSourcesDisconnectHint" xml:space="preserve">
+    <value>Supprimer dès qu'une des sources sélectionnées est déconnectée, même si d'autres restent connectées.</value>
+  </data>
+  <data name="MvotAuthoritativeSources" xml:space="preserve">
+    <value>Sources faisant autorité</value>
+  </data>
+  <data name="MvotSelectAuthoritativeSources" xml:space="preserve">
+    <value>Sélectionnez les systèmes connectés qui sont des sources faisant autorité pour ce type d'objets. Au moins un système contributeur doit être sélectionné ; aucun n'est sélectionné par défaut.</value>
+  </data>
+  <data name="MvotProjects" xml:space="preserve">
+    <value>Projette</value>
+  </data>
+  <data name="MvotJoinsOnly" xml:space="preserve">
+    <value>Jointures uniquement</value>
+  </data>
+  <data name="MvotProjectsNotAuthoritative" xml:space="preserve">
+    <value>Projette, sans autorité</value>
+  </data>
+  <data name="MvotNoContributingSystems" xml:space="preserve">
+    <value>Aucun système contributeur trouvé. Créez des règles de synchronisation entrantes pour ce type d'objets afin de permettre la sélection des sources faisant autorité.</value>
+  </data>
+  <data name="MvotPreviewChanges" xml:space="preserve">
+    <value>Aperçu des modifications</value>
+  </data>
+  <data name="Reset" xml:space="preserve">
+    <value>Réinitialiser</value>
+  </data>
+  <data name="MvotPreviewStale" xml:space="preserve">
+    <value>Les paramètres de suppression ont été modifiés depuis l'exécution de cet aperçu ; il ne décrit donc plus ce que l'enregistrement ferait. Relancez l'aperçu pour obtenir une réponse sur les paramètres actuels.</value>
+  </data>
+  <data name="MvotPreviewDeletionRules" xml:space="preserve">
+    <value>Aperçu : règles de suppression</value>
+  </data>
+  <data name="MvotDownstreamDeprovisioning" xml:space="preserve">
+    <value>Déprovisionnement en aval</value>
+  </data>
+  <data name="MvotDeprovisioningIntro" xml:space="preserve">
+    <value>Lorsqu'un objet Metaverse de ce type est supprimé (ou quitte le périmètre d'une règle de synchronisation d'exportation), l'action de déprovisionnement de chaque règle de synchronisation d'exportation détermine ce qu'il advient de l'objet correspondant dans son système connecté : Déconnecter le laisse en place ; Supprimer le retire. Les règles de synchronisation désactivées ne s'appliquent pas pendant la synchronisation.</value>
+  </data>
+  <data name="MvotSearchRules" xml:space="preserve">
+    <value>Rechercher des règles</value>
+  </data>
+  <data name="MvotDeprovisioningAction" xml:space="preserve">
+    <value>Action de déprovisionnement</value>
+  </data>
+  <data name="MvotDeprovisionDisconnect" xml:space="preserve">
+    <value>Déconnecter</value>
+  </data>
+  <data name="MvotDeprovisionDisable" xml:space="preserve">
+    <value>Désactiver</value>
+  </data>
+  <data name="MvotDeprovisionDisableUnsupported" xml:space="preserve">
+    <value>Désactiver (non prise en charge par le connecteur)</value>
+  </data>
+  <data name="MvotDeprovisionDelete" xml:space="preserve">
+    <value>Supprimer</value>
+  </data>
+  <data name="MvotDeprovisionActionSet" xml:space="preserve">
+    <value>Action de déprovisionnement de « {0} » définie sur {1}.</value>
+  </data>
+  <data name="MvotNoExportRulesMatch" xml:space="preserve">
+    <value>Aucune règle de synchronisation d'exportation ne correspond à « {0} ».</value>
+  </data>
+  <data name="MvotNoExportRulesForType" xml:space="preserve">
+    <value>Aucune règle de synchronisation d'exportation ne cible ce type d'objets Metaverse</value>
+  </data>
+  <data name="MvotNoExportRulesForTypeHint" xml:space="preserve">
+    <value>Lorsque les objets Metaverse de ce type sont supprimés, aucun objet des systèmes connectés n'est affecté. Créez une règle de synchronisation d'exportation pour ce type afin de modifier ce comportement.</value>
+  </data>
+  <data name="MvotAttributesIntro" xml:space="preserve">
+    <value>Voici les attributs liés au type d'objets Metaverse :</value>
+  </data>
+  <data name="MvotFilterByType" xml:space="preserve">
+    <value>Filtrer par type :</value>
+  </data>
+  <data name="MvotFilterByPlurality" xml:space="preserve">
+    <value>Filtrer par pluralité :</value>
+  </data>
+  <data name="MvotFilterByBuiltIn" xml:space="preserve">
+    <value>Filtrer par intégré :</value>
+  </data>
+  <data name="MvotSingleValued" xml:space="preserve">
+    <value>Monovaleur</value>
+  </data>
+  <data name="MvotMultiValued" xml:space="preserve">
+    <value>Multivaleur</value>
+  </data>
+  <data name="MvotSearchAttributes" xml:space="preserve">
+    <value>Rechercher des attributs</value>
+  </data>
+  <data name="MvotAddAttribute" xml:space="preserve">
+    <value>Ajouter un attribut</value>
+  </data>
+  <data name="MvotPlurality" xml:space="preserve">
+    <value>Pluralité</value>
+  </data>
+  <data name="MvotBuiltInAttribute" xml:space="preserve">
+    <value>Attribut intégré</value>
+  </data>
+  <data name="MvotCustom" xml:space="preserve">
+    <value>Personnalisé</value>
+  </data>
+  <data name="MvotContributors" xml:space="preserve">
+    <value>Contributeurs</value>
+  </data>
+  <data name="MvotContributorsTooltip" xml:space="preserve">
+    <value>Nombre de règles de synchronisation qui contribuent à cet attribut en entrée. Si elles sont plusieurs, un ordre de priorité des attributs détermine laquelle l'emporte.</value>
+  </data>
+  <data name="MvotMultipleContributors" xml:space="preserve">
+    <value>Plusieurs contributeurs. Cliquez pour gérer l'ordre de priorité des attributs.</value>
+  </data>
+  <data name="MvotContributorCountOne" xml:space="preserve">
+    <value>{0} contributeur</value>
+  </data>
+  <data name="MvotContributorCountOther" xml:space="preserve">
+    <value>{0} contributeurs</value>
+  </data>
+  <data name="MvotChangeHistory" xml:space="preserve">
+    <value>Historique des modifications</value>
+  </data>
+  <data name="MvotBuiltInAttributesCannotUnbind" xml:space="preserve">
+    <value>Les attributs intégrés ne peuvent pas être dissociés.</value>
+  </data>
+  <data name="MvotRemoveAttributeBinding" xml:space="preserve">
+    <value>Retirer cet attribut du type d'objets</value>
+  </data>
+  <data name="MvotNoAttributesMatch" xml:space="preserve">
+    <value>Aucun attribut ne correspond à « {0} ».</value>
+  </data>
+  <data name="MvotNoAttributesMatchFilters" xml:space="preserve">
+    <value>Aucun attribut ne correspond aux filtres sélectionnés</value>
+  </data>
+  <data name="MvotNoAttributesMatchFiltersHint" xml:space="preserve">
+    <value>Effacez les filtres Type, Pluralité et Intégré ci-dessus pour voir tous les attributs liés à ce type d'objets Metaverse.</value>
+  </data>
+  <data name="MvotClearFilters" xml:space="preserve">
+    <value>Effacer les filtres</value>
+  </data>
+  <data name="MvotNoAttributesBound" xml:space="preserve">
+    <value>Aucun attribut n'est lié à ce type d'objets Metaverse</value>
+  </data>
+  <data name="MvotNoAttributesBoundHint" xml:space="preserve">
+    <value>Utilisez le bouton Ajouter un attribut pour en lier un ; jusque-là, les objets Metaverse de ce type ne peuvent contenir aucune valeur.</value>
+  </data>
+  <data name="MvotChanges" xml:space="preserve">
+    <value>Modifications</value>
+  </data>
+  <data name="MvotAttributePriorityTitle" xml:space="preserve">
+    <value>Priorité des attributs : {0}</value>
+  </data>
+  <data name="MvotAttributePriorityIntro" xml:space="preserve">
+    <value>Plusieurs règles de synchronisation peuvent contribuer à cet attribut. Faites glisser pour définir laquelle l'emporte lorsque plusieurs fournissent une valeur ; la priorité la plus élevée est en haut. La première à fournir une valeur l'emporte (sauf si {0} est sélectionné). Les règles désactivées conservent leur position, mais ne contribuent jamais.</value>
+  </data>
+  <data name="MvotNullIsAValue" xml:space="preserve">
+    <value>&lt;code class="jim-code-inline jim-code-inline-strong"&gt;Null est une valeur&lt;/code&gt;</value>
+  </data>
+  <data name="MvotRuleNotFound" xml:space="preserve">
+    <value>La règle de synchronisation est introuvable. Elle a peut-être été supprimée.</value>
+  </data>
+  <data name="MvotRuleUpdateFailed" xml:space="preserve">
+    <value>Échec de la mise à jour de la règle de synchronisation « {0} ».</value>
+  </data>
+  <data name="MvotRuleUpdateFailedDetail" xml:space="preserve">
+    <value>Échec de la mise à jour de la règle de synchronisation : {0}</value>
+  </data>
+  <data name="MvotHelpManual" xml:space="preserve">
+    <value>Les objets doivent être supprimés manuellement par un administrateur.</value>
+  </data>
+  <data name="MvotHelpWhenLastConnectorDisconnected" xml:space="preserve">
+    <value>Supprimer lorsque tous les objets de systèmes connectés sont déconnectés.</value>
+  </data>
+  <data name="MvotHelpWhenAuthoritativeSourceDisconnected" xml:space="preserve">
+    <value>Supprimer selon le déclencheur de source faisant autorité ci-dessous.</value>
+  </data>
+  <data name="MvotPreviewStartFailed" xml:space="preserve">
+    <value>Échec du démarrage de l'aperçu : {0}</value>
+  </data>
+  <data name="MvotDeletionRulesSaved" xml:space="preserve">
+    <value>Règles de suppression enregistrées avec succès.</value>
+  </data>
+  <data name="MvotDeletionRulesSaveFailed" xml:space="preserve">
+    <value>Échec de l'enregistrement des règles de suppression : {0}</value>
+  </data>
+  <data name="SpdIntroAny" xml:space="preserve">
+    <value>Définit le &lt;b&gt;même mot de passe&lt;/b&gt; sur les objets de systèmes connectés que vous choisissez. JIM ne conserve le mot de passe chiffré que jusqu'à ce que chaque système l'ait reçu, et garde celui qu'un système a refusé pour pouvoir terminer la tâche.</value>
+  </data>
+  <data name="SpdIntroOne" xml:space="preserve">
+    <value>Définit le mot de passe sur &lt;b&gt;{0}&lt;/b&gt; dans &lt;b&gt;{1}&lt;/b&gt;. JIM ne conserve le mot de passe chiffré que jusqu'à ce que le système l'ait reçu, et garde celui qu'il a refusé pour pouvoir terminer la tâche.</value>
+  </data>
+  <data name="SpdNoneSettable" xml:space="preserve">
+    <value>Aucun objet de système connecté ne se trouve dans un système connecté dont le connecteur peut définir des mots de passe.</value>
+  </data>
+  <data name="SpdConnectorCannotSet" xml:space="preserve">
+    <value>Le connecteur de ce système connecté ne peut pas définir de mots de passe ; il n'y a donc rien à faire ici.</value>
+  </data>
+  <data name="SpdConnectedSystemObjects" xml:space="preserve">
+    <value>Objets de systèmes connectés</value>
+  </data>
+  <data name="SpdSelectAll" xml:space="preserve">
+    <value>Tout sélectionner</value>
+  </data>
+  <data name="SpdDelivering" xml:space="preserve">
+    <value>Envoi à {0}. Chaque ligne se met à jour lorsque son système répond.</value>
+  </data>
+  <data name="SpdTargetNounOne" xml:space="preserve">
+    <value>{0} système connecté</value>
+  </data>
+  <data name="SpdTargetNounOther" xml:space="preserve">
+    <value>{0} systèmes connectés</value>
+  </data>
+  <data name="SpdStopTrying" xml:space="preserve">
+    <value>Arrêter les tentatives</value>
+  </data>
+  <data name="SpdPassword" xml:space="preserve">
+    <value>Mot de passe</value>
+  </data>
+  <data name="SpdPasswordPlaceholder" xml:space="preserve">
+    <value>Générez-en un ou saisissez le vôtre</value>
+  </data>
+  <data name="SpdGenerate" xml:space="preserve">
+    <value>Générer</value>
+  </data>
+  <data name="SpdHide" xml:space="preserve">
+    <value>Masquer</value>
+  </data>
+  <data name="SpdReveal" xml:space="preserve">
+    <value>Afficher</value>
+  </data>
+  <data name="SpdHiddenAgain" xml:space="preserve">
+    <value>Masqué à nouveau automatiquement dans {0} secondes.</value>
+  </data>
+  <data name="SpdEverySelectedSystem" xml:space="preserve">
+    <value>chaque système sélectionné</value>
+  </data>
+  <data name="SpdThisSystem" xml:space="preserve">
+    <value>ce système</value>
+  </data>
+  <data name="SpdGeneratedToSatisfy" xml:space="preserve">
+    <value>Généré pour satisfaire {0} : {1}.</value>
+  </data>
+  <data name="SpdNoPolicyIntro" xml:space="preserve">
+    <value>JIM n'a aucune politique de mot de passe pour &lt;b&gt;{0}&lt;/b&gt;, donc un mot de passe généré ne peut pas être vérifié selon {1} avant d'être envoyé. JIM lit la politique lorsqu'il actualise le schéma d'un système connecté ; &lt;b&gt;{2}&lt;/b&gt; dans {3} la récupérera.</value>
+  </data>
+  <data name="SpdRulesOne" xml:space="preserve">
+    <value>ses règles</value>
+  </data>
+  <data name="SpdRulesOther" xml:space="preserve">
+    <value>leurs règles</value>
+  </data>
+  <data name="SpdRefreshSchema" xml:space="preserve">
+    <value>Actualiser le schéma</value>
+  </data>
+  <data name="SpdSchemaTab" xml:space="preserve">
+    <value>l'onglet Schéma</value>
+  </data>
+  <data name="SpdSystemSchemaTab" xml:space="preserve">
+    <value>Onglet Schéma de {0}</value>
+  </data>
+  <data name="SpdNoPublishedPolicyOne" xml:space="preserve">
+    <value>{0} ne publie aucune règle de mot de passe que n'importe quel client peut lire, donc JIM ne peut pas vérifier un mot de passe à l'avance. Il n'y a rien à configurer : un mot de passe qu'il refuse est signalé au moment où cela se produit.</value>
+  </data>
+  <data name="SpdNoPublishedPolicyOther" xml:space="preserve">
+    <value>{0} ne publient aucune règle de mot de passe que n'importe quel client peut lire, donc JIM ne peut pas vérifier un mot de passe à l'avance. Il n'y a rien à configurer : un mot de passe qu'ils refusent est signalé au moment où cela se produit.</value>
+  </data>
+  <data name="SpdIrreconcilable" xml:space="preserve">
+    <value>Aucun mot de passe unique ne peut satisfaire chaque système sélectionné. {0} Définissez-les séparément, ou désélectionnez-en un.</value>
+  </data>
+  <data name="SpdAfterPasswordSet" xml:space="preserve">
+    <value>Après la définition du mot de passe</value>
+  </data>
+  <data name="SpdEnableObjects" xml:space="preserve">
+    <value>Activer les objets de systèmes connectés lors de la définition du mot de passe</value>
+  </data>
+  <data name="SpdEnableObject" xml:space="preserve">
+    <value>Activer l'objet de système connecté lors de la définition du mot de passe</value>
+  </data>
+  <data name="SpdEnableIntro" xml:space="preserve">
+    <value>Ces réglages s'appliquent dès maintenant à ce compte. Lorsqu'une règle de synchronisation transmet &lt;code&gt;userAccountControl&lt;/code&gt; avec l'application de l'état activée, l'exportation suivante remet sa valeur en place. Désactivé, un objet de système connecté qui attend encore son premier mot de passe est activé comme l'indique le mot de passe initial de sa règle de synchronisation.</value>
+  </data>
+  <data name="SpdSharedPermanent" xml:space="preserve">
+    <value>Un mot de passe qui n'expire jamais, conservé dans {0} systèmes. Un identifiant obtenu depuis l'un d'eux ouvre les autres, et rien ne le fera tourner. Envisagez de les définir séparément.</value>
+  </data>
+  <data name="SpdNoClipboard" xml:space="preserve">
+    <value>La copie est indisponible, car cette page n'a pas été servie en HTTPS. Les navigateurs n'autorisent l'accès au presse-papiers que dans un contexte sécurisé.</value>
+  </data>
+  <data name="SpdClipboardNotice" xml:space="preserve">
+    <value>JIM vide le presse-papiers à la fermeture de cette boîte de dialogue lorsque le navigateur le permet, mais votre système d'exploitation peut conserver une copie dans son propre historique du presse-papiers.</value>
+  </data>
+  <data name="SpdSetting" xml:space="preserve">
+    <value>Définition...</value>
+  </data>
+  <data name="SpdDone" xml:space="preserve">
+    <value>Terminé</value>
+  </data>
+  <data name="SpdTryAnother" xml:space="preserve">
+    <value>Essayer un autre mot de passe</value>
+  </data>
+  <data name="SpdCopyTooltip" xml:space="preserve">
+    <value>Copier le mot de passe sans l'afficher</value>
+  </data>
+  <data name="SpdClipboardNeedsHttps" xml:space="preserve">
+    <value>L'accès au presse-papiers nécessite une connexion HTTPS</value>
+  </data>
+  <data name="SpdSetOnCount" xml:space="preserve">
+    <value>Définir sur {0} objets de systèmes connectés</value>
+  </data>
+  <data name="SpdSetPassword" xml:space="preserve">
+    <value>Définir le mot de passe</value>
+  </data>
+  <data name="SpdUnsettableOne" xml:space="preserve">
+    <value>{0} détient un objet de systèmes connectés, mais son connecteur ne peut pas définir de mots de passe.</value>
+  </data>
+  <data name="SpdUnsettableOther" xml:space="preserve">
+    <value>{0} détiennent des objets de systèmes connectés, mais leurs connecteurs ne peuvent pas définir de mots de passe.</value>
+  </data>
+  <data name="SpdPausedOne" xml:space="preserve">
+    <value>{0} n'accepte pas les mots de passe propagés ; celui-ci y est envoyé parce que vous avez désigné l'objet de système connecté.</value>
+  </data>
+  <data name="SpdPausedOther" xml:space="preserve">
+    <value>{0} n'acceptent pas les mots de passe propagés ; celui-ci y est envoyé parce que vous avez désigné les objets de systèmes connectés.</value>
+  </data>
+  <data name="SpdPasswordSet" xml:space="preserve">
+    <value>Mot de passe défini.</value>
+  </data>
+  <data name="SpdPasswordSetOnAll" xml:space="preserve">
+    <value>Mot de passe défini sur l'ensemble des {0} objets de systèmes connectés.</value>
+  </data>
+  <data name="SpdSetOfTotal" xml:space="preserve">
+    <value>Défini sur {0} des {1} objets de systèmes connectés.</value>
+  </data>
+  <data name="SpdWarnedOne" xml:space="preserve">
+    <value>{0} n'a pas pu appliquer tout ce qui était demandé ; le mot de passe n'y fonctionne donc pas exactement comme choisi ; sa ligne indique ce qui a été appliqué.</value>
+  </data>
+  <data name="SpdWarnedOther" xml:space="preserve">
+    <value>{0} n'ont pas pu appliquer tout ce qui était demandé ; le mot de passe n'y fonctionne donc pas exactement comme choisi ; leurs lignes indiquent ce qui a été appliqué.</value>
+  </data>
+  <data name="SpdRefusedOne" xml:space="preserve">
+    <value>Le mot de passe n'a pas été défini. {0} l'a refusé.</value>
+  </data>
+  <data name="SpdRefusedOther" xml:space="preserve">
+    <value>Le mot de passe de {0} est inchangé ; il diffère donc désormais de celui qui vient d'être défini ailleurs.</value>
+  </data>
+  <data name="SpdExpired" xml:space="preserve">
+    <value>La modification pour {0} a expiré avant d'avoir pu être envoyée.</value>
+  </data>
+  <data name="SpdCancelled" xml:space="preserve">
+    <value>L'envoi à {0} a été arrêté ; le mot de passe y est donc inchangé.</value>
+  </data>
+  <data name="SpdRetrying" xml:space="preserve">
+    <value>Impossible de joindre {0} ; JIM a conservé le mot de passe et réessaiera {1}, avec une attente plus longue à chaque tentative, jusqu'à son envoi ou l'expiration de la modification.</value>
+  </data>
+  <data name="SpdWhenShortly" xml:space="preserve">
+    <value>sous peu</value>
+  </data>
+  <data name="SpdWhenIn" xml:space="preserve">
+    <value>dans {0}</value>
+  </data>
+  <data name="SpdWaitMoment" xml:space="preserve">
+    <value>un instant</value>
+  </data>
+  <data name="SpdWaitAboutMinute" xml:space="preserve">
+    <value>environ une minute</value>
+  </data>
+  <data name="SpdWaitMinutes" xml:space="preserve">
+    <value>{0} minutes</value>
+  </data>
+  <data name="SpdWaitAboutHour" xml:space="preserve">
+    <value>environ une heure</value>
+  </data>
+  <data name="SpdWaitAboutHours" xml:space="preserve">
+    <value>environ {0} heures</value>
+  </data>
+  <data name="SpdWaitAboutDays" xml:space="preserve">
+    <value>environ {0} jours</value>
+  </data>
+  <data name="SpdInFlightOne" xml:space="preserve">
+    <value>{0} n'a pas encore répondu ; l'envoi se poursuit sans cette boîte de dialogue.</value>
+  </data>
+  <data name="SpdInFlightOther" xml:space="preserve">
+    <value>{0} n'ont pas encore répondu ; l'envoi se poursuit sans cette boîte de dialogue.</value>
+  </data>
+  <data name="SpdHeld" xml:space="preserve">
+    <value>{0} l'acceptera une fois la synchronisation des mots de passe activée là-bas.</value>
+  </data>
+  <data name="SpdFurtherChecksOne" xml:space="preserve">
+    <value>{0} applique des contrôles supplémentaires que JIM ne voit pas, donc un mot de passe satisfaisant les règles ci-dessus peut tout de même être refusé.</value>
+  </data>
+  <data name="SpdFurtherChecksOther" xml:space="preserve">
+    <value>{0} appliquent des contrôles supplémentaires que JIM ne voit pas, donc un mot de passe satisfaisant les règles ci-dessus peut tout de même être refusé.</value>
+  </data>
+  <data name="SpdSetMustChange" xml:space="preserve">
+    <value>Mot de passe défini ; doit être modifié à la prochaine ouverture de session</value>
+  </data>
+  <data name="SpdSetNeverExpires" xml:space="preserve">
+    <value>Mot de passe défini ; n'expire jamais</value>
+  </data>
+  <data name="SpdSetAgesPolicy" xml:space="preserve">
+    <value>Mot de passe défini ; vieillit selon la politique propre au système</value>
+  </data>
+  <data name="SpdSetPlain" xml:space="preserve">
+    <value>Mot de passe défini</value>
+  </data>
+  <data name="SpdExpiryRequireChange" xml:space="preserve">
+    <value>Exiger un changement à la prochaine ouverture de session</value>
+  </data>
+  <data name="SpdExpiryAgePolicy" xml:space="preserve">
+    <value>Vieillir selon la politique propre au système connecté</value>
+  </data>
+  <data name="SpdExpiryNever" xml:space="preserve">
+    <value>N'expire jamais</value>
+  </data>
+  <data name="SpdPasswordCopied" xml:space="preserve">
+    <value>Mot de passe copié dans le presse-papiers.</value>
+  </data>
+  <data name="SpdPasswordCopyFailed" xml:space="preserve">
+    <value>Le mot de passe n'a pas pu être copié. Affichez-le et copiez-le à la main.</value>
+  </data>
+  <data name="PwdFallbackTypeName" xml:space="preserve">
+    <value>objet Metaverse</value>
+  </data>
+  <data name="PwdHeadlineParkedOne" xml:space="preserve">
+    <value>Un changement de mot de passe est suspendu.</value>
+  </data>
+  <data name="PwdHeadlineParkedOther" xml:space="preserve">
+    <value>{0} changements de mot de passe sont suspendus.</value>
+  </data>
+  <data name="PwdHeadlineExpiredOne" xml:space="preserve">
+    <value>Un changement de mot de passe a expiré.</value>
+  </data>
+  <data name="PwdHeadlineExpiredOther" xml:space="preserve">
+    <value>{0} changements de mot de passe ont expiré.</value>
+  </data>
+  <data name="PwdHeadlineMixed" xml:space="preserve">
+    <value>{0} {1} suspendu(s) et {2} {3} expiré(s).</value>
+  </data>
+  <data name="PwdChangeCountOne" xml:space="preserve">
+    <value>Un changement de mot de passe</value>
+  </data>
+  <data name="PwdChangeCountOther" xml:space="preserve">
+    <value>{0} changements de mot de passe</value>
+  </data>
+  <data name="PwdWordIs" xml:space="preserve">
+    <value>est</value>
+  </data>
+  <data name="PwdWordAre" xml:space="preserve">
+    <value>sont</value>
+  </data>
+  <data name="PwdWordHas" xml:space="preserve">
+    <value>a</value>
+  </data>
+  <data name="PwdWordHave" xml:space="preserve">
+    <value>ont</value>
+  </data>
+  <data name="PwdTwoSentences" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="PwdAttentionExpired" xml:space="preserve">
+    <value>{0} : expiré avant d'avoir pu être envoyé.</value>
+  </data>
+  <data name="PwdAttentionRow" xml:space="preserve">
+    <value>{0} {1}{2}, et JIM a cessé d'essayer.</value>
+  </data>
+  <data name="PwdReasonInBrackets" xml:space="preserve">
+    <value> ({0})</value>
+  </data>
+  <data name="PwdVerbRefused" xml:space="preserve">
+    <value>a refusé le mot de passe</value>
+  </data>
+  <data name="PwdVerbUnreachable" xml:space="preserve">
+    <value>n'a pas pu être joint</value>
+  </data>
+  <data name="PwdVerbConfigFault" xml:space="preserve">
+    <value>n'a pas pu le recevoir</value>
+  </data>
+  <data name="PwdVerbNoObject" xml:space="preserve">
+    <value>n'a aucun objet de systèmes connectés sur lequel définir le mot de passe</value>
+  </data>
+  <data name="PwdVerbUnsupported" xml:space="preserve">
+    <value>ne peut pas définir de mots de passe</value>
+  </data>
+  <data name="PwdVerbDefault" xml:space="preserve">
+    <value>n'a pas accepté le mot de passe</value>
+  </data>
+  <data name="PwdOpenInQueue" xml:space="preserve">
+    <value>Ouvrir dans la file d'attente</value>
+  </data>
+  <data name="PwdSetCardIntro" xml:space="preserve">
+    <value>Choisissez un mot de passe et appliquez-le aux objets de systèmes connectés que vous cochez. Il est défini immédiatement là où le système répond ; il est conservé et réessayé là où ce n'est pas le cas.</value>
+  </data>
+  <data name="PwdObjectOne" xml:space="preserve">
+    <value>objet de systèmes connectés</value>
+  </data>
+  <data name="PwdObjectOther" xml:space="preserve">
+    <value>objets de systèmes connectés</value>
+  </data>
+  <data name="PwdCoverage" xml:space="preserve">
+    <value>&lt;b&gt;{0} sur {1}&lt;/b&gt; {2} peut recevoir un mot de passe</value>
+  </data>
+  <data name="PwdUnavailableNone" xml:space="preserve">
+    <value>Indisponible : le type {0} n'a aucun objet de systèmes connectés.</value>
+  </data>
+  <data name="PwdUnavailableNoneCapable" xml:space="preserve">
+    <value>Indisponible : aucun des objets de systèmes connectés du type {0} ne se trouve dans un système connecté dont le connecteur peut définir des mots de passe.</value>
+  </data>
+  <data name="PwdStillToBeDelivered" xml:space="preserve">
+    <value>Reste à envoyer</value>
+  </data>
+  <data name="PwdQueuedIntro" xml:space="preserve">
+    <value>Un changement quitte la file d'attente une fois arrivé. Tout ce qui figure ici est encore dû à ce système connecté, ou a cessé d'être tenté.</value>
+  </data>
+  <data name="PwdColConnectedSystem" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="PwdColAttempts" xml:space="preserve">
+    <value>Tentatives</value>
+  </data>
+  <data name="PwdColNextAttempt" xml:space="preserve">
+    <value>Prochaine tentative</value>
+  </data>
+  <data name="PwdColQueued" xml:space="preserve">
+    <value>En file d'attente</value>
+  </data>
+  <data name="PwdHistoryHeading" xml:space="preserve">
+    <value>Changements de mot de passe récents</value>
+  </data>
+  <data name="PwdQueueButton" xml:space="preserve">
+    <value>File d'attente des mots de passe</value>
+  </data>
+  <data name="PwdNeverSet" xml:space="preserve">
+    <value>JIM n'a jamais défini ni synchronisé de mot de passe pour le type {0}.</value>
+  </data>
+  <data name="PwdInitiatorNotRecorded" xml:space="preserve">
+    <value>Initiateur non enregistré</value>
+  </data>
+  <data name="PwdRecordedNoTargets" xml:space="preserve">
+    <value>Enregistré, mais mis en file pour aucun système connecté : aucun de ceux dans lesquels le type {0} possède un objet de systèmes connectés n'avait la synchronisation des mots de passe activée à ce moment-là.</value>
+  </data>
+  <data name="PwdTargetDetail" xml:space="preserve">
+    <value>&lt;b&gt;{0} :&lt;/b&gt; {1}</value>
+  </data>
+  <data name="PwdNow" xml:space="preserve">
+    <value>Maintenant</value>
+  </data>
+  <data name="MaiMulti" xml:space="preserve">
+    <value>Multi</value>
+  </data>
+  <data name="MaiSingle" xml:space="preserve">
+    <value>Mono</value>
+  </data>
+  <data name="MaiCurrentValue" xml:space="preserve">
+    <value>Valeur actuelle</value>
+  </data>
+  <data name="MaiMoreCount" xml:space="preserve">
+    <value>+{0} de plus</value>
+  </data>
+  <data name="MaiSourceNotRecorded" xml:space="preserve">
+    <value>Source non enregistrée</value>
+  </data>
+  <data name="MaiSource" xml:space="preserve">
+    <value>Source</value>
+  </data>
+  <data name="MaiSetBy" xml:space="preserve">
+    <value>Défini par</value>
+  </data>
+  <data name="MaiSourceType" xml:space="preserve">
+    <value>Type de source</value>
+  </data>
+  <data name="MaiCorrected" xml:space="preserve">
+    <value>Corrigée</value>
+  </data>
+  <data name="MaiAsserts" xml:space="preserve">
+    <value>Affirme</value>
+  </data>
+  <data name="MaiNoValueNullIsValue" xml:space="preserve">
+    <value>Aucune valeur (Null est une valeur)</value>
+  </data>
+  <data name="MaiFrom" xml:space="preserve">
+    <value>Depuis</value>
+  </data>
+  <data name="MaiLastSet" xml:space="preserve">
+    <value>Dernière définition</value>
+  </data>
+  <data name="MaiBy" xml:space="preserve">
+    <value>par</value>
+  </data>
+  <data name="MaiTheActivity" xml:space="preserve">
+    <value>l'activité</value>
+  </data>
+  <data name="MaiActivityFallback" xml:space="preserve">
+    <value>Activité</value>
+  </data>
+  <data name="MaiEverySource" xml:space="preserve">
+    <value>Chaque source &lt;em&gt;par ordre de priorité&lt;/em&gt;</value>
+  </data>
+  <data name="MaiPriorityRank" xml:space="preserve">
+    <value>Priorité {0}</value>
+  </data>
+  <data name="MaiPrioritySetOn" xml:space="preserve">
+    <value>La priorité est définie sur l'attribut {0}.</value>
+  </data>
+  <data name="MaiChangePriority" xml:space="preserve">
+    <value>Modifier la priorité</value>
+  </data>
+  <data name="MaiHistory" xml:space="preserve">
+    <value>Historique</value>
+  </data>
+  <data name="MaiOpenInTimeline" xml:space="preserve">
+    <value>Ouvrir dans la chronologie</value>
+  </data>
+  <data name="MaiExploreCausality" xml:space="preserve">
+    <value>Explorer la causalité</value>
+  </data>
+  <data name="MaiNoChanges" xml:space="preserve">
+    <value>Aucune modification enregistrée pour cet attribut.</value>
+  </data>
+  <data name="MaiValueCorrected" xml:space="preserve">
+    <value>Valeur corrigée</value>
+  </data>
+  <data name="MaiValueGenerated" xml:space="preserve">
+    <value>Valeur générée</value>
+  </data>
+  <data name="MaiShowingRecent" xml:space="preserve">
+    <value>Affichage des modifications les plus récentes uniquement.</value>
+  </data>
+  <data name="MaiStateInUse" xml:space="preserve">
+    <value>Utilisée</value>
+  </data>
+  <data name="MaiStateOutranked" xml:space="preserve">
+    <value>Supplantée</value>
+  </data>
+  <data name="MaiStateNoValue" xml:space="preserve">
+    <value>Aucune valeur</value>
+  </data>
+  <data name="MaiStateNotJoined" xml:space="preserve">
+    <value>Non jointe</value>
+  </data>
+  <data name="MaiStateNotEvaluated" xml:space="preserve">
+    <value>Non évaluée</value>
+  </data>
+  <data name="AvniTitle" xml:space="preserve">
+    <value>Valeurs d'attribut non importées</value>
+  </data>
+  <data name="AvniThisValue" xml:space="preserve">
+    <value>cette valeur</value>
+  </data>
+  <data name="AvniTheseValues" xml:space="preserve">
+    <value>ces valeurs</value>
+  </data>
+  <data name="AvniTheAttribute" xml:space="preserve">
+    <value>l'attribut</value>
+  </data>
+  <data name="AvniEachAttribute" xml:space="preserve">
+    <value>chaque attribut</value>
+  </data>
+  <data name="AvniCouldNotImport" xml:space="preserve">
+    <value>JIM n'a pas pu importer {0}, si bien il a laissé {1} tel qu'il était déjà et a importé le reste de l'objet.</value>
+  </data>
+  <data name="AvniFoundByIntro" xml:space="preserve">
+    <value>La colonne Trouvé par indique si le connecteur n'a pas pu lire une valeur, ou si JIM n'a pas pu la conserver telle qu'elle a été lue.</value>
+  </data>
+  <data name="AvniValue" xml:space="preserve">
+    <value>Valeur</value>
+  </data>
+  <data name="AvniValues" xml:space="preserve">
+    <value>Valeurs</value>
+  </data>
+  <data name="AvniSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher un attribut ou une valeur</value>
+  </data>
+  <data name="AvniAttribute" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="AvniValueReceived" xml:space="preserve">
+    <value>Valeur reçue</value>
+  </data>
+  <data name="AvniExpected" xml:space="preserve">
+    <value>Attendu</value>
+  </data>
+  <data name="AvniFoundBy" xml:space="preserve">
+    <value>Trouvé par</value>
+  </data>
+  <data name="AvniWhyNotImported" xml:space="preserve">
+    <value>Motif de l'échec d'importation</value>
+  </data>
+  <data name="AvniNoValuesMatch" xml:space="preserve">
+    <value>Aucune valeur ne correspond à « {0} ».</value>
+  </data>
+  <data name="AvniKeptNote" xml:space="preserve">
+    <value>Les {0} premières valeurs sur {1} sont conservées avec l'élément.</value>
+  </data>
+  <data name="AvniTheValue" xml:space="preserve">
+    <value>la valeur</value>
+  </data>
+  <data name="AvniTheValues" xml:space="preserve">
+    <value>les valeurs</value>
+  </data>
+  <data name="AvniTheValueIs" xml:space="preserve">
+    <value>la valeur est</value>
+  </data>
+  <data name="AvniTheValuesAre" xml:space="preserve">
+    <value>les valeurs sont</value>
+  </data>
+  <data name="AvniTheConnectedSystem" xml:space="preserve">
+    <value>le système connecté</value>
+  </data>
+  <data name="AvniNextStep" xml:space="preserve">
+    <value>Corrigez {0} dans {1}, puis relancez l'importation. Si {2} correct et que le type d'un attribut est erroné, modifiez-le dans l'onglet Schéma.</value>
+  </data>
+  <data name="AvniOpenSchema" xml:space="preserve">
+    <value>Ouvrir le schéma</value>
+  </data>
+</root>

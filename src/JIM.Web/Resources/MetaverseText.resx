@@ -1,0 +1,1097 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="MetaverseObjectTypeNoun" xml:space="preserve">
+    <value>Metaverse Object Type</value>
+    <comment>Names the kind of object in labels and dialog text, mid-sentence.</comment>
+  </data>
+  <data name="MetaverseAttributeNoun" xml:space="preserve">
+    <value>Metaverse Attribute</value>
+    <comment>Names the kind of object in labels and dialog text, mid-sentence.</comment>
+  </data>
+  <data name="SynchronisationRuleNoun" xml:space="preserve">
+    <value>Synchronisation Rule</value>
+    <comment>Names the kind of object in labels and dialog text, mid-sentence.</comment>
+  </data>
+  <data name="SynchronisationRulesNoun" xml:space="preserve">
+    <value>Synchronisation Rules</value>
+    <comment>Plural of SynchronisationRuleNoun, as a grid's plural name.</comment>
+  </data>
+  <data name="ConnectedSystemNoun" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Names the kind of object in column headers, mid-sentence.</comment>
+  </data>
+  <data name="AttributeNoun" xml:space="preserve">
+    <value>Attribute</value>
+    <comment>Singular name of an attribute, as a grid's singular name.</comment>
+  </data>
+  <data name="AttributesNoun" xml:space="preserve">
+    <value>Attributes</value>
+    <comment>Plural name of attributes, as a tab heading and a grid's plural name.</comment>
+  </data>
+  <data name="MvotPageTitle" xml:space="preserve">
+    <value>Metaverse Object Type: {0}</value>
+    <comment>Browser page title. {0} is the object type's name.</comment>
+  </data>
+  <data name="MvotHeading" xml:space="preserve">
+    <value>Metaverse Object Type:</value>
+    <comment>Page heading, followed by the object type's name.</comment>
+  </data>
+  <data name="MvotPageInfo" xml:space="preserve">
+    <value>A Metaverse Object Type is one kind of object the Metaverse holds, such as a User or a Group: its attributes, and what happens to its objects when they lose their connections.</value>
+    <comment>Page info popover.</comment>
+  </data>
+  <data name="DetailsTab" xml:space="preserve">
+    <value>Details</value>
+    <comment>Tab heading and section heading.</comment>
+  </data>
+  <data name="MvotEditObjectType" xml:space="preserve">
+    <value>Edit Object Type</value>
+    <comment>Tooltip on the edit button.</comment>
+  </data>
+  <data name="MvotEditObjectTypeAria" xml:space="preserve">
+    <value>edit object type</value>
+    <comment>Accessible name (aria-label) of the edit button; read aloud by screen readers.</comment>
+  </data>
+  <data name="MvotBuiltInCannotRename" xml:space="preserve">
+    <value>Built-in Object Types cannot be renamed or re-iconed.</value>
+    <comment>Tooltip on the lock icon for a built-in object type.</comment>
+  </data>
+  <data name="MvotPluralName" xml:space="preserve">
+    <value>Plural Name</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="MvotBuiltInQuestion" xml:space="preserve">
+    <value>Built-in?</value>
+    <comment>Field label and column heading. Yes or No follows the label.</comment>
+  </data>
+  <data name="MvotIcon" xml:space="preserve">
+    <value>Icon</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="MvotIconHelp" xml:space="preserve">
+    <value>Browse available icons at the &lt;a href="https://mudblazor.com/features/icons" target="_blank" class="mud-link"&gt;MudBlazor Icon Gallery&lt;/a&gt;. Use the &lt;strong&gt;Filled&lt;/strong&gt; icon name (e.g., "Person", "Groups", "Devices").</value>
+    <comment>Caption under the icon field. Contains an HTML link and an emphasis element; keep the tags. Rendered as markup.</comment>
+  </data>
+  <data name="MvotDeletionRules" xml:space="preserve">
+    <value>Deletion Rules</value>
+    <comment>Section heading.</comment>
+  </data>
+  <data name="MvotDeletionRulesIntro" xml:space="preserve">
+    <value>Configure when Metaverse Objects of this type should be automatically deleted.</value>
+    <comment>Section subtitle.</comment>
+  </data>
+  <data name="MvotViewPendingDeletions" xml:space="preserve">
+    <value>View Pending Deletions</value>
+    <comment>Button that opens the pending deletions list.</comment>
+  </data>
+  <data name="MvotDeletionRule" xml:space="preserve">
+    <value>Deletion Rule</value>
+    <comment>Select label.</comment>
+  </data>
+  <data name="MvotRuleManual" xml:space="preserve">
+    <value>Manual</value>
+    <comment>Deletion rule option.</comment>
+  </data>
+  <data name="MvotRuleWhenLastConnectorDisconnected" xml:space="preserve">
+    <value>When Last Connector Disconnected</value>
+    <comment>Deletion rule option.</comment>
+  </data>
+  <data name="MvotRuleWhenAuthoritativeSourceDisconnected" xml:space="preserve">
+    <value>When Authoritative Source Disconnected</value>
+    <comment>Deletion rule option.</comment>
+  </data>
+  <data name="MvotDays" xml:space="preserve">
+    <value>Days</value>
+    <comment>Grace period field label.</comment>
+  </data>
+  <data name="MvotHours" xml:space="preserve">
+    <value>Hours</value>
+    <comment>Grace period field label.</comment>
+  </data>
+  <data name="MvotMinutes" xml:space="preserve">
+    <value>Minutes</value>
+    <comment>Grace period field label.</comment>
+  </data>
+  <data name="MvotGracePeriod" xml:space="preserve">
+    <value>Grace period</value>
+    <comment>Helper text under the Days field.</comment>
+  </data>
+  <data name="MvotDeletionTrigger" xml:space="preserve">
+    <value>Deletion Trigger</value>
+    <comment>Section label.</comment>
+  </data>
+  <data name="MvotAllSourcesDisconnect" xml:space="preserve">
+    <value>All sources disconnect</value>
+    <comment>Radio option label.</comment>
+  </data>
+  <data name="MvotAllSourcesDisconnectHint" xml:space="preserve">
+    <value>Delete only once every selected source has disconnected. Resilient to a single system failing or being rebuilt. This is the default.</value>
+    <comment>Radio option description.</comment>
+  </data>
+  <data name="MvotSpecificSourcesDisconnect" xml:space="preserve">
+    <value>Specific source(s) disconnect</value>
+    <comment>Radio option label.</comment>
+  </data>
+  <data name="MvotSpecificSourcesDisconnectHint" xml:space="preserve">
+    <value>Delete when any one of the selected sources disconnects, even if others remain connected.</value>
+    <comment>Radio option description.</comment>
+  </data>
+  <data name="MvotAuthoritativeSources" xml:space="preserve">
+    <value>Authoritative Sources</value>
+    <comment>Section label.</comment>
+  </data>
+  <data name="MvotSelectAuthoritativeSources" xml:space="preserve">
+    <value>Select the Connected Systems that are authoritative sources for this object type. At least one contributing system must be selected; nothing is selected by default.</value>
+    <comment>Helper text above the list of contributing systems.</comment>
+  </data>
+  <data name="MvotProjects" xml:space="preserve">
+    <value>Projects</value>
+    <comment>Chip on a contributing system that projects into the Metaverse.</comment>
+  </data>
+  <data name="MvotJoinsOnly" xml:space="preserve">
+    <value>Joins only</value>
+    <comment>Chip on a contributing system that only joins.</comment>
+  </data>
+  <data name="MvotProjectsNotAuthoritative" xml:space="preserve">
+    <value>Projects, not authoritative</value>
+    <comment>Warning chip on a projecting system that is not an authoritative source.</comment>
+  </data>
+  <data name="MvotNoContributingSystems" xml:space="preserve">
+    <value>No contributing systems found. Create inbound Synchronisation Rules for this object type to enable authoritative source selection.</value>
+    <comment>Warning shown when no system contributes to this object type.</comment>
+  </data>
+  <data name="MvotPreviewChanges" xml:space="preserve">
+    <value>Preview Changes</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="Reset" xml:space="preserve">
+    <value>Reset</value>
+    <comment>Button that discards unsaved edits. Shared by pages that reset a form.</comment>
+  </data>
+  <data name="MvotPreviewStale" xml:space="preserve">
+    <value>The deletion settings have been edited since this preview ran, so it no longer describes what saving would do. Preview again for an answer about the current settings.</value>
+    <comment>Warning shown when the form has changed since the preview ran.</comment>
+  </data>
+  <data name="MvotPreviewDeletionRules" xml:space="preserve">
+    <value>Preview: Deletion Rules</value>
+    <comment>Preview panel title.</comment>
+  </data>
+  <data name="MvotDownstreamDeprovisioning" xml:space="preserve">
+    <value>Downstream Deprovisioning</value>
+    <comment>Section heading.</comment>
+  </data>
+  <data name="MvotDeprovisioningIntro" xml:space="preserve">
+    <value>When a Metaverse Object of this type is deleted (or leaves an export Synchronisation Rule's scope), each export Synchronisation Rule's Deprovisioning Action determines what happens to the corresponding object in its Connected System: Disconnect leaves it in place; Delete removes it. Disabled Synchronisation Rules do not apply during synchronisation.</value>
+    <comment>Section subtitle. Disconnect and Delete are the action names shown in the drop-down.</comment>
+  </data>
+  <data name="MvotSearchRules" xml:space="preserve">
+    <value>Search rules</value>
+    <comment>Search box placeholder in the grid.</comment>
+  </data>
+  <data name="MvotDeprovisioningAction" xml:space="preserve">
+    <value>Deprovisioning Action</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="MvotDeprovisionDisconnect" xml:space="preserve">
+    <value>Disconnect</value>
+    <comment>Deprovisioning action option.</comment>
+  </data>
+  <data name="MvotDeprovisionDisable" xml:space="preserve">
+    <value>Disable</value>
+    <comment>Deprovisioning action option.</comment>
+  </data>
+  <data name="MvotDeprovisionDisableUnsupported" xml:space="preserve">
+    <value>Disable (not supported by Connector)</value>
+    <comment>Deprovisioning action option when the connector cannot disable accounts.</comment>
+  </data>
+  <data name="MvotDeprovisionDelete" xml:space="preserve">
+    <value>Delete</value>
+    <comment>Deprovisioning action option.</comment>
+  </data>
+  <data name="MvotDeprovisionActionSet" xml:space="preserve">
+    <value>Deprovisioning Action for '{0}' set to {1}.</value>
+    <comment>Success message. {0} is the rule's name; {1} is the action name (Disconnect, Disable or Delete).</comment>
+  </data>
+  <data name="MvotNoExportRulesMatch" xml:space="preserve">
+    <value>No export Synchronisation Rules match "{0}"</value>
+    <comment>Empty grid. {0} is the search text the administrator typed.</comment>
+  </data>
+  <data name="MvotNoExportRulesForType" xml:space="preserve">
+    <value>No export Synchronisation Rules target this Metaverse Object Type</value>
+    <comment>Empty grid heading.</comment>
+  </data>
+  <data name="MvotNoExportRulesForTypeHint" xml:space="preserve">
+    <value>When Metaverse Objects of this type are deleted, no objects in Connected Systems are affected. Create an export Synchronisation Rule for this type to change that.</value>
+    <comment>Empty grid description.</comment>
+  </data>
+  <data name="MvotAttributesIntro" xml:space="preserve">
+    <value>These are the attributes bound to the Metaverse Object Type:</value>
+    <comment>Section subtitle.</comment>
+  </data>
+  <data name="MvotFilterByType" xml:space="preserve">
+    <value>Filter by Type:</value>
+    <comment>Chip set label.</comment>
+  </data>
+  <data name="MvotFilterByPlurality" xml:space="preserve">
+    <value>Filter by Plurality:</value>
+    <comment>Chip set label.</comment>
+  </data>
+  <data name="MvotFilterByBuiltIn" xml:space="preserve">
+    <value>Filter by Built-in:</value>
+    <comment>Chip set label.</comment>
+  </data>
+  <data name="MvotSingleValued" xml:space="preserve">
+    <value>Single-Valued</value>
+    <comment>Plurality value.</comment>
+  </data>
+  <data name="MvotMultiValued" xml:space="preserve">
+    <value>Multi-Valued</value>
+    <comment>Plurality value.</comment>
+  </data>
+  <data name="MvotSearchAttributes" xml:space="preserve">
+    <value>Search attributes</value>
+    <comment>Search box placeholder in the grid.</comment>
+  </data>
+  <data name="MvotAddAttribute" xml:space="preserve">
+    <value>Add Attribute</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="MvotPlurality" xml:space="preserve">
+    <value>Plurality</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="MvotBuiltInAttribute" xml:space="preserve">
+    <value>Built-in attribute</value>
+    <comment>Tooltip on the lock icon.</comment>
+  </data>
+  <data name="MvotCustom" xml:space="preserve">
+    <value>Custom</value>
+    <comment>Built-in column value for a user-defined attribute.</comment>
+  </data>
+  <data name="MvotContributors" xml:space="preserve">
+    <value>Contributors</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="MvotContributorsTooltip" xml:space="preserve">
+    <value>The number of Synchronisation Rules that contribute this attribute inbound. More than one means an Attribute Priority order determines which wins.</value>
+    <comment>Tooltip on the column heading.</comment>
+  </data>
+  <data name="MvotMultipleContributors" xml:space="preserve">
+    <value>Multiple contributors. Click to manage the Attribute Priority order.</value>
+    <comment>Tooltip on the contributor count button.</comment>
+  </data>
+  <data name="MvotContributorCountOne" xml:space="preserve">
+    <value>{0} contributor</value>
+    <comment>Contributor count button, singular. {0} is the count.</comment>
+  </data>
+  <data name="MvotContributorCountOther" xml:space="preserve">
+    <value>{0} contributors</value>
+    <comment>Contributor count button, plural. {0} is the count.</comment>
+  </data>
+  <data name="MvotChangeHistory" xml:space="preserve">
+    <value>Change history</value>
+    <comment>Tooltip on the history button.</comment>
+  </data>
+  <data name="MvotBuiltInAttributesCannotUnbind" xml:space="preserve">
+    <value>Built-in attributes cannot be unbound.</value>
+    <comment>Tooltip on the lock icon.</comment>
+  </data>
+  <data name="MvotRemoveAttributeBinding" xml:space="preserve">
+    <value>Remove this attribute from the Object Type</value>
+    <comment>Tooltip on the remove button.</comment>
+  </data>
+  <data name="MvotNoAttributesMatch" xml:space="preserve">
+    <value>No attributes match "{0}"</value>
+    <comment>Empty grid. {0} is the search text the administrator typed.</comment>
+  </data>
+  <data name="MvotNoAttributesMatchFilters" xml:space="preserve">
+    <value>No attributes match the selected filters</value>
+    <comment>Empty grid heading.</comment>
+  </data>
+  <data name="MvotNoAttributesMatchFiltersHint" xml:space="preserve">
+    <value>Clear the Type, Plurality and Built-in filters above to see every attribute bound to this Metaverse Object Type.</value>
+    <comment>Empty grid description. Names the filters as labelled above.</comment>
+  </data>
+  <data name="MvotClearFilters" xml:space="preserve">
+    <value>Clear Filters</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="MvotNoAttributesBound" xml:space="preserve">
+    <value>No attributes are bound to this Metaverse Object Type</value>
+    <comment>Empty grid heading.</comment>
+  </data>
+  <data name="MvotNoAttributesBoundHint" xml:space="preserve">
+    <value>Use the Add Attribute button to bind one; until then, Metaverse Objects of this type can hold no values.</value>
+    <comment>Empty grid description.</comment>
+  </data>
+  <data name="MvotChanges" xml:space="preserve">
+    <value>Changes</value>
+    <comment>Tab heading.</comment>
+  </data>
+  <data name="MvotAttributePriorityTitle" xml:space="preserve">
+    <value>Attribute Priority: {0}</value>
+    <comment>Dialog title. {0} is the attribute's name.</comment>
+  </data>
+  <data name="MvotAttributePriorityIntro" xml:space="preserve">
+    <value>Multiple Synchronisation Rules can contribute this attribute. Drag to set which wins when more than one supplies a value; the highest priority is at the top. The first to supply a value wins (unless {0} is selected). Disabled rules hold their position but never contribute.</value>
+    <comment>Dialog text. {0} is the option name 'Null is a value', shown as inline code; keep the placeholder.</comment>
+  </data>
+  <data name="MvotNullIsAValue" xml:space="preserve">
+    <value>&lt;code class="jim-code-inline jim-code-inline-strong"&gt;Null is a value&lt;/code&gt;</value>
+    <comment>The option name, shown as inline code inside the description. Rendered as markup; keep the tags.</comment>
+  </data>
+  <data name="MvotRuleNotFound" xml:space="preserve">
+    <value>The Synchronisation Rule could not be found. It may have been deleted.</value>
+    <comment>Error snackbar.</comment>
+  </data>
+  <data name="MvotRuleUpdateFailed" xml:space="preserve">
+    <value>Failed to update Synchronisation Rule '{0}'.</value>
+    <comment>Error snackbar. {0} is the rule's name.</comment>
+  </data>
+  <data name="MvotRuleUpdateFailedDetail" xml:space="preserve">
+    <value>Failed to update the Synchronisation Rule: {0}</value>
+    <comment>Error snackbar. {0} is the exception message.</comment>
+  </data>
+  <data name="MvotHelpManual" xml:space="preserve">
+    <value>Objects must be manually deleted by an administrator.</value>
+    <comment>Helper text for the Manual deletion rule.</comment>
+  </data>
+  <data name="MvotHelpWhenLastConnectorDisconnected" xml:space="preserve">
+    <value>Delete when all Connected System Objects are disconnected.</value>
+    <comment>Helper text for the When Last Connector Disconnected rule.</comment>
+  </data>
+  <data name="MvotHelpWhenAuthoritativeSourceDisconnected" xml:space="preserve">
+    <value>Delete according to the authoritative source trigger below.</value>
+    <comment>Helper text for the When Authoritative Source Disconnected rule.</comment>
+  </data>
+  <data name="MvotPreviewStartFailed" xml:space="preserve">
+    <value>Failed to start the preview: {0}</value>
+    <comment>Error snackbar. {0} is the exception message.</comment>
+  </data>
+  <data name="MvotDeletionRulesSaved" xml:space="preserve">
+    <value>Deletion rules saved successfully.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="MvotDeletionRulesSaveFailed" xml:space="preserve">
+    <value>Failed to save deletion rules: {0}</value>
+    <comment>Error snackbar. {0} is the exception message.</comment>
+  </data>
+  <data name="SpdIntroAny" xml:space="preserve">
+    <value>Sets the &lt;b&gt;same password&lt;/b&gt; on the Connected System Objects you choose. JIM holds the password encrypted only until each system has it, and keeps a refused one so it can finish the job.</value>
+    <comment>Intro when several accounts can be chosen. Contains &lt;b&gt; tags; keep them.</comment>
+  </data>
+  <data name="SpdIntroOne" xml:space="preserve">
+    <value>Sets the password on &lt;b&gt;{0}&lt;/b&gt; in &lt;b&gt;{1}&lt;/b&gt;. JIM holds the password encrypted only until the system has it, and keeps a refused one so it can finish the job.</value>
+    <comment>Intro for one account. {0} is the account identifier, {1} the Connected System's name; both are HTML-encoded before insertion. Contains &lt;b&gt; tags; keep them.</comment>
+  </data>
+  <data name="SpdNoneSettable" xml:space="preserve">
+    <value>None of the Connected System Objects are in a Connected System whose Connector can set passwords.</value>
+    <comment>Info alert when no selected account can take a password.</comment>
+  </data>
+  <data name="SpdConnectorCannotSet" xml:space="preserve">
+    <value>This Connected System's Connector cannot set passwords, so there is nothing to do here.</value>
+    <comment>Info alert when the one account's connector cannot set passwords.</comment>
+  </data>
+  <data name="SpdConnectedSystemObjects" xml:space="preserve">
+    <value>Connected System Objects</value>
+    <comment>Overline heading above the account picker.</comment>
+  </data>
+  <data name="SpdSelectAll" xml:space="preserve">
+    <value>Select all</value>
+    <comment>Link that selects every account.</comment>
+  </data>
+  <data name="SpdDelivering" xml:space="preserve">
+    <value>Delivering to {0}. Each row updates as its system answers.</value>
+    <comment>{0} is the count of systems, as SpdTargetNounOne or SpdTargetNounOther.</comment>
+  </data>
+  <data name="SpdTargetNounOne" xml:space="preserve">
+    <value>{0} Connected System</value>
+    <comment>Count of Connected Systems, singular. {0} is the count.</comment>
+  </data>
+  <data name="SpdTargetNounOther" xml:space="preserve">
+    <value>{0} Connected Systems</value>
+    <comment>Count of Connected Systems, plural. {0} is the count.</comment>
+  </data>
+  <data name="SpdStopTrying" xml:space="preserve">
+    <value>Stop trying</value>
+    <comment>Button that stops retrying one system.</comment>
+  </data>
+  <data name="SpdPassword" xml:space="preserve">
+    <value>Password</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="SpdPasswordPlaceholder" xml:space="preserve">
+    <value>Generate one, or type your own</value>
+    <comment>Placeholder in the password field.</comment>
+  </data>
+  <data name="SpdGenerate" xml:space="preserve">
+    <value>Generate</value>
+    <comment>Button that generates a password.</comment>
+  </data>
+  <data name="SpdHide" xml:space="preserve">
+    <value>Hide</value>
+    <comment>Button that hides a revealed password.</comment>
+  </data>
+  <data name="SpdReveal" xml:space="preserve">
+    <value>Reveal</value>
+    <comment>Button that shows the password.</comment>
+  </data>
+  <data name="SpdHiddenAgain" xml:space="preserve">
+    <value>Hidden again automatically in {0} seconds.</value>
+    <comment>{0} is the number of seconds.</comment>
+  </data>
+  <data name="SpdEverySelectedSystem" xml:space="preserve">
+    <value>every selected system</value>
+    <comment>Fills the 'Generated to satisfy' sentence.</comment>
+  </data>
+  <data name="SpdThisSystem" xml:space="preserve">
+    <value>this system</value>
+    <comment>Fills the 'Generated to satisfy' sentence.</comment>
+  </data>
+  <data name="SpdGeneratedToSatisfy" xml:space="preserve">
+    <value>Generated to satisfy {0}: {1}.</value>
+    <comment>{0} is 'every selected system' or 'this system'; {1} is the list of password rules.</comment>
+  </data>
+  <data name="SpdNoPolicyIntro" xml:space="preserve">
+    <value>JIM has no password policy for &lt;b&gt;{0}&lt;/b&gt;, so a generated password cannot be checked against {1} before it is sent. JIM reads the policy while it refreshes a Connected System's schema, so &lt;b&gt;{2}&lt;/b&gt; on the {3} will pick it up.</value>
+    <comment>{0} is the system names; {1} is SpdRulesOne or SpdRulesOther; {2} is SpdRefreshSchema; {3} is SpdSchemaTab. Contains &lt;b&gt; tags; keep them.</comment>
+  </data>
+  <data name="SpdRulesOne" xml:space="preserve">
+    <value>its rules</value>
+    <comment>Fills the no-policy sentence for one system.</comment>
+  </data>
+  <data name="SpdRulesOther" xml:space="preserve">
+    <value>their rules</value>
+    <comment>Fills the no-policy sentence for several systems.</comment>
+  </data>
+  <data name="SpdRefreshSchema" xml:space="preserve">
+    <value>Refresh Schema</value>
+    <comment>Button on the Schema tab of a Connected System.</comment>
+  </data>
+  <data name="SpdSchemaTab" xml:space="preserve">
+    <value>Schema tab</value>
+    <comment>Tab name on a Connected System's page. Used mid-sentence.</comment>
+  </data>
+  <data name="SpdSystemSchemaTab" xml:space="preserve">
+    <value>{0}'s Schema tab</value>
+    <comment>Link to a Connected System's Schema tab. {0} is the system's name.</comment>
+  </data>
+  <data name="SpdNoPublishedPolicyOne" xml:space="preserve">
+    <value>{0} does not publish password rules that any client can read, so JIM cannot check a password against them in advance. There is nothing to configure: a password it refuses is reported when it happens.</value>
+    <comment>Caption for one system with no published password rules. {0} is the system's name.</comment>
+  </data>
+  <data name="SpdNoPublishedPolicyOther" xml:space="preserve">
+    <value>{0} do not publish password rules that any client can read, so JIM cannot check a password against them in advance. There is nothing to configure: a password they refuse is reported when it happens.</value>
+    <comment>Caption for several systems with no published password rules. {0} is the systems' names.</comment>
+  </data>
+  <data name="SpdIrreconcilable" xml:space="preserve">
+    <value>No single password can satisfy every selected system. {0} Set them separately, or deselect one.</value>
+    <comment>Error alert. {0} is the list of conflicts the rules reported.</comment>
+  </data>
+  <data name="SpdAfterPasswordSet" xml:space="preserve">
+    <value>After the password is set</value>
+    <comment>Select label.</comment>
+  </data>
+  <data name="SpdEnableObjects" xml:space="preserve">
+    <value>Enable the Connected System Objects as part of setting the password</value>
+    <comment>Switch label when several accounts are chosen.</comment>
+  </data>
+  <data name="SpdEnableObject" xml:space="preserve">
+    <value>Enable the Connected System Object as part of setting the password</value>
+    <comment>Switch label when one account is chosen.</comment>
+  </data>
+  <data name="SpdEnableIntro" xml:space="preserve">
+    <value>These apply to this account now. Where a Synchronisation Rule flows &lt;code&gt;userAccountControl&lt;/code&gt; with Enforce State on, the next export puts its value back. Left off, a Connected System Object still waiting for its first password is enabled as its Synchronisation Rule's Initial Password says.</value>
+    <comment>Helper text under the switch. Contains a &lt;code&gt; tag; keep it.</comment>
+  </data>
+  <data name="SpdSharedPermanent" xml:space="preserve">
+    <value>One password that never expires, held in {0} systems. A credential taken from any one of them opens the others, and nothing will rotate it. Consider setting these separately.</value>
+    <comment>Warning shown for one password held in several systems. {0} is the count of systems.</comment>
+  </data>
+  <data name="SpdNoClipboard" xml:space="preserve">
+    <value>Copying is unavailable because this page was not served over HTTPS. Browsers only allow clipboard access in a secure context.</value>
+    <comment>Warning alert.</comment>
+  </data>
+  <data name="SpdClipboardNotice" xml:space="preserve">
+    <value>JIM clears the clipboard when this dialog closes where the browser allows it, but your operating system may keep a copy in its own clipboard history.</value>
+    <comment>Caption at the foot of the form.</comment>
+  </data>
+  <data name="SpdSetting" xml:space="preserve">
+    <value>Setting...</value>
+    <comment>Label on the submit button while the change is queued.</comment>
+  </data>
+  <data name="SpdDone" xml:space="preserve">
+    <value>Done</value>
+    <comment>Button label that closes the dialog once the change is done.</comment>
+  </data>
+  <data name="SpdTryAnother" xml:space="preserve">
+    <value>Try another password</value>
+    <comment>Button that generates a fresh password for every account.</comment>
+  </data>
+  <data name="SpdCopyTooltip" xml:space="preserve">
+    <value>Copy the password without showing it</value>
+    <comment>Tooltip on the Copy button when the clipboard is available.</comment>
+  </data>
+  <data name="SpdClipboardNeedsHttps" xml:space="preserve">
+    <value>Clipboard access needs an HTTPS connection</value>
+    <comment>Tooltip on the Copy button when the clipboard is unavailable.</comment>
+  </data>
+  <data name="SpdSetOnCount" xml:space="preserve">
+    <value>Set on {0} Connected System Objects</value>
+    <comment>Submit button when several accounts are chosen. {0} is the count.</comment>
+  </data>
+  <data name="SpdSetPassword" xml:space="preserve">
+    <value>Set Password</value>
+    <comment>Submit button when one account is chosen.</comment>
+  </data>
+  <data name="SpdUnsettableOne" xml:space="preserve">
+    <value>{0} holds a Connected System Object, but its Connector cannot set passwords.</value>
+    <comment>Caption for one account whose connector cannot set passwords. {0} is the system's name.</comment>
+  </data>
+  <data name="SpdUnsettableOther" xml:space="preserve">
+    <value>{0} hold Connected System Objects, but their Connectors cannot set passwords.</value>
+    <comment>Caption for several accounts whose connectors cannot set passwords. {0} is the systems' names.</comment>
+  </data>
+  <data name="SpdPausedOne" xml:space="preserve">
+    <value>{0} is not taking propagated passwords; this one is delivered there because you named the Connected System Object.</value>
+    <comment>Caption for one system that is not taking propagated passwords. {0} is the system's name.</comment>
+  </data>
+  <data name="SpdPausedOther" xml:space="preserve">
+    <value>{0} are not taking propagated passwords; this one is delivered there because you named the Connected System Objects.</value>
+    <comment>Caption for several systems that are not taking propagated passwords. {0} is the systems' names.</comment>
+  </data>
+  <data name="SpdPasswordSet" xml:space="preserve">
+    <value>Password set.</value>
+    <comment>Summary when every system set the password.</comment>
+  </data>
+  <data name="SpdPasswordSetOnAll" xml:space="preserve">
+    <value>Password set on all {0} Connected System Objects.</value>
+    <comment>Summary. {0} is the count.</comment>
+  </data>
+  <data name="SpdSetOfTotal" xml:space="preserve">
+    <value>Set on {0} of {1} Connected System Objects.</value>
+    <comment>Summary. {0} is the number set; {1} the total.</comment>
+  </data>
+  <data name="SpdWarnedOne" xml:space="preserve">
+    <value>{0} could not apply everything asked for, so the password there does not behave exactly as chosen; its row says what was applied.</value>
+    <comment>Summary for one system that set the password with a warning. {0} is the system's name.</comment>
+  </data>
+  <data name="SpdWarnedOther" xml:space="preserve">
+    <value>{0} could not apply everything asked for, so the password there does not behave exactly as chosen; their rows say what was applied.</value>
+    <comment>Summary for several systems that set the password with a warning. {0} is the systems' names.</comment>
+  </data>
+  <data name="SpdRefusedOne" xml:space="preserve">
+    <value>The password was not set. {0} refused it.</value>
+    <comment>Summary when one system refused. {0} is the system's name.</comment>
+  </data>
+  <data name="SpdRefusedOther" xml:space="preserve">
+    <value>The password in {0} is unchanged, so it now differs from the one just set elsewhere.</value>
+    <comment>Summary when systems refused. {0} is the systems' names.</comment>
+  </data>
+  <data name="SpdExpired" xml:space="preserve">
+    <value>The change for {0} expired before it could be delivered.</value>
+    <comment>Summary. {0} is the systems' names.</comment>
+  </data>
+  <data name="SpdCancelled" xml:space="preserve">
+    <value>Delivery to {0} was stopped, so the password there is unchanged.</value>
+    <comment>Summary. {0} is the systems' names.</comment>
+  </data>
+  <data name="SpdRetrying" xml:space="preserve">
+    <value>{0} could not be reached, so JIM has kept the password and will try again {1}, then with a longer wait each time, until it is delivered or the change expires.</value>
+    <comment>Summary for systems JIM could not reach. {0} is the systems' names; {1} is SpdWhenShortly or SpdWhenIn.</comment>
+  </data>
+  <data name="SpdWhenShortly" xml:space="preserve">
+    <value>shortly</value>
+    <comment>Fills the retry sentence when the next attempt is due now.</comment>
+  </data>
+  <data name="SpdWhenIn" xml:space="preserve">
+    <value>in {0}</value>
+    <comment>Fills the retry sentence. {0} is a wait such as 'about an hour'.</comment>
+  </data>
+  <data name="SpdWaitMoment" xml:space="preserve">
+    <value>a moment</value>
+    <comment>A wait in the retry sentence.</comment>
+  </data>
+  <data name="SpdWaitAboutMinute" xml:space="preserve">
+    <value>about a minute</value>
+    <comment>A wait in the retry sentence.</comment>
+  </data>
+  <data name="SpdWaitMinutes" xml:space="preserve">
+    <value>{0} minutes</value>
+    <comment>A wait in the retry sentence. {0} is the number of minutes.</comment>
+  </data>
+  <data name="SpdWaitAboutHour" xml:space="preserve">
+    <value>about an hour</value>
+    <comment>A wait in the retry sentence.</comment>
+  </data>
+  <data name="SpdWaitAboutHours" xml:space="preserve">
+    <value>about {0} hours</value>
+    <comment>A wait in the retry sentence. {0} is the number of hours.</comment>
+  </data>
+  <data name="SpdWaitAboutDays" xml:space="preserve">
+    <value>about {0} days</value>
+    <comment>A wait in the retry sentence. {0} is the number of days.</comment>
+  </data>
+  <data name="SpdInFlightOne" xml:space="preserve">
+    <value>{0} has not answered yet; delivery carries on without this dialog.</value>
+    <comment>Summary for one system still answering. {0} is the system's name.</comment>
+  </data>
+  <data name="SpdInFlightOther" xml:space="preserve">
+    <value>{0} have not answered yet; delivery carries on without this dialog.</value>
+    <comment>Summary for several systems still answering. {0} is the systems' names.</comment>
+  </data>
+  <data name="SpdHeld" xml:space="preserve">
+    <value>{0} will take it once Password Synchronisation is switched on there.</value>
+    <comment>Summary for systems that hold the password until Password Synchronisation is on. {0} is the systems' names.</comment>
+  </data>
+  <data name="SpdFurtherChecksOne" xml:space="preserve">
+    <value>{0} applies further checks JIM cannot see, so a password satisfying the rules above can still be refused.</value>
+    <comment>Caption for one system with checks JIM cannot see. {0} is the system's name.</comment>
+  </data>
+  <data name="SpdFurtherChecksOther" xml:space="preserve">
+    <value>{0} apply further checks JIM cannot see, so a password satisfying the rules above can still be refused.</value>
+    <comment>Caption for several systems with checks JIM cannot see. {0} is the systems' names.</comment>
+  </data>
+  <data name="SpdSetMustChange" xml:space="preserve">
+    <value>Password set; must be changed at next sign-in</value>
+    <comment>Outcome text for a set password when the person must change it at sign-in.</comment>
+  </data>
+  <data name="SpdSetNeverExpires" xml:space="preserve">
+    <value>Password set; never expires</value>
+    <comment>Outcome text for a set password that never expires.</comment>
+  </data>
+  <data name="SpdSetAgesPolicy" xml:space="preserve">
+    <value>Password set; ages according to the system's own policy</value>
+    <comment>Outcome text for a set password that ages under the system's policy.</comment>
+  </data>
+  <data name="SpdSetPlain" xml:space="preserve">
+    <value>Password set</value>
+    <comment>Outcome text for a set password with no expiry behaviour.</comment>
+  </data>
+  <data name="SpdExpiryRequireChange" xml:space="preserve">
+    <value>Require a change at the next sign-in</value>
+    <comment>Option in the 'After the password is set' list.</comment>
+  </data>
+  <data name="SpdExpiryAgePolicy" xml:space="preserve">
+    <value>Age according to the Connected System's own policy</value>
+    <comment>Option in the 'After the password is set' list.</comment>
+  </data>
+  <data name="SpdExpiryNever" xml:space="preserve">
+    <value>Never expires</value>
+    <comment>Option in the 'After the password is set' list.</comment>
+  </data>
+  <data name="SpdPasswordCopied" xml:space="preserve">
+    <value>Password copied to the clipboard.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="SpdPasswordCopyFailed" xml:space="preserve">
+    <value>The password could not be copied. Reveal it and copy it by hand.</value>
+    <comment>Warning snackbar.</comment>
+  </data>
+  <data name="PwdFallbackTypeName" xml:space="preserve">
+    <value>Metaverse Object</value>
+    <comment>Fallback noun for the person when the page gives no object type. Mid-sentence.</comment>
+  </data>
+  <data name="PwdHeadlineParkedOne" xml:space="preserve">
+    <value>1 password change is parked.</value>
+    <comment>Headline when one change is parked.</comment>
+  </data>
+  <data name="PwdHeadlineParkedOther" xml:space="preserve">
+    <value>{0} password changes are parked.</value>
+    <comment>Headline when several changes are parked. {0} is the count.</comment>
+  </data>
+  <data name="PwdHeadlineExpiredOne" xml:space="preserve">
+    <value>1 password change has expired.</value>
+    <comment>Headline when one change has expired.</comment>
+  </data>
+  <data name="PwdHeadlineExpiredOther" xml:space="preserve">
+    <value>{0} password changes have expired.</value>
+    <comment>Headline when several changes have expired. {0} is the count.</comment>
+  </data>
+  <data name="PwdHeadlineMixed" xml:space="preserve">
+    <value>{0} {1} parked and {2} {3} expired.</value>
+    <comment>Headline when some are parked and some expired. {0} is PwdChangeCountOne or PwdChangeCountOther; {1} is PwdWordIs or PwdWordAre; {2} is the number that has expired; {3} is PwdWordHas or PwdWordHave. French wording needs review: the participle agreement is shown as (s).</comment>
+  </data>
+  <data name="PwdChangeCountOne" xml:space="preserve">
+    <value>1 password change</value>
+    <comment>Counted phrase, singular.</comment>
+  </data>
+  <data name="PwdChangeCountOther" xml:space="preserve">
+    <value>{0} password changes</value>
+    <comment>Counted phrase, plural. {0} is the count.</comment>
+  </data>
+  <data name="PwdWordIs" xml:space="preserve">
+    <value>is</value>
+    <comment>Verb in the mixed headline, singular.</comment>
+  </data>
+  <data name="PwdWordAre" xml:space="preserve">
+    <value>are</value>
+    <comment>Verb in the mixed headline, plural.</comment>
+  </data>
+  <data name="PwdWordHas" xml:space="preserve">
+    <value>has</value>
+    <comment>Verb in the mixed headline, singular.</comment>
+  </data>
+  <data name="PwdWordHave" xml:space="preserve">
+    <value>have</value>
+    <comment>Verb in the mixed headline, plural.</comment>
+  </data>
+  <data name="PwdTwoSentences" xml:space="preserve">
+    <value>{0} {1}</value>
+    <comment>Joins the headline to the first row's sentence.</comment>
+  </data>
+  <data name="PwdAttentionExpired" xml:space="preserve">
+    <value>{0}: expired before it could be delivered.</value>
+    <comment>{0} is the Connected System's name.</comment>
+  </data>
+  <data name="PwdAttentionRow" xml:space="preserve">
+    <value>{0} {1}{2} and JIM has stopped trying.</value>
+    <comment>{0} is the Connected System's name; {1} is one of the PwdVerb phrases; {2} is PwdReasonInBrackets or nothing.</comment>
+  </data>
+  <data name="PwdReasonInBrackets" xml:space="preserve">
+    <value> ({0})</value>
+    <comment>The failure reason in brackets, after the verb phrase. {0} is the reason.</comment>
+  </data>
+  <data name="PwdVerbRefused" xml:space="preserve">
+    <value>refused it</value>
+    <comment>Verb phrase for a refused password.</comment>
+  </data>
+  <data name="PwdVerbUnreachable" xml:space="preserve">
+    <value>could not be reached</value>
+    <comment>Verb phrase for a system JIM could not reach.</comment>
+  </data>
+  <data name="PwdVerbConfigFault" xml:space="preserve">
+    <value>could not take it</value>
+    <comment>Verb phrase for a configuration fault.</comment>
+  </data>
+  <data name="PwdVerbNoObject" xml:space="preserve">
+    <value>has no Connected System Object to set it on</value>
+    <comment>Verb phrase when the target object is missing.</comment>
+  </data>
+  <data name="PwdVerbUnsupported" xml:space="preserve">
+    <value>cannot set passwords</value>
+    <comment>Verb phrase when the connector cannot set passwords.</comment>
+  </data>
+  <data name="PwdVerbDefault" xml:space="preserve">
+    <value>did not take it</value>
+    <comment>Verb phrase for any other failure.</comment>
+  </data>
+  <data name="PwdOpenInQueue" xml:space="preserve">
+    <value>Open in queue</value>
+    <comment>Link at the foot of the attention alert.</comment>
+  </data>
+  <data name="PwdSetCardIntro" xml:space="preserve">
+    <value>Choose a password and apply it to the Connected System Objects you tick. Set now where the system answers; kept and retried where it does not.</value>
+    <comment>Text under the Set Password heading.</comment>
+  </data>
+  <data name="PwdObjectOne" xml:space="preserve">
+    <value>Connected System Object</value>
+    <comment>Noun in the coverage line, singular.</comment>
+  </data>
+  <data name="PwdObjectOther" xml:space="preserve">
+    <value>Connected System Objects</value>
+    <comment>Noun in the coverage line, plural.</comment>
+  </data>
+  <data name="PwdCoverage" xml:space="preserve">
+    <value>&lt;b&gt;{0} of {1}&lt;/b&gt; {2} can take a password</value>
+    <comment>Coverage line: how many accounts can take a password. {2} is PwdObjectOne or PwdObjectOther. Contains &lt;b&gt; tags; keep them.</comment>
+  </data>
+  <data name="PwdUnavailableNone" xml:space="preserve">
+    <value>Unavailable: this {0} has no Connected System Objects.</value>
+    <comment>{0} is the object type's name.</comment>
+  </data>
+  <data name="PwdUnavailableNoneCapable" xml:space="preserve">
+    <value>Unavailable: none of this {0}'s Connected System Objects are in a Connected System whose Connector can set passwords.</value>
+    <comment>{0} is the object type's name.</comment>
+  </data>
+  <data name="PwdStillToBeDelivered" xml:space="preserve">
+    <value>Still to be delivered</value>
+    <comment>Card heading for queued changes.</comment>
+  </data>
+  <data name="PwdQueuedIntro" xml:space="preserve">
+    <value>A change leaves the queue once it arrives. Anything here is still owed to that Connected System, or has stopped being attempted.</value>
+    <comment>Text under the queued changes heading.</comment>
+  </data>
+  <data name="PwdColConnectedSystem" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="PwdColAttempts" xml:space="preserve">
+    <value>Attempts</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="PwdColNextAttempt" xml:space="preserve">
+    <value>Next attempt</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="PwdColQueued" xml:space="preserve">
+    <value>Queued</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="PwdHistoryHeading" xml:space="preserve">
+    <value>Recent password changes</value>
+    <comment>Card heading.</comment>
+  </data>
+  <data name="PwdQueueButton" xml:space="preserve">
+    <value>Password queue</value>
+    <comment>Button that opens the queue.</comment>
+  </data>
+  <data name="PwdNeverSet" xml:space="preserve">
+    <value>JIM has never set or synchronised a password for this {0}.</value>
+    <comment>Empty history. {0} is the object type's name.</comment>
+  </data>
+  <data name="PwdInitiatorNotRecorded" xml:space="preserve">
+    <value>Initiator not recorded</value>
+    <comment>Shown where the Activity did not record who made the change.</comment>
+  </data>
+  <data name="PwdRecordedNoTargets" xml:space="preserve">
+    <value>Recorded, but queued for no Connected System: none that this {0} has a Connected System Object in was enabled for Password Synchronisation at the time.</value>
+    <comment>Shown when a change reached no system. {0} is the object type's name.</comment>
+  </data>
+  <data name="PwdTargetDetail" xml:space="preserve">
+    <value>&lt;b&gt;{0}:&lt;/b&gt; {1}</value>
+    <comment>A system's detail line: its name, then what happened. Contains &lt;b&gt; tags; keep them.</comment>
+  </data>
+  <data name="PwdNow" xml:space="preserve">
+    <value>Now</value>
+    <comment>Next attempt when delivery is under way.</comment>
+  </data>
+  <data name="MaiMulti" xml:space="preserve">
+    <value>Multi</value>
+    <comment>Attribute plurality, shown after the attribute type.</comment>
+  </data>
+  <data name="MaiSingle" xml:space="preserve">
+    <value>Single</value>
+    <comment>Attribute plurality, shown after the attribute type.</comment>
+  </data>
+  <data name="MaiCurrentValue" xml:space="preserve">
+    <value>Current value</value>
+    <comment>Section label.</comment>
+  </data>
+  <data name="MaiMoreCount" xml:space="preserve">
+    <value>+{0} more</value>
+    <comment>Shown when more values exist than are listed. {0} is the count.</comment>
+  </data>
+  <data name="MaiSourceNotRecorded" xml:space="preserve">
+    <value>Source not recorded</value>
+    <comment>Shown where the value's source was not recorded.</comment>
+  </data>
+  <data name="MaiSource" xml:space="preserve">
+    <value>Source</value>
+    <comment>Definition list label.</comment>
+  </data>
+  <data name="MaiSetBy" xml:space="preserve">
+    <value>Set by</value>
+    <comment>Definition list label.</comment>
+  </data>
+  <data name="MaiSourceType" xml:space="preserve">
+    <value>Source type</value>
+    <comment>Definition list label.</comment>
+  </data>
+  <data name="MaiCorrected" xml:space="preserve">
+    <value>Corrected</value>
+    <comment>Chip on a generated value that was corrected.</comment>
+  </data>
+  <data name="MaiAsserts" xml:space="preserve">
+    <value>Asserts</value>
+    <comment>Definition list label: what the source asserts.</comment>
+  </data>
+  <data name="MaiNoValueNullIsValue" xml:space="preserve">
+    <value>No value (Null is a value)</value>
+    <comment>What a source asserts when it asserts no value.</comment>
+  </data>
+  <data name="MaiFrom" xml:space="preserve">
+    <value>From</value>
+    <comment>Definition list label: the object the value came from.</comment>
+  </data>
+  <data name="MaiLastSet" xml:space="preserve">
+    <value>Last set</value>
+    <comment>Definition list label.</comment>
+  </data>
+  <data name="MaiBy" xml:space="preserve">
+    <value>by</value>
+    <comment>Joins the time and the Activity: 'by the Activity'.</comment>
+  </data>
+  <data name="MaiTheActivity" xml:space="preserve">
+    <value>the Activity</value>
+    <comment>Used when the Activity has no description.</comment>
+  </data>
+  <data name="MaiActivityFallback" xml:space="preserve">
+    <value>Activity</value>
+    <comment>Link text when the history entry has no description.</comment>
+  </data>
+  <data name="MaiEverySource" xml:space="preserve">
+    <value>Every source &lt;em&gt;in priority order&lt;/em&gt;</value>
+    <comment>Section label. Contains an &lt;em&gt; tag; keep it. Rendered as markup.</comment>
+  </data>
+  <data name="MaiPriorityRank" xml:space="preserve">
+    <value>Priority {0}</value>
+    <comment>Accessible name of the rank badge. {0} is the rank.</comment>
+  </data>
+  <data name="MaiPrioritySetOn" xml:space="preserve">
+    <value>Priority is set on the {0} attribute.</value>
+    <comment>Caption. {0} is the attribute's name.</comment>
+  </data>
+  <data name="MaiChangePriority" xml:space="preserve">
+    <value>Change priority</value>
+    <comment>Link to the object type's page.</comment>
+  </data>
+  <data name="MaiHistory" xml:space="preserve">
+    <value>History</value>
+    <comment>Section label.</comment>
+  </data>
+  <data name="MaiOpenInTimeline" xml:space="preserve">
+    <value>Open in Timeline</value>
+    <comment>Link that switches to the Changes tab.</comment>
+  </data>
+  <data name="MaiExploreCausality" xml:space="preserve">
+    <value>Explore causality</value>
+    <comment>Link to the Causality Explorer.</comment>
+  </data>
+  <data name="MaiNoChanges" xml:space="preserve">
+    <value>No changes recorded for this attribute.</value>
+    <comment>Shown when the attribute has no history.</comment>
+  </data>
+  <data name="MaiValueCorrected" xml:space="preserve">
+    <value>Value corrected</value>
+    <comment>Chip on a history entry.</comment>
+  </data>
+  <data name="MaiValueGenerated" xml:space="preserve">
+    <value>Value generated</value>
+    <comment>Chip on a history entry.</comment>
+  </data>
+  <data name="MaiShowingRecent" xml:space="preserve">
+    <value>Showing the most recent changes only.</value>
+    <comment>Shown when the history is truncated.</comment>
+  </data>
+  <data name="MaiStateInUse" xml:space="preserve">
+    <value>In use</value>
+    <comment>Source state.</comment>
+  </data>
+  <data name="MaiStateOutranked" xml:space="preserve">
+    <value>Outranked</value>
+    <comment>Source state: a higher-priority source supplies the value.</comment>
+  </data>
+  <data name="MaiStateNoValue" xml:space="preserve">
+    <value>No value</value>
+    <comment>Source state.</comment>
+  </data>
+  <data name="MaiStateNotJoined" xml:space="preserve">
+    <value>Not joined</value>
+    <comment>Source state: the object is not joined.</comment>
+  </data>
+  <data name="MaiStateNotEvaluated" xml:space="preserve">
+    <value>Not evaluated</value>
+    <comment>Source state.</comment>
+  </data>
+  <data name="AvniTitle" xml:space="preserve">
+    <value>Attribute Values Not Imported</value>
+    <comment>Panel heading.</comment>
+  </data>
+  <data name="AvniThisValue" xml:space="preserve">
+    <value>this value</value>
+    <comment>Fills the first sentence when one value failed. Used mid-sentence.</comment>
+  </data>
+  <data name="AvniTheseValues" xml:space="preserve">
+    <value>these values</value>
+    <comment>Fills the first sentence when several values failed. Used mid-sentence.</comment>
+  </data>
+  <data name="AvniTheAttribute" xml:space="preserve">
+    <value>the attribute</value>
+    <comment>Fills the first sentence when one attribute is affected. Used mid-sentence.</comment>
+  </data>
+  <data name="AvniEachAttribute" xml:space="preserve">
+    <value>each attribute</value>
+    <comment>Fills the first sentence when several attributes are affected. Used mid-sentence.</comment>
+  </data>
+  <data name="AvniCouldNotImport" xml:space="preserve">
+    <value>JIM could not import {0}, so it left {1} as it already held it and imported the rest of the object.</value>
+    <comment>{0} is AvniThisValue or AvniTheseValues; {1} is AvniTheAttribute or AvniEachAttribute.</comment>
+  </data>
+  <data name="AvniFoundByIntro" xml:space="preserve">
+    <value>The Found By column says whether the Connector could not read a value, or JIM could not hold it as read.</value>
+    <comment>Explains the Found By column.</comment>
+  </data>
+  <data name="AvniValue" xml:space="preserve">
+    <value>Value</value>
+    <comment>Grid's singular name.</comment>
+  </data>
+  <data name="AvniValues" xml:space="preserve">
+    <value>Values</value>
+    <comment>Grid's plural name, and the word in the kept-values note.</comment>
+  </data>
+  <data name="AvniSearchPlaceholder" xml:space="preserve">
+    <value>Search attribute or value</value>
+    <comment>Search box placeholder.</comment>
+  </data>
+  <data name="AvniAttribute" xml:space="preserve">
+    <value>Attribute</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="AvniValueReceived" xml:space="preserve">
+    <value>Value Received</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="AvniExpected" xml:space="preserve">
+    <value>Expected</value>
+    <comment>Column heading: the type the attribute expected.</comment>
+  </data>
+  <data name="AvniFoundBy" xml:space="preserve">
+    <value>Found By</value>
+    <comment>Column heading: whether the connector or JIM found the problem.</comment>
+  </data>
+  <data name="AvniWhyNotImported" xml:space="preserve">
+    <value>Why It Could Not Be Imported</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="AvniNoValuesMatch" xml:space="preserve">
+    <value>No values match "{0}"</value>
+    <comment>Empty grid. {0} is the search text the administrator typed.</comment>
+  </data>
+  <data name="AvniKeptNote" xml:space="preserve">
+    <value>The first {0} of {1} values are kept with the item.</value>
+    <comment>Note under the grid. {0} is the number shown; {1} the total.</comment>
+  </data>
+  <data name="AvniTheValue" xml:space="preserve">
+    <value>the value</value>
+    <comment>Fills the next-step sentence when one value failed.</comment>
+  </data>
+  <data name="AvniTheValues" xml:space="preserve">
+    <value>the values</value>
+    <comment>Fills the next-step sentence when several values failed.</comment>
+  </data>
+  <data name="AvniTheValueIs" xml:space="preserve">
+    <value>the value is</value>
+    <comment>Fills the next-step sentence: 'If the value is right'.</comment>
+  </data>
+  <data name="AvniTheValuesAre" xml:space="preserve">
+    <value>the values are</value>
+    <comment>Fills the next-step sentence: 'If the values are right'.</comment>
+  </data>
+  <data name="AvniTheConnectedSystem" xml:space="preserve">
+    <value>the Connected System</value>
+    <comment>Fills the next-step sentence when the location is not known.</comment>
+  </data>
+  <data name="AvniNextStep" xml:space="preserve">
+    <value>Correct {0} in {1} and run the import again. If {2} right and an attribute's type is wrong, change it on the Schema tab.</value>
+    <comment>{0} is AvniTheValue or AvniTheValues; {1} is the Connected System or its location (already HTML-encoded, in a span); {2} is AvniTheValueIs or AvniTheValuesAre. Rendered as markup.</comment>
+  </data>
+  <data name="AvniOpenSchema" xml:space="preserve">
+    <value>Open Schema</value>
+    <comment>Link to the Schema tab, followed by an arrow.</comment>
+  </data>
+</root>
