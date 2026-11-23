@@ -171,21 +171,7 @@ The **Cloud** setting reaches a tenant in the US Government L4 (GCC High), US Go
 
 ### Outbound proxy {#outbound-proxy}
 
-Where JIM must reach the internet through a proxy, give `jim.web` and `jim.worker` the standard `HTTPS_PROXY` variable, and list in `NO_PROXY` every host JIM reaches directly: your identity provider and your internal Connected Systems. The shipped compose files do not set them, so add them in your production overlay, the file you pass with `-f` alongside the others:
-
-```yaml
-services:
-  jim.web:
-    environment:
-      HTTPS_PROXY: http://proxy.example.com:3128
-      NO_PROXY: localhost,idp.example.com,.corp.example.com
-  jim.worker:
-    environment:
-      HTTPS_PROXY: http://proxy.example.com:3128
-      NO_PROXY: localhost,idp.example.com,.corp.example.com
-```
-
-JIM reads a server's certificate through the same proxy, so behind a TLS-inspecting proxy the certificate you are shown is the proxy's. A proxy that intercepts traffic without being configured needs neither variable.
+Where JIM reaches the internet through a proxy, set `HTTPS_PROXY`, and `NO_PROXY` for the hosts JIM reaches directly, as the [Configuration Reference](../administration/configuration.md#outbound-proxy) describes; the installer asks for both. JIM reads a server's certificate through the same proxy, so behind a TLS-inspecting proxy the certificate you are shown is the proxy's.
 
 ## :material-wrench-outline: Troubleshooting
 
