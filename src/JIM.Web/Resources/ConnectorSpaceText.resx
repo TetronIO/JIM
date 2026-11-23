@@ -1446,4 +1446,64 @@
     <value>Changes appear here while the Pending Export is waiting to be exported, and are cleared once the Connected System confirms them.</value>
     <comment>Empty state hint</comment>
   </data>
+  <data name="DtsNoSource" xml:space="preserve">
+    <value>Select at least one authoritative source. No source is selected, so this configuration cannot be saved.</value>
+    <comment>Alert when no source is selected</comment>
+  </data>
+  <data name="DtsAllOne" xml:space="preserve">
+    <value>A {0} will be {1} when {2} disconnects.</value>
+    <comment>{0} is the Object Type, in bold; {1} is the fate; {2} is the source</comment>
+  </data>
+  <data name="DtsAllMany" xml:space="preserve">
+    <value>A {0} will be {1} only when {2} have {3} disconnected. While any of them remains connected the object is retained.</value>
+    <comment>{0} Object Type, {1} fate, {2} the sources, {3} the word all in bold</comment>
+  </data>
+  <data name="DtsAllWord" xml:space="preserve">
+    <value>all</value>
+    <comment>Used inside the sentence above</comment>
+  </data>
+  <data name="DtsAnyOne" xml:space="preserve">
+    <value>A {0} will be {1} when {2} disconnects, regardless of other connectors.</value>
+    <comment>{0} is the Object Type, {1} the fate, {2} the source</comment>
+  </data>
+  <data name="DtsAnyMany" xml:space="preserve">
+    <value>A {0} will be {1} when {2} of {3} disconnects, even if the others remain connected.</value>
+    <comment>{0} Object Type, {1} fate, {2} the word any in bold, {3} the sources</comment>
+  </data>
+  <data name="DtsAnyWord" xml:space="preserve">
+    <value>any</value>
+    <comment>Used inside the sentence above</comment>
+  </data>
+  <data name="DtsListAnd" xml:space="preserve">
+    <value>and</value>
+    <comment>Joins the last two source names</comment>
+  </data>
+  <data name="DtsListOr" xml:space="preserve">
+    <value>or</value>
+    <comment>Joins the last two source names</comment>
+  </data>
+  <data name="DtsFateGrace" xml:space="preserve">
+    <value>scheduled for deletion, with a {0} grace period,</value>
+    <comment>{0} is the grace period in bold</comment>
+  </data>
+  <data name="DtsFateImmediate" xml:space="preserve">
+    <value>deleted immediately, with no grace period,</value>
+    <comment>Fate with no grace period</comment>
+  </data>
+  <data name="DtsAdjDay" xml:space="preserve">
+    <value>{0} day</value>
+    <comment>Grace period part, as a compound adjective; {0} is the count</comment>
+  </data>
+  <data name="DtsAdjHour" xml:space="preserve">
+    <value>{0} hour</value>
+    <comment>Grace period part, as a compound adjective; {0} is the count</comment>
+  </data>
+  <data name="DtsAdjMinute" xml:space="preserve">
+    <value>{0} minute</value>
+    <comment>Grace period part, as a compound adjective; {0} is the count</comment>
+  </data>
+  <data name="DtsAdjZero" xml:space="preserve">
+    <value>0 minute</value>
+    <comment>Grace period shown when every part is zero</comment>
+  </data>
 </root>

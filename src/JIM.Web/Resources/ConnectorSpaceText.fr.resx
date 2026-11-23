@@ -1088,4 +1088,49 @@
   <data name="PmvNoneHint" xml:space="preserve">
     <value>Les modifications apparaissent ici tant que l’exportation en attente attend d’être exportée, et sont effacées une fois que le système connecté les a confirmées.</value>
   </data>
+  <data name="DtsNoSource" xml:space="preserve">
+    <value>Sélectionnez au moins une source faisant autorité. Aucune source n’est sélectionnée : cette configuration ne peut donc pas être enregistrée.</value>
+  </data>
+  <data name="DtsAllOne" xml:space="preserve">
+    <value>Un objet {0} sera {1} lorsque {2} se déconnectera.</value>
+  </data>
+  <data name="DtsAllMany" xml:space="preserve">
+    <value>Un objet {0} sera {1} seulement lorsque {2} auront {3} été déconnectés. Tant que l’un d’eux reste connecté, l’objet est conservé.</value>
+  </data>
+  <data name="DtsAllWord" xml:space="preserve">
+    <value>tous</value>
+  </data>
+  <data name="DtsAnyOne" xml:space="preserve">
+    <value>Un objet {0} sera {1} lorsque {2} se déconnectera, quels que soient les autres connecteurs.</value>
+  </data>
+  <data name="DtsAnyMany" xml:space="preserve">
+    <value>Un objet {0} sera {1} lorsque {2} de {3} se déconnectera, même si les autres restent connectés.</value>
+  </data>
+  <data name="DtsAnyWord" xml:space="preserve">
+    <value>n’importe lequel</value>
+  </data>
+  <data name="DtsListAnd" xml:space="preserve">
+    <value>et</value>
+  </data>
+  <data name="DtsListOr" xml:space="preserve">
+    <value>ou</value>
+  </data>
+  <data name="DtsFateGrace" xml:space="preserve">
+    <value>programmé pour suppression, avec un délai de grâce de {0},</value>
+  </data>
+  <data name="DtsFateImmediate" xml:space="preserve">
+    <value>supprimé immédiatement, sans délai de grâce,</value>
+  </data>
+  <data name="DtsAdjDay" xml:space="preserve">
+    <value>{0} jour</value>
+  </data>
+  <data name="DtsAdjHour" xml:space="preserve">
+    <value>{0} heure</value>
+  </data>
+  <data name="DtsAdjMinute" xml:space="preserve">
+    <value>{0} minute</value>
+  </data>
+  <data name="DtsAdjZero" xml:space="preserve">
+    <value>0 minute</value>
+  </data>
 </root>
