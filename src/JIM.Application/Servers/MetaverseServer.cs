@@ -240,23 +240,23 @@ public partial class MetaverseServer
     private async Task RenameMetaverseObjectTypeCoreAsync(int objectTypeId, string newName, string newPluralName, string? icon, Func<MetaverseObjectType, Task> auditedUpdateAsync)
     {
         if (string.IsNullOrWhiteSpace(newName))
-            throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.ObjectTypeNameRequired)), nameof(newName));
+            throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ObjectTypeNameRequired)), nameof(newName));
         if (string.IsNullOrWhiteSpace(newPluralName))
-            throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.ObjectTypePluralNameRequired)), nameof(newPluralName));
+            throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ObjectTypePluralNameRequired)), nameof(newPluralName));
 
         var objectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(objectTypeId, includeChildObjects: false)
-            ?? throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.ObjectTypeNotFound), objectTypeId.ToString()), nameof(objectTypeId));
+            ?? throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ObjectTypeNotFound), objectTypeId.ToString()), nameof(objectTypeId));
 
         if (objectType.BuiltIn)
-            throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.ObjectTypeBuiltInCannotRename), objectType.Name));
+            throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.ObjectTypeBuiltInCannotRename), objectType.Name));
 
         var trimmedName = newName.Trim();
         var trimmedPluralName = newPluralName.Trim();
 
         if (!await IsMetaverseObjectTypeNameAvailableAsync(trimmedName, objectTypeId))
-            throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.ObjectTypeNameExists), trimmedName));
+            throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.ObjectTypeNameExists), trimmedName));
         if (!await IsMetaverseObjectTypePluralNameAvailableAsync(trimmedPluralName, objectTypeId))
-            throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.ObjectTypePluralNameExists), trimmedPluralName));
+            throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.ObjectTypePluralNameExists), trimmedPluralName));
 
         objectType.Name = trimmedName;
         objectType.PluralName = trimmedPluralName;
@@ -632,13 +632,13 @@ public partial class MetaverseServer
     private async Task RenameMetaverseAttributeCoreAsync(int attributeId, string newName, Func<MetaverseAttribute, Task> auditedUpdateAsync)
     {
         if (string.IsNullOrWhiteSpace(newName))
-            throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.AttributeNameRequired)), nameof(newName));
+            throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.AttributeNameRequired)), nameof(newName));
 
         var attribute = await Application.Repository.Metaverse.GetMetaverseAttributeAsync(attributeId, withChangeTracking: true)
-            ?? throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.AttributeNotFound), attributeId.ToString()), nameof(attributeId));
+            ?? throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.AttributeNotFound), attributeId.ToString()), nameof(attributeId));
 
         if (attribute.BuiltIn)
-            throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.AttributeBuiltInCannotRename), attribute.Name));
+            throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.AttributeBuiltInCannotRename), attribute.Name));
 
         if (!await Application.Repository.Metaverse.IsMetaverseAttributeNameUniqueAsync(newName, attributeId))
             throw new MetaverseAttributeNameConflictException(newName);
@@ -692,22 +692,22 @@ public partial class MetaverseServer
         ArgumentNullException.ThrowIfNull(standardMappings);
 
         if (standardMappings.Any(m => m.Standard == AttributeStandard.NotSet))
-            throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.StandardMappingNeedsStandard)), nameof(standardMappings));
+            throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.StandardMappingNeedsStandard)), nameof(standardMappings));
         if (standardMappings.Any(m => string.IsNullOrWhiteSpace(m.CounterpartName)))
-            throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.StandardMappingNeedsCounterpart)), nameof(standardMappings));
+            throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.StandardMappingNeedsCounterpart)), nameof(standardMappings));
 
         var duplicateGroup = standardMappings
             .GroupBy(m => (m.Standard, CounterpartName: m.CounterpartName.Trim()))
             .FirstOrDefault(g => g.Count() > 1);
         if (duplicateGroup != null)
-            throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.StandardMappingDuplicate), duplicateGroup.Key.Standard.ToString(), duplicateGroup.Key.CounterpartName), nameof(standardMappings));
+            throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.StandardMappingDuplicate), duplicateGroup.Key.Standard.ToString(), duplicateGroup.Key.CounterpartName), nameof(standardMappings));
 
         // the mappings are child rows of the attribute, so load the attribute tracked with them included
         var attribute = await Application.Repository.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(attributeId, withChangeTracking: true)
-            ?? throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.AttributeNotFound), attributeId.ToString()), nameof(attributeId));
+            ?? throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.AttributeNotFound), attributeId.ToString()), nameof(attributeId));
 
         if (attribute.BuiltIn)
-            throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.StandardMappingsBuiltInCannotModify), attribute.Name));
+            throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.StandardMappingsBuiltInCannotModify), attribute.Name));
 
         // reconcile in place so retained mappings keep their identity: remove absent, update notes on matches, add new
         var staleMappings = attribute.StandardMappings
@@ -760,10 +760,10 @@ public partial class MetaverseServer
     private async Task BindAttributeToObjectTypeCoreAsync(int attributeId, int metaverseObjectTypeId, Func<Activity, Task> createActivityAsync, string? changeReason)
     {
         var attribute = await Application.Repository.Metaverse.GetMetaverseAttributeAsync(attributeId)
-            ?? throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.AttributeNotFound), attributeId.ToString()), nameof(attributeId));
+            ?? throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.AttributeNotFound), attributeId.ToString()), nameof(attributeId));
 
         if (attribute.BuiltIn)
-            throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.BindingsBuiltInCannotModify), attribute.Name));
+            throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.BindingsBuiltInCannotModify), attribute.Name));
 
         var activity = new Activity
         {
@@ -836,7 +836,7 @@ public partial class MetaverseServer
         ArgumentNullException.ThrowIfNull(attribute);
 
         if (attribute.BuiltIn)
-            throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.AttributeBuiltInCannotDelete), attribute.Name));
+            throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.AttributeBuiltInCannotDelete), attribute.Name));
 
         var impact = await EvaluateAttributeDeletionAsync(attribute);
 
@@ -914,7 +914,7 @@ public partial class MetaverseServer
     public async Task<AttributeUnassignImpact> EvaluateAttributeUnassignAsync(int attributeId, int metaverseObjectTypeId)
     {
         var attribute = await Application.Repository.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(attributeId)
-            ?? throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.AttributeNotFound), attributeId.ToString()), nameof(attributeId));
+            ?? throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.AttributeNotFound), attributeId.ToString()), nameof(attributeId));
 
         var objectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(metaverseObjectTypeId, false);
         var objectsWithValues = await Application.Repository.Metaverse.GetAttributeValueObjectCountByTypeAsync(attributeId, metaverseObjectTypeId);
@@ -959,7 +959,7 @@ public partial class MetaverseServer
         var impact = await EvaluateAttributeUnassignAsync(attributeId, metaverseObjectTypeId);
 
         if (impact.BuiltIn)
-            throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.AttributeBuiltInCannotUnassign), impact.AttributeName));
+            throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.AttributeBuiltInCannotUnassign), impact.AttributeName));
 
         // Nothing bound to remove, or blocked by stored values or by configuration reading the attribute on this
         // type: make no change and report via the impact.
@@ -1053,10 +1053,10 @@ public partial class MetaverseServer
     private async Task<AttributeSchemaChangeImpact> ChangeMetaverseAttributeSchemaCoreAsync(int attributeId, AttributeDataType newType, AttributePlurality newPlurality, Func<MetaverseAttribute, Task> auditedUpdateAsync)
     {
         var attribute = await Application.Repository.Metaverse.GetMetaverseAttributeAsync(attributeId, withChangeTracking: true)
-            ?? throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.AttributeNotFound), attributeId.ToString()), nameof(attributeId));
+            ?? throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.AttributeNotFound), attributeId.ToString()), nameof(attributeId));
 
         if (attribute.BuiltIn)
-            throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.AttributeBuiltInCannotChangeType), attribute.Name));
+            throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.AttributeBuiltInCannotChangeType), attribute.Name));
 
         EnsureAttributeCapability(newType, newPlurality);
 
@@ -1162,7 +1162,7 @@ public partial class MetaverseServer
         ArgumentNullException.ThrowIfNull(objectType);
 
         if (objectType.BuiltIn)
-            throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.ObjectTypeBuiltInCannotDelete), objectType.Name));
+            throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.ObjectTypeBuiltInCannotDelete), objectType.Name));
 
         var impact = await EvaluateObjectTypeDeletionAsync(objectType);
 
@@ -2495,22 +2495,22 @@ public partial class MetaverseServer
         ArgumentNullException.ThrowIfNull(criteria);
 
         if (criteria.FromDate.HasValue && criteria.ToDate.HasValue && criteria.FromDate.Value > criteria.ToDate.Value)
-            throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.ChangeSearchTimeRangeInverted)));
+            throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ChangeSearchTimeRangeInverted)));
 
         if (criteria.AttributeConditions.Count > MaxChangeSearchConditions)
-            throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.ChangeSearchTooManyConditions), MaxChangeSearchConditions.ToString()));
+            throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ChangeSearchTooManyConditions), MaxChangeSearchConditions.ToString()));
 
         var conditions = new List<ResolvedAttributeChangeCondition>();
         foreach (var condition in criteria.AttributeConditions)
         {
             if (!Enum.IsDefined(condition.Operator))
-                throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.ChangeSearchOperatorUnknown), condition.Operator.ToString()));
+                throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ChangeSearchOperatorUnknown), condition.Operator.ToString()));
 
             var attribute = await Application.Repository.Metaverse.GetMetaverseAttributeAsync(condition.AttributeId)
-                ?? throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.ChangeSearchAttributeUnknown), condition.AttributeId.ToString()));
+                ?? throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ChangeSearchAttributeUnknown), condition.AttributeId.ToString()));
 
             if (!AttributeChangeConditionParser.TryParse(attribute.Type, condition.Value, out var match, out var error))
-                throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.ChangeSearchConditionInvalid), attribute.Name, error ?? string.Empty));
+                throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ChangeSearchConditionInvalid), attribute.Name, error ?? string.Empty));
 
             conditions.Add(new ResolvedAttributeChangeCondition
             {
@@ -2530,7 +2530,7 @@ public partial class MetaverseServer
             Conditions = conditions,
             MatchMode = Enum.IsDefined(criteria.MatchMode)
                 ? criteria.MatchMode
-                : throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.ChangeSearchMatchModeUnknown), criteria.MatchMode.ToString()))
+                : throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.ChangeSearchMatchModeUnknown), criteria.MatchMode.ToString()))
         };
     }
 

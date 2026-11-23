@@ -18,62 +18,43 @@ public interface IJimMessageException
 }
 
 /// <summary>
-/// An <see cref="InvalidOperationException"/> a person is meant to read: a refusal such as "cannot delete a built-in X".
-/// Callers that catch <see cref="InvalidOperationException"/> still do, and <see cref="Exception.Message"/> is unchanged.
+/// Makes the framework exceptions a person is meant to read carry their message (#3030). The exception keeps its own
+/// type, so a caller that catches (or a test that expects) <see cref="InvalidOperationException"/> or
+/// <see cref="ArgumentException"/> is unaffected and <see cref="Exception.Message"/> is the British English as before;
+/// the message rides in <see cref="Exception.Data"/> for the portal to render in the viewer's language
+/// (<c>MessageDisplay.ToDisplayText</c>).
 /// </summary>
-public class JimInvalidOperationException : InvalidOperationException, IJimMessageException
+public static class JimExceptions
 {
-    public JimInvalidOperationException(JimMessage detail)
-        : base(detail.ToEnglish())
+    /// <summary>The key the message is held under in <see cref="Exception.Data"/>.</summary>
+    public const string DataKey = "JimMessage";
+
+    /// <summary>An <see cref="InvalidOperationException"/> a person is meant to read.</summary>
+    public static InvalidOperationException InvalidOperation(JimMessage detail) =>
+        new InvalidOperationException(detail.ToEnglish()).WithDetail(detail);
+
+    /// <summary>
+    /// An <see cref="ArgumentException"/> a person is meant to read. A parameter name appends "(Parameter 'x')" to
+    /// <see cref="Exception.Message"/>, as it did before; the portal shows the message without it.
+    /// </summary>
+    public static ArgumentException Argument(JimMessage detail, string? paramName = null) =>
+        (paramName == null ? new ArgumentException(detail.ToEnglish()) : new ArgumentException(detail.ToEnglish(), paramName)).WithDetail(detail);
+
+    /// <summary>A <see cref="FileNotFoundException"/> a person is meant to read.</summary>
+    public static FileNotFoundException FileNotFound(JimMessage detail) =>
+        new FileNotFoundException(detail.ToEnglish()).WithDetail(detail);
+
+    /// <summary>Attaches the message to an exception, and returns it.</summary>
+    public static TException WithDetail<TException>(this TException exception, JimMessage detail) where TException : Exception
     {
-        Detail = detail;
+        exception.Data[DataKey] = detail;
+        return exception;
     }
 
-    public JimMessage Detail { get; }
-}
-
-/// <summary>
-/// An <see cref="ArgumentException"/> a person is meant to read: a request refused for what it holds. Like the base
-/// class, a parameter name appends "(Parameter 'x')" to <see cref="Exception.Message"/>, as it did before; the portal shows
-/// <see cref="Detail"/> without it.
-/// </summary>
-public class JimArgumentException : ArgumentException, IJimMessageException
-{
-    public JimArgumentException(JimMessage detail)
-        : base(detail.ToEnglish())
-    {
-        Detail = detail;
-    }
-
-    public JimArgumentException(JimMessage detail, string paramName)
-        : base(detail.ToEnglish(), paramName)
-    {
-        Detail = detail;
-    }
-
-    public JimMessage Detail { get; }
-}
-
-/// <summary>A <see cref="KeyNotFoundException"/> a person is meant to read.</summary>
-public class JimKeyNotFoundException : KeyNotFoundException, IJimMessageException
-{
-    public JimKeyNotFoundException(JimMessage detail)
-        : base(detail.ToEnglish())
-    {
-        Detail = detail;
-    }
-
-    public JimMessage Detail { get; }
-}
-
-/// <summary>A <see cref="FileNotFoundException"/> a person is meant to read.</summary>
-public class JimFileNotFoundException : FileNotFoundException, IJimMessageException
-{
-    public JimFileNotFoundException(JimMessage detail)
-        : base(detail.ToEnglish())
-    {
-        Detail = detail;
-    }
-
-    public JimMessage Detail { get; }
+    /// <summary>
+    /// The message an exception carries, whether as an <see cref="IJimMessageException"/> or attached by
+    /// <see cref="WithDetail{TException}"/>; null for an ordinary exception.
+    /// </summary>
+    public static JimMessage? DetailOf(this Exception exception) =>
+        exception is IJimMessageException { Detail: { } own } ? own : exception.Data[DataKey] as JimMessage;
 }

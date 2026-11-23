@@ -140,7 +140,7 @@ public class FeatureFlagServer
     {
         if (enabled && definition.Tier == FeatureFlagTier.InDevelopment && !allowInDevelopment)
         {
-            throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.FeatureInDevelopment),
+            throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.FeatureInDevelopment),
                 definition.DisplayName, definition.TrackingIssueNumber.ToString()));
         }
     }

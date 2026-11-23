@@ -112,7 +112,7 @@ public class CertificateServer : ICertificateProvider
             var thumbprint = x509Cert.Thumbprint;
 
             if (await Application.Repository.TrustedCertificates.ExistsByThumbprintAsync(thumbprint))
-                throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.CertificateThumbprintExists), thumbprint));
+                throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.CertificateThumbprintExists), thumbprint));
 
             var certificate = new TrustedCertificate
             {
@@ -191,14 +191,14 @@ public class CertificateServer : ICertificateProvider
         {
             // Validate the file path exists and load the certificate
             if (!File.Exists(filePath))
-                throw new JimFileNotFoundException(ServerMessage.Create(nameof(ServerMessages.CertificateFileNotFound), filePath));
+                throw JimExceptions.FileNotFound(ServerMessage.Create(nameof(ServerMessages.CertificateFileNotFound), filePath));
 
             var certificateData = await File.ReadAllBytesAsync(filePath);
             var x509Cert = ParseCertificate(certificateData);
             var thumbprint = x509Cert.Thumbprint;
 
             if (await Application.Repository.TrustedCertificates.ExistsByThumbprintAsync(thumbprint))
-                throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.CertificateThumbprintExists), thumbprint));
+                throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.CertificateThumbprintExists), thumbprint));
 
             var certificate = new TrustedCertificate
             {
@@ -265,7 +265,7 @@ public class CertificateServer : ICertificateProvider
             RequirePurpose(trustedFor.Value);
 
         var certificate = await Application.Repository.TrustedCertificates.GetByIdAsync(id)
-            ?? throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.CertificateNotFound), id.ToString()));
+            ?? throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.CertificateNotFound), id.ToString()));
 
         var activity = new Activity
         {
@@ -376,7 +376,7 @@ public class CertificateServer : ICertificateProvider
     public async Task<CertificateValidationResult> ValidateAsync(Guid id)
     {
         var certificate = await Application.Repository.TrustedCertificates.GetByIdAsync(id)
-            ?? throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.CertificateNotFound), id.ToString()));
+            ?? throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.CertificateNotFound), id.ToString()));
 
         var result = new CertificateValidationResult();
 
@@ -891,7 +891,7 @@ public class CertificateServer : ICertificateProvider
     {
         const CertificateTrustPurpose known = CertificateTrustPurpose.Connectors | CertificateTrustPurpose.SignIn;
         if (trustedFor == CertificateTrustPurpose.None || (trustedFor & ~known) != 0)
-            throw new JimArgumentException(ServerMessage.Create(nameof(ServerMessages.CertificateTrustPurposeRequired)), nameof(trustedFor));
+            throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.CertificateTrustPurposeRequired)), nameof(trustedFor));
     }
 
     /// <summary>

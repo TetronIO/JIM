@@ -180,29 +180,49 @@ public class ObjectMatchingRule : IAuditable
     /// System Object Type and the Metaverse attribute, which this model may not have loaded; the application layer's
     /// validator does that.
     /// </remarks>
-    public string? DescribeComparisonInvalidity()
+    public string? DescribeComparisonInvalidity() => FindComparisonInvalidity() switch
+    {
+        ObjectMatchingRuleShapeProblem.NoSource =>
+            "An Object Matching Rule must have a source, a Connected System attribute or an expression, or it has nothing to match on.",
+        ObjectMatchingRuleShapeProblem.SeveralSources =>
+            $"An Object Matching Rule takes exactly one source, a Connected System attribute or an expression; this one has {Sources.Count}. " +
+            "To match on a combination of attributes, write an expression that combines them.",
+        ObjectMatchingRuleShapeProblem.AttributeAndExpression =>
+            "An Object Matching Rule's source is either a Connected System attribute or an expression, not both.",
+        ObjectMatchingRuleShapeProblem.NeitherAttributeNorExpression =>
+            "An Object Matching Rule's source names neither a Connected System attribute nor an expression, so the rule has nothing to match on.",
+        ObjectMatchingRuleShapeProblem.NoTarget =>
+            "An Object Matching Rule must name the Metaverse Attribute its source values are compared against.",
+        _ => null
+    };
+
+    /// <summary>
+    /// What is wrong with the rule's shape, as a value a display can put in the reader's language, or
+    /// <see cref="ObjectMatchingRuleShapeProblem.None"/> when it is sound. <see cref="DescribeComparisonInvalidity"/> is
+    /// the same answer in British English.
+    /// </summary>
+    public ObjectMatchingRuleShapeProblem FindComparisonInvalidity()
     {
         if (Sources.Count == 0)
-            return "An Object Matching Rule must have a source, a Connected System attribute or an expression, or it has nothing to match on.";
+            return ObjectMatchingRuleShapeProblem.NoSource;
 
         if (Sources.Count > 1)
-            return $"An Object Matching Rule takes exactly one source, a Connected System attribute or an expression; this one has {Sources.Count}. " +
-                   "To match on a combination of attributes, write an expression that combines them.";
+            return ObjectMatchingRuleShapeProblem.SeveralSources;
 
         var source = Sources[0];
         var hasAttribute = source.ConnectedSystemAttributeId.HasValue || source.ConnectedSystemAttribute != null;
         var hasExpression = !string.IsNullOrWhiteSpace(source.Expression);
 
         if (hasAttribute && hasExpression)
-            return "An Object Matching Rule's source is either a Connected System attribute or an expression, not both.";
+            return ObjectMatchingRuleShapeProblem.AttributeAndExpression;
 
         if (!hasAttribute && !hasExpression)
-            return "An Object Matching Rule's source names neither a Connected System attribute nor an expression, so the rule has nothing to match on.";
+            return ObjectMatchingRuleShapeProblem.NeitherAttributeNorExpression;
 
         if (TargetMetaverseAttributeId == null && TargetMetaverseAttribute == null)
-            return "An Object Matching Rule must name the Metaverse Attribute its source values are compared against.";
+            return ObjectMatchingRuleShapeProblem.NoTarget;
 
-        return null;
+        return ObjectMatchingRuleShapeProblem.None;
     }
 
     /// <summary>

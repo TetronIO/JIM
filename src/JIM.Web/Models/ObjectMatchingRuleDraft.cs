@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Preview;
 using JIM.Models.Staging;
@@ -72,6 +73,9 @@ public sealed class ObjectMatchingRuleDraft
     /// </summary>
     public string? Problem { get; set; }
 
+    /// <summary>The same problem as a message, shown in the viewer's language; <see cref="Problem"/> is its English.</summary>
+    public JimMessage? ProblemDetail { get; set; }
+
     /// <summary>Whether a source of the chosen kind is given.</summary>
     public bool HasSource => SourceKind == ObjectMatchingRuleSourceKind.Expression
         ? !string.IsNullOrWhiteSpace(Expression)
@@ -123,6 +127,7 @@ public sealed class ObjectMatchingRuleDraft
         _caseSensitive = ObjectMatchingDefaults.CaseSensitive;
         _caseSensitiveChosen = false;
         Problem = null;
+        ProblemDetail = null;
     }
 
     private void FollowSourceCaseSensitivity()

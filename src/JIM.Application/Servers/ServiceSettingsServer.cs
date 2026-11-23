@@ -572,10 +572,10 @@ namespace JIM.Application.Servers
         {
             var setting = await GetSettingAsync(key);
             if (setting == null)
-                throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.SettingNotFound), key));
+                throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.SettingNotFound), key));
 
             if (setting.IsReadOnly)
-                throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.SettingReadOnly), setting.DisplayName));
+                throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.SettingReadOnly), setting.DisplayName));
 
             // Encrypt encrypted string values before storing
             if (setting.ValueType == ServiceSettingValueType.StringEncrypted &&
@@ -602,10 +602,10 @@ namespace JIM.Application.Servers
         {
             var setting = await GetSettingAsync(key);
             if (setting == null)
-                throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.SettingNotFound), key));
+                throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.SettingNotFound), key));
 
             if (setting.IsReadOnly)
-                throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.SettingReadOnly), setting.DisplayName));
+                throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.SettingReadOnly), setting.DisplayName));
 
             setting.Value = null; // null means use default
 

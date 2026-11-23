@@ -145,7 +145,7 @@ public class SchedulerServer
         // the product and must not be deleted; they may be enabled, disabled and re-timed, but not removed.
         // This is the authoritative backstop for any caller; the API also rejects the request with a 400.
         if (schedule.BuiltIn)
-            throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.SchedBuiltInCannotDelete), schedule.Name));
+            throw JimExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.SchedBuiltInCannotDelete), schedule.Name));
 
         var activity = new Activity
         {
@@ -254,7 +254,7 @@ public class SchedulerServer
     {
         var schedule = await Application.Repository.Scheduling.GetScheduleAsync(step.ScheduleId);
         if (schedule?.BuiltIn == true)
-            throw new JimInvalidOperationException(ServerMessage.Create(refusalKey, schedule.Name));
+            throw JimExceptions.InvalidOperation(ServerMessage.Create(refusalKey, schedule.Name));
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -776,7 +776,7 @@ public class SchedulerServer
                 Log.Warning("StartScheduleExecutionAsync: Step {StepId} of execution {ExecutionId} could not be queued ({Reason}) and is set to stop the Schedule. The Schedule will not start.",
                     step.Id, execution.Id, refusal);
                 await FailStartAsync(execution, message);
-                throw new JimInvalidOperationException(failure);
+                throw JimExceptions.InvalidOperation(failure);
             }
         }
 

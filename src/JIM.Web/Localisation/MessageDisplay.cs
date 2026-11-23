@@ -25,7 +25,7 @@ public static class MessageDisplay
     /// What to show a person for an exception: a <see cref="JimMessageException"/>'s message in their language, else the
     /// exception's own message (an unexpected fault, whose text is for support, not translation).
     /// </summary>
-    public static string ToDisplayText(this Exception exception) => exception is IJimMessageException { Detail: { } detail }
+    public static string ToDisplayText(this Exception exception) => exception.DetailOf() is { } detail
         ? detail.ToCurrentLanguage()
         : exception.Message;
 }

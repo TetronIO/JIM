@@ -1,3 +1,4 @@
+@using JIM.Models.Localisation
 @using System.Globalization
 @using JIM.Application.Expressions
 @using JIM.Application.Interfaces
@@ -99,7 +100,7 @@
 
 @if (Draft.Problem != null)
 {
-    <MudAlert Severity="Severity.Warning" Class="mt-3" data-testid="jim-matching-rule-problem">@Draft.Problem</MudAlert>
+    <MudAlert Severity="Severity.Warning" Class="mt-3" data-testid="jim-matching-rule-problem">@MessageDisplay.Show(Draft.ProblemDetail, Draft.Problem)</MudAlert>
 }
 
 @* ─── Try it: what the rule would compare for an object holding these values ─── *@
@@ -201,7 +202,7 @@
                                 Name="@(lookup.MetaverseObjectName ?? identityId.ToString())" Href="@IdentityHref(identityId)" Class="ma-0" />
                 }
             </div>
-            <MudText Typo="Typo.body2" Class="mt-2">@lookup.Description</MudText>
+            <MudText Typo="Typo.body2" Class="mt-2">@MessageDisplay.Show(lookup.DescriptionDetail, lookup.Description)</MudText>
             @if (lookup.Candidates.Count > 0)
             {
                 <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-2">
@@ -374,9 +375,10 @@
     /// </summary>
     private void RefreshProblem()
     {
-        Draft.Problem = Draft.IsComplete && Draft.TargetAttribute is { } target && _validator != null
-            ? _validator.DescribeProblem(Draft.ToRule(0), ObjectType, target)
+        Draft.ProblemDetail = Draft.IsComplete && Draft.TargetAttribute is { } target && _validator != null
+            ? _validator.DescribeProblemDetail(Draft.ToRule(0), ObjectType, target)
             : null;
+        Draft.Problem = Draft.ProblemDetail?.ToEnglish();
 
         if (Draft.IsComplete && Draft.Problem == null)
         {

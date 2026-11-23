@@ -2,12 +2,15 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Interfaces;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Application.Services;
 using JIM.Data.Repositories;
 using System.Security.Cryptography;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Security;
 using JIM.Models.Staging;
@@ -160,7 +163,7 @@ public class PasswordSynchronisationServer
     {
         ArgumentNullException.ThrowIfNull(request);
         if (string.IsNullOrEmpty(request.Password))
-            throw new ArgumentException("A password is required.", nameof(request));
+            throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.PwdRequired)), nameof(request));
 
         // Setting a password enables an account or leaves it as it is; it never disables one (#2162). A disable here
         // would override the account's Attribute Flows as a side effect of a password reset, and nothing that sets a
@@ -168,8 +171,7 @@ public class PasswordSynchronisationServer
         // Connector. No parameter name, because the message goes to API callers as it is.
         if (request.EnableAccount == false)
         {
-            throw new ArgumentException(
-                "enableAccount accepts true, to enable the account as its password is set, or can be left out to leave the account's enabled state as it is. Setting a password never disables an account.");
+            throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.PwdNeverDisable)));
         }
 
         // A password set on every Connected System leaves "Password never expires" as each account has it (#2159): it
@@ -179,8 +181,7 @@ public class PasswordSynchronisationServer
         // gets the same answer, and like the disable refusal, before anything is queued or recorded.
         if (request.Targets == null && request.ExpiryBehaviour == PasswordExpiryBehaviour.NeverExpires)
         {
-            throw new ArgumentException(
-                "expiryBehaviour NeverExpires needs the accounts to be named. A password set on every Connected System configured for Password Synchronisation leaves \"Password never expires\" as each account has it; name the Connected System Objects to choose Never expires for them.");
+            throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.PwdNeverExpiresNeedsAccounts)));
         }
 
         var plan = request.Targets == null
@@ -317,7 +318,7 @@ public class PasswordSynchronisationServer
     private async Task<List<PlannedTarget>> PlanExplicitChangeAsync(Guid metaverseObjectId, IReadOnlyList<Guid> targets)
     {
         if (targets.Count == 0)
-            throw new ArgumentException("At least one account is required. To set the password on every Connected System configured for Password Synchronisation, name no accounts at all.");
+            throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.PwdNoAccounts)));
 
         var connectedSystems = _connectedSystemRepo();
         var accounts = (await connectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId))
@@ -330,19 +331,19 @@ public class PasswordSynchronisationServer
         foreach (var connectedSystemObjectId in targets.Distinct())
         {
             if (!accounts.TryGetValue(connectedSystemObjectId, out var account))
-                throw new ArgumentException($"Connected System Object {connectedSystemObjectId} is not one of this Metaverse Object's accounts.");
+                throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.PwdNotThisPersonsAccount), connectedSystemObjectId.ToString()));
 
             if (!systems.TryGetValue(account.ConnectedSystemId, out var system))
             {
                 // Loaded with its Connector Definition, so the capability check below is the same check the
                 // account list makes: the Connector's code, not a flag that could have gone stale.
                 system = await connectedSystems.GetConnectedSystemForPasswordDeliveryAsync(account.ConnectedSystemId)
-                    ?? throw new ArgumentException($"Connected System {account.ConnectedSystemId}, which holds Connected System Object {connectedSystemObjectId}, does not exist.");
+                    ?? throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.PwdSystemMissing), account.ConnectedSystemId.ToString(), connectedSystemObjectId.ToString()));
 
                 var connector = _createConnector(system);
                 using var disposableConnector = connector as IDisposable;
                 if (connector is not IConnectorPasswordManagement)
-                    throw new ArgumentException($"Connected System Object {connectedSystemObjectId} is in {system.Name}, whose Connector cannot set passwords.");
+                    throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.PwdConnectorCannotSet), connectedSystemObjectId.ToString(), system.Name));
 
                 systems[system.Id] = system;
             }
@@ -351,7 +352,7 @@ public class PasswordSynchronisationServer
             // into one row and the first account would silently never get the password. Refused rather than
             // guessed at: the administrator chose both, and only they can say which.
             if (accountBySystem.TryGetValue(system.Id, out var other))
-                throw new ArgumentException($"Connected System Objects {other} and {connectedSystemObjectId} are both in {system.Name}; a password can be set on one account per Connected System at a time.");
+                throw JimExceptions.Argument(ServerMessage.Create(nameof(ServerMessages.PwdTwoAccountsOneSystem), other.ToString(), connectedSystemObjectId.ToString(), system.Name));
 
             accountBySystem[system.Id] = connectedSystemObjectId;
             plan.Add(new PlannedTarget(
