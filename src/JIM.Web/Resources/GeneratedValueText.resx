@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="BaseExpressionLabel" xml:space="preserve">
+    <value>Base expression</value>
+    <comment>Label of the base expression field</comment>
+  </data>
+  <data name="UniquenessTokenTitle" xml:space="preserve">
+    <value>Uniqueness token</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="TokenOnlyIfTaken" xml:space="preserve">
+    <value>Add a number only if the value is already taken</value>
+  </data>
+  <data name="TokenSequence" xml:space="preserve">
+    <value>Always add a sequence number</value>
+  </data>
+  <data name="TokenSequenceHint" xml:space="preserve">
+    <value>The next number from a counter kept for the target attribute. Optionally fixed width.</value>
+  </data>
+  <data name="TokenRandom" xml:space="preserve">
+    <value>Always add a random token</value>
+  </data>
+  <data name="StyleLabel" xml:space="preserve">
+    <value>Style</value>
+    <comment>Label of the suffix style select</comment>
+  </data>
+  <data name="SuffixNumber" xml:space="preserve">
+    <value>Number</value>
+    <comment>Suffix style option</comment>
+  </data>
+  <data name="SuffixLetter" xml:space="preserve">
+    <value>Letter</value>
+    <comment>Suffix style option</comment>
+  </data>
+  <data name="StartAt" xml:space="preserve">
+    <value>Start at</value>
+    <comment>Label of a counter's first value</comment>
+  </data>
+  <data name="Increment" xml:space="preserve">
+    <value>Increment</value>
+    <comment>Label of a sequence step</comment>
+  </data>
+  <data name="NeverReuseLabel" xml:space="preserve">
+    <value>Never reuse a value</value>
+    <comment>Switch label, and the locked row for a sequence</comment>
+  </data>
+  <data name="PadToFixedWidth" xml:space="preserve">
+    <value>Pad to a fixed width</value>
+    <comment>Switch label</comment>
+  </data>
+  <data name="PadNotAvailableNumber" xml:space="preserve">
+    <value>Not available: a Number attribute cannot hold leading zeros. Choose a Text attribute for fixed-width values.</value>
+    <comment>Shown for a Number target, where padding cannot apply</comment>
+  </data>
+  <data name="PadOffOrOn" xml:space="preserve">
+    <value>Off: plain numbers. On: zero-padded to the width below.</value>
+  </data>
+  <data name="WidthLabel" xml:space="preserve">
+    <value>Width</value>
+    <comment>Label of the fixed width</comment>
+  </data>
+  <data name="WidthExceededTitle" xml:space="preserve">
+    <value>When the number outgrows the width</value>
+    <comment>Subheading</comment>
+  </data>
+  <data name="StopAndReport" xml:space="preserve">
+    <value>Stop and report an error</value>
+    <comment>Radio option</comment>
+  </data>
+  <data name="StopAndReportHint" xml:space="preserve">
+    <value>For fixed-length validation downstream. The object fails with a clear reason; nothing is written.</value>
+  </data>
+  <data name="AllowLonger" xml:space="preserve">
+    <value>Allow longer numbers</value>
+    <comment>Radio option</comment>
+  </data>
+  <data name="AllowLongerHint" xml:space="preserve">
+    <value>The width becomes a minimum: a number that would no longer fit grows past it instead of failing.</value>
+  </data>
+  <data name="SequenceAlwaysOn" xml:space="preserve">
+    <value>Always on for sequence numbers: the counter only moves forward.</value>
+  </data>
+  <data name="FormatLabel" xml:space="preserve">
+    <value>Format</value>
+    <comment>Label of the random token format</comment>
+  </data>
+  <data name="FormatGuid" xml:space="preserve">
+    <value>GUID</value>
+    <comment>Random format option</comment>
+  </data>
+  <data name="FormatHex" xml:space="preserve">
+    <value>Hex</value>
+    <comment>Random format option</comment>
+  </data>
+  <data name="FormatDigits" xml:space="preserve">
+    <value>Digits</value>
+    <comment>Random format option</comment>
+  </data>
+  <data name="LengthLabel" xml:space="preserve">
+    <value>Length</value>
+    <comment>Label of the random length</comment>
+  </data>
+  <data name="MissingInputTitle" xml:space="preserve">
+    <value>If an input has no value</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="WaitForInputs" xml:space="preserve">
+    <value>Wait until every input has a value</value>
+    <comment>Radio option</comment>
+  </data>
+  <data name="WaitForInputsHint" xml:space="preserve">
+    <value>Recommended for generated values: a value built from a missing input would be kept for ever.</value>
+  </data>
+  <data name="EvaluateAnyway" xml:space="preserve">
+    <value>Evaluate anyway</value>
+    <comment>Radio option</comment>
+  </data>
+  <data name="EvaluateAnywayHint" xml:space="preserve">
+    <value>Only if the expression handles missing values itself, for example with IIF and IsNullOrEmpty.</value>
+  </data>
+  <data name="CheckedForAvailabilityTitle" xml:space="preserve">
+    <value>Checked for availability</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="CollisionRemediationTitle" xml:space="preserve">
+    <value>Collision Remediation</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="AdvancedTitle" xml:space="preserve">
+    <value>Advanced</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="AttemptLimitSummary" xml:space="preserve">
+    <value>Attempt limit {0}</value>
+    <comment>Section summary; {0} is the limit</comment>
+  </data>
+  <data name="AttemptLimitLabel" xml:space="preserve">
+    <value>Attempt limit</value>
+    <comment>Label of the attempt limit</comment>
+  </data>
+  <data name="AttemptLimitHelper" xml:space="preserve">
+    <value>Candidates tried per object per run before the object fails.</value>
+  </data>
+  <data name="CannotBeSaved" xml:space="preserve">
+    <value>This configuration cannot be saved:</value>
+    <comment>Heading above the list of validation errors</comment>
+  </data>
+  <data name="HideHowItWorks" xml:space="preserve">
+    <value>Hide how it works</value>
+    <comment>Link that collapses the explanation</comment>
+  </data>
+  <data name="HowItWorks" xml:space="preserve">
+    <value>How it works</value>
+    <comment>Link that expands the explanation</comment>
+  </data>
+  <data name="WhenGeneratedHeading" xml:space="preserve">
+    <value>When JIM generates this value</value>
+    <comment>Heading of the explanation</comment>
+  </data>
+  <data name="ImportStatement" xml:space="preserve">
+    <value>1. No higher-priority source supplies {0} for the Metaverse Object. JIM generates a value the first time and keeps it from then on. Like any Attribute Flow taking the attribute over, it replaces a value a higher-priority source left behind when it stopped supplying one.</value>
+    <comment>{0} is the target attribute name</comment>
+  </data>
+  <data name="ImportTargetFallback" xml:space="preserve">
+    <value>this attribute</value>
+    <comment>Used for {0} when no target name is known</comment>
+  </data>
+  <data name="ExportStatement" xml:space="preserve">
+    <value>1. JIM generates {0} the first time it exports it to a Connected System Object and keeps that value from then on. A value the Connected System already holds is replaced; to set it only on accounts JIM creates, turn on Initial Export Only.</value>
+    <comment>{0} is the target attribute name, or the fallback value</comment>
+  </data>
+  <data name="ExportTargetFallback" xml:space="preserve">
+    <value>the value</value>
+    <comment>Used for {0} when no target name is known</comment>
+  </data>
+  <data name="NoInputsToWait" xml:space="preserve">
+    <value>2. No inputs to wait for: the base expression is empty.</value>
+  </data>
+  <data name="ThenOnce" xml:space="preserve">
+    <value>3. Then once only.</value>
+  </data>
+  <data name="EveryInputHasValue" xml:space="preserve">
+    <value>2. Every attribute the base expression reads has a value:</value>
+  </data>
+  <data name="ThenOnceKept" xml:space="preserve">
+    <value>3. Then once only. The value is kept even if these inputs later change.</value>
+  </data>
+  <data name="ThisValueFallback" xml:space="preserve">
+    <value>this value</value>
+    <comment>Used as the attribute name when no target name is known</comment>
+  </data>
+  <data name="GeneratedOnceKept" xml:space="preserve">
+    <value>Generated once, then kept.</value>
+    <comment>Summary of when the value is generated</comment>
+  </data>
+  <data name="GeneratedOnceWhenInputs" xml:space="preserve">
+    <value>Generated once, when every input has a value, then kept even if they change.</value>
+  </data>
+  <data name="NeverReuseOff" xml:space="preserve">
+    <value>Off: once JIM stops holding a value, it can be issued again, possibly to a different person.</value>
+  </data>
+  <data name="NeverReuseOn" xml:space="preserve">
+    <value>On: once JIM stops holding a value, it is never issued again. Turn this off only if a value may safely pass to a different person.</value>
+  </data>
+  <data name="OnlyIfTakenNumberHint" xml:space="preserve">
+    <value>Needs a base expression; not available for a Number attribute.</value>
+  </data>
+  <data name="OnlyIfTakenAddBaseHint" xml:space="preserve">
+    <value>Needs a base expression; add one above, or choose a Sequence or Random token instead.</value>
+  </data>
+  <data name="RandomSubtextNumber" xml:space="preserve">
+    <value>Digits only for a Number attribute; GUID and hex are text.</value>
+  </data>
+  <data name="RandomSubtext" xml:space="preserve">
+    <value>A GUID, or a short hex or digit string. A clash draws again.</value>
+  </data>
+  <data name="BaseExpressionNumberHint" xml:space="preserve">
+    <value>Not available for a Number attribute: a prefix or letters would make the value text.</value>
+  </data>
+  <data name="BaseExpressionHint" xml:space="preserve">
+    <value>Reads the source object's attributes. Optional for a Sequence or Random token.</value>
+  </data>
+</root>
