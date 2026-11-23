@@ -1346,4 +1346,76 @@
   <data name="AuxRunSummary" xml:space="preserve">
     <value>{0}, {1}, {2} entrées lues</value>
   </data>
+  <data name="AuxHeading" xml:space="preserve">
+    <value>Classes auxiliaires</value>
+  </data>
+  <data name="AuxPanelInfo" xml:space="preserve">
+    <value>Les classes dont ce type d’objet est composé : sa propre classe structurelle, plus les classes auxiliaires qui y sont fusionnées, dont les attributs rejoignent le type d’objet à la prochaine actualisation du schéma. Seules les classes que vous activez façonnent le schéma ; les suggestions ne s’appliquent jamais d’elles-mêmes.</value>
+  </data>
+  <data name="AuxPanelNoneDefined" xml:space="preserve">
+    <value>{0} ne définit aucune classe auxiliaire : il n’y a donc rien à fusionner dans ce type d’objet.</value>
+  </data>
+  <data name="AuxMadeOf" xml:space="preserve">
+    <value>Composé de</value>
+  </data>
+  <data name="AuxAddClass" xml:space="preserve">
+    <value>Ajouter une classe auxiliaire</value>
+  </data>
+  <data name="AuxMergedCount" xml:space="preserve">
+    <value>{0} classes auxiliaires fusionnées sur {1}</value>
+  </data>
+  <data name="AuxPanelNotYetRead" xml:space="preserve">
+    <value>JIM n’a pas encore lu les entrées de {0} pour savoir quelles classes auxiliaires sont en usage ; ajoutez des propositions de classes auxiliaires pour les découvrir.</value>
+  </data>
+  <data name="AuxViewActivity" xml:space="preserve">
+    <value>Voir l’activité</value>
+  </data>
+  <data name="AuxCancelledRunNote" xml:space="preserve">
+    <value>Une exécution annulée conserve ce qu’elle a trouvé. Ces classes sont réellement en usage ; celles qu’elle n’a jamais atteintes restent simplement inconnues.</value>
+  </data>
+  <data name="AuxCarrierIntro" xml:space="preserve">
+    <value>Chaque entrée de {0} porte exactement une classe structurelle. Indiquez celle que JIM doit écrire avec {1} lorsqu’il crée une entrée de ce type d’objet.</value>
+  </data>
+  <data name="AuxProvisioning" xml:space="preserve">
+    <value>Provisionnement</value>
+  </data>
+  <data name="AuxCarrierLabel" xml:space="preserve">
+    <value>Classe structurelle porteuse</value>
+  </data>
+  <data name="AuxCarrierUnset" xml:space="preserve">
+    <value>Tant qu’aucune classe porteuse n’est choisie, JIM peut importer des objets {0}, mais ne peut pas les créer.</value>
+  </data>
+  <data name="AuxCarrierCreate" xml:space="preserve">
+    <value>À la création, JIM écrit à la fois {0} et {1}.</value>
+  </data>
+  <data name="AuxOfferChangeFailed" xml:space="preserve">
+    <value>« {0} » n’a pas pu être modifié.</value>
+  </data>
+  <data name="AuxMergedMessage" xml:space="preserve">
+    <value>« {0} » fusionnée dans « {1} ». Actualisez le schéma pour importer ses attributs.</value>
+  </data>
+  <data name="AuxUnmergedMessage" xml:space="preserve">
+    <value>« {0} » n’est plus fusionnée dans « {1} ».</value>
+  </data>
+  <data name="AuxCarrierChangeFailed" xml:space="preserve">
+    <value>La classe structurelle porteuse de « {0} » n’a pas pu être modifiée.</value>
+  </data>
+  <data name="AuxCarrierRemoved" xml:space="preserve">
+    <value>« {0} » n’a plus de classe structurelle porteuse : JIM ne peut donc pas créer ses objets.</value>
+  </data>
+  <data name="AuxCarrierSet" xml:space="preserve">
+    <value>Les objets « {0} » seront créés en tant que « {1} ».</value>
+  </data>
+  <data name="AuxRunFinished" xml:space="preserve">
+    <value>L’exécution de la découverte est déjà terminée.</value>
+  </data>
+  <data name="AuxCancelRequested" xml:space="preserve">
+    <value>Annulation demandée. Ce que l’exécution a déjà trouvé est conservé.</value>
+  </data>
+  <data name="AuxRunBy" xml:space="preserve">
+    <value> par {0}</value>
+  </data>
+  <data name="AuxRunSummaryBy" xml:space="preserve">
+    <value>{0}, {1}{2}, {3} entrées lues</value>
+  </data>
 </root>

@@ -122,4 +122,7 @@
   <data name="AuxStatusCancelled" xml:space="preserve">
     <value>Canceled, partial</value>
   </data>
+  <data name="AuxCancelledRunNote" xml:space="preserve">
+    <value>A canceled run keeps what it found. Those classes are genuinely in use; the ones it never reached are simply unknown.</value>
+  </data>
 </root>

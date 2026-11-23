@@ -1790,4 +1790,100 @@
     <value>{0}, {1}, {2} entries read</value>
     <comment>Describes a discovery run: scope, when, entries read.</comment>
   </data>
+  <data name="AuxHeading" xml:space="preserve">
+    <value>Auxiliary Classes</value>
+    <comment>Panel heading and its info popover title.</comment>
+  </data>
+  <data name="AuxPanelInfo" xml:space="preserve">
+    <value>The classes this Object Type is made of: its own structural class, plus the auxiliary classes merged into it, whose attributes join the Object Type at the next schema refresh. Only the classes you enable shape the schema; suggestions never apply themselves.</value>
+    <comment>Info popover body on the auxiliary classes panel.</comment>
+  </data>
+  <data name="AuxPanelNoneDefined" xml:space="preserve">
+    <value>{0} defines no auxiliary classes, so there is nothing to merge into this Object Type.</value>
+    <comment>Shown when the schema has no auxiliary classes. {0} is the Connected System.</comment>
+  </data>
+  <data name="AuxMadeOf" xml:space="preserve">
+    <value>Made of</value>
+    <comment>Label before the composition chips.</comment>
+  </data>
+  <data name="AuxAddClass" xml:space="preserve">
+    <value>Add auxiliary class</value>
+    <comment>Button that opens the auxiliary classes dialog.</comment>
+  </data>
+  <data name="AuxMergedCount" xml:space="preserve">
+    <value>{0} of {1} auxiliary classes merged</value>
+    <comment>Count of merged classes. {0} merged, {1} in total (formatted numbers).</comment>
+  </data>
+  <data name="AuxPanelNotYetRead" xml:space="preserve">
+    <value>JIM has not yet read {0}'s entries to find which auxiliary classes are in use; Add auxiliary class offers to discover them.</value>
+    <comment>Discovery status before any run. {0} is the Connected System.</comment>
+  </data>
+  <data name="AuxViewActivity" xml:space="preserve">
+    <value>View Activity</value>
+    <comment>Link to the discovery run's Activity.</comment>
+  </data>
+  <data name="AuxCancelledRunNote" xml:space="preserve">
+    <value>A cancelled run keeps what it found. Those classes are genuinely in use; the ones it never reached are simply unknown.</value>
+    <comment>Shown after a cancelled discovery run.</comment>
+  </data>
+  <data name="AuxCarrierIntro" xml:space="preserve">
+    <value>Every entry in {0} carries exactly one structural class. Name the one JIM should write alongside {1} when it creates an entry of this Object Type.</value>
+    <comment>Provisioning intro for an auxiliary Object Type. {0} is the Connected System, {1} the Object Type.</comment>
+  </data>
+  <data name="AuxProvisioning" xml:space="preserve">
+    <value>Provisioning</value>
+    <comment>Panel heading for an auxiliary Object Type.</comment>
+  </data>
+  <data name="AuxCarrierLabel" xml:space="preserve">
+    <value>Structural Carrier Class</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="AuxCarrierUnset" xml:space="preserve">
+    <value>Until a carrier is chosen, JIM can import {0} objects but cannot create them.</value>
+    <comment>Warning. {0} is the Object Type.</comment>
+  </data>
+  <data name="AuxCarrierCreate" xml:space="preserve">
+    <value>On create, JIM writes both {0} and {1}.</value>
+    <comment>Caption under the carrier picker. {0} is the carrier class, {1} the Object Type.</comment>
+  </data>
+  <data name="AuxOfferChangeFailed" xml:space="preserve">
+    <value>'{0}' could not be changed.</value>
+    <comment>Error snackbar. {0} is the class.</comment>
+  </data>
+  <data name="AuxMergedMessage" xml:space="preserve">
+    <value>'{0}' merged into '{1}'. Refresh the schema to bring in its attributes.</value>
+    <comment>Success snackbar. {0} the class, {1} the Object Type.</comment>
+  </data>
+  <data name="AuxUnmergedMessage" xml:space="preserve">
+    <value>'{0}' is no longer merged into '{1}'.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="AuxCarrierChangeFailed" xml:space="preserve">
+    <value>The Structural Carrier Class for '{0}' could not be changed.</value>
+    <comment>Error snackbar. {0} is the Object Type.</comment>
+  </data>
+  <data name="AuxCarrierRemoved" xml:space="preserve">
+    <value>'{0}' no longer has a Structural Carrier Class, so JIM cannot create its objects.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="AuxCarrierSet" xml:space="preserve">
+    <value>'{0}' objects will be created as '{1}'.</value>
+    <comment>Success snackbar. {0} is the Object Type, {1} the carrier class.</comment>
+  </data>
+  <data name="AuxRunFinished" xml:space="preserve">
+    <value>The discovery run has already finished.</value>
+    <comment>Info snackbar.</comment>
+  </data>
+  <data name="AuxCancelRequested" xml:space="preserve">
+    <value>Cancellation requested. What the run has already found is kept.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="AuxRunBy" xml:space="preserve">
+    <value> by {0}</value>
+    <comment>Appended to a discovery run's description. {0} is the initiator's name.</comment>
+  </data>
+  <data name="AuxRunSummaryBy" xml:space="preserve">
+    <value>{0}, {1}{2}, {3} entries read</value>
+    <comment>Describes a discovery run. {2} is ' by name' or nothing.</comment>
+  </data>
 </root>
