@@ -46,4 +46,634 @@
     <value>Try it</value>
     <comment>Heading of the pane where an Attribute Flow or Generated Value can be tried out.</comment>
   </data>
+  <data name="AttributeFlowTitle" xml:space="preserve">
+    <value>Attribute Flow</value>
+    <comment>Heading of the Attribute Flow section of a Synchronisation Rule.</comment>
+  </data>
+  <data name="AddAttributeFlowButton" xml:space="preserve">
+    <value>Add Attribute Flow</value>
+    <comment>Button, and dialog title, for adding an Attribute Flow.</comment>
+  </data>
+  <data name="EditAttributeFlowTitle" xml:space="preserve">
+    <value>Edit Attribute Flow</value>
+    <comment>Dialog title when editing an Attribute Flow.</comment>
+  </data>
+  <data name="MappingTypeLabel" xml:space="preserve">
+    <value>Mapping Type:</value>
+    <comment>Filter label above the mapping type chips.</comment>
+  </data>
+  <data name="DataTypeLabel" xml:space="preserve">
+    <value>Data Type:</value>
+    <comment>Filter label above the data type chips.</comment>
+  </data>
+  <data name="PluralityLabel" xml:space="preserve">
+    <value>Plurality:</value>
+    <comment>Filter label above the plurality chips.</comment>
+  </data>
+  <data name="PluralitySingleValued" xml:space="preserve">
+    <value>Single-Valued</value>
+    <comment>Plurality of an attribute that holds one value.</comment>
+  </data>
+  <data name="PluralityMultiValued" xml:space="preserve">
+    <value>Multi-Valued</value>
+    <comment>Plurality of an attribute that holds several values.</comment>
+  </data>
+  <data name="MappingTypeAttributeMapping" xml:space="preserve">
+    <value>Attribute Mapping</value>
+    <comment>Mapping type: copies an attribute.</comment>
+  </data>
+  <data name="MappingTypeExpressionMapping" xml:space="preserve">
+    <value>Expression Mapping</value>
+    <comment>Mapping type: computes a value with an expression.</comment>
+  </data>
+  <data name="MappingTypeDerived" xml:space="preserve">
+    <value>Derived</value>
+    <comment>Mapping type: an import Expression that reads the Metaverse Object.</comment>
+  </data>
+  <data name="MappingTypeGeneratedMapping" xml:space="preserve">
+    <value>Generated Mapping</value>
+    <comment>Mapping type: a Generated Value.</comment>
+  </data>
+  <data name="MappingTypeAdvancedMapping" xml:space="preserve">
+    <value>Advanced Mapping</value>
+    <comment>Mapping type: an advanced mapping.</comment>
+  </data>
+  <data name="NotSet" xml:space="preserve">
+    <value>Not Set</value>
+    <comment>Shown where a mapping type or data type has not been chosen.</comment>
+  </data>
+  <data name="DataTypeText" xml:space="preserve">
+    <value>Text</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeNumber" xml:space="preserve">
+    <value>Number</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeDateTime" xml:space="preserve">
+    <value>Date Time</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeBinary" xml:space="preserve">
+    <value>Binary</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeReference" xml:space="preserve">
+    <value>Reference</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeGuid" xml:space="preserve">
+    <value>Guid</value>
+    <comment>Attribute data type: a globally unique identifier.</comment>
+  </data>
+  <data name="DataTypeBoolean" xml:space="preserve">
+    <value>Boolean</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="DataTypeLongNumber" xml:space="preserve">
+    <value>Long Number</value>
+    <comment>Attribute data type.</comment>
+  </data>
+  <data name="TypeGenerated" xml:space="preserve">
+    <value>Generated</value>
+    <comment>Type column chip for a Generated Value mapping.</comment>
+  </data>
+  <data name="SourcesTitle" xml:space="preserve">
+    <value>Sources</value>
+    <comment>Title of the list of sources a flow joins.</comment>
+  </data>
+  <data name="ColumnSource" xml:space="preserve">
+    <value>Source</value>
+    <comment>Grid column heading.</comment>
+  </data>
+  <data name="ColumnTarget" xml:space="preserve">
+    <value>Target</value>
+    <comment>Grid column heading.</comment>
+  </data>
+  <data name="ColumnUpdated" xml:space="preserve">
+    <value>Updated</value>
+    <comment>Grid column heading: when an item was last updated.</comment>
+  </data>
+  <data name="SingularAttributeFlow" xml:space="preserve">
+    <value>Attribute Flow</value>
+    <comment>Noun in the grid count, for one Attribute Flow.</comment>
+  </data>
+  <data name="PluralAttributeFlows" xml:space="preserve">
+    <value>Attribute Flows</value>
+    <comment>Noun in the grid count, for several Attribute Flows.</comment>
+  </data>
+  <data name="SearchAttributeFlowsPlaceholder" xml:space="preserve">
+    <value>Search by attribute or expression</value>
+    <comment>Placeholder of the Attribute Flow search box.</comment>
+  </data>
+  <data name="ChipDisabled" xml:space="preserve">
+    <value>Disabled</value>
+    <comment>Chip on a disabled Attribute Flow.</comment>
+  </data>
+  <data name="InitialExportOnlyChip" xml:space="preserve">
+    <value>Initial Export Only</value>
+    <comment>Chip on an Attribute Flow that exports only when JIM creates the object.</comment>
+  </data>
+  <data name="InitialExportOnlyTooltip" xml:space="preserve">
+    <value>Initial Export Only: flows when JIM creates the object, then the attribute becomes unmanaged</value>
+    <comment>Tooltip on the Initial Export Only chip.</comment>
+  </data>
+  <data name="SetOnCreationOnlyChip" xml:space="preserve">
+    <value>Set on creation only</value>
+    <comment>Chip on an attribute that can be written only when the object is created.</comment>
+  </data>
+  <data name="NoAttributeFlowsMatchSearch" xml:space="preserve">
+    <value>No Attribute Flows match "{0}"</value>
+    <comment>Empty grid when the search matched nothing. {0} is the search text.</comment>
+  </data>
+  <data name="NoAttributeFlowsMatchSearchHint" xml:space="preserve">
+    <value>Try a different search term, or clear the search.</value>
+  </data>
+  <data name="NoAttributeFlowsMatchFilters" xml:space="preserve">
+    <value>No Attribute Flows match these filters</value>
+    <comment>Empty grid when the chip filters match nothing.</comment>
+  </data>
+  <data name="NoAttributeFlowsMatchFiltersHint" xml:space="preserve">
+    <value>Clear a Mapping Type, Data Type or Plurality filter above to widen the list.</value>
+  </data>
+  <data name="NoAttributeFlowsYet" xml:space="preserve">
+    <value>No Attribute Flows defined yet</value>
+    <comment>Empty grid when a Synchronisation Rule has no Attribute Flows.</comment>
+  </data>
+  <data name="NoAttributeFlowsYetHint" xml:space="preserve">
+    <value>Use the Add Attribute Flow button to say which attribute values this Synchronisation Rule moves.</value>
+  </data>
+  <data name="RetiredCount" xml:space="preserve">
+    <value>{0:N0} retired</value>
+    <comment>Count of retired values on a row. {0} is the number.</comment>
+  </data>
+  <data name="ViewRetiredValuesAria" xml:space="preserve">
+    <value>view retired values</value>
+    <comment>Accessible name of the retired values button.</comment>
+  </data>
+  <data name="StartAgain" xml:space="preserve">
+    <value>Start again…</value>
+    <comment>Tooltip of the button that starts a generated sequence again.</comment>
+  </data>
+  <data name="StartAgainAria" xml:space="preserve">
+    <value>start again</value>
+    <comment>Accessible name of the start again button.</comment>
+  </data>
+  <data name="EditAria" xml:space="preserve">
+    <value>edit</value>
+    <comment>Accessible name of an edit icon button.</comment>
+  </data>
+  <data name="DeleteAria" xml:space="preserve">
+    <value>delete</value>
+    <comment>Accessible name of a delete icon button.</comment>
+  </data>
+  <data name="SourceTypeLabel" xml:space="preserve">
+    <value>Source Type</value>
+    <comment>Label of the Source Type field.</comment>
+  </data>
+  <data name="SelectSourceType" xml:space="preserve">
+    <value>Please select the type of source for this Attribute Flow</value>
+    <comment>Placeholder of the Source Type field.</comment>
+  </data>
+  <data name="SourceTypeAttribute" xml:space="preserve">
+    <value>Attribute</value>
+    <comment>Source type option.</comment>
+  </data>
+  <data name="SourceTypeAttributeHelp" xml:space="preserve">
+    <value>Copies a value from a source attribute</value>
+    <comment>Help under the Attribute source type option.</comment>
+  </data>
+  <data name="SourceTypeExpression" xml:space="preserve">
+    <value>Expression</value>
+    <comment>Source type option.</comment>
+  </data>
+  <data name="SourceTypeExpressionHelp" xml:space="preserve">
+    <value>Computes a value using an expression</value>
+    <comment>Help under the Expression source type option.</comment>
+  </data>
+  <data name="SourceTypeGenerated" xml:space="preserve">
+    <value>Generated Value</value>
+    <comment>Source type option.</comment>
+  </data>
+  <data name="SourceTypeGeneratedHelp" xml:space="preserve">
+    <value>Generates a unique, persistent value</value>
+    <comment>Help under the Generated Value source type option.</comment>
+  </data>
+  <data name="AssignValueTo" xml:space="preserve">
+    <value>Assign the value to</value>
+    <comment>Label of the target attribute field.</comment>
+  </data>
+  <data name="SelectTargetMetaverseAttribute" xml:space="preserve">
+    <value>Please select the target Metaverse attribute</value>
+    <comment>Placeholder of the target Metaverse attribute field.</comment>
+  </data>
+  <data name="SelectTargetConnectedSystemAttribute" xml:space="preserve">
+    <value>Please select the target Connected System attribute</value>
+    <comment>Placeholder of the target Connected System attribute field.</comment>
+  </data>
+  <data name="ReadOnlyTargetReason" xml:space="preserve">
+    <value>This Connected System reports this attribute as read-only.</value>
+    <comment>Shown beside a target attribute that is read-only.</comment>
+  </data>
+  <data name="Suggested" xml:space="preserve">
+    <value>Suggested</value>
+    <comment>Chip on the attribute JIM suggests.</comment>
+  </data>
+  <data name="ChosenByExchangeRecipients" xml:space="preserve">
+    <value>Chosen by Exchange recipients</value>
+    <comment>Helper text when the Exchange recipients panel chose the target.</comment>
+  </data>
+  <data name="ConnectedSystemAttributeLabel" xml:space="preserve">
+    <value>Connected System Attribute</value>
+    <comment>Label of the source Connected System attribute field.</comment>
+  </data>
+  <data name="SelectSourceConnectedSystemAttribute" xml:space="preserve">
+    <value>Please select the source Connected System attribute</value>
+    <comment>Placeholder of the source Connected System attribute field.</comment>
+  </data>
+  <data name="MetaverseAttributeLabel" xml:space="preserve">
+    <value>Metaverse Attribute</value>
+    <comment>Label of the source Metaverse attribute field.</comment>
+  </data>
+  <data name="SelectSourceMetaverseAttribute" xml:space="preserve">
+    <value>Please select the source Metaverse attribute</value>
+    <comment>Placeholder of the source Metaverse attribute field.</comment>
+  </data>
+  <data name="AttributeTypeAndPlurality" xml:space="preserve">
+    <value>({0} : {1})</value>
+    <comment>Data type and plurality beside an attribute in a list. {0} is the data type, {1} the plurality.</comment>
+  </data>
+  <data name="ExpressionPlaceholderExport" xml:space="preserve">
+    <value>e.g. IIF(mv["Active"] == true, Upper(mv["Display Name"]), null)</value>
+    <comment>Example Expression shown as a placeholder in the export direction.</comment>
+  </data>
+  <data name="ExpressionPlaceholderImport" xml:space="preserve">
+    <value>e.g. IIF(mv["Active"] == true, Upper(cs["Name"]), null)</value>
+    <comment>Example Expression shown as a placeholder in the import direction.</comment>
+  </data>
+  <data name="MissingInputBehaviourTitle" xml:space="preserve">
+    <value>Missing Input Behaviour</value>
+    <comment>Heading of the Missing Input Behaviour section.</comment>
+  </data>
+  <data name="AttentionFailsWholeObject" xml:space="preserve">
+    <value>Fails the whole object</value>
+    <comment>Attention badge on a section heading.</comment>
+  </data>
+  <data name="MissingInputIntro" xml:space="preserve">
+    <value>What to do when an attribute this Expression reads has no value on the object being synchronised.</value>
+  </data>
+  <data name="MissingInputEvaluateAnyway" xml:space="preserve">
+    <value>Evaluate anyway</value>
+    <comment>Missing Input Behaviour option, and its summary.</comment>
+  </data>
+  <data name="MissingInputEvaluateAnywayHint" xml:space="preserve">
+    <value>Run the Expression without the input. For an Expression that handles a missing value itself. The default.</value>
+  </data>
+  <data name="MissingInputContributeNoValue" xml:space="preserve">
+    <value>Contribute no value</value>
+    <comment>Missing Input Behaviour option, and its summary.</comment>
+  </data>
+  <data name="MissingInputContributeNoValueHint" xml:space="preserve">
+    <value>Contribute nothing, so a lower-priority contributor can still win the attribute. No error.</value>
+  </data>
+  <data name="MissingInputWait" xml:space="preserve">
+    <value>Wait until every input has a value</value>
+    <comment>Missing Input Behaviour summary for a Generated Value.</comment>
+  </data>
+  <data name="MissingInputFailMapping" xml:space="preserve">
+    <value>Fail this mapping</value>
+    <comment>Missing Input Behaviour option, and its summary.</comment>
+  </data>
+  <data name="MissingInputFailMappingHint" xml:space="preserve">
+    <value>Record an error against the object; other Attribute Flows still run and the target keeps its value.</value>
+  </data>
+  <data name="MissingInputFailObject" xml:space="preserve">
+    <value>Fail the object</value>
+    <comment>Missing Input Behaviour option, and its summary.</comment>
+  </data>
+  <data name="MissingInputFailObjectHint" xml:space="preserve">
+    <value>Run no Attribute Flow on this Synchronisation Rule for the object. For identity-critical output.</value>
+  </data>
+  <data name="MissingInputFailObjectWarning" xml:space="preserve">
+    <value>While this is set, an object missing any attribute this Expression reads will not synchronise at all: none of its attributes flow, and it is reported as an error on every run until the missing value is supplied.</value>
+    <comment>Warning shown when the Fail the object behaviour is chosen.</comment>
+  </data>
+  <data name="StandardMappingsGuidance" xml:space="preserve">
+    <value>Standard Mappings are guidance only; any attribute can be chosen, and they never affect what synchronisation flows.</value>
+  </data>
+  <data name="UseSuggestion" xml:space="preserve">
+    <value>Use {0}</value>
+    <comment>Button applying a Standard Mapping suggestion. {0} is the attribute name.</comment>
+  </data>
+  <data name="MoreThanOneRuleContributes" xml:space="preserve">
+    <value>More than one Synchronisation Rule contributes {0}. Its priority order decides which value wins.</value>
+    <comment>{0} is the Metaverse Attribute name.</comment>
+  </data>
+  <data name="AttributeHasContributors" xml:space="preserve">
+    <value>{0} already has contributors. This mapping is added at the lowest priority and will not win resolution until it is promoted.</value>
+    <comment>{0} is the Metaverse Attribute name.</comment>
+  </data>
+  <data name="ManagePriorityOnObjectType" xml:space="preserve">
+    <value>Manage priority on the {0} Object Type page</value>
+    <comment>Link text. {0} is the Metaverse Object Type name, or the fallback Metaverse.</comment>
+  </data>
+  <data name="MetaverseFallbackName" xml:space="preserve">
+    <value>Metaverse</value>
+    <comment>Stands in for the Metaverse Object Type name where there is none.</comment>
+  </data>
+  <data name="ValueHandlingTitle" xml:space="preserve">
+    <value>Value handling</value>
+    <comment>Heading of the value handling section.</comment>
+  </data>
+  <data name="AttentionBlankClears" xml:space="preserve">
+    <value>A blank clears the value</value>
+    <comment>Attention badge on the value handling heading.</comment>
+  </data>
+  <data name="NullIsValueLabel" xml:space="preserve">
+    <value>Null is a value</value>
+    <comment>Checkbox label, and a summary part.</comment>
+  </data>
+  <data name="NullIsValueHelp" xml:space="preserve">
+    <value>When this Synchronisation Rule applies to a Connected System Object that is joined to a Metaverse Object, but contributes no value, treat that as an authoritative "no value": clear the Metaverse Object attribute value rather than falling back to a lower-priority contributor. A rule that results in no opinion (rule disabled, Connected System Object not joined, or out of scope) is skipped regardless.</value>
+    <comment>Explains Null is a value.</comment>
+  </data>
+  <data name="NullIsValueWarning" xml:space="preserve">
+    <value>Wherever this Synchronisation Rule wins priority, a blank in the Connected System now clears the Metaverse Object attribute value rather than leaving it alone. A truncated or empty import therefore clears the attribute across every object this rule covers.</value>
+    <comment>Warning shown while Null is a value is on.</comment>
+  </data>
+  <data name="ValueProcessingTitle" xml:space="preserve">
+    <value>Value processing</value>
+    <comment>Subtitle above the inbound value processing options.</comment>
+  </data>
+  <data name="ValueProcessingHelp" xml:space="preserve">
+    <value>Apply transforms to the imported text value before it flows to the Metaverse. By default, whitespace-only and empty values are treated as no value (they do not flow, and clear any existing value).</value>
+  </data>
+  <data name="TreatWhitespaceAsNoValue" xml:space="preserve">
+    <value>Treat whitespace as no value</value>
+    <comment>Checkbox label, and a summary part.</comment>
+  </data>
+  <data name="TrimWhitespace" xml:space="preserve">
+    <value>Trim leading and trailing whitespace</value>
+    <comment>Checkbox label.</comment>
+  </data>
+  <data name="TrimWhitespaceShort" xml:space="preserve">
+    <value>Trim whitespace</value>
+    <comment>Summary part for the trim option.</comment>
+  </data>
+  <data name="CollapseWhitespaceTooltip" xml:space="preserve">
+    <value>Reduces runs of consecutive whitespace inside the value to a single space; for example 'John···Smith' becomes 'John Smith' (each · is a space).</value>
+    <comment>Tooltip on the collapse option.</comment>
+  </data>
+  <data name="CollapseInternalWhitespace" xml:space="preserve">
+    <value>Collapse internal whitespace</value>
+    <comment>Checkbox label, and a summary part.</comment>
+  </data>
+  <data name="CaseNormalisationLabel" xml:space="preserve">
+    <value>Case normalisation</value>
+    <comment>Label of the case normalisation field.</comment>
+  </data>
+  <data name="CaseUpper" xml:space="preserve">
+    <value>Upper case</value>
+    <comment>Case normalisation option, and its summary.</comment>
+  </data>
+  <data name="CaseLower" xml:space="preserve">
+    <value>Lower case</value>
+    <comment>Case normalisation option, and its summary.</comment>
+  </data>
+  <data name="CaseTitle" xml:space="preserve">
+    <value>Title case</value>
+    <comment>Case normalisation option, and its summary.</comment>
+  </data>
+  <data name="InitialExportOnlyLabel" xml:space="preserve">
+    <value>Initial Export Only</value>
+    <comment>Checkbox label.</comment>
+  </data>
+  <data name="InitialExportOnlyHelp" xml:space="preserve">
+    <value>Only flow this attribute when JIM creates the object in the Connected System. Once provisioned, the attribute becomes unmanaged: Metaverse changes are not exported and Drift Correction leaves it alone, allowing the Connected System to own the value. Objects that join to pre-existing Connected System objects never receive the value.</value>
+    <comment>Explains Initial Export Only.</comment>
+  </data>
+  <data name="EnabledHelp" xml:space="preserve">
+    <value>A disabled Attribute Flow is skipped by synchronisation until it is re-enabled. Where another Attribute Flow also contributes the attribute, its value takes over at the next synchronisation; values only this flow contributed stay in place.</value>
+    <comment>Explains the Enabled option.</comment>
+  </data>
+  <data name="EnabledHelpShort" xml:space="preserve">
+    <value>A disabled Attribute Flow is skipped by synchronisation until it is re-enabled.</value>
+    <comment>Short form of the Enabled explanation.</comment>
+  </data>
+  <data name="UniqueSequence" xml:space="preserve">
+    <value>Always add a sequence number</value>
+    <comment>Uniqueness token summary for a Sequence.</comment>
+  </data>
+  <data name="UniqueRandom" xml:space="preserve">
+    <value>Always add a random token</value>
+    <comment>Uniqueness token summary for a Random value.</comment>
+  </data>
+  <data name="UniqueIfTaken" xml:space="preserve">
+    <value>Add a number only if taken</value>
+    <comment>Uniqueness token summary when a number is added only on a clash.</comment>
+  </data>
+  <data name="AvailabilityLoading" xml:space="preserve">
+    <value>Loading</value>
+    <comment>Availability of a Generated Value while the Connected Systems load.</comment>
+  </data>
+  <data name="AvailabilityNotExported" xml:space="preserve">
+    <value>Not exported to any Connected System</value>
+    <comment>Availability of a Generated Value with no Connected System.</comment>
+  </data>
+  <data name="CheckedInOne" xml:space="preserve">
+    <value>Checked in {0} Connected System</value>
+    <comment>Singular. {0} is the number of Connected Systems.</comment>
+  </data>
+  <data name="CheckedInOther" xml:space="preserve">
+    <value>Checked in {0} Connected Systems</value>
+    <comment>Plural. {0} is the number of Connected Systems.</comment>
+  </data>
+  <data name="AvailabilityExcluded" xml:space="preserve">
+    <value>{0}, {1} excluded</value>
+    <comment>{0} is the checked summary, {1} the number excluded.</comment>
+  </data>
+  <data name="NotAvailable" xml:space="preserve">
+    <value>Not available</value>
+    <comment>Summary value when a setting cannot apply.</comment>
+  </data>
+  <data name="SwitchOn" xml:space="preserve">
+    <value>On</value>
+    <comment>Summary value for a switch that is on.</comment>
+  </data>
+  <data name="SwitchOff" xml:space="preserve">
+    <value>Off</value>
+    <comment>Summary value for a switch that is off.</comment>
+  </data>
+  <data name="NullIsNotAValue" xml:space="preserve">
+    <value>Null is not a value</value>
+    <comment>Summary when Null is a value is off and no processing applies.</comment>
+  </data>
+  <data name="ListSeparator" xml:space="preserve">
+    <value>, </value>
+    <comment>Separates items in a list of settings.</comment>
+  </data>
+  <data name="PluralitySingleValuedWords" xml:space="preserve">
+    <value>Single Valued</value>
+    <comment>Plurality beside an attribute in a list: an attribute that holds one value.</comment>
+  </data>
+  <data name="PluralityMultiValuedWords" xml:space="preserve">
+    <value>Multi Valued</value>
+    <comment>Plurality beside an attribute in a list: an attribute that holds several values.</comment>
+  </data>
+  <data name="ExpressionLabel" xml:space="preserve">
+    <value>Expression</value>
+    <comment>Label of the Expression field.</comment>
+  </data>
+  <data name="UpdateAttributeFlowButton" xml:space="preserve">
+    <value>Update Attribute Flow</value>
+    <comment>Button saving an edited Attribute Flow.</comment>
+  </data>
+  <data name="ViewRetiredValuesWithCount" xml:space="preserve">
+    <value>View retired values ({0:N0})</value>
+    <comment>Button tooltip with the number of retired values. {0} is the number.</comment>
+  </data>
+  <data name="ViewRetiredValues" xml:space="preserve">
+    <value>View retired values</value>
+    <comment>Button tooltip when no values are retired.</comment>
+  </data>
+  <data name="RetiredChipTooltipOne" xml:space="preserve">
+    <value>{0:N0} value of {1} will never be issued again.</value>
+    <comment>Singular. {0} is the count, {1} the attribute name.</comment>
+  </data>
+  <data name="RetiredChipTooltipOther" xml:space="preserve">
+    <value>{0:N0} values of {1} will never be issued again.</value>
+    <comment>Plural. {0} is the count, {1} the attribute name.</comment>
+  </data>
+  <data name="PasswordDeliveryNote" xml:space="preserve">
+    <value>Password delivery leaves Enabled and Password never expires to this Attribute Flow. Initial Passwords and synchronised passwords do not change them.</value>
+    <comment>Note on a userAccountControl Attribute Flow where passwords are delivered.</comment>
+  </data>
+  <data name="MvaToSvaIndicatorTooltip" xml:space="preserve">
+    <value>This mapping flows a Multi-Valued source to a Single-Valued target. Any object with more than one value will not flow this attribute and will be recorded as an error; a single value flows normally.</value>
+    <comment>Tooltip on the Multi-Valued to Single-Valued indicator.</comment>
+  </data>
+  <data name="DisabledMappingDescription" xml:space="preserve">
+    <value>This Attribute Flow is disabled and skipped by synchronisation until it is re-enabled.</value>
+    <comment>Tooltip on the Disabled chip.</comment>
+  </data>
+  <data name="SentenceAndSentence" xml:space="preserve">
+    <value>{0} {1}</value>
+    <comment>Joins two sentences. Each placeholder is a whole sentence.</comment>
+  </data>
+  <data name="StandardMappingImportOne" xml:space="preserve">
+    <value>In {0}, {1} corresponds to the Metaverse Attribute {2}.</value>
+    <comment>Standard Mapping sentence, one target. {0} is the standard, {1} the source, {2} the target.</comment>
+  </data>
+  <data name="StandardMappingImportOther" xml:space="preserve">
+    <value>In {0}, {1} corresponds to the Metaverse Attributes {2}.</value>
+    <comment>Standard Mapping sentence, several targets. {0} is the standard, {1} the source, {2} the targets.</comment>
+  </data>
+  <data name="StandardMappingExport" xml:space="preserve">
+    <value>In {0}, {1} corresponds to {2} in this Connected System.</value>
+    <comment>Standard Mapping sentence on export. {0} is the standard, {1} the Metaverse Attribute, {2} the targets.</comment>
+  </data>
+  <data name="ListAnd" xml:space="preserve">
+    <value> and </value>
+    <comment>Joins the last two items of a list. Spaces are intentional.</comment>
+  </data>
+  <data name="UnavailableAlsoTypeMismatch" xml:space="preserve">
+    <value>It also corresponds to {0}, which holds a different data type, so the value cannot flow to it directly. An Expression source can convert it.</value>
+    <comment>{0} is the target attribute name.</comment>
+  </data>
+  <data name="UnavailableAlsoAlreadyTargeted" xml:space="preserve">
+    <value>It also corresponds to {0}, which another Attribute Flow on this Synchronisation Rule already targets.</value>
+    <comment>{0} is the target attribute name.</comment>
+  </data>
+  <data name="UnavailableAlsoReadOnly" xml:space="preserve">
+    <value>It also corresponds to {0}, which this Connected System reports as read-only, so no Attribute Flow can write to it.</value>
+    <comment>{0} is the target attribute name.</comment>
+  </data>
+  <data name="UnavailableAlsoOther" xml:space="preserve">
+    <value>It also corresponds to {0}, which is not available as a target.</value>
+    <comment>{0} is the target attribute name.</comment>
+  </data>
+  <data name="UnavailableFirstTypeMismatch" xml:space="preserve">
+    <value>In {0}, {1} corresponds to {2}, which holds a different data type, so the value cannot flow to it directly. An Expression source can convert it.</value>
+    <comment>{0} is the standard, {1} the source, {2} the target.</comment>
+  </data>
+  <data name="UnavailableFirstAlreadyTargeted" xml:space="preserve">
+    <value>In {0}, {1} corresponds to {2}, which another Attribute Flow on this Synchronisation Rule already targets.</value>
+    <comment>{0} is the standard, {1} the source, {2} the target.</comment>
+  </data>
+  <data name="UnavailableFirstReadOnly" xml:space="preserve">
+    <value>In {0}, {1} corresponds to {2}, which this Connected System reports as read-only, so no Attribute Flow can write to it.</value>
+    <comment>{0} is the standard, {1} the source, {2} the target.</comment>
+  </data>
+  <data name="UnavailableFirstOther" xml:space="preserve">
+    <value>In {0}, {1} corresponds to {2}, which is not available as a target.</value>
+    <comment>{0} is the standard, {1} the source, {2} the target.</comment>
+  </data>
+  <data name="AttributeLabelWithType" xml:space="preserve">
+    <value>{0} ({1} : {2})</value>
+    <comment>Attribute name with its data type and plurality, in a select. {0} name, {1} data type, {2} plurality.</comment>
+  </data>
+  <data name="MvaToSvaWarningImport" xml:space="preserve">
+    <value>{0} is Multi-Valued but {1} is Single-Valued. If a synchronised object has more than one value, no value will flow for this attribute and an error will be recorded against that object (a single value flows normally). To always flow a value, target a Multi-Valued attribute or use an Expression to select one.</value>
+    <comment>Warning on an import mapping from a Multi-Valued source to a Single-Valued target. {0} is the source and {1} the target, each in code formatting.</comment>
+  </data>
+  <data name="MvaToSvaWarningExport" xml:space="preserve">
+    <value>{0} is Multi-Valued but {1} is Single-Valued. If an object has more than one value, no value will be exported for this attribute and an error will be recorded against that object (a single value exports normally). To always export a value, target a Multi-Valued attribute or use an Expression to select one.</value>
+    <comment>Warning on an export mapping from a Multi-Valued source to a Single-Valued target. {0} is the source and {1} the target, each in code formatting.</comment>
+  </data>
+  <data name="DisableAttributeFlowQuestion" xml:space="preserve">
+    <value>Disable Attribute Flow?</value>
+    <comment>Title of the confirmation before disabling an Attribute Flow.</comment>
+  </data>
+  <data name="SaveAttributeFlowQuestion" xml:space="preserve">
+    <value>Save Attribute Flow?</value>
+    <comment>Title of the confirmation before saving an Attribute Flow that others depend on.</comment>
+  </data>
+  <data name="RemoveAttributeFlowQuestion" xml:space="preserve">
+    <value>Remove Attribute Flow?</value>
+    <comment>Title of the confirmation before removing an Attribute Flow that others depend on.</comment>
+  </data>
+  <data name="DisableFlowTo" xml:space="preserve">
+    <value>disable the Attribute Flow to {0}</value>
+    <comment>Confirmation sentence fragment, lower case, after 'Do you want to'. {0} is the target attribute.</comment>
+  </data>
+  <data name="ChangeFlowTo" xml:space="preserve">
+    <value>change the Attribute Flow to {0}</value>
+    <comment>Confirmation sentence fragment, lower case. {0} is the target attribute.</comment>
+  </data>
+  <data name="RemoveFlowTo" xml:space="preserve">
+    <value>remove the Attribute Flow to {0}</value>
+    <comment>Confirmation sentence fragment, lower case. {0} is the target attribute.</comment>
+  </data>
+  <data name="DisableButton" xml:space="preserve">
+    <value>Disable</value>
+    <comment>Button confirming a disable.</comment>
+  </data>
+  <data name="RemoveButton" xml:space="preserve">
+    <value>Remove</value>
+    <comment>Button confirming a removal.</comment>
+  </data>
+  <data name="RemoveConfirmButton" xml:space="preserve">
+    <value>Remove!</value>
+    <comment>Button confirming the removal of an Attribute Flow.</comment>
+  </data>
+  <data name="ThisAttribute" xml:space="preserve">
+    <value>this attribute</value>
+    <comment>Stands in for an attribute name when there is none. Lower case, mid-sentence.</comment>
+  </data>
+  <data name="TheAttribute" xml:space="preserve">
+    <value>the attribute</value>
+    <comment>Stands in for an attribute name when there is none. Lower case, mid-sentence.</comment>
+  </data>
+  <data name="ConfirmRemoveMapping" xml:space="preserve">
+    <value>Are you sure you want to remove this Attribute Mapping?</value>
+    <comment>Confirmation before removing an Attribute Flow that contributes no values.</comment>
+  </data>
+  <data name="WarningTitle" xml:space="preserve">
+    <value>Warning</value>
+    <comment>Title of a warning message box.</comment>
+  </data>
+  <data name="ChooseAttributeToTry" xml:space="preserve">
+    <value>Choose the attribute to assign the value to, then try it here.</value>
+    <comment>Shown in the Try it pane before a target attribute is chosen.</comment>
+  </data>
 </root>

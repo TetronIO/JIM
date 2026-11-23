@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NoAttributeFlowsYetHint" xml:space="preserve">
+    <value>Use the Add Attribute Flow button to say which attribute values this Synchronization Rule moves.</value>
+  </data>
+  <data name="MissingInputBehaviourTitle" xml:space="preserve">
+    <value>Missing Input Behavior</value>
+  </data>
+  <data name="MissingInputIntro" xml:space="preserve">
+    <value>What to do when an attribute this Expression reads has no value on the object being synchronized.</value>
+  </data>
+  <data name="MissingInputFailObjectHint" xml:space="preserve">
+    <value>Run no Attribute Flow on this Synchronization Rule for the object. For identity-critical output.</value>
+  </data>
+  <data name="MissingInputFailObjectWarning" xml:space="preserve">
+    <value>While this is set, an object missing any attribute this Expression reads will not synchronize at all: none of its attributes flow, and it is reported as an error on every run until the missing value is supplied.</value>
+  </data>
+  <data name="StandardMappingsGuidance" xml:space="preserve">
+    <value>Standard Mappings are guidance only; any attribute can be chosen, and they never affect what synchronization flows.</value>
+  </data>
+  <data name="MoreThanOneRuleContributes" xml:space="preserve">
+    <value>More than one Synchronization Rule contributes {0}. Its priority order decides which value wins.</value>
+  </data>
+  <data name="NullIsValueHelp" xml:space="preserve">
+    <value>When this Synchronization Rule applies to a Connected System Object that is joined to a Metaverse Object, but contributes no value, treat that as an authoritative "no value": clear the Metaverse Object attribute value rather than falling back to a lower-priority contributor. A rule that results in no opinion (rule disabled, Connected System Object not joined, or out of scope) is skipped regardless.</value>
+  </data>
+  <data name="NullIsValueWarning" xml:space="preserve">
+    <value>Wherever this Synchronization Rule wins priority, a blank in the Connected System now clears the Metaverse Object attribute value rather than leaving it alone. A truncated or empty import therefore clears the attribute across every object this rule covers.</value>
+  </data>
+  <data name="CaseNormalisationLabel" xml:space="preserve">
+    <value>Case normalization</value>
+  </data>
+  <data name="EnabledHelp" xml:space="preserve">
+    <value>A disabled Attribute Flow is skipped by synchronization until it is re-enabled. Where another Attribute Flow also contributes the attribute, its value takes over at the next synchronization; values only this flow contributed stay in place.</value>
+  </data>
+  <data name="EnabledHelpShort" xml:space="preserve">
+    <value>A disabled Attribute Flow is skipped by synchronization until it is re-enabled.</value>
+  </data>
+  <data name="PasswordDeliveryNote" xml:space="preserve">
+    <value>Password delivery leaves Enabled and Password never expires to this Attribute Flow. Initial Passwords and synchronized passwords do not change them.</value>
+  </data>
+  <data name="DisabledMappingDescription" xml:space="preserve">
+    <value>This Attribute Flow is disabled and skipped by synchronization until it is re-enabled.</value>
+  </data>
+  <data name="UnavailableAlsoAlreadyTargeted" xml:space="preserve">
+    <value>It also corresponds to {0}, which another Attribute Flow on this Synchronization Rule already targets.</value>
+  </data>
+  <data name="UnavailableFirstAlreadyTargeted" xml:space="preserve">
+    <value>In {0}, {1} corresponds to {2}, which another Attribute Flow on this Synchronization Rule already targets.</value>
+  </data>
+  <data name="MvaToSvaWarningImport" xml:space="preserve">
+    <value>{0} is Multi-Valued but {1} is Single-Valued. If a synchronized object has more than one value, no value will flow for this attribute and an error will be recorded against that object (a single value flows normally). To always flow a value, target a Multi-Valued attribute or use an Expression to select one.</value>
+  </data>
+</root>

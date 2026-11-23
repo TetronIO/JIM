@@ -38,4 +38,484 @@
   <data name="TryItHeading" xml:space="preserve">
     <value>Essayer</value>
   </data>
+  <data name="AttributeFlowTitle" xml:space="preserve">
+    <value>Flux d’attributs</value>
+  </data>
+  <data name="AddAttributeFlowButton" xml:space="preserve">
+    <value>Ajouter un flux d’attributs</value>
+  </data>
+  <data name="EditAttributeFlowTitle" xml:space="preserve">
+    <value>Modifier le flux d’attributs</value>
+  </data>
+  <data name="MappingTypeLabel" xml:space="preserve">
+    <value>Type de mappage :</value>
+  </data>
+  <data name="DataTypeLabel" xml:space="preserve">
+    <value>Type de données :</value>
+  </data>
+  <data name="PluralityLabel" xml:space="preserve">
+    <value>Pluralité :</value>
+  </data>
+  <data name="PluralitySingleValued" xml:space="preserve">
+    <value>Monovaleur</value>
+  </data>
+  <data name="PluralityMultiValued" xml:space="preserve">
+    <value>Multivaleur</value>
+  </data>
+  <data name="MappingTypeAttributeMapping" xml:space="preserve">
+    <value>Mappage d’attribut</value>
+  </data>
+  <data name="MappingTypeExpressionMapping" xml:space="preserve">
+    <value>Mappage d’expression</value>
+  </data>
+  <data name="MappingTypeDerived" xml:space="preserve">
+    <value>Dérivé</value>
+  </data>
+  <data name="MappingTypeGeneratedMapping" xml:space="preserve">
+    <value>Mappage généré</value>
+  </data>
+  <data name="MappingTypeAdvancedMapping" xml:space="preserve">
+    <value>Mappage avancé</value>
+  </data>
+  <data name="NotSet" xml:space="preserve">
+    <value>Non défini</value>
+  </data>
+  <data name="DataTypeText" xml:space="preserve">
+    <value>Texte</value>
+  </data>
+  <data name="DataTypeNumber" xml:space="preserve">
+    <value>Nombre</value>
+  </data>
+  <data name="DataTypeDateTime" xml:space="preserve">
+    <value>Date et heure</value>
+  </data>
+  <data name="DataTypeBinary" xml:space="preserve">
+    <value>Binaire</value>
+  </data>
+  <data name="DataTypeReference" xml:space="preserve">
+    <value>Référence</value>
+  </data>
+  <data name="DataTypeGuid" xml:space="preserve">
+    <value>GUID</value>
+  </data>
+  <data name="DataTypeBoolean" xml:space="preserve">
+    <value>Booléen</value>
+  </data>
+  <data name="DataTypeLongNumber" xml:space="preserve">
+    <value>Nombre long</value>
+  </data>
+  <data name="TypeGenerated" xml:space="preserve">
+    <value>Généré</value>
+  </data>
+  <data name="SourcesTitle" xml:space="preserve">
+    <value>Sources</value>
+  </data>
+  <data name="ColumnSource" xml:space="preserve">
+    <value>Source</value>
+  </data>
+  <data name="ColumnTarget" xml:space="preserve">
+    <value>Cible</value>
+  </data>
+  <data name="ColumnUpdated" xml:space="preserve">
+    <value>Mis à jour</value>
+  </data>
+  <data name="SingularAttributeFlow" xml:space="preserve">
+    <value>Flux d’attributs</value>
+  </data>
+  <data name="PluralAttributeFlows" xml:space="preserve">
+    <value>Flux d’attributs</value>
+  </data>
+  <data name="SearchAttributeFlowsPlaceholder" xml:space="preserve">
+    <value>Rechercher par attribut ou expression</value>
+  </data>
+  <data name="ChipDisabled" xml:space="preserve">
+    <value>Désactivé</value>
+  </data>
+  <data name="InitialExportOnlyChip" xml:space="preserve">
+    <value>Exportation initiale uniquement</value>
+  </data>
+  <data name="InitialExportOnlyTooltip" xml:space="preserve">
+    <value>Exportation initiale uniquement : le flux s’applique lorsque JIM crée l’objet, puis l’attribut devient non géré</value>
+  </data>
+  <data name="SetOnCreationOnlyChip" xml:space="preserve">
+    <value>Défini à la création uniquement</value>
+  </data>
+  <data name="NoAttributeFlowsMatchSearch" xml:space="preserve">
+    <value>Aucun flux d’attributs ne correspond à « {0} »</value>
+  </data>
+  <data name="NoAttributeFlowsMatchSearchHint" xml:space="preserve">
+    <value>Essayez un autre terme de recherche, ou effacez la recherche.</value>
+  </data>
+  <data name="NoAttributeFlowsMatchFilters" xml:space="preserve">
+    <value>Aucun flux d’attributs ne correspond à ces filtres</value>
+  </data>
+  <data name="NoAttributeFlowsMatchFiltersHint" xml:space="preserve">
+    <value>Effacez un filtre de type de mappage, de type de données ou de pluralité ci-dessus pour élargir la liste.</value>
+  </data>
+  <data name="NoAttributeFlowsYet" xml:space="preserve">
+    <value>Aucun flux d’attributs défini pour le moment</value>
+  </data>
+  <data name="NoAttributeFlowsYetHint" xml:space="preserve">
+    <value>Utilisez le bouton Ajouter un flux d’attributs pour indiquer les valeurs d’attributs que cette règle de synchronisation déplace.</value>
+  </data>
+  <data name="RetiredCount" xml:space="preserve">
+    <value>{0:N0} retirées</value>
+  </data>
+  <data name="ViewRetiredValuesAria" xml:space="preserve">
+    <value>afficher les valeurs retirées</value>
+  </data>
+  <data name="StartAgain" xml:space="preserve">
+    <value>Recommencer…</value>
+  </data>
+  <data name="StartAgainAria" xml:space="preserve">
+    <value>recommencer</value>
+  </data>
+  <data name="EditAria" xml:space="preserve">
+    <value>modifier</value>
+  </data>
+  <data name="DeleteAria" xml:space="preserve">
+    <value>supprimer</value>
+  </data>
+  <data name="SourceTypeLabel" xml:space="preserve">
+    <value>Type de source</value>
+  </data>
+  <data name="SelectSourceType" xml:space="preserve">
+    <value>Sélectionnez le type de source de ce flux d’attributs</value>
+  </data>
+  <data name="SourceTypeAttribute" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="SourceTypeAttributeHelp" xml:space="preserve">
+    <value>Copie une valeur d’un attribut source</value>
+  </data>
+  <data name="SourceTypeExpression" xml:space="preserve">
+    <value>Expression</value>
+  </data>
+  <data name="SourceTypeExpressionHelp" xml:space="preserve">
+    <value>Calcule une valeur à l’aide d’une expression</value>
+  </data>
+  <data name="SourceTypeGenerated" xml:space="preserve">
+    <value>Valeur générée</value>
+  </data>
+  <data name="SourceTypeGeneratedHelp" xml:space="preserve">
+    <value>Génère une valeur unique et persistante</value>
+  </data>
+  <data name="AssignValueTo" xml:space="preserve">
+    <value>Affecter la valeur à</value>
+  </data>
+  <data name="SelectTargetMetaverseAttribute" xml:space="preserve">
+    <value>Sélectionnez l’attribut Metaverse cible</value>
+  </data>
+  <data name="SelectTargetConnectedSystemAttribute" xml:space="preserve">
+    <value>Sélectionnez l’attribut du système connecté cible</value>
+  </data>
+  <data name="ReadOnlyTargetReason" xml:space="preserve">
+    <value>Ce système connecté signale cet attribut comme étant en lecture seule.</value>
+  </data>
+  <data name="Suggested" xml:space="preserve">
+    <value>Suggéré</value>
+  </data>
+  <data name="ChosenByExchangeRecipients" xml:space="preserve">
+    <value>Choisi par les destinataires Exchange</value>
+  </data>
+  <data name="ConnectedSystemAttributeLabel" xml:space="preserve">
+    <value>Attribut du système connecté</value>
+  </data>
+  <data name="SelectSourceConnectedSystemAttribute" xml:space="preserve">
+    <value>Sélectionnez l’attribut du système connecté source</value>
+  </data>
+  <data name="MetaverseAttributeLabel" xml:space="preserve">
+    <value>Attribut Metaverse</value>
+  </data>
+  <data name="SelectSourceMetaverseAttribute" xml:space="preserve">
+    <value>Sélectionnez l’attribut Metaverse source</value>
+  </data>
+  <data name="AttributeTypeAndPlurality" xml:space="preserve">
+    <value>({0} : {1})</value>
+  </data>
+  <data name="ExpressionPlaceholderExport" xml:space="preserve">
+    <value>Par exemple : IIF(mv["Active"] == true, Upper(mv["Display Name"]), null)</value>
+  </data>
+  <data name="ExpressionPlaceholderImport" xml:space="preserve">
+    <value>Par exemple : IIF(mv["Active"] == true, Upper(cs["Name"]), null)</value>
+  </data>
+  <data name="MissingInputBehaviourTitle" xml:space="preserve">
+    <value>Comportement en cas d’entrée manquante</value>
+  </data>
+  <data name="AttentionFailsWholeObject" xml:space="preserve">
+    <value>Fait échouer tout l’objet</value>
+  </data>
+  <data name="MissingInputIntro" xml:space="preserve">
+    <value>Que faire lorsqu’un attribut lu par cette expression n’a pas de valeur sur l’objet synchronisé.</value>
+  </data>
+  <data name="MissingInputEvaluateAnyway" xml:space="preserve">
+    <value>Évaluer quand même</value>
+  </data>
+  <data name="MissingInputEvaluateAnywayHint" xml:space="preserve">
+    <value>Exécuter l’expression sans l’entrée. Pour une expression qui gère elle-même une valeur absente. Option par défaut.</value>
+  </data>
+  <data name="MissingInputContributeNoValue" xml:space="preserve">
+    <value>Ne contribuer aucune valeur</value>
+  </data>
+  <data name="MissingInputContributeNoValueHint" xml:space="preserve">
+    <value>Ne rien contribuer, afin qu’un contributeur de priorité inférieure puisse encore l’emporter pour l’attribut. Aucune erreur.</value>
+  </data>
+  <data name="MissingInputWait" xml:space="preserve">
+    <value>Attendre que chaque entrée ait une valeur</value>
+  </data>
+  <data name="MissingInputFailMapping" xml:space="preserve">
+    <value>Faire échouer ce mappage</value>
+  </data>
+  <data name="MissingInputFailMappingHint" xml:space="preserve">
+    <value>Enregistrer une erreur sur l’objet ; les autres flux d’attributs continuent de s’exécuter et la cible conserve sa valeur.</value>
+  </data>
+  <data name="MissingInputFailObject" xml:space="preserve">
+    <value>Faire échouer l’objet</value>
+  </data>
+  <data name="MissingInputFailObjectHint" xml:space="preserve">
+    <value>N’exécuter aucun flux d’attributs de cette règle de synchronisation pour l’objet. Pour une sortie critique pour l’identité.</value>
+  </data>
+  <data name="MissingInputFailObjectWarning" xml:space="preserve">
+    <value>Tant que ce réglage est actif, un objet auquel il manque un attribut lu par cette expression ne se synchronise pas du tout : aucun de ses attributs ne circule, et il est signalé comme erreur à chaque exécution tant que la valeur manquante n’est pas fournie.</value>
+  </data>
+  <data name="StandardMappingsGuidance" xml:space="preserve">
+    <value>Les mappages standard ne sont que des indications ; tout attribut peut être choisi, et ils n’affectent jamais les flux de synchronisation.</value>
+  </data>
+  <data name="UseSuggestion" xml:space="preserve">
+    <value>Utiliser {0}</value>
+  </data>
+  <data name="MoreThanOneRuleContributes" xml:space="preserve">
+    <value>Plusieurs règles de synchronisation contribuent à {0}. Leur ordre de priorité détermine la valeur retenue.</value>
+  </data>
+  <data name="AttributeHasContributors" xml:space="preserve">
+    <value>{0} a déjà des contributeurs. Ce mappage est ajouté avec la priorité la plus basse et ne l’emportera pas tant qu’il n’est pas promu.</value>
+  </data>
+  <data name="ManagePriorityOnObjectType" xml:space="preserve">
+    <value>Gérer la priorité sur la page du type d’objet {0}</value>
+  </data>
+  <data name="MetaverseFallbackName" xml:space="preserve">
+    <value>Metaverse</value>
+  </data>
+  <data name="ValueHandlingTitle" xml:space="preserve">
+    <value>Gestion des valeurs</value>
+  </data>
+  <data name="AttentionBlankClears" xml:space="preserve">
+    <value>Un vide efface la valeur</value>
+  </data>
+  <data name="NullIsValueLabel" xml:space="preserve">
+    <value>Null est une valeur</value>
+  </data>
+  <data name="NullIsValueHelp" xml:space="preserve">
+    <value>Lorsque cette règle de synchronisation s’applique à un objet de système connecté lié à un objet Metaverse, mais ne contribue aucune valeur, traiter cela comme une « absence de valeur » faisant autorité : effacer la valeur de l’attribut de l’objet Metaverse au lieu de revenir à un contributeur de priorité inférieure. Une règle sans avis (règle désactivée, objet de système connecté non lié, ou hors périmètre) est ignorée dans tous les cas.</value>
+  </data>
+  <data name="NullIsValueWarning" xml:space="preserve">
+    <value>Partout où cette règle de synchronisation l’emporte en priorité, un vide dans le système connecté efface désormais la valeur de l’attribut de l’objet Metaverse au lieu de la laisser intacte. Une importation tronquée ou vide efface donc l’attribut sur tous les objets couverts par cette règle.</value>
+  </data>
+  <data name="ValueProcessingTitle" xml:space="preserve">
+    <value>Traitement des valeurs</value>
+  </data>
+  <data name="ValueProcessingHelp" xml:space="preserve">
+    <value>Appliquer des transformations à la valeur de texte importée avant qu’elle ne circule vers le Metaverse. Par défaut, les valeurs composées uniquement d’espaces et les valeurs vides sont traitées comme une absence de valeur (elles ne circulent pas et effacent toute valeur existante).</value>
+  </data>
+  <data name="TreatWhitespaceAsNoValue" xml:space="preserve">
+    <value>Traiter les espaces comme une absence de valeur</value>
+  </data>
+  <data name="TrimWhitespace" xml:space="preserve">
+    <value>Supprimer les espaces en début et en fin</value>
+  </data>
+  <data name="TrimWhitespaceShort" xml:space="preserve">
+    <value>Supprimer les espaces</value>
+  </data>
+  <data name="CollapseWhitespaceTooltip" xml:space="preserve">
+    <value>Réduit les suites d’espaces consécutifs à l’intérieur de la valeur à un seul espace ; par exemple « John···Smith » devient « John Smith » (chaque · représente un espace).</value>
+  </data>
+  <data name="CollapseInternalWhitespace" xml:space="preserve">
+    <value>Réduire les espaces internes</value>
+  </data>
+  <data name="CaseNormalisationLabel" xml:space="preserve">
+    <value>Normalisation de la casse</value>
+  </data>
+  <data name="CaseUpper" xml:space="preserve">
+    <value>Majuscules</value>
+  </data>
+  <data name="CaseLower" xml:space="preserve">
+    <value>Minuscules</value>
+  </data>
+  <data name="CaseTitle" xml:space="preserve">
+    <value>Première lettre en majuscule</value>
+  </data>
+  <data name="InitialExportOnlyLabel" xml:space="preserve">
+    <value>Exportation initiale uniquement</value>
+  </data>
+  <data name="InitialExportOnlyHelp" xml:space="preserve">
+    <value>Ne faire circuler cet attribut que lorsque JIM crée l’objet dans le système connecté. Une fois provisionné, l’attribut devient non géré : les modifications du Metaverse ne sont pas exportées et la correction de dérive le laisse de côté, afin que le système connecté en soit propriétaire. Les objets joints à des objets de système connecté préexistants ne reçoivent jamais la valeur.</value>
+  </data>
+  <data name="EnabledHelp" xml:space="preserve">
+    <value>Un flux d’attributs désactivé est ignoré par la synchronisation jusqu’à sa réactivation. Lorsqu’un autre flux d’attributs contribue aussi à l’attribut, sa valeur prend le relais lors de la synchronisation suivante ; les valeurs que ce seul flux contribuait restent en place.</value>
+  </data>
+  <data name="EnabledHelpShort" xml:space="preserve">
+    <value>Un flux d’attributs désactivé est ignoré par la synchronisation jusqu’à sa réactivation.</value>
+  </data>
+  <data name="UniqueSequence" xml:space="preserve">
+    <value>Ajouter toujours un numéro de séquence</value>
+  </data>
+  <data name="UniqueRandom" xml:space="preserve">
+    <value>Ajouter toujours un jeton aléatoire</value>
+  </data>
+  <data name="UniqueIfTaken" xml:space="preserve">
+    <value>Ajouter un numéro uniquement si la valeur est déjà prise</value>
+  </data>
+  <data name="AvailabilityLoading" xml:space="preserve">
+    <value>Chargement</value>
+  </data>
+  <data name="AvailabilityNotExported" xml:space="preserve">
+    <value>Non exporté vers aucun système connecté</value>
+  </data>
+  <data name="CheckedInOne" xml:space="preserve">
+    <value>Vérifié dans {0} système connecté</value>
+  </data>
+  <data name="CheckedInOther" xml:space="preserve">
+    <value>Vérifié dans {0} systèmes connectés</value>
+  </data>
+  <data name="AvailabilityExcluded" xml:space="preserve">
+    <value>{0}, {1} exclus</value>
+  </data>
+  <data name="NotAvailable" xml:space="preserve">
+    <value>Non disponible</value>
+  </data>
+  <data name="SwitchOn" xml:space="preserve">
+    <value>Activé</value>
+  </data>
+  <data name="SwitchOff" xml:space="preserve">
+    <value>Désactivé</value>
+  </data>
+  <data name="NullIsNotAValue" xml:space="preserve">
+    <value>La valeur null n’est pas une valeur</value>
+  </data>
+  <data name="ListSeparator" xml:space="preserve">
+    <value>, </value>
+  </data>
+  <data name="PluralitySingleValuedWords" xml:space="preserve">
+    <value>Monovaleur</value>
+  </data>
+  <data name="PluralityMultiValuedWords" xml:space="preserve">
+    <value>Multivaleur</value>
+  </data>
+  <data name="ExpressionLabel" xml:space="preserve">
+    <value>Expression</value>
+  </data>
+  <data name="UpdateAttributeFlowButton" xml:space="preserve">
+    <value>Mettre à jour le flux d’attributs</value>
+  </data>
+  <data name="ViewRetiredValuesWithCount" xml:space="preserve">
+    <value>Afficher les valeurs retirées ({0:N0})</value>
+  </data>
+  <data name="ViewRetiredValues" xml:space="preserve">
+    <value>Afficher les valeurs retirées</value>
+  </data>
+  <data name="RetiredChipTooltipOne" xml:space="preserve">
+    <value>{0:N0} valeur de {1} ne sera plus jamais émise.</value>
+  </data>
+  <data name="RetiredChipTooltipOther" xml:space="preserve">
+    <value>{0:N0} valeurs de {1} ne seront plus jamais émises.</value>
+  </data>
+  <data name="PasswordDeliveryNote" xml:space="preserve">
+    <value>La remise des mots de passe laisse Activé et Le mot de passe n’expire jamais pour ce flux d’attributs. Les mots de passe initiaux et les mots de passe synchronisés ne les modifient pas.</value>
+  </data>
+  <data name="MvaToSvaIndicatorTooltip" xml:space="preserve">
+    <value>Ce mappage fait circuler une source Multivaleur vers une cible Monovaleur. Tout objet comportant plus d’une valeur ne fera pas circuler cet attribut et sera enregistré comme erreur ; une valeur unique circule normalement.</value>
+  </data>
+  <data name="DisabledMappingDescription" xml:space="preserve">
+    <value>Ce flux d’attributs est désactivé et ignoré par la synchronisation jusqu’à sa réactivation.</value>
+  </data>
+  <data name="SentenceAndSentence" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="StandardMappingImportOne" xml:space="preserve">
+    <value>Dans {0}, {1} correspond à l’attribut Metaverse {2}.</value>
+  </data>
+  <data name="StandardMappingImportOther" xml:space="preserve">
+    <value>Dans {0}, {1} correspond aux attributs Metaverse {2}.</value>
+  </data>
+  <data name="StandardMappingExport" xml:space="preserve">
+    <value>Dans {0}, {1} correspond à {2} dans ce système connecté.</value>
+  </data>
+  <data name="ListAnd" xml:space="preserve">
+    <value> et </value>
+  </data>
+  <data name="UnavailableAlsoTypeMismatch" xml:space="preserve">
+    <value>Il correspond aussi à {0}, qui détient un type de données différent, de sorte que la valeur ne peut pas y circuler directement. Une source Expression peut la convertir.</value>
+  </data>
+  <data name="UnavailableAlsoAlreadyTargeted" xml:space="preserve">
+    <value>Il correspond aussi à {0}, que cible déjà un autre flux d’attributs de cette règle de synchronisation.</value>
+  </data>
+  <data name="UnavailableAlsoReadOnly" xml:space="preserve">
+    <value>Il correspond aussi à {0}, que ce système connecté signale comme étant en lecture seule, de sorte qu’aucun flux d’attributs ne peut y écrire.</value>
+  </data>
+  <data name="UnavailableAlsoOther" xml:space="preserve">
+    <value>Il correspond aussi à {0}, qui n’est pas disponible comme cible.</value>
+  </data>
+  <data name="UnavailableFirstTypeMismatch" xml:space="preserve">
+    <value>Dans {0}, {1} correspond à {2}, qui détient un type de données différent, de sorte que la valeur ne peut pas y circuler directement. Une source Expression peut la convertir.</value>
+  </data>
+  <data name="UnavailableFirstAlreadyTargeted" xml:space="preserve">
+    <value>Dans {0}, {1} correspond à {2}, que cible déjà un autre flux d’attributs de cette règle de synchronisation.</value>
+  </data>
+  <data name="UnavailableFirstReadOnly" xml:space="preserve">
+    <value>Dans {0}, {1} correspond à {2}, que ce système connecté signale comme étant en lecture seule, de sorte qu’aucun flux d’attributs ne peut y écrire.</value>
+  </data>
+  <data name="UnavailableFirstOther" xml:space="preserve">
+    <value>Dans {0}, {1} correspond à {2}, qui n’est pas disponible comme cible.</value>
+  </data>
+  <data name="AttributeLabelWithType" xml:space="preserve">
+    <value>{0} ({1} : {2})</value>
+  </data>
+  <data name="MvaToSvaWarningImport" xml:space="preserve">
+    <value>{0} est multivaleur mais {1} est monovaleur. Si un objet synchronisé comporte plus d’une valeur, aucune valeur ne circulera pour cet attribut et une erreur sera enregistrée pour cet objet (une valeur unique circule normalement). Pour toujours faire circuler une valeur, ciblez un attribut multivaleur ou utilisez une expression pour en choisir une.</value>
+  </data>
+  <data name="MvaToSvaWarningExport" xml:space="preserve">
+    <value>{0} est multivaleur mais {1} est monovaleur. Si un objet comporte plus d’une valeur, aucune valeur ne sera exportée pour cet attribut et une erreur sera enregistrée pour cet objet (une valeur unique s’exporte normalement). Pour toujours exporter une valeur, ciblez un attribut multivaleur ou utilisez une expression pour en choisir une.</value>
+  </data>
+  <data name="DisableAttributeFlowQuestion" xml:space="preserve">
+    <value>Désactiver le flux d’attributs ?</value>
+  </data>
+  <data name="SaveAttributeFlowQuestion" xml:space="preserve">
+    <value>Enregistrer le flux d’attributs ?</value>
+  </data>
+  <data name="RemoveAttributeFlowQuestion" xml:space="preserve">
+    <value>Supprimer le flux d’attributs ?</value>
+  </data>
+  <data name="DisableFlowTo" xml:space="preserve">
+    <value>désactiver le flux d’attributs vers {0}</value>
+  </data>
+  <data name="ChangeFlowTo" xml:space="preserve">
+    <value>modifier le flux d’attributs vers {0}</value>
+  </data>
+  <data name="RemoveFlowTo" xml:space="preserve">
+    <value>supprimer le flux d’attributs vers {0}</value>
+  </data>
+  <data name="DisableButton" xml:space="preserve">
+    <value>Désactiver</value>
+  </data>
+  <data name="RemoveButton" xml:space="preserve">
+    <value>Supprimer</value>
+  </data>
+  <data name="RemoveConfirmButton" xml:space="preserve">
+    <value>Supprimer !</value>
+  </data>
+  <data name="ThisAttribute" xml:space="preserve">
+    <value>cet attribut</value>
+  </data>
+  <data name="TheAttribute" xml:space="preserve">
+    <value>l’attribut</value>
+  </data>
+  <data name="ConfirmRemoveMapping" xml:space="preserve">
+    <value>Voulez-vous vraiment supprimer ce mappage d’attribut ?</value>
+  </data>
+  <data name="WarningTitle" xml:space="preserve">
+    <value>Avertissement</value>
+  </data>
+  <data name="ChooseAttributeToTry" xml:space="preserve">
+    <value>Choisissez l’attribut auquel affecter la valeur, puis essayez-la ici.</value>
+  </data>
 </root>
