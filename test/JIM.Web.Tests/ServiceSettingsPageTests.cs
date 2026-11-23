@@ -46,7 +46,7 @@ public class ServiceSettingsPageTests : JimComponentTestContext
             new ServiceSetting
             {
                 Key = "SSO.Authority",
-                DisplayName = "SSO Authority",
+                DisplayName = "SSO authority",
                 Category = ServiceSettingCategory.SSO,
                 ValueType = ServiceSettingValueType.String,
                 Description = "Where JIM sends people to sign in."
@@ -110,7 +110,7 @@ public class ServiceSettingsPageTests : JimComponentTestContext
 
         var page = Render<Settings>();
 
-        page.WaitForAssertion(() => Assert.That(page.Markup, Does.Contain("SSO Authority")));
+        page.WaitForAssertion(() => Assert.That(page.Markup, Does.Contain("SSO authority")));
         _serviceSettingsRepository.Verify(r => r.GetAllSettingsAsync(), Times.AtLeastOnce);
     }
 
@@ -150,7 +150,7 @@ public class ServiceSettingsPageTests : JimComponentTestContext
             new ServiceSetting
             {
                 Key = "SSO.Authority",
-                DisplayName = "SSO Authority",
+                DisplayName = "SSO authority",
                 Category = ServiceSettingCategory.SSO,
                 ValueType = ServiceSettingValueType.String,
                 Description = "Where JIM sends people to sign in."
@@ -161,7 +161,7 @@ public class ServiceSettingsPageTests : JimComponentTestContext
         _navigation.NavigateTo("/admin/settings");
         var page = Render<Settings>();
 
-        page.WaitForAssertion(() => Assert.That(page.Markup, Does.Contain("SSO Authority")));
+        page.WaitForAssertion(() => Assert.That(page.Markup, Does.Contain("SSO authority")));
         Assert.That(page.Markup, Does.Not.Contain(FeatureFlagCatalogueScope.InDevelopmentFlag.DisplayName),
             "an In Development flag must never appear on a Production host");
     }
@@ -221,7 +221,7 @@ public class ServiceSettingsPageTests : JimComponentTestContext
             new ServiceSetting
             {
                 Key = "SSO.Authority",
-                DisplayName = "SSO Authority",
+                DisplayName = "SSO authority",
                 Category = ServiceSettingCategory.SSO,
                 ValueType = ServiceSettingValueType.String,
                 Description = "Where JIM sends people to sign in."
@@ -232,7 +232,7 @@ public class ServiceSettingsPageTests : JimComponentTestContext
         _navigation.NavigateTo("/admin/settings");
         var page = Render<Settings>();
 
-        page.WaitForAssertion(() => Assert.That(page.Markup, Does.Contain("SSO Authority")));
+        page.WaitForAssertion(() => Assert.That(page.Markup, Does.Contain("SSO authority")));
         Assert.That(page.Markup, Does.Contain(FeatureFlagCatalogueScope.InDevelopmentFlag.DisplayName));
 
         var checkboxLabel = page.FindAll("label")
@@ -240,7 +240,7 @@ public class ServiceSettingsPageTests : JimComponentTestContext
         var checkboxInput = checkboxLabel.Closest(".mud-checkbox")!.QuerySelector("input[type=checkbox]")!;
         await checkboxInput.ChangeAsync(true);
 
-        page.WaitForAssertion(() => Assert.That(page.Markup, Does.Not.Contain("SSO Authority"),
+        page.WaitForAssertion(() => Assert.That(page.Markup, Does.Not.Contain("SSO authority"),
             "the filter must remove non-flag rows"));
         Assert.That(page.Markup, Does.Contain(FeatureFlagCatalogueScope.InDevelopmentFlag.DisplayName),
             "the filter must keep the Preview Features row it exists to show");

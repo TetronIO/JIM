@@ -43,7 +43,7 @@
             </HeaderTemplate>
             <CellTemplate>
                 @{ var schedule = context.Item; }
-                <OneLineText Text="@schedule.Name" Secondary="@schedule.Description" />
+                <OneLineText Text="@BuiltInDisplay.ScheduleName(schedule.Name, schedule.BuiltIn)" Secondary="@BuiltInDisplay.ScheduleDescription(schedule.Name, schedule.BuiltIn, schedule.Description)" />
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="ScheduleHeader" Title="@OperationsText.ScheduleEditorStepsTab" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
@@ -252,7 +252,7 @@
     <TitleContent>
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-3" />
-            @(_executionsSchedule?.Name ?? OperationsText.SchedulesSingularName)
+            @(_executionsSchedule is { } executionsSchedule ? BuiltInDisplay.ScheduleName(executionsSchedule.Name, executionsSchedule.BuiltIn) : OperationsText.SchedulesSingularName)
         </MudText>
     </TitleContent>
     <DialogContent>

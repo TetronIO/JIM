@@ -7,7 +7,7 @@
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3">
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Setting?.Description</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@(Setting == null ? null : ServiceSettingDisplay.Description(Setting.Key, Setting.Description))</MudText>
 
             @if (Setting != null)
             {

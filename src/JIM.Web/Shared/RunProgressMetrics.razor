@@ -32,7 +32,7 @@
             {
                 <div class="jim-run-substep jim-run-substep--@RunPhaseVisuals.StatusModifier(subStep.Status)">
                     <MudIcon Icon="@RunPhaseVisuals.StatusIcon(subStep)" Size="Size.Small" Class="jim-run-substep-icon" />
-                    <MudText Typo="Typo.body2">@subStep.Name</MudText>
+                    <MudText Typo="Typo.body2">@RunPhaseDisplay.Name(subStep.Key, subStep.Name)</MudText>
                     @* Separated rather than left to the colour alone: at the same weight and size as
                        the step's name, "Fetching objects 20 sec, 990 ms" read as one phrase. The
                        separator is markup rather than generated content so it is not lost to a
@@ -192,8 +192,8 @@
             var total = RunPhaseReading.TopLevel(Phases).Count;
 
             return position.HasValue && total > 0
-                ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityStepScope, position, total, step.Name)
-                : step.Name;
+                ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityStepScope, position, total, RunPhaseDisplay.Name(step.Key, step.Name))
+                : RunPhaseDisplay.Name(step.Key, step.Name);
         }
     }
 

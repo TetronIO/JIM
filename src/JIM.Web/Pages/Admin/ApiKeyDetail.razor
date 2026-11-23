@@ -124,7 +124,7 @@
                         {
                             @foreach (var role in _apiKey.Roles)
                             {
-                                <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="mr-1">@role.Name</MudChip>
+                                <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="mr-1">@BuiltInDisplay.RoleName(role.Name, role.BuiltIn)</MudChip>
                             }
                         }
                         else

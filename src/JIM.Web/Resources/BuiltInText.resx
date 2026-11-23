@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Schedule_TemporalScopeReconciliation" xml:space="preserve">
+    <value>Temporal Scope Reconciliation</value>
+    <comment>Built-in Schedule name.</comment>
+  </data>
+  <data name="Schedule_TemporalScopeReconciliation_Description" xml:space="preserve">
+    <value>Built-in schedule that re-evaluates relative-date scoping for objects whose scope membership changes as time passes (for example a leaver whose end date passes) but whose source data has not changed, so the synchronisation and export hot paths would otherwise skip them.</value>
+    <comment>Built-in Schedule description.</comment>
+  </data>
+  <data name="Schedule_HistoryRetentionCleanup" xml:space="preserve">
+    <value>History Retention Cleanup</value>
+    <comment>Built-in Schedule name.</comment>
+  </data>
+  <data name="Schedule_HistoryRetentionCleanup_Description" xml:space="preserve">
+    <value>Built-in schedule that removes change history, Activities, initial-password records and terminal Pending Password Changes once they have had the retention period set for their kind. Records still being worked are never removed, however old.</value>
+    <comment>Built-in Schedule description.</comment>
+  </data>
+  <data name="Role_Administrator" xml:space="preserve">
+    <value>Administrator</value>
+    <comment>Built-in Role name.</comment>
+  </data>
+</root>
