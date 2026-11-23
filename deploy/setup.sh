@@ -2155,7 +2155,7 @@ configure_outbound_proxy() {
     if [ -z "${JIM_SETUP_HTTPS_PROXY+set}" ]; then
         echo
         info "Outbound proxy"
-        echo "${DIM}  Only needed if JIM reaches the internet, for the Microsoft Entra ID Connector say, through a proxy.${RESET}"
+        echo "${DIM}  Only needed if JIM must reach the internet, as the Microsoft Entra ID Connector does, through a proxy.${RESET}"
         echo
         if prompt_yn "Does JIM reach the internet through a proxy?" "n"; then
             prompt_value "JIM_SETUP_HTTPS_PROXY" "  Proxy URL (e.g. http://proxy.example.com:3128)" "${HTTPS_PROXY:-${https_proxy:-}}"

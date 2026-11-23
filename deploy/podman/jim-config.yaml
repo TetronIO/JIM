@@ -63,7 +63,7 @@ data:
   # --- Reverse proxy or load balancer (only if one sits in front of JIM) ---
   # JIM_TRUSTED_PROXIES: 10.0.0.5
 
-  # --- Outbound proxy (only if JIM reaches the internet through one, for the Microsoft Entra ID Connector say) ---
+  # --- Outbound proxy (only if JIM must reach the internet through one, as the Microsoft Entra ID Connector does) ---
   # The standard names, which JIM reads as every proxy-aware program does. NO_PROXY lists the hosts JIM reaches
   # directly: keep localhost and 127.0.0.1, and add an internal identity provider and internal Connected Systems.
   # A proxy URL carrying a password belongs in jim-secrets.yaml instead: every account on the host can read this file.
