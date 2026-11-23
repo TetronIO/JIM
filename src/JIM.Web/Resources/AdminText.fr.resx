@@ -737,4 +737,103 @@
   <data name="LogsLoadFailed" xml:space="preserve">
     <value>Échec du chargement des journaux : {0}</value>
   </data>
+  <data name="ApiKeyDetailPageTitle" xml:space="preserve">
+    <value>Clé d’API : {0}</value>
+  </data>
+  <data name="ApiKeyHeading" xml:space="preserve">
+    <value>Clé d’API :</value>
+  </data>
+  <data name="ApiKeyDetailPageInfo" xml:space="preserve">
+    <value>Une clé d’API permet à un script ou à un autre système d’appeler l’API REST de JIM sans se connecter. Ses rôles déterminent ce qu’elle peut faire.</value>
+  </data>
+  <data name="ApiKeyDetailNotFound" xml:space="preserve">
+    <value>Introuvable</value>
+  </data>
+  <data name="ApiKeyDetailsTab" xml:space="preserve">
+    <value>Détails</value>
+  </data>
+  <data name="ApiKeyActivityTab" xml:space="preserve">
+    <value>Activité</value>
+  </data>
+  <data name="ApiKeyChangesTab" xml:space="preserve">
+    <value>Modifications</value>
+  </data>
+  <data name="ApiKeyMetadata" xml:space="preserve">
+    <value>Métadonnées</value>
+  </data>
+  <data name="ApiKeyIdLabel" xml:space="preserve">
+    <value>ID :</value>
+  </data>
+  <data name="ApiKeyPrefixLabel" xml:space="preserve">
+    <value>Préfixe de clé :</value>
+  </data>
+  <data name="ApiKeyPrefixTooltip" xml:space="preserve">
+    <value>Seul le préfixe de la clé est stocké, par sécurité. La clé complète n’est affichée qu’une fois, à sa création, et ne peut plus être récupérée.</value>
+  </data>
+  <data name="ApiKeyStatusLabel" xml:space="preserve">
+    <value>Statut :</value>
+  </data>
+  <data name="ApiKeyExpiresLabel" xml:space="preserve">
+    <value>Expiration :</value>
+  </data>
+  <data name="ApiKeyExpiredOn" xml:space="preserve">
+    <value>Expirée ({0})</value>
+  </data>
+  <data name="ApiKeyLastUsedLabel" xml:space="preserve">
+    <value>Dernière utilisation :</value>
+  </data>
+  <data name="ApiKeyFrom" xml:space="preserve">
+    <value>depuis</value>
+  </data>
+  <data name="ApiKeyIpTooltip" xml:space="preserve">
+    <value>Adresse IP d’où provenait la requête la plus récente authentifiée avec cette clé.</value>
+  </data>
+  <data name="ApiKeyRolesLabel" xml:space="preserve">
+    <value>Rôles :</value>
+  </data>
+  <data name="ApiKeyNoRolesAssigned" xml:space="preserve">
+    <value>Aucun rôle attribué</value>
+  </data>
+  <data name="ApiKeyTypeLabel" xml:space="preserve">
+    <value>Type :</value>
+  </data>
+  <data name="ApiKeyInfrastructureKey" xml:space="preserve">
+    <value>Clé d’infrastructure</value>
+  </data>
+  <data name="ApiKeyActivitiesIntro" xml:space="preserve">
+    <value>Toutes les activités initiées par cette clé d’API.</value>
+  </data>
+  <data name="ApiKeyActivityNounSingular" xml:space="preserve">
+    <value>Activité</value>
+  </data>
+  <data name="ApiKeyActivityNounPlural" xml:space="preserve">
+    <value>Activités</value>
+  </data>
+  <data name="ApiKeyActivitySearchPlaceholder" xml:space="preserve">
+    <value>Rechercher par type ou cible</value>
+  </data>
+  <data name="ApiKeyActivityTarget" xml:space="preserve">
+    <value>Cible</value>
+  </data>
+  <data name="ApiKeyActivityOperation" xml:space="preserve">
+    <value>Opération</value>
+  </data>
+  <data name="ApiKeyActivityExecutionTime" xml:space="preserve">
+    <value>Durée d’exécution</value>
+  </data>
+  <data name="ApiKeyActivityNoName" xml:space="preserve">
+    <value>(sans nom)</value>
+  </data>
+  <data name="ApiKeyActivityEmptySearch" xml:space="preserve">
+    <value>Aucune activité ne correspond à « {0} ».</value>
+  </data>
+  <data name="ApiKeyActivityEmptyNone" xml:space="preserve">
+    <value>Aucune activité n’a encore été enregistrée pour cette clé d’API.</value>
+  </data>
+  <data name="ApiKeyActivityEmptyNoneHint" xml:space="preserve">
+    <value>Les activités apparaissent ici dès que cette clé d’API est utilisée pour appeler l’API REST.</value>
+  </data>
+  <data name="ApiKeyNotFound" xml:space="preserve">
+    <value>Clé d’API introuvable. Elle a peut-être été supprimée.</value>
+  </data>
 </root>

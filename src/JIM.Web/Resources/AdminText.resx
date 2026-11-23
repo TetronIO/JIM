@@ -978,4 +978,136 @@
     <value>Failed to load logs: {0}</value>
     <comment>Snackbar; {0} is the error message</comment>
   </data>
+  <data name="ApiKeyDetailPageTitle" xml:space="preserve">
+    <value>API Key: {0}</value>
+    <comment>Browser title; {0} is the key name</comment>
+  </data>
+  <data name="ApiKeyHeading" xml:space="preserve">
+    <value>API Key:</value>
+    <comment>Heading label before the key name</comment>
+  </data>
+  <data name="ApiKeyDetailPageInfo" xml:space="preserve">
+    <value>An API Key lets a script or another system call JIM's REST API without signing in. Its Roles decide what it may do.</value>
+    <comment>Page information popover</comment>
+  </data>
+  <data name="ApiKeyDetailNotFound" xml:space="preserve">
+    <value>Not Found</value>
+    <comment>Breadcrumb shown while the key cannot be found</comment>
+  </data>
+  <data name="ApiKeyDetailsTab" xml:space="preserve">
+    <value>Details</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="ApiKeyActivityTab" xml:space="preserve">
+    <value>Activity</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="ApiKeyChangesTab" xml:space="preserve">
+    <value>Changes</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="ApiKeyMetadata" xml:space="preserve">
+    <value>Metadata</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="ApiKeyIdLabel" xml:space="preserve">
+    <value>ID:</value>
+    <comment>Label</comment>
+  </data>
+  <data name="ApiKeyPrefixLabel" xml:space="preserve">
+    <value>Key Prefix:</value>
+    <comment>Label</comment>
+  </data>
+  <data name="ApiKeyPrefixTooltip" xml:space="preserve">
+    <value>Only the key's prefix is stored, for security. The full key is shown once at creation and cannot be retrieved again.</value>
+    <comment>Tooltip on the key prefix</comment>
+  </data>
+  <data name="ApiKeyStatusLabel" xml:space="preserve">
+    <value>Status:</value>
+    <comment>Label</comment>
+  </data>
+  <data name="ApiKeyExpiresLabel" xml:space="preserve">
+    <value>Expires:</value>
+    <comment>Label</comment>
+  </data>
+  <data name="ApiKeyExpiredOn" xml:space="preserve">
+    <value>Expired ({0})</value>
+    <comment>Chip for a key past its expiry; {0} is the expiry date and time</comment>
+  </data>
+  <data name="ApiKeyLastUsedLabel" xml:space="preserve">
+    <value>Last Used:</value>
+    <comment>Label</comment>
+  </data>
+  <data name="ApiKeyFrom" xml:space="preserve">
+    <value>from</value>
+    <comment>Shown between the last used date and the IP address</comment>
+  </data>
+  <data name="ApiKeyIpTooltip" xml:space="preserve">
+    <value>The IP address the most recent request authenticated with this key came from.</value>
+    <comment>Tooltip on the IP address</comment>
+  </data>
+  <data name="ApiKeyRolesLabel" xml:space="preserve">
+    <value>Roles:</value>
+    <comment>Label</comment>
+  </data>
+  <data name="ApiKeyNoRolesAssigned" xml:space="preserve">
+    <value>No roles assigned</value>
+    <comment>Shown when the key has no roles</comment>
+  </data>
+  <data name="ApiKeyTypeLabel" xml:space="preserve">
+    <value>Type:</value>
+    <comment>Label</comment>
+  </data>
+  <data name="ApiKeyInfrastructureKey" xml:space="preserve">
+    <value>Infrastructure Key</value>
+    <comment>Chip marking an infrastructure key</comment>
+  </data>
+  <data name="ApiKeyActivitiesIntro" xml:space="preserve">
+    <value>All Activities initiated by this API Key.</value>
+    <comment>Intro text on the Activity tab</comment>
+  </data>
+  <data name="ApiKeyActivityNounSingular" xml:space="preserve">
+    <value>Activity</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="ApiKeyActivityNounPlural" xml:space="preserve">
+    <value>Activities</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="ApiKeyActivitySearchPlaceholder" xml:space="preserve">
+    <value>Search type or target</value>
+    <comment>Search box placeholder</comment>
+  </data>
+  <data name="ApiKeyActivityTarget" xml:space="preserve">
+    <value>Target</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ApiKeyActivityOperation" xml:space="preserve">
+    <value>Operation</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ApiKeyActivityExecutionTime" xml:space="preserve">
+    <value>Execution Time</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ApiKeyActivityNoName" xml:space="preserve">
+    <value>(no name)</value>
+    <comment>Shown when an Activity's target has no name</comment>
+  </data>
+  <data name="ApiKeyActivityEmptySearch" xml:space="preserve">
+    <value>No Activities match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="ApiKeyActivityEmptyNone" xml:space="preserve">
+    <value>No Activities have been recorded for this API Key</value>
+    <comment>Empty state when the key has no Activities</comment>
+  </data>
+  <data name="ApiKeyActivityEmptyNoneHint" xml:space="preserve">
+    <value>Activities appear here once this API Key is used to call the REST API.</value>
+    <comment>Empty state secondary text</comment>
+  </data>
+  <data name="ApiKeyNotFound" xml:space="preserve">
+    <value>API Key not found. It may have been deleted.</value>
+    <comment>Warning alert when the key does not exist</comment>
+  </data>
 </root>
