@@ -11,12 +11,10 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Object Changes</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ManageHistory" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Object Changes
-    <PageInfo Title="Object Changes" DocsPage="configuration/object-changes.md">
-        Find changes to Metaverse Objects across every object: when they were made, to which type of object, and how
-        their attributes changed. Only changes JIM recorded can be found, so none appear while Metaverse Object change
-        tracking is turned off, and history retention removes older ones.
+<PageTitle>@ActivityText.ActivityObjectChangesTitle</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ManageHistory" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@ActivityText.ActivityObjectChangesTitle
+    <PageInfo Title="@ActivityText.ActivityObjectChangesTitle" DocsPage="configuration/object-changes.md">
+        @ActivityText.ActivityObjectChangesDescription
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
@@ -25,12 +23,12 @@
 <MudPaper Outlined="true" Class="pa-4 mt-2">
     <MudStack Row="true" Spacing="3" Class="flex-wrap" AlignItems="AlignItems.End">
         <MudItem Class="flex-grow-1" Style="max-width: 280px;">
-            <MudDateRangePicker Label="Changed between" Variant="Variant.Outlined"
+            <MudDateRangePicker Label="@ActivityText.ActivityObjectChangesChangedBetween" Variant="Variant.Outlined"
                                 DateRange="@DateRange" DateRangeChanged="OnDateRangeChangedAsync"
                                 Clearable="true" AutoClose="true" />
         </MudItem>
         <MudItem Class="flex-grow-1" Style="max-width: 280px;">
-            <MudSelect T="int?" Label="Metaverse Object Type" Variant="Variant.Outlined" Dense="true" Clearable="true"
+            <MudSelect T="int?" Label="@ActivityText.ActivityObjectChangesObjectType" Variant="Variant.Outlined" Dense="true" Clearable="true"
                        Value="_state.ObjectTypeId" ValueChanged="OnObjectTypeChangedAsync">
                 @foreach (var objectType in _objectTypes)
                 {
@@ -42,18 +40,18 @@
 
     <MudStack Spacing="2" Class="mt-4">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="flex-wrap">
-            <MudText Typo="Typo.subtitle2">Attribute changes</MudText>
+            <MudText Typo="Typo.subtitle2">@ActivityText.ActivityObjectChangesAttributeChanges</MudText>
             @if (_state.Conditions.Count(c => c.AttributeId.HasValue) > 1)
             {
                 <SegmentedToggle TValue="AttributeConditionMatchMode" Options="@MatchModeOptions" Value="@_state.MatchMode"
-                                 ValueChanged="OnMatchModeChangedAsync" AriaLabel="How conditions combine" Dense="true" />
+                                 ValueChanged="OnMatchModeChangedAsync" AriaLabel="@ActivityText.ActivityObjectChangesHowCombine" Dense="true" />
             }
         </MudStack>
         @foreach (var condition in _state.Conditions)
         {
             <MudStack @key="condition.Key" Row="true" Spacing="3" Class="flex-wrap" AlignItems="AlignItems.Center">
                 <div style="width: 260px;">
-                    <MudSelect T="int?" Label="Attribute" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                    <MudSelect T="int?" Label="@ActivityText.ActivityColumnAttribute" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
                                Value="condition.AttributeId" ValueChanged="@(v => OnConditionAttributeChangedAsync(condition, v))">
                         @foreach (var metaverseAttribute in _attributes)
                         {
@@ -62,27 +60,27 @@
                     </MudSelect>
                 </div>
                 <div style="width: 220px;">
-                    <MudSelect T="AttributeChangeOperator" Label="Condition" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                    <MudSelect T="AttributeChangeOperator" Label="@ActivityText.ActivityObjectChangesCondition" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
                                Value="condition.Operator" ValueChanged="@(v => OnConditionOperatorChangedAsync(condition, v))">
-                        <MudSelectItem T="AttributeChangeOperator" Value="AttributeChangeOperator.ChangedTo">changed to</MudSelectItem>
-                        <MudSelectItem T="AttributeChangeOperator" Value="AttributeChangeOperator.ChangedFrom">changed from</MudSelectItem>
-                        <MudSelectItem T="AttributeChangeOperator" Value="AttributeChangeOperator.AnyChange">changed (to or from)</MudSelectItem>
+                        <MudSelectItem T="AttributeChangeOperator" Value="AttributeChangeOperator.ChangedTo">@ActivityText.ActivityOperatorChangedTo</MudSelectItem>
+                        <MudSelectItem T="AttributeChangeOperator" Value="AttributeChangeOperator.ChangedFrom">@ActivityText.ActivityOperatorChangedFrom</MudSelectItem>
+                        <MudSelectItem T="AttributeChangeOperator" Value="AttributeChangeOperator.AnyChange">@ActivityText.ActivityOperatorChanged</MudSelectItem>
                     </MudSelect>
                 </div>
                 @* Commits on blur or Enter rather than per keystroke: each commit re-runs the search across every
                    recorded change, and a half-typed value is not a question worth asking the database. *@
                 <div style="flex: 1 1 220px; min-width: 220px;">
-                    <MudTextField T="string" Label="Value" Placeholder="@ValueHint(condition)" Variant="Variant.Outlined" Margin="Margin.Dense"
+                    <MudTextField T="string" Label="@ActivityText.ActivityColumnValue" Placeholder="@ValueHint(condition)" Variant="Variant.Outlined" Margin="Margin.Dense"
                                   @bind-Value="condition.Value" @bind-Value:after="ApplyFilterChangeAsync" />
                 </div>
-                <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="Remove condition"
+                <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="@ActivityText.ActivityObjectChangesRemoveCondition"
                                OnClick="@(() => RemoveConditionAsync(condition))" />
             </MudStack>
         }
         <div>
             <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" DropShadow="false"
                        Disabled="@(_state.Conditions.Count >= JIM.Application.Servers.MetaverseServer.MaxChangeSearchConditions)"
-                       OnClick="AddCondition">Add Condition</MudButton>
+                       OnClick="AddCondition">@ActivityText.ActivityObjectChangesAddCondition</MudButton>
         </div>
     </MudStack>
 </MudPaper>
@@ -111,42 +109,42 @@
                      LoadWindow="LoadWindowAsync"
                      RowClicked="HandleRowClicked"
                      RowClassFunc="RowClass"
-                     SingularName="Change"
-                     PluralName="Changes"
-                     SearchPlaceholder="Search Metaverse Object name">
+                     SingularName="@ActivityText.ActivityHistoryChangeSingular"
+                     PluralName="@ActivityText.ActivityHistoryChangesPlural"
+                     SearchPlaceholder="@ActivityText.ActivityObjectChangesSearch">
     <Columns>
-        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Changed" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="@ActivityText.ActivityObjectChangesChanged" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <CellTemplate>
                 <MudTooltip Text="@context.Item.Change.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                     @context.Item.Change.ChangeTime.ToRelativeTime()
                 </MudTooltip>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Metaverse Object" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="@ActivityText.ActivityFieldMetaverseObject" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <CellTemplate>
                 <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@context.Item.MetaverseObjectTypeName"
                             Name="@context.Item.MetaverseObjectDisplayName" Href="@ObjectHref(context.Item)"
                             Deleted="@context.Item.MetaverseObjectDeleted" Tooltip="@DeletedTooltip(context.Item)" Class="ma-0" />
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Change" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="@ActivityText.ActivityColumnChange" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <CellTemplate>
                 @context.Item.Change.ChangeType.ToString().SplitOnCapitalLetters()
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Attributes" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="@ActivityText.ActivityObjectChangesAttributes" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
             <CellTemplate>
                 @{ var summaries = ObjectChangeSummary.Summarise(context.Item); }
                 <div class="jim-one-line-list">
                 @if (summaries.Count > 0 && summaries[0].FinalValues)
                 {
                     @* A deletion records the object's last values; label them as such, so they do not read as cleared. *@
-                    <span class="jim-final-values-label">Final values</span>
+                    <span class="jim-final-values-label">@ActivityText.ActivityObjectChangesFinalValues</span>
                 }
                 @* The list sits in the row's shrinking slot: it is a one-line list of its own, and nested as a plain flex
                    child it would hold its width and run into the next column instead of clipping. *@
                 <div class="jim-one-line-list-value">
-                <OverflowList TItem="ObjectChangeSummary" Items="@summaries" Title="@(context.Item.Change.ChangeType == ObjectChangeType.Deleted ? "Final values" : "Attribute changes")">
+                <OverflowList TItem="ObjectChangeSummary" Items="@summaries" Title="@(context.Item.Change.ChangeType == ObjectChangeType.Deleted ? ActivityText.ActivityObjectChangesFinalValues : ActivityText.ActivityObjectChangesAttributeChanges)">
                     <ItemTemplate Context="summary">
                         <span class="jim-one-line">
                             <span class="@(summary.Matched ? "" : "mud-text-secondary") mr-1">@summary.AttributeName:</span>
@@ -167,7 +165,7 @@
                                 }
                                 else
                                 {
-                                    <span class="mud-text-secondary">(cleared)</span>
+                                    <span class="mud-text-secondary">@ActivityText.ActivityObjectChangesCleared</span>
                                 }
                             }
                             else
@@ -189,7 +187,7 @@
                 </div>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Made by" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="@ActivityText.ActivityObjectChangesMadeBy" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <CellTemplate>
                 @* Capped so a long Connected System and rule pair clips its names rather than squeezing the Attributes
                    column, which the row exists to show. *@
@@ -201,11 +199,11 @@
                 </div>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="Activity" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn T="MetaverseObjectChangeSearchResult" Title="@ActivityText.ActivityFieldActivity" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <CellTemplate>
                 @if (context.Item.Change.ActivityId is { } activityId)
                 {
-                    <MudLink Href="@($"/activity/{activityId}")" @onclick:stopPropagation="true">View Activity</MudLink>
+                    <MudLink Href="@($"/activity/{activityId}")" @onclick:stopPropagation="true">@ActivityText.ActivityViewActivity</MudLink>
                 }
                 else
                 {
@@ -218,39 +216,39 @@
         @if (!string.IsNullOrWhiteSpace(grid.SearchText))
         {
             <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                             PrimaryText="@($"No changes to Metaverse Objects named like \"{grid.SearchText}\"")"
-                             SecondaryText="Try a different name, or clear the search."
-                             ActionText="Clear Search"
+                             PrimaryText="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityObjectChangesNoMatchName, grid.SearchText)"
+                             SecondaryText="@ActivityText.ActivityObjectChangesTryDifferentName"
+                             ActionText="@ActivityText.ActivityClearSearch"
                              OnAction="@(() => grid.ClearSearchAsync())" />
         }
         else if (_state.HasActiveFilters)
         {
             <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
-                             PrimaryText="No changes match the current filters"
-                             SecondaryText="Widen the time range, or adjust or clear the attribute conditions."
-                             ActionText="Clear Filters"
+                             PrimaryText="@ActivityText.ActivityNoChangesMatch"
+                             SecondaryText="@ActivityText.ActivityObjectChangesWidenRange"
+                             ActionText="@ActivityText.ActivityClearFilters"
                              OnAction="ClearFiltersAsync" />
         }
         else
         {
             <TableEmptyState Icon="@Icons.Material.Filled.ManageHistory"
-                             PrimaryText="No changes recorded"
-                             SecondaryText="Changes to Metaverse Objects appear here as synchronisations and administrators make them, while Metaverse Object change tracking is turned on." />
+                             PrimaryText="@ActivityText.ActivityObjectChangesNoneRecorded"
+                             SecondaryText="@ActivityText.ActivityObjectChangesNoneRecordedDetail" />
         }
     </EmptyContent>
 </VirtualisedDataGrid>
 
 @code {
-    private static readonly IReadOnlyList<SegmentedToggleOption<AttributeConditionMatchMode>> MatchModeOptions =
+    private static IReadOnlyList<SegmentedToggleOption<AttributeConditionMatchMode>> MatchModeOptions =>
     [
-        new(AttributeConditionMatchMode.All, "All conditions", Tooltip: "Every condition met by the same change: one Metaverse Object, in one Activity"),
-        new(AttributeConditionMatchMode.Any, "Any condition", Tooltip: "At least one condition met")
+        new(AttributeConditionMatchMode.All, ActivityText.ActivityObjectChangesMatchAll, Tooltip: ActivityText.ActivityObjectChangesMatchAllTooltip),
+        new(AttributeConditionMatchMode.Any, ActivityText.ActivityObjectChangesMatchAny, Tooltip: ActivityText.ActivityObjectChangesMatchAnyTooltip)
     ];
 
     private readonly List<BreadcrumbItem> _breadcrumbs =
     [
-        new("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new("Object Changes", href: null, disabled: true)
+        new(ActivityText.ActivityBreadcrumbHome, href: "/", icon: Icons.Material.Filled.Home),
+        new(ActivityText.ActivityObjectChangesTitle, href: null, disabled: true)
     ];
 
     private VirtualisedDataGrid<MetaverseObjectChangeSearchResult>? _grid;
@@ -304,7 +302,7 @@
             : null;
 
     private static string? DeletedTooltip(MetaverseObjectChangeSearchResult result) =>
-        result.MetaverseObjectDeletedAt is { } deletedAt ? $"Deleted {deletedAt.ToRelativeTime()}" : null;
+        result.MetaverseObjectDeletedAt is { } deletedAt ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityObjectChangesDeleted, deletedAt.ToRelativeTime()) : null;
 
     private string? RowClass(MetaverseObjectChangeSearchResult result, int _) =>
         _selected?.Change.Id == result.Change.Id ? "jim-row-selected" : null;
@@ -314,12 +312,12 @@
         var type = _attributes.FirstOrDefault(a => a.Id == condition.AttributeId)?.Type;
         return type switch
         {
-            AttributeDataType.Text => "Any value; * matches anything",
-            AttributeDataType.Reference => "The referenced object's name; * matches anything",
-            AttributeDataType.DateTime => "yyyy-MM-dd for the whole day",
-            AttributeDataType.Boolean => "true or false",
-            AttributeDataType.Binary => "Leave empty; Binary values are not recorded",
-            _ => "Any value"
+            AttributeDataType.Text => ActivityText.ActivityHintText,
+            AttributeDataType.Reference => ActivityText.ActivityHintReference,
+            AttributeDataType.DateTime => ActivityText.ActivityHintDate,
+            AttributeDataType.Boolean => ActivityText.ActivityHintBoolean,
+            AttributeDataType.Binary => ActivityText.ActivityHintBinary,
+            _ => ActivityText.ActivityHintAny
         };
     }
 

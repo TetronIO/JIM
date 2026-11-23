@@ -5,6 +5,7 @@ using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Transactional.DTOs;
 using JIM.Utilities;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -73,21 +74,21 @@ public sealed record ExecutionItemFollowUpDisplay(
             // change already waiting for the account, whose own Activity reports the delivery.
             var target = followUp.PasswordOutcomes?.Targets.FirstOrDefault();
             if (target == null)
-                return new(followUp.ActivityId, "Initial password", followUp.TargetName, "Carried", "neutral", followUp.Message, false, followUp.Created, followUp.TargetType);
+                return new(followUp.ActivityId, ActivityText.ActivityFollowUpTitleInitialPassword, followUp.TargetName, ActivityText.ActivityFollowUpStateCarried, "neutral", followUp.Message, false, followUp.Created, followUp.TargetType);
 
             var (label, modifier, running) = target.State switch
             {
-                PasswordChangeTargetState.Set => ("Delivered", target.CompletedWithWarning ? "warn" : "ok", false),
-                PasswordChangeTargetState.Queued => ("Queued", "neutral", true),
-                PasswordChangeTargetState.Delivering => ("Delivering", "neutral", true),
-                PasswordChangeTargetState.Retrying => ("Retrying", "warn", true),
-                PasswordChangeTargetState.Held => ("Held", "warn", true),
-                PasswordChangeTargetState.Parked => ("Parked", "err", false),
-                PasswordChangeTargetState.Expired => ("Expired", "err", false),
-                PasswordChangeTargetState.Cancelled => ("Cancelled", "err", false),
+                PasswordChangeTargetState.Set => (ActivityText.ActivityFollowUpStateDelivered, target.CompletedWithWarning ? "warn" : "ok", false),
+                PasswordChangeTargetState.Queued => (ActivityText.ActivityFollowUpStateQueued, "neutral", true),
+                PasswordChangeTargetState.Delivering => (ActivityText.ActivityFollowUpStateDelivering, "neutral", true),
+                PasswordChangeTargetState.Retrying => (ActivityText.ActivityFollowUpStateRetrying, "warn", true),
+                PasswordChangeTargetState.Held => (ActivityText.ActivityFollowUpStateHeld, "warn", true),
+                PasswordChangeTargetState.Parked => (ActivityText.ActivityFollowUpStateParked, "err", false),
+                PasswordChangeTargetState.Expired => (ActivityText.ActivityFollowUpStateExpired, "err", false),
+                PasswordChangeTargetState.Cancelled => (ActivityText.ActivityFollowUpStateCancelled, "err", false),
                 _ => (target.State.ToString(), "neutral", false)
             };
-            return new(followUp.ActivityId, "Initial password", followUp.TargetName, label, modifier,
+            return new(followUp.ActivityId, ActivityText.ActivityFollowUpTitleInitialPassword, followUp.TargetName, label, modifier,
                 PasswordChangeTargetDisplay.Words(target), running, followUp.Created, followUp.TargetType);
         }
 
@@ -105,7 +106,19 @@ public sealed record ExecutionItemFollowUpDisplay(
             ? ExchangeChangeOutcomeDisplay.Title(null)
             : Helpers.GetActivityTargetTypeName(followUp.TargetType);
         return new(followUp.ActivityId, title, followUp.TargetName,
-            followUp.Status.ToString().SplitOnCapitalLetters(), statusModifier, followUp.Message,
+            StatusLabel(followUp.Status), statusModifier, followUp.Message,
             followUp.Status is ActivityStatus.InProgress or ActivityStatus.NotSet, followUp.Created, followUp.TargetType);
     }
+
+    private static string StatusLabel(ActivityStatus status) => status switch
+    {
+        ActivityStatus.NotSet => ActivityText.ActivityStatusNotSet,
+        ActivityStatus.InProgress => ActivityText.ActivityStatusInProgress,
+        ActivityStatus.Complete => ActivityText.ActivityStatusComplete,
+        ActivityStatus.CompleteWithWarning => ActivityText.ActivityStatusCompleteWithWarning,
+        ActivityStatus.CompleteWithError => ActivityText.ActivityStatusCompleteWithError,
+        ActivityStatus.FailedWithError => ActivityText.ActivityStatusFailedWithError,
+        ActivityStatus.Cancelled => ActivityText.ActivityStatusCancelled,
+        _ => status.ToString().SplitOnCapitalLetters()
+    };
 }

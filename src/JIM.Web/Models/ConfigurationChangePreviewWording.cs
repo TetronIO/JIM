@@ -1,8 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Activities;
 using JIM.Models.Preview;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -43,7 +45,9 @@ public static class ConfigurationChangePreviewWording
         if (string.IsNullOrEmpty(connectedSystemName))
             return string.Empty;
 
-        return Takeovers.Contains(transition) ? $", now from {connectedSystemName}" : $" in {connectedSystemName}";
+        return string.Format(CultureInfo.CurrentCulture,
+            Takeovers.Contains(transition) ? ActivityText.ActivityWordingNowFrom : ActivityText.ActivityWordingIn,
+            connectedSystemName);
     }
 
     /// <summary>
@@ -78,14 +82,11 @@ public static class ConfigurationChangePreviewWording
     /// <param name="previewTargetName">The name of the object the preview was about, where the sentence names it.</param>
     public static string NothingWouldChange(ConfigurationChangePreviewSurface surface, string? previewTargetName = null) => surface switch
     {
-        ConfigurationChangePreviewSurface.ConnectedSystemDeletion =>
-            "Deleting this system would change nothing outside it: no Metaverse Object would lose or change a value, " +
-            "none would become eligible for deletion, and nothing would be exported to another Connected System. Its own " +
-            "Connected System Objects are still deleted with it.",
+        ConfigurationChangePreviewSurface.ConnectedSystemDeletion => ActivityText.ActivityWordingDeletionNoChange,
         ConfigurationChangePreviewSurface.ConnectedSystemFullSynchronisation =>
-            $"A Full Synchronisation of {(string.IsNullOrEmpty(previewTargetName) ? "this Connected System" : previewTargetName)} would " +
-            "change nothing. Every object is already in the state its Synchronisation Rules describe.",
-        _ => "This change would not change anything: no object moves through any transition as a result of it."
+            string.Format(CultureInfo.CurrentCulture, ActivityText.ActivityWordingFullSyncNoChange,
+                string.IsNullOrEmpty(previewTargetName) ? ActivityText.ActivityWordingThisConnectedSystem : previewTargetName),
+        _ => ActivityText.ActivityWordingNoChange
     };
 
     /// <summary>
@@ -105,11 +106,11 @@ public static class ConfigurationChangePreviewWording
         ActivityRunProfileExecutionItemSyncOutcomeType transition)
     {
         if (transition == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn)
-            return ("Queued", "Target keeps");
+            return (ActivityText.ActivityWordingQueued, ActivityText.ActivityWordingTargetKeeps);
 
         return surface == ConfigurationChangePreviewSurface.ConnectedSystemFullSynchronisation
-            ? ("Now", "After the synchronisation")
-            : ("Current value", "Proposed value");
+            ? (ActivityText.ActivityWordingNow, ActivityText.ActivityWordingAfterSynchronisation)
+            : (ActivityText.ActivityWordingCurrentValue, ActivityText.ActivityWordingProposedValue);
     }
 
     /// <summary>

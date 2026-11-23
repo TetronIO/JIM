@@ -20,7 +20,7 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Item Details: @(_liveRecord?.ExternalId ??
+<PageTitle>@ActivityText.ActivityItemPageTitlePrefix @(_liveRecord?.ExternalId ??
         _activityRunProfileExecutionItem?.Id.ToString())</PageTitle>
 
     @if (_activityRunProfileExecutionItem != null)
@@ -29,8 +29,8 @@
         @* No status icon after the title: the title already says what happened ("Person Deletion Detected"),
            and the Operation field below states it again with its own icon. *@
         <MudText Typo="Typo.h3" Class="mb-2"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@GetStatusTitle()
-            <PageInfo Title="Execution Item" DocsPage="configuration/activity-execution-items.md">
-                What one Run Profile run did to one object: what happened, what it went on to cause, and any error it met.
+            <PageInfo Title="@ActivityText.ActivityItemPageTitle" DocsPage="configuration/activity-execution-items.md">
+                @ActivityText.ActivityItemPageDescription
             </PageInfo>
         </MudText>
         <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0 mb-4"></MudBreadcrumbs>
@@ -40,11 +40,11 @@
            both inline made the page a scroll rather than an answer, so each has its own tab. The Pending
            Export tab appears only where there is one. *@
         <NavigableMudTabs Class="mt-2" TabPanelsClass="pt-6">
-        <MudTabPanel Text="Overview">
+        <MudTabPanel Text="@ActivityText.ActivityItemTabOverview">
 
         @* Summary Section *@
         <MudText Typo="Typo.h6" Class="mb-2">
-            Execution Summary
+            @ActivityText.ActivityItemExecutionSummary
         </MudText>
         <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
             @GetStatusDescription()
@@ -55,7 +55,7 @@
                 @if (_runConnectedSystemHeader != null)
                 {
                     <MudItem xs="12" sm="6" md="4">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Connected System</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityFieldConnectedSystem</MudText>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             <MudIcon Icon="@Icons.Material.Filled.Storage" Class="mud-text-secondary" />
                             <MudLink Href="@Utilities.GetConnectedSystemHref(_runConnectedSystemHeader)">
@@ -71,7 +71,7 @@
                     var executedLocal = _activity.Executed.ToLocalTime();
 
                     <MudItem xs="12" sm="6" md="4">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">@(IsHousekeepingContext() ? "Activity" : "Run Profile")</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">@(IsHousekeepingContext() ? ActivityText.ActivityFieldActivity : ActivityText.ActivityFieldRunProfile)</MudText>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Class="mud-text-secondary" />
                             <MudText>@_activity.TargetName</MudText>
@@ -79,7 +79,7 @@
                     </MudItem>
 
                     <MudItem xs="12" sm="6" md="4">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Executed</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityFieldExecuted</MudText>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mud-text-secondary" />
                             <MudText>@executedLocal.ToFriendlyDate() (@executedLocal.ToRelativeTime())</MudText>
@@ -89,7 +89,7 @@
 
                 @* Initiated By *@
                 <MudItem xs="12" sm="6" md="4">
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By</MudText>
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityColumnInitiatedBy</MudText>
                     @if (_activity != null)
                     {
                         <MudText>
@@ -113,7 +113,7 @@
                         _activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet))
                 {
                     <MudItem xs="12" sm="6" md="4">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Operation</MudText><br />
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityColumnOperation</MudText><br />
                         <MudTooltip Arrow="true" Placement="Placement.Top">
                             <TooltipContent>
                                 <TooltipText Text="@Helpers.GetOperationDescription(_activityRunProfileExecutionItem.ObjectChangeType, IsSyncContext())" />
@@ -151,7 +151,7 @@
                                             TypeName="@liveRecord.ObjectTypeName" />
                                 <MudLink
                                     Href="@(Utilities.GetConnectedSystemObjectHref(liveRecordSystemId, liveRecord.Id))">
-                                    View Object
+                                    @ActivityText.ActivityViewObject
                                 </MudLink>
                             }
                         </MudStack>
@@ -171,9 +171,9 @@
                             else
                             {
                                 <ObjectChip Kind="ObjectChipKind.MetaverseObject"
-                                            TypeName="@(_activityRunProfileExecutionItem.ObjectTypeSnapshot ?? "Object")"
+                                            TypeName="@(_activityRunProfileExecutionItem.ObjectTypeSnapshot ?? ActivityText.ActivityObjectFallback)"
                                             Name="@_activityRunProfileExecutionItem.DisplayNameSnapshot" />
-                                <MudText Class="mud-text-secondary">(deleted)</MudText>
+                                <MudText Class="mud-text-secondary">@ActivityText.ActivityDeletedMarker</MudText>
                             }
                         </MudStack>
                     }
@@ -189,7 +189,7 @@
                                 <ChildContent>
                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="jim-explained">
                                         <MudIcon Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.Rejected)" Class="mud-text-secondary" />
-                                        <MudText>Rejected: @_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
+                                        <MudText>@string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityRejectedWithId, _activityRunProfileExecutionItem.ExternalIdSnapshot)</MudText>
                                     </MudStack>
                                 </ChildContent>
                             </MudTooltip>
@@ -204,7 +204,7 @@
                                 <ChildContent>
                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="jim-explained">
                                         <MudIcon Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.PendingRemoval)" Class="mud-text-secondary" />
-                                        <MudText>Pending Removal: @_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
+                                        <MudText>@string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPendingRemovalWithId, _activityRunProfileExecutionItem.ExternalIdSnapshot)</MudText>
                                     </MudStack>
                                 </ChildContent>
                             </MudTooltip>
@@ -219,7 +219,7 @@
                                 <ChildContent>
                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="jim-explained">
                                         <MudIcon Icon="@Helpers.GetExternalIdStatusIcon(ExternalIdStatus.Deleted)" Class="mud-text-secondary" />
-                                        <MudText>Deleted: @_activityRunProfileExecutionItem.ExternalIdSnapshot</MudText>
+                                        <MudText>@string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityDeletedWithId, _activityRunProfileExecutionItem.ExternalIdSnapshot)</MudText>
                                     </MudStack>
                                 </ChildContent>
                             </MudTooltip>
@@ -228,12 +228,12 @@
                     else if (IsHousekeepingContext() && !string.IsNullOrEmpty(_activityRunProfileExecutionItem.DisplayNameSnapshot))
                     {
                         @* Housekeeping deletion: no CSO involved; show the deleted Metaverse Object's name *@
-                        <MudText Class="mud-text-secondary">@_activityRunProfileExecutionItem.DisplayNameSnapshot (deleted)</MudText>
+                        <MudText Class="mud-text-secondary">@_activityRunProfileExecutionItem.DisplayNameSnapshot @ActivityText.ActivityDeletedMarker</MudText>
                     }
                     else
                     {
                         @* No CSO and no external ID snapshot - the object has been deleted *@
-                        <MudText Class="mud-text-secondary">The Connected System Object has been deleted.</MudText>
+                        <MudText Class="mud-text-secondary">@ActivityText.ActivityCsoDeleted</MudText>
                     }
                 </MudItem>
 
@@ -241,7 +241,7 @@
                 @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.SourceLocation))
                 {
                     <MudItem xs="12" sm="6" md="4">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Source</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityFieldSource</MudText>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             <MudIcon Icon="@Icons.Material.Outlined.Description" Class="mud-text-secondary" />
                             <MudText Class="jim-text-code">@_activityRunProfileExecutionItem.SourceLocation</MudText>
@@ -260,10 +260,7 @@
         {
             <MudAlert Severity="Severity.Info" Class="mb-5">
                 <MudText Typo="Typo.body1">
-                    The Connected System Object has been detected as deleted from the source system and marked for
-                    removal. When a Full Synchronisation or Delta Synchronisation Run Profile is executed, JIM will
-                    disconnect this object from the metaverse and evaluate the Deletion Rule for its Metaverse
-                    Object Type.
+                    @ActivityText.ActivityItemDeletionAlert
                 </MudText>
             </MudAlert>
         }
@@ -272,10 +269,10 @@
         @if (CausalityItemLoader.ShowsCausality(_activityRunProfileExecutionItem) && _causality is { } causality)
         {
             <MudText Typo="Typo.h6" Class="mb-2">
-                Causality
+                @ActivityText.ActivityItemCausalityHeading
             </MudText>
             <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
-                What happened during processing and the downstream consequences.
+                @ActivityText.ActivityItemCausalityDescription
             </MudText>
             <div class="mb-5">
                 <CausalityPanel Item="causality.Item"
@@ -305,7 +302,7 @@
                    `Outlined` styles the inner panels rather than this container, so it produced no border
                    at all here and left the default 4px radius against the panel above's 10px. *@
                 <MudExpansionPanels Class="mb-5 jim-expansion-panel" Elevation="0">
-                    <MudExpansionPanel Text="Deletion Rule in force at the time">
+                    <MudExpansionPanel Text="@ActivityText.ActivityItemDeletionRuleAtTime">
                         <DeletionPolicySnapshotView Snapshot="_deletionPolicySnapshot"
                                                     ObjectTypeName="@_metaverseObjectType?.Name" />
                     </MudExpansionPanel>
@@ -320,7 +317,7 @@
            export provisioned, with where it stands now. The run's own status is final; a follow-up reports here instead. *@
         @if (_followUps.Count > 0)
         {
-            <MudText Typo="Typo.h6" Class="mb-2">Follow-up</MudText>
+            <MudText Typo="Typo.h6" Class="mb-2">@ActivityText.ActivityFollowUpLabel</MudText>
             <MudPaper Outlined="true" Class="pa-4 mb-5">
                 @foreach (var followUp in _followUps)
                 {
@@ -339,7 +336,7 @@
              && _attributeValueErrors == null)
         {
             <MudText Typo="Typo.h6" Class="mb-3">
-                Error Details
+                @ActivityText.ActivityItemErrorDetails
             </MudText>
 
             <MudAlert Severity="Severity.Error" Class="mb-3 jim-alert-error">
@@ -403,7 +400,7 @@
                     && _activityRunProfileExecutionItem.ObjectChangeType != ObjectChangeType.Deleted
                     && _activityRunProfileExecutionItem.SyncOutcomes.Count == 0)
                     {
-                        <MudText Typo="Typo.h6" Class="mb-3">Attribute Changes</MudText>
+                        <MudText Typo="Typo.h6" Class="mb-3">@ActivityText.ActivityItemAttributeChangesHeading</MudText>
 
                         <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
                             @GetAttributeChangesDescription()
@@ -418,21 +415,21 @@
                                              StateKey="@Id.ToString()"
                                              DefaultSortBy="attribute"
                                              LoadWindow="LoadAttributeChangeWindowAsync"
-                                             SingularName="Attribute Change"
-                                             PluralName="Attribute Changes"
-                                             SearchPlaceholder="Search attribute or value">
+                                             SingularName="@ActivityText.ActivityItemAttributeChangeSingular"
+                                             PluralName="@ActivityText.ActivityItemAttributeChangesHeading"
+                                             SearchPlaceholder="@ActivityText.ActivityItemSearchAttributes">
                             <Columns>
-                                <TemplateColumn T="FlattenedChange" Title="Attribute" Sortable="false" CellClass="jim-nowrap">
+                                <TemplateColumn T="FlattenedChange" Title="@ActivityText.ActivityColumnAttribute" Sortable="false" CellClass="jim-nowrap">
                                     <HeaderTemplate>
-                                        <VirtualisedSortHeader Title="Attribute" Name="attribute" />
+                                        <VirtualisedSortHeader Title="@ActivityText.ActivityColumnAttribute" Name="attribute" />
                                     </HeaderTemplate>
                                     <CellTemplate>
                                         <MudText Class="mud-text-secondary">@context.Item.AttributeName</MudText>
                                     </CellTemplate>
                                 </TemplateColumn>
-                                <TemplateColumn T="FlattenedChange" Title="Change" Sortable="false" CellClass="jim-nowrap">
+                                <TemplateColumn T="FlattenedChange" Title="@ActivityText.ActivityColumnChange" Sortable="false" CellClass="jim-nowrap">
                                     <HeaderTemplate>
-                                        <VirtualisedSortHeader Title="Change" Name="change" />
+                                        <VirtualisedSortHeader Title="@ActivityText.ActivityColumnChange" Name="change" />
                                     </HeaderTemplate>
                                     <CellTemplate>
                                         <MudChip T="string" Variant="Variant.Text"
@@ -441,9 +438,9 @@
                                         </MudChip>
                                     </CellTemplate>
                                 </TemplateColumn>
-                                <TemplateColumn T="FlattenedChange" Title="Value" Sortable="false">
+                                <TemplateColumn T="FlattenedChange" Title="@ActivityText.ActivityColumnValue" Sortable="false">
                                     <HeaderTemplate>
-                                        <MudText Typo="Typo.button">Value</MudText>
+                                        <MudText Typo="Typo.button">@ActivityText.ActivityColumnValue</MudText>
                                     </HeaderTemplate>
                                     <CellTemplate>
                                         @if (context.Item.ReferenceValue is { } reference)
@@ -471,16 +468,16 @@
                                 @if (!string.IsNullOrWhiteSpace(grid.SearchText))
                                 {
                                     <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                                     PrimaryText="@($"No Attribute Changes match \"{grid.SearchText}\"")"
-                                                     SecondaryText="Try a different search term, or clear the search."
-                                                     ActionText="Clear Search"
+                                                     PrimaryText="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityNoAttributeChangesMatch, grid.SearchText)"
+                                                     SecondaryText="@ActivityText.ActivitySearchTryAgain"
+                                                     ActionText="@ActivityText.ActivityClearSearch"
                                                      OnAction="@(() => grid.ClearSearchAsync())" />
                                 }
                                 else
                                 {
                                     <TableEmptyState Icon="@Icons.Material.Filled.EditNote"
-                                                     PrimaryText="No Attribute Changes were recorded"
-                                                     SecondaryText="This operation changed no attribute values on the object." />
+                                                     PrimaryText="@ActivityText.ActivityNoAttributeChangesRecorded"
+                                                     SecondaryText="@ActivityText.ActivityNoAttributeChangesDetail" />
                                 }
                             </EmptyContent>
                         </VirtualisedDataGrid>
@@ -488,15 +485,15 @@
 else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.NoChange)
                         {
                             <MudAlert Severity="Severity.Info" Class="mb-5">
-                                <MudText Typo="Typo.body1">No Changes Required</MudText>
+                                <MudText Typo="Typo.body1">@ActivityText.ActivityItemNoChangesRequired</MudText>
                                 <MudText Typo="Typo.body1">
-                                    @if (_activityRunProfileExecutionItem.NoChangeReason != null)
+                                    @if (_activityRunProfileExecutionItem.NoChangeReason is { } noChangeReason)
                                     {
-                                        @_activityRunProfileExecutionItem.NoChangeReason.ToString()!.SplitOnCapitalLetters()
+                                        @NoChangeReasonText(noChangeReason)
                                     }
                                     else
                                     {
-                                        <text>The object was already up to date with no attribute changes needed.</text>
+                                        <text>@ActivityText.ActivityItemAlreadyUpToDate</text>
                                     }
                                 </MudText>
                             </MudAlert>
@@ -507,7 +504,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         @* Shown only where there is one: an empty tab invites a click that answers nothing. *@
         @if (_pendingExport != null)
         {
-            <MudTabPanel Text="Pending Export">
+            <MudTabPanel Text="@ActivityText.ActivityItemTabPendingExport">
                 <ActivityItemPendingExportPanel PendingExport="_pendingExport"
                                                 ItemErrorType="@(_activityRunProfileExecutionItem.ErrorType ?? ActivityRunProfileExecutionItemErrorType.NotSet)"
                                                 ItemObjectChangeType="_activityRunProfileExecutionItem.ObjectChangeType"
@@ -570,6 +567,17 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
 
 
     /// <summary>
+    /// What a recorded reason an item needed no change says, in the viewer's language. The two reasons a reader sees
+    /// are written out; any other falls back to its name split into words.
+    /// </summary>
+    private static string NoChangeReasonText(NoChangeReason reason) => reason switch
+    {
+        NoChangeReason.MvoNoAttributeChanges => ActivityText.ActivityNoChangeReasonMvoNoAttributeChanges,
+        NoChangeReason.CsoAlreadyCurrent => ActivityText.ActivityNoChangeReasonCsoAlreadyCurrent,
+        _ => reason.ToString().SplitOnCapitalLetters()
+    };
+
+    /// <summary>
     /// Removes the "Eligible for deletion: ..." segment from a deletion outcome's detail message, for
     /// callers that already state the due date in their own sentence (#119). The segments are joined
     /// with ". ", and the due date is always last.
@@ -579,6 +587,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         if (string.IsNullOrEmpty(detailMessage))
             return string.Empty;
 
+        // i18n: exempt - matches the English segment the deletion rule writes into the Activity's message
         var index = detailMessage.IndexOf("Eligible for deletion:", StringComparison.Ordinal);
         return index < 0 ? detailMessage : detailMessage[..index].TrimEnd(' ', '.');
     }
@@ -665,23 +674,23 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
         _fromOperations = string.Equals(query["from"], "operations", StringComparison.OrdinalIgnoreCase);
 
-        var activityName = _activity?.DisplayName ?? "Activity Detail";
+        var activityName = _activity?.DisplayName ?? ActivityText.ActivityBreadcrumbActivityDetail;
         var activityHref = $"/activity/{_activityRunProfileExecutionItem.ActivityId}{(_fromOperations ? "?from=operations" : "")}";
 
         _breadcrumbs = _fromOperations
             ? new List<BreadcrumbItem>
             {
-                new("Home", href: "/", icon: Icons.Material.Filled.Home),
-                new("Operations", href: "/admin/operations?t=activity"),
+                new(ActivityText.ActivityBreadcrumbHome, href: "/", icon: Icons.Material.Filled.Home),
+                new(ActivityText.ActivityBreadcrumbOperations, href: "/admin/operations?t=activity"),
                 new(activityName, href: activityHref),
-                new("Item Details", href: null, disabled: true)
+                new(ActivityText.ActivityBreadcrumbItemDetails, href: null, disabled: true)
             }
             : new List<BreadcrumbItem>
             {
-                new("Home", href: "/", icon: Icons.Material.Filled.Home),
-                new("Activity", href: "/activity"),
+                new(ActivityText.ActivityBreadcrumbHome, href: "/", icon: Icons.Material.Filled.Home),
+                new(ActivityText.ActivityBreadcrumbActivity, href: "/activity"),
                 new(activityName, href: activityHref),
-                new("Item Details", href: null, disabled: true)
+                new(ActivityText.ActivityBreadcrumbItemDetails, href: null, disabled: true)
             };
 
         // Load associated Pending Export for:
@@ -804,6 +813,9 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private string GetStatusIcon() => Helpers.GetOperationIcon(
         _activityRunProfileExecutionItem?.ObjectChangeType ?? ObjectChangeType.NotSet);
 
+    private static string Fmt(string format, params object?[] args) =>
+        string.Format(System.Globalization.CultureInfo.CurrentCulture, format, args);
+
     private string GetStatusTitle()
     {
         if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
@@ -815,23 +827,23 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations
-            ObjectChangeType.Added => $"{typeName} Added to Connector Space",
-            ObjectChangeType.Updated => $"{typeName} Updated",
+            ObjectChangeType.Added => Fmt(ActivityText.ActivityItemTitleAdded, typeName),
+            ObjectChangeType.Updated => Fmt(ActivityText.ActivityItemTitleUpdated, typeName),
             ObjectChangeType.Deleted => IsHousekeepingContext()
-                ? $"Metaverse {typeName} Deleted"
-                : IsSyncContext() ? "Source Deletion Processed" : $"{typeName} Deletion Detected",
+                ? Fmt(ActivityText.ActivityItemTitleMetaverseDeleted, typeName)
+                : IsSyncContext() ? ActivityText.ActivityItemTitleSourceDeletionProcessed : Fmt(ActivityText.ActivityItemTitleDeletionDetected, typeName),
             // Sync operations
-            ObjectChangeType.Projected => $"Projected {typeName} to the Metaverse",
-            ObjectChangeType.Joined => $"Joined {typeName} to Metaverse {mvoTypeName}",
-            ObjectChangeType.AttributeFlow => $"{typeName} Attributes Flowed to Metaverse {mvoTypeName}",
-            ObjectChangeType.Disconnected => $"Disconnected {typeName} from Metaverse",
+            ObjectChangeType.Projected => Fmt(ActivityText.ActivityItemTitleProjected, typeName),
+            ObjectChangeType.Joined => Fmt(ActivityText.ActivityItemTitleJoined, typeName, mvoTypeName),
+            ObjectChangeType.AttributeFlow => Fmt(ActivityText.ActivityItemTitleAttributeFlow, typeName, mvoTypeName),
+            ObjectChangeType.Disconnected => Fmt(ActivityText.ActivityItemTitleDisconnected, typeName),
             // Export operations
-            ObjectChangeType.Exported => $"{typeName} Exported",
-            ObjectChangeType.Deprovisioned => $"{typeName} Deprovisioned",
+            ObjectChangeType.Exported => Fmt(ActivityText.ActivityItemTitleExported, typeName),
+            ObjectChangeType.Deprovisioned => Fmt(ActivityText.ActivityItemTitleDeprovisioned, typeName),
             // Other
-            ObjectChangeType.NoChange => "No Changes",
-            ObjectChangeType.ExportScopeReview => $"{typeName} Export Review",
-            _ => "Synchronisation Complete"
+            ObjectChangeType.NoChange => ActivityText.ActivityItemTitleNoChanges,
+            ObjectChangeType.ExportScopeReview => Fmt(ActivityText.ActivityItemTitleExportReview, typeName),
+            _ => ActivityText.ActivityItemTitleSynchronisationComplete
         };
     }
 
@@ -844,7 +856,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                    ?? _activityRunProfileExecutionItem?.ObjectTypeSnapshot;
 
         if (string.IsNullOrEmpty(name))
-            return "Object";
+            return ActivityText.ActivityObjectFallback;
 
         return char.ToUpperInvariant(name[0]) + name[1..];
     }
@@ -854,7 +866,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     /// </summary>
     private string GetMetaverseObjectTypeName()
     {
-        return _metaverseObjectType?.Name ?? "Object";
+        return _metaverseObjectType?.Name ?? ActivityText.ActivityObjectFallback;
     }
 
     /// <summary>
@@ -900,30 +912,30 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     {
         // If CSO exists, show "Connected System Object"
         if (_liveRecord != null)
-            return "Connected System Object";
+            return ActivityText.ActivityFieldConnectedSystemObject;
 
         // An export scope review item records a Metaverse Object, not a CSO
         if (_activityRunProfileExecutionItem?.MetaverseObjectId.HasValue == true)
-            return "Metaverse Object";
+            return ActivityText.ActivityFieldMetaverseObject;
 
         // Housekeeping deletion items describe the deleted Metaverse Object, not a CSO
         if (IsHousekeepingContext()
             && _activityRunProfileExecutionItem?.ObjectChangeType == ObjectChangeType.Deleted
             && string.IsNullOrEmpty(_activityRunProfileExecutionItem.ExternalIdSnapshot))
-            return "Metaverse Object";
+            return ActivityText.ActivityFieldMetaverseObject;
 
         // If no CSO but has external ID snapshot
         if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem?.ExternalIdSnapshot))
         {
             // If there's an error (rejected), show "External ID (from source data)" for clarity
             if (RecordsRejection())
-                return "External ID (from source data)";
+                return ActivityText.ActivityFieldExternalIdFromSource;
 
-            return "External ID";
+            return ActivityText.ActivityFieldExternalId;
         }
 
         // Fallback
-        return "Connected System Object";
+        return ActivityText.ActivityFieldConnectedSystemObject;
     }
 
     private string GetStatusDescription()
@@ -938,13 +950,13 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             // An item recording a Metaverse Object and no Connected System Object (matching before provisioning, #2052)
             // is about the Metaverse Object.
             return _activityRunProfileExecutionItem is { ConnectedSystemObjectId: null, MetaverseObjectId: not null }
-                ? "An error occurred while synchronising the Metaverse Object."
-                : "An error occurred while synchronising the Connected System Object.";
+                ? ActivityText.ActivityItemErrorMetaverseObject
+                : ActivityText.ActivityItemErrorConnectedSystemObject;
         }
 
         var description = GetOperationStatusDescription();
         return _unresolvedReferenceTone == UnresolvedReferenceTone.Warning
-            ? $"{description} {GetUnresolvedReferenceClause()} could not be linked to Connected System Objects."
+            ? Fmt(ActivityText.ActivityItemUnresolvedAppend, description, GetUnresolvedReferenceClause())
             : description;
     }
 
@@ -956,47 +968,47 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     {
         var typeName = _liveRecord?.ObjectTypeName
                        ?? _activityRunProfileExecutionItem?.ObjectTypeSnapshot
-                       ?? "object";
+                       ?? ActivityText.ActivityObjectLowercase;
         var imported = _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
-            ObjectChangeType.Added => "was added to the Connector Space",
-            ObjectChangeType.Updated => "was updated",
-            _ => "was imported"
+            ObjectChangeType.Added => ActivityText.ActivityItemImportedAdded,
+            ObjectChangeType.Updated => ActivityText.ActivityItemImportedUpdated,
+            _ => ActivityText.ActivityItemImportedDefault
         };
 
-        return $"The {typeName} {imported}, but {GetUnresolvedReferenceClause().ToLowerInvariant()} could not be linked to Connected System Objects.";
+        return Fmt(ActivityText.ActivityItemUnresolvedSentence, typeName, imported, GetUnresolvedReferenceClause().ToLowerInvariant());
     }
 
     /// <summary>"3 of its references", or "Some of its references" for an item recorded before the count existed.</summary>
     private string GetUnresolvedReferenceClause() =>
         _activityRunProfileExecutionItem?.UnresolvedReferenceCount is { } count
-            ? $"{count:N0} of its references"
-            : "Some of its references";
+            ? Fmt(ActivityText.ActivityItemReferencesCount, count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture))
+            : ActivityText.ActivityItemSomeReferences;
 
     private string GetOperationStatusDescription()
     {
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations
-            ObjectChangeType.Added => "A new Connected System Object was imported and added to the connector space.",
-            ObjectChangeType.Updated => "The Connected System Object was updated with new attribute values.",
+            ObjectChangeType.Added => ActivityText.ActivityItemStatusAdded,
+            ObjectChangeType.Updated => ActivityText.ActivityItemStatusUpdated,
             ObjectChangeType.Deleted => IsHousekeepingContext()
-                ? "The Metaverse Object's deletion grace period expired and the housekeeping process deleted it from the metaverse."
+                ? ActivityText.ActivityItemStatusHousekeepingDeleted
                 : IsSyncContext()
-                    ? "The Connected System Object was removed from the connector space after the source system deletion was confirmed."
-                    : "The Connected System Object was detected as deleted from the source system and marked for removal.",
+                    ? ActivityText.ActivityItemStatusSyncDeleted
+                    : ActivityText.ActivityItemStatusDeletionDetected,
             // Sync operations
-            ObjectChangeType.Projected => "A new Metaverse Object was created via projection from the Connected System Object.",
-            ObjectChangeType.Joined => "The Connected System Object was joined to an existing Metaverse Object.",
-            ObjectChangeType.AttributeFlow => "Attributes were flowed between the Connected System Object and metaverse.",
-            ObjectChangeType.Disconnected => "The Connected System Object was disconnected from the metaverse. Join and metaverse deletion rules were evaluated.",
+            ObjectChangeType.Projected => ActivityText.ActivityItemStatusProjected,
+            ObjectChangeType.Joined => ActivityText.ActivityItemStatusJoined,
+            ObjectChangeType.AttributeFlow => ActivityText.ActivityItemStatusAttributeFlow,
+            ObjectChangeType.Disconnected => ActivityText.ActivityItemStatusDisconnected,
             // Export operations
-            ObjectChangeType.Exported => "The Connected System Object was exported to the target system.",
-            ObjectChangeType.Deprovisioned => "The Connected System Object was deprovisioned from the target system.",
+            ObjectChangeType.Exported => ActivityText.ActivityItemStatusExported,
+            ObjectChangeType.Deprovisioned => ActivityText.ActivityItemStatusDeprovisioned,
             // Other
-            ObjectChangeType.NoChange => "The Connected System Object was already up to date.",
-            ObjectChangeType.ExportScopeReview => "This Metaverse Object was reviewed against the export Synchronisation Rules during this synchronisation, because an export rule changed or the object was created or changed outside synchronisation. The outcomes below show what the review did: provisioned it, deprovisioned it, or delivered values changed outside synchronisation.",
-            _ => "Synchronisation completed for the Connected System Object."
+            ObjectChangeType.NoChange => ActivityText.ActivityItemStatusNoChange,
+            ObjectChangeType.ExportScopeReview => ActivityText.ActivityItemStatusExportScopeReview,
+            _ => ActivityText.ActivityItemStatusDefault
         };
     }
 
@@ -1008,23 +1020,23 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations - affect Connected System Objects
-            ObjectChangeType.Added => "Connected System Object Added",
-            ObjectChangeType.Updated => "Connected System Object Updated",
+            ObjectChangeType.Added => ActivityText.ActivityOperationTextAdded,
+            ObjectChangeType.Updated => ActivityText.ActivityOperationTextUpdated,
             ObjectChangeType.Deleted => IsHousekeepingContext()
-                ? "Metaverse Object Deleted"
-                : IsSyncContext() ? "Deletion Processed" : "Deletion Detected",
+                ? ActivityText.ActivityOperationTextMetaverseDeleted
+                : IsSyncContext() ? ActivityText.ActivityOperationTextDeletionProcessed : ActivityText.ActivityOperationTextDeletionDetected,
             // Sync operations
-            ObjectChangeType.Projected => "Projected",
-            ObjectChangeType.Joined => "Joined",
-            ObjectChangeType.AttributeFlow => "Attribute Flow",
-            ObjectChangeType.Disconnected => "Disconnected",
+            ObjectChangeType.Projected => ActivityText.ActivityOperationTextProjected,
+            ObjectChangeType.Joined => ActivityText.ActivityOperationTextJoined,
+            ObjectChangeType.AttributeFlow => ActivityText.ActivityOperationTextAttributeFlow,
+            ObjectChangeType.Disconnected => ActivityText.ActivityOperationTextDisconnected,
             // Export operations
-            ObjectChangeType.Exported => "Exported",
-            ObjectChangeType.Deprovisioned => "Deprovisioned",
+            ObjectChangeType.Exported => ActivityText.ActivityOperationTextExported,
+            ObjectChangeType.Deprovisioned => ActivityText.ActivityOperationTextDeprovisioned,
             // Other
-            ObjectChangeType.NoChange => "No Change",
-            ObjectChangeType.ExportScopeReview => "Export Review",
-            _ => _activityRunProfileExecutionItem?.ObjectChangeType.ToString()?.SplitOnCapitalLetters() ?? "Unknown"
+            ObjectChangeType.NoChange => ActivityText.ActivityOperationTextNoChange,
+            ObjectChangeType.ExportScopeReview => ActivityText.ActivityOperationTextExportReview,
+            _ => _activityRunProfileExecutionItem?.ObjectChangeType.ToString()?.SplitOnCapitalLetters() ?? ActivityText.ActivityUnknown
         };
     }
 
@@ -1073,10 +1085,10 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         {
             // Import operations - changes are to Connected System Object attributes
             ObjectChangeType.Added or ObjectChangeType.Updated or ObjectChangeType.Deleted =>
-            "The following Connected System Object attributes were modified during this import operation.",
+            ActivityText.ActivityItemAttributesModifiedImport,
 
             // Sync and export operations - changes flow to/from Metaverse Object
-            _ => "The following Metaverse Object attributes were modified during this synchronisation operation."
+            _ => ActivityText.ActivityItemAttributesModifiedSync
         };
     }
 }

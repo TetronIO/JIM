@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ActivityFollowUpStateCancelled" xml:space="preserve">
+    <value>Canceled</value>
+  </data>
+  <data name="ActivityStatusCancelled" xml:space="preserve">
+    <value>Canceled</value>
+  </data>
+  <data name="ActivityWordingFullSyncNoChange" xml:space="preserve">
+    <value>A Full Synchronization of {0} would change nothing. Every object is already in the state its Synchronization Rules describe.</value>
+  </data>
+  <data name="ActivityWordingAfterSynchronisation" xml:space="preserve">
+    <value>After the synchronization</value>
+  </data>
+  <data name="ActivityEffectProcessedInFull" xml:space="preserve">
+    <value>At the next synchronization of {0}, Delta or Full. That run processes every {1} object, not only the changed ones: {2}{3}. Other Object Types are processed as usual.</value>
+  </data>
+  <data name="ActivityEffectDurationClause" xml:space="preserve">
+    <value>, {0} at the speed of its last Full Synchronization</value>
+  </data>
+  <data name="ActivityEffectUntilThen" xml:space="preserve">
+    <value>Until then the Connected System's page lists it as awaiting synchronization, with a button to run that synchronization straight away.</value>
+  </data>
+  <data name="ActivityEffectExportReview" xml:space="preserve">
+    <value>At the next synchronization of any Connected System, which reviews every {0} Metaverse Object against the rule as it now stands.</value>
+  </data>
+  <data name="ActivityEffectFullSyncSentence" xml:space="preserve">
+    <value>Existing objects get {0} at the next Full Synchronization of {1}.</value>
+  </data>
+  <data name="ActivityClearTrackedTooltip" xml:space="preserve">
+    <value>Objects joined at the moment of the clear, so the next Full Synchronization can tell who returned.</value>
+  </data>
+  <data name="ActivityStatCsosDisconnectedIncluding" xml:space="preserve">
+    <value>Connected System Objects Disconnected, including {0} that left an import Synchronization Rule's scope</value>
+  </data>
+  <data name="ActivityTypeSynchronisationRule" xml:space="preserve">
+    <value>Synchronization Rule</value>
+  </data>
+  <data name="ActivityNoActivitiesYetMine" xml:space="preserve">
+    <value>Activities appear here as you initiate operations in JIM, such as synchronizations and configuration changes.</value>
+  </data>
+  <data name="ActivityCategorySynchronisation" xml:space="preserve">
+    <value>Synchronization</value>
+  </data>
+  <data name="ActivityMyActivityDescription" xml:space="preserve">
+    <value>View operations you have initiated, including synchronizations, configuration changes, and other actions.</value>
+  </data>
+  <data name="ActivityListDescription" xml:space="preserve">
+    <value>Monitor all activity across the system. View operations initiated by users or automated processes, including synchronizations, configuration changes, and system events.</value>
+  </data>
+  <data name="ActivityItemDeletionAlert" xml:space="preserve">
+    <value>The Connected System Object has been detected as deleted from the source system and marked for removal. When a Full Synchronization or Delta Synchronization Run Profile is executed, JIM will disconnect this object from the metaverse and evaluate the Deletion Rule for its Metaverse Object Type.</value>
+  </data>
+  <data name="ActivityItemTitleSynchronisationComplete" xml:space="preserve">
+    <value>Synchronization Complete</value>
+  </data>
+  <data name="ActivityItemErrorMetaverseObject" xml:space="preserve">
+    <value>An error occurred while synchronizing the Metaverse Object.</value>
+  </data>
+  <data name="ActivityItemErrorConnectedSystemObject" xml:space="preserve">
+    <value>An error occurred while synchronizing the Connected System Object.</value>
+  </data>
+  <data name="ActivityItemStatusExportScopeReview" xml:space="preserve">
+    <value>This Metaverse Object was reviewed against the export Synchronization Rules during this synchronization, because an export rule changed or the object was created or changed outside synchronization. The outcomes below show what the review did: provisioned it, deprovisioned it, or delivered values changed outside synchronization.</value>
+  </data>
+  <data name="ActivityItemStatusDefault" xml:space="preserve">
+    <value>Synchronization completed for the Connected System Object.</value>
+  </data>
+  <data name="ActivityItemAttributesModifiedSync" xml:space="preserve">
+    <value>The following Metaverse Object attributes were modified during this synchronization operation.</value>
+  </data>
+  <data name="ActivityMechanismSynchronisation" xml:space="preserve">
+    <value>Synchronization</value>
+  </data>
+  <data name="ActivityObjectChangesDescription" xml:space="preserve">
+    <value>Find changes to Metaverse Objects across every object: when they were made, to which type of object, and how their attributes changed. Only changes JIM recorded can be found, so none appear while Metaverse Object change tracking is turned off, and history retention removes older ones.</value>
+  </data>
+  <data name="ActivityObjectChangesNoneRecordedDetail" xml:space="preserve">
+    <value>Changes to Metaverse Objects appear here as synchronizations and administrators make them, while Metaverse Object change tracking is turned on.</value>
+  </data>
+  <data name="ActivityChangesNotAppliedTooltip" xml:space="preserve">
+    <value>This synchronization did not complete. The next one will claim these changes again.</value>
+  </data>
+  <data name="ActivityProcessedFullCovers" xml:space="preserve">
+    <value>A Full Synchronization processes every object. This one also covers the following changes, made before it started, to all {0}{1} objects:</value>
+  </data>
+  <data name="ActivityProcessedFullCovered" xml:space="preserve">
+    <value>A Full Synchronization processes every object. This one also covered the following changes, made before it started, to all {0}{1} objects:</value>
+  </data>
+  <data name="ActivityProcessedDeltaProcessing" xml:space="preserve">
+    <value>A Delta Synchronization processes changed objects only. This one is also processing all {0}{1} objects, because the following changes were made before it started:</value>
+  </data>
+  <data name="ActivityProcessedDeltaProcessed" xml:space="preserve">
+    <value>A Delta Synchronization processes changed objects only. This one also processed all {0}{1} objects, because the following changes were made before it started:</value>
+  </data>
+  <data name="ActivityApplySyncName" xml:space="preserve">
+    <value>Synchronization</value>
+  </data>
+  <data name="ActivityAppliedBySynchronisation" xml:space="preserve">
+    <value>a synchronization{0}</value>
+  </data>
+  <data name="ActivityPredictionNote" xml:space="preserve">
+    <value>What the preview predicted, and what the synchronization did. The actual count includes objects of this type that changed for other reasons since the preview.</value>
+  </data>
+  <data name="ActivityAwaitingNextSynchronisation" xml:space="preserve">
+    <value>Awaiting the next synchronization of</value>
+  </data>
+  <data name="ActivityConfigPriorityNoteBefore" xml:space="preserve">
+    <value>Attribute Priority changes are not shown here; priority is stored on the contributing Synchronization Rules. Find them on the</value>
+  </data>
+  <data name="ActivityAckGeneralEffect" xml:space="preserve">
+    <value>Saving does not apply this to existing objects. Run a Full Synchronization for the Connected Systems concerned to put it into effect.</value>
+  </data>
+  <data name="ActivityPreviewCancelled" xml:space="preserve">
+    <value>The preview was canceled, so it covers only the objects it had reached. Run it again for a complete answer.</value>
+  </data>
+</root>

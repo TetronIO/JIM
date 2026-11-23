@@ -2,7 +2,9 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using System.Globalization;
 using JIM.Models.Activities.DTOs;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -33,7 +35,7 @@ public static class ConfigurationChangePreflightConsequences
             // No per-item icon: the alert already carries one, and two side by side reads as a rendering fault.
             Items = destructive.Select(item => new ConsequenceItem
             {
-                Text = $"{LeafOf(item.Label)}: {item.Consequence}"
+                Text = string.Format(CultureInfo.CurrentCulture, ActivityText.ActivityConsequenceItem, LeafOf(item.Label), item.Consequence)
             }).ToList()
         };
     }
@@ -70,15 +72,15 @@ public static class ConfigurationChangePreflightConsequences
         var single = destructive.Count == 1;
 
         if (destructive.All(i => i.IsCollectionItem))
-            return single ? "Removing this takes objects out of scope" : "Removing these takes objects out of scope";
+            return single ? ActivityText.ActivityConsequenceRemovingThis : ActivityText.ActivityConsequenceRemovingThese;
 
         // A single save can do both, and neither of the specific headlines is true of the whole. Widen rather than
         // pick one and be wrong about the other half.
         if (destructive.Any(i => i.IsCollectionItem))
-            return "These changes decide whether objects are removed";
+            return ActivityText.ActivityConsequenceChangesDecideRemoval;
 
         return single
-            ? "This property decides whether objects are removed"
-            : "These properties decide whether objects are removed";
+            ? ActivityText.ActivityConsequencePropertyDecidesRemoval
+            : ActivityText.ActivityConsequencePropertiesDecideRemoval;
     }
 }

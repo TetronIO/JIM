@@ -9,7 +9,7 @@
    Activity that saved no such change. *@
 @if (Groups.Count > 0)
 {
-    <MudText Typo="Typo.h5" Class="mt-5">Applying this change</MudText>
+    <MudText Typo="Typo.h5" Class="mt-5">@ActivityText.ActivityApplyingThisChange</MudText>
     <MudStack Spacing="1" Class="mt-2" data-testid="jim-change-application">
         @foreach (var group in Groups)
         {
@@ -22,14 +22,14 @@
                     var appliedAt = group.AppliedAt;
                     var appliedSuffix = appliedAt is { } applied ? $", {applied.ToLocalTime().ToFriendlyDate()}" : string.Empty;
                     <span data-testid="jim-change-application-applied">
-                        Applied by
+                        @ActivityText.ActivityAppliedBy
                         @if (group.AppliedByActivityId is { } runId)
                         {
-                            <ObjectChip Kind="ObjectChipKind.Activity" Name="Synchronisation" Href="@($"/activity/{runId}")" Class="ma-0" />@appliedSuffix
+                            <ObjectChip Kind="ObjectChipKind.Activity" Name="@ActivityText.ActivityApplySyncName" Href="@($"/activity/{runId}")" Class="ma-0" />@appliedSuffix
                         }
                         else
                         {
-                            @($"a synchronisation{appliedSuffix}")
+                            @string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityAppliedBySynchronisation, appliedSuffix)
                         }
                     </span>
                     @if (group.PredictionComparison is { } comparison)
@@ -38,12 +38,12 @@
                            a number here is never a different measure from the one beside it. *@
                         <div class="mt-1 ml-4" data-testid="jim-change-application-prediction">
                             <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                What the preview predicted, and what the synchronisation did. The actual count includes objects of this type that changed for other reasons since the preview.
+                                @ActivityText.ActivityPredictionNote
                             </MudText>
                             @foreach (var line in comparison.Lines)
                             {
                                 <MudText Typo="Typo.body2" @key="line.Outcome" data-testid="jim-change-application-prediction-line">
-                                    @Helpers.GetOutcomeTypePlainName(line.Outcome): predicted @line.Predicted.ToString("N0"), actual @line.Actual.ToString("N0")
+                                    @string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPredictionLine, Helpers.GetOutcomeTypePlainName(line.Outcome), line.Predicted.ToString("N0", System.Globalization.CultureInfo.CurrentCulture), line.Actual.ToString("N0", System.Globalization.CultureInfo.CurrentCulture))
                                 </MudText>
                             }
                         </div>
@@ -52,7 +52,7 @@
                 else
                 {
                     <span data-testid="jim-change-application-awaiting">
-                        Awaiting the next synchronisation of
+                        @ActivityText.ActivityAwaitingNextSynchronisation
                         <MudLink Href="@($"/admin/connected-systems/{group.ConnectedSystemId}")">@group.ConnectedSystemName</MudLink>
                     </span>
                 }
