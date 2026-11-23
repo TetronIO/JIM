@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ActivityFollowUpStateCancelled" xml:space="preserve">
+    <value>Canceled</value>
+  </data>
+  <data name="ActivityStatusCancelled" xml:space="preserve">
+    <value>Canceled</value>
+  </data>
+  <data name="ActivityWordingFullSyncNoChange" xml:space="preserve">
+    <value>A Full Synchronization of {0} would change nothing. Every object is already in the state its Synchronization Rules describe.</value>
+  </data>
+  <data name="ActivityWordingAfterSynchronisation" xml:space="preserve">
+    <value>After the synchronization</value>
+  </data>
+  <data name="ActivityEffectProcessedInFull" xml:space="preserve">
+    <value>At the next synchronization of {0}, Delta or Full. That run processes every {1} object, not only the changed ones: {2}{3}. Other Object Types are processed as usual.</value>
+  </data>
+  <data name="ActivityEffectDurationClause" xml:space="preserve">
+    <value>, {0} at the speed of its last Full Synchronization</value>
+  </data>
+  <data name="ActivityEffectUntilThen" xml:space="preserve">
+    <value>Until then the Connected System's page lists it as awaiting synchronization, with a button to run that synchronization straight away.</value>
+  </data>
+  <data name="ActivityEffectExportReview" xml:space="preserve">
+    <value>At the next synchronization of any Connected System, which reviews every {0} Metaverse Object against the rule as it now stands.</value>
+  </data>
+  <data name="ActivityEffectFullSyncSentence" xml:space="preserve">
+    <value>Existing objects get {0} at the next Full Synchronization of {1}.</value>
+  </data>
+</root>

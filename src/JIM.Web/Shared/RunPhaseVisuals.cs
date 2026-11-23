@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Web.Resources;
 using MudBlazor;
 
 namespace JIM.Web.Shared;
@@ -92,8 +93,8 @@ public static class RunPhaseVisuals
     /// </summary>
     public static string OutcomeTooltip(ActivityPhase? phase) => phase?.Status switch
     {
-        ActivityPhaseStatus.Skipped => "Not needed for this run",
-        ActivityPhaseStatus.Failed => "The run failed at this step",
+        ActivityPhaseStatus.Skipped => ActivityText.ActivityOutcomeSkippedTooltip,
+        ActivityPhaseStatus.Failed => ActivityText.ActivityOutcomeFailedTooltip,
         _ => string.Empty
     };
 }

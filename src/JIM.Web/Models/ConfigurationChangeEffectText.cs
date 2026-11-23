@@ -1,8 +1,11 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Staging.DTOs;
+using JIM.Web.Localisation;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -23,22 +26,20 @@ public static class ConfigurationChangeEffectText
     {
         ArgumentNullException.ThrowIfNull(estimate);
 
-        return $"At the next synchronisation of {estimate.ConnectedSystemName}, Delta or Full. That run processes every " +
-               $"{estimate.ObjectTypeName} object, not only the changed ones: {Objects(estimate.ObjectCount)}{DurationClause(estimate.EstimatedDuration)}. " +
-               "Other Object Types are processed as usual.";
+        return string.Format(CultureInfo.CurrentCulture, ActivityText.ActivityEffectProcessedInFull,
+            estimate.ConnectedSystemName, estimate.ObjectTypeName, Objects(estimate.ObjectCount), DurationClause(estimate.EstimatedDuration));
     }
 
     /// <summary>
     /// What the save leaves in place until that run: where the administrator finds the change, and the way to run it.
     /// </summary>
-    public const string UntilThen =
-        "Until then the Connected System's page lists it as awaiting synchronisation, with a button to run that synchronisation straight away.";
+    public static string UntilThen => ActivityText.ActivityEffectUntilThen;
 
     /// <summary>
     /// What the save flags an export rule's Metaverse Objects for.
     /// </summary>
     public static string ExportReview(string metaverseObjectTypeName) =>
-        $"At the next synchronisation of any Connected System, which reviews every {metaverseObjectTypeName} Metaverse Object against the rule as it now stands.";
+        string.Format(CultureInfo.CurrentCulture, ActivityText.ActivityEffectExportReview, metaverseObjectTypeName);
 
     /// <summary>
     /// What is left for a Full Synchronisation, naming what and where.
@@ -48,9 +49,11 @@ public static class ConfigurationChangeEffectText
         ArgumentNullException.ThrowIfNull(effect);
 
         var what = effect.FullSynchronisationSections.Count == 0
-            ? "this"
-            : $"the change to {string.Join(", ", effect.FullSynchronisationSections)}";
-        return $"Existing objects get {what} at the next Full Synchronisation of {effect.FullSynchronisationConnectedSystemName}.";
+            ? ActivityText.ActivityEffectThisChange
+            : string.Format(CultureInfo.CurrentCulture, ActivityText.ActivityEffectChangeTo,
+                string.Join(", ", effect.FullSynchronisationSections));
+        return string.Format(CultureInfo.CurrentCulture, ActivityText.ActivityEffectFullSyncSentence,
+            what, effect.FullSynchronisationConnectedSystemName);
     }
 
     /// <summary>
@@ -63,7 +66,7 @@ public static class ConfigurationChangeEffectText
         if (estimatedDuration is not { } duration)
             return string.Empty;
 
-        return $", {Duration(duration)} at the speed of its last Full Synchronisation";
+        return string.Format(CultureInfo.CurrentCulture, ActivityText.ActivityEffectDurationClause, Duration(duration));
     }
 
     /// <summary>
@@ -73,11 +76,15 @@ public static class ConfigurationChangeEffectText
     public static string Duration(TimeSpan duration)
     {
         if (duration < TimeSpan.FromMinutes(1))
-            return "under a minute";
+            return ActivityText.ActivityEffectUnderAMinute;
 
         var minutes = (int)Math.Round(duration.TotalMinutes, MidpointRounding.AwayFromZero);
-        return minutes == 1 ? "about 1 minute" : $"about {minutes:N0} minutes";
+        return string.Format(CultureInfo.CurrentCulture,
+            PluralRules.Choose(minutes, ActivityText.ActivityEffectAboutMinutesOne, ActivityText.ActivityEffectAboutMinutesOther),
+            minutes.ToString("N0", CultureInfo.CurrentCulture));
     }
 
-    private static string Objects(int count) => count == 1 ? "1 object" : $"{count:N0} objects";
+    private static string Objects(int count) => string.Format(CultureInfo.CurrentCulture,
+        PluralRules.Choose(count, ActivityText.ActivityEffectObjectsOne, ActivityText.ActivityEffectObjectsOther),
+        count.ToString("N0", CultureInfo.CurrentCulture));
 }

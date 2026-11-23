@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -67,8 +68,8 @@ public static class FollowUpSummaryDisplay
 
     private static string Title(ActivityTargetType kind) => kind switch
     {
-        ActivityTargetType.PasswordSynchronisation => "Initial passwords",
-        ActivityTargetType.ExchangeRecipient => "Exchange changes",
+        ActivityTargetType.PasswordSynchronisation => ActivityText.ActivityFollowUpTitleInitialPassword,
+        ActivityTargetType.ExchangeRecipient => ActivityText.ActivityFollowUpTitleExchangeChanges,
         _ => kind.ToString()
     };
 
@@ -85,15 +86,15 @@ public static class FollowUpSummaryDisplay
     /// </summary>
     private static (string Label, string Modifier, bool Running) PasswordPill(string state) => state switch
     {
-        "Set" => ("Delivered", "ok", false),
-        "Queued" => ("Queued", "neutral", true),
-        "Delivering" => ("Delivering", "neutral", true),
-        "Retrying" => ("Retrying", "warn", true),
-        "Held" => ("Held", "warn", true),
-        "Parked" => ("Parked", "err", false),
-        "Expired" => ("Expired", "err", false),
-        "Cancelled" => ("Cancelled", "err", false),
-        "Carried" => ("Carried", "neutral", false),
+        "Set" => (ActivityText.ActivityFollowUpStateDelivered, "ok", false),
+        "Queued" => (ActivityText.ActivityFollowUpStateQueued, "neutral", true),
+        "Delivering" => (ActivityText.ActivityFollowUpStateDelivering, "neutral", true),
+        "Retrying" => (ActivityText.ActivityFollowUpStateRetrying, "warn", true),
+        "Held" => (ActivityText.ActivityFollowUpStateHeld, "warn", true),
+        "Parked" => (ActivityText.ActivityFollowUpStateParked, "err", false),
+        "Expired" => (ActivityText.ActivityFollowUpStateExpired, "err", false),
+        "Cancelled" => (ActivityText.ActivityFollowUpStateCancelled, "err", false),
+        "Carried" => (ActivityText.ActivityFollowUpStateCarried, "neutral", false),
         _ => (state, "neutral", false)
     };
 

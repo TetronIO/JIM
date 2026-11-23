@@ -1,0 +1,389 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ActivityOutcomeSkippedTooltip" xml:space="preserve">
+    <value>Not needed for this run</value>
+    <comment>Tooltip on a run step that was skipped</comment>
+  </data>
+  <data name="ActivityOutcomeFailedTooltip" xml:space="preserve">
+    <value>The run failed at this step</value>
+    <comment>Tooltip on a run step where the run failed</comment>
+  </data>
+  <data name="ActivityFollowUpLabel" xml:space="preserve">
+    <value>Follow-up</value>
+    <comment>Label before the follow-up counts on an Activity list row</comment>
+  </data>
+  <data name="ActivityFollowUpDescription" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>Tooltip: {0} is the follow-up's title, {1} its per-state counts</comment>
+  </data>
+  <data name="ActivityViewActivity" xml:space="preserve">
+    <value>View Activity</value>
+    <comment>Link to open an Activity</comment>
+  </data>
+  <data name="ActivityFollowUpTitleInitialPassword" xml:space="preserve">
+    <value>Initial password</value>
+    <comment>Title of an initial password follow-up</comment>
+  </data>
+  <data name="ActivityFollowUpTitleExchangeChanges" xml:space="preserve">
+    <value>Exchange changes</value>
+    <comment>Title of the Exchange recipient change follow-ups in a summary</comment>
+  </data>
+  <data name="ActivityFollowUpStateDelivered" xml:space="preserve">
+    <value>Delivered</value>
+    <comment>Follow-up state: the password reached the system. Lower-cased in a sentence like "3 remis"</comment>
+  </data>
+  <data name="ActivityFollowUpStateQueued" xml:space="preserve">
+    <value>Queued</value>
+    <comment>Follow-up state: waiting to be delivered</comment>
+  </data>
+  <data name="ActivityFollowUpStateDelivering" xml:space="preserve">
+    <value>Delivering</value>
+    <comment>Follow-up state: being delivered now</comment>
+  </data>
+  <data name="ActivityFollowUpStateRetrying" xml:space="preserve">
+    <value>Retrying</value>
+    <comment>Follow-up state: a delivery failed and will be tried again</comment>
+  </data>
+  <data name="ActivityFollowUpStateHeld" xml:space="preserve">
+    <value>Held</value>
+    <comment>Follow-up state: held back until a condition clears</comment>
+  </data>
+  <data name="ActivityFollowUpStateParked" xml:space="preserve">
+    <value>Parked</value>
+    <comment>Follow-up state: stopped, a person must act</comment>
+  </data>
+  <data name="ActivityFollowUpStateExpired" xml:space="preserve">
+    <value>Expired</value>
+    <comment>Follow-up state: no longer valid</comment>
+  </data>
+  <data name="ActivityFollowUpStateCancelled" xml:space="preserve">
+    <value>Cancelled</value>
+    <comment>Follow-up state: cancelled</comment>
+  </data>
+  <data name="ActivityFollowUpStateCarried" xml:space="preserve">
+    <value>Carried</value>
+    <comment>Follow-up state: carried by a password change already waiting for the account</comment>
+  </data>
+  <data name="ActivityStatusNotSet" xml:space="preserve">
+    <value>Not set</value>
+    <comment>Activity status: not yet set</comment>
+  </data>
+  <data name="ActivityStatusInProgress" xml:space="preserve">
+    <value>In progress</value>
+    <comment>Activity status</comment>
+  </data>
+  <data name="ActivityStatusComplete" xml:space="preserve">
+    <value>Complete</value>
+    <comment>Activity status</comment>
+  </data>
+  <data name="ActivityStatusCompleteWithWarning" xml:space="preserve">
+    <value>Complete with warning</value>
+    <comment>Activity status</comment>
+  </data>
+  <data name="ActivityStatusCompleteWithError" xml:space="preserve">
+    <value>Complete with error</value>
+    <comment>Activity status</comment>
+  </data>
+  <data name="ActivityStatusFailedWithError" xml:space="preserve">
+    <value>Failed with error</value>
+    <comment>Activity status</comment>
+  </data>
+  <data name="ActivityStatusCancelled" xml:space="preserve">
+    <value>Cancelled</value>
+    <comment>Activity status: cancelled</comment>
+  </data>
+  <data name="ActivityPreviewObjectsAffected" xml:space="preserve">
+    <value>Objects affected by this change</value>
+    <comment>Label on a save confirmation when a Configuration Change Preview found nothing to change</comment>
+  </data>
+  <data name="ActivityPreviewFromPreview" xml:space="preserve">
+    <value>from the preview</value>
+    <comment>Note beside a count on a save confirmation, saying the count comes from the preview run</comment>
+  </data>
+  <data name="ActivityVerdictSubjectOne" xml:space="preserve">
+    <value>1 object</value>
+    <comment>Subject of a preview verdict sentence: exactly one object</comment>
+  </data>
+  <data name="ActivityVerdictSubjectOther" xml:space="preserve">
+    <value>{0} objects</value>
+    <comment>Subject of a preview verdict sentence: {0} is the count, formatted for the culture</comment>
+  </data>
+  <data name="ActivityVerdictSentenceOne" xml:space="preserve">
+    <value>{0} would {1}.</value>
+    <comment>Preview verdict sentence for one object: {0} is the subject, {1} the consequence clause (for example "leave the Connected System")</comment>
+  </data>
+  <data name="ActivityVerdictSentenceOther" xml:space="preserve">
+    <value>{0} would {1}.</value>
+    <comment>Preview verdict sentence for several objects: {0} is the subject, {1} the consequence clause</comment>
+  </data>
+  <data name="ActivityVerdictLabelSentence" xml:space="preserve">
+    <value>{0}: {1}.</value>
+    <comment>Preview verdict fragment for an outcome with no sentence form: {0} is the subject, {1} the outcome label</comment>
+  </data>
+  <data name="ActivityWordingNowFrom" xml:space="preserve">
+    <value>, now from {0}</value>
+    <comment>Appended to a summary row for a takeover: {0} is the Connected System that is now the source of the value</comment>
+  </data>
+  <data name="ActivityWordingIn" xml:space="preserve">
+    <value> in {0}</value>
+    <comment>Appended to a summary row: {0} is the Connected System holding the objects</comment>
+  </data>
+  <data name="ActivityWordingThisConnectedSystem" xml:space="preserve">
+    <value>this Connected System</value>
+    <comment>Stands in for a Connected System's name where none is known; fills {0} in the Full Synchronisation sentence</comment>
+  </data>
+  <data name="ActivityWordingDeletionNoChange" xml:space="preserve">
+    <value>Deleting this system would change nothing outside it: no Metaverse Object would lose or change a value, none would become eligible for deletion, and nothing would be exported to another Connected System. Its own Connected System Objects are still deleted with it.</value>
+    <comment>Sentence on a Connected System deletion preview that found nothing to change</comment>
+  </data>
+  <data name="ActivityWordingFullSyncNoChange" xml:space="preserve">
+    <value>A Full Synchronisation of {0} would change nothing. Every object is already in the state its Synchronisation Rules describe.</value>
+    <comment>Sentence on a Full Synchronisation preview that found nothing to change; {0} is the Connected System's name or "this Connected System"</comment>
+  </data>
+  <data name="ActivityWordingNoChange" xml:space="preserve">
+    <value>This change would not change anything: no object moves through any transition as a result of it.</value>
+    <comment>Sentence on a preview that found nothing to change</comment>
+  </data>
+  <data name="ActivityWordingQueued" xml:space="preserve">
+    <value>Queued</value>
+    <comment>Column heading in a preview drill-down: the change queued for an export</comment>
+  </data>
+  <data name="ActivityWordingTargetKeeps" xml:space="preserve">
+    <value>Target keeps</value>
+    <comment>Column heading in a preview drill-down: the value the target already holds and keeps</comment>
+  </data>
+  <data name="ActivityWordingNow" xml:space="preserve">
+    <value>Now</value>
+    <comment>Column heading in a Full Synchronisation preview: the object's value now</comment>
+  </data>
+  <data name="ActivityWordingAfterSynchronisation" xml:space="preserve">
+    <value>After the synchronisation</value>
+    <comment>Column heading in a Full Synchronisation preview: the object's value after the run</comment>
+  </data>
+  <data name="ActivityWordingCurrentValue" xml:space="preserve">
+    <value>Current value</value>
+    <comment>Column heading in a preview drill-down</comment>
+  </data>
+  <data name="ActivityWordingProposedValue" xml:space="preserve">
+    <value>Proposed value</value>
+    <comment>Column heading in a preview drill-down</comment>
+  </data>
+  <data name="ActivityEffectProcessedInFull" xml:space="preserve">
+    <value>At the next synchronisation of {0}, Delta or Full. That run processes every {1} object, not only the changed ones: {2}{3}. Other Object Types are processed as usual.</value>
+    <comment>{0} is the Connected System name; {1} the Object Type name; {2} the object count phrase; {3} the duration clause (which starts with a comma, or is empty)</comment>
+  </data>
+  <data name="ActivityEffectDurationClause" xml:space="preserve">
+    <value>, {0} at the speed of its last Full Synchronisation</value>
+    <comment>Led by a comma, appended to a sentence about processing time; {0} is the duration</comment>
+  </data>
+  <data name="ActivityEffectUnderAMinute" xml:space="preserve">
+    <value>under a minute</value>
+    <comment>A duration of less than one minute</comment>
+  </data>
+  <data name="ActivityEffectAboutMinutesOne" xml:space="preserve">
+    <value>about {0} minute</value>
+    <comment>A duration of one minute, rounded; {0} is 1</comment>
+  </data>
+  <data name="ActivityEffectAboutMinutesOther" xml:space="preserve">
+    <value>about {0} minutes</value>
+    <comment>A duration of several minutes, rounded; {0} is the count</comment>
+  </data>
+  <data name="ActivityEffectUntilThen" xml:space="preserve">
+    <value>Until then the Connected System's page lists it as awaiting synchronisation, with a button to run that synchronisation straight away.</value>
+    <comment>Sentence on the save acknowledgement saying where the change waits</comment>
+  </data>
+  <data name="ActivityEffectExportReview" xml:space="preserve">
+    <value>At the next synchronisation of any Connected System, which reviews every {0} Metaverse Object against the rule as it now stands.</value>
+    <comment>{0} is the Metaverse Object Type name</comment>
+  </data>
+  <data name="ActivityEffectFullSyncSentence" xml:space="preserve">
+    <value>Existing objects get {0} at the next Full Synchronisation of {1}.</value>
+    <comment>{0} is "this change" or "the change to &lt;sections&gt;"; {1} is the Connected System name</comment>
+  </data>
+  <data name="ActivityEffectThisChange" xml:space="preserve">
+    <value>this change</value>
+    <comment>Stands in for {0} in the Full Synchronisation sentence when no section is named</comment>
+  </data>
+  <data name="ActivityEffectChangeTo" xml:space="preserve">
+    <value>the change to {0}</value>
+    <comment>Names the sections a Full Synchronisation applies; {0} is the list of sections</comment>
+  </data>
+  <data name="ActivityEffectObjectsOne" xml:space="preserve">
+    <value>1 object</value>
+    <comment>A count of exactly one object in a sentence about processing</comment>
+  </data>
+  <data name="ActivityEffectObjectsOther" xml:space="preserve">
+    <value>{0} objects</value>
+    <comment>A count of objects in a sentence about processing; {0} is the count, formatted for the culture</comment>
+  </data>
+  <data name="ActivityConsequenceRemovingThis" xml:space="preserve">
+    <value>Removing this takes objects out of scope</value>
+    <comment>Consequence of a save that removes a scope entry</comment>
+  </data>
+  <data name="ActivityConsequenceRemovingThese" xml:space="preserve">
+    <value>Removing these takes objects out of scope</value>
+    <comment>Consequence of a save that removes several scope entries</comment>
+  </data>
+  <data name="ActivityConsequenceChangesDecideRemoval" xml:space="preserve">
+    <value>These changes decide whether objects are removed</value>
+    <comment>Consequence of a save that changes several properties deciding removal</comment>
+  </data>
+  <data name="ActivityConsequencePropertyDecidesRemoval" xml:space="preserve">
+    <value>This property decides whether objects are removed</value>
+    <comment>Consequence of a save that changes one property deciding removal</comment>
+  </data>
+  <data name="ActivityConsequencePropertiesDecideRemoval" xml:space="preserve">
+    <value>These properties decide whether objects are removed</value>
+    <comment>Consequence of a save that changes several properties deciding removal</comment>
+  </data>
+  <data name="ActivityOperationClearConnectedSystemObjects" xml:space="preserve">
+    <value>Clear Connected System Objects</value>
+    <comment>Name of a Connected System clear operation on the Completed list</comment>
+  </data>
+  <data name="ActivityOperationDeleteConnectedSystem" xml:space="preserve">
+    <value>Delete Connected System</value>
+    <comment>Name of a Connected System delete operation on the Completed list</comment>
+  </data>
+  <data name="ActivityOperationDeprovisionConnectedSystem" xml:space="preserve">
+    <value>Deprovision Connected System</value>
+    <comment>Name of a Connected System deprovision operation on the Completed list</comment>
+  </data>
+  <data name="ActivityOperationOther" xml:space="preserve">
+    <value>{0} Connected System</value>
+    <comment>Name of a Connected System operation with no name of its own; {0} is the operation's internal name</comment>
+  </data>
+  <data name="ActivityOutcomeConnectedSystemObjectsRemoved" xml:space="preserve">
+    <value>Connected System Objects removed</value>
+    <comment>Outcome of a clear: how many Connected System Objects were removed</comment>
+  </data>
+  <data name="ActivityOutcomePendingExportsRemoved" xml:space="preserve">
+    <value>Pending Exports removed</value>
+    <comment>Outcome of a clear: how many Pending Exports were removed</comment>
+  </data>
+  <data name="ActivityOutcomeJoinsTracked" xml:space="preserve">
+    <value>Joins tracked for reconciliation</value>
+    <comment>Outcome of a clear: joins kept so the next Full Synchronisation can reconcile them</comment>
+  </data>
+  <data name="ActivityConsequenceItem" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>A destructive consequence line: {0} is the item's label, {1} what it does</comment>
+  </data>
+  <data name="ActivityInitiatorScheduleTooltip" xml:space="preserve">
+    <value>Schedule: {0}</value>
+    <comment>Tooltip on a Schedule who-initiated chip; {0} is the Schedule's name</comment>
+  </data>
+  <data name="ActivityInitiatorSystem" xml:space="preserve">
+    <value>System</value>
+    <comment>Name on the chip for JIM itself as the initiator</comment>
+  </data>
+  <data name="ActivityInitiatorApiKey" xml:space="preserve">
+    <value>API Key</value>
+    <comment>Name on the chip for an API key with no name recorded</comment>
+  </data>
+  <data name="ActivityInitiatorApiKeyNamed" xml:space="preserve">
+    <value>API Key: {0}</value>
+    <comment>Tooltip on an API key chip; {0} is the key's name</comment>
+  </data>
+  <data name="ActivityInitiatorAnonymous" xml:space="preserve">
+    <value>Anonymous</value>
+    <comment>Who-initiated text for an unidentified caller (a failed sign-in attempt)</comment>
+  </data>
+  <data name="ActivityInitiatorUnknown" xml:space="preserve">
+    <value>Unknown</value>
+    <comment>Name shown for an initiator whose name and id are both unknown</comment>
+  </data>
+  <data name="ActivityMetricRate" xml:space="preserve">
+    <value>Rate</value>
+    <comment>Label of the throughput figure on a running Activity</comment>
+  </data>
+  <data name="ActivityMetricRemaining" xml:space="preserve">
+    <value>Remaining</value>
+    <comment>Label of the time-remaining figure on a running Activity</comment>
+  </data>
+  <data name="ActivityMetricProcessed" xml:space="preserve">
+    <value>Processed</value>
+    <comment>Label of the processed-objects figure on a running Activity</comment>
+  </data>
+  <data name="ActivityMetricReferenceValuesProcessed" xml:space="preserve">
+    <value>Reference values processed</value>
+    <comment>Label of the processed figure when the step counts reference values rather than objects</comment>
+  </data>
+  <data name="ActivityStepScope" xml:space="preserve">
+    <value>Step {0} of {1}: {2}</value>
+    <comment>Names the step the figures measure; {0} position, {1} total steps, {2} step name</comment>
+  </data>
+  <data name="ActivityMetricPerSecond" xml:space="preserve">
+    <value>{0} /sec</value>
+    <comment>Throughput with its unit; {0} is the rate</comment>
+  </data>
+  <data name="ActivityMetricFinishingUp" xml:space="preserve">
+    <value>Finishing up</value>
+    <comment>Shown in place of the time remaining while the last objects are saved</comment>
+  </data>
+  <data name="ActivityWorkerTaskWaiting" xml:space="preserve">
+    <value>Waiting...</value>
+    <comment>Shown on a queued task</comment>
+  </data>
+  <data name="ActivityWorkerTaskWaitingPreviousStep" xml:space="preserve">
+    <value>Waiting for previous step...</value>
+    <comment>Shown on a task waiting for the step before it to finish</comment>
+  </data>
+  <data name="ActivityCaptionJoined" xml:space="preserve">
+    <value>{0} - {1}</value>
+    <comment>Joins two parts of a progress caption with a dash; {0} and {1} are the parts</comment>
+  </data>
+  <data name="ActivityFieldNotSet" xml:space="preserve">
+    <value>not set</value>
+    <comment>Field history: a scalar that had no value before or has none now</comment>
+  </data>
+  <data name="ActivityFieldSecretSet" xml:space="preserve">
+    <value>secret set</value>
+    <comment>Field history: a secret that has a value; the value itself is never shown</comment>
+  </data>
+  <data name="ActivityFieldSecretChanged" xml:space="preserve">
+    <value>secret changed; value hidden</value>
+    <comment>Field history: a secret that changed; the value is never shown</comment>
+  </data>
+  <data name="ActivityFieldRemoved" xml:space="preserve">
+    <value>removed</value>
+    <comment>Field history: a value that was removed</comment>
+  </data>
+  <data name="ActivityHistoryCreatedAtVersion" xml:space="preserve">
+    <value>This object was created at this version.</value>
+    <comment>Notice on a configuration history version where the object first existed</comment>
+  </data>
+  <data name="ActivityHistoryDeletedAtVersion" xml:space="preserve">
+    <value>This object was deleted at this version.</value>
+    <comment>Notice on a configuration history version where the object was deleted</comment>
+  </data>
+  <data name="ActivityHistoryNoDifferences" xml:space="preserve">
+    <value>No differences between these versions.</value>
+    <comment>Shown when two configuration history versions are identical</comment>
+  </data>
+  <data name="ActivityHistoryDialogTitle" xml:space="preserve">
+    <value>Change history: {0}</value>
+    <comment>Title of the change history dialog; {0} is the object's name</comment>
+  </data>
+  <data name="ActivityHistoryDefaultObjectLabel" xml:space="preserve">
+    <value>object</value>
+    <comment>Words for the kind of object in an empty history message, when the caller names none</comment>
+  </data>
+  <data name="ActivityFollowUpSummaryNote" xml:space="preserve">
+    <value>The run's own result stays as it ended. These change as the work is delivered; each export item's Follow-up says why.</value>
+    <comment>Note under the Follow-up summary panel</comment>
+  </data>
+</root>

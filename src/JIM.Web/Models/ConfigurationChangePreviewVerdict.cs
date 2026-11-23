@@ -1,9 +1,12 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Activities;
 using JIM.Models.Preview;
 using JIM.Web.Causality;
+using JIM.Web.Localisation;
+using JIM.Web.Resources;
 using MudBlazor;
 
 namespace JIM.Web.Models;
@@ -109,7 +112,9 @@ public static class ConfigurationChangePreviewVerdict
         // "objects" rather than the population's name: an impact count is aggregated across whatever the adapter
         // counted, and only the summary groups below carry a reliable object type. Naming one here would be a guess,
         // and a guess about what is being deleted is not a thing to put in the leading sentence.
-        var subject = count.ObjectCount == 1 ? "1 object" : $"{count.ObjectCount:N0} objects";
+        var subject = string.Format(CultureInfo.CurrentCulture,
+            PluralRules.Choose(count.ObjectCount, ActivityText.ActivityVerdictSubjectOne, ActivityText.ActivityVerdictSubjectOther),
+            count.ObjectCount.ToString("N0", CultureInfo.CurrentCulture));
 
         // "would" is redundant on a row label, where the panel's heading has already established that nothing has
         // happened yet, but this IS that heading-level statement, and carrying the modal is what lets one bare
@@ -118,7 +123,9 @@ public static class ConfigurationChangePreviewVerdict
         // The sentence form where the outcome has one, otherwise the label, which reads as a fragment rather
         // than as a clause but says the right thing. Every transition a preview can produce carries one.
         return display.SentenceForm is { Length: > 0 } clause
-            ? $"{subject} would {clause}."
-            : $"{subject}: {display.Label}.";
+            ? string.Format(CultureInfo.CurrentCulture,
+                PluralRules.Choose(count.ObjectCount, ActivityText.ActivityVerdictSentenceOne, ActivityText.ActivityVerdictSentenceOther),
+                subject, clause)
+            : string.Format(CultureInfo.CurrentCulture, ActivityText.ActivityVerdictLabelSentence, subject, display.Label);
     }
 }

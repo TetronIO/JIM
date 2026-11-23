@@ -8,7 +8,7 @@
 @if (Lines.Count > 0)
 {
     <span class="jim-follow-up-chips" data-testid="jim-follow-up-chips">
-        <span class="jim-follow-up-chips-label">Follow-up</span>
+        <span class="jim-follow-up-chips-label">@ActivityText.ActivityFollowUpLabel</span>
         @foreach (var line in Lines)
         {
             var settled = line.Total - line.RunningCount - line.StuckCount;
@@ -44,5 +44,6 @@
         : Icons.Material.Filled.Email;
 
     private static string Describe(FollowUpSummaryLine line, Func<FollowUpSummaryState, bool> which) =>
-        $"{line.Title}: " + string.Join(", ", line.States.Where(which).Select(s => $"{s.Count:N0} {s.Label}"));
+        string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityFollowUpDescription,
+            line.Title, string.Join(", ", line.States.Where(which).Select(s => $"{s.Count:N0} {s.Label}")));
 }

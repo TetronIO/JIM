@@ -1,0 +1,296 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ActivityOutcomeSkippedTooltip" xml:space="preserve">
+    <value>Pas nécessaire pour cette exécution</value>
+  </data>
+  <data name="ActivityOutcomeFailedTooltip" xml:space="preserve">
+    <value>L’exécution a échoué à cette étape</value>
+  </data>
+  <data name="ActivityFollowUpLabel" xml:space="preserve">
+    <value>Suivi</value>
+  </data>
+  <data name="ActivityFollowUpDescription" xml:space="preserve">
+    <value>{0} : {1}</value>
+  </data>
+  <data name="ActivityViewActivity" xml:space="preserve">
+    <value>Voir l’activité</value>
+  </data>
+  <data name="ActivityFollowUpTitleInitialPassword" xml:space="preserve">
+    <value>Mot de passe initial</value>
+  </data>
+  <data name="ActivityFollowUpTitleExchangeChanges" xml:space="preserve">
+    <value>Modifications Exchange</value>
+  </data>
+  <data name="ActivityFollowUpStateDelivered" xml:space="preserve">
+    <value>Remis</value>
+  </data>
+  <data name="ActivityFollowUpStateQueued" xml:space="preserve">
+    <value>En file d’attente</value>
+  </data>
+  <data name="ActivityFollowUpStateDelivering" xml:space="preserve">
+    <value>En cours de remise</value>
+  </data>
+  <data name="ActivityFollowUpStateRetrying" xml:space="preserve">
+    <value>Nouvelle tentative</value>
+  </data>
+  <data name="ActivityFollowUpStateHeld" xml:space="preserve">
+    <value>Suspendu</value>
+  </data>
+  <data name="ActivityFollowUpStateParked" xml:space="preserve">
+    <value>Mis en attente</value>
+  </data>
+  <data name="ActivityFollowUpStateExpired" xml:space="preserve">
+    <value>Expiré</value>
+  </data>
+  <data name="ActivityFollowUpStateCancelled" xml:space="preserve">
+    <value>Annulé</value>
+  </data>
+  <data name="ActivityFollowUpStateCarried" xml:space="preserve">
+    <value>Reporté</value>
+  </data>
+  <data name="ActivityStatusNotSet" xml:space="preserve">
+    <value>Non définie</value>
+  </data>
+  <data name="ActivityStatusInProgress" xml:space="preserve">
+    <value>En cours</value>
+  </data>
+  <data name="ActivityStatusComplete" xml:space="preserve">
+    <value>Terminée</value>
+  </data>
+  <data name="ActivityStatusCompleteWithWarning" xml:space="preserve">
+    <value>Terminée avec un avertissement</value>
+  </data>
+  <data name="ActivityStatusCompleteWithError" xml:space="preserve">
+    <value>Terminée avec une erreur</value>
+  </data>
+  <data name="ActivityStatusFailedWithError" xml:space="preserve">
+    <value>Échec avec une erreur</value>
+  </data>
+  <data name="ActivityStatusCancelled" xml:space="preserve">
+    <value>Annulée</value>
+  </data>
+  <data name="ActivityPreviewObjectsAffected" xml:space="preserve">
+    <value>Objets concernés par cette modification</value>
+  </data>
+  <data name="ActivityPreviewFromPreview" xml:space="preserve">
+    <value>d’après l’aperçu</value>
+  </data>
+  <data name="ActivityVerdictSubjectOne" xml:space="preserve">
+    <value>1 objet</value>
+  </data>
+  <data name="ActivityVerdictSubjectOther" xml:space="preserve">
+    <value>{0} objets</value>
+  </data>
+  <data name="ActivityVerdictSentenceOne" xml:space="preserve">
+    <value>{0} serait {1}.</value>
+  </data>
+  <data name="ActivityVerdictSentenceOther" xml:space="preserve">
+    <value>{0} seraient {1}.</value>
+  </data>
+  <data name="ActivityVerdictLabelSentence" xml:space="preserve">
+    <value>{0} : {1}.</value>
+  </data>
+  <data name="ActivityWordingNowFrom" xml:space="preserve">
+    <value>, désormais depuis {0}</value>
+  </data>
+  <data name="ActivityWordingIn" xml:space="preserve">
+    <value> dans {0}</value>
+  </data>
+  <data name="ActivityWordingThisConnectedSystem" xml:space="preserve">
+    <value>ce système connecté</value>
+  </data>
+  <data name="ActivityWordingDeletionNoChange" xml:space="preserve">
+    <value>La suppression de ce système ne modifierait rien en dehors de lui : aucun objet Metaverse ne perdrait ni ne modifierait de valeur, aucun ne deviendrait éligible à la suppression, et rien ne serait exporté vers un autre système connecté. Ses propres objets de systèmes connectés sont tout de même supprimés avec lui.</value>
+  </data>
+  <data name="ActivityWordingFullSyncNoChange" xml:space="preserve">
+    <value>Une synchronisation complète de {0} ne modifierait rien. Chaque objet est déjà dans l’état décrit par ses règles de synchronisation.</value>
+  </data>
+  <data name="ActivityWordingNoChange" xml:space="preserve">
+    <value>Cette modification ne changerait rien : aucun objet ne change d’état en conséquence.</value>
+  </data>
+  <data name="ActivityWordingQueued" xml:space="preserve">
+    <value>En file d’attente</value>
+  </data>
+  <data name="ActivityWordingTargetKeeps" xml:space="preserve">
+    <value>La cible conserve</value>
+  </data>
+  <data name="ActivityWordingNow" xml:space="preserve">
+    <value>Maintenant</value>
+  </data>
+  <data name="ActivityWordingAfterSynchronisation" xml:space="preserve">
+    <value>Après la synchronisation</value>
+  </data>
+  <data name="ActivityWordingCurrentValue" xml:space="preserve">
+    <value>Valeur actuelle</value>
+  </data>
+  <data name="ActivityWordingProposedValue" xml:space="preserve">
+    <value>Valeur proposée</value>
+  </data>
+  <data name="ActivityEffectProcessedInFull" xml:space="preserve">
+    <value>À la prochaine synchronisation de {0}, delta ou complète. Cette exécution traite chaque objet {1}, et pas seulement les objets modifiés : {2}{3}. Les autres types d’objets sont traités normalement.</value>
+  </data>
+  <data name="ActivityEffectDurationClause" xml:space="preserve">
+    <value>, {0} au rythme de sa dernière synchronisation complète</value>
+  </data>
+  <data name="ActivityEffectUnderAMinute" xml:space="preserve">
+    <value>moins d’une minute</value>
+  </data>
+  <data name="ActivityEffectAboutMinutesOne" xml:space="preserve">
+    <value>environ {0} minute</value>
+  </data>
+  <data name="ActivityEffectAboutMinutesOther" xml:space="preserve">
+    <value>environ {0} minutes</value>
+  </data>
+  <data name="ActivityEffectUntilThen" xml:space="preserve">
+    <value>D’ici là, la page du système connecté la liste comme en attente de synchronisation, avec un bouton pour lancer cette synchronisation immédiatement.</value>
+  </data>
+  <data name="ActivityEffectExportReview" xml:space="preserve">
+    <value>À la prochaine synchronisation de n’importe quel système connecté, qui examine chaque objet Metaverse de type {0} au regard de la règle telle qu’elle est actuellement.</value>
+  </data>
+  <data name="ActivityEffectFullSyncSentence" xml:space="preserve">
+    <value>Les objets existants reçoivent {0} lors de la prochaine synchronisation complète de {1}.</value>
+  </data>
+  <data name="ActivityEffectThisChange" xml:space="preserve">
+    <value>cette modification</value>
+  </data>
+  <data name="ActivityEffectChangeTo" xml:space="preserve">
+    <value>la modification de {0}</value>
+  </data>
+  <data name="ActivityEffectObjectsOne" xml:space="preserve">
+    <value>1 objet</value>
+  </data>
+  <data name="ActivityEffectObjectsOther" xml:space="preserve">
+    <value>{0} objets</value>
+  </data>
+  <data name="ActivityConsequenceRemovingThis" xml:space="preserve">
+    <value>Supprimer cet élément fait sortir des objets du périmètre</value>
+  </data>
+  <data name="ActivityConsequenceRemovingThese" xml:space="preserve">
+    <value>Supprimer ces éléments fait sortir des objets du périmètre</value>
+  </data>
+  <data name="ActivityConsequenceChangesDecideRemoval" xml:space="preserve">
+    <value>Ces modifications déterminent si des objets sont supprimés</value>
+  </data>
+  <data name="ActivityConsequencePropertyDecidesRemoval" xml:space="preserve">
+    <value>Cette propriété détermine si des objets sont supprimés</value>
+  </data>
+  <data name="ActivityConsequencePropertiesDecideRemoval" xml:space="preserve">
+    <value>Ces propriétés déterminent si des objets sont supprimés</value>
+  </data>
+  <data name="ActivityOperationClearConnectedSystemObjects" xml:space="preserve">
+    <value>Vider les objets de systèmes connectés</value>
+  </data>
+  <data name="ActivityOperationDeleteConnectedSystem" xml:space="preserve">
+    <value>Supprimer le système connecté</value>
+  </data>
+  <data name="ActivityOperationDeprovisionConnectedSystem" xml:space="preserve">
+    <value>Déprovisionner le système connecté</value>
+  </data>
+  <data name="ActivityOperationOther" xml:space="preserve">
+    <value>{0} système connecté</value>
+  </data>
+  <data name="ActivityOutcomeConnectedSystemObjectsRemoved" xml:space="preserve">
+    <value>Objets de systèmes connectés supprimés</value>
+  </data>
+  <data name="ActivityOutcomePendingExportsRemoved" xml:space="preserve">
+    <value>Exportations en attente supprimées</value>
+  </data>
+  <data name="ActivityOutcomeJoinsTracked" xml:space="preserve">
+    <value>Jointures suivies pour réconciliation</value>
+  </data>
+  <data name="ActivityConsequenceItem" xml:space="preserve">
+    <value>{0} : {1}</value>
+  </data>
+  <data name="ActivityInitiatorScheduleTooltip" xml:space="preserve">
+    <value>Planification : {0}</value>
+  </data>
+  <data name="ActivityInitiatorSystem" xml:space="preserve">
+    <value>Système</value>
+  </data>
+  <data name="ActivityInitiatorApiKey" xml:space="preserve">
+    <value>Clé d’API</value>
+  </data>
+  <data name="ActivityInitiatorApiKeyNamed" xml:space="preserve">
+    <value>Clé d’API : {0}</value>
+  </data>
+  <data name="ActivityInitiatorAnonymous" xml:space="preserve">
+    <value>Anonyme</value>
+  </data>
+  <data name="ActivityInitiatorUnknown" xml:space="preserve">
+    <value>Inconnu</value>
+  </data>
+  <data name="ActivityMetricRate" xml:space="preserve">
+    <value>Débit</value>
+  </data>
+  <data name="ActivityMetricRemaining" xml:space="preserve">
+    <value>Restant</value>
+  </data>
+  <data name="ActivityMetricProcessed" xml:space="preserve">
+    <value>Traités</value>
+  </data>
+  <data name="ActivityMetricReferenceValuesProcessed" xml:space="preserve">
+    <value>Valeurs de référence traitées</value>
+  </data>
+  <data name="ActivityStepScope" xml:space="preserve">
+    <value>Étape {0} sur {1} : {2}</value>
+  </data>
+  <data name="ActivityMetricPerSecond" xml:space="preserve">
+    <value>{0} /s</value>
+  </data>
+  <data name="ActivityMetricFinishingUp" xml:space="preserve">
+    <value>Finalisation en cours</value>
+  </data>
+  <data name="ActivityWorkerTaskWaiting" xml:space="preserve">
+    <value>En attente…</value>
+  </data>
+  <data name="ActivityWorkerTaskWaitingPreviousStep" xml:space="preserve">
+    <value>En attente de l’étape précédente…</value>
+  </data>
+  <data name="ActivityCaptionJoined" xml:space="preserve">
+    <value>{0} - {1}</value>
+  </data>
+  <data name="ActivityFieldNotSet" xml:space="preserve">
+    <value>non défini</value>
+  </data>
+  <data name="ActivityFieldSecretSet" xml:space="preserve">
+    <value>secret défini</value>
+  </data>
+  <data name="ActivityFieldSecretChanged" xml:space="preserve">
+    <value>secret modifié ; valeur masquée</value>
+  </data>
+  <data name="ActivityFieldRemoved" xml:space="preserve">
+    <value>supprimé</value>
+  </data>
+  <data name="ActivityHistoryCreatedAtVersion" xml:space="preserve">
+    <value>Cet objet a été créé à cette version.</value>
+  </data>
+  <data name="ActivityHistoryDeletedAtVersion" xml:space="preserve">
+    <value>Cet objet a été supprimé à cette version.</value>
+  </data>
+  <data name="ActivityHistoryNoDifferences" xml:space="preserve">
+    <value>Aucune différence entre ces versions.</value>
+  </data>
+  <data name="ActivityHistoryDialogTitle" xml:space="preserve">
+    <value>Historique des modifications : {0}</value>
+  </data>
+  <data name="ActivityHistoryDefaultObjectLabel" xml:space="preserve">
+    <value>objet</value>
+  </data>
+  <data name="ActivityFollowUpSummaryNote" xml:space="preserve">
+    <value>Le résultat propre à l’exécution reste tel qu’il s’est terminé. Ces valeurs évoluent au fil de la remise du travail ; le suivi de chaque élément d’exportation indique pourquoi.</value>
+  </data>
+</root>
