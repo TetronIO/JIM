@@ -640,6 +640,8 @@ Describe 'Invoke-JIMEntraIdConnectorChange' {
                 $script:JimCalls.Add([PSCustomObject]@{ Method = $Method; Endpoint = $Endpoint; Body = $Body })
                 if ($Method -eq 'POST') { [PSCustomObject]@{ id = 42 } }
             }
+            # Signing in to Entra ID as the application is the subject of its own tests below.
+            Mock Wait-JIMEntraIdCertificateApplied { $true }
             $script:Connection = @{
                 ApplicationId = 'app-object'; AppId = 'client-id'; ServicePrincipalId = 'app-sp'; GraphServicePrincipalId = 'graph-sp'
                 CertificateValidityDays = 365; SettingIds = @{ 'Tenant ID' = 1; 'Client ID' = 2; 'Authentication Method' = 3; 'Certificate' = 4; 'Track Source of Authority Changes' = 6 }
@@ -699,6 +701,32 @@ Describe 'Invoke-JIMEntraIdConnectorChange' {
             $put.Body.settingValues['6'].ContainsKey('stringValue') | Should -BeFalse
             $script:Connection.Certificate.Pfx | Should -BeNullOrEmpty
             $script:Connection.CertificateStored | Should -BeTrue
+        }
+    }
+
+    It 'waits for Entra ID to accept a new certificate before JIM is given it' {
+        InModuleScope JIM {
+            $script:Order = [System.Collections.Generic.List[string]]::new()
+            Mock Wait-JIMEntraIdCertificateApplied { $script:Order.Add('wait'); $true }
+            Mock Invoke-JIMApi { $script:Order.Add($Method) }
+            $script:Connection.Certificate = [PSCustomObject]@{ Pfx = (ConvertTo-SecureString 'UEZY' -AsPlainText -Force); Thumbprint = 'ABC' }
+            Invoke-JIMEntraIdConnectorChange -Connection $script:Connection -Change ([PSCustomObject]@{
+                Action = 'SetConnectedSystem'; Target = 'Microsoft Entra ID'
+                Arguments = @{ ConnectedSystemId = 42; Settings = @{ 'Tenant ID' = 'tenant' }; SetsClientId = $false; SetsCertificate = $true } })
+
+            @($script:Order) | Should -Be @('wait', 'PUT')
+        }
+    }
+
+    It 'does not wait when JIM is given no new certificate' {
+        InModuleScope JIM {
+            Mock Wait-JIMEntraIdCertificateApplied { $true }
+            Mock Invoke-JIMApi {}
+            Invoke-JIMEntraIdConnectorChange -Connection $script:Connection -Change ([PSCustomObject]@{
+                Action = 'SetConnectedSystem'; Target = 'Microsoft Entra ID'
+                Arguments = @{ ConnectedSystemId = 42; Settings = @{ 'Tenant ID' = 'tenant' }; SetsClientId = $false; SetsCertificate = $false } })
+
+            Should -Invoke Wait-JIMEntraIdCertificateApplied -Times 0
         }
     }
 
@@ -782,6 +810,136 @@ Describe 'Invoke-JIMEntraIdConnectorChange' {
 
             $patch = $script:GraphCalls | Where-Object Method -eq 'Patch' | Select-Object -First 1
             @($patch.Body.keyCredentials | ForEach-Object { $_.keyId }) | Should -Be @('other-key')
+        }
+    }
+}
+
+# Entra ID applies a new certificate unevenly: seen accepting it, then refusing every request from three to six minutes
+# after it was uploaded (#3053). Registration waits until it has been accepted on every request for a while.
+Describe 'Wait-JIMEntraIdCertificateApplied' {
+
+    BeforeEach {
+        InModuleScope JIM {
+            Mock Start-Sleep {}
+            Mock Write-Progress {}
+            $script:Connection = @{ TenantId = 'tenant'; AppId = 'client-id'; Certificate = [PSCustomObject]@{ Pfx = (ConvertTo-SecureString 'UEZY' -AsPlainText -Force) } }
+            $script:Accepted = [PSCustomObject]@{ Accepted = $true; StillApplying = $false; Reason = $null }
+            $script:Applying = [PSCustomObject]@{ Accepted = $false; StillApplying = $true; Reason = 'AADSTS700027: could not verify the assertion' }
+        }
+    }
+
+    It 'returns once every request has been accepted for the settling time' {
+        InModuleScope JIM {
+            $script:Requests = 0
+            Mock Request-JIMEntraIdCertificateToken { $script:Requests++; $script:Accepted }
+
+            Wait-JIMEntraIdCertificateApplied -Connection $script:Connection -SettleSeconds 60 -IntervalSeconds 15 -TimeoutSeconds 600 | Should -BeTrue
+
+            # Accepted at 0, 15, 30, 45 and 60 seconds.
+            $script:Requests | Should -Be 5
+        }
+    }
+
+    It 'starts the settling time again after a refusal that says the certificate is still being applied' {
+        InModuleScope JIM {
+            $script:Answers = [System.Collections.Generic.Queue[object]]::new()
+            foreach ($answer in @($script:Accepted, $script:Accepted, $script:Applying, $script:Accepted, $script:Accepted, $script:Accepted, $script:Accepted, $script:Accepted)) {
+                $script:Answers.Enqueue($answer)
+            }
+            Mock Request-JIMEntraIdCertificateToken { $script:Answers.Dequeue() }
+            Mock Write-Warning {}
+
+            Wait-JIMEntraIdCertificateApplied -Connection $script:Connection -SettleSeconds 60 -IntervalSeconds 15 -TimeoutSeconds 600 | Should -BeTrue
+
+            Should -Invoke Request-JIMEntraIdCertificateToken -Times 8 -Exactly
+            Should -Invoke Write-Warning -Times 1 -Exactly
+        }
+    }
+
+    It 'gives up with a warning, and lets registration carry on, when Entra ID is still refusing it at the timeout' {
+        InModuleScope JIM {
+            Mock Request-JIMEntraIdCertificateToken { $script:Applying }
+            Mock Write-Warning {}
+
+            Wait-JIMEntraIdCertificateApplied -Connection $script:Connection -SettleSeconds 60 -IntervalSeconds 15 -TimeoutSeconds 120 | Should -BeFalse
+
+            # Asked at 0, 15, ... and 120 seconds.
+            Should -Invoke Request-JIMEntraIdCertificateToken -Times 9 -Exactly
+            Should -Invoke Write-Warning -ParameterFilter { $Message -like '*ten minutes*' }
+        }
+    }
+
+    It 'stops waiting at a refusal that waiting will not cure, leaving JIM''s connection test to report it' {
+        InModuleScope JIM {
+            Mock Request-JIMEntraIdCertificateToken { [PSCustomObject]@{ Accepted = $false; StillApplying = $false; Reason = 'AADSTS90002: Tenant not found' } }
+
+            Wait-JIMEntraIdCertificateApplied -Connection $script:Connection -SettleSeconds 60 -IntervalSeconds 15 -TimeoutSeconds 600 | Should -BeFalse
+
+            Should -Invoke Request-JIMEntraIdCertificateToken -Times 1 -Exactly
+        }
+    }
+}
+
+Describe 'Request-JIMEntraIdCertificateToken' {
+
+    BeforeAll {
+        InModuleScope JIM {
+            $made = New-JIMEntraIdConnectorCertificate -Name 'JIM test' -ValidityDays 30
+            $script:Pfx = $made.Pfx
+            $script:PublicKey = [Convert]::FromBase64String($made.KeyCredential.key)
+        }
+    }
+
+    It 'signs in as the application with a client assertion the certificate signed' {
+        InModuleScope JIM {
+            Mock Invoke-WebRequest {
+                $script:Sent = @{ Uri = $Uri; Body = $Body }
+                [PSCustomObject]@{ StatusCode = 200; Content = '{"access_token":"t","expires_in":3599}' }
+            }
+
+            $answer = Request-JIMEntraIdCertificateToken -TenantId 'tenant' -ClientId 'client-id' -Pfx $script:Pfx
+
+            $answer.Accepted | Should -BeTrue
+            $script:Sent.Uri | Should -Be 'https://login.microsoftonline.com/tenant/oauth2/v2.0/token'
+            $script:Sent.Body.client_id | Should -Be 'client-id'
+            $script:Sent.Body.grant_type | Should -Be 'client_credentials'
+            $script:Sent.Body.client_assertion_type | Should -Be 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
+
+            $parts = $script:Sent.Body.client_assertion.Split('.')
+            $decode = { param($Text) $padded = $Text.Replace('-', '+').Replace('_', '/'); $padded += '=' * ((4 - $padded.Length % 4) % 4); [Convert]::FromBase64String($padded) }
+            $claims = [System.Text.Encoding]::UTF8.GetString((& $decode $parts[1])) | ConvertFrom-Json
+            $claims.aud | Should -Be 'https://login.microsoftonline.com/tenant/oauth2/v2.0/token'
+            $claims.iss | Should -Be 'client-id'
+            $claims.sub | Should -Be 'client-id'
+            $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new([byte[]]$script:PublicKey)
+            $rsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPublicKey($certificate)
+            $rsa.VerifyData([System.Text.Encoding]::ASCII.GetBytes("$($parts[0]).$($parts[1])"), (& $decode $parts[2]),
+                [System.Security.Cryptography.HashAlgorithmName]::SHA256, [System.Security.Cryptography.RSASignaturePadding]::Pkcs1) | Should -BeTrue
+        }
+    }
+
+    It 'reports a refusal that says the certificate is still being applied' {
+        InModuleScope JIM {
+            Mock Invoke-WebRequest {
+                [PSCustomObject]@{ StatusCode = 401; Content = '{"error":"invalid_client","error_description":"AADSTS700027: Client assertion failed signature validation.","error_codes":[700027]}' }
+            }
+
+            $answer = Request-JIMEntraIdCertificateToken -TenantId 'tenant' -ClientId 'client-id' -Pfx $script:Pfx
+
+            $answer.Accepted | Should -BeFalse
+            $answer.StillApplying | Should -BeTrue
+        }
+    }
+
+    It 'reports any other refusal as one waiting will not cure' {
+        InModuleScope JIM {
+            Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 400; Content = '{"error":"invalid_request","error_description":"AADSTS90002: Tenant not found."}' } }
+
+            $answer = Request-JIMEntraIdCertificateToken -TenantId 'tenant' -ClientId 'client-id' -Pfx $script:Pfx
+
+            $answer.Accepted | Should -BeFalse
+            $answer.StillApplying | Should -BeFalse
+            $answer.Reason | Should -BeLike '*AADSTS90002*'
         }
     }
 }

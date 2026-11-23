@@ -532,6 +532,9 @@ function Invoke-JIMEntraIdConnectorChange {
             if ($arguments.SetsCertificate) {
                 $values[[string]$settingIds['Certificate']] = @{ stringValue = [System.Net.NetworkCredential]::new('', $Connection.Certificate.Pfx).Password }
             }
+            # Entra ID applies a new certificate unevenly, accepting it and then refusing it again for minutes, so JIM is
+            # given it only once Entra ID has accepted it consistently; until then JIM keeps the credential it had.
+            if ($arguments.SetsCertificate) { $null = Wait-JIMEntraIdCertificateApplied -Connection $Connection }
             # JIM tests the connection as it saves the credential, and Entra ID can take a minute or two to honour a
             # credential and permissions granted moments ago, so a refusal that only says so is tried again.
             $body = @{ settingValues = $values; changeReason = 'Set up by Register-JIMEntraIdConnector' }
@@ -558,6 +561,152 @@ function Invoke-JIMEntraIdConnectorChange {
             $null = Invoke-JIMEntraIdGraphApi -Connection $Connection -Method Patch -Path "/applications/$($Connection.ApplicationId)" -Body @{ keyCredentials = @($keep) }
         }
         default { throw "Unknown change: $($Change.Action)" }
+    }
+}
+
+function Wait-JIMEntraIdCertificateApplied {
+    <#
+    .SYNOPSIS
+        Waits until Microsoft Entra ID has accepted the application's new certificate on every request for a settling
+        time, and says whether it did.
+
+    .DESCRIPTION
+        Entra ID applies a newly uploaded certificate unevenly: it has been seen accepting one, then refusing it on every
+        request from three to six minutes after the upload (#3053). A run that asks for a token in that window waits up to
+        ten minutes itself, but a JIM that starts working with a certificate Entra ID has settled on is better. Each check
+        signs in as the application from here, not from JIM, so it cannot prove that the Entra ID servers JIM reaches
+        have the certificate; it shortens the wait JIM's own runs may still meet. A refusal waiting will not cure ends the
+        wait at once, leaving JIM's connection test, which follows, to report it.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Reads only: it signs in and changes nothing.')]
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)][hashtable]$Connection,
+        [int]$SettleSeconds = 180,
+        [int]$IntervalSeconds = 15,
+        [int]$TimeoutSeconds = 900
+    )
+
+    # Counted in requests rather than read off the clock: the requests are what Entra ID answers.
+    $needed = [int][Math]::Ceiling($SettleSeconds / $IntervalSeconds) + 1
+    $attempts = [int][Math]::Ceiling($TimeoutSeconds / $IntervalSeconds) + 1
+    $activity = 'Waiting for Microsoft Entra ID to apply the new certificate'
+    $streak = 0
+    $warned = $false
+    try {
+        for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+            if ($attempt -gt 1) { Start-Sleep -Seconds $IntervalSeconds }
+            $answer = Request-JIMEntraIdCertificateToken -TenantId $Connection.TenantId -ClientId $Connection.AppId -Pfx $Connection.Certificate.Pfx
+            if ($answer.Accepted) {
+                $streak++
+                if ($streak -ge $needed) { return $true }
+            }
+            elseif ($answer.StillApplying) {
+                $streak = 0
+                if (-not $warned) {
+                    Write-Warning "Microsoft Entra ID is still applying the new certificate. Waiting until it accepts it on every request for $SettleSeconds seconds, for up to $([Math]::Round($TimeoutSeconds / 60)) minutes."
+                    $warned = $true
+                }
+            }
+            else {
+                Write-Verbose "Microsoft Entra ID refused the new certificate in a way waiting will not cure; JIM's connection test will report it: $($answer.Reason)"
+                return $false
+            }
+            Write-Progress -Activity $activity -Status "Accepted on $streak of the $needed requests in a row it needs" -PercentComplete ([Math]::Min(100, [int](100 * $streak / $needed)))
+        }
+    }
+    finally {
+        Write-Progress -Activity $activity -Completed
+    }
+
+    Write-Warning "Microsoft Entra ID was still refusing the new certificate at times after $([Math]::Round($TimeoutSeconds / 60)) minutes. JIM is given it now; a run that is refused it keeps asking for up to ten minutes, and if Entra ID still refuses it then, run this again with -ResetCertificate."
+    return $false
+}
+
+function Request-JIMEntraIdCertificateToken {
+    <#
+    .SYNOPSIS
+        Signs in to Microsoft Entra ID as the application with its certificate, as JIM does, and says whether Entra ID
+        accepted it, and if not, whether the refusal is one Entra ID gives while still applying a new certificate.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(Mandatory)][string]$TenantId,
+        [Parameter(Mandatory)][string]$ClientId,
+        [Parameter(Mandatory)][securestring]$Pfx
+    )
+
+    $tokenEndpoint = "https://login.microsoftonline.com/$([uri]::EscapeDataString($TenantId))/oauth2/v2.0/token"
+    $body = @{
+        client_id = $ClientId; grant_type = 'client_credentials'; scope = 'https://graph.microsoft.com/.default'
+        client_assertion_type = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
+        client_assertion = New-JIMEntraIdClientAssertion -TokenEndpoint $tokenEndpoint -ClientId $ClientId -Pfx $Pfx
+    }
+    try {
+        $response = Invoke-WebRequest -Method Post -Uri $tokenEndpoint -Body $body -ContentType 'application/x-www-form-urlencoded' -SkipHttpErrorCheck -ErrorAction Stop
+    }
+    catch [System.Net.Http.HttpRequestException] {
+        return [PSCustomObject]@{ Accepted = $false; StillApplying = $false; Reason = "Could not reach Microsoft Entra ID: $($_.Exception.Message)" }
+    }
+
+    $content = $null
+    try { $content = $response.Content | ConvertFrom-Json -ErrorAction Stop } catch [System.ArgumentException] { $content = $null }
+    if ([int]$response.StatusCode -eq 200 -and $content -and $content.PSObject.Properties['access_token']) {
+        return [PSCustomObject]@{ Accepted = $true; StillApplying = $false; Reason = $null }
+    }
+    # The description only: Entra ID's error bodies echo nothing secret, but the assertion stays out of any message.
+    $reason = if ($content -and $content.PSObject.Properties['error_description']) { ([string]$content.error_description).Split([char]10)[0].Trim() } else { "HTTP $([int]$response.StatusCode)" }
+    return [PSCustomObject]@{ Accepted = $false; StillApplying = ($reason -match 'AADSTS700027\b'); Reason = $reason }
+}
+
+function New-JIMEntraIdClientAssertion {
+    <#
+    .SYNOPSIS
+        A client assertion: a JSON Web Token signed with the certificate's private key, which proves to Entra ID that
+        the caller holds a certificate on the application. Valid for ten minutes.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Builds a value in memory; changes nothing.')]
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][string]$TokenEndpoint,
+        [Parameter(Mandatory)][string]$ClientId,
+        [Parameter(Mandatory)][securestring]$Pfx
+    )
+
+    $encode = { param([byte[]]$Bytes) [Convert]::ToBase64String($Bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_') }
+    $pfxBytes = [Convert]::FromBase64String([System.Net.NetworkCredential]::new('', $Pfx).Password)
+    try {
+        # An ephemeral key never reaches a key store; macOS cannot load one, so there the default is used.
+        $flags = if ($IsMacOS) { [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::DefaultKeySet }
+            else { [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet }
+        $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($pfxBytes, [string]$null, $flags)
+    }
+    finally {
+        [Array]::Clear($pfxBytes, 0, $pfxBytes.Length)
+    }
+    try {
+        $header = [ordered]@{ alg = 'RS256'; typ = 'JWT'; 'x5t#S256' = (& $encode ([System.Security.Cryptography.SHA256]::HashData($certificate.RawData))) } | ConvertTo-Json -Compress
+        $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        $payload = [ordered]@{
+            aud = $TokenEndpoint; iss = $ClientId; sub = $ClientId
+            jti = [Guid]::NewGuid().ToString(); nbf = $now; iat = $now; exp = $now + 600
+        } | ConvertTo-Json -Compress
+        $unsigned = "$(& $encode ([System.Text.Encoding]::UTF8.GetBytes($header))).$(& $encode ([System.Text.Encoding]::UTF8.GetBytes($payload)))"
+        $rsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($certificate)
+        try {
+            $signature = $rsa.SignData([System.Text.Encoding]::ASCII.GetBytes($unsigned), [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+                [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+        }
+        finally {
+            $rsa.Dispose()
+        }
+        return "$unsigned.$(& $encode $signature)"
+    }
+    finally {
+        $certificate.Dispose()
     }
 }
 
