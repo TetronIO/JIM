@@ -1,6 +1,6 @@
 # Microsoft Entra ID Connector Integration Scenarios
 
-- **Status:** Doing (Phase 1 complete but for the runner and AD lab wiring, which arrive with Scenario 036)
+- **Status:** Doing (Phases 1 to 3 complete; Scenario 038, hybrid, outstanding under #3029)
 - **Issue:** [#361](https://github.com/TetronIO/JIM/issues/361) (Phase 9 of the Connector's design plan)
 - **Related Issues:** [#3028](https://github.com/TetronIO/JIM/issues/3028) (import limited to Administrative Units, a possible later add-on), [#3029](https://github.com/TetronIO/JIM/issues/3029) (Scenario 038)
 - **Related Plans:** [`MICROSOFT_GRAPH_CONNECTOR_DESIGN.md`](MICROSOFT_GRAPH_CONNECTOR_DESIGN.md), whose Testing Strategy this replaces in detail
@@ -110,13 +110,13 @@ Tracked by [#3029](https://github.com/TetronIO/JIM/issues/3029), since it needs 
 - ✅ The harness helpers, `test/integration/utils/EntraIdConnectorLab-Helpers.ps1`, with Pester tests beside them.
 - The scenarios registered with the runner, and the `ad-lab.yml` step and its `jim-entra-connector` status, arrive with Scenario 036, the first thing they run.
 
-### Phase 2: Scenario 036
+### Phase 2: Scenario 036 ✅
 
-The scenario, its registration with the runner, and the `ad-lab.yml` step and status.
+The scenario, its registration with the runner, and the `ad-lab.yml` step and status. It passed end to end in the AD lab on 2026-11-23, after fixes the live runs found: a retried Create no longer duplicates an object, a refused certificate is asked about again while Entra ID applies it, a Disable resolves the references other exports still owe its account, and removing a member deleted from the tenant counts as done. `entra-connector.yml` runs both scenarios from any branch on a GitHub-hosted runner, in the approval-gated `jim-entra-tenant` environment, so a Connector change can be run live before it merges.
 
-### Phase 3: Scenario 037
+### Phase 3: Scenario 037 ✅
 
-The scenario, its registration with the runner, and the `ad-lab.yml` step, which runs Scenarios 036 and 037 one after the other (each replaces the certificate JIM holds) and reports both as `jim-entra-connector`. A tenant that refuses the Microsoft 365 group with hidden membership skips that check and says so.
+The scenario, its registration with the runner, and the `ad-lab.yml` step, which runs Scenarios 036 and 037 one after the other (each replaces the certificate JIM holds) and reports both as `jim-entra-connector`. A tenant that refuses the Microsoft 365 group with hidden membership skips that check and says so. It passed in the AD lab on its first run, on 2026-11-23, the hidden-membership group included.
 
 ### Phase 4: Scenario 038 ([#3029](https://github.com/TetronIO/JIM/issues/3029))
 
