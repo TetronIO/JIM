@@ -600,4 +600,28 @@
   <data name="DeselectedAttributeStillRead" xml:space="preserve">
     <value>Un attribut désélectionné est encore lu par : {0}. Il n’est plus importé ; ces lecteurs lisent donc des valeurs qui ne sont jamais actualisées, et aucune valeur pour les objets importés désormais.</value>
   </data>
+  <data name="CreatedBuiltInServiceSetting" xml:space="preserve">
+    <value>Paramètre de service intégré « {0} » créé</value>
+  </data>
+  <data name="CreatedBuiltInExampleDataSet" xml:space="preserve">
+    <value>Jeu de données d’exemple intégré « {0} » créé</value>
+  </data>
+  <data name="CreatedBuiltInExampleDataTemplate" xml:space="preserve">
+    <value>Modèle de données d’exemple intégré « {0} » créé</value>
+  </data>
+  <data name="CreatedBuiltInPredefinedSearch" xml:space="preserve">
+    <value>Recherche prédéfinie intégrée « {0} » créée</value>
+  </data>
+  <data name="CreatedBuiltInMetaverseObjectType" xml:space="preserve">
+    <value>Type d’objets Metaverse intégré « {0} » créé</value>
+  </data>
+  <data name="CreatedBuiltInMetaverseAttribute" xml:space="preserve">
+    <value>Attribut Metaverse intégré « {0} » créé</value>
+  </data>
+  <data name="CreatedBuiltInConnectorDefinition" xml:space="preserve">
+    <value>Définition de connecteur intégrée « {0} » créée</value>
+  </data>
+  <data name="CreatedBuiltInRole" xml:space="preserve">
+    <value>Rôle intégré « {0} » créé</value>
+  </data>
 </root>

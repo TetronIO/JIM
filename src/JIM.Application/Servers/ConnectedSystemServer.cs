@@ -329,7 +329,7 @@ public partial class ConnectedSystemServer
             TargetType = ActivityTargetType.ConnectorDefinition,
             TargetOperationType = ActivityTargetOperationType.Create,
             ParentActivityId = parentActivityId,
-            Message = $"Created built-in Connector Definition '{connectorName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CreatedBuiltInConnectorDefinition), connectorName)
         };
         await Application.Activities.CreateSystemActivityAsync(activity);
 

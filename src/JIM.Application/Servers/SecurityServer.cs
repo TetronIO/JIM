@@ -347,7 +347,7 @@ public class SecurityServer
             TargetType = ActivityTargetType.Role,
             TargetOperationType = ActivityTargetOperationType.Create,
             ParentActivityId = parentActivityId,
-            Message = $"Created built-in Role '{roleName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CreatedBuiltInRole), roleName)
         };
         await Application.Activities.CreateSystemActivityAsync(activity);
 

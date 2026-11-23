@@ -547,7 +547,7 @@ public partial class MetaverseServer
             TargetType = ActivityTargetType.MetaverseObjectType,
             TargetOperationType = ActivityTargetOperationType.Create,
             ParentActivityId = parentActivityId,
-            Message = $"Created built-in Metaverse Object Type '{objectTypeName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CreatedBuiltInMetaverseObjectType), objectTypeName)
         };
         await Application.Activities.CreateSystemActivityAsync(activity);
 
@@ -578,7 +578,7 @@ public partial class MetaverseServer
             TargetType = ActivityTargetType.MetaverseAttribute,
             TargetOperationType = ActivityTargetOperationType.Create,
             ParentActivityId = parentActivityId,
-            Message = $"Created built-in Metaverse Attribute '{attributeName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CreatedBuiltInMetaverseAttribute), attributeName)
         };
         await Application.Activities.CreateSystemActivityAsync(activity);
 

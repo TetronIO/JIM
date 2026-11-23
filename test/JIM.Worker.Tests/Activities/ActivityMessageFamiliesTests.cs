@@ -36,6 +36,25 @@ public class ActivityMessageFamiliesTests
         DisabledPartitionName = partitionName
     };
 
+    [TestCase(nameof(ActivityMessages.CreatedBuiltInServiceSetting), "Created built-in Service Setting 'Sync page size'")]
+    [TestCase(nameof(ActivityMessages.CreatedBuiltInExampleDataSet), "Created built-in Example Data Set 'Sync page size'")]
+    [TestCase(nameof(ActivityMessages.CreatedBuiltInExampleDataTemplate), "Created built-in Example Data Template 'Sync page size'")]
+    [TestCase(nameof(ActivityMessages.CreatedBuiltInPredefinedSearch), "Created built-in Predefined Search 'Sync page size'")]
+    [TestCase(nameof(ActivityMessages.CreatedBuiltInMetaverseObjectType), "Created built-in Metaverse Object Type 'Sync page size'")]
+    [TestCase(nameof(ActivityMessages.CreatedBuiltInMetaverseAttribute), "Created built-in Metaverse Attribute 'Sync page size'")]
+    [TestCase(nameof(ActivityMessages.CreatedBuiltInConnectorDefinition), "Created built-in Connector Definition 'Sync page size'")]
+    [TestCase(nameof(ActivityMessages.CreatedBuiltInRole), "Created built-in Role 'Sync page size'")]
+    public void CreatedBuiltIn_EveryKind_ReadsAsTheSeedingSummaryAlwaysHas_AndRendersInFrench(string key, string english)
+    {
+        var message = ActivityMessage.Create(key, "Sync page size");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message.ToEnglish(), Is.EqualTo(english));
+            Assert.That(InFrench(message), Does.Contain("« Sync page size »"));
+        }
+    }
+
     [Test]
     public void RunRefusal_DisabledByHand_SaysWhatTheModelDescriptionSays_AndRendersInFrench()
     {

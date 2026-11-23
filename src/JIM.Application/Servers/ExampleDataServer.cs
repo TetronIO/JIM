@@ -188,7 +188,7 @@ public class ExampleDataServer
             TargetType = ActivityTargetType.ExampleDataSet,
             TargetOperationType = ActivityTargetOperationType.Create,
             ParentActivityId = parentActivityId,
-            Message = $"Created built-in Example Data Set '{name}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CreatedBuiltInExampleDataSet), name)
         };
         await Application.Activities.CreateSystemActivityAsync(activity);
 
@@ -404,7 +404,7 @@ public class ExampleDataServer
             TargetType = ActivityTargetType.ExampleDataTemplate,
             TargetOperationType = ActivityTargetOperationType.Create,
             ParentActivityId = parentActivityId,
-            Message = $"Created built-in Example Data Template '{name}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CreatedBuiltInExampleDataTemplate), name)
         };
         await Application.Activities.CreateSystemActivityAsync(activity);
 

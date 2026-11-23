@@ -555,7 +555,7 @@ public class SearchServer
             TargetType = ActivityTargetType.PredefinedSearch,
             TargetOperationType = ActivityTargetOperationType.Create,
             ParentActivityId = parentActivityId,
-            Message = $"Created built-in Predefined Search '{searchName}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CreatedBuiltInPredefinedSearch), searchName)
         };
         await Application.Activities.CreateSystemActivityAsync(activity);
 

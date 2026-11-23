@@ -795,4 +795,36 @@
     <value>A deselected attribute is still read by: {0}. It is no longer imported, so these read values that are never refreshed, and no value for objects imported from now on.</value>
     <comment>A Warning on a Connected System schema change. {0}: what still reads the attribute (a list).</comment>
   </data>
+  <data name="CreatedBuiltInServiceSetting" xml:space="preserve">
+    <value>Created built-in Service Setting '{0}'</value>
+    <comment>The message of the System Initialisation Activity that created a built-in item; {0} is its name.</comment>
+  </data>
+  <data name="CreatedBuiltInExampleDataSet" xml:space="preserve">
+    <value>Created built-in Example Data Set '{0}'</value>
+    <comment>The message of the System Initialisation Activity that created a built-in item; {0} is its name.</comment>
+  </data>
+  <data name="CreatedBuiltInExampleDataTemplate" xml:space="preserve">
+    <value>Created built-in Example Data Template '{0}'</value>
+    <comment>The message of the System Initialisation Activity that created a built-in item; {0} is its name.</comment>
+  </data>
+  <data name="CreatedBuiltInPredefinedSearch" xml:space="preserve">
+    <value>Created built-in Predefined Search '{0}'</value>
+    <comment>The message of the System Initialisation Activity that created a built-in item; {0} is its name.</comment>
+  </data>
+  <data name="CreatedBuiltInMetaverseObjectType" xml:space="preserve">
+    <value>Created built-in Metaverse Object Type '{0}'</value>
+    <comment>The message of the System Initialisation Activity that created a built-in item; {0} is its name.</comment>
+  </data>
+  <data name="CreatedBuiltInMetaverseAttribute" xml:space="preserve">
+    <value>Created built-in Metaverse Attribute '{0}'</value>
+    <comment>The message of the System Initialisation Activity that created a built-in item; {0} is its name.</comment>
+  </data>
+  <data name="CreatedBuiltInConnectorDefinition" xml:space="preserve">
+    <value>Created built-in Connector Definition '{0}'</value>
+    <comment>The message of the System Initialisation Activity that created a built-in item; {0} is its name.</comment>
+  </data>
+  <data name="CreatedBuiltInRole" xml:space="preserve">
+    <value>Created built-in Role '{0}'</value>
+    <comment>The message of the System Initialisation Activity that created a built-in item; {0} is its name.</comment>
+  </data>
 </root>

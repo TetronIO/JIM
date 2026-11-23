@@ -501,7 +501,7 @@ namespace JIM.Application.Servers
                 TargetType = ActivityTargetType.ServiceSetting,
                 TargetOperationType = ActivityTargetOperationType.Create,
                 ParentActivityId = parentActivityId,
-                Message = $"Created built-in Service Setting '{displayName}'"
+                MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CreatedBuiltInServiceSetting), displayName)
             };
             await Application.Activities.CreateSystemActivityAsync(activity);
 
