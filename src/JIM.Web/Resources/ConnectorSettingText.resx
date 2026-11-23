@@ -942,4 +942,8 @@
     <value>Object Type</value>
     <comment>The heading above settings of which exactly one must be filled in (the File Connector's Object Type group). The English text is the group's name in the Connector.</comment>
   </data>
+  <data name="JIM_SCIM_2_0_Service_Provider_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Lets SCIM 2.0 clients provision into JIM. JIM acts as the SCIM service provider: clients write Users and Groups to JIM's own SCIM endpoint, and this Connector imports what they wrote.</value>
+    <comment>The description of the SCIM 2.0 Service Provider Connector, on the Connectors page. Users and Groups are SCIM resource types.</comment>
+  </data>
 </root>

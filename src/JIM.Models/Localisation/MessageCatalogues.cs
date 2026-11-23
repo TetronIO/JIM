@@ -14,4 +14,6 @@ public static class MessageCatalogues
 
     /// <summary>How a Scoping Criterion and a relative date read on a chip (<c>ScopingCriteriaMessages.resx</c>).</summary>
     public const string ScopingCriteria = "JIM.Models:ScopingCriteriaMessages";
+
+    public const string SyncRule = "JIM.Models:SyncRuleMessages";
 }

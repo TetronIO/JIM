@@ -16,8 +16,9 @@ namespace JIM.Web.Tests.Localisation;
 [TestFixture]
 public class ServiceSettingDisplayTests
 {
-    // Internal bookkeeping for the configuration-change hash; never shown to an administrator.
-    private static readonly string[] NotShownToAdministrators = [Constants.SettingKeys.ConfigurationChangeHashKey];
+    // Every setting is listed on the Service Settings page, the configuration-change hash key included (its value is
+    // masked, but its name and description show), so none is exempt.
+    private static readonly string[] NotShownToAdministrators = [];
 
     [Test]
     public void EveryShownServiceSetting_HasANameAndADescription()

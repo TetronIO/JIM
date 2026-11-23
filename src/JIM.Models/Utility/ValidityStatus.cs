@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Utility;
 
 /// <summary>
@@ -39,6 +41,19 @@ public class ValidityStatusItem
         Level = level;
         Message = message;
     }
+
+    /// <summary>A finding whose <see cref="Message"/> is <paramref name="detail"/>'s English (#3030).</summary>
+    public ValidityStatusItem(ValidityStatusItemLevel level, JimMessage detail)
+        : this(level, detail.ToEnglish())
+    {
+        Detail = detail;
+    }
+
+    /// <summary>
+    /// <see cref="Message"/> as a message, so the portal can show it in the viewer's language (#3030); null for a
+    /// finding built from text alone.
+    /// </summary>
+    public JimMessage? Detail { get; }
 }
 
 public enum ValidityStatusItemLevel

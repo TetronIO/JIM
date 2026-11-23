@@ -23,13 +23,27 @@ namespace JIM.Web.Tests.Localisation;
 [TestFixture]
 public class ConnectorSettingDisplayTests
 {
+    /// <summary>
+    /// Every Connector JIM ships, found rather than listed, so a new one cannot be missed (the SCIM 2.0 Service Provider
+    /// Connector was, while this was a list). The test doubles under JIM.Connectors.Mock are not shipped.
+    /// </summary>
     private static IEnumerable<IConnector> BuiltInConnectors() =>
-        [new LdapConnector(), new FileConnector(), new ScimConnector(), new SqlConnector(), new GraphConnector()];
+        typeof(LdapConnector).Assembly.GetTypes()
+            .Where(type => typeof(IConnector).IsAssignableFrom(type) && type is { IsClass: true, IsAbstract: false }
+                           && type.Namespace?.StartsWith("JIM.Connectors.Mock", StringComparison.Ordinal) != true
+                           && type.GetConstructor(Type.EmptyTypes) != null)
+            .Select(type => (IConnector)Activator.CreateInstance(type)!)
+            .ToList();
+
+    [Test]
+    public void BuiltInConnectors_FindsEveryShippedConnector() =>
+        Assert.That(BuiltInConnectors().Select(connector => connector.GetType()),
+            Is.SupersetOf(new[] { typeof(LdapConnector), typeof(FileConnector), typeof(ScimConnector), typeof(SqlConnector), typeof(GraphConnector) }));
 
     private static string? Neutral(string key) => ConnectorSettingText.ResourceManager.GetString(key, CultureInfo.InvariantCulture);
 
     private static IEnumerable<(string Definition, ConnectorSetting Setting)> AllSettings() =>
-        BuiltInConnectors().SelectMany(connector => ((IConnectorSettings)connector).GetSettings().Select(setting => (connector.Name, setting)));
+        BuiltInConnectors().OfType<IConnectorSettings>().SelectMany(settings => settings.GetSettings().Select(setting => (((IConnector)settings).Name, setting)));
 
     [Test]
     public void EveryBuiltInConnectorSetting_HasALabel_AMatchingDescription_AndEveryChoice()

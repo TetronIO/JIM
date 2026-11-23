@@ -194,4 +194,10 @@
   <data name="Instance_Id_Description" xml:space="preserve">
     <value>Identifiant stable et immuable, généré une seule fois lors de la création de cette instance de JIM. Utilisé par les outils, les journaux et la télémétrie pour identifier cette instance. Ne peut pas être modifié.</value>
   </data>
+  <data name="Security_ConfigurationChangeHashKey" xml:space="preserve">
+    <value>Clé de hachage des modifications de configuration</value>
+  </data>
+  <data name="Security_ConfigurationChangeHashKey_Description" xml:space="preserve">
+    <value>Clé conservée par le serveur, utilisée pour détecter les modifications des valeurs de configuration secrètes dans l’historique des modifications sans stocker ces valeurs. Générée automatiquement ; jamais affichée ni modifiée.</value>
+  </data>
 </root>

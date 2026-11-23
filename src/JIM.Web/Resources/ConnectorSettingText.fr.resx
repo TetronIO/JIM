@@ -710,4 +710,7 @@
   <data name="JIM_File_Connector_Group_Object_Type" xml:space="preserve">
     <value>Type d’objet</value>
   </data>
+  <data name="JIM_SCIM_2_0_Service_Provider_Connector_ConnectorDescription" xml:space="preserve">
+    <value>Permet aux clients SCIM 2.0 de provisionner dans JIM. JIM joue le rôle de fournisseur de services SCIM : les clients écrivent des utilisateurs et des groupes sur le point de terminaison SCIM de JIM, et ce connecteur importe ce qu’ils ont écrit.</value>
+  </data>
 </root>

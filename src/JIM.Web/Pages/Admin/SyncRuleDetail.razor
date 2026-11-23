@@ -155,7 +155,7 @@ else if (_syncRule != null)
                     <div class="d-flex align-center mb-2">
                         <MudIcon Class="mr-2" Color="@(item.Level == ValidityStatusItemLevel.Warning ? Color.Warning : Color.Error)"
                             Icon="@(item.Level == ValidityStatusItemLevel.Warning ? @Icons.Material.Filled.Warning : @Icons.Material.Filled.Error)" />
-                        <MudText>@item.Message</MudText>
+                        <MudText>@MessageDisplay.Show(item.Detail, item.Message)</MudText>
                     </div>
                 }
             </MudAlert>

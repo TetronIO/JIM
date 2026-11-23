@@ -254,4 +254,12 @@
     <value>A stable, immutable identifier generated once when this JIM instance was created. Used by tooling, logs, and telemetry to identify this instance. Cannot be changed.</value>
     <comment>Service setting description (Instance.Id).</comment>
   </data>
+  <data name="Security_ConfigurationChangeHashKey" xml:space="preserve">
+    <value>Configuration change hash key</value>
+    <comment>A Service Setting name.</comment>
+  </data>
+  <data name="Security_ConfigurationChangeHashKey_Description" xml:space="preserve">
+    <value>Server-held key used to detect changes to secret configuration values in change history without storing the values. Generated automatically; never displayed or edited.</value>
+    <comment>The Service Setting description.</comment>
+  </data>
 </root>
