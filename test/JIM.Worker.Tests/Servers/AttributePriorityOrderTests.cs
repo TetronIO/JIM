@@ -403,6 +403,40 @@ public class AttributePriorityOrderTests
         _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(It.IsAny<IReadOnlyCollection<SyncRuleMapping>>()), Times.Never);
     }
 
+    /// <summary>An Accumulate attribute (#3059) has no winner, so its contributors have no order to set.</summary>
+    private static SyncRuleMapping[] AccumulateContributors()
+    {
+        var m10 = BuildMapping(10, 1, false);
+        var m20 = BuildMapping(20, 2, false);
+        m10.TargetMetaverseAttribute!.ContributionMode = AttributeContributionMode.Accumulate;
+        m20.TargetMetaverseAttribute = m10.TargetMetaverseAttribute;
+        return [m10, m20];
+    }
+
+    [Test]
+    public void SetAttributePriorityOrderAsync_AccumulateAttribute_ThrowsNamingTheModeAndDoesNotPersist()
+    {
+        SetupContributors(AccumulateContributors());
+
+        var ex = Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _jim.ConnectedSystems.SetAttributePriorityOrderAsync(ObjectTypeId, AttributeId, [(20, false), (10, false)], _user));
+
+        Assert.That(ex!.Message, Does.Contain("Accumulate"));
+        _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(It.IsAny<IReadOnlyCollection<SyncRuleMapping>>()), Times.Never);
+    }
+
+    [Test]
+    public void MoveAttributePriorityAsync_AccumulateAttribute_ThrowsNamingTheModeAndDoesNotPersist()
+    {
+        SetupContributors(AccumulateContributors());
+
+        var ex = Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _jim.ConnectedSystems.MoveAttributePriorityAsync(ObjectTypeId, AttributeId, mappingId: 20, targetPosition: 1, nullIsValue: null, _user));
+
+        Assert.That(ex!.Message, Does.Contain("Accumulate"));
+        _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(It.IsAny<IReadOnlyCollection<SyncRuleMapping>>()), Times.Never);
+    }
+
     [Test]
     public void MoveAttributePriorityAsync_UnknownMapping_ThrowsAndDoesNotPersist()
     {

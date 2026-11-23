@@ -414,8 +414,10 @@ public partial class SyncEngine
         if (candidates.Count == 0)
             return [];
 
+        // Only values the departure will withdraw count: an Accumulate value stays (#3059).
         var valueCountsByRule = mvo.AttributeValues
-            .Where(av => av.ContributedBySystemId == cso.ConnectedSystemId && av.ContributedBySyncRuleId.HasValue)
+            .Where(av => av.ContributedBySystemId == cso.ConnectedSystemId && av.ContributedBySyncRuleId.HasValue &&
+                         ContributedValueRecall.IsRecallable(av))
             .GroupBy(av => av.ContributedBySyncRuleId!.Value)
             .ToDictionary(group => group.Key, group => group.Count());
 
@@ -452,7 +454,8 @@ public partial class SyncEngine
         var withdrawn = mvo.AttributeValues
             .Where(av => av.ContributedBySystemId == cso.ConnectedSystemId &&
                          av.ContributedBySyncRuleId is int ruleId && departedSyncRuleIds.Contains(ruleId) &&
-                         !mvo.PendingAttributeValueRemovals.Contains(av))
+                         !mvo.PendingAttributeValueRemovals.Contains(av) &&
+                         ContributedValueRecall.IsRecallable(av))
             .ToList();
         if (withdrawn.Count == 0)
             return withdrawn;
@@ -522,6 +525,7 @@ public partial class SyncEngine
             .Where(av => av.ContributedBySystemId == cso.ConnectedSystemId &&
                          av.ContributedBySyncRuleId is int contributingRuleId &&
                          !mvo.PendingAttributeValueRemovals.Contains(av) &&
+                         ContributedValueRecall.IsRecallable(av) &&
                          priorityContext.GetContributor(objectTypeId, av.AttributeId, contributingRuleId) == null &&
                          !priorityContext.HasDormantContributor(objectTypeId, av.AttributeId, contributingRuleId))
             .ToList();

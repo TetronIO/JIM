@@ -166,6 +166,34 @@ public class MetaverseControllerAttributePriorityTests
         Assert.That(dto!.AwaitingSynchronisation, Is.Empty, "a read records nothing");
     }
 
+    [Test]
+    public async Task GetAttributePriorityOrderAsync_ReportsTheAttributesContributionModeAsync()
+    {
+        SetupTwoContributors();
+
+        var result = await _controller.GetAttributePriorityOrderAsync(MetaverseAttributeId, MetaverseObjectTypeId);
+
+        var dto = (result as OkObjectResult)?.Value as AttributePriorityOrderDto;
+        Assert.That(dto!.ContributionMode, Is.EqualTo(AttributeContributionMode.Priority));
+    }
+
+    [Test]
+    public async Task GetAttributePriorityOrderAsync_AccumulateAttribute_ReportsAccumulateAsync()
+    {
+        SetupTwoContributors();
+        _mv.Setup(r => r.GetMetaverseAttributeAsync(MetaverseAttributeId, It.IsAny<bool>()))
+            .ReturnsAsync(new MetaverseAttribute
+            {
+                Id = MetaverseAttributeId, Name = "department", Type = AttributeDataType.Text,
+                AttributePlurality = AttributePlurality.MultiValued, ContributionMode = AttributeContributionMode.Accumulate
+            });
+
+        var result = await _controller.GetAttributePriorityOrderAsync(MetaverseAttributeId, MetaverseObjectTypeId);
+
+        var dto = (result as OkObjectResult)?.Value as AttributePriorityOrderDto;
+        Assert.That(dto!.ContributionMode, Is.EqualTo(AttributeContributionMode.Accumulate));
+    }
+
     // Two import rules, on different Object Types of different Connected Systems, contribute to the attribute: HR's
     // rule first, then the directory's. Swapping them changes which wins for the objects of both types.
     private void SetupTwoContributors()

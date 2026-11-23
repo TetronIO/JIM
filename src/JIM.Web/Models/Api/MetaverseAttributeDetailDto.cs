@@ -46,6 +46,13 @@ public class MetaverseAttributeDetailDto
     public AttributeRenderingHint RenderingHint { get; set; }
 
     /// <summary>
+    /// How the values of several import Synchronisation Rules are combined: <c>Priority</c> (the highest-priority
+    /// contributor supplies the values) or <c>Accumulate</c> (every contributor adds values, and synchronisation never
+    /// removes one).
+    /// </summary>
+    public AttributeContributionMode ContributionMode { get; set; }
+
+    /// <summary>
     /// The Object Types the attribute is bound to.
     /// </summary>
     public List<ObjectTypeReferenceDto> ObjectTypes { get; set; } = new();
@@ -70,6 +77,7 @@ public class MetaverseAttributeDetailDto
             AttributePlurality = entity.AttributePlurality,
             BuiltIn = entity.BuiltIn,
             RenderingHint = entity.RenderingHint,
+            ContributionMode = entity.ContributionMode,
             ObjectTypes = entity.MetaverseObjectTypes?
                 .Select(ot => new ObjectTypeReferenceDto { Id = ot.Id, Name = ot.Name })
                 .ToList() ?? new(),

@@ -229,8 +229,9 @@ public partial class ConnectedSystemServer
             {
                 // Select this object's recalled values by intact provenance. An empty set means the
                 // provenance moved since the id query ran (a concurrent re-election); nothing to do.
+                // An Accumulate attribute's values stay, keeping their recorded Connected System (#3059).
                 var recalledValues = mvo.AttributeValues
-                    .Where(av => av.ContributedBySyncRuleId == syncRuleId)
+                    .Where(av => av.ContributedBySyncRuleId == syncRuleId && ContributedValueRecall.IsRecallable(av))
                     .ToList();
                 if (recalledValues.Count == 0)
                     continue;

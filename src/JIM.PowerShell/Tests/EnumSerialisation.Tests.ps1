@@ -231,6 +231,30 @@ Describe 'Request enum serialisation (string names, not numeric ordinals)' {
 
     Context 'New-JIMMetaverseAttribute' {
 
+        It 'Sends contributionMode as the string enum name' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                New-JIMMetaverseAttribute -Name 'Account Audit Log' -Type Text -AttributePlurality MultiValued -ContributionMode Accumulate -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -ParameterFilter {
+                    $Method -eq 'POST' -and $Body.contributionMode -is [string] -and $Body.contributionMode -eq 'Accumulate'
+                }
+            }
+        }
+
+        It 'Leaves contributionMode out of the request when -ContributionMode is not given, so JIM applies Priority' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                New-JIMMetaverseAttribute -Name 'Test' -Type Text -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -ParameterFilter { $Method -eq 'POST' -and -not $Body.ContainsKey('contributionMode') }
+            }
+        }
+
         It 'Sends attributePlurality as the string enum name' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
@@ -287,6 +311,31 @@ Describe 'Request enum serialisation (string names, not numeric ordinals)' {
                     $Body.type -is [string] -and $Body.type -eq 'Number' -and
                     $Body.attributePlurality -is [string] -and $Body.attributePlurality -eq 'MultiValued'
                 }
+            }
+        }
+
+        It 'Sends contributionMode as the string enum name' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Existing'; type = 'Text'; attributePlurality = 'MultiValued' } }
+
+                Set-JIMMetaverseAttribute -Id 1 -ContributionMode Accumulate -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -notlike '*/schema' -and
+                    $Body.contributionMode -is [string] -and $Body.contributionMode -eq 'Accumulate'
+                }
+            }
+        }
+
+        It 'Leaves contributionMode out of the request when -ContributionMode is not given' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Existing'; type = 'Text'; attributePlurality = 'MultiValued' } }
+
+                Set-JIMMetaverseAttribute -Id 1 -RenderingHint List -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -ParameterFilter { $Method -eq 'PATCH' -and -not $Body.ContainsKey('contributionMode') }
             }
         }
 

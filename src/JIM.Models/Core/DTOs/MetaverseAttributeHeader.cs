@@ -39,6 +39,13 @@ public class MetaverseAttributeHeader
     public bool BuiltIn { get; set; }
 
     /// <summary>
+    /// How the values of several import Synchronisation Rules are combined: <c>Priority</c> (the highest-priority
+    /// contributor supplies the values) or <c>Accumulate</c> (every contributor adds values, and synchronisation never
+    /// removes one).
+    /// </summary>
+    public AttributeContributionMode ContributionMode { get; set; }
+
+    /// <summary>
     /// The Object Types the attribute is bound to, each as a Key (the Object Type's ID) and a Value (its name).
     /// </summary>
     public IEnumerable<KeyValuePair<int, string>>? MetaverseObjectTypes { get; set; }
@@ -56,6 +63,7 @@ public class MetaverseAttributeHeader
             Type = entity.Type,
             AttributePlurality = entity.AttributePlurality,
             BuiltIn = entity.BuiltIn,
+            ContributionMode = entity.ContributionMode,
             MetaverseObjectTypes = entity.MetaverseObjectTypes?
                 .Select(ot => new KeyValuePair<int, string>(ot.Id, ot.Name))
                 .ToList()

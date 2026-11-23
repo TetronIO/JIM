@@ -275,6 +275,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             BuiltIn = a.BuiltIn,
             Type = a.Type,
             AttributePlurality = a.AttributePlurality,
+            ContributionMode = a.ContributionMode,
             MetaverseObjectTypes = a.MetaverseObjectTypes.Select(t => new KeyValuePair<int, string>(t.Id, t.Name))
         }).ToListAsync();
     }
@@ -454,6 +455,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             BuiltIn = a.BuiltIn,
             Type = a.Type,
             AttributePlurality = a.AttributePlurality,
+            ContributionMode = a.ContributionMode,
             MetaverseObjectTypes = a.MetaverseObjectTypes.Select(t => new KeyValuePair<int, string>(t.Id, t.Name))
         });
     }
@@ -4597,8 +4599,10 @@ public partial class MetaverseRepository : IMetaverseRepository
     /// <inheritdoc />
     public async Task<ContributedValuesSummary> GetContributedValuesSummaryAsync(int syncRuleId, int? metaverseAttributeId = null)
     {
+        // An Accumulate attribute's values are never recalled, so they are no part of a recall's impact (#3059).
         var query = Repository.Database.MetaverseObjectAttributeValues
-            .Where(av => av.ContributedBySyncRuleId == syncRuleId);
+            .Where(av => av.ContributedBySyncRuleId == syncRuleId &&
+                         av.Attribute.ContributionMode != AttributeContributionMode.Accumulate);
 
         if (metaverseAttributeId.HasValue)
         {
@@ -4633,8 +4637,10 @@ public partial class MetaverseRepository : IMetaverseRepository
         // Select by the rule-provenance join, not the denormalised ContributedBySystemId: severed values
         // (rule link cleared, system record retained, #1537) are permanently exempt from recall and must
         // not be stated as deprovisioning impact.
+        // Accumulate values are kept by every recall, so they are not deprovisioning impact either (#3059).
         var query = Repository.Database.MetaverseObjectAttributeValues
             .Where(av => av.ContributedBySyncRuleId != null &&
+                         av.Attribute.ContributionMode != AttributeContributionMode.Accumulate &&
                          Repository.Database.SyncRules
                              .Where(sr => sr.ConnectedSystemId == connectedSystemId)
                              .Select(sr => sr.Id)
@@ -4654,8 +4660,10 @@ public partial class MetaverseRepository : IMetaverseRepository
     /// <inheritdoc />
     public async Task<List<Guid>> GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(int syncRuleId)
     {
+        // An object holding only Accumulate values from the rule has nothing to recall (#3059).
         return await Repository.Database.MetaverseObjectAttributeValues
-            .Where(av => av.ContributedBySyncRuleId == syncRuleId)
+            .Where(av => av.ContributedBySyncRuleId == syncRuleId &&
+                         av.Attribute.ContributionMode != AttributeContributionMode.Accumulate)
             .Select(av => av.MetaverseObject.Id)
             .Distinct()
             .ToListAsync();
@@ -4669,7 +4677,8 @@ public partial class MetaverseRepository : IMetaverseRepository
         // translates the negated Any() to a parameterised NOT EXISTS; the in-memory test provider cannot
         // honour this faithfully (no real foreign keys), so this method needs RequiresPostgres coverage.
         return await Repository.Database.MetaverseObjectAttributeValues
-            .Where(av => av.ContributedBySyncRuleId == syncRuleId)
+            .Where(av => av.ContributedBySyncRuleId == syncRuleId &&
+                         av.Attribute.ContributionMode != AttributeContributionMode.Accumulate)
             .Where(av => !Repository.Database.ConnectedSystemObjects
                 .Any(cso => cso.MetaverseObjectId == av.MetaverseObject.Id && cso.ConnectedSystemId == connectedSystemId))
             .Select(av => av.MetaverseObject.Id)

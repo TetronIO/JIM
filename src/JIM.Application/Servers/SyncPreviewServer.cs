@@ -2207,8 +2207,9 @@ public class SyncPreviewServer
 
         if (csoType is { RemoveContributedAttributesOnObsoletion: true } && !skipRecallForImmediateDeletion && workingMvo.Type != null)
         {
+            // As the real disconnect: an Accumulate attribute's values stay (#3059).
             var contributedAttributes = workingMvo.AttributeValues
-                .Where(av => av.ContributedBySystemId == context.ConnectedSystemId)
+                .Where(av => av.ContributedBySystemId == context.ConnectedSystemId && ContributedValueRecall.IsRecallable(av))
                 .ToList();
             foreach (var attributeValue in contributedAttributes)
                 workingMvo.PendingAttributeValueRemovals.Add(attributeValue);

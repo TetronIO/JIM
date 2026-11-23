@@ -2315,16 +2315,23 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<Guid>> GetMetaverseObjectIdsWithValuesContributedBySyncRuleAsync(int syncRuleId)
     {
         var result = _mvos.Values
-            .Where(mvo => mvo.AttributeValues.Any(av => av.ContributedBySyncRuleId == syncRuleId))
+            .Where(mvo => mvo.AttributeValues.Any(av => av.ContributedBySyncRuleId == syncRuleId && IsRecallable(av)))
             .Select(mvo => mvo.Id)
             .ToList();
         return Task.FromResult(result);
     }
 
+    /// <summary>
+    /// Mirrors the PostgreSQL selectors' exclusion of Accumulate attributes (#3059); a value loaded without its attribute
+    /// is treated as recallable, as the in-memory store has no attribute table to join to.
+    /// </summary>
+    private static bool IsRecallable(MetaverseObjectAttributeValue av) =>
+        av.Attribute?.ContributionMode != AttributeContributionMode.Accumulate;
+
     public virtual Task<List<Guid>> GetMetaverseObjectIdsWithStrandedValuesContributedBySyncRuleAsync(int syncRuleId, int connectedSystemId)
     {
         var result = _mvos.Values
-            .Where(mvo => mvo.AttributeValues.Any(av => av.ContributedBySyncRuleId == syncRuleId))
+            .Where(mvo => mvo.AttributeValues.Any(av => av.ContributedBySyncRuleId == syncRuleId && IsRecallable(av)))
             .Where(mvo => !_csos.Values.Any(cso => cso.MetaverseObjectId == mvo.Id && cso.ConnectedSystemId == connectedSystemId))
             .Select(mvo => mvo.Id)
             .ToList();
