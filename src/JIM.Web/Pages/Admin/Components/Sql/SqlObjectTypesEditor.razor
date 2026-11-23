@@ -1,3 +1,4 @@
+@using System.Globalization
 @using System.Net
 @using JIM.Connectors.Sql
 @using JIM.Models.Staging
@@ -19,15 +20,15 @@
             <MudText Typo="Typo.body2" Class="mud-text-secondary">
                 @if (_jsonView)
                 {
-                    <text>The document REST and PowerShell send as this setting's value.</text>
+                    <text>@SqlText.DocumentSummary</text>
                 }
                 else if (_model is { ObjectTypes.Count: > 0 })
                 {
-                    @(_model.ObjectTypes.Count == 1 ? "1 Object Type. Select it to change it." : $"{_model.ObjectTypes.Count} Object Types. Select one to change it.")
+                    @string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(_model.ObjectTypes.Count, SqlText.ObjectTypesSummaryOne, SqlText.ObjectTypesSummaryOther), _model.ObjectTypes.Count)
                 }
                 else
                 {
-                    <text>Which tables and views JIM reads objects from, and what identifies them.</text>
+                    <text>@SqlText.ObjectTypesIntro</text>
                 }
             </MudText>
         </div>
@@ -35,22 +36,22 @@
         @if (_jsonView)
         {
             <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="CopyAsync"
-                       Disabled="@string.IsNullOrEmpty(SettingValue.StringValue)" data-testid="jim-sql-json-copy">Copy</MudButton>
+                       Disabled="@string.IsNullOrEmpty(SettingValue.StringValue)" data-testid="jim-sql-json-copy">@CommonText.Copy</MudButton>
         }
         @* The cards cannot show a document that cannot be read; the problems above the text say what to fix. *@
         <MudButton Variant="Variant.Text" StartIcon="@(_jsonView ? Icons.Material.Filled.ViewAgenda : Icons.Material.Filled.DataObject)"
                    OnClick="ToggleJsonViewAsync" Disabled="@(_jsonView && !CardsCanShowTheDocument)" data-testid="jim-sql-object-types-json-toggle">
-            @(_jsonView ? "View as cards" : "View as JSON")
+            @(_jsonView ? SqlText.ViewAsCards : SqlText.ViewAsJson)
         </MudButton>
         @if (_jsonView && string.IsNullOrWhiteSpace(SettingValue.StringValue) && !string.IsNullOrEmpty(SettingValue.Setting.Example))
         {
             <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.PostAdd" OnClick="InsertExampleAsync"
-                       data-testid="jim-sql-json-insert-example">Insert Example</MudButton>
+                       data-testid="jim-sql-json-insert-example">@SqlText.InsertExample</MudButton>
         }
         @if (!_jsonView)
         {
             <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" OnClick="AddObjectTypeAsync"
-                       data-testid="jim-sql-object-types-add">Add Object Type</MudButton>
+                       data-testid="jim-sql-object-types-add">@SqlText.AddObjectType</MudButton>
         }
     </div>
 
@@ -65,7 +66,7 @@
         {
             <div class="d-flex align-center gap-2 mt-4" data-testid="jim-sql-catalogue-loading">
                 <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">Reading the database's tables and views...</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@SqlText.ReadingCatalogue</MudText>
             </div>
         }
         else if (_catalogueFailure != null)
@@ -75,12 +76,12 @@
             <MudAlert Severity="Severity.Warning" Dense="true" Class="jim-sql-inline-alert mt-4" data-testid="jim-sql-catalogue-unavailable">
                 <div class="jim-sql-inline-alert-body">
                     <div class="jim-sql-inline-alert-text">
-                        <strong>JIM could not read the database's tables and views, so names are typed rather than chosen.</strong>
+                        <strong>@SqlText.CatalogueUnavailable</strong>
                         <div class="mt-1">@_catalogueFailure</div>
                     </div>
                     <span class="jim-sql-inline-alert-actions">
                         <AlertButton Severity="Severity.Warning" Size="Size.Small" OnClick="RetryCatalogueAsync"
-                                     data-testid="jim-sql-catalogue-retry">Retry</AlertButton>
+                                     data-testid="jim-sql-catalogue-retry">@CommonText.Retry</AlertButton>
                     </span>
                 </div>
             </MudAlert>
@@ -386,8 +387,8 @@
         // A card with nothing on it loses nothing, so it goes without asking: typically one just added by mistake.
         if (!SqlObjectTypesEditorModel.IsBlank(objectType))
         {
-            var confirmed = await DialogService.ShowMessageBoxAsync("Remove Object Type?", RemovalMessage(objectType.Name, _model.ReferencesTo(index)),
-                yesText: "Remove", cancelText: "Cancel");
+            var confirmed = await DialogService.ShowMessageBoxAsync(SqlText.RemoveObjectTypeTitle, RemovalMessage(objectType.Name, _model.ReferencesTo(index)),
+                yesText: CommonText.Remove, cancelText: CommonText.Cancel);
             if (confirmed != true)
                 return;
         }
@@ -403,15 +404,20 @@
     /// </summary>
     private static MarkupString RemovalMessage(string? name, IReadOnlyList<SqlObjectTypeReference> references)
     {
-        static string Code(string? text) => $"<code class=\"jim-code-inline\">{WebUtility.HtmlEncode(text ?? "unnamed")}</code>";
+        static string Code(string? text) => $"<code class=\"jim-code-inline\">{WebUtility.HtmlEncode(text ?? SqlText.UnnamedName)}</code>";
 
-        var subject = string.IsNullOrWhiteSpace(name) ? "this Object Type" : $"Object Type <strong>{WebUtility.HtmlEncode(name)}</strong>";
+        var subject = string.IsNullOrWhiteSpace(name)
+            ? SqlText.RemovalSubjectUnnamed
+            : string.Format(CultureInfo.CurrentCulture, SqlText.RemovalSubjectNamed, WebUtility.HtmlEncode(name));
         if (references.Count == 0)
-            return new MarkupString($"Remove {subject}? Its objects stop being imported once the settings are saved.");
+            return new MarkupString(string.Format(CultureInfo.CurrentCulture, SqlText.RemovalWithoutReferences, subject));
 
-        var items = string.Concat(references.Select(r =>
-            $"<li>{WebUtility.HtmlEncode(r.ObjectTypeName ?? "Unnamed Object Type")}: {(r.IsMultiValuedAttribute ? "multi-valued attribute" : "column")} {Code(r.Name)}</li>"));
-        return new MarkupString($"Remove {subject}? These references to it are removed with it:<ul class=\"mt-2 ml-5\">{items}</ul>");
+        var items = string.Concat(references.Select(r => "<li>" + string.Format(CultureInfo.CurrentCulture, SqlText.RemovalReferenceItem,
+            WebUtility.HtmlEncode(r.ObjectTypeName ?? SqlText.UnnamedObjectType),
+            r.IsMultiValuedAttribute ? SqlText.RemovalKindMultiValued : SqlText.RemovalKindColumn,
+            Code(r.Name)) + "</li>"));
+        return new MarkupString(string.Format(CultureInfo.CurrentCulture, SqlText.RemovalWithReferences, subject,
+            $"<ul class=\"mt-2 ml-5\">{items}</ul>"));
     }
 
     /// <summary>
@@ -432,11 +438,11 @@
         try
         {
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", SettingValue.StringValue ?? string.Empty);
-            Snackbar.Add($"{SettingValue.Setting.Name} copied to the clipboard.", Severity.Info);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SqlText.SettingCopied, SettingValue.Setting.Name), Severity.Info);
         }
         catch (JSException)
         {
-            Snackbar.Add("The browser would not copy to the clipboard. Select the text and copy it instead.", Severity.Warning);
+            Snackbar.Add(SqlText.CopyFailed, Severity.Warning);
         }
         catch (JSDisconnectedException)
         {

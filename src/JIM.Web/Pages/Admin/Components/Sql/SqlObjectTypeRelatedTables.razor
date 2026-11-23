@@ -1,5 +1,6 @@
 @using JIM.Connectors.Sql
 @using JIM.Models.Staging
+@using System.Globalization
 @using JIM.Web.Models
 @inject IDialogService DialogService
 
@@ -16,18 +17,18 @@
             <div class="flex-grow-1">
                 <MudText>@Describe(relatedTable)</MudText>
             </div>
-            <MudTooltip Text="Edit this multi-valued attribute" Arrow="true" Placement="Placement.Top">
-                <MudIconButton Icon="@Icons.Material.Filled.Edit" aria-label="Edit this multi-valued attribute"
+            <MudTooltip Text="@SqlText.EditMultiValuedAttribute" Arrow="true" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" aria-label="@SqlText.EditMultiValuedAttribute"
                                OnClick="@(() => EditAsync(relatedTable))" />
             </MudTooltip>
-            <MudTooltip Text="Remove this multi-valued attribute" Arrow="true" Placement="Placement.Top">
-                <MudIconButton Icon="@Icons.Material.Filled.Delete" aria-label="Remove this multi-valued attribute"
+            <MudTooltip Text="@SqlText.RemoveMultiValuedAttribute" Arrow="true" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" aria-label="@SqlText.RemoveMultiValuedAttribute"
                                OnClick="@(() => RemoveAsync(relatedTable))" />
             </MudTooltip>
         </div>
     }
 }
-<MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => EditAsync(null))">Add multi-valued attribute</MudButton>
+<MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => EditAsync(null))">@SqlText.AddMultiValuedAttribute</MudButton>
 
 @code {
     [Parameter, EditorRequired]
@@ -58,7 +59,7 @@
             DialogService,
             relatedTable ?? new SqlRelatedTableDocument(),
             relatedTable == null,
-            string.IsNullOrWhiteSpace(ObjectType.Name) ? "parent" : ObjectType.Name,
+            string.IsNullOrWhiteSpace(ObjectType.Name) ? SqlText.ParentFallbackName : ObjectType.Name,
             [.. (ObjectType.AnchorColumns ?? []).OfType<string>()],
             [.. ObjectTypeNames],
             CatalogueObjects,
@@ -91,21 +92,26 @@
     /// A multi-valued attribute in one line: the attribute, where its values come from, how they join to the
     /// parent, and what they reference. Names of attributes, tables and columns are inline code.
     /// </summary>
-    private static RenderFragment Describe(SqlRelatedTableDocument relatedTable) => __builder =>
+    private static MarkupString Describe(SqlRelatedTableDocument relatedTable)
     {
-        <code class="jim-code-inline">@(relatedTable.AttributeName ?? "unnamed")</code>
-        <text> from </text>
-        <code class="jim-code-inline">@($"{SqlObjectTypesEditorModel.Qualified(relatedTable.Schema, relatedTable.Table ?? "?")}.{relatedTable.ValueColumn ?? "?"}")</code>
-        <text>, joined on </text>
-        <SqlColumnList Columns="@(relatedTable.JoinColumns ?? [])" />
-        @if (!string.IsNullOrWhiteSpace(relatedTable.ReferencesObjectType))
-        {
-            <text>, referencing @relatedTable.ReferencesObjectType</text>
-        }
-        @if (!string.IsNullOrWhiteSpace(relatedTable.WatermarkColumn))
-        {
-            <text>, watermark </text>
-            <code class="jim-code-inline">@relatedTable.WatermarkColumn</code>
-        }
-    };
+        var joinColumns = string.Join(", ", (relatedTable.JoinColumns ?? []).OfType<string>()
+            .Where(c => c.Length > 0).Select(Code));
+        var description = string.Format(CultureInfo.CurrentCulture, SqlText.RelatedTableDescribe,
+            Code(relatedTable.AttributeName ?? SqlText.UnnamedAttribute),
+            Code($"{SqlObjectTypesEditorModel.Qualified(relatedTable.Schema, relatedTable.Table ?? "?")}.{relatedTable.ValueColumn ?? "?"}"),
+            joinColumns);
+
+        if (!string.IsNullOrWhiteSpace(relatedTable.ReferencesObjectType))
+            description += string.Format(CultureInfo.CurrentCulture, SqlText.RelatedTableReferencing,
+                System.Net.WebUtility.HtmlEncode(relatedTable.ReferencesObjectType));
+
+        if (!string.IsNullOrWhiteSpace(relatedTable.WatermarkColumn))
+            description += string.Format(CultureInfo.CurrentCulture, SqlText.RelatedTableWatermark, Code(relatedTable.WatermarkColumn));
+
+        return new MarkupString(description);
+    }
+
+    /// <summary>A name as inline code, HTML-encoded: the editor names attributes, tables and columns this way.</summary>
+    private static string Code(string? text) =>
+        $"<code class=\"jim-code-inline\">{System.Net.WebUtility.HtmlEncode(text)}</code>";
 }

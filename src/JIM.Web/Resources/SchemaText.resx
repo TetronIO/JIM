@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DataFlowPriorityUnranked" xml:space="preserve">
+    <value>Unranked</value>
+    <comment>Priority column, for a contribution that has never been given a position (the sentinel, not a number).</comment>
+  </data>
+  <data name="DataFlowPriorityOfContributors" xml:space="preserve">
+    <value>{0} of {1}</value>
+    <comment>Priority column: this contribution's position, then the number of contributors sharing its Metaverse Attribute.</comment>
+  </data>
+  <data name="DataFlowPriorityTooltipOutbound" xml:space="preserve">
+    <value>Priority orders competing contributions into the Metaverse, so it applies to Inbound flows only.</value>
+    <comment>Tooltip on the Priority cell of an Outbound flow.</comment>
+  </data>
+  <data name="DataFlowPriorityTooltipSoleContributorUnranked" xml:space="preserve">
+    <value>This is the only contributor to this Metaverse Attribute, so it is not competing with anything and has never needed a position.</value>
+    <comment>Tooltip: the only contribution to a Metaverse Attribute, never given a position.</comment>
+  </data>
+  <data name="DataFlowPriorityTooltipSoleContributorRanked" xml:space="preserve">
+    <value>This is the only contributor to this Metaverse Attribute, so its position decides nothing until another Synchronisation Rule contributes to it.</value>
+    <comment>Tooltip: the only contribution to a Metaverse Attribute, already given a position.</comment>
+  </data>
+  <data name="DataFlowPriorityTooltipUnpositionedOfMany" xml:space="preserve">
+    <value>This contribution has never been given a position, so it ranks lowest of the {0} contributors to this Metaverse Attribute. Give it a position to change that.</value>
+    <comment>Tooltip: an unpositioned contribution among several. {0} is the number of contributors.</comment>
+  </data>
+  <data name="DataFlowPriorityTooltipOrdered" xml:space="preserve">
+    <value>{0} Synchronisation Rules contribute to this Metaverse Attribute; the lowest-numbered contribution with a value wins.</value>
+    <comment>Tooltip on a Priority cell among several contributors. {0} is always two or more.</comment>
+  </data>
+  <data name="DataFlowDirectionInbound" xml:space="preserve">
+    <value>Inbound</value>
+    <comment>Direction of a Synchronisation Rule flow: into the Metaverse.</comment>
+  </data>
+  <data name="DataFlowDirectionOutbound" xml:space="preserve">
+    <value>Outbound</value>
+    <comment>Direction of a Synchronisation Rule flow: out of the Metaverse.</comment>
+  </data>
+  <data name="ResolutionTenMicroseconds" xml:space="preserve">
+    <value>Ten Microseconds</value>
+    <comment>A DateTime resolution, as the attribute editor names it.</comment>
+  </data>
+  <data name="ResolutionHundredMicroseconds" xml:space="preserve">
+    <value>Hundred Microseconds</value>
+    <comment>A DateTime resolution.</comment>
+  </data>
+  <data name="ResolutionTenMilliseconds" xml:space="preserve">
+    <value>Ten Milliseconds</value>
+    <comment>A DateTime resolution.</comment>
+  </data>
+  <data name="ResolutionHundredMilliseconds" xml:space="preserve">
+    <value>Hundred Milliseconds</value>
+    <comment>A DateTime resolution.</comment>
+  </data>
+  <data name="WatermarkNextDeltaImportReadsAfter" xml:space="preserve">
+    <value>Next Delta Import reads changes after</value>
+    <comment>Partition scope line: the position a Delta Import reads from. The position follows this text.</comment>
+  </data>
+  <data name="WatermarkRecordedAt" xml:space="preserve">
+    <value>Recorded {0}</value>
+    <comment>Partition scope line: when the watermark was recorded. {0} is a relative time such as '3 hours ago'.</comment>
+  </data>
+  <data name="WatermarkUnreadable" xml:space="preserve">
+    <value>The recorded watermark could not be read. The next Delta Import reads every object in this partition, as a Full Import does, and records a new one.</value>
+    <comment>Partition scope line when the recorded watermark cannot be read.</comment>
+  </data>
+  <data name="WatermarkNone" xml:space="preserve">
+    <value>No watermark recorded. The next Delta Import reads every object in this partition, as a Full Import does, and records one.</value>
+    <comment>Partition scope line when no watermark has been recorded yet.</comment>
+  </data>
+</root>

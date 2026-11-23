@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DataFlowPriorityTooltipSoleContributorRanked" xml:space="preserve">
+    <value>This is the only contributor to this Metaverse Attribute, so its position decides nothing until another Synchronization Rule contributes to it.</value>
+  </data>
+  <data name="DataFlowPriorityTooltipOrdered" xml:space="preserve">
+    <value>{0} Synchronization Rules contribute to this Metaverse Attribute; the lowest-numbered contribution with a value wins.</value>
+  </data>
+</root>

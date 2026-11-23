@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Connectors.Sql
 @using JIM.Models.Staging
 @using JIM.Web.Models
@@ -10,22 +11,21 @@
 <MudDialog>
     <DialogContent>
         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
-            A child table holding one row per value. Each row is joined to its @ParentName object on the columns that
-            hold the parent's anchor.
+            @string.Format(CultureInfo.CurrentCulture, SqlText.RelatedDialogIntro, ParentName)
         </MudText>
 
-        <MudTextField T="string" Label="Attribute name" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
-                      @bind-Value="_relatedTable.AttributeName" Required="true" RequiredError="Name the attribute"
-                      HelperText="What the attribute is called on the Object Type." Class="mb-3"
+        <MudTextField T="string" Label="@SqlText.RelatedAttributeName" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+                      @bind-Value="_relatedTable.AttributeName" Required="true" RequiredError="@SqlText.NameTheAttribute"
+                      HelperText="@SqlText.AttributeNameHelper" Class="mb-3"
                       data-testid="jim-sql-related-attribute-name" />
 
         <MudGrid Spacing="2" Class="mb-1">
             <MudItem xs="12" sm="5">
-                <SqlCatalogueNameField Label="Schema" Value="@_relatedTable.Schema" Options="@SchemaOptions"
+                <SqlCatalogueNameField Label="@SqlText.SchemaLabel" Value="@_relatedTable.Schema" Options="@SchemaOptions"
                                        ValueChanged="@(v => { _relatedTable.Schema = v; return Task.CompletedTask; })" />
             </MudItem>
             <MudItem xs="12" sm="7">
-                <SqlCatalogueNameField Label="Table" Value="@_relatedTable.Table" Options="@TableOptions"
+                <SqlCatalogueNameField Label="@SqlText.TableLabel" Value="@_relatedTable.Table" Options="@TableOptions"
                                        ValueChanged="OnTableChangedAsync" TestId="jim-sql-related-table" />
             </MudItem>
         </MudGrid>
@@ -35,25 +35,25 @@
             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@_tableFailure</MudText>
         }
 
-        <SqlCatalogueNameField Label="Value column" Value="@_relatedTable.ValueColumn" Options="@ColumnOptions"
+        <SqlCatalogueNameField Label="@SqlText.ValueColumnLabel" Value="@_relatedTable.ValueColumn" Options="@ColumnOptions"
                                ValueChanged="@(v => { _relatedTable.ValueColumn = v; return Task.CompletedTask; })"
-                               HelperText="The column holding each value." Class="mb-3" />
+                               HelperText="@SqlText.ValueColumnHelper" Class="mb-3" />
 
         @for (var i = 0; i < ParentAnchorColumns.Count; i++)
         {
             var position = i;
-            <SqlCatalogueNameField Label="@($"Column holding {ParentAnchorColumns[position]}")"
+            <SqlCatalogueNameField Label="@string.Format(CultureInfo.CurrentCulture, SqlText.JoinColumnLabel, ParentAnchorColumns[position])"
                                    Value="@JoinColumnAt(position)" Options="@ColumnOptions"
                                    ValueChanged="@(v => SetJoinColumn(position, v))"
-                                   HelperText="@(position == 0 ? "Joins each row to its parent: one column per anchor column, in the same order." : null)"
+                                   HelperText="@(position == 0 ? SqlText.JoinColumnHelper : null)"
                                    Class="mb-3" />
         }
 
-        <MudSelect T="string" Label="Values reference" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3"
+        <MudSelect T="string" Label="@SqlText.ValuesReferenceLabel" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3"
                    Value="@(_relatedTable.ReferencesObjectType ?? string.Empty)"
                    ValueChanged="@(v => _relatedTable.ReferencesObjectType = string.IsNullOrEmpty(v) ? null : v)"
-                   HelperText="Choose an Object Type when each value holds that Object Type's anchor, as group members do.">
-            <MudSelectItem T="string" Value="@string.Empty">Nothing: the values are plain values</MudSelectItem>
+                   HelperText="@SqlText.ValuesReferenceHelper">
+            <MudSelectItem T="string" Value="@string.Empty">@SqlText.ValuesReferenceNothing</MudSelectItem>
             @foreach (var name in ObjectTypeNames)
             {
                 <MudSelectItem T="string" Value="@name">@name</MudSelectItem>
@@ -62,16 +62,16 @@
 
         @if (ShowWatermark)
         {
-            <SqlCatalogueNameField Label="Watermark column" Value="@_relatedTable.WatermarkColumn" Options="@ColumnOptions"
+            <SqlCatalogueNameField Label="@SqlText.WatermarkColumnLabel" Value="@_relatedTable.WatermarkColumn" Options="@ColumnOptions"
                                    ValueChanged="@(v => { _relatedTable.WatermarkColumn = v; return Task.CompletedTask; })"
-                                   HelperText="Delta Import Mode is Watermark Column: the last-modified column on this table, so an added or removed value is seen."
+                                   HelperText="@SqlText.WatermarkColumnHelper"
                                    TestId="jim-sql-related-watermark-column" />
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">@CommonText.Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!CanSave())" OnClick="Save"
-                   data-testid="jim-sql-related-save">@(IsNew ? "Add" : "Update")</MudButton>
+                   data-testid="jim-sql-related-save">@(IsNew ? CommonText.Add : SqlText.Update)</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -86,7 +86,7 @@
     public bool IsNew { get; set; }
 
     [Parameter]
-    public string ParentName { get; set; } = "parent";
+    public string ParentName { get; set; } = SqlText.ParentFallbackName;
 
     /// <summary>The parent Object Type's anchor columns, each of which the child table must hold.</summary>
     [Parameter]
@@ -173,8 +173,8 @@
         var read = await LoadTable(_relatedTable.Schema, _relatedTable.Table);
         _table = read.Value;
         _tableFailure = read.Failure != null
-            ? $"The table's columns could not be read, so type their names: {read.Failure}"
-            : read.Value == null ? "The database account cannot see a table of that name, so its columns cannot be listed." : null;
+            ? string.Format(CultureInfo.CurrentCulture, SqlText.TableColumnsUnreadable, read.Failure)
+            : read.Value == null ? SqlText.TableNotVisible : null;
     }
 
     /// <summary>
@@ -222,7 +222,7 @@
             { x => x.ShowWatermark, showWatermark }
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
-        var title = isNew ? "Add Multi-Valued Attribute" : "Edit Multi-Valued Attribute";
+        var title = isNew ? SqlText.AddMultiValuedAttributeTitle : SqlText.EditMultiValuedAttributeTitle;
         var dialog = await dialogService.ShowAsync<SqlRelatedTableDialog>(title, parameters, options);
         var result = await dialog.Result;
         return result is { Canceled: false, Data: SqlRelatedTableDocument edited } ? edited : null;

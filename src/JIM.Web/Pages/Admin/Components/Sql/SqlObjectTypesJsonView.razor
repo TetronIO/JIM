@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Web.Models
 @inject IJSRuntime JS
 @inject ISnackbar Snackbar
@@ -18,11 +19,11 @@
         <MudAlert Severity="Severity.Error" Class="mb-3" data-testid="jim-sql-json-problems">
             @if (Problems.Any(p => p.StopsReading))
             {
-                <strong>The cards can show this document once @(Problems.Count == 1 ? "this is" : "these are") fixed.</strong>
+                <strong>@PluralRules.Choose(Problems.Count, SqlText.JsonProblemsFixOne, SqlText.JsonProblemsFixOther)</strong>
             }
             else if (Problems.Count > 1)
             {
-                <strong>@Problems.Count problems to fix before this document can be saved.</strong>
+                <strong>@string.Format(CultureInfo.CurrentCulture, SqlText.JsonProblemsCount, Problems.Count)</strong>
             }
             @if (Problems.Count == 1)
             {
@@ -85,12 +86,12 @@
 
     /// <summary>The name the textarea is announced by.</summary>
     [Parameter]
-    public string Label { get; set; } = "Object Types document";
+    public string Label { get; set; } = SqlText.JsonViewLabel;
 
     [Parameter]
     public string? Class { get; set; }
 
-    private const string Placeholder = "Paste or type the document, or insert the example to start from.";
+    private static string Placeholder => SqlText.JsonViewPlaceholder;
 
     private ElementReference _textarea;
     private ElementReference _scroller;
@@ -124,7 +125,7 @@
     {
         @if (problem.Line is { } line)
         {
-            <MudLink OnClick="@(() => GoToLineAsync(line))">Line @line</MudLink><text>: </text>
+            <MudLink OnClick="@(() => GoToLineAsync(line))">@string.Format(CultureInfo.CurrentCulture, SqlText.JsonProblemLine, line)</MudLink><text>@SqlText.JsonProblemSeparator</text>
         }
         @problem.Message
     };

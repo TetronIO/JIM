@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DataFlowPriorityUnranked" xml:space="preserve">
+    <value>Non classé</value>
+  </data>
+  <data name="DataFlowPriorityOfContributors" xml:space="preserve">
+    <value>{0} sur {1}</value>
+  </data>
+  <data name="DataFlowPriorityTooltipOutbound" xml:space="preserve">
+    <value>La priorité ordonne les contributions concurrentes vers le Metaverse ; elle ne s’applique donc qu’aux flux entrants.</value>
+  </data>
+  <data name="DataFlowPriorityTooltipSoleContributorUnranked" xml:space="preserve">
+    <value>C’est le seul contributeur à cet attribut Metaverse : il n’est en concurrence avec aucun autre et n’a jamais eu besoin de position.</value>
+  </data>
+  <data name="DataFlowPriorityTooltipSoleContributorRanked" xml:space="preserve">
+    <value>C’est le seul contributeur à cet attribut Metaverse : sa position ne décide de rien tant qu’une autre règle de synchronisation n’y contribue pas.</value>
+  </data>
+  <data name="DataFlowPriorityTooltipUnpositionedOfMany" xml:space="preserve">
+    <value>Cette contribution n’a jamais reçu de position : elle se classe donc en dernier parmi les {0} contributeurs à cet attribut Metaverse. Attribuez-lui une position pour changer cela.</value>
+  </data>
+  <data name="DataFlowPriorityTooltipOrdered" xml:space="preserve">
+    <value>{0} règles de synchronisation contribuent à cet attribut Metaverse ; la contribution portant le numéro le plus bas, si elle a une valeur, l’emporte.</value>
+  </data>
+  <data name="DataFlowDirectionInbound" xml:space="preserve">
+    <value>Entrant</value>
+  </data>
+  <data name="DataFlowDirectionOutbound" xml:space="preserve">
+    <value>Sortant</value>
+  </data>
+  <data name="ResolutionTenMicroseconds" xml:space="preserve">
+    <value>Dix microsecondes</value>
+  </data>
+  <data name="ResolutionHundredMicroseconds" xml:space="preserve">
+    <value>Cent microsecondes</value>
+  </data>
+  <data name="ResolutionTenMilliseconds" xml:space="preserve">
+    <value>Dix millisecondes</value>
+  </data>
+  <data name="ResolutionHundredMilliseconds" xml:space="preserve">
+    <value>Cent millisecondes</value>
+  </data>
+  <data name="WatermarkNextDeltaImportReadsAfter" xml:space="preserve">
+    <value>La prochaine importation delta lit les modifications postérieures à</value>
+  </data>
+  <data name="WatermarkRecordedAt" xml:space="preserve">
+    <value>Enregistré {0}</value>
+  </data>
+  <data name="WatermarkUnreadable" xml:space="preserve">
+    <value>La marque de progression enregistrée n’a pas pu être lue. La prochaine importation delta lit chaque objet de cette partition, comme le fait une importation complète, et en enregistre une nouvelle.</value>
+  </data>
+  <data name="WatermarkNone" xml:space="preserve">
+    <value>Aucune marque de progression enregistrée. La prochaine importation delta lit chaque objet de cette partition, comme le fait une importation complète, et en enregistre une.</value>
+  </data>
+</root>

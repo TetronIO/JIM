@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DeltaImportWatermarkColumnMissing" xml:space="preserve">
+    <value>Le mode d’importation delta est « {0} » et ce type d’objet est sélectionné pour la synchronisation : il lui faut donc une colonne de marque de progression. Choisissez-en une, ou désélectionnez ce type d’objet dans l’onglet Schéma si JIM ne l’importe jamais.</value>
+  </data>
+  <data name="MultiValuedWatermarkColumnMissing" xml:space="preserve">
+    <value>Le mode d’importation delta est « {0} » : l’attribut multivalué « {1} » a donc besoin d’une colonne de marque de progression dans sa propre table. Un ajout ou une suppression de ligne modifie l’objet sans toucher à sa propre ligne.</value>
+  </data>
+  <data name="ChangeLogTableMissing" xml:space="preserve">
+    <value>Le mode d’importation delta est « {0} » et ce type d’objet est sélectionné pour la synchronisation : il lui faut donc une table de journal des modifications. Choisissez-en une, ou désélectionnez ce type d’objet dans l’onglet Schéma si JIM ne l’importe jamais.</value>
+  </data>
+  <data name="SourceSelectStatement" xml:space="preserve">
+    <value>Instruction SELECT</value>
+  </data>
+  <data name="SourceNoneChosen" xml:space="preserve">
+    <value>Aucune source choisie</value>
+  </data>
+  <data name="AddColumn" xml:space="preserve">
+    <value>Ajouter une colonne</value>
+  </data>
+  <data name="JsonViewPlaceholder" xml:space="preserve">
+    <value>Collez ou saisissez le document, ou insérez l’exemple pour commencer.</value>
+  </data>
+  <data name="JsonViewLabel" xml:space="preserve">
+    <value>Document des types d’objets</value>
+  </data>
+  <data name="JsonProblemsFixOne" xml:space="preserve">
+    <value>Les cartes pourront afficher ce document une fois ceci corrigé.</value>
+  </data>
+  <data name="JsonProblemsFixOther" xml:space="preserve">
+    <value>Les cartes pourront afficher ce document une fois ces éléments corrigés.</value>
+  </data>
+  <data name="JsonProblemsCount" xml:space="preserve">
+    <value>{0} problèmes à corriger avant que ce document puisse être enregistré.</value>
+  </data>
+  <data name="JsonProblemLine" xml:space="preserve">
+    <value>Ligne {0}</value>
+  </data>
+  <data name="JsonProblemSeparator" xml:space="preserve">
+    <value> : </value>
+  </data>
+  <data name="ColumnLabel" xml:space="preserve">
+    <value>Colonne</value>
+  </data>
+  <data name="ObjectTypeLabel" xml:space="preserve">
+    <value>Type d’objet</value>
+  </data>
+  <data name="RemoveReference" xml:space="preserve">
+    <value>Supprimer cette référence</value>
+  </data>
+  <data name="EditMultiValuedAttribute" xml:space="preserve">
+    <value>Modifier cet attribut multivalué</value>
+  </data>
+  <data name="RemoveMultiValuedAttribute" xml:space="preserve">
+    <value>Supprimer cet attribut multivalué</value>
+  </data>
+  <data name="AddMultiValuedAttribute" xml:space="preserve">
+    <value>Ajouter un attribut multivalué</value>
+  </data>
+  <data name="AddReference" xml:space="preserve">
+    <value>Ajouter une référence</value>
+  </data>
+  <data name="Dismiss" xml:space="preserve">
+    <value>Ignorer</value>
+  </data>
+  <data name="AddObjectTypeForIt" xml:space="preserve">
+    <value>Ajouter un type d’objet pour elle</value>
+  </data>
+  <data name="RelatedTableDescribe" xml:space="preserve">
+    <value>{0} à partir de {1}, jointure sur {2}</value>
+  </data>
+  <data name="RelatedTableReferencing" xml:space="preserve">
+    <value>, référençant {0}</value>
+  </data>
+  <data name="RelatedTableWatermark" xml:space="preserve">
+    <value>, marque de progression {0}</value>
+  </data>
+  <data name="UnnamedAttribute" xml:space="preserve">
+    <value>sans nom</value>
+  </data>
+  <data name="ParentFallbackName" xml:space="preserve">
+    <value>parent</value>
+  </data>
+  <data name="ReferenceSuggestion" xml:space="preserve">
+    <value>{0} a une clé étrangère vers l’ancre de {1}, cela ressemble donc à une référence vers {2}.</value>
+  </data>
+  <data name="ForeignKeySuggestion" xml:space="preserve">
+    <value>{0} a une clé étrangère vers {1}, et aucun type d’objet n’en lit encore les données.</value>
+  </data>
+  <data name="RelatedDialogIntro" xml:space="preserve">
+    <value>Une table enfant contenant une ligne par valeur. Chaque ligne est jointe à son objet {0} par les colonnes qui contiennent l’ancre du parent.</value>
+  </data>
+  <data name="RelatedAttributeName" xml:space="preserve">
+    <value>Nom de l’attribut</value>
+  </data>
+  <data name="NameTheAttribute" xml:space="preserve">
+    <value>Indiquez le nom de l’attribut</value>
+  </data>
+  <data name="AttributeNameHelper" xml:space="preserve">
+    <value>Le nom de l’attribut sur le type d’objet.</value>
+  </data>
+  <data name="SchemaLabel" xml:space="preserve">
+    <value>Schéma</value>
+  </data>
+  <data name="TableLabel" xml:space="preserve">
+    <value>Table</value>
+  </data>
+  <data name="ValueColumnLabel" xml:space="preserve">
+    <value>Colonne de valeur</value>
+  </data>
+  <data name="ValueColumnHelper" xml:space="preserve">
+    <value>La colonne qui contient chaque valeur.</value>
+  </data>
+  <data name="JoinColumnLabel" xml:space="preserve">
+    <value>Colonne contenant {0}</value>
+  </data>
+  <data name="JoinColumnHelper" xml:space="preserve">
+    <value>Chaque ligne est reliée à son parent par une jointure : une colonne par colonne d’ancre, dans le même ordre.</value>
+  </data>
+  <data name="ValuesReferenceLabel" xml:space="preserve">
+    <value>Référence des valeurs</value>
+  </data>
+  <data name="ValuesReferenceHelper" xml:space="preserve">
+    <value>Choisissez un type d’objet lorsque chaque valeur contient l’ancre de ce type d’objet, comme le font les membres d’un groupe.</value>
+  </data>
+  <data name="ValuesReferenceNothing" xml:space="preserve">
+    <value>Aucun : les valeurs sont de simples valeurs</value>
+  </data>
+  <data name="WatermarkColumnLabel" xml:space="preserve">
+    <value>Colonne de marque de progression</value>
+  </data>
+  <data name="WatermarkColumnHelper" xml:space="preserve">
+    <value>Le mode d’importation delta est « Colonne de marque de progression » : la colonne de dernière modification de cette table, pour qu’un ajout ou une suppression de valeur soit pris en compte.</value>
+  </data>
+  <data name="Update" xml:space="preserve">
+    <value>Mettre à jour</value>
+  </data>
+  <data name="TableColumnsUnreadable" xml:space="preserve">
+    <value>Impossible de lire les colonnes de la table ; saisissez donc leurs noms : {0}</value>
+  </data>
+  <data name="TableNotVisible" xml:space="preserve">
+    <value>Le compte de base de données ne voit aucune table de ce nom ; ses colonnes ne peuvent donc pas être listées.</value>
+  </data>
+  <data name="AddMultiValuedAttributeTitle" xml:space="preserve">
+    <value>Ajouter un attribut multivalué</value>
+  </data>
+  <data name="EditMultiValuedAttributeTitle" xml:space="preserve">
+    <value>Modifier l’attribut multivalué</value>
+  </data>
+  <data name="ObjectTypesSummaryOne" xml:space="preserve">
+    <value>1 type d’objet. Sélectionnez-le pour le modifier.</value>
+  </data>
+  <data name="ObjectTypesSummaryOther" xml:space="preserve">
+    <value>{0} types d’objets. Sélectionnez-en un pour le modifier.</value>
+  </data>
+  <data name="DocumentSummary" xml:space="preserve">
+    <value>Le document que l’API REST et PowerShell envoient comme valeur de ce paramètre.</value>
+  </data>
+  <data name="ObjectTypesIntro" xml:space="preserve">
+    <value>Les tables et vues dont JIM lit les objets, et ce qui les identifie.</value>
+  </data>
+  <data name="ViewAsCards" xml:space="preserve">
+    <value>Afficher en cartes</value>
+  </data>
+  <data name="ViewAsJson" xml:space="preserve">
+    <value>Afficher en JSON</value>
+  </data>
+  <data name="InsertExample" xml:space="preserve">
+    <value>Insérer l’exemple</value>
+  </data>
+  <data name="AddObjectType" xml:space="preserve">
+    <value>Ajouter un type d’objet</value>
+  </data>
+  <data name="ReadingCatalogue" xml:space="preserve">
+    <value>Lecture des tables et vues de la base de données…</value>
+  </data>
+  <data name="CatalogueUnavailable" xml:space="preserve">
+    <value>JIM n’a pas pu lire les tables et vues de la base de données : les noms sont donc saisis et non choisis.</value>
+  </data>
+  <data name="RemoveObjectTypeTitle" xml:space="preserve">
+    <value>Supprimer le type d’objet ?</value>
+  </data>
+  <data name="RemovalSubjectUnnamed" xml:space="preserve">
+    <value>ce type d’objet</value>
+  </data>
+  <data name="RemovalSubjectNamed" xml:space="preserve">
+    <value>type d’objet &lt;strong&gt;{0}&lt;/strong&gt;</value>
+  </data>
+  <data name="RemovalWithoutReferences" xml:space="preserve">
+    <value>Supprimer {0} ? Ses objets cessent d’être importés une fois les paramètres enregistrés.</value>
+  </data>
+  <data name="RemovalWithReferences" xml:space="preserve">
+    <value>Supprimer {0} ? Ces références à ce type sont supprimées avec lui :{1}</value>
+  </data>
+  <data name="RemovalReferenceItem" xml:space="preserve">
+    <value>{0} : {1} {2}</value>
+  </data>
+  <data name="RemovalKindMultiValued" xml:space="preserve">
+    <value>attribut multivalué</value>
+  </data>
+  <data name="RemovalKindColumn" xml:space="preserve">
+    <value>colonne</value>
+  </data>
+  <data name="UnnamedObjectType" xml:space="preserve">
+    <value>Type d’objet sans nom</value>
+  </data>
+  <data name="UnnamedName" xml:space="preserve">
+    <value>sans nom</value>
+  </data>
+  <data name="CopyFailed" xml:space="preserve">
+    <value>Le navigateur n’a pas pu copier dans le presse-papiers. Sélectionnez le texte et copiez-le à la place.</value>
+  </data>
+  <data name="SettingCopied" xml:space="preserve">
+    <value>{0} copié dans le presse-papiers.</value>
+  </data>
+</root>
