@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="RunProfilesIntro" xml:space="preserve">
+    <value>Run Profiles define what operations can be performed on a Connector, i.e. import, export and synchronization, with any required settings.</value>
+  </data>
+  <data name="RunProfilePreviewTooltip" xml:space="preserve">
+    <value>Preview what this Full Synchronization would do, without running it</value>
+  </data>
+  <data name="RunProfilePreviewAriaLabel" xml:space="preserve">
+    <value>Preview this Full Synchronization</value>
+  </data>
+  <data name="RunProfileVerificationModeHelp" xml:space="preserve">
+    <value>Runs the honest attribute diff on every object instead of skipping unchanged objects by content hash, and reports any disagreement between the stored hash and the diff as an error. Use temporarily to validate the content-hash skip optimization; leave off for normal, faster Full Imports.</value>
+  </data>
+</root>

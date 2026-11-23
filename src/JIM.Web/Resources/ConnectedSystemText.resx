@@ -1,0 +1,313 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="RunProfilesIntro" xml:space="preserve">
+    <value>Run Profiles define what operations can be performed on a Connector, i.e. import, export and synchronisation, with any required settings.</value>
+    <comment>Information alert on the Connected System's Run Profiles tab</comment>
+  </data>
+  <data name="RunProfileNounSingular" xml:space="preserve">
+    <value>Run Profile</value>
+    <comment>Singular noun for counts and empty states</comment>
+  </data>
+  <data name="RunProfileNounPlural" xml:space="preserve">
+    <value>Run Profiles</value>
+    <comment>Plural noun for counts and empty states</comment>
+  </data>
+  <data name="RunProfileSearchPlaceholder" xml:space="preserve">
+    <value>Search Run Profiles</value>
+    <comment>Search box placeholder</comment>
+  </data>
+  <data name="RunProfileCreateButton" xml:space="preserve">
+    <value>Create Run Profile</value>
+    <comment>Toolbar button and dialog submit button that create a Run Profile</comment>
+  </data>
+  <data name="RunProfileCreateTitle" xml:space="preserve">
+    <value>Create New Run Profile</value>
+    <comment>Title of the create Run Profile dialog</comment>
+  </data>
+  <data name="RunProfileEditTitle" xml:space="preserve">
+    <value>Edit Run Profile</value>
+    <comment>Title of the edit Run Profile dialog</comment>
+  </data>
+  <data name="RunType" xml:space="preserve">
+    <value>Run Type</value>
+    <comment>Column heading and form field label for a Run Profile's run type</comment>
+  </data>
+  <data name="RunProfileVerificationModeTooltip" xml:space="preserve">
+    <value>Verification Mode is enabled: this Full Import performs no content-hash skips and diffs every object.</value>
+    <comment>Tooltip on the Verification Mode chip in the grid</comment>
+  </data>
+  <data name="VerificationMode" xml:space="preserve">
+    <value>Verification Mode</value>
+    <comment>Chip, checkbox label and grid label for Verification Mode</comment>
+  </data>
+  <data name="RunProfileObjectTypeChangesAllowedChip" xml:space="preserve">
+    <value>Object Type changes allowed</value>
+    <comment>Chip shown on a Run Profile that allows Object Type changes</comment>
+  </data>
+  <data name="RunProfileMaxCreatesTooltip" xml:space="preserve">
+    <value>If more than this many creates are pending when this Export runs, none of them are attempted and the run completes with a warning.</value>
+    <comment>Tooltip on the Max creates chip</comment>
+  </data>
+  <data name="RunProfileMaxCreatesChip" xml:space="preserve">
+    <value>Max creates {0}</value>
+    <comment>Chip showing the Max creates limit; {0} is the number</comment>
+  </data>
+  <data name="RunProfileMaxUpdatesTooltip" xml:space="preserve">
+    <value>If more than this many updates are pending when this Export runs, none of them are attempted and the run completes with a warning.</value>
+    <comment>Tooltip on the Max updates chip</comment>
+  </data>
+  <data name="RunProfileMaxUpdatesChip" xml:space="preserve">
+    <value>Max updates {0}</value>
+    <comment>Chip showing the Max updates limit; {0} is the number</comment>
+  </data>
+  <data name="RunProfileMaxDeletesTooltip" xml:space="preserve">
+    <value>If more than this many deletes are pending when this Export runs, none of them are attempted and the run completes with a warning.</value>
+    <comment>Tooltip on the Max deletes chip</comment>
+  </data>
+  <data name="RunProfileMaxDeletesChip" xml:space="preserve">
+    <value>Max deletes {0}</value>
+    <comment>Chip showing the Max deletes limit; {0} is the number</comment>
+  </data>
+  <data name="RunProfileMaxDetectedDeletionsChip" xml:space="preserve">
+    <value>Max detected deletions {0}</value>
+    <comment>Chip showing the Max detected deletions limit; {0} is the number</comment>
+  </data>
+  <data name="RunProfileMaxDetectedDeletionsPercentChip" xml:space="preserve">
+    <value>Max detected deletions {0}%</value>
+    <comment>Chip showing the Max detected deletions percentage limit; {0} is the percentage</comment>
+  </data>
+  <data name="RunProfileMaxCreates" xml:space="preserve">
+    <value>Max creates</value>
+    <comment>Label of the Max creates limit field and the Safeguards column</comment>
+  </data>
+  <data name="RunProfileMaxUpdates" xml:space="preserve">
+    <value>Max updates</value>
+    <comment>Label of the Max updates limit field</comment>
+  </data>
+  <data name="RunProfileMaxDeletes" xml:space="preserve">
+    <value>Max deletes</value>
+    <comment>Label of the Max deletes limit field</comment>
+  </data>
+  <data name="MaxDetectedDeletionsLabel" xml:space="preserve">
+    <value>Max detected deletions</value>
+    <comment>Label of the Max detected deletions limit field</comment>
+  </data>
+  <data name="MaxDetectedDeletionsPercentLabel" xml:space="preserve">
+    <value>Max detected deletions (% of Connector Space)</value>
+    <comment>Label of the Max detected deletions percentage limit field; Connector Space is a glossary term</comment>
+  </data>
+  <data name="RunProfileNoLimit" xml:space="preserve">
+    <value>No limit</value>
+    <comment>Placeholder of an empty limit field</comment>
+  </data>
+  <data name="RunProfileExportLimitsIntro" xml:space="preserve">
+    <value>Limits on what this run may attempt. Leave blank for no limit.</value>
+    <comment>Explanation under the Safeguards heading on an Export Run Profile</comment>
+  </data>
+  <data name="RunProfileExportLimitsCaption" xml:space="preserve">
+    <value>If a run would exceed a limit, it attempts none of that change type; the changes stay pending and the run completes with a warning. To let a legitimate mass change through, run an Export Run Profile without the limit.</value>
+    <comment>Caption under the Export Safeguards fields</comment>
+  </data>
+  <data name="PartitionLabel" xml:space="preserve">
+    <value>Partition</value>
+    <comment>Column heading and field label for a Partition</comment>
+  </data>
+  <data name="PartitionOptionalHelp" xml:space="preserve">
+    <value>Optional. Leave empty to import from all selected partitions.</value>
+    <comment>Helper text under the Partition field on an import Run Profile</comment>
+  </data>
+  <data name="RunProfilePartitionDeselectedTooltip" xml:space="preserve">
+    <value>This partition is no longer selected, so it is not managed by JIM and this Run Profile cannot run. Select the partition again on the Scope tab, or point this Run Profile at a selected partition.</value>
+    <comment>Tooltip on the Not selected chip; the Scope tab name must match its translated label</comment>
+  </data>
+  <data name="RunProfilePartitionNotSelectedChip" xml:space="preserve">
+    <value>Not selected</value>
+    <comment>Chip for a Run Profile whose partition is no longer selected</comment>
+  </data>
+  <data name="RunProfilePartitionRemovedTooltip" xml:space="preserve">
+    <value>The Connected System no longer has this partition. Choose the partition this Run Profile reads, or All selected partitions, when you enable it.</value>
+    <comment>Tooltip on the Removed chip</comment>
+  </data>
+  <data name="RunProfilePartitionRemovedChip" xml:space="preserve">
+    <value>Removed</value>
+    <comment>Chip for a Run Profile whose partition was removed from the Connected System</comment>
+  </data>
+  <data name="AllSelectedPartitionsShort" xml:space="preserve">
+    <value>All selected</value>
+    <comment>Partition cell meaning the Run Profile reads every selected partition</comment>
+  </data>
+  <data name="AllSelectedPartitions" xml:space="preserve">
+    <value>All selected partitions</value>
+    <comment>Option in the Partition field meaning every selected partition</comment>
+  </data>
+  <data name="PageSizeLabel" xml:space="preserve">
+    <value>Page Size</value>
+    <comment>Column heading and field label for the page size</comment>
+  </data>
+  <data name="PageSizeRequired" xml:space="preserve">
+    <value>How many items to process in one go when importing</value>
+    <comment>Validation message for an empty Page Size field</comment>
+  </data>
+  <data name="FilePathLabel" xml:space="preserve">
+    <value>File Path</value>
+    <comment>Column heading and field label for a file path</comment>
+  </data>
+  <data name="FilePathHelp" xml:space="preserve">
+    <value>Leave empty to use the Connected System's File Path, or enter an in-container path such as /connector-files/Users.csv to read a different file</value>
+    <comment>Helper text under the File Path field</comment>
+  </data>
+  <data name="RunProfilePreviewTooltip" xml:space="preserve">
+    <value>Preview what this Full Synchronisation would do, without running it</value>
+    <comment>Tooltip on the preview button of a Full Synchronization Run Profile</comment>
+  </data>
+  <data name="RunProfilePreviewAriaLabel" xml:space="preserve">
+    <value>Preview this Full Synchronisation</value>
+    <comment>Accessible label of the preview button</comment>
+  </data>
+  <data name="RunProfileNoSearchMatch" xml:space="preserve">
+    <value>No Run Profiles match "{0}"</value>
+    <comment>Empty state when a search matches nothing; {0} is the search text</comment>
+  </data>
+  <data name="RunProfileNoSearchMatchHint" xml:space="preserve">
+    <value>Try a different search term, or clear the search.</value>
+    <comment>Empty state hint under the no-match message</comment>
+  </data>
+  <data name="RunProfileNoneYet" xml:space="preserve">
+    <value>No Run Profiles yet</value>
+    <comment>Empty state when a Connected System has no Run Profiles</comment>
+  </data>
+  <data name="RunProfileNoneYetHint" xml:space="preserve">
+    <value>Use the Create Run Profile button to define what this Connected System can be asked to do.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="RunProfileSelectRunType" xml:space="preserve">
+    <value>Select run type</value>
+    <comment>Placeholder option in the Run Type field</comment>
+  </data>
+  <data name="RunProfileTypeNotSupported" xml:space="preserve">
+    <value>(not supported by the connector)</value>
+    <comment>Shown beside a run type the Connector does not support</comment>
+  </data>
+  <data name="RunProfileNameRequired" xml:space="preserve">
+    <value>A name for the Run Profile is required</value>
+    <comment>Validation message for an empty Run Profile name</comment>
+  </data>
+  <data name="RunProfileTypeRequired" xml:space="preserve">
+    <value>A Run Profile type is required</value>
+    <comment>Validation message for an unset run type</comment>
+  </data>
+  <data name="RunProfileSelectRunTypeRequired" xml:space="preserve">
+    <value>Please select a run type</value>
+    <comment>Validation message shown when no run type is chosen</comment>
+  </data>
+  <data name="RunProfilePartitionChoiceRequired" xml:space="preserve">
+    <value>Choose the partition this Run Profile reads, or All selected partitions</value>
+    <comment>Validation message on the scope choice shown when enabling a Run Profile whose partition was removed</comment>
+  </data>
+  <data name="RunProfilePartitionRemovedRequiredHelp" xml:space="preserve">
+    <value>Required to enable it: the partition it read was removed.</value>
+    <comment>Helper text on the scope choice</comment>
+  </data>
+  <data name="RunProfileVerificationModeHelp" xml:space="preserve">
+    <value>Runs the honest attribute diff on every object instead of skipping unchanged objects by content hash, and reports any disagreement between the stored hash and the diff as an error. Use temporarily to validate the content-hash skip optimisation; leave off for normal, faster Full Imports.</value>
+    <comment>Tooltip on the Verification Mode checkbox</comment>
+  </data>
+  <data name="AllowObjectTypeChangesLabel" xml:space="preserve">
+    <value>Allow Object Type Changes</value>
+    <comment>Checkbox label for Allow Object Type Changes</comment>
+  </data>
+  <data name="SafeguardsTitle" xml:space="preserve">
+    <value>Safeguards</value>
+    <comment>Heading of the limits panel on a Run Profile</comment>
+  </data>
+  <data name="RunProfileConnectorNoObjectTypeDetection" xml:space="preserve">
+    <value>This Connector cannot tell an object that has changed Object Type apart from two objects that share an External ID, so this setting has no effect here.</value>
+    <comment>Caption shown when the Connector cannot detect Object Type changes</comment>
+  </data>
+  <data name="RunProfileDisabledExplanation" xml:space="preserve">
+    <value>This Run Profile is disabled, so it cannot run. {0}</value>
+    <comment>Explanation of why a Run Profile is disabled; {0} gives the reason</comment>
+  </data>
+  <data name="RunProfileDisabledChipTooltip" xml:space="preserve">
+    <value>This Run Profile is disabled, so it cannot run. {0}</value>
+    <comment>Tooltip on the Disabled chip; same text as RunProfileDisabledExplanation</comment>
+  </data>
+  <data name="RunTypeLockedHelp" xml:space="preserve">
+    <value>The run type cannot be changed. Delete and recreate the profile to use a different type.</value>
+    <comment>Helper text on the disabled Run Type field</comment>
+  </data>
+  <data name="RunProfileAllowObjectTypeChangesExplanation" xml:space="preserve">
+    <value>By default, an object that comes back from the Connected System under a different Object Type is refused: the Activity reports it as an error, and the existing Connected System Object is kept exactly as it is. Turn this on to carry the change out: this Full Import imports the object as a new Connected System Object of its new Object Type, and retires the old one, which is then disconnected under the usual Deletion Rules. Usually set on a second Full Import Run Profile, run by hand when the change is intended.</value>
+    <comment>Tooltip on the Allow Object Type Changes help icon</comment>
+  </data>
+  <data name="RunProfileAllowObjectTypeChangesChipExplanation" xml:space="preserve">
+    <value>This Full Import carries out Object Type changes rather than refusing them. An object that comes back under a different Object Type is imported as a new Connected System Object, and the old one is retired.</value>
+    <comment>Tooltip on the Object Type changes allowed chip</comment>
+  </data>
+  <data name="RunProfileDeltaLimitsSummary" xml:space="preserve">
+    <value>If the Connected System reports more deletions than either limit, this Delta Import marks none as deleted.</value>
+    <comment>Explains the deletion limits on a Delta Import</comment>
+  </data>
+  <data name="RunProfileFullLimitsSummary" xml:space="preserve">
+    <value>If a Full Import would mark more objects as deleted than either limit, it marks none.</value>
+    <comment>Explains the deletion limits on a Full Import</comment>
+  </data>
+  <data name="RunProfileDeltaLimitsCaption" xml:space="preserve">
+    <value>The percentage is of the objects in this run's scope not already marked as deleted, before it saves anything. Creates and updates are still applied. Each Delta Import reports withheld deletions again until you raise a limit or run a Delta Import Run Profile without one.</value>
+    <comment>Caption under the deletion limits on a Delta Import</comment>
+  </data>
+  <data name="RunProfileFullLimitsCaption" xml:space="preserve">
+    <value>The percentage is of the objects in this run's scope not already marked as deleted, when it starts. Objects the import did see are still updated. Fix the connector's scope or raise a limit, then run again.</value>
+    <comment>Caption under the deletion limits on a Full Import</comment>
+  </data>
+  <data name="RunProfileDeltaLimitTooltip" xml:space="preserve">
+    <value>If the Connected System reports more deletions than this, the Delta Import marks none as deleted and completes with a warning.</value>
+    <comment>Tooltip on the deleted-objects chip of a Delta Import</comment>
+  </data>
+  <data name="RunProfileFullLimitTooltip" xml:space="preserve">
+    <value>If a Full Import would mark more than this many objects as deleted, it marks none and completes with a warning.</value>
+    <comment>Tooltip on the deleted-objects chip of a Full Import</comment>
+  </data>
+  <data name="RunProfileAddedSnackbar" xml:space="preserve">
+    <value>New Run Profile added.</value>
+    <comment>Snackbar after a Run Profile is created</comment>
+  </data>
+  <data name="RunProfileCreateFailed" xml:space="preserve">
+    <value>Failed to create Run Profile. Please try again.</value>
+    <comment>Snackbar when a Run Profile could not be created</comment>
+  </data>
+  <data name="RunProfileUpdatedSnackbar" xml:space="preserve">
+    <value>Run Profile updated.</value>
+    <comment>Snackbar after a Run Profile is saved</comment>
+  </data>
+  <data name="RunProfileUpdateFailed" xml:space="preserve">
+    <value>Failed to update Run Profile. Please try again.</value>
+    <comment>Snackbar when a Run Profile could not be saved</comment>
+  </data>
+  <data name="RunProfileDeleteTitle" xml:space="preserve">
+    <value>Delete Run Profile</value>
+    <comment>Title of the delete confirmation</comment>
+  </data>
+  <data name="RunProfileDeleteConfirm" xml:space="preserve">
+    <value>Are you sure you want to delete the Run Profile '{0}'? This action cannot be undone.</value>
+    <comment>Delete confirmation; {0} is the Run Profile name</comment>
+  </data>
+  <data name="RunProfileRemovedSnackbar" xml:space="preserve">
+    <value>Run Profile removed.</value>
+    <comment>Snackbar after a Run Profile is deleted</comment>
+  </data>
+</root>

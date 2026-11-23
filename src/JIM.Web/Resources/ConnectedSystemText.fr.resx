@@ -1,0 +1,239 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="RunProfilesIntro" xml:space="preserve">
+    <value>Les profils d’exécution définissent les opérations qu’un connecteur peut effectuer, c’est-à-dire l’importation, l’exportation et la synchronisation, avec les paramètres requis.</value>
+  </data>
+  <data name="RunProfileNounSingular" xml:space="preserve">
+    <value>profil d’exécution</value>
+  </data>
+  <data name="RunProfileNounPlural" xml:space="preserve">
+    <value>profils d’exécution</value>
+  </data>
+  <data name="RunProfileSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher des profils d’exécution</value>
+  </data>
+  <data name="RunProfileCreateButton" xml:space="preserve">
+    <value>Créer un profil d’exécution</value>
+  </data>
+  <data name="RunProfileCreateTitle" xml:space="preserve">
+    <value>Créer un nouveau profil d’exécution</value>
+  </data>
+  <data name="RunProfileEditTitle" xml:space="preserve">
+    <value>Modifier le profil d’exécution</value>
+  </data>
+  <data name="RunType" xml:space="preserve">
+    <value>Type d’exécution</value>
+  </data>
+  <data name="RunProfileVerificationModeTooltip" xml:space="preserve">
+    <value>Le mode de vérification est activé : cette importation complète ne saute aucun objet d’après son hachage de contenu et compare chaque objet.</value>
+  </data>
+  <data name="VerificationMode" xml:space="preserve">
+    <value>Mode de vérification</value>
+  </data>
+  <data name="RunProfileObjectTypeChangesAllowedChip" xml:space="preserve">
+    <value>Changements de type d’objet autorisés</value>
+  </data>
+  <data name="RunProfileMaxCreatesTooltip" xml:space="preserve">
+    <value>Si plus de ce nombre de créations sont en attente au moment de cette exportation, aucune d’entre elles n’est tentée et l’exécution se termine avec un avertissement.</value>
+  </data>
+  <data name="RunProfileMaxCreatesChip" xml:space="preserve">
+    <value>Créations max. {0}</value>
+  </data>
+  <data name="RunProfileMaxUpdatesTooltip" xml:space="preserve">
+    <value>Si plus de ce nombre de mises à jour sont en attente au moment de cette exportation, aucune n’est tentée et l’exécution se termine avec un avertissement.</value>
+  </data>
+  <data name="RunProfileMaxUpdatesChip" xml:space="preserve">
+    <value>Mises à jour max. {0}</value>
+  </data>
+  <data name="RunProfileMaxDeletesTooltip" xml:space="preserve">
+    <value>Si plus de ce nombre de suppressions sont en attente au moment de cette exportation, aucune n’est tentée et l’exécution se termine avec un avertissement.</value>
+  </data>
+  <data name="RunProfileMaxDeletesChip" xml:space="preserve">
+    <value>Suppressions max. {0}</value>
+  </data>
+  <data name="RunProfileMaxDetectedDeletionsChip" xml:space="preserve">
+    <value>Suppressions détectées max. {0}</value>
+  </data>
+  <data name="RunProfileMaxDetectedDeletionsPercentChip" xml:space="preserve">
+    <value>Suppressions détectées max. {0} %</value>
+  </data>
+  <data name="RunProfileMaxCreates" xml:space="preserve">
+    <value>Créations max.</value>
+  </data>
+  <data name="RunProfileMaxUpdates" xml:space="preserve">
+    <value>Mises à jour max.</value>
+  </data>
+  <data name="RunProfileMaxDeletes" xml:space="preserve">
+    <value>Suppressions max.</value>
+  </data>
+  <data name="MaxDetectedDeletionsLabel" xml:space="preserve">
+    <value>Suppressions détectées max.</value>
+  </data>
+  <data name="MaxDetectedDeletionsPercentLabel" xml:space="preserve">
+    <value>Suppressions détectées max. (% de l’espace connecteur)</value>
+  </data>
+  <data name="RunProfileNoLimit" xml:space="preserve">
+    <value>Aucune limite</value>
+  </data>
+  <data name="RunProfileExportLimitsIntro" xml:space="preserve">
+    <value>Limites de ce que cette exécution peut tenter. Laissez vide pour aucune limite.</value>
+  </data>
+  <data name="RunProfileExportLimitsCaption" xml:space="preserve">
+    <value>Si une exécution dépasserait une limite, elle ne tente aucune modification de ce type ; les modifications restent en attente et l’exécution se termine avec un avertissement. Pour laisser passer une modification massive légitime, exécutez un profil d’exécution d’exportation sans cette limite.</value>
+  </data>
+  <data name="PartitionLabel" xml:space="preserve">
+    <value>Partition</value>
+  </data>
+  <data name="PartitionOptionalHelp" xml:space="preserve">
+    <value>Facultatif. Laissez vide pour importer depuis toutes les partitions sélectionnées.</value>
+  </data>
+  <data name="RunProfilePartitionDeselectedTooltip" xml:space="preserve">
+    <value>Cette partition n’est plus sélectionnée ; elle n’est donc plus gérée par JIM et ce profil d’exécution ne peut pas s’exécuter. Sélectionnez de nouveau la partition dans l’onglet Périmètre, ou faites pointer ce profil d’exécution vers une partition sélectionnée.</value>
+  </data>
+  <data name="RunProfilePartitionNotSelectedChip" xml:space="preserve">
+    <value>Non sélectionnée</value>
+  </data>
+  <data name="RunProfilePartitionRemovedTooltip" xml:space="preserve">
+    <value>Le système connecté ne possède plus cette partition. Choisissez la partition que lit ce profil d’exécution, ou Toutes les partitions sélectionnées, lorsque vous l’activez.</value>
+  </data>
+  <data name="RunProfilePartitionRemovedChip" xml:space="preserve">
+    <value>Supprimée</value>
+  </data>
+  <data name="AllSelectedPartitionsShort" xml:space="preserve">
+    <value>Toutes les sélectionnées</value>
+  </data>
+  <data name="AllSelectedPartitions" xml:space="preserve">
+    <value>Toutes les partitions sélectionnées</value>
+  </data>
+  <data name="PageSizeLabel" xml:space="preserve">
+    <value>Taille de page</value>
+  </data>
+  <data name="PageSizeRequired" xml:space="preserve">
+    <value>Nombre d’éléments à traiter en une fois lors de l’importation</value>
+  </data>
+  <data name="FilePathLabel" xml:space="preserve">
+    <value>Chemin d’accès au fichier</value>
+  </data>
+  <data name="FilePathHelp" xml:space="preserve">
+    <value>Laissez vide pour utiliser le chemin d’accès au fichier du système connecté, ou saisissez un chemin dans le conteneur, tel que /connector-files/Users.csv, pour lire un autre fichier.</value>
+  </data>
+  <data name="RunProfilePreviewTooltip" xml:space="preserve">
+    <value>Prévisualiser ce que ferait cette synchronisation complète, sans l’exécuter</value>
+  </data>
+  <data name="RunProfilePreviewAriaLabel" xml:space="preserve">
+    <value>Prévisualiser cette synchronisation complète</value>
+  </data>
+  <data name="RunProfileNoSearchMatch" xml:space="preserve">
+    <value>Aucun profil d’exécution ne correspond à « {0} ».</value>
+  </data>
+  <data name="RunProfileNoSearchMatchHint" xml:space="preserve">
+    <value>Essayez un autre terme de recherche, ou effacez la recherche.</value>
+  </data>
+  <data name="RunProfileNoneYet" xml:space="preserve">
+    <value>Aucun profil d’exécution pour le moment</value>
+  </data>
+  <data name="RunProfileNoneYetHint" xml:space="preserve">
+    <value>Utilisez le bouton Créer un profil d’exécution pour définir les opérations que ce système connecté peut être invité à effectuer.</value>
+  </data>
+  <data name="RunProfileSelectRunType" xml:space="preserve">
+    <value>Sélectionner le type d’exécution</value>
+  </data>
+  <data name="RunProfileTypeNotSupported" xml:space="preserve">
+    <value>(non pris en charge par le connecteur)</value>
+  </data>
+  <data name="RunProfileNameRequired" xml:space="preserve">
+    <value>Un nom de profil d’exécution est requis</value>
+  </data>
+  <data name="RunProfileTypeRequired" xml:space="preserve">
+    <value>Un type de profil d’exécution est requis</value>
+  </data>
+  <data name="RunProfileSelectRunTypeRequired" xml:space="preserve">
+    <value>Veuillez sélectionner un type d’exécution.</value>
+  </data>
+  <data name="RunProfilePartitionChoiceRequired" xml:space="preserve">
+    <value>Choisissez la partition que lit ce profil d’exécution, ou Toutes les partitions sélectionnées</value>
+  </data>
+  <data name="RunProfilePartitionRemovedRequiredHelp" xml:space="preserve">
+    <value>Requis pour l’activer : la partition qu’il lisait a été supprimée.</value>
+  </data>
+  <data name="RunProfileVerificationModeHelp" xml:space="preserve">
+    <value>Compare les attributs de chaque objet au lieu d’ignorer les objets inchangés d’après leur hachage de contenu, et signale toute divergence entre le hachage stocké et cette comparaison comme une erreur. À utiliser temporairement pour valider l’optimisation d’ignorance par hachage de contenu ; à laisser désactivé pour une importation complète normale, plus rapide.</value>
+  </data>
+  <data name="AllowObjectTypeChangesLabel" xml:space="preserve">
+    <value>Autoriser les changements de type d’objet</value>
+  </data>
+  <data name="SafeguardsTitle" xml:space="preserve">
+    <value>Garde-fous</value>
+  </data>
+  <data name="RunProfileConnectorNoObjectTypeDetection" xml:space="preserve">
+    <value>Ce connecteur ne peut pas distinguer un objet dont le type d’objet a changé de deux objets qui partagent un identifiant externe ; ce paramètre n’a donc aucun effet ici.</value>
+  </data>
+  <data name="RunProfileDisabledExplanation" xml:space="preserve">
+    <value>Ce profil d’exécution est désactivé, il ne peut donc pas s’exécuter. {0}</value>
+  </data>
+  <data name="RunProfileDisabledChipTooltip" xml:space="preserve">
+    <value>Ce profil d’exécution est désactivé, il ne peut donc pas s’exécuter. {0}</value>
+  </data>
+  <data name="RunTypeLockedHelp" xml:space="preserve">
+    <value>Le type d’exécution ne peut pas être modifié. Supprimez le profil et recréez-le pour utiliser un autre type.</value>
+  </data>
+  <data name="RunProfileAllowObjectTypeChangesExplanation" xml:space="preserve">
+    <value>Par défaut, un objet qui revient du système connecté sous un type d’objet différent est refusé : l’activité le signale comme une erreur, et l’objet du système connecté existant reste exactement tel quel. Activez cette option pour appliquer le changement : cette importation complète importe l’objet comme un nouvel objet de système connecté de son nouveau type d’objet, et retire l’ancien, qui est alors déconnecté selon les règles de suppression habituelles. Elle se définit généralement sur un second profil d’exécution d’importation complète, lancé manuellement lorsque le changement est voulu.</value>
+  </data>
+  <data name="RunProfileAllowObjectTypeChangesChipExplanation" xml:space="preserve">
+    <value>Cette importation complète applique les changements de type d’objet au lieu de les refuser. Un objet qui revient sous un type d’objet différent est importé comme un nouvel objet de système connecté, et l’ancien est retiré.</value>
+  </data>
+  <data name="RunProfileDeltaLimitsSummary" xml:space="preserve">
+    <value>Si le système connecté signale plus de suppressions que l’une ou l’autre limite, cette importation delta ne marque aucune suppression comme supprimée.</value>
+  </data>
+  <data name="RunProfileFullLimitsSummary" xml:space="preserve">
+    <value>Si une importation complète marquerait plus d’objets comme supprimés que l’une ou l’autre limite, elle n’en marque aucun.</value>
+  </data>
+  <data name="RunProfileDeltaLimitsCaption" xml:space="preserve">
+    <value>Le pourcentage porte sur les objets du périmètre de cette exécution qui ne sont pas déjà marqués comme supprimés, avant toute sauvegarde. Les créations et les mises à jour sont toujours appliquées. Chaque importation delta signale de nouveau les suppressions retenues, jusqu’à ce que vous augmentiez une limite ou exécutiez un profil d’exécution d’importation delta sans limite.</value>
+  </data>
+  <data name="RunProfileFullLimitsCaption" xml:space="preserve">
+    <value>Le pourcentage porte sur les objets du périmètre de cette exécution qui ne sont pas déjà marqués comme supprimés, au moment de son démarrage. Les objets que l’importation a vus sont toujours mis à jour. Corrigez le périmètre du connecteur ou augmentez une limite, puis exécutez de nouveau.</value>
+  </data>
+  <data name="RunProfileDeltaLimitTooltip" xml:space="preserve">
+    <value>Si le système connecté signale plus de suppressions que ce nombre, l’importation delta ne marque aucune suppression comme supprimée et se termine avec un avertissement.</value>
+  </data>
+  <data name="RunProfileFullLimitTooltip" xml:space="preserve">
+    <value>Si une importation complète marquerait plus de ce nombre d’objets comme supprimés, elle n’en marque aucun et se termine avec un avertissement.</value>
+  </data>
+  <data name="RunProfileAddedSnackbar" xml:space="preserve">
+    <value>Nouveau profil d’exécution ajouté.</value>
+  </data>
+  <data name="RunProfileCreateFailed" xml:space="preserve">
+    <value>Échec de la création du profil d’exécution. Veuillez réessayer.</value>
+  </data>
+  <data name="RunProfileUpdatedSnackbar" xml:space="preserve">
+    <value>Profil d’exécution mis à jour.</value>
+  </data>
+  <data name="RunProfileUpdateFailed" xml:space="preserve">
+    <value>Échec de la mise à jour du profil d’exécution. Veuillez réessayer.</value>
+  </data>
+  <data name="RunProfileDeleteTitle" xml:space="preserve">
+    <value>Supprimer le profil d’exécution</value>
+  </data>
+  <data name="RunProfileDeleteConfirm" xml:space="preserve">
+    <value>Voulez-vous vraiment supprimer le profil d’exécution « {0} » ? Cette action est irréversible.</value>
+  </data>
+  <data name="RunProfileRemovedSnackbar" xml:space="preserve">
+    <value>Profil d’exécution supprimé.</value>
+  </data>
+</root>
