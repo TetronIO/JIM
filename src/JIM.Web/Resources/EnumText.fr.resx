@@ -300,7 +300,7 @@
     <value>Objet Metaverse</value>
   </data>
   <data name="ActivityTargetType_TrustedCertificate" xml:space="preserve">
-    <value>Certificat de confiance</value>
+    <value>Certificat approuvé</value>
   </data>
   <data name="ActivityTargetType_ObjectMatchingRule" xml:space="preserve">
     <value>Règle de correspondance d’objets</value>

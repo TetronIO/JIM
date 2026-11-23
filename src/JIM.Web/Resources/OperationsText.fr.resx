@@ -516,7 +516,7 @@
     <value>Génération de données</value>
   </data>
   <data name="CompletedTrustedCertificate" xml:space="preserve">
-    <value>Certificat de confiance</value>
+    <value>Certificat approuvé</value>
   </data>
   <data name="CompletedMetaverseAttribute" xml:space="preserve">
     <value>Attribut Metaverse</value>

@@ -495,7 +495,7 @@
     <value>Booléen</value>
   </data>
   <data name="DataTypeLongNumber" xml:space="preserve">
-    <value>Grand nombre</value>
+    <value>Nombre long</value>
   </data>
   <data name="DataTypeDecimal" xml:space="preserve">
     <value>Décimal</value>

@@ -84,7 +84,7 @@
     <value>Importation complète</value>
   </data>
   <data name="DeltaImport" xml:space="preserve">
-    <value>Importation différentielle</value>
+    <value>Importation delta</value>
   </data>
   <data name="Export" xml:space="preserve">
     <value>Exportation</value>

@@ -591,7 +591,7 @@
     <value>Exportations de CSO en échec</value>
   </data>
   <data name="ActivityStatCsosJoinedTitle" xml:space="preserve">
-    <value>Objets de systèmes connectés rattachés</value>
+    <value>Objets de systèmes connectés joints</value>
   </data>
   <data name="ActivityStatCsosJoined" xml:space="preserve">
     <value>CSO rattachés</value>
@@ -867,7 +867,7 @@
     <value>Projetés</value>
   </data>
   <data name="ActivityOutcomeJoined" xml:space="preserve">
-    <value>Rattachés</value>
+    <value>Joints</value>
   </data>
   <data name="ActivityOutcomeAttributeFlows" xml:space="preserve">
     <value>Flux d’attributs</value>
@@ -981,7 +981,7 @@
     <value>Objets Metaverse projetés</value>
   </data>
   <data name="ActivityChipJoined" xml:space="preserve">
-    <value>Objets de systèmes connectés rattachés</value>
+    <value>Objets de systèmes connectés joints</value>
   </data>
   <data name="ActivityChipAttributeFlow" xml:space="preserve">
     <value>Objets Metaverse avec flux d’attributs</value>
@@ -1359,7 +1359,7 @@
     <value>Projeté</value>
   </data>
   <data name="ActivityOperationTextJoined" xml:space="preserve">
-    <value>Rattaché</value>
+    <value>Joint</value>
   </data>
   <data name="ActivityOperationTextAttributeFlow" xml:space="preserve">
     <value>Flux d’attributs</value>

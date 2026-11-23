@@ -57,10 +57,10 @@
     <value>Pluralité :</value>
   </data>
   <data name="PluralitySingleValued" xml:space="preserve">
-    <value>Monovaleur</value>
+    <value>Monovalué</value>
   </data>
   <data name="PluralityMultiValued" xml:space="preserve">
-    <value>Multivaleur</value>
+    <value>Multivalué</value>
   </data>
   <data name="MappingTypeAttributeMapping" xml:space="preserve">
     <value>Mappage d’attribut</value>
@@ -1014,10 +1014,10 @@
     <value>Aucune valeur</value>
   </data>
   <data name="PluralitySingleValuedLower" xml:space="preserve">
-    <value>monovaleur</value>
+    <value>monovalué</value>
   </data>
   <data name="PluralityMultiValuedLower" xml:space="preserve">
-    <value>multivaleur</value>
+    <value>multivalué</value>
   </data>
   <data name="HasNoValueAria" xml:space="preserve">
     <value>{0} n’a aucune valeur</value>
@@ -2163,7 +2163,7 @@
     <value>↑↓ pour choisir · Entrée ou Tab pour insérer · Échap pour fermer</value>
   </data>
   <data name="FlowTestIntro" xml:space="preserve">
-    <value>Donnez une valeur à chaque entrée, ou chargez-les depuis un objet, et voyez ce que ferait une synchronisation avec ce flux d'attributs en l'état. Chaque valeur est lue selon le type de son attribut.</value>
+    <value>Donnez une valeur à chaque entrée, ou chargez-les depuis un objet, et voyez ce que ferait une synchronisation avec ce flux d’attributs en l’état. Chaque valeur est lue selon le type de son attribut.</value>
   </data>
   <data name="FlowTestValueSourceAria" xml:space="preserve">
     <value>D’où viennent les valeurs</value>
@@ -2205,10 +2205,10 @@
     <value>multivalué</value>
   </data>
   <data name="FlowTestNotHeldExport" xml:space="preserve">
-    <value>Un flux d'attributs d'exportation lit uniquement l'objet Metaverse ; cette entrée n'a donc jamais de valeur.</value>
+    <value>Un flux d’attributs d’exportation lit uniquement l’objet Metaverse ; cette entrée n’a donc jamais de valeur.</value>
   </data>
   <data name="FlowTestNotHeldNoAttribute" xml:space="preserve">
-    <value>« {0} » n'a aucun attribut de ce nom ; cette entrée n'a donc jamais de valeur.</value>
+    <value>« {0} » n’a aucun attribut de ce nom ; cette entrée n’a donc jamais de valeur.</value>
   </data>
   <data name="FlowTestIncomplete" xml:space="preserve">
     <value>Aucun résultat tant que l’expression n’est pas complète : {0}</value>
@@ -2217,7 +2217,7 @@
     <value>Aucun résultat tant que l’expression n’est pas complète : {0} (position {1})</value>
   </data>
   <data name="FlowTestParseFailed" xml:space="preserve">
-    <value>L'expression n'a pas pu être analysée.</value>
+    <value>L’expression n’a pas pu être analysée.</value>
   </data>
   <data name="FlowTestEnterValues" xml:space="preserve">
     <value>Saisissez une valeur pour chaque entrée, ou chargez-les depuis un objet, pour voir le résultat.</value>
@@ -2256,7 +2256,7 @@
     <value>Non évalué : aucune valeur pour {0}</value>
   </data>
   <data name="FlowTestNotConvertible" xml:space="preserve">
-    <value>« {0} » n'est pas une valeur de type {1}</value>
+    <value>« {0} » n’est pas une valeur de type {1}</value>
   </data>
   <data name="FlowTestMultiValuedResult" xml:space="preserve">
     <value>{0} valeurs, pour un attribut qui n’en contient qu’une</value>
@@ -2292,10 +2292,10 @@
     <value>Rien à traiter</value>
   </data>
   <data name="FlowTestNotAppliedText" xml:space="preserve">
-    <value>Non appliqué : le traitement des valeurs ne s'applique qu'aux attributs de type texte, à l'importation</value>
+    <value>Non appliqué : le traitement des valeurs ne s’applique qu’aux attributs de type texte, à l’importation</value>
   </data>
   <data name="FlowTestNotAppliedImport" xml:space="preserve">
-    <value>Non appliqué : le traitement des valeurs ne s'applique qu'à l'importation</value>
+    <value>Non appliqué : le traitement des valeurs ne s’applique qu’à l’importation</value>
   </data>
   <data name="FlowTestNoneSet" xml:space="preserve">
     <value>Aucun défini</value>
@@ -2346,10 +2346,10 @@
     <value>Traiter les espaces comme une absence de valeur</value>
   </data>
   <data name="FlowTestSavedCaseGenerated" xml:space="preserve">
-    <value>Valeur générée pour {0}, exécutée sur le flux d'attributs tel qu'enregistré</value>
+    <value>Valeur générée pour {0}, exécutée sur le flux d’attributs tel qu’enregistré</value>
   </data>
   <data name="FlowTestSavedCaseFlow" xml:space="preserve">
-    <value>Flux d'attributs vers {0}, exécuté sur le flux d'attributs tel qu'enregistré</value>
+    <value>Flux d’attributs vers {0}, exécuté sur le flux d’attributs tel qu’enregistré</value>
   </data>
   <data name="ScopingGroupLogicType" xml:space="preserve">
     <value>GROUPE DE CRITÈRES. TYPE DE LOGIQUE :</value>

@@ -591,7 +591,7 @@
     <value>Table de journal des modifications</value>
   </data>
   <data name="JIM_SQL_Connector_Delta_Import_Mode_Option_Watermark_Column" xml:space="preserve">
-    <value>Colonne de filigrane</value>
+    <value>Colonne de marque de progression</value>
   </data>
   <data name="JIM_Microsoft_Entra_ID_Connector_ConnectorDescription" xml:space="preserve">
     <value>Permet la synchronisation bidirectionnelle des utilisateurs et des groupes avec Microsoft Entra ID, par l’intermédiaire de l’API Microsoft Graph.</value>
