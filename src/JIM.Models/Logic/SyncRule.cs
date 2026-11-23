@@ -185,6 +185,41 @@ public class SyncRule : IAuditable, IValidated
     public List<string> RuleSaveWarnings { get; } = [];
 
     /// <summary>
+    /// The warnings in <see cref="RuleSaveWarnings"/> that carry a message the portal shows in the viewer's language
+    /// (#3030), keyed by their British English. Never serialised.
+    /// </summary>
+    [NotMapped]
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Dictionary<string, JIM.Models.Localisation.JimMessage> RuleSaveWarningDetails { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Raises a rule-level save warning: its English joins <see cref="RuleSaveWarnings"/> and its message is kept beside it.</summary>
+    public void AddRuleSaveWarning(JIM.Models.Localisation.JimMessage detail)
+    {
+        var english = JIM.Models.Localisation.MessageRenderer.ToEnglish(detail);
+        RuleSaveWarnings.Add(english);
+        RuleSaveWarningDetails[english] = detail;
+    }
+
+    /// <summary>
+    /// The message behind one of <see cref="SaveWarnings"/>, for the portal to show in the viewer's language (#3030), or
+    /// null where the warning is English only (text another part of JIM produced). Match is on the warning's English.
+    /// </summary>
+    public JIM.Models.Localisation.JimMessage? DescribeSaveWarning(string warning)
+    {
+        if (RuleSaveWarningDetails.TryGetValue(warning, out var ruleDetail))
+            return ruleDetail;
+
+        var mappingDetail = AttributeFlowRules.Select(mapping => mapping.SaveWarningDetails.GetValueOrDefault(warning)).FirstOrDefault(detail => detail != null);
+        if (mappingDetail != null)
+            return mappingDetail;
+
+        return ScopingDetailsOf(ObjectScopingCriteriaGroups).Select(details => details.GetValueOrDefault(warning)).FirstOrDefault(detail => detail != null);
+    }
+
+    private static IEnumerable<Dictionary<string, JIM.Models.Localisation.JimMessage>> ScopingDetailsOf(IEnumerable<SyncRuleScopingCriteriaGroup> groups) =>
+        groups.SelectMany(group => group.Criteria.Select(criterion => criterion.SaveWarningDetails).Concat(ScopingDetailsOf(group.ChildGroups)));
+
+    /// <summary>
     /// Every warning the save that returned this instance raised: <see cref="RuleSaveWarnings"/>, then
     /// <see cref="AttributeFlowSaveWarnings"/>, then <see cref="ScopingSaveWarnings"/>, each once. The one list the portal
     /// and the REST API report, so neither says more or less than the other.

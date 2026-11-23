@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 
@@ -31,7 +34,8 @@ public partial class ConnectedSystemServer
         if (syncRule.Direction != SyncRuleDirection.Export)
             return;
 
-        syncRule.RuleSaveWarnings.AddRange(await FindConnectorDefinedAttributeOverlapsAsync(syncRule, syncRule.AttributeFlowRules, involving: null));
+        foreach (var warning in await FindConnectorDefinedAttributeOverlapsAsync(syncRule, syncRule.AttributeFlowRules, involving: null))
+            syncRule.AddRuleSaveWarning(warning);
     }
 
     /// <summary>
@@ -51,14 +55,15 @@ public partial class ConnectedSystemServer
 
         var storedMappings = await Application.Repository.ConnectedSystems.GetSyncRuleMappingsAsync(syncRuleId);
         var mappings = storedMappings.Where(stored => mapping.Id == 0 || stored.Id != mapping.Id).Append(mapping).ToList();
-        mapping.SaveWarnings.AddRange(await FindConnectorDefinedAttributeOverlapsAsync(syncRule, mappings, involving: mapping));
+        foreach (var warning in await FindConnectorDefinedAttributeOverlapsAsync(syncRule, mappings, involving: mapping))
+            mapping.AddSaveWarning(warning);
     }
 
     /// <summary>
     /// The overlaps among <paramref name="mappings"/>, as warnings. When <paramref name="involving"/> is given, only those
     /// it takes part in, on either side.
     /// </summary>
-    private async Task<List<string>> FindConnectorDefinedAttributeOverlapsAsync(SyncRule syncRule, IReadOnlyCollection<SyncRuleMapping> mappings,
+    private async Task<List<JimMessage>> FindConnectorDefinedAttributeOverlapsAsync(SyncRule syncRule, IReadOnlyCollection<SyncRuleMapping> mappings,
         SyncRuleMapping? involving)
     {
         var objectTypeId = syncRule.ConnectedSystemObjectType?.Id ?? syncRule.ConnectedSystemObjectTypeId;
@@ -129,9 +134,7 @@ public partial class ConnectedSystemServer
             .Select(source =>
                 $"{source.Expression}|{source.MetaverseAttribute?.Id ?? source.MetaverseAttributeId}|{source.ConnectedSystemAttribute?.Id ?? source.ConnectedSystemAttributeId}");
 
-    private static string BuildConnectorDefinedAttributeOverlapMessage(ConnectedSystemObjectTypeAttribute connectorDefined,
+    private static JimMessage BuildConnectorDefinedAttributeOverlapMessage(ConnectedSystemObjectTypeAttribute connectorDefined,
         ConnectedSystemObjectTypeAttribute source, string connectorName) =>
-        $"'{connectorDefined.Name}' is defined by the {connectorName} and written to the Connected System through '{source.Name}', which " +
-        "this rule also flows, from a different source. Each export may overwrite the other's value. Flow one of them, or give " +
-        "both the same source.";
+        ConnectedSystemMessage.Create(nameof(ConnectedSystemMessages.SaveWarningConnectorDefinedOverlap), connectorDefined.Name, connectorName, source.Name);
 }

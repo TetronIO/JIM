@@ -304,7 +304,7 @@ else
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.Data.Common.DbException or ObjectDisposedException)
         {
-            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PriorityOrderFailed, ex.Message), Severity.Error);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.PriorityOrderFailed, ex.ToDisplayText()), Severity.Error);
         }
         finally
         {

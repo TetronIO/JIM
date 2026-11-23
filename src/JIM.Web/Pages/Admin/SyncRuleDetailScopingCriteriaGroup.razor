@@ -72,7 +72,7 @@
                 <MudChip T="string">@CriterionOperatorOptions.FriendlyComparison(criteria.ComparisonType, criteria.GetAttributeDataType())</MudChip>
                 @if (SearchComparisonOperators.TakesValue(criteria.ComparisonType))
                 {
-                    <MudChip T="string">@criteria.ToString()</MudChip>
+                    <MudChip T="string">@criteria.Describe().Show()</MudChip>
                 }
             }
             <MudTooltip Text="@SyncRuleText.ScopingDeleteCriteria" Arrow="true" Placement="Placement.Top">
@@ -266,7 +266,7 @@
 
         @if (_newSyncRuleScopingCriteria is { NeedsFullReconciliationPass: true })
         {
-            <MudAlert Severity="Severity.Info" Class="mt-5" data-testid="jim-scoping-criterion-full-pass">@SyncRuleScopingCriteria.FullReconciliationPassNotice</MudAlert>
+            <MudAlert Severity="Severity.Info" Class="mt-5" data-testid="jim-scoping-criterion-full-pass">@SyncRuleScopingCriteria.FullReconciliationPassNoticeMessage.Show()</MudAlert>
         }
 
     </DialogContent>

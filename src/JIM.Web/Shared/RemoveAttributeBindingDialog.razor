@@ -41,7 +41,7 @@
                             @foreach (var reader in _impact.Readers)
                             {
                                 <MudListItem T="string" Icon="@Icons.Material.Filled.Link" Href="@Helpers.AttributeReaderHref(reader)">
-                                    @reader.Description
+                                    @reader.ShowDescription()
                                 </MudListItem>
                             }
                         </MudList>

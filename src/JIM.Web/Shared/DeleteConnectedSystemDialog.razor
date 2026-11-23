@@ -369,7 +369,7 @@
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Log.Error(ex, "Error deleting Connected System {Id}", ConnectedSystem.Id);
-            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DeleteSystemError, ex.Message), Severity.Error);
+            Snackbar.Add(string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectedSystemText.DeleteSystemError, ex.ToDisplayText()), Severity.Error);
             return false;
         }
 

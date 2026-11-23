@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="RelativeHoursFromNowOne" xml:space="preserve">
+    <value>dans {0} heure</value>
+  </data>
+  <data name="RelativeHoursFromNowOther" xml:space="preserve">
+    <value>dans {0} heures</value>
+  </data>
+  <data name="RelativeHoursAgoOne" xml:space="preserve">
+    <value>il y a {0} heure</value>
+  </data>
+  <data name="RelativeHoursAgoOther" xml:space="preserve">
+    <value>il y a {0} heures</value>
+  </data>
+  <data name="RelativeDaysFromNowOne" xml:space="preserve">
+    <value>dans {0} jour</value>
+  </data>
+  <data name="RelativeDaysFromNowOther" xml:space="preserve">
+    <value>dans {0} jours</value>
+  </data>
+  <data name="RelativeDaysAgoOne" xml:space="preserve">
+    <value>il y a {0} jour</value>
+  </data>
+  <data name="RelativeDaysAgoOther" xml:space="preserve">
+    <value>il y a {0} jours</value>
+  </data>
+  <data name="RelativeWeeksFromNowOne" xml:space="preserve">
+    <value>dans {0} semaine</value>
+  </data>
+  <data name="RelativeWeeksFromNowOther" xml:space="preserve">
+    <value>dans {0} semaines</value>
+  </data>
+  <data name="RelativeWeeksAgoOne" xml:space="preserve">
+    <value>il y a {0} semaine</value>
+  </data>
+  <data name="RelativeWeeksAgoOther" xml:space="preserve">
+    <value>il y a {0} semaines</value>
+  </data>
+  <data name="RelativeMonthsFromNowOne" xml:space="preserve">
+    <value>dans {0} mois</value>
+  </data>
+  <data name="RelativeMonthsFromNowOther" xml:space="preserve">
+    <value>dans {0} mois</value>
+  </data>
+  <data name="RelativeMonthsAgoOne" xml:space="preserve">
+    <value>il y a {0} mois</value>
+  </data>
+  <data name="RelativeMonthsAgoOther" xml:space="preserve">
+    <value>il y a {0} mois</value>
+  </data>
+  <data name="RelativeYearsFromNowOne" xml:space="preserve">
+    <value>dans {0} an</value>
+  </data>
+  <data name="RelativeYearsFromNowOther" xml:space="preserve">
+    <value>dans {0} ans</value>
+  </data>
+  <data name="RelativeYearsAgoOne" xml:space="preserve">
+    <value>il y a {0} an</value>
+  </data>
+  <data name="RelativeYearsAgoOther" xml:space="preserve">
+    <value>il y a {0} ans</value>
+  </data>
+  <data name="CriterionHas" xml:space="preserve">
+    <value>Possède {0}</value>
+  </data>
+  <data name="CriterionHasNo" xml:space="preserve">
+    <value>Ne possède pas {0}</value>
+  </data>
+  <data name="CriterionConnection" xml:space="preserve">
+    <value>{0} dans {1}</value>
+  </data>
+  <data name="CriterionObjectTypeId" xml:space="preserve">
+    <value>Type d’objets {0}</value>
+  </data>
+  <data name="CriterionNoAttribute" xml:space="preserve">
+    <value>Aucun attribut défini</value>
+  </data>
+  <data name="CriterionText" xml:space="preserve">
+    <value>Texte : {0}</value>
+  </data>
+  <data name="CriterionNumber" xml:space="preserve">
+    <value>Nombre : {0}</value>
+  </data>
+  <data name="CriterionLongNumber" xml:space="preserve">
+    <value>Grand nombre : {0}</value>
+  </data>
+  <data name="CriterionDecimal" xml:space="preserve">
+    <value>Décimal : {0}</value>
+  </data>
+  <data name="CriterionBoolean" xml:space="preserve">
+    <value>Booléen : {0}</value>
+  </data>
+  <data name="CriterionGuid" xml:space="preserve">
+    <value>GUID : {0}</value>
+  </data>
+  <data name="CriterionDate" xml:space="preserve">
+    <value>Date : {0}</value>
+  </data>
+  <data name="CriterionUnsupported" xml:space="preserve">
+    <value>Type de données non pris en charge</value>
+  </data>
+  <data name="CriterionPlainText" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="FullReconciliationPassNotice" xml:space="preserve">
+    <value>Ce critère compare une expression à une date relative. La réconciliation du périmètre temporel ne peut limiter une date relative aux objets dont la date l’a franchie que si la date est stockée dans un attribut ; pour cette règle, chaque réconciliation évalue donc tous les objets de son type, par lots. Sur un type d’objets volumineux, préférez transférer la date dans un attribut et comparer celui-ci.</value>
+  </data>
+</root>

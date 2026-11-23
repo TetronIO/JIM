@@ -813,7 +813,7 @@
         catch (ArgumentException ex)
         {
             // A refusal the server explains, such as enabling a Run Profile without the scope it needs.
-            Snackbar.Add(ex.Message, Severity.Error);
+            Snackbar.Add(ex.ToDisplayText(), Severity.Error);
         }
         catch
         {

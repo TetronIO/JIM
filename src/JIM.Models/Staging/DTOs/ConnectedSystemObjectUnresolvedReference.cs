@@ -45,4 +45,18 @@ public class ConnectedSystemObjectUnresolvedReference
 
     /// <summary>What to do about it, in words.</summary>
     public string Remedy { get; set; } = null!;
+
+    /// <summary>
+    /// <see cref="Finding"/> as a message the portal shows in the viewer's language (#3030); <see cref="Finding"/> is always
+    /// its British English. Never serialised: the REST API and PowerShell keep the English.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public JIM.Models.Localisation.JimMessage? FindingDetail { get; set; }
+
+    /// <summary>
+    /// <see cref="Remedy"/> as a message the portal shows in the viewer's language (#3030); <see cref="Remedy"/> is always
+    /// its British English. Never serialised: the REST API and PowerShell keep the English.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public JIM.Models.Localisation.JimMessage? RemedyDetail { get; set; }
 }

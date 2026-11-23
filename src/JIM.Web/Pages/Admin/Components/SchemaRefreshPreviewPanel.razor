@@ -114,7 +114,7 @@
                     @foreach (var reader in Dependents.RemovedAttributeReaders)
                     {
                         <li>
-                            @string.Format(CultureInfo.CurrentCulture, SchemaText.PreviewReaderLine, reader.Description)
+                            @string.Format(CultureInfo.CurrentCulture, SchemaText.PreviewReaderLine, reader.ShowDescription())
                             @if (Helpers.AttributeReaderHref(reader) is { } readerHref)
                             {
                                 <MudLink Href="@readerHref" Target="_blank" Class="ml-1">@SchemaText.PreviewOpen</MudLink>

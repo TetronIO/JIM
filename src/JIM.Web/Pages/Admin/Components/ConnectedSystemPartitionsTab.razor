@@ -734,7 +734,7 @@ else
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to import hierarchy for Connected System {ConnectedSystemId}", ConnectedSystem.Id);
-            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.RetrieveFailed, ex.Message), Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.RetrieveFailed, ex.ToDisplayText()), Severity.Error);
         }
         finally
         {

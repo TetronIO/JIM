@@ -173,7 +173,7 @@
         // excluded so a tearing-down circuit propagates rather than rendering as a discovery failure.
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _errorMessage = ex.Message;
+            _errorMessage = ex.ToDisplayText();
         }
         finally
         {

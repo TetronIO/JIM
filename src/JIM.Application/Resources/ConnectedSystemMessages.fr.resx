@@ -1,0 +1,332 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="SyncRuleObjectTypesCannotChange" xml:space="preserve">
+    <value>Le {0} de la règle de synchronisation « {1} » ne peut plus être modifié une fois la règle enregistrée : ses critères de périmètre, ses flux d’attributs et ses règles de correspondance d’objets nomment des attributs de ses types d’objets. Créez plutôt une nouvelle règle de synchronisation pour l’autre type d’objet.</value>
+  </data>
+  <data name="ChangedObjectTypesBoth" xml:space="preserve">
+    <value>type d’objets de système connecté et type d’objets Metaverse</value>
+  </data>
+  <data name="ChangedObjectTypeConnectedSystem" xml:space="preserve">
+    <value>type d’objets de système connecté</value>
+  </data>
+  <data name="ChangedObjectTypeMetaverse" xml:space="preserve">
+    <value>type d’objets Metaverse</value>
+  </data>
+  <data name="SyncRuleEnabledOnDeselectedObjectType" xml:space="preserve">
+    <value>La règle de synchronisation « {0} » ne peut pas être activée, car son type d’objets « {1} » n’est pas sélectionné sur le système connecté. Sélectionnez d’abord le type d’objets, ou enregistrez la règle de synchronisation désactivée.</value>
+  </data>
+  <data name="SyncRuleDeprovisionDisableUnsupported" xml:space="preserve">
+    <value>La règle de synchronisation « {0} » ne peut pas effectuer le déprovisionnement avec Désactiver : le {1} qu’utilise « {2} » ne peut pas désactiver un compte. Choisissez Supprimer ou Déconnecter.</value>
+  </data>
+  <data name="ObjectTypeStillManagedOne" xml:space="preserve">
+    <value>Le type d’objets « {0} » ne peut pas être désélectionné tant qu’une règle de synchronisation activée le gère encore : {2}. Désactivez d’abord cette règle de synchronisation, ou laissez le type d’objets sélectionné.</value>
+  </data>
+  <data name="ObjectTypeStillManagedOther" xml:space="preserve">
+    <value>Le type d’objets « {0} » ne peut pas être désélectionné tant que {1} règles de synchronisation activées le gèrent encore : {2}. Désactivez d’abord ces règles de synchronisation, ou laissez le type d’objets sélectionné.</value>
+  </data>
+  <data name="AttributeDeselectionRefusal" xml:space="preserve">
+    <value>Un attribut lu par un critère de périmètre ne peut pas être désélectionné : il ne serait plus importé, si bien que le critère déciderait du périmètre à partir de valeurs jamais actualisées, et d’aucune valeur pour les objets importés ensuite. Modifiez d’abord ceci :</value>
+  </data>
+  <data name="SchemaRefreshRemovalRefusal" xml:space="preserve">
+    <value>« Appliquer et supprimer » est refusé : la configuration lit un attribut que le système connecté ne signale plus. Modifiez d’abord ceci, ou appliquez sans supprimer :</value>
+  </data>
+  <data name="AttributeReadersRefusal" xml:space="preserve">
+    <value>{0} {1}.</value>
+  </data>
+  <data name="ConnectorFallbackName" xml:space="preserve">
+    <value>le connecteur</value>
+  </data>
+  <data name="ConnectorDefinedAttributeNameCollision" xml:space="preserve">
+    <value>{0} définit un attribut nommé « {1} » sur le type d’objets « {2} », mais « {3} » possède déjà un attribut de ce nom. Un attribut défini par le connecteur doit porter un nom que les attributs propres du système connecté ne peuvent pas avoir. Le schéma n’a pas été modifié.</value>
+  </data>
+  <data name="MappingSourceTypeNotSet" xml:space="preserve">
+    <value>L’attribut source « {0} » est de type NotSet. Les attributs doivent avoir un type défini avant de pouvoir être utilisés dans des mappages.</value>
+  </data>
+  <data name="MappingTargetTypeNotSet" xml:space="preserve">
+    <value>L’attribut cible « {0} » est de type NotSet. Les attributs doivent avoir un type défini avant de pouvoir être utilisés dans des mappages.</value>
+  </data>
+  <data name="MappingTypeMismatch" xml:space="preserve">
+    <value>Types incompatibles : l’attribut source « {0} » ({1}) n’est pas compatible avec l’attribut cible « {2} » ({3}). Les attributs source et cible doivent avoir le même type.</value>
+  </data>
+  <data name="MappingTargetReadOnly" xml:space="preserve">
+    <value>Impossible de créer un flux d’attributs d’exportation vers l’attribut en lecture seule « {0} ». Cet attribut est marqué en lecture seule par le système connecté et ne peut pas être écrit.</value>
+  </data>
+  <data name="DuplicateMappingTargetNamed" xml:space="preserve">
+    <value>La règle de synchronisation « {0} » possède déjà un flux d’attributs ciblant « {1} » ; un seul mappage par attribut cible est pris en charge, et un mappage désactivé compte quand même. Pour passer d’un attribut source à un autre au sein d’une même règle, utilisez un seul mappage par expression (par exemple attribute_1 ?? attribute_2). Pour arbitrer entre des sources avec la priorité des attributs, définissez le second flux sur une autre règle de synchronisation, avec un périmètre différent.</value>
+  </data>
+  <data name="DuplicateMappingTargetUnnamed" xml:space="preserve">
+    <value>Cette règle de synchronisation possède déjà un flux d’attributs ciblant « {0} » ; un seul mappage par attribut cible est pris en charge, et un mappage désactivé compte quand même. Pour passer d’un attribut source à un autre au sein d’une même règle, utilisez un seul mappage par expression (par exemple attribute_1 ?? attribute_2). Pour arbitrer entre des sources avec la priorité des attributs, définissez le second flux sur une autre règle de synchronisation, avec un périmètre différent.</value>
+  </data>
+  <data name="MappingSettingsNoChanges" xml:space="preserve">
+    <value>Aucun paramètre à modifier n’a été fourni.</value>
+  </data>
+  <data name="MappingNoExpressionSource" xml:space="preserve">
+    <value>Ce flux d’attributs n’a pas de source de type expression ; les paramètres d’expression ne s’y appliquent donc pas. Supprimez le mappage et recréez-le avec une source de type expression.</value>
+  </data>
+  <data name="MappingSeveralExpressionSources" xml:space="preserve">
+    <value>Ce flux d’attributs a plusieurs sources de type expression ; on ne sait donc pas quelle expression remplacer.</value>
+  </data>
+  <data name="MappingImportOnlySettings" xml:space="preserve">
+    <value>« Null est une valeur », le traitement des valeurs entrantes et la normalisation de la casse s’appliquent uniquement aux mappages d’importation.</value>
+  </data>
+  <data name="MappingExportOnlySettings" xml:space="preserve">
+    <value>« Exportation initiale uniquement » s’applique uniquement aux mappages d’exportation.</value>
+  </data>
+  <data name="KeepUniqueNotApplicable" xml:space="preserve">
+    <value>« Garder unique » s’applique uniquement à un flux d’attributs qui construit sa valeur avec une expression (une valeur construite à partir d’une valeur générée), et non à un flux direct ni à une valeur générée elle-même.</value>
+  </data>
+  <data name="TargetPrefixed" xml:space="preserve">
+    <value>{0} : {1}</value>
+  </data>
+  <data name="MappingNotGenerated" xml:space="preserve">
+    <value>Ce flux d’attributs n’est pas un mappage généré ; les paramètres de génération ne s’y appliquent donc pas.</value>
+  </data>
+  <data name="RestartMappingNotFound" xml:space="preserve">
+    <value>Aucun mappage de flux d’attributs n’a été trouvé avec l’ID {0}.</value>
+  </data>
+  <data name="RestartNotGenerated" xml:space="preserve">
+    <value>Ce flux d’attributs n’est pas un mappage généré ; « Recommencer » s’applique uniquement aux mappages générés.</value>
+  </data>
+  <data name="ExclusionNoMetaverseTarget" xml:space="preserve">
+    <value>Une valeur générée pour {0} n’est vérifiée que dans son propre système connecté ; elle ne peut donc pas exclure de systèmes connectés. Supprimez les exclusions.</value>
+  </data>
+  <data name="ExclusionThisAttribute" xml:space="preserve">
+    <value>cet attribut</value>
+  </data>
+  <data name="ExclusionTheGeneratedAttribute" xml:space="preserve">
+    <value>l’attribut généré</value>
+  </data>
+  <data name="ExclusionNotExcludable" xml:space="preserve">
+    <value>Le système connecté « {0} » ne peut pas être exclu des vérifications de disponibilité de {1} : aucun flux d’attributs d’exportation ne lui envoie {1} sans modification.</value>
+  </data>
+  <data name="ExclusionMissingSystem" xml:space="preserve">
+    <value>Le système connecté {0} ne peut pas être exclu des vérifications de disponibilité de {1} : il n’existe pas.</value>
+  </data>
+  <data name="PriorityNoContributions" xml:space="preserve">
+    <value>Aucune contribution d’attribut d’importation n’existe pour l’attribut Metaverse {0} du type d’objets Metaverse {1}.</value>
+  </data>
+  <data name="PriorityDuplicateMappings" xml:space="preserve">
+    <value>L’ordre de priorité des attributs contient des identifiants de mappage en double.</value>
+  </data>
+  <data name="PriorityMismatchBase" xml:space="preserve">
+    <value>L’ordre de priorité des attributs doit répertorier chaque mappage contributeur de l’attribut une seule fois, et aucun autre.</value>
+  </data>
+  <data name="PriorityMissing" xml:space="preserve">
+    <value>Manquants : {0}.</value>
+  </data>
+  <data name="PriorityNotContributors" xml:space="preserve">
+    <value>Ne contribuent pas à cet attribut : {0}. Rechargez l’ordre actuel et réessayez.</value>
+  </data>
+  <data name="PriorityMappingOfRule" xml:space="preserve">
+    <value>mappage {0} (règle de synchronisation « {1} »)</value>
+  </data>
+  <data name="PriorityMapping" xml:space="preserve">
+    <value>mappage {0}</value>
+  </data>
+  <data name="PriorityNotAContributor" xml:space="preserve">
+    <value>Le mappage {0} ne contribue pas à l’attribut Metaverse {1} du type d’objets Metaverse {2}.</value>
+  </data>
+  <data name="ListPair" xml:space="preserve">
+    <value>{0}, {1}</value>
+  </data>
+  <data name="MessagePair" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="ScopingCriterionCannotBeSaved" xml:space="preserve">
+    <value>Le critère de périmètre sur « {0} » ne peut pas être enregistré : {1}</value>
+  </data>
+  <data name="ScopingCriterionLeftAsWas" xml:space="preserve">
+    <value>Le critère de périmètre sur « {0} » n’est pas valide et a été laissé tel quel : {1}</value>
+  </data>
+  <data name="MappingRemovalChoicesUpdatesOnly" xml:space="preserve">
+    <value>Les choix de suppression de mappage s’appliquent uniquement aux mises à jour : une règle de synchronisation en cours de création n’a aucun mappage de flux d’attributs enregistré à supprimer.</value>
+  </data>
+  <data name="MappingRemovalChoicesDuplicate" xml:space="preserve">
+    <value>Les choix de suppression de mappage contiennent un identifiant de mappage en double, ce qui rend l’intention ambiguë.</value>
+  </data>
+  <data name="MappingRemovalChoiceStillPresent" xml:space="preserve">
+    <value>Le choix de suppression du mappage {0} désigne un mappage encore présent sur la règle de synchronisation ; un choix ne peut décrire qu’une suppression planifiée.</value>
+  </data>
+  <data name="MappingRemovalChoiceMissing" xml:space="preserve">
+    <value>Le choix de suppression du mappage {0} désigne un mappage qui n’existe pas ; il a peut-être déjà été supprimé, auquel cas son choix a été fait à ce moment-là.</value>
+  </data>
+  <data name="MappingRemovalChoiceWrongRule" xml:space="preserve">
+    <value>Le choix de suppression du mappage {0} désigne un mappage qui n’appartient pas à la règle de synchronisation {1}.</value>
+  </data>
+  <data name="ConnectorNoSchemaImport" xml:space="preserve">
+    <value>Le connecteur « {0} » ne prend pas en charge l’importation du schéma.</value>
+  </data>
+  <data name="ConnectorNoPasswordChannel" xml:space="preserve">
+    <value>Le connecteur « {0} » ne prend pas en charge la définition des mots de passe ; il n’y a donc aucun canal de mot de passe à vérifier.</value>
+  </data>
+  <data name="ConnectorNoDirectoryDiscovery" xml:space="preserve">
+    <value>Le connecteur « {0} » ne prend pas en charge la découverte des serveurs d’annuaire.</value>
+  </data>
+  <data name="ConnectorNoDiscoveryForSetting" xml:space="preserve">
+    <value>Le connecteur « {0} » ne peut pas découvrir de serveurs pour le paramètre « {1} ».</value>
+  </data>
+  <data name="ConnectorNoCatalogue" xml:space="preserve">
+    <value>Le connecteur « {0} » ne peut pas décrire le contenu de sa source.</value>
+  </data>
+  <data name="ConnectorNoHierarchyImport" xml:space="preserve">
+    <value>Le connecteur « {0} » ne prend pas en charge l’importation de la hiérarchie.</value>
+  </data>
+  <data name="ConnectedSystemNotFoundById" xml:space="preserve">
+    <value>Aucun système connecté trouvé avec l’ID {0}.</value>
+  </data>
+  <data name="RunProfileVerifyFullImportOnly" xml:space="preserve">
+    <value>VerifyImportContentHashes ne peut être activé que sur un profil d’exécution d’importation complète.</value>
+  </data>
+  <data name="RunProfileNoConnectedSystem" xml:space="preserve">
+    <value>Aucun système connecté de ce nom n’a été trouvé !</value>
+  </data>
+  <data name="RunProfileNotValidForConnector" xml:space="preserve">
+    <value>Le profil d’exécution n’est pas valide pour le connecteur !</value>
+  </data>
+  <data name="SaveWarningProjectionConflict" xml:space="preserve">
+    <value>La règle de synchronisation d’importation « {0} » projette aussi des objets « {1} » depuis « {2} », mais en tant que « {3} ». Une synchronisation ne projette rien pour un objet que les deux règles ont dans leur périmètre, et le signale comme un conflit de type de projection. Donnez aux règles des périmètres qui ne se chevauchent jamais, ou faites-les projeter vers un seul type d’objets Metaverse.</value>
+  </data>
+  <data name="SaveWarningExportRulesOverlap" xml:space="preserve">
+    <value>La règle de synchronisation d’exportation « {0} » gère aussi des objets « {1} » dans « {2} » pour « {3} ». Une seule règle d’exportation peut gérer un objet : une synchronisation n’exporte rien vers ce système connecté pour un objet que les deux règles ont dans leur périmètre, et le signale comme un chevauchement de règles d’exportation. Donnez aux règles des périmètres qui ne se chevauchent jamais, ou regroupez-les en une seule règle.</value>
+  </data>
+  <data name="SaveWarningExportObjectTypesDiffer" xml:space="preserve">
+    <value>La règle de synchronisation d’exportation « {0} » provisionne des objets « {1} » vers « {2} » en tant que « {3} », et cette règle les provisionne en tant que {4}. Chaque objet ne peut avoir qu’un seul objet dans « {2} » ; lorsque les périmètres des deux règles couvrent le même, une seule règle le provisionne et l’autre signale un échec de synchronisation pour cet objet à chaque synchronisation. Veillez à ce que les périmètres ne se chevauchent jamais.</value>
+  </data>
+  <data name="SaveWarningThisObjectType" xml:space="preserve">
+    <value>« {0} »</value>
+  </data>
+  <data name="SaveWarningADifferentObjectType" xml:space="preserve">
+    <value>un autre type d’objets</value>
+  </data>
+  <data name="SaveWarningConnectorDefinedOverlap" xml:space="preserve">
+    <value>« {0} » est défini par le {1} et écrit dans le système connecté via « {2} », que cette règle alimente aussi, depuis une autre source. Chaque exportation peut écraser la valeur de l’autre. Alimentez-en un seul, ou donnez la même source aux deux.</value>
+  </data>
+  <data name="PassThroughText" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="SemicolonPair" xml:space="preserve">
+    <value>{0} ; {1}</value>
+  </data>
+  <data name="ReaderOwnerSyncRule" xml:space="preserve">
+    <value>règle de synchronisation « {0} »</value>
+  </data>
+  <data name="ReaderOwnerExampleDataTemplate" xml:space="preserve">
+    <value>modèle de données d’exemple « {0} »</value>
+  </data>
+  <data name="ReaderOwnerObjectType" xml:space="preserve">
+    <value>type d’objets de système connecté « {0} »</value>
+  </data>
+  <data name="ReaderScopingCriterionExpression" xml:space="preserve">
+    <value>expression du critère de périmètre {0} dans {1}</value>
+  </data>
+  <data name="ReaderScopingCriterionAttribute" xml:space="preserve">
+    <value>critère de périmètre sur « {0} » dans {1}</value>
+  </data>
+  <data name="ReaderAttributeFlowExpression" xml:space="preserve">
+    <value>expression de flux d’attributs vers « {0} » dans {1}</value>
+  </data>
+  <data name="ReaderObjectMatchingRuleExpression" xml:space="preserve">
+    <value>expression de règle de correspondance d’objets {0} dans {1}</value>
+  </data>
+  <data name="ReaderExampleDataExpression" xml:space="preserve">
+    <value>expression pour « {0} » dans {1}</value>
+  </data>
+  <data name="ReaderOther" xml:space="preserve">
+    <value>{0} dans {1}</value>
+  </data>
+  <data name="HeldAfterImportMatched" xml:space="preserve">
+    <value>l’objet est mis en correspondance à la prochaine synchronisation</value>
+  </data>
+  <data name="HeldAfterImportScope" xml:space="preserve">
+    <value>le périmètre de l’objet est déterminé à la prochaine synchronisation</value>
+  </data>
+  <data name="UrefAmbiguousFinding" xml:space="preserve">
+    <value>Cette valeur correspond à des objets de plusieurs types d’objets ({0}), et l’attribut « {1} » ne déclare pas auquel il fait référence.</value>
+  </data>
+  <data name="UrefAmbiguousRemedy" xml:space="preserve">
+    <value>Déclarez son type d’objets cible dans l’onglet Schéma si le connecteur le permet.</value>
+  </data>
+  <data name="UrefNotFoundFinding" xml:space="preserve">
+    <value>Aucun objet ayant cette valeur n’a été importé dans {0}.</value>
+  </data>
+  <data name="UrefNotFoundNoContainmentRemedy" xml:space="preserve">
+    <value>Exécutez une importation complète pour écarter un changement manqué. Si la référence reste non résolue, la source fait référence à un objet qui n’en fait pas partie, ou dont le type d’objets n’est pas importé.</value>
+  </data>
+  <data name="UrefNotFoundRemedy" xml:space="preserve">
+    <value>Exécutez une importation complète pour écarter un changement manqué.</value>
+  </data>
+  <data name="UrefOutsideConnectedSystemFinding" xml:space="preserve">
+    <value>Cette valeur ne figure dans aucune des partitions de {0} ; JIM ne peut donc pas importer l’objet qu’elle désigne.</value>
+  </data>
+  <data name="UrefOutsideRemedyWarn" xml:space="preserve">
+    <value>Si de telles références sont attendues, définissez la gestion des références non résolues sur « Ignorer » pour que les exécutions cessent de les signaler.</value>
+  </data>
+  <data name="UrefOutsideRemedyIgnore" xml:space="preserve">
+    <value>Les exécutions ne signalent déjà pas de telles références ; rien ne doit être modifié dans JIM si elles sont attendues.</value>
+  </data>
+  <data name="UrefOutsideRemedyDefault" xml:space="preserve">
+    <value>Si de telles références sont attendues, définissez la gestion des références non résolues sur « Avertissement ».</value>
+  </data>
+  <data name="UrefPartitionNotSelectedFinding" xml:space="preserve">
+    <value>La partition {0} n’est pas sélectionnée.</value>
+  </data>
+  <data name="UrefSelectOnScopeTabRemedy" xml:space="preserve">
+    <value>Sélectionnez-la dans l’onglet Périmètre, puis exécutez une importation complète.</value>
+  </data>
+  <data name="UrefNotFoundInScopeFinding" xml:space="preserve">
+    <value>{0} est dans la portée du conteneur, mais aucun objet ayant cette valeur n’a été importé.</value>
+  </data>
+  <data name="UrefNotFoundInScopeRemedy" xml:space="preserve">
+    <value>Exécutez une importation complète pour écarter un changement manqué. Si la référence reste non résolue, l’objet n’existe plus dans {0}, ou son type d’objets n’est pas importé.</value>
+  </data>
+  <data name="UrefContainerExcludedFinding" xml:space="preserve">
+    <value>{0} est exclu de la portée du conteneur.</value>
+  </data>
+  <data name="UrefContainerExcludedRemedy" xml:space="preserve">
+    <value>Si ses objets doivent figurer dans JIM, levez l’exclusion dans l’onglet Périmètre, puis exécutez une importation complète.</value>
+  </data>
+  <data name="UrefContainerNotInScopeFinding" xml:space="preserve">
+    <value>{0} n’est pas dans la portée du conteneur.</value>
+  </data>
+  <data name="UrefOutsideEveryContainerFinding" xml:space="preserve">
+    <value>L’objet se trouve dans {0}, en dehors de tout conteneur connu de JIM.</value>
+  </data>
+  <data name="UrefOutsideEveryContainerRemedy" xml:space="preserve">
+    <value>Actualisez la hiérarchie dans l’onglet Périmètre, puis sélectionnez le conteneur qui le contient et exécutez une importation complète.</value>
+  </data>
+  <data name="UrefGroupAmbiguousFinding" xml:space="preserve">
+    <value>Ces valeurs correspondent à des objets de plusieurs types d’objets, sur des attributs qui ne déclarent pas auquel ils font référence.</value>
+  </data>
+  <data name="UrefGroupAmbiguousRemedy" xml:space="preserve">
+    <value>Déclarez le type d’objets cible de chaque attribut dans l’onglet Schéma si le connecteur le permet.</value>
+  </data>
+  <data name="HeldUnderAnotherDataType" xml:space="preserve">
+    <value>{0} est conservé en tant que {1}{2} : une actualisation du schéma a changé son type de données et aucune importation ne l’a lu depuis. Exécutez une importation complète pour le lire selon son nouveau type ; {3}.</value>
+  </data>
+  <data name="HeldNotAsCurrentType" xml:space="preserve">
+    <value>, et non selon son type {0}</value>
+  </data>
+  <data name="HeldSubjectAttribute" xml:space="preserve">
+    <value>L’attribut de système connecté « {0} »</value>
+  </data>
+  <data name="HeldSubjectInput" xml:space="preserve">
+    <value>L’entrée {0}</value>
+  </data>
+  <data name="HeldSubjectInputs" xml:space="preserve">
+    <value>Les entrées {0}</value>
+  </data>
+</root>

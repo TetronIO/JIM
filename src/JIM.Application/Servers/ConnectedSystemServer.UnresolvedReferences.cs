@@ -1,8 +1,11 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Application.Services;
 using JIM.Models.Core;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Utility;
@@ -276,8 +279,10 @@ public partial class ConnectedSystemServer
     {
         foreach (var fix in fixes.Where(f => f.Cause == UnresolvedReferenceCause.AmbiguousObjectType))
         {
-            fix.Finding = "These values match objects of more than one Object Type, on attributes that do not declare which one they reference.";
-            fix.Remedy = "Declare each attribute's target Object Type on the Schema tab if the Connector supports doing so.";
+            fix.FindingDetail = ConnectedSystemMessage.Create(nameof(ConnectedSystemMessages.UrefGroupAmbiguousFinding));
+            fix.Finding = fix.FindingDetail.ToEnglish();
+            fix.RemedyDetail = ConnectedSystemMessage.Create(nameof(ConnectedSystemMessages.UrefGroupAmbiguousRemedy));
+            fix.Remedy = fix.RemedyDetail.ToEnglish();
         }
     }
 
@@ -337,7 +342,9 @@ public partial class ConnectedSystemServer
                 PartitionExternalId = group.Key.PartitionExternalId,
                 Count = group.Sum(e => e.Count),
                 Finding = group.First().Diagnosis.Finding,
-                Remedy = group.First().Diagnosis.Remedy
+                FindingDetail = group.First().Diagnosis.FindingDetail,
+                Remedy = group.First().Diagnosis.Remedy,
+                RemedyDetail = group.First().Diagnosis.RemedyDetail
             })
             // Most values first; at equal counts, the steps an administrator can take in JIM before those that lie in
             // the Connected System.

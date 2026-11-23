@@ -1,7 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Preview;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
@@ -100,21 +103,19 @@ public sealed class UnresolvedReferenceClassifier
         {
             diagnosis.CandidateObjectTypeNames = [.. ambiguousWith.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name, StringComparer.OrdinalIgnoreCase)];
             return Conclude(diagnosis, UnresolvedReferenceCause.AmbiguousObjectType,
-                $"This value matches objects of more than one Object Type ({string.Join(", ", diagnosis.CandidateObjectTypeNames)}), and attribute " +
-                $"'{attributeName}' does not declare which one it references.",
-                "Declare its target Object Type on the Schema tab if the Connector supports doing so.");
+                Message(nameof(ConnectedSystemMessages.UrefAmbiguousFinding), string.Join(", ", diagnosis.CandidateObjectTypeNames), attributeName),
+                Message(nameof(ConnectedSystemMessages.UrefAmbiguousRemedy)));
         }
 
         if (_containment == null || _scope == null)
             return Conclude(diagnosis, UnresolvedReferenceCause.NotFound,
-                $"Nothing with this value has been imported into {_connectedSystem.Name}.",
-                "Run a Full Import to rule out a missed change. If it is still unresolved, the source refers to an object that is not in it, " +
-                "or one whose Object Type is not imported.");
+                Message(nameof(ConnectedSystemMessages.UrefNotFoundFinding), _connectedSystem.Name),
+                Message(nameof(ConnectedSystemMessages.UrefNotFoundNoContainmentRemedy)));
 
         var partitionBoundary = ContainerSpecificity.ResolveMostSpecific(value, _partitionBoundaries, _containment.IsWithinContainer);
         if (partitionBoundary == null)
             return Conclude(diagnosis, UnresolvedReferenceCause.OutsideConnectedSystem,
-                $"This value is in none of {_connectedSystem.Name}'s partitions, so JIM cannot import the object it names.",
+                Message(nameof(ConnectedSystemMessages.UrefOutsideConnectedSystemFinding), _connectedSystem.Name),
                 OutsideConnectedSystemRemedy());
 
         var partition = _partitionsById[partitionBoundary.Id];
@@ -122,15 +123,15 @@ public sealed class UnresolvedReferenceClassifier
         {
             diagnosis.PartitionExternalId = partition.ExternalId;
             return Conclude(diagnosis, UnresolvedReferenceCause.PartitionNotSelected,
-                $"Partition {partition.ExternalId} is not selected.",
-                "Select it on the Scope tab, then run a Full Import.");
+                Message(nameof(ConnectedSystemMessages.UrefPartitionNotSelectedFinding), partition.ExternalId),
+                Message(nameof(ConnectedSystemMessages.UrefSelectOnScopeTabRemedy)));
         }
 
         var nearest = NearestKnownContainer(partition.Id, value);
         if (_scope.Contains(partition.Id, value) is not { } inScope)
             return Conclude(diagnosis, UnresolvedReferenceCause.NotFound,
-                $"Nothing with this value has been imported into {_connectedSystem.Name}.",
-                "Run a Full Import to rule out a missed change.");
+                Message(nameof(ConnectedSystemMessages.UrefNotFoundFinding), _connectedSystem.Name),
+                Message(nameof(ConnectedSystemMessages.UrefNotFoundRemedy)));
 
         // Where no known Container holds the value, the partition is the place a finding can point at.
         diagnosis.ContainerExternalId = nearest?.ExternalId;
@@ -139,9 +140,8 @@ public sealed class UnresolvedReferenceClassifier
 
         if (inScope)
             return Conclude(diagnosis, UnresolvedReferenceCause.NotFoundInScope,
-                $"{nearest?.ExternalId ?? partition.ExternalId} is in Container Scope, but nothing with this value has been imported.",
-                $"Run a Full Import to rule out a missed change. If it is still unresolved, the object no longer exists in {_connectedSystem.Name}, " +
-                "or its Object Type is not imported.");
+                Message(nameof(ConnectedSystemMessages.UrefNotFoundInScopeFinding), nearest?.ExternalId ?? partition.ExternalId),
+                Message(nameof(ConnectedSystemMessages.UrefNotFoundInScopeRemedy), _connectedSystem.Name));
 
         var decider = ContainerSpecificity.ResolveMostSpecific(value, _scopeDecidingContainers, _containment.IsWithinContainer);
         if (decider != null && _scope.ExcludedContainers.Contains(decider))
@@ -149,17 +149,17 @@ public sealed class UnresolvedReferenceClassifier
             diagnosis.ContainerExternalId = decider.ExternalId;
             diagnosis.PartitionExternalId = null;
             return Conclude(diagnosis, UnresolvedReferenceCause.ContainerExcluded,
-                $"{decider.ExternalId} is excluded from Container Scope.",
-                "If its objects belong in JIM, lift the exclusion on the Scope tab, then run a Full Import.");
+                Message(nameof(ConnectedSystemMessages.UrefContainerExcludedFinding), decider.ExternalId),
+                Message(nameof(ConnectedSystemMessages.UrefContainerExcludedRemedy)));
         }
 
         return nearest != null
             ? Conclude(diagnosis, UnresolvedReferenceCause.ContainerNotInScope,
-                $"{nearest.ExternalId} is not in Container Scope.",
-                "Select it on the Scope tab, then run a Full Import.")
+                Message(nameof(ConnectedSystemMessages.UrefContainerNotInScopeFinding), nearest.ExternalId),
+                Message(nameof(ConnectedSystemMessages.UrefSelectOnScopeTabRemedy)))
             : Conclude(diagnosis, UnresolvedReferenceCause.ContainerNotInScope,
-                $"The object sits in {partition.ExternalId}, outside every Container JIM knows of.",
-                "Refresh the hierarchy on the Scope tab, then select the Container that holds it and run a Full Import.");
+                Message(nameof(ConnectedSystemMessages.UrefOutsideEveryContainerFinding), partition.ExternalId),
+                Message(nameof(ConnectedSystemMessages.UrefOutsideEveryContainerRemedy)));
     }
 
     /// <summary>
@@ -176,14 +176,19 @@ public sealed class UnresolvedReferenceClassifier
     };
 
     private static ConnectedSystemObjectUnresolvedReference Conclude(
-        ConnectedSystemObjectUnresolvedReference diagnosis, UnresolvedReferenceCause cause, string finding, string remedy)
+        ConnectedSystemObjectUnresolvedReference diagnosis, UnresolvedReferenceCause cause, JimMessage finding, JimMessage remedy)
     {
         diagnosis.Cause = cause;
         diagnosis.FixLocation = FixLocationFor(cause);
-        diagnosis.Finding = finding;
-        diagnosis.Remedy = remedy;
+        diagnosis.Finding = finding.ToEnglish();
+        diagnosis.FindingDetail = finding;
+        diagnosis.Remedy = remedy.ToEnglish();
+        diagnosis.RemedyDetail = remedy;
         return diagnosis;
     }
+
+    private static JimMessage Message(string key, params MessageArgument[] arguments) =>
+        ConnectedSystemMessage.Create(key, arguments);
 
     private ConnectedSystemContainer? NearestKnownContainer(int partitionId, string value)
     {
@@ -212,12 +217,10 @@ public sealed class UnresolvedReferenceClassifier
     /// What to do about a value JIM cannot import, given the handling already chosen: each step suggests the next quieter
     /// setting, so the advice never names the one in force.
     /// </summary>
-    private string OutsideConnectedSystemRemedy() => _connectedSystem.UnresolvedReferenceHandling switch
+    private JimMessage OutsideConnectedSystemRemedy() => _connectedSystem.UnresolvedReferenceHandling switch
     {
-        UnresolvedReferenceHandling.Warn =>
-            "If references like this are expected, set Unresolved Reference Handling to Ignore so runs stop reporting them.",
-        UnresolvedReferenceHandling.Ignore =>
-            "Runs already leave references like this unreported; nothing in JIM needs changing if they are expected.",
-        _ => "If references like this are expected, set Unresolved Reference Handling to Warn."
+        UnresolvedReferenceHandling.Warn => Message(nameof(ConnectedSystemMessages.UrefOutsideRemedyWarn)),
+        UnresolvedReferenceHandling.Ignore => Message(nameof(ConnectedSystemMessages.UrefOutsideRemedyIgnore)),
+        _ => Message(nameof(ConnectedSystemMessages.UrefOutsideRemedyDefault))
     };
 }

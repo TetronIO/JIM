@@ -11,4 +11,7 @@ public static class MessageCatalogues
 {
     /// <summary>What is wrong with a Connected System's setting values (<c>SettingValidationMessages.resx</c>).</summary>
     public const string SettingValidation = "JIM.Models:SettingValidationMessages";
+
+    /// <summary>How a Scoping Criterion and a relative date read on a chip (<c>ScopingCriteriaMessages.resx</c>).</summary>
+    public const string ScopingCriteria = "JIM.Models:ScopingCriteriaMessages";
 }

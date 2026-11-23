@@ -1246,12 +1246,12 @@
         catch (CsvParsingException ex)
         {
             await ShowCsvErrorDialogAsync(ex);
-            _schemaRefreshResult = SchemaRefreshResult.Failed(ex.Message);
+            _schemaRefreshResult = SchemaRefreshResult.Failed(ex.ToDisplayText());
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to import schema for Connected System {SystemId}", ConnectedSystem.Id);
-            _schemaRefreshResult = SchemaRefreshResult.Failed(ex.Message);
+            _schemaRefreshResult = SchemaRefreshResult.Failed(ex.ToDisplayText());
         }
         finally
         {
@@ -1293,7 +1293,7 @@
             // the persist throws (database faults included, which are not domain exceptions), the administrator
             // must see the failure in the panel rather than have it escape and tear the circuit down.
             Log.Error(ex, "Failed to apply schema refresh for Connected System {SystemId}", ConnectedSystem.Id);
-            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.ApplyFailed, ex.Message), Severity.Error, options => options.RequireInteraction = true);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.ApplyFailed, ex.ToDisplayText()), Severity.Error, options => options.RequireInteraction = true);
         }
         finally
         {
@@ -1333,7 +1333,7 @@
         {
             // Same boundary as the plain apply: any failure reaches the administrator, never the circuit.
             Log.Error(ex, "Failed to apply schema refresh with disables for Connected System {SystemId}", ConnectedSystem.Id);
-            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.ApplyFailed, ex.Message), Severity.Error, options => options.RequireInteraction = true);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.ApplyFailed, ex.ToDisplayText()), Severity.Error, options => options.RequireInteraction = true);
         }
         finally
         {
@@ -1382,7 +1382,7 @@
         {
             // Same boundary as the plain apply: any failure reaches the administrator, never the circuit.
             Log.Error(ex, "Failed to apply schema refresh with removals for Connected System {SystemId}", ConnectedSystem.Id);
-            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.ApplyFailed, ex.Message), Severity.Error, options => options.RequireInteraction = true);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.ApplyFailed, ex.ToDisplayText()), Severity.Error, options => options.RequireInteraction = true);
         }
         finally
         {
@@ -1613,20 +1613,20 @@
             // the selection was refused: the Connector said this Connected System's settings cannot serve it (an Object
             // Type selected without what the configured Delta Import Mode needs, say), or an Object Type is deselected
             // while an enabled Synchronisation Rule still manages it (#1474). Nothing was saved; the message names the fix.
-            Snackbar.Add(ex.Message, Severity.Error, options => options.RequireInteraction = true);
+            Snackbar.Add(ex.ToDisplayText(), Severity.Error, options => options.RequireInteraction = true);
             return;
         }
         catch (AttributeReadByConfigurationException ex)
         {
             // an attribute a Scoping Criterion reads was deselected (#2265); nothing was saved, and the message names
             // each criterion to change first.
-            Snackbar.Add(ex.Message, Severity.Error, options => options.RequireInteraction = true);
+            Snackbar.Add(ex.ToDisplayText(), Severity.Error, options => options.RequireInteraction = true);
             return;
         }
         DiscardSchemaPreview();
         Snackbar.Add(SchemaText.AttributeChangesSaved, Severity.Success);
         if (deselectionWarnings.Count > 0)
-            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.DeselectedStillRead, string.Join("; ", deselectionWarnings.Select(r => r.Description))),
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.DeselectedStillRead, string.Join("; ", deselectionWarnings.Select(r => r.ShowDescription()))),
                 Severity.Warning, options => options.RequireInteraction = true);
 
         await OnConnectedSystemChanged.InvokeAsync();
