@@ -1214,4 +1214,241 @@
   <data name="IpaExpiredOtherRule" xml:space="preserve">
     <value>{0} comptes ont été provisionnés par {1} sans jamais recevoir de mot de passe initial dans les limites de leur durée de vie. JIM a cessé d'essayer ; il faut leur définir un mot de passe par d'autres moyens.</value>
   </data>
+  <data name="MotdNameRequired" xml:space="preserve">
+    <value>Un nom est requis.</value>
+  </data>
+  <data name="MotdNameHelp" xml:space="preserve">
+    <value>Le nom au singulier du type d'objets (par exemple Device).</value>
+  </data>
+  <data name="MotdPluralRequired" xml:space="preserve">
+    <value>Un nom au pluriel est requis.</value>
+  </data>
+  <data name="MotdPluralHelp" xml:space="preserve">
+    <value>Le nom au pluriel du type d'objets (par exemple Devices).</value>
+  </data>
+  <data name="MotdIcon" xml:space="preserve">
+    <value>Icône (facultatif)</value>
+  </data>
+  <data name="MotdIconHelp" xml:space="preserve">
+    <value>Un nom d'icône Filled de MudBlazor, par exemple Person, Groups, Devices. Laissez vide pour l'icône par défaut.</value>
+  </data>
+  <data name="MotdAddAttributes" xml:space="preserve">
+    <value>Ajouter des attributs (facultatif)</value>
+  </data>
+  <data name="MotdAddAttributesHelp" xml:space="preserve">
+    <value>Liez des attributs Metaverse existants au nouveau type d'objets. Vous pourrez aussi les gérer plus tard dans l'onglet Attributs du type d'objets.</value>
+  </data>
+  <data name="MotdCreate" xml:space="preserve">
+    <value>Créer un type d'objets</value>
+  </data>
+  <data name="MotdNameExists" xml:space="preserve">
+    <value>Un type d'objets nommé « {0} » existe déjà. Les noms ne tiennent pas compte de la casse.</value>
+  </data>
+  <data name="MotdPluralNameExists" xml:space="preserve">
+    <value>Un type d'objets ayant le nom au pluriel « {0} » existe déjà. Les noms ne tiennent pas compte de la casse.</value>
+  </data>
+  <data name="MotdSavedChanges" xml:space="preserve">
+    <value>Modifications enregistrées pour « {0} ».</value>
+  </data>
+  <data name="MotdCreated" xml:space="preserve">
+    <value>Type d'objets « {0} » créé.</value>
+  </data>
+  <data name="MotdSaveFailed" xml:space="preserve">
+    <value>Échec de l'enregistrement du type d'objets : {0}</value>
+  </data>
+  <data name="MotdNewTitle" xml:space="preserve">
+    <value>Nouveau type d'objets</value>
+  </data>
+  <data name="MotdEditTitle" xml:space="preserve">
+    <value>Modifier « {0} »</value>
+  </data>
+  <data name="PhmLeadBy" xml:space="preserve">
+    <value>par</value>
+  </data>
+  <data name="PhmLeadVia" xml:space="preserve">
+    <value>via</value>
+  </data>
+  <data name="PhmApiKeyTrail" xml:space="preserve">
+    <value>(clé d'API)</value>
+  </data>
+  <data name="PhmScope" xml:space="preserve">
+    <value>sur {0} systèmes connectés</value>
+  </data>
+  <data name="PhmParkedDefault" xml:space="preserve">
+    <value>suspendu ; JIM a cessé d'essayer jusqu'à ce que quelqu'un relance l'envoi</value>
+  </data>
+  <data name="PhmRetrying" xml:space="preserve">
+    <value>nouvelle tentative en cours</value>
+  </data>
+  <data name="PhmHeld" xml:space="preserve">
+    <value>en attente que la synchronisation des mots de passe soit activée pour ce système connecté.</value>
+  </data>
+  <data name="PhmQueued" xml:space="preserve">
+    <value>en file d'attente, pas encore tentée.</value>
+  </data>
+  <data name="PhmDelivering" xml:space="preserve">
+    <value>envoi en cours.</value>
+  </data>
+  <data name="PhmExpired" xml:space="preserve">
+    <value>expiré avant d'avoir pu être envoyé.</value>
+  </data>
+  <data name="PhmCancelledByAdmin" xml:space="preserve">
+    <value>annulé par un administrateur.</value>
+  </data>
+  <data name="PhmCancelledBy" xml:space="preserve">
+    <value>annulé par {0}.</value>
+  </data>
+  <data name="PhmLastAttempted" xml:space="preserve">
+    <value>Dernière tentative le {0}.</value>
+  </data>
+  <data name="PhmQueuedOn" xml:space="preserve">
+    <value>Mis en file le {0}.</value>
+  </data>
+  <data name="PhmJoin" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="PhmSetWithWarningDefault" xml:space="preserve">
+    <value>défini, mais tout ce qui était demandé n'a pas pu être appliqué</value>
+  </data>
+  <data name="PhmDeliveredLate" xml:space="preserve">
+    <value>envoyé {0}, {1} après la demande.</value>
+  </data>
+  <data name="PhmDidNotTake" xml:space="preserve">
+    <value>n'a pas accepté le mot de passe</value>
+  </data>
+  <data name="PhmInitialSet" xml:space="preserve">
+    <value>Mot de passe initial défini</value>
+  </data>
+  <data name="PhmPasswordSet" xml:space="preserve">
+    <value>Mot de passe défini</value>
+  </data>
+  <data name="PhmStillRunning" xml:space="preserve">
+    <value>La tentative est toujours en cours</value>
+  </data>
+  <data name="PhmRecorded" xml:space="preserve">
+    <value>{0} Enregistré le {1}.</value>
+  </data>
+  <data name="PhmFaultJoin" xml:space="preserve">
+    <value>{0}, {1}</value>
+  </data>
+  <data name="PhmNextAttempt" xml:space="preserve">
+    <value> Prochaine tentative {0}.</value>
+  </data>
+  <data name="PhmSuffixFailed" xml:space="preserve">
+    <value>échec</value>
+  </data>
+  <data name="PhmSuffixQueued" xml:space="preserve">
+    <value>en file</value>
+  </data>
+  <data name="PhmSuffixDelivering" xml:space="preserve">
+    <value>envoi</value>
+  </data>
+  <data name="PhmSuffixRetrying" xml:space="preserve">
+    <value>nouvelle tentative</value>
+  </data>
+  <data name="PhmSuffixHeld" xml:space="preserve">
+    <value>en attente</value>
+  </data>
+  <data name="PhmSuffixParked" xml:space="preserve">
+    <value>suspendu</value>
+  </data>
+  <data name="PhmSuffixExpired" xml:space="preserve">
+    <value>expiré</value>
+  </data>
+  <data name="PhmSuffixCancelled" xml:space="preserve">
+    <value>annulé</value>
+  </data>
+  <data name="PhmSuffixWarning" xml:space="preserve">
+    <value>avertissement</value>
+  </data>
+  <data name="MdtGroupBy" xml:space="preserve">
+    <value>Grouper par</value>
+  </data>
+  <data name="MdtAttribute" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="MdtCategory" xml:space="preserve">
+    <value>Catégorie</value>
+  </data>
+  <data name="MdtNoAttributesFromSource" xml:space="preserve">
+    <value>Aucun attribut ne provient de cette source</value>
+  </data>
+  <data name="MdtNoAttributes" xml:space="preserve">
+    <value>Cet objet n'a aucune valeur d'attribut</value>
+  </data>
+  <data name="McbTitle" xml:space="preserve">
+    <value>D'où viennent les valeurs du type {0}</value>
+  </data>
+  <data name="McbSelectSourceHint" xml:space="preserve">
+    <value> · sélectionnez une source pour filtrer</value>
+  </data>
+  <data name="McbAllValuesFrom" xml:space="preserve">
+    <value>Toutes les {0} valeurs proviennent de {1}</value>
+  </data>
+  <data name="McbFilterAria" xml:space="preserve">
+    <value>Filtrer les attributs par source</value>
+  </data>
+  <data name="McbSeveralSources" xml:space="preserve">
+    <value>Plusieurs sources</value>
+  </data>
+  <data name="McbRuleDeleted" xml:space="preserve">
+    <value>{0} · règle supprimée</value>
+  </data>
+  <data name="TixHome" xml:space="preserve">
+    <value>Accueil</value>
+  </data>
+  <data name="TixPageInfo" xml:space="preserve">
+    <value>Recherchez ou parcourez {0}.</value>
+  </data>
+  <data name="TixHasValueFor" xml:space="preserve">
+    <value>A une valeur pour : {0}</value>
+  </data>
+  <data name="TixUnknownAttribute" xml:space="preserve">
+    <value>Aucun attribut Metaverse nommé « {0} » n'est défini : aucun objet ne correspond. Effacez le filtre pour parcourir tous les {1}.</value>
+  </data>
+  <data name="TixNoMatch" xml:space="preserve">
+    <value>Aucun {0} ne correspond à « {1} ».</value>
+  </data>
+  <data name="TixNoHasValue" xml:space="preserve">
+    <value>Aucun {0} n'a de valeur pour {1}</value>
+  </data>
+  <data name="TixClearFilterHint" xml:space="preserve">
+    <value>Effacez le filtre ci-dessus pour parcourir tous les {0}.</value>
+  </data>
+  <data name="TixNoneYet" xml:space="preserve">
+    <value>Aucun {0} pour l'instant</value>
+  </data>
+  <data name="TixObjectsAppear" xml:space="preserve">
+    <value>Les objets apparaissent ici dès qu'ils sont créés ou importés.</value>
+  </data>
+  <data name="TixNoSuchSearch" xml:space="preserve">
+    <value>Recherche prédéfinie introuvable, désolé.</value>
+  </data>
+  <data name="TixCreateDefault" xml:space="preserve">
+    <value>Veuillez créer une recherche prédéfinie par défaut pour ce type d'objets Metaverse</value>
+  </data>
+  <data name="PfgHide" xml:space="preserve">
+    <value>Masquer l'aide</value>
+  </data>
+  <data name="PfgShow" xml:space="preserve">
+    <value>Comment corriger ceci</value>
+  </data>
+  <data name="PfgRegenerateAll" xml:space="preserve">
+    <value>Nouveau mot de passe pour les {0} objets de systèmes connectés</value>
+  </data>
+  <data name="PfgRegenerateExplain" xml:space="preserve">
+    <value>Réécrit les objets de systèmes connectés qui ont déjà reçu le mot de passe, afin qu'ils détiennent tous le même. Relancer ce seul système connecté les laisserait avec deux mots de passe.</value>
+  </data>
+  <data name="PfgVerdictRetryDifferent" xml:space="preserve">
+    <value>Vaut la peine d'être relancé avec un autre mot de passe</value>
+  </data>
+  <data name="PfgVerdictRetryUnchanged" xml:space="preserve">
+    <value>Vaut la peine d'être relancé sans modification</value>
+  </data>
+  <data name="PfgVerdictNeedsSomebody" xml:space="preserve">
+    <value>Rien ne changera tant qu'un administrateur n'aura pas accordé le droit nécessaire</value>
+  </data>
+  <data name="PfgVerdictNeverHelps" xml:space="preserve">
+    <value>Relancer ne servira jamais à rien</value>
+  </data>
 </root>

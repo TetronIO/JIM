@@ -58,23 +58,23 @@
                             OnRowClick="@(group => SelectAttributeAsync(group.AttributeId))"
                             Class="@(ShowInspector ? "jim-inspect-table-narrow" : null)">
                 <ToolBarExtras>
-                    <span class="jim-inspect-toolbar-label mr-2">Group by</span>
-                    <SegmentedToggle TValue="string" AriaLabel="Group by" Value="@GroupBy" Options="@GroupByOptions"
+                    <span class="jim-inspect-toolbar-label mr-2">@MetaverseText.MdtGroupBy</span>
+                    <SegmentedToggle TValue="string" AriaLabel="@MetaverseText.MdtGroupBy" Value="@GroupBy" Options="@GroupByOptions"
                                      ValueChanged="ChangeGroupByAsync" Dense="true" />
                 </ToolBarExtras>
                 <HeaderContent>
-                    <MudTh Class="jim-attr-header-name"><VirtualisedSortHeader Title="Attribute" Name="attribute" /></MudTh>
-                    <MudTh Class="jim-attr-header-value"><VirtualisedSortHeader Title="Value" Name="value" /></MudTh>
+                    <MudTh Class="jim-attr-header-name"><VirtualisedSortHeader Title="@MetaverseText.MdtAttribute" Name="attribute" /></MudTh>
+                    <MudTh Class="jim-attr-header-value"><VirtualisedSortHeader Title="@MetaverseText.MvaValue" Name="value" /></MudTh>
                     @if (GroupBy != "source")
                     {
-                        <MudTh Class="jim-attr-header-source"><MudText Typo="Typo.button">Source</MudText></MudTh>
+                        <MudTh Class="jim-attr-header-source"><MudText Typo="Typo.button">@MetaverseText.MvcSource</MudText></MudTh>
                     }
                     @* Type and Plurality give way while the inspector is open: its header states both for the
                        selected attribute, and the Value column needs the width more. *@
                     @if (!ShowInspector)
                     {
-                        <MudTh Class="jim-attr-header-type"><VirtualisedSortHeader Title="Type" Name="type" /></MudTh>
-                        <MudTh Class="jim-attr-header-plurality"><VirtualisedSortHeader Title="Plurality" Name="plurality" /></MudTh>
+                        <MudTh Class="jim-attr-header-type"><VirtualisedSortHeader Title="@CommonText.ColumnType" Name="type" /></MudTh>
+                        <MudTh Class="jim-attr-header-plurality"><VirtualisedSortHeader Title="@MetaverseText.MvotPlurality" Name="plurality" /></MudTh>
                     }
                 </HeaderContent>
                 <GroupHeaderTemplate>
@@ -96,7 +96,7 @@
                                 <span class="jim-inspect-group-name">@key</span>
                             }
                             <span class="jim-inspect-group-sep" aria-hidden="true">·</span>
-                            <span class="jim-inspect-group-count">@count attribute@(count == 1 ? "" : "s")</span>
+                            <span class="jim-inspect-group-count">@string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(count, MetaverseText.MvcAttributeCountOne, MetaverseText.MvcAttributeCountOther), count)</span>
                         </div>
                     </MudTd>
                 </GroupHeaderTemplate>
@@ -151,13 +151,13 @@
                             <MudText Typo="Typo.body1" Class="mud-text-secondary">@group.Values[0].Attribute.Type</MudText>
                         </MudTd>
                         <MudTd Class="jim-attr-plurality">
-                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@(group.IsMultiValued ? "Multi" : "Single")</MudText>
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">@(group.IsMultiValued ? MetaverseText.MaiMulti : MetaverseText.MaiSingle)</MudText>
                         </MudTd>
                     }
                 </RowTemplate>
                 <EmptyContent>
                     <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
-                                     PrimaryText="@(ContributionFilterKey != null ? "No attributes come from this source" : "This object has no attribute values")" />
+                                     PrimaryText="@(ContributionFilterKey != null ? MetaverseText.MdtNoAttributesFromSource : MetaverseText.MdtNoAttributes)" />
                 </EmptyContent>
             </AttributeTable>
         </div>
@@ -233,7 +233,7 @@
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.Binary && attributeValue.ByteValue != null)
         {
-            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@attributeValue.ByteValue.Length bytes</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@string.Format(CultureInfo.CurrentCulture, MetaverseText.MvaBytes, attributeValue.ByteValue.Length)</MudChip>
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.Reference && attributeValue.ReferenceValue != null)
         {
@@ -256,7 +256,7 @@
 
     /// <summary>The Metaverse Object Type's name, passed through to the contribution bar's heading.</summary>
     [Parameter]
-    public string ObjectTypeName { get; set; } = "object";
+    public string ObjectTypeName { get; set; } = MetaverseText.TvObjectFallback;
 
     /// <summary>Per-attribute total value counts from the capped load.</summary>
     [Parameter]
@@ -320,11 +320,11 @@
     /// </summary>
     private int ColumnCount => 2 + (GroupBy != "source" ? 1 : 0) + (ShowInspector ? 0 : 2);
 
-    private static readonly IReadOnlyList<SegmentedToggleOption<string>> GroupByOptions =
+    private static IReadOnlyList<SegmentedToggleOption<string>> GroupByOptions =>
     [
-        new("none", "None"),
-        new("source", "Source"),
-        new("category", "Category")
+        new("none", CommonText.None),
+        new("source", MetaverseText.MvcSource),
+        new("category", MetaverseText.MdtCategory)
     ];
 
     // Grouped once per parameter set; the search and the sort only filter and order these lists.
@@ -499,7 +499,7 @@
         if (value.GuidValue.HasValue)
             return value.GuidValue.Value.ToString();
         if (value.BoolValue.HasValue)
-            return value.BoolValue.Value ? "True" : "False";
+            return value.BoolValue.Value ? CommonText.True : CommonText.False;
         return string.Empty;
     }
 

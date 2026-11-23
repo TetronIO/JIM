@@ -1614,4 +1614,320 @@
     <value>{0} accounts were provisioned by {1} and never given an initial password within its time to live. JIM has stopped trying; they need a password set by other means.</value>
     <comment>Tooltip on the expired chip, several accounts, for a Synchronisation Rule. {0} is the count; {1} the rule's name.</comment>
   </data>
+  <data name="MotdNameRequired" xml:space="preserve">
+    <value>A name is required.</value>
+    <comment>Error under the name field.</comment>
+  </data>
+  <data name="MotdNameHelp" xml:space="preserve">
+    <value>The singular name of the Object Type (e.g. Device).</value>
+    <comment>Helper text under the name field.</comment>
+  </data>
+  <data name="MotdPluralRequired" xml:space="preserve">
+    <value>A plural name is required.</value>
+    <comment>Error under the plural name field.</comment>
+  </data>
+  <data name="MotdPluralHelp" xml:space="preserve">
+    <value>The plural name of the Object Type (e.g. Devices).</value>
+    <comment>Helper text under the plural name field.</comment>
+  </data>
+  <data name="MotdIcon" xml:space="preserve">
+    <value>Icon (optional)</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="MotdIconHelp" xml:space="preserve">
+    <value>A MudBlazor Filled icon name, e.g. Person, Groups, Devices. Leave empty for the default.</value>
+    <comment>Helper text under the icon field.</comment>
+  </data>
+  <data name="MotdAddAttributes" xml:space="preserve">
+    <value>Add attributes (optional)</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="MotdAddAttributesHelp" xml:space="preserve">
+    <value>Bind existing Metaverse Attributes to the new Object Type. You can also manage these later on the Object Type's Attributes tab.</value>
+    <comment>Helper text under the attributes field.</comment>
+  </data>
+  <data name="MotdCreate" xml:space="preserve">
+    <value>Create Object Type</value>
+    <comment>Button that creates the object type.</comment>
+  </data>
+  <data name="MotdNameExists" xml:space="preserve">
+    <value>An Object Type named "{0}" already exists. Names are case-insensitive.</value>
+    <comment>Error under the name field. {0} is the name typed.</comment>
+  </data>
+  <data name="MotdPluralNameExists" xml:space="preserve">
+    <value>An Object Type with plural name "{0}" already exists. Names are case-insensitive.</value>
+    <comment>Error under the plural name field. {0} is the plural name typed.</comment>
+  </data>
+  <data name="MotdSavedChanges" xml:space="preserve">
+    <value>Saved changes to "{0}".</value>
+    <comment>Success snackbar. {0} is the object type's name.</comment>
+  </data>
+  <data name="MotdCreated" xml:space="preserve">
+    <value>Created Object Type "{0}".</value>
+    <comment>Success snackbar. {0} is the object type's name.</comment>
+  </data>
+  <data name="MotdSaveFailed" xml:space="preserve">
+    <value>Failed to save Object Type: {0}</value>
+    <comment>Error snackbar. {0} is the exception message.</comment>
+  </data>
+  <data name="MotdNewTitle" xml:space="preserve">
+    <value>New Object Type</value>
+    <comment>Dialog title when creating.</comment>
+  </data>
+  <data name="MotdEditTitle" xml:space="preserve">
+    <value>Edit "{0}"</value>
+    <comment>Dialog title when editing. {0} is the object type's name.</comment>
+  </data>
+  <data name="PhmLeadBy" xml:space="preserve">
+    <value>by</value>
+    <comment>Joins the name of the person who made a change: 'by Alice'.</comment>
+  </data>
+  <data name="PhmLeadVia" xml:space="preserve">
+    <value>via</value>
+    <comment>Joins the name of an API key that made a change: 'via Automation'.</comment>
+  </data>
+  <data name="PhmApiKeyTrail" xml:space="preserve">
+    <value>(API key)</value>
+    <comment>Shown after an automation's name.</comment>
+  </data>
+  <data name="PhmScope" xml:space="preserve">
+    <value>on {0} Connected Systems</value>
+    <comment>Shown after the initiator when an administrator chose several accounts. {0} is the count.</comment>
+  </data>
+  <data name="PhmParkedDefault" xml:space="preserve">
+    <value>parked; JIM has stopped trying until somebody retries it</value>
+    <comment>Detail for a parked system with no fault recorded. Lower case: a sentence fragment.</comment>
+  </data>
+  <data name="PhmRetrying" xml:space="preserve">
+    <value>retrying</value>
+    <comment>Detail for a system being retried with no fault recorded.</comment>
+  </data>
+  <data name="PhmHeld" xml:space="preserve">
+    <value>held until Password Synchronisation is switched on for this Connected System.</value>
+    <comment>Detail for a held system.</comment>
+  </data>
+  <data name="PhmQueued" xml:space="preserve">
+    <value>queued, not yet attempted.</value>
+    <comment>Detail for a queued system.</comment>
+  </data>
+  <data name="PhmDelivering" xml:space="preserve">
+    <value>delivering now.</value>
+    <comment>Detail for a system being delivered to.</comment>
+  </data>
+  <data name="PhmExpired" xml:space="preserve">
+    <value>expired before it could be delivered.</value>
+    <comment>Detail for an expired system.</comment>
+  </data>
+  <data name="PhmCancelledByAdmin" xml:space="preserve">
+    <value>cancelled by an administrator.</value>
+    <comment>Detail for a cancelled system.</comment>
+  </data>
+  <data name="PhmCancelledBy" xml:space="preserve">
+    <value>cancelled by {0}.</value>
+    <comment>Detail for a cancelled system. {0} is the name of who cancelled it.</comment>
+  </data>
+  <data name="PhmLastAttempted" xml:space="preserve">
+    <value>Last attempted {0}.</value>
+    <comment>Line under a target's chip. {0} is the date.</comment>
+  </data>
+  <data name="PhmQueuedOn" xml:space="preserve">
+    <value>Queued {0}.</value>
+    <comment>Line under a target's chip. {0} is the date.</comment>
+  </data>
+  <data name="PhmJoin" xml:space="preserve">
+    <value>{0} {1}</value>
+    <comment>Joins a sentence and the date line beneath it.</comment>
+  </data>
+  <data name="PhmSetWithWarningDefault" xml:space="preserve">
+    <value>set, but not everything asked for could be applied</value>
+    <comment>Detail for a system that set the password with a warning, with no message.</comment>
+  </data>
+  <data name="PhmDeliveredLate" xml:space="preserve">
+    <value>delivered {0}, {1} after the request.</value>
+    <comment>Detail when delivery lagged the request. {0} is the time; {1} how long after.</comment>
+  </data>
+  <data name="PhmDidNotTake" xml:space="preserve">
+    <value>did not take the password</value>
+    <comment>Detail for a failed system with no message.</comment>
+  </data>
+  <data name="PhmInitialSet" xml:space="preserve">
+    <value>Initial password set</value>
+    <comment>Words for a provisioned success.</comment>
+  </data>
+  <data name="PhmPasswordSet" xml:space="preserve">
+    <value>Password set</value>
+    <comment>Words for a successful set.</comment>
+  </data>
+  <data name="PhmStillRunning" xml:space="preserve">
+    <value>The attempt is still running</value>
+    <comment>Words for an outcome not yet known.</comment>
+  </data>
+  <data name="PhmRecorded" xml:space="preserve">
+    <value>{0} Recorded {1}.</value>
+    <comment>The words, then when they were recorded. {0} is the words; {1} the date.</comment>
+  </data>
+  <data name="PhmFaultJoin" xml:space="preserve">
+    <value>{0}, {1}</value>
+    <comment>A failure reason and the target's own words, joined.</comment>
+  </data>
+  <data name="PhmNextAttempt" xml:space="preserve">
+    <value> Next attempt {0}.</value>
+    <comment>Appended to a retrying system's detail. {0} is the time or date. Leading space kept.</comment>
+  </data>
+  <data name="PhmSuffixFailed" xml:space="preserve">
+    <value>failed</value>
+    <comment>Chip suffix: the word after the system's name.</comment>
+  </data>
+  <data name="PhmSuffixQueued" xml:space="preserve">
+    <value>queued</value>
+    <comment>Chip suffix.</comment>
+  </data>
+  <data name="PhmSuffixDelivering" xml:space="preserve">
+    <value>delivering</value>
+    <comment>Chip suffix.</comment>
+  </data>
+  <data name="PhmSuffixRetrying" xml:space="preserve">
+    <value>retrying</value>
+    <comment>Chip suffix.</comment>
+  </data>
+  <data name="PhmSuffixHeld" xml:space="preserve">
+    <value>held</value>
+    <comment>Chip suffix.</comment>
+  </data>
+  <data name="PhmSuffixParked" xml:space="preserve">
+    <value>parked</value>
+    <comment>Chip suffix.</comment>
+  </data>
+  <data name="PhmSuffixExpired" xml:space="preserve">
+    <value>expired</value>
+    <comment>Chip suffix.</comment>
+  </data>
+  <data name="PhmSuffixCancelled" xml:space="preserve">
+    <value>cancelled</value>
+    <comment>Chip suffix.</comment>
+  </data>
+  <data name="PhmSuffixWarning" xml:space="preserve">
+    <value>warning</value>
+    <comment>Chip suffix for a set password with a warning.</comment>
+  </data>
+  <data name="MdtGroupBy" xml:space="preserve">
+    <value>Group by</value>
+    <comment>Toolbar label and the accessible name of the group-by control.</comment>
+  </data>
+  <data name="MdtAttribute" xml:space="preserve">
+    <value>Attribute</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="MdtCategory" xml:space="preserve">
+    <value>Category</value>
+    <comment>Group-by option: group the attributes by category.</comment>
+  </data>
+  <data name="MdtNoAttributesFromSource" xml:space="preserve">
+    <value>No attributes come from this source</value>
+    <comment>Empty grid heading, when a contribution filter is on.</comment>
+  </data>
+  <data name="MdtNoAttributes" xml:space="preserve">
+    <value>This object has no attribute values</value>
+    <comment>Empty grid heading.</comment>
+  </data>
+  <data name="McbTitle" xml:space="preserve">
+    <value>Where this {0} gets its values</value>
+    <comment>Heading of the contribution panel. {0} is the object type's name.</comment>
+  </data>
+  <data name="McbSelectSourceHint" xml:space="preserve">
+    <value> · select a source to filter</value>
+    <comment>Appended to the attribute count when there is more than one source. Leading space kept.</comment>
+  </data>
+  <data name="McbAllValuesFrom" xml:space="preserve">
+    <value>All {0} values from {1}</value>
+    <comment>Shown when every value has one source. {0} is the count; {1} the source.</comment>
+  </data>
+  <data name="McbFilterAria" xml:space="preserve">
+    <value>Filter attributes by source</value>
+    <comment>Accessible name of the source legend.</comment>
+  </data>
+  <data name="McbSeveralSources" xml:space="preserve">
+    <value>Several sources</value>
+    <comment>Source label when a value has several origins.</comment>
+  </data>
+  <data name="McbRuleDeleted" xml:space="preserve">
+    <value>{0} · rule deleted</value>
+    <comment>Source label when the synchronisation rule has been deleted. {0} is the Connected System's name.</comment>
+  </data>
+  <data name="TixHome" xml:space="preserve">
+    <value>Home</value>
+    <comment>Breadcrumb link to the home page.</comment>
+  </data>
+  <data name="TixPageInfo" xml:space="preserve">
+    <value>Search, or browse for {0}.</value>
+    <comment>Page info popover. {0} is the object type's plural name, in lower case.</comment>
+  </data>
+  <data name="TixHasValueFor" xml:space="preserve">
+    <value>Has a value for: {0}</value>
+    <comment>Filter chip. {0} is the attribute's name.</comment>
+  </data>
+  <data name="TixUnknownAttribute" xml:space="preserve">
+    <value>No Metaverse Attribute named "{0}" is defined, so no objects match. Clear the filter to browse all {1}.</value>
+    <comment>Info alert. {0} is the name typed; {1} the plural name of the object type.</comment>
+  </data>
+  <data name="TixNoMatch" xml:space="preserve">
+    <value>No {0} match "{1}"</value>
+    <comment>Empty grid. {0} is the plural name; {1} the search text typed.</comment>
+  </data>
+  <data name="TixNoHasValue" xml:space="preserve">
+    <value>No {0} have a value for {1}</value>
+    <comment>Empty grid. {0} is the plural name; {1} the attribute's name.</comment>
+  </data>
+  <data name="TixClearFilterHint" xml:space="preserve">
+    <value>Clear the filter above to browse all {0}.</value>
+    <comment>Empty grid description. {0} is the plural name.</comment>
+  </data>
+  <data name="TixNoneYet" xml:space="preserve">
+    <value>No {0} yet</value>
+    <comment>Empty grid heading. {0} is the plural name.</comment>
+  </data>
+  <data name="TixObjectsAppear" xml:space="preserve">
+    <value>Objects appear here once they are created or imported.</value>
+    <comment>Empty grid description.</comment>
+  </data>
+  <data name="TixNoSuchSearch" xml:space="preserve">
+    <value>No such predefined search found, sorry</value>
+    <comment>Shown when the predefined search in the address does not exist.</comment>
+  </data>
+  <data name="TixCreateDefault" xml:space="preserve">
+    <value>Please create a default Predefined Search for this Metaverse Object Type</value>
+    <comment>Shown when the object type has no default predefined search.</comment>
+  </data>
+  <data name="PfgHide" xml:space="preserve">
+    <value>Hide guidance</value>
+    <comment>Toggle when the guidance is open.</comment>
+  </data>
+  <data name="PfgShow" xml:space="preserve">
+    <value>How to fix this</value>
+    <comment>Toggle when the guidance is closed.</comment>
+  </data>
+  <data name="PfgRegenerateAll" xml:space="preserve">
+    <value>New password for all {0} Connected System Objects</value>
+    <comment>Button. {0} is the number of accounts the password was set on.</comment>
+  </data>
+  <data name="PfgRegenerateExplain" xml:space="preserve">
+    <value>Rewrites the Connected System Objects that already took the password, so they all hold the same one. Retrying this Connected System alone would leave them with two.</value>
+    <comment>Caption under the regenerate button.</comment>
+  </data>
+  <data name="PfgVerdictRetryDifferent" xml:space="preserve">
+    <value>Worth retrying with a different password</value>
+    <comment>Verdict sentence.</comment>
+  </data>
+  <data name="PfgVerdictRetryUnchanged" xml:space="preserve">
+    <value>Worth retrying unchanged</value>
+    <comment>Verdict sentence.</comment>
+  </data>
+  <data name="PfgVerdictNeedsSomebody" xml:space="preserve">
+    <value>Nothing changes until somebody grants the right</value>
+    <comment>Verdict sentence.</comment>
+  </data>
+  <data name="PfgVerdictNeverHelps" xml:space="preserve">
+    <value>Retrying will never help</value>
+    <comment>Verdict sentence.</comment>
+  </data>
 </root>
