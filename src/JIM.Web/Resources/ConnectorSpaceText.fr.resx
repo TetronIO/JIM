@@ -902,4 +902,112 @@
   <data name="PdlNoneHint" xml:space="preserve">
     <value>Les objets Metaverse apparaissent ici lorsqu’une déconnexion planifie leur suppression automatique.</value>
   </data>
+  <data name="ImpTitle" xml:space="preserve">
+    <value>Objet importé</value>
+  </data>
+  <data name="ImpJson" xml:space="preserve">
+    <value>JSON</value>
+  </data>
+  <data name="ImpViewAria" xml:space="preserve">
+    <value>Affichage de l’objet importé</value>
+  </data>
+  <data name="ImpRunLimit" xml:space="preserve">
+    <value>Non enregistré : cette exécution avait déjà enregistré les {0} premiers objets rejetés, où elle s’arrête. Ouvrez l’un des éléments rejetés antérieurs de l’exécution pour voir ce que le connecteur a renvoyé.</value>
+  </data>
+  <data name="ImpIntro" xml:space="preserve">
+    <value>Ce que le connecteur a renvoyé pour cet objet, tel qu’enregistré lors de son rejet.</value>
+  </data>
+  <data name="ImpAttributesMarked" xml:space="preserve">
+    <value>Les attributs concernés par l’erreur sont signalés.</value>
+  </data>
+  <data name="ImpTipNamedInError" xml:space="preserve">
+    <value>L’erreur de l’élément concerne cet attribut.</value>
+  </data>
+  <data name="ImpNamedInError" xml:space="preserve">
+    <value>Nommé dans l’erreur</value>
+  </data>
+  <data name="ImpTipWithheld" xml:space="preserve">
+    <value>Cet attribut contient, ou peut contenir, un identifiant d’authentification ; JIM n’a donc pas enregistré ses valeurs.</value>
+  </data>
+  <data name="ImpWithheld" xml:space="preserve">
+    <value>Non enregistré (identifiant d’authentification)</value>
+  </data>
+  <data name="ImpOmittedValueOne" xml:space="preserve">
+    <value>+ {0} autre valeur non enregistrée</value>
+  </data>
+  <data name="ImpOmittedValueOther" xml:space="preserve">
+    <value>+ {0} autres valeurs non enregistrées</value>
+  </data>
+  <data name="ImpNoAttributes" xml:space="preserve">
+    <value>Le connecteur n’a renvoyé aucun attribut pour cet objet</value>
+  </data>
+  <data name="ImpCopyJson" xml:space="preserve">
+    <value>Copier le JSON</value>
+  </data>
+  <data name="ImpOmittedAttrOne" xml:space="preserve">
+    <value>{0} attribut a été omis pour conserver l’enregistrement dans sa limite de taille{1}</value>
+  </data>
+  <data name="ImpOmittedAttrOther" xml:space="preserve">
+    <value>{0} attributs ont été omis pour conserver l’enregistrement dans sa limite de taille{1}</value>
+  </data>
+  <data name="ImpOmittedNames" xml:space="preserve">
+    <value> : {0}</value>
+  </data>
+  <data name="ImpAndOthers" xml:space="preserve">
+    <value>, et d’autres</value>
+  </data>
+  <data name="ImpCredentialsNote" xml:space="preserve">
+    <value>Les valeurs des attributs qui contiennent, ou peuvent contenir, des identifiants d’authentification ne sont jamais enregistrées. L’enregistrement est conservé tant que cette activité existe.</value>
+  </data>
+  <data name="ImpCopied" xml:space="preserve">
+    <value>Copié dans le presse-papiers</value>
+  </data>
+  <data name="ImpCopyFailed" xml:space="preserve">
+    <value>Le navigateur n’a pas permis à JIM de copier le JSON. Sélectionnez-le et copiez-le à la place.</value>
+  </data>
+  <data name="ImvSearch" xml:space="preserve">
+    <value>Rechercher dans {0}...</value>
+  </data>
+  <data name="ImvValuesPlural" xml:space="preserve">
+    <value>Valeurs</value>
+  </data>
+  <data name="ImvNoMatch" xml:space="preserve">
+    <value>Aucune valeur ne correspond à « {0} »</value>
+  </data>
+  <data name="DelManualTyped" xml:space="preserve">
+    <value>La règle de suppression des objets {0} a été définie sur {1} ; la suppression automatique a été désactivée.</value>
+  </data>
+  <data name="DelManualUntyped" xml:space="preserve">
+    <value>La règle de suppression a été définie sur {0} ; la suppression automatique a été désactivée.</value>
+  </data>
+  <data name="DelManualLabel" xml:space="preserve">
+    <value>suppression manuelle uniquement</value>
+  </data>
+  <data name="DelLastConnectorTyped" xml:space="preserve">
+    <value>La règle de suppression des objets {0} exigeait que {1} soit déconnecté ; les autres objets de systèmes connectés sont restés connectés.</value>
+  </data>
+  <data name="DelLastConnectorUntyped" xml:space="preserve">
+    <value>La règle de suppression exigeait que {0} soit déconnecté ; les autres objets de systèmes connectés sont restés connectés.</value>
+  </data>
+  <data name="DelAllConnectors" xml:space="preserve">
+    <value>tous les connecteurs</value>
+  </data>
+  <data name="DelNotSourceSystem" xml:space="preserve">
+    <value>{0} n’a pas été configuré comme source faisant autorité ; sa déconnexion n’a donc pas déclenché de suppression.</value>
+  </data>
+  <data name="DelAllSourcesMode" xml:space="preserve">
+    <value>Le mode de déclenchement était {0} : {1} s’est déconnecté, mais {2} sur {3} sources sélectionnées sont restées connectées ({4}).</value>
+  </data>
+  <data name="DelAllSourcesLabel" xml:space="preserve">
+    <value>Toutes les sources se déconnectent</value>
+  </data>
+  <data name="DelAuthoritativeTyped" xml:space="preserve">
+    <value>La règle de suppression des objets {0} exigeait qu’une source faisant autorité se déconnecte ; les conditions enregistrées n’ont pas déclenché de suppression.</value>
+  </data>
+  <data name="DelAuthoritativeUntyped" xml:space="preserve">
+    <value>La règle de suppression exigeait qu’une source faisant autorité se déconnecte ; les conditions enregistrées n’ont pas déclenché de suppression.</value>
+  </data>
+  <data name="DelExplainFooter" xml:space="preserve">
+    <value>Cette explication reflète la politique de suppression enregistrée lors de l’exécution de cette activité.</value>
+  </data>
 </root>

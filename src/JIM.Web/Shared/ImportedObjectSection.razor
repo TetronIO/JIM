@@ -15,12 +15,12 @@
     <div class="jim-imported-object-head">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
             <MudIcon Icon="@Icons.Material.Outlined.Inventory2" Class="mud-text-secondary" />
-            <MudText Typo="Typo.h6">Imported Object</MudText>
+            <MudText Typo="Typo.h6">@ConnectorSpaceText.ImpTitle</MudText>
         </MudStack>
         @if (Snapshot.RunLimitReached != true)
         {
             <SegmentedToggle TValue="ImportedObjectView" Options="@ViewOptions" Value="@_view" ValueChanged="@(v => _view = v)"
-                             AriaLabel="Imported Object view" TestId="jim-imported-object-view" />
+                             AriaLabel="@ConnectorSpaceText.ImpViewAria" TestId="jim-imported-object-view" />
         }
     </div>
 
@@ -28,31 +28,30 @@
         @if (Snapshot.RunLimitReached == true)
         {
             <MudText Typo="Typo.body1" data-testid="jim-imported-object-run-limit">
-                Not recorded: this run had already recorded the first @ImportedObjectSnapshot.MaxSnapshotsPerRun.ToString("N0")
-                rejected objects, which is where it stops. Open one of the run's earlier rejected items to see what the Connector returned.
+                @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.ImpRunLimit, ImportedObjectSnapshot.MaxSnapshotsPerRun.ToString("N0"))
             </MudText>
         }
         else
         {
             <MudText Typo="Typo.body1" Class="mb-3">
-                What the Connector returned for this object, as recorded when it was rejected.
+                @ConnectorSpaceText.ImpIntro
                 @if (Snapshot.Attributes.Any(a => a.NamedInError == true))
                 {
-                    @:The attributes the error is about are marked.
+                    @ConnectorSpaceText.ImpAttributesMarked
                 }
             </MudText>
 
             <div class="jim-imported-object-facts mb-3">
-                <span><span class="mud-text-secondary">Object Type</span> @(Snapshot.ObjectType ?? "None")</span>
+                <span><span class="mud-text-secondary">@ConnectorSpaceText.DeletedObjectType</span> @(Snapshot.ObjectType ?? CommonText.None)</span>
                 @* A Connector that does not say what kind of change it read reports NotSet, which says nothing worth a label. *@
                 @if (Snapshot.ChangeType is { } changeType and not ObjectChangeType.NotSet)
                 {
-                    <span><span class="mud-text-secondary">Change Type</span> @changeType</span>
+                    <span><span class="mud-text-secondary">@ConnectorSpaceText.CsoColumnChangeType</span> @changeType</span>
                 }
-                <span><span class="mud-text-secondary">Attributes</span> @AttributeTotal.ToString("N0")</span>
+                <span><span class="mud-text-secondary">@ConnectorSpaceText.CsoTabAttributes</span> @AttributeTotal.ToString("N0")</span>
                 @if (!string.IsNullOrEmpty(SourceLocation))
                 {
-                    <span><span class="mud-text-secondary">Source</span> <span class="jim-text-code">@SourceLocation</span></span>
+                    <span><span class="mud-text-secondary">@ConnectorSpaceText.PexLabelSource</span> <span class="jim-text-code">@SourceLocation</span></span>
                 }
             </div>
 
@@ -64,13 +63,13 @@
                                 Sort="Sort"
                                 DefaultSortBy="received"
                                 UrlParameterPrefix="io-"
-                                SingularName="Attribute"
-                                PluralName="Attributes"
+                                SingularName="@ConnectorSpaceText.CsoColumnAttribute"
+                                PluralName="@ConnectorSpaceText.CsoTabAttributes"
                                 RowClassFunc="@RowClass">
                     <HeaderContent>
-                        <MudTh Class="jim-attr-header-name"><VirtualisedSortHeader Title="Attribute" Name="attribute" /></MudTh>
-                        <MudTh Class="jim-attr-header-value">Value</MudTh>
-                        <MudTh Class="jim-attr-header-type"><VirtualisedSortHeader Title="Type" Name="type" /></MudTh>
+                        <MudTh Class="jim-attr-header-name"><VirtualisedSortHeader Title="@ConnectorSpaceText.CsoColumnAttribute" Name="attribute" /></MudTh>
+                        <MudTh Class="jim-attr-header-value">@ConnectorSpaceText.CsoColumnValue</MudTh>
+                        <MudTh Class="jim-attr-header-type"><VirtualisedSortHeader Title="@CommonText.ColumnType" Name="type" /></MudTh>
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd Class="jim-attr-name">
@@ -78,8 +77,8 @@
                                 <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.Name</MudText>
                                 @if (context.NamedInError == true)
                                 {
-                                    <MudTooltip Text="The item's error is about this attribute." Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="ma-0" data-testid="jim-imported-object-named-in-error">Named in error</MudChip>
+                                    <MudTooltip Text="@ConnectorSpaceText.ImpTipNamedInError" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="ma-0" data-testid="jim-imported-object-named-in-error">@ConnectorSpaceText.ImpNamedInError</MudChip>
                                     </MudTooltip>
                                 }
                             </div>
@@ -87,8 +86,8 @@
                         <MudTd Class="jim-attr-value">
                             @if (context.Withheld == true)
                             {
-                                <MudTooltip Text="This attribute holds, or may hold, a credential, so JIM did not record its values." Arrow="true" Placement="Placement.Top">
-                                    <span class="mud-text-secondary jim-imported-object-withheld" data-testid="jim-imported-object-withheld">Not recorded (credential)</span>
+                                <MudTooltip Text="@ConnectorSpaceText.ImpTipWithheld" Arrow="true" Placement="Placement.Top">
+                                    <span class="mud-text-secondary jim-imported-object-withheld" data-testid="jim-imported-object-withheld">@ConnectorSpaceText.ImpWithheld</span>
                                 </MudTooltip>
                             }
                             else if (context.Values.Count == 0)
@@ -110,7 +109,7 @@
                             @if (context.OmittedValueCount is { } omitted)
                             {
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1" data-testid="jim-imported-object-omitted-values">
-                                    + @omitted.ToString("N0") more @(omitted == 1 ? "value" : "values") not recorded
+                                    @string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(omitted, ConnectorSpaceText.ImpOmittedValueOne, ConnectorSpaceText.ImpOmittedValueOther), omitted.ToString("N0"))
                                 </MudText>
                             }
                         </MudTd>
@@ -120,14 +119,14 @@
                     </RowTemplate>
                     <EmptyContent>
                         <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
-                                         PrimaryText="The Connector returned no attributes for this object" />
+                                         PrimaryText="@ConnectorSpaceText.ImpNoAttributes" />
                     </EmptyContent>
                 </AttributeTable>
             }
             else
             {
                 <div class="d-flex justify-end mb-2">
-                    <MudButton StartIcon="@Icons.Material.Filled.ContentCopy" Variant="Variant.Text" OnClick="CopyJsonAsync">Copy JSON</MudButton>
+                    <MudButton StartIcon="@Icons.Material.Filled.ContentCopy" Variant="Variant.Text" OnClick="CopyJsonAsync">@ConnectorSpaceText.ImpCopyJson</MudButton>
                 </div>
                 <div class="jim-json-syntax" data-testid="jim-imported-object-json">@((MarkupString)Helpers.HighlightJson(_json ??= Helpers.FormatJson(Snapshot.ToJson())))</div>
             }
@@ -135,13 +134,12 @@
             @if (Snapshot.OmittedAttributeCount is { } omittedAttributes)
             {
                 <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3" data-testid="jim-imported-object-omitted-attributes">
-                    @omittedAttributes.ToString("N0") @(omittedAttributes == 1 ? "attribute was" : "attributes were") left out to keep the record
-                    within its size limit@(OmittedNames is { } names ? $": {names}" : ".")
+                    @string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(omittedAttributes, ConnectorSpaceText.ImpOmittedAttrOne, ConnectorSpaceText.ImpOmittedAttrOther), omittedAttributes.ToString("N0"), OmittedNames is { } names ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.ImpOmittedNames, names) : ".")
                 </MudText>
             }
 
             <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
-                Values of attributes that hold, or may hold, credentials are never recorded. The record is kept for as long as this Activity.
+                @ConnectorSpaceText.ImpCredentialsNote
             </MudText>
         }
     </div>
@@ -162,10 +160,10 @@
 
     private enum ImportedObjectView { Attributes, Json }
 
-    private static readonly IReadOnlyList<SegmentedToggleOption<ImportedObjectView>> ViewOptions =
+    private static IReadOnlyList<SegmentedToggleOption<ImportedObjectView>> ViewOptions =>
     [
-        new(ImportedObjectView.Attributes, "Attributes", TestId: "jim-imported-object-view-attributes"),
-        new(ImportedObjectView.Json, "JSON", TestId: "jim-imported-object-view-json")
+        new(ImportedObjectView.Attributes, ConnectorSpaceText.CsoTabAttributes, TestId: "jim-imported-object-view-attributes"),
+        new(ImportedObjectView.Json, ConnectorSpaceText.ImpJson, TestId: "jim-imported-object-view-json")
     ];
 
     private ImportedObjectView _view = ImportedObjectView.Attributes;
@@ -174,9 +172,10 @@
     private int AttributeTotal => Snapshot.Attributes.Count + (Snapshot.OmittedAttributeCount ?? 0);
 
     private string? OmittedNames => Snapshot.OmittedAttributeNames is { Count: > 0 } names
-        ? string.Join(", ", names) + (names.Count < Snapshot.OmittedAttributeCount ? ", and others" : string.Empty)
+        ? string.Join(", ", names) + (names.Count < Snapshot.OmittedAttributeCount ? ConnectorSpaceText.ImpAndOthers : string.Empty)
         : null;
 
+    // i18n: exempt - a CSS class name, not text
     private string PaperClass => string.IsNullOrEmpty(Class) ? "jim-imported-object" : $"jim-imported-object {Class}";
 
     private static string RowClass(ImportedObjectSnapshotAttribute attribute, int _)
@@ -211,11 +210,11 @@
         try
         {
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", _json ??= Helpers.FormatJson(Snapshot.ToJson()));
-            Snackbar.Add("Copied to clipboard", Severity.Success);
+            Snackbar.Add(ConnectorSpaceText.ImpCopied, Severity.Success);
         }
         catch (JSException)
         {
-            Snackbar.Add("The browser would not let JIM copy the JSON. Select it and copy it instead.", Severity.Warning);
+            Snackbar.Add(ConnectorSpaceText.ImpCopyFailed, Severity.Warning);
         }
     }
 }
