@@ -38,8 +38,10 @@ internal static partial class SynchronisationHistorySnapshot
     {
         "Id",
         "xmin",
-        // The Activity's progress message carries throughput, which is timing.
-        "Message"
+        // The Activity's progress message carries throughput, which is timing, and so does the message it is
+        // rendered from (#3039).
+        "Message",
+        "MessageDetailJson"
     };
 
     /// <summary>
