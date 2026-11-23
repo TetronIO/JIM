@@ -19,7 +19,7 @@
 
 **Every string a person reads in the portal comes from a resource file, with a translation in every language in progress or released, in the same change that adds or edits it.** Translation is part of writing the text, not a follow-up: a new page, a reworded tooltip and a new snackbar message each ship with their French (and an en-US entry where the spelling differs) or the build fails. Nobody on the team needs to read French for this to work; whoever writes the English writes the translations, following the glossary, and the tests below check what a machine can.
 
-**Languages are delivered one at a time.** Each language in `UiLanguages` has a stage: *Planned* (translations optional), *In progress* (every string required in the change that adds it; offered in development builds) and *Released* (offered to everyone). Today en-GB is released, French and en-US are in progress, and German is planned: it gets a pass of its own, over the finished resource files, when its turn comes.
+**Languages are delivered one at a time.** Each language in `UiLanguages` has a stage: *Planned* (translations optional), *In progress* (every string required in the change that adds it; offered in development builds) and *Released* (offered to everyone). Today en-GB, en-US and French are released, and German is in progress.
 
 ## How it works
 
@@ -141,6 +141,16 @@ The baseline started at 7,635 hard-coded strings in 333 files (7,121 once the de
 - **Glossary:** every JIM term uses its French form in `glossary.json`; the test fails anything else. Worker, Scheduler, Metaverse and product names are not translated.
 - **Buttons and headings** use the infinitive ("Enregistrer", "Créer une planification"); column headings are nouns ("Dernière exécution").
 - **Agreement:** a placeholder that holds a count takes `...One`/`...Other` keys; French treats 0 and 1 as singular (`PluralRules` knows).
+
+### Writing German
+
+- **Formal and plain:** *Sie*, never *du*; natural German word order rather than the English order word for word.
+- **Typography:** German quotation marks „…“ around a quoted name; no space before `:` or `;`. Nouns are capitalised, so JIM's terms read as ordinary German nouns ("die Synchronisierungsregel", "das verbundene System"), not English Title Case.
+- **Glossary:** every JIM term uses its German form in `glossary.json`, which is matched case-insensitively as a substring, so compounds and inflections pass ("Synchronisierungsregeln", "Metaverse-Objekttyp"). The Connected System patterns need "verbunden" and "System" side by side: write "Objekt im verbundenen System", not "verbundenes Zielsystem". Fixed words beyond the glossary: Kennwort (password), Synchronisierung, Dienst (service), Geltungsbereich (scope).
+- **Buttons and menu items** use the infinitive ("Speichern", "Regel löschen"); headings and labels are nouns.
+- **Fragments joined by code** are the hard part: German moves the verb to the end and inflects articles by case, so a fragment translated in isolation often reads wrongly once joined. Read the neighbouring keys and the translator comment, and translate the fragment for the slot it fills (a dative after "von", a subordinate clause after "wenn"). Where a fragment cannot be made right, that is a sign the English should be one template with placeholders; change the English rather than forcing the German.
+- **Agreement:** German treats only 1 as singular; `PluralRules` knows.
+
 
 ## Scope
 
