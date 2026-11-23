@@ -125,4 +125,7 @@
   <data name="AuxCancelledRunNote" xml:space="preserve">
     <value>A canceled run keeps what it found. Those classes are genuinely in use; the ones it never reached are simply unknown.</value>
   </data>
+  <data name="AuxCancelRequested" xml:space="preserve">
+    <value>Cancelation requested. What the run has already found is kept.</value>
+  </data>
 </root>
