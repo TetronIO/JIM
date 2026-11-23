@@ -27,6 +27,8 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
     private readonly string? _scope;
     private readonly Func<DateTimeOffset> _utcNow;
     private readonly Func<HttpStatusCode, string?, string>? _describeFailure;
+    private readonly OAuthStillBeingAppliedRetry? _stillBeingApplied;
+    private readonly Func<TimeSpan, CancellationToken, Task> _delay;
 
     // One acquisition at a time: parallel export means many callers arrive together, and without this
     // they would each fire an identical token request at the authorisation server.
@@ -59,6 +61,12 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
     /// repeat request parameters in error responses, and the message reaches Activity errors and logs. When null, a
     /// generic message naming the status is used.
     /// </param>
+    /// <param name="stillBeingApplied">
+    /// Which refusals mean the authorisation server has not yet applied a newly added credential, and how long to wait
+    /// before asking again; a refusal still of that kind after the last wait is reported like any other. When null, no
+    /// refusal is retried.
+    /// </param>
+    /// <param name="delay">Waiting seam, so the retry is testable without waiting.</param>
     public OAuthClientCredentialsAuthentication(
         HttpClient tokenClient,
         Uri tokenEndpoint,
@@ -66,7 +74,9 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
         IOAuthClientCredential clientCredential,
         string? scope = null,
         Func<DateTimeOffset>? utcNow = null,
-        Func<HttpStatusCode, string?, string>? describeFailure = null)
+        Func<HttpStatusCode, string?, string>? describeFailure = null,
+        OAuthStillBeingAppliedRetry? stillBeingApplied = null,
+        Func<TimeSpan, CancellationToken, Task>? delay = null)
     {
         ArgumentNullException.ThrowIfNull(tokenClient);
         ArgumentNullException.ThrowIfNull(tokenEndpoint);
@@ -85,6 +95,8 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
         _scope = string.IsNullOrWhiteSpace(scope) ? null : scope;
         _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
         _describeFailure = describeFailure;
+        _stillBeingApplied = stillBeingApplied;
+        _delay = delay ?? Task.Delay;
     }
 
     public async Task ApplyAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -150,6 +162,41 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
 
     private async Task<OAuthTokenResponse> RequestTokenAsync(CancellationToken cancellationToken)
     {
+        var delays = _stillBeingApplied?.Delays ?? [];
+        for (var attempt = 0; ; attempt++)
+        {
+            var (token, refusal) = await TryRequestTokenAsync(cancellationToken);
+            if (token != null)
+                return token;
+
+            // A fresh request, with a freshly built credential, after each wait: the server that refused may be the only
+            // one yet to apply the credential.
+            if (attempt < delays.Count && _stillBeingApplied!.IsStillBeingApplied(refusal!.Value.Status, refusal.Value.Body))
+            {
+                await _delay(delays[attempt], cancellationToken);
+                continue;
+            }
+
+            throw DescribeRefusal(refusal!.Value.Status, refusal.Value.ReasonPhrase, refusal.Value.Body);
+        }
+    }
+
+    private HttpAuthenticationException DescribeRefusal(HttpStatusCode status, string? reasonPhrase, string? body)
+    {
+        if (_describeFailure != null)
+            return new HttpAuthenticationException(_describeFailure(status, body));
+
+        // The body is deliberately not included: authorisation servers echo request parameters
+        // in error responses, and this text reaches Activity errors and logs.
+        return new HttpAuthenticationException(
+            $"The OAuth 2.0 token endpoint returned HTTP {(int)status} ({reasonPhrase}). " +
+            "Check the Client ID, Client Secret, OAuth Scope and Token Endpoint URL settings.");
+    }
+
+    /// <returns>The token, or the refusal's status, reason and body (read only where something will look at it).</returns>
+    private async Task<(OAuthTokenResponse? Token, (HttpStatusCode Status, string? ReasonPhrase, string? Body)? Refusal)> TryRequestTokenAsync(
+        CancellationToken cancellationToken)
+    {
         // Client authentication travels in the form body. If a provider mandates HTTP Basic client
         // authentication instead, that becomes another IOAuthClientCredential rather than a change here.
         var form = new List<KeyValuePair<string, string>>
@@ -179,17 +226,10 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
         {
             if (!response.IsSuccessStatusCode)
             {
-                if (_describeFailure != null)
-                {
-                    var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                    throw new HttpAuthenticationException(_describeFailure(response.StatusCode, errorBody));
-                }
-
-                // The body is deliberately not included: authorisation servers echo request parameters
-                // in error responses, and this text reaches Activity errors and logs.
-                throw new HttpAuthenticationException(
-                    $"The OAuth 2.0 token endpoint returned HTTP {(int)response.StatusCode} ({response.ReasonPhrase}). " +
-                    "Check the Client ID, Client Secret, OAuth Scope and Token Endpoint URL settings.");
+                var errorBody = _describeFailure != null || _stillBeingApplied != null
+                    ? await response.Content.ReadAsStringAsync(cancellationToken)
+                    : null;
+                return (null, (response.StatusCode, response.ReasonPhrase, errorBody));
             }
 
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -206,7 +246,7 @@ public class OAuthClientCredentialsAuthentication : IHttpAuthenticationStrategy
             if (token == null || string.IsNullOrWhiteSpace(token.AccessToken))
                 throw new HttpAuthenticationException("The OAuth 2.0 token endpoint response did not contain an access_token.");
 
-            return token;
+            return (token, null);
         }
     }
 

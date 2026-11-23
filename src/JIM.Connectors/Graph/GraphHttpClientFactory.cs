@@ -110,7 +110,8 @@ internal static class GraphHttpClientFactory
             ownedCredential = null;
         }
 
-        return new OAuthClientCredentialsAuthentication(tokenClient, tokenEndpoint, clientId, credential, cloud.Scope, describeFailure: EntraTokenFailure.Describe);
+        return new OAuthClientCredentialsAuthentication(tokenClient, tokenEndpoint, clientId, credential, cloud.Scope, describeFailure: EntraTokenFailure.Describe,
+            stillBeingApplied: EntraTokenFailure.StillBeingAppliedRetry);
     }
 
     private static GraphManagedIdentityTokenSource CreateManagedIdentitySource(List<ConnectedSystemSettingValue> settingValues, GraphCloud cloud,
