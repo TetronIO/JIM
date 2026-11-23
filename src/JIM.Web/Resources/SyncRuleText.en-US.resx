@@ -242,7 +242,7 @@
   <data name="IdentityAwaitingOne" xml:space="preserve">
     <value>1 saved change reaches existing objects at the next synchronization of {0}, which processes every {1}.</value>
   </data>
-  <data name="IdentityAwaitingMany" xml:space="preserve">
+  <data name="IdentityAwaitingOther" xml:space="preserve">
     <value>{0:N0} saved changes reach existing objects at the next synchronization of {1}, which processes every {2}.</value>
   </data>
   <data name="PreviewSizeCappedHelp" xml:space="preserve">

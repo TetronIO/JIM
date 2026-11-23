@@ -1820,16 +1820,16 @@
   <data name="DerivedReadsVia" xml:space="preserve">
     <value>{0} (via {1})</value>
   </data>
-  <data name="DependantsOneOne" xml:space="preserve">
+  <data name="DependantsSingleFlowSingleInput" xml:space="preserve">
     <value>Après avoir {0}, plus rien d’autre ne contribue à {1}. Ce flux d’attributs dérivé le lit, il n’aura donc plus d’entrée :</value>
   </data>
-  <data name="DependantsOneMany" xml:space="preserve">
+  <data name="DependantsSingleFlowManyInputs" xml:space="preserve">
     <value>Après avoir {0}, plus rien d’autre ne contribue à {1}. Ce flux d’attributs dérivé les lit, il n’aura donc plus d’entrée :</value>
   </data>
-  <data name="DependantsManyOne" xml:space="preserve">
+  <data name="DependantsManyFlowsSingleInput" xml:space="preserve">
     <value>Après avoir {0}, plus rien d’autre ne contribue à {1}. Ces flux d’attributs dérivés le lisent, ils n’auront donc plus d’entrée :</value>
   </data>
-  <data name="DependantsManyMany" xml:space="preserve">
+  <data name="DependantsManyFlowsManyInputs" xml:space="preserve">
     <value>Après avoir {0}, plus rien d’autre ne contribue à {1}. Ces flux d’attributs dérivés les lisent, ils n’auront donc plus d’entrée :</value>
   </data>
   <data name="DerivedPanelHeading" xml:space="preserve">
@@ -1934,7 +1934,7 @@
   <data name="AddBindingButtonOne" xml:space="preserve">
     <value>Ajouter 1 attribut</value>
   </data>
-  <data name="AddBindingButtonMany" xml:space="preserve">
+  <data name="AddBindingButtonOther" xml:space="preserve">
     <value>Ajouter {0} attributs</value>
   </data>
   <data name="AddBindingAdded" xml:space="preserve">
@@ -1979,7 +1979,7 @@
   <data name="IdentityAwaitingOne" xml:space="preserve">
     <value>1 modification enregistrée atteint les objets existants lors de la prochaine synchronisation de {0}, qui traite chaque {1}.</value>
   </data>
-  <data name="IdentityAwaitingMany" xml:space="preserve">
+  <data name="IdentityAwaitingOther" xml:space="preserve">
     <value>{0:N0} modifications enregistrées atteignent les objets existants lors de la prochaine synchronisation de {1}, qui traite chaque {2}.</value>
   </data>
   <data name="IdentityObjectOfType" xml:space="preserve">

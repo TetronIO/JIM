@@ -2396,19 +2396,19 @@
     <value>{0} (via {1})</value>
     <comment>A dependant's indirect input. {0} the first attribute, {1} the chain.</comment>
   </data>
-  <data name="DependantsOneOne" xml:space="preserve">
+  <data name="DependantsSingleFlowSingleInput" xml:space="preserve">
     <value>After you {0}, nothing else contributes {1}. This Derived Attribute Flow reads it, so it will have no input:</value>
     <comment>Sentence above the dependants list: one dependant, one lost attribute. {0} is the change, {1} the attribute.</comment>
   </data>
-  <data name="DependantsOneMany" xml:space="preserve">
+  <data name="DependantsSingleFlowManyInputs" xml:space="preserve">
     <value>After you {0}, nothing else contributes {1}. This Derived Attribute Flow reads them, so it will have no input:</value>
     <comment>Sentence above the dependants list: one dependant, several lost attributes.</comment>
   </data>
-  <data name="DependantsManyOne" xml:space="preserve">
+  <data name="DependantsManyFlowsSingleInput" xml:space="preserve">
     <value>After you {0}, nothing else contributes {1}. These Derived Attribute Flows read it, so they will have no input:</value>
     <comment>Sentence above the dependants list: several dependants, one lost attribute.</comment>
   </data>
-  <data name="DependantsManyMany" xml:space="preserve">
+  <data name="DependantsManyFlowsManyInputs" xml:space="preserve">
     <value>After you {0}, nothing else contributes {1}. These Derived Attribute Flows read them, so they will have no input:</value>
     <comment>Sentence above the dependants list: several dependants, several lost attributes.</comment>
   </data>
@@ -2548,7 +2548,7 @@
     <value>Add 1 attribute</value>
     <comment>Confirm button when one attribute is selected.</comment>
   </data>
-  <data name="AddBindingButtonMany" xml:space="preserve">
+  <data name="AddBindingButtonOther" xml:space="preserve">
     <value>Add {0} attributes</value>
     <comment>Confirm button when several are selected. {0} is the count.</comment>
   </data>
@@ -2608,7 +2608,7 @@
     <value>1 saved change reaches existing objects at the next synchronisation of {0}, which processes every {1}.</value>
     <comment>Tooltip. {0} is the Connected System name, {1} the object phrase. Singular.</comment>
   </data>
-  <data name="IdentityAwaitingMany" xml:space="preserve">
+  <data name="IdentityAwaitingOther" xml:space="preserve">
     <value>{0:N0} saved changes reach existing objects at the next synchronisation of {1}, which processes every {2}.</value>
     <comment>Tooltip. {0} is the count, {1} the Connected System name, {2} the object phrase. Plural.</comment>
   </data>

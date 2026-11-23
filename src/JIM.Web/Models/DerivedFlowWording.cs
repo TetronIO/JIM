@@ -137,10 +137,10 @@ public static class DerivedFlowWording
 
         var template = (dependants.Count == 1, lost.Count == 1) switch
         {
-            (true, true) => SyncRuleText.DependantsOneOne,
-            (true, false) => SyncRuleText.DependantsOneMany,
-            (false, true) => SyncRuleText.DependantsManyOne,
-            _ => SyncRuleText.DependantsManyMany
+            (true, true) => SyncRuleText.DependantsSingleFlowSingleInput,
+            (true, false) => SyncRuleText.DependantsSingleFlowManyInputs,
+            (false, true) => SyncRuleText.DependantsManyFlowsSingleInput,
+            _ => SyncRuleText.DependantsManyFlowsManyInputs
         };
 
         return string.Format(CultureInfo.CurrentCulture, template, change, JoinNames(lost, "or"));

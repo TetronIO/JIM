@@ -123,7 +123,7 @@
                 : string.Format(culture, SyncRuleText.IdentityObjectOfType, ConnectedSystemObjectTypeName);
             return AwaitingSynchronisationChangeCount == 1
                 ? string.Format(culture, SyncRuleText.IdentityAwaitingOne, ConnectedSystemName, objects)
-                : string.Format(culture, SyncRuleText.IdentityAwaitingMany, AwaitingSynchronisationChangeCount, ConnectedSystemName, objects);
+                : string.Format(culture, SyncRuleText.IdentityAwaitingOther, AwaitingSynchronisationChangeCount, ConnectedSystemName, objects);
         }
     }
 
