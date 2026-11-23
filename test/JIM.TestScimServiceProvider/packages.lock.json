@@ -36,14 +36,14 @@
       "jim.scim": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.17.0, )",
-          "JIM.Utilities": "[0.17.0, )"
+          "JIM.Models": "[1.0.0, )",
+          "JIM.Utilities": "[1.0.0, )"
         }
       },
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.17.0, )",
+          "JIM.Models": "[1.0.0, )",
           "Serilog": "[4.4.0, )"
         }
       }
