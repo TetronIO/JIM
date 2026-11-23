@@ -250,4 +250,244 @@
     <value>Unknown deletion rule</value>
     <comment>Deletion Rule tooltip for a value the portal does not recognise</comment>
   </data>
+  <data name="CertificatePageTitle" xml:space="preserve">
+    <value>Trusted Certificates</value>
+    <comment>Browser title and page heading</comment>
+  </data>
+  <data name="CertificatePageInfo" xml:space="preserve">
+    <value>Manage the certificates JIM trusts: for Connectors' secure connections (LDAPS, HTTPS, SQL Server), for signing in through your identity provider, or both. Certificates can be uploaded directly or referenced from the connector-files mount.</value>
+    <comment>Page information popover</comment>
+  </data>
+  <data name="CertificateBreadcrumb" xml:space="preserve">
+    <value>Certificates</value>
+    <comment>Breadcrumb for the Trusted Certificates page</comment>
+  </data>
+  <data name="CertificateNounSingular" xml:space="preserve">
+    <value>Trusted Certificate</value>
+    <comment>Noun used in the count and in the change history dialog</comment>
+  </data>
+  <data name="CertificateNounPlural" xml:space="preserve">
+    <value>Trusted Certificates</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="CertificateUploadButton" xml:space="preserve">
+    <value>Upload Certificate</value>
+    <comment>Toolbar button and upload dialog title</comment>
+  </data>
+  <data name="CertificateReferenceFileButton" xml:space="preserve">
+    <value>Reference File Path</value>
+    <comment>Toolbar button</comment>
+  </data>
+  <data name="CertificateMenuViewDetails" xml:space="preserve">
+    <value>View Details</value>
+    <comment>Row menu item</comment>
+  </data>
+  <data name="CertificateMenuChangeHistory" xml:space="preserve">
+    <value>Change History</value>
+    <comment>Row menu item</comment>
+  </data>
+  <data name="CertificateTrustedFor" xml:space="preserve">
+    <value>Trusted for</value>
+    <comment>Column heading and Details field label</comment>
+  </data>
+  <data name="CertificateSubject" xml:space="preserve">
+    <value>Subject</value>
+    <comment>Column heading and Details field label: the certificate subject</comment>
+  </data>
+  <data name="CertificateSource" xml:space="preserve">
+    <value>Source</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="CertificateExpires" xml:space="preserve">
+    <value>Expires</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="CertificateUploaded" xml:space="preserve">
+    <value>Uploaded</value>
+    <comment>Source chip: the certificate was uploaded</comment>
+  </data>
+  <data name="CertificateFilePath" xml:space="preserve">
+    <value>File Path</value>
+    <comment>Source chip, dialog field label and Details field label</comment>
+  </data>
+  <data name="CertificatePurposeSignIn" xml:space="preserve">
+    <value>Sign-in</value>
+    <comment>Trusted-for value and chip</comment>
+  </data>
+  <data name="CertificatePurposeConnectors" xml:space="preserve">
+    <value>Connectors</value>
+    <comment>Trusted-for value and chip</comment>
+  </data>
+  <data name="CertificatePurposeBoth" xml:space="preserve">
+    <value>Sign-in and Connectors</value>
+    <comment>Trusted-for value when both purposes are set</comment>
+  </data>
+  <data name="CertificateDaysUntilExpiryOne" xml:space="preserve">
+    <value>{0} day</value>
+    <comment>Expiry chip, singular; {0} is a number</comment>
+  </data>
+  <data name="CertificateDaysUntilExpiryOther" xml:space="preserve">
+    <value>{0} days</value>
+    <comment>Expiry chip, plural; {0} is a number</comment>
+  </data>
+  <data name="CertificateExpired" xml:space="preserve">
+    <value>Expired</value>
+    <comment>Expiry chip</comment>
+  </data>
+  <data name="CertificateInUseBySignIn" xml:space="preserve">
+    <value>In use by sign-in</value>
+    <comment>Status chip</comment>
+  </data>
+  <data name="CertificateInUseBySignInTooltip" xml:space="preserve">
+    <value>Your identity provider's certificate chains to this one, so sign-in relies on it. Checked {0}.</value>
+    <comment>Tooltip; {0} is when the identity provider was last checked, relative (for example, 2 hours ago)</comment>
+  </data>
+  <data name="CertificateEmptySearch" xml:space="preserve">
+    <value>No Trusted Certificates match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="CertificateEmptyNone" xml:space="preserve">
+    <value>No Trusted Certificates have been added yet</value>
+    <comment>Empty state when there are no certificates</comment>
+  </data>
+  <data name="CertificateEmptyNoneHint" xml:space="preserve">
+    <value>Use the Upload Certificate or Reference File Path buttons to add one.</value>
+    <comment>Empty state secondary text; quotes the toolbar button labels</comment>
+  </data>
+  <data name="CertificateNameHelper" xml:space="preserve">
+    <value>A friendly name for this certificate (e.g., 'Corp Root CA')</value>
+    <comment>Upload dialog helper text</comment>
+  </data>
+  <data name="CertificateNameRequired" xml:space="preserve">
+    <value>A name is required</value>
+    <comment>Validation message on the name field</comment>
+  </data>
+  <data name="CertificateSelectFile" xml:space="preserve">
+    <value>Select Certificate File</value>
+    <comment>Upload button before a file is chosen</comment>
+  </data>
+  <data name="CertificateFormats" xml:space="preserve">
+    <value>Supported formats: PEM (.pem, .crt) or DER (.cer, .der)</value>
+    <comment>Upload dialog caption</comment>
+  </data>
+  <data name="CertificateNotes" xml:space="preserve">
+    <value>Notes</value>
+    <comment>Field label</comment>
+  </data>
+  <data name="CertificateNotesHelper" xml:space="preserve">
+    <value>Optional notes about this certificate</value>
+    <comment>Field helper text</comment>
+  </data>
+  <data name="CertificateUploading" xml:space="preserve">
+    <value>Uploading</value>
+    <comment>Button text while the upload runs</comment>
+  </data>
+  <data name="CertificateReferenceDialogTitle" xml:space="preserve">
+    <value>Reference Certificate File</value>
+    <comment>Reference dialog title</comment>
+  </data>
+  <data name="CertificateFilePathRequired" xml:space="preserve">
+    <value>A file path is required</value>
+    <comment>Validation message on the file path field</comment>
+  </data>
+  <data name="CertificateReferenceNameHelper" xml:space="preserve">
+    <value>A friendly name for this certificate</value>
+    <comment>Reference dialog name helper text</comment>
+  </data>
+  <data name="CertificateFilePathHelper" xml:space="preserve">
+    <value>Full path to the certificate file (e.g., /connector-files/certs/root-ca.pem)</value>
+    <comment>Helper text on the file path field</comment>
+  </data>
+  <data name="CertificateAddButton" xml:space="preserve">
+    <value>Add Certificate</value>
+    <comment>Reference dialog confirm button</comment>
+  </data>
+  <data name="CertificateAdding" xml:space="preserve">
+    <value>Adding</value>
+    <comment>Button text while the certificate is added</comment>
+  </data>
+  <data name="CertificateDetailsTitle" xml:space="preserve">
+    <value>Certificate Details</value>
+    <comment>Details dialog title</comment>
+  </data>
+  <data name="CertificateIssuer" xml:space="preserve">
+    <value>Issuer</value>
+    <comment>Details field label</comment>
+  </data>
+  <data name="CertificateValidFrom" xml:space="preserve">
+    <value>Valid From</value>
+    <comment>Details field label</comment>
+  </data>
+  <data name="CertificateValidTo" xml:space="preserve">
+    <value>Valid To</value>
+    <comment>Details field label</comment>
+  </data>
+  <data name="CertificateThumbprint" xml:space="preserve">
+    <value>Thumbprint</value>
+    <comment>Details field label</comment>
+  </data>
+  <data name="CertificateSerialNumber" xml:space="preserve">
+    <value>Serial Number</value>
+    <comment>Details field label</comment>
+  </data>
+  <data name="CertificateSourceType" xml:space="preserve">
+    <value>Source Type</value>
+    <comment>Details field label</comment>
+  </data>
+  <data name="CertificateEditTitle" xml:space="preserve">
+    <value>Edit Certificate</value>
+    <comment>Edit dialog title</comment>
+  </data>
+  <data name="CertificateSaving" xml:space="preserve">
+    <value>Saving</value>
+    <comment>Button text while the change is saved</comment>
+  </data>
+  <data name="CertificateUploadedSuccess" xml:space="preserve">
+    <value>Certificate uploaded successfully.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="CertificateAddedSuccess" xml:space="preserve">
+    <value>Certificate added successfully.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="CertificateUpdatedSuccess" xml:space="preserve">
+    <value>Certificate updated successfully.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="CertificateDeletedSuccess" xml:space="preserve">
+    <value>Certificate deleted successfully.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="CertificateUploadFailed" xml:space="preserve">
+    <value>Failed to upload certificate: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="CertificateAddFailed" xml:space="preserve">
+    <value>Failed to add certificate: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="CertificateUpdateFailed" xml:space="preserve">
+    <value>Failed to update certificate: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="CertificateDeleteFailed" xml:space="preserve">
+    <value>Failed to delete certificate: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="CertificateDeleteTitle" xml:space="preserve">
+    <value>Delete Certificate</value>
+    <comment>Confirmation dialog title</comment>
+  </data>
+  <data name="CertificateDeleteMessage" xml:space="preserve">
+    <value>Are you sure you want to delete the certificate '{0}'? This action cannot be undone.</value>
+    <comment>Confirmation dialog message; {0} is the certificate name</comment>
+  </data>
+  <data name="CertificateStopSignInTitle" xml:space="preserve">
+    <value>Stop sign-in through '{0}'?</value>
+    <comment>Lockout confirmation dialog title; {0} is the certificate name</comment>
+  </data>
+  <data name="CertificateUploadVerb" xml:space="preserve">
+    <value>Upload</value>
+    <comment>Upload dialog confirm button, and the change reason dialog confirm button</comment>
+  </data>
 </root>
