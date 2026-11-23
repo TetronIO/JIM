@@ -116,7 +116,7 @@ public static class ServiceHealthDisplay
         ArgumentNullException.ThrowIfNull(service);
 
         if (service.Status == ServiceHealthStatus.Unhealthy)
-            return service.Reason;
+            return MessageDisplay.Show(service.ReasonDetail, service.Reason)!;
 
         return string.IsNullOrWhiteSpace(service.CurrentWork) ? HealthText.Idle : service.CurrentWork;
     }
@@ -147,7 +147,7 @@ public static class ServiceHealthDisplay
         ArgumentNullException.ThrowIfNull(service);
 
         if (service.Status != ServiceHealthStatus.Unhealthy)
-            return service.Reason;
+            return MessageDisplay.Show(service.ReasonDetail, service.Reason)!;
 
         if (WasDoing(service) is { } wasDoing)
             return wasDoing;

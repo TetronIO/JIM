@@ -3,8 +3,11 @@
 
 using System.Data.Common;
 using System.Text.Json;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Application.Services;
 using JIM.Models.Activities;
+using JIM.Models.Localisation;
 using JIM.Models.Scheduling;
 using JIM.Models.Scheduling.DTOs;
 using JIM.Models.Tasking;
@@ -142,7 +145,7 @@ public class SchedulerServer
         // the product and must not be deleted; they may be enabled, disabled and re-timed, but not removed.
         // This is the authoritative backstop for any caller; the API also rejects the request with a 400.
         if (schedule.BuiltIn)
-            throw new InvalidOperationException($"The built-in schedule '{schedule.Name}' cannot be deleted.");
+            throw new JimInvalidOperationException(ServerMessage.Create(nameof(ServerMessages.SchedBuiltInCannotDelete), schedule.Name));
 
         var activity = new Activity
         {
@@ -217,7 +220,7 @@ public class SchedulerServer
     /// </summary>
     public async Task CreateScheduleStepAsync(ScheduleStep step)
     {
-        await GuardStepScheduleNotBuiltInAsync(step, "added to");
+        await GuardStepScheduleNotBuiltInAsync(step, nameof(ServerMessages.SchedStepsCannotBeAdded));
         await Application.Repository.Scheduling.CreateScheduleStepAsync(step);
     }
 
@@ -227,7 +230,7 @@ public class SchedulerServer
     /// </summary>
     public async Task UpdateScheduleStepAsync(ScheduleStep step)
     {
-        await GuardStepScheduleNotBuiltInAsync(step, "changed on");
+        await GuardStepScheduleNotBuiltInAsync(step, nameof(ServerMessages.SchedStepsCannotBeChanged));
         await Application.Repository.Scheduling.UpdateScheduleStepAsync(step);
     }
 
@@ -237,7 +240,7 @@ public class SchedulerServer
     /// </summary>
     public async Task DeleteScheduleStepAsync(ScheduleStep step)
     {
-        await GuardStepScheduleNotBuiltInAsync(step, "removed from");
+        await GuardStepScheduleNotBuiltInAsync(step, nameof(ServerMessages.SchedStepsCannotBeRemoved));
         await Application.Repository.Scheduling.DeleteScheduleStepAsync(step);
     }
 
@@ -247,11 +250,11 @@ public class SchedulerServer
     /// maintained by JIM. The portal and REST API also enforce this, returning a friendly error before reaching
     /// here. A no-op when the parent schedule is a normal user schedule or cannot be found.
     /// </summary>
-    private async Task GuardStepScheduleNotBuiltInAsync(ScheduleStep step, string verb)
+    private async Task GuardStepScheduleNotBuiltInAsync(ScheduleStep step, string refusalKey)
     {
         var schedule = await Application.Repository.Scheduling.GetScheduleAsync(step.ScheduleId);
         if (schedule?.BuiltIn == true)
-            throw new InvalidOperationException($"Steps cannot be {verb} the built-in schedule '{schedule.Name}'.");
+            throw new JimInvalidOperationException(ServerMessage.Create(refusalKey, schedule.Name));
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -768,11 +771,12 @@ public class SchedulerServer
                     continue;
                 }
 
-                var message = DescribeStartFailure(step, failedActivity, refusal);
+                var failure = DescribeStartFailureDetail(step, failedActivity, refusal);
+                var message = failure.ToEnglish();
                 Log.Warning("StartScheduleExecutionAsync: Step {StepId} of execution {ExecutionId} could not be queued ({Reason}) and is set to stop the Schedule. The Schedule will not start.",
                     step.Id, execution.Id, refusal);
                 await FailStartAsync(execution, message);
-                throw new InvalidOperationException(message);
+                throw new JimInvalidOperationException(failure);
             }
         }
 
@@ -1527,7 +1531,20 @@ public class SchedulerServer
     /// The reason a start failed at a step, as recorded on the execution: which step, what it runs, and why.
     /// </summary>
     private static string DescribeStartFailure(ScheduleStep step, Activity? stepActivity, string reason) =>
-        $"The Schedule could not start. {StepSubject(step.StepIndex, [StepDisplayName(step, stepActivity)])} could not be queued: {AsClause(reason)}. No steps ran.";
+        DescribeStartFailureDetail(step, stepActivity, reason).ToEnglish();
+
+    /// <summary>
+    /// The same sentence as a message, so the portal can show the refusal in the reader's language. The reason is
+    /// text a worker task recorded, so it stays as it was written.
+    /// </summary>
+    private static JimMessage DescribeStartFailureDetail(ScheduleStep step, Activity? stepActivity, string reason)
+    {
+        var stepNumber = (step.StepIndex + 1).ToString();
+        var name = StepDisplayName(step, stepActivity);
+        return string.IsNullOrWhiteSpace(name)
+            ? ServerMessage.Create(nameof(ServerMessages.SchedStartFailedStep), stepNumber, AsClause(reason))
+            : ServerMessage.Create(nameof(ServerMessages.SchedStartFailedStepNamed), stepNumber, name, AsClause(reason));
+    }
 
     /// <summary>
     /// "Step 3" on its own, or "Step 3, Active Directory - Full Import," when there are names to give, ready to be

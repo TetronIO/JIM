@@ -290,7 +290,7 @@
         {
             // A condition the search cannot run (a value not of its attribute's type) is the reader's to fix, so it
             // is shown above the grid rather than treated as a failure.
-            _searchError = ex.Message;
+            _searchError = ex.ToDisplayText();
             await InvokeAsync(StateHasChanged);
             return new VirtualisedWindow<MetaverseObjectChangeSearchResult>([], 0);
         }

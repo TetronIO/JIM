@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ObjectTypeNameRequired" xml:space="preserve">
+    <value>Le nom du type d’objet Metaverse est obligatoire.</value>
+  </data>
+  <data name="ObjectTypePluralNameRequired" xml:space="preserve">
+    <value>Le nom au pluriel du type d’objet Metaverse est obligatoire.</value>
+  </data>
+  <data name="ObjectTypeNotFound" xml:space="preserve">
+    <value>Le type d’objet Metaverse {0} est introuvable.</value>
+  </data>
+  <data name="ObjectTypeBuiltInCannotRename" xml:space="preserve">
+    <value>Impossible de renommer le type d’objet Metaverse intégré « {0} » ou d’en changer l’icône.</value>
+  </data>
+  <data name="ObjectTypeNameExists" xml:space="preserve">
+    <value>Un type d’objet Metaverse nommé « {0} » existe déjà.</value>
+  </data>
+  <data name="ObjectTypePluralNameExists" xml:space="preserve">
+    <value>Un type d’objet Metaverse dont le nom au pluriel est « {0} » existe déjà.</value>
+  </data>
+  <data name="ObjectTypeBuiltInCannotDelete" xml:space="preserve">
+    <value>Impossible de supprimer le type d’objet Metaverse intégré « {0} ».</value>
+  </data>
+  <data name="AttributeNameRequired" xml:space="preserve">
+    <value>Le nom de l’attribut Metaverse est obligatoire.</value>
+  </data>
+  <data name="AttributeNotFound" xml:space="preserve">
+    <value>L’attribut Metaverse {0} est introuvable.</value>
+  </data>
+  <data name="AttributeBuiltInCannotRename" xml:space="preserve">
+    <value>Impossible de renommer l’attribut Metaverse intégré « {0} ».</value>
+  </data>
+  <data name="AttributeNameExists" xml:space="preserve">
+    <value>Un attribut Metaverse nommé « {0} » existe déjà (les noms sont comparés sans tenir compte de la casse).</value>
+  </data>
+  <data name="AttributeRenameReadByExpressions" xml:space="preserve">
+    <value>L’attribut Metaverse « {0} » ne peut pas être renommé tant que des expressions le lisent par son nom. Modifiez d’abord celles-ci : {1}.</value>
+  </data>
+  <data name="StandardMappingNeedsStandard" xml:space="preserve">
+    <value>Chaque mappage standard exige une norme.</value>
+  </data>
+  <data name="StandardMappingNeedsCounterpart" xml:space="preserve">
+    <value>Chaque mappage standard exige le nom d’un attribut équivalent.</value>
+  </data>
+  <data name="StandardMappingDuplicate" xml:space="preserve">
+    <value>Mappage standard en double : {0} « {1} ».</value>
+  </data>
+  <data name="StandardMappingsBuiltInCannotModify" xml:space="preserve">
+    <value>Impossible de modifier les mappages standard de l’attribut Metaverse intégré « {0} » ; ils sont gérés par JIM.</value>
+  </data>
+  <data name="BindingsBuiltInCannotModify" xml:space="preserve">
+    <value>Impossible de modifier les liaisons de l’attribut Metaverse intégré « {0} ».</value>
+  </data>
+  <data name="AttributeBuiltInCannotDelete" xml:space="preserve">
+    <value>Impossible de supprimer l’attribut Metaverse intégré « {0} ».</value>
+  </data>
+  <data name="AttributeBuiltInCannotUnassign" xml:space="preserve">
+    <value>Impossible de désaffecter l’attribut Metaverse intégré « {0} ».</value>
+  </data>
+  <data name="AttributeBuiltInCannotChangeType" xml:space="preserve">
+    <value>Impossible de modifier le type ou la pluralité de l’attribut Metaverse intégré « {0} ».</value>
+  </data>
+  <data name="AttributePluralityUnsupported" xml:space="preserve">
+    <value>Un attribut de type {0} ne peut pas être {1}.</value>
+  </data>
+  <data name="MultiValuedBooleanRule" xml:space="preserve">
+    <value>Un attribut booléen contient une seule valeur, vrai ou faux ; il ne peut donc pas être multivalué.</value>
+  </data>
+  <data name="ChangeSearchTimeRangeInverted" xml:space="preserve">
+    <value>La plage de temps se termine avant de commencer.</value>
+  </data>
+  <data name="ChangeSearchTooManyConditions" xml:space="preserve">
+    <value>Une recherche peut combiner au plus {0} conditions d’attribut.</value>
+  </data>
+  <data name="ChangeSearchOperatorUnknown" xml:space="preserve">
+    <value>« {0} » n’est pas un opérateur de changement d’attribut reconnu.</value>
+  </data>
+  <data name="ChangeSearchAttributeUnknown" xml:space="preserve">
+    <value>Il n’existe aucun attribut Metaverse portant l’identifiant {0}.</value>
+  </data>
+  <data name="ChangeSearchConditionInvalid" xml:space="preserve">
+    <value>{0} : {1}</value>
+  </data>
+  <data name="ChangeSearchMatchModeUnknown" xml:space="preserve">
+    <value>« {0} » n’est pas un mode de correspondance des conditions reconnu.</value>
+  </data>
+  <data name="FeatureDisabled" xml:space="preserve">
+    <value>La fonctionnalité « {0} » est actuellement désactivée.</value>
+  </data>
+  <data name="FeatureFlagNotFound" xml:space="preserve">
+    <value>Aucun indicateur de fonctionnalité n’a la clé « {0} ».</value>
+  </data>
+  <data name="FeatureInDevelopment" xml:space="preserve">
+    <value>La fonctionnalité « {0} » est en cours de développement (sa suppression est suivie dans le ticket n° {1}). Elle ne peut être activée en dehors du développement qu’en transmettant allowInDevelopment.</value>
+  </data>
+  <data name="CertificateThumbprintExists" xml:space="preserve">
+    <value>Un certificat portant l’empreinte {0} existe déjà dans le magasin.</value>
+  </data>
+  <data name="CertificateFileNotFound" xml:space="preserve">
+    <value>Fichier de certificat introuvable : {0}</value>
+  </data>
+  <data name="CertificateNotFound" xml:space="preserve">
+    <value>Le certificat portant l’identifiant {0} est introuvable.</value>
+  </data>
+  <data name="CertificateTrustPurposeRequired" xml:space="preserve">
+    <value>Un certificat doit être approuvé pour les connecteurs, pour la connexion, ou pour les deux.</value>
+  </data>
+  <data name="SecureEndpointSystemNotFound" xml:space="preserve">
+    <value>Le système connecté {0} est introuvable.</value>
+  </data>
+  <data name="SecureEndpointNoConnectorDefinition" xml:space="preserve">
+    <value>Le système connecté « {0} » n’a pas de définition de connecteur ; JIM ne peut donc pas savoir où il se connecte.</value>
+  </data>
+  <data name="SecureEndpointConnectorUnavailable" xml:space="preserve">
+    <value>Le connecteur « {0} » n’est pas disponible ; JIM ne peut donc pas savoir où ce système connecté se connecte.</value>
+  </data>
+  <data name="SecureEndpointConnectorNotEncrypted" xml:space="preserve">
+    <value>Le connecteur « {0} » n’établit pas de connexions chiffrées ; il n’y a donc aucun certificat de serveur à examiner.</value>
+  </data>
+  <data name="SecureEndpointNotConfigured" xml:space="preserve">
+    <value>Le système connecté « {0} » n’est pas configuré pour établir une connexion chiffrée ; il n’y a donc aucun certificat de serveur à examiner.</value>
+  </data>
+  <data name="ServerCertificateUnreachable" xml:space="preserve">
+    <value>{0}:{1} est injoignable ; JIM n’a donc pas pu lire son certificat. Il s’agit d’un problème de connectivité, et non d’un problème de certificat.</value>
+  </data>
+  <data name="SettingNotFound" xml:space="preserve">
+    <value>Le paramètre dont la clé est « {0} » est introuvable.</value>
+  </data>
+  <data name="SettingReadOnly" xml:space="preserve">
+    <value>Le paramètre « {0} » est en lecture seule et ne peut pas être modifié.</value>
+  </data>
+  <data name="IdpThumbprintRequired" xml:space="preserve">
+    <value>Une empreinte est requise. JIM n’approuvera pas n’importe quel certificat que présente le fournisseur d’identité.</value>
+  </data>
+  <data name="IdpNotConfigured" xml:space="preserve">
+    <value>Aucun fournisseur d’identité n’est configuré (JIM_SSO_AUTHORITY).</value>
+  </data>
+  <data name="IdpNoAnswer" xml:space="preserve">
+    <value>aucune réponse</value>
+  </data>
+  <data name="IdpUnreachable" xml:space="preserve">
+    <value>JIM n’a pas pu joindre le fournisseur d’identité à l’adresse {0} : {1}.</value>
+  </data>
+  <data name="IdpPlainHttp" xml:space="preserve">
+    <value>Le fournisseur d’identité à l’adresse {0} est joint en HTTP simple ; il n’y a donc aucun certificat à vérifier. Utilisez HTTPS en dehors du développement local.</value>
+  </data>
+  <data name="IdpConfigurationUnreadable" xml:space="preserve">
+    <value>JIM a joint {0} mais n’a pas pu lire sa configuration OpenID Connect : {1}.</value>
+  </data>
+  <data name="IdpNameMismatch" xml:space="preserve">
+    <value>Le certificat de {0} n’a pas été émis pour {0}. Approuver un certificat ne peut pas y remédier : le fournisseur d’identité a besoin d’un certificat qui nomme {0}, ou JIM_SSO_AUTHORITY doit utiliser un nom que son certificat porte.</value>
+  </data>
+  <data name="IdpUntrusted" xml:space="preserve">
+    <value>JIM n’approuve pas le certificat de {0} : sa chaîne se termine à « {1} », et aucun certificat approuvé pour la connexion ne s’en porte garant. Approuvez cette autorité de certification pour la connexion afin d’activer la connexion.</value>
+  </data>
+  <data name="IdpUntrustedIssuedBy" xml:space="preserve">
+    <value>JIM n’approuve pas le certificat de {0} : sa chaîne se termine à « {1} » (émis par « {2} »), et aucun certificat approuvé pour la connexion ne s’en porte garant. Approuvez cette autorité de certification pour la connexion afin d’activer la connexion.</value>
+  </data>
+  <data name="IdpNoTlsCertificate" xml:space="preserve">
+    <value>JIM a joint {0} mais celui-ci n’a présenté aucun certificat TLS : {1}.</value>
+  </data>
+  <data name="IdpTrustedConfigurationUnreadable" xml:space="preserve">
+    <value>JIM approuve le certificat de {0} mais n’a pas pu lire sa configuration OpenID Connect : {1}. Vérifiez JIM_SSO_AUTHORITY.</value>
+  </data>
+  <data name="IdpTrustedByOperatingSystem" xml:space="preserve">
+    <value>Le certificat de {0} est approuvé par le système d’exploitation.</value>
+  </data>
+  <data name="IdpTrustedByStore" xml:space="preserve">
+    <value>Le certificat de {0} est approuvé via le magasin de certificats de JIM ({1}).</value>
+  </data>
+  <data name="IdpNothingTrusted" xml:space="preserve">
+    <value>Rien n’a été approuvé. {0}</value>
+  </data>
+  <data name="IdpNotPresenting" xml:space="preserve">
+    <value>{0} ne présente pas actuellement de certificat portant cette empreinte ; rien n’a donc été approuvé. C’est normal si son certificat a été renouvelé depuis votre consultation ; vérifiez de nouveau son état.</value>
+  </data>
+  <data name="IdpAlreadyTrusted" xml:space="preserve">
+    <value>« {0} » est déjà approuvé pour la connexion.</value>
+  </data>
+  <data name="IdpWouldNotVouch" xml:space="preserve">
+    <value>Approuver « {0} » ne rendrait pas {1} approuvé : un certificat de sa chaîne a expiré ou n’est pas valide. Rien n’a été approuvé ; le certificat du fournisseur d’identité doit être renouvelé.</value>
+  </data>
+  <data name="IdpWidenedToSignIn" xml:space="preserve">
+    <value>« {0} » était déjà approuvé pour les connecteurs et l’est désormais aussi pour la connexion.</value>
+  </data>
+  <data name="IdpNowTrusted" xml:space="preserve">
+    <value>« {0} » est désormais approuvé pour la connexion.</value>
+  </data>
+  <data name="SchedBuiltInCannotDelete" xml:space="preserve">
+    <value>La planification intégrée « {0} » ne peut pas être supprimée.</value>
+  </data>
+  <data name="SchedStepsCannotBeAdded" xml:space="preserve">
+    <value>Il n’est pas possible d’ajouter des étapes à la planification intégrée « {0} ».</value>
+  </data>
+  <data name="SchedStepsCannotBeChanged" xml:space="preserve">
+    <value>Il n’est pas possible de modifier les étapes de la planification intégrée « {0} ».</value>
+  </data>
+  <data name="SchedStepsCannotBeRemoved" xml:space="preserve">
+    <value>Il n’est pas possible de retirer des étapes de la planification intégrée « {0} ».</value>
+  </data>
+  <data name="SchedStartFailedStep" xml:space="preserve">
+    <value>La planification n’a pas pu démarrer. L’étape {0} n’a pas pu être mise en file d’attente : {1}. Aucune étape n’a été exécutée.</value>
+  </data>
+  <data name="SchedStartFailedStepNamed" xml:space="preserve">
+    <value>La planification n’a pas pu démarrer. L’étape {0}, {1}, n’a pas pu être mise en file d’attente : {2}. Aucune étape n’a été exécutée.</value>
+  </data>
+</root>

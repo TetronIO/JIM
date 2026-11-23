@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Localisation;
 
 namespace JIM.Models.Security;
 
@@ -60,7 +61,19 @@ public class IdentityProviderTrustStatus
     /// <summary>
     /// A sentence explaining the state, suitable for showing.
     /// </summary>
-    public string? Message { get; init; }
+    public string? Message
+    {
+        get => _message ?? Detail?.ToEnglish();
+        init => _message = value;
+    }
+
+    private string? _message;
+
+    /// <summary>
+    /// The same sentence as a message the portal renders in the viewer's language; <see cref="Message"/> is its
+    /// British English, which the REST API and logs keep reading.
+    /// </summary>
+    public JimMessage? Detail { get; init; }
 
     public DateTime CheckedUtc { get; init; }
 

@@ -1061,7 +1061,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, OperationsText.ScheduleEditorSaveFailed, ex.Message), Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, OperationsText.ScheduleEditorSaveFailed, ex.ToDisplayText()), Severity.Error);
         }
         finally
         {

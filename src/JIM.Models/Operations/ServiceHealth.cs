@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Operations;
 
 /// <summary>
@@ -28,7 +30,19 @@ public class ServiceHealth
     /// The condition in plain words, with the figures that matter, for example "Heartbeat 3 seconds ago",
     /// "No heartbeat for 4 minutes" or "Never started".
     /// </summary>
-    public string Reason { get; set; } = null!;
+    public string Reason
+    {
+        get => _reason ?? ReasonDetail?.ToEnglish() ?? null!;
+        set => _reason = value;
+    }
+
+    private string? _reason;
+
+    /// <summary>
+    /// The same reason as a message the portal renders in the viewer's language; <see cref="Reason"/> is its
+    /// British English, which the REST API and PowerShell keep reading.
+    /// </summary>
+    public JimMessage? ReasonDetail { get; set; }
 
     /// <summary>
     /// The instance the verdict was derived from (host name plus a per-process id), or null when the service has

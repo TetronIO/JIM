@@ -567,7 +567,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.CertificateUploadFailed, ex.Message), Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.CertificateUploadFailed, ex.ToDisplayText()), Severity.Error);
         }
         finally
         {
@@ -600,7 +600,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.CertificateAddFailed, ex.Message), Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.CertificateAddFailed, ex.ToDisplayText()), Severity.Error);
         }
         finally
         {
@@ -645,7 +645,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.CertificateUpdateFailed, ex.Message), Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.CertificateUpdateFailed, ex.ToDisplayText()), Severity.Error);
         }
         finally
         {
@@ -694,7 +694,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.CertificateDeleteFailed, ex.Message), Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.CertificateDeleteFailed, ex.ToDisplayText()), Severity.Error);
         }
     }
 

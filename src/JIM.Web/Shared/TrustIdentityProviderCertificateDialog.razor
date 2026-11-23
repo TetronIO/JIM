@@ -153,11 +153,11 @@
                 or IdentityProviderCertificateTrustOutcome.AlreadyTrusted)
             {
                 await IdentityProviderTrust.RecheckAsync(CancellationToken.None);
-                MudDialog.Close(DialogResult.Ok(result.Message));
+                MudDialog.Close(DialogResult.Ok(MessageDisplay.Show(result.Detail, result.Message)));
                 return;
             }
 
-            _failureMessage = result.Message ?? SharedText.TrustDialogFailureMessage;
+            _failureMessage = MessageDisplay.Show(result.Detail, result.Message) ?? SharedText.TrustDialogFailureMessage;
             _step = Step.Failed;
             MudDialog.StateHasChanged();
         }

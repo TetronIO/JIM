@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ObjectTypeNameRequired" xml:space="preserve">
+    <value>A Metaverse Object Type name is required.</value>
+  </data>
+  <data name="ObjectTypePluralNameRequired" xml:space="preserve">
+    <value>A Metaverse Object Type plural name is required.</value>
+  </data>
+  <data name="ObjectTypeNotFound" xml:space="preserve">
+    <value>Metaverse Object Type {0} not found.</value>
+    <comment>{0} is the numeric id of the object type.</comment>
+  </data>
+  <data name="ObjectTypeBuiltInCannotRename" xml:space="preserve">
+    <value>Cannot rename or re-icon built-in Metaverse Object Type '{0}'.</value>
+  </data>
+  <data name="ObjectTypeNameExists" xml:space="preserve">
+    <value>A Metaverse Object Type named '{0}' already exists.</value>
+  </data>
+  <data name="ObjectTypePluralNameExists" xml:space="preserve">
+    <value>A Metaverse Object Type with plural name '{0}' already exists.</value>
+  </data>
+  <data name="ObjectTypeBuiltInCannotDelete" xml:space="preserve">
+    <value>Cannot delete built-in Metaverse Object Type '{0}'.</value>
+  </data>
+  <data name="AttributeNameRequired" xml:space="preserve">
+    <value>A Metaverse Attribute name is required.</value>
+  </data>
+  <data name="AttributeNotFound" xml:space="preserve">
+    <value>Metaverse Attribute {0} not found.</value>
+    <comment>{0} is the numeric id of the attribute.</comment>
+  </data>
+  <data name="AttributeBuiltInCannotRename" xml:space="preserve">
+    <value>Cannot rename built-in Metaverse Attribute '{0}'.</value>
+  </data>
+  <data name="AttributeNameExists" xml:space="preserve">
+    <value>A Metaverse Attribute named '{0}' already exists (names are compared case-insensitively).</value>
+  </data>
+  <data name="AttributeRenameReadByExpressions" xml:space="preserve">
+    <value>Metaverse Attribute '{0}' cannot be renamed while Expressions read it by name. Change these first: {1}.</value>
+    <comment>{1} lists the Expressions that read the attribute, separated by semicolons.</comment>
+  </data>
+  <data name="StandardMappingNeedsStandard" xml:space="preserve">
+    <value>Every Standard Mapping requires a standard.</value>
+  </data>
+  <data name="StandardMappingNeedsCounterpart" xml:space="preserve">
+    <value>Every Standard Mapping requires a counterpart attribute name.</value>
+  </data>
+  <data name="StandardMappingDuplicate" xml:space="preserve">
+    <value>Duplicate Standard Mapping: {0} '{1}'.</value>
+    <comment>{0} is the standard (a name such as Ldap); {1} is the counterpart attribute name.</comment>
+  </data>
+  <data name="StandardMappingsBuiltInCannotModify" xml:space="preserve">
+    <value>Cannot modify the Standard Mappings of built-in Metaverse Attribute '{0}'; they are maintained by JIM.</value>
+  </data>
+  <data name="BindingsBuiltInCannotModify" xml:space="preserve">
+    <value>Cannot modify the bindings of built-in Metaverse Attribute '{0}'.</value>
+  </data>
+  <data name="AttributeBuiltInCannotDelete" xml:space="preserve">
+    <value>Cannot delete built-in Metaverse Attribute '{0}'.</value>
+  </data>
+  <data name="AttributeBuiltInCannotUnassign" xml:space="preserve">
+    <value>Cannot unassign built-in Metaverse Attribute '{0}'.</value>
+  </data>
+  <data name="AttributeBuiltInCannotChangeType" xml:space="preserve">
+    <value>Cannot change the type or plurality of built-in Metaverse Attribute '{0}'.</value>
+  </data>
+  <data name="AttributePluralityUnsupported" xml:space="preserve">
+    <value>A {0} attribute cannot be {1}.</value>
+    <comment>{0} is the data type name and {1} the plurality name, both shown as the identifiers JIM uses.</comment>
+  </data>
+  <data name="MultiValuedBooleanRule" xml:space="preserve">
+    <value>A Boolean attribute holds one value, true or false, so it cannot be multi-valued.</value>
+    <comment>Must stay equal to AttributeDataTypeCapabilities.MultiValuedBooleanRule; a test pins it.</comment>
+  </data>
+  <data name="ChangeSearchTimeRangeInverted" xml:space="preserve">
+    <value>The time range ends before it starts.</value>
+  </data>
+  <data name="ChangeSearchTooManyConditions" xml:space="preserve">
+    <value>A search can combine at most {0} attribute conditions.</value>
+    <comment>{0} is the maximum number of conditions.</comment>
+  </data>
+  <data name="ChangeSearchOperatorUnknown" xml:space="preserve">
+    <value>'{0}' is not a recognised attribute change operator.</value>
+  </data>
+  <data name="ChangeSearchAttributeUnknown" xml:space="preserve">
+    <value>There is no Metaverse Attribute with id {0}.</value>
+  </data>
+  <data name="ChangeSearchConditionInvalid" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>{0} is the attribute name; {1} says why its value cannot be searched for.</comment>
+  </data>
+  <data name="ChangeSearchMatchModeUnknown" xml:space="preserve">
+    <value>'{0}' is not a recognised condition match mode.</value>
+  </data>
+  <data name="FeatureDisabled" xml:space="preserve">
+    <value>The '{0}' feature is currently disabled.</value>
+  </data>
+  <data name="FeatureFlagNotFound" xml:space="preserve">
+    <value>No feature flag with key '{0}' exists.</value>
+  </data>
+  <data name="FeatureInDevelopment" xml:space="preserve">
+    <value>'{0}' is an in-development feature (tracked for removal in issue #{1}). It can only be enabled outside Development by passing allowInDevelopment.</value>
+    <comment>{1} is an issue number. allowInDevelopment is a parameter name and stays as it is.</comment>
+  </data>
+  <data name="CertificateThumbprintExists" xml:space="preserve">
+    <value>A certificate with thumbprint {0} already exists in the store.</value>
+  </data>
+  <data name="CertificateFileNotFound" xml:space="preserve">
+    <value>Certificate file not found: {0}</value>
+  </data>
+  <data name="CertificateNotFound" xml:space="preserve">
+    <value>Certificate with ID {0} not found.</value>
+  </data>
+  <data name="CertificateTrustPurposeRequired" xml:space="preserve">
+    <value>A certificate must be trusted for Connectors, sign-in, or both.</value>
+  </data>
+  <data name="SecureEndpointSystemNotFound" xml:space="preserve">
+    <value>Connected System {0} was not found.</value>
+    <comment>{0} is the numeric id of the Connected System.</comment>
+  </data>
+  <data name="SecureEndpointNoConnectorDefinition" xml:space="preserve">
+    <value>The '{0}' Connected System has no Connector Definition, so JIM cannot tell where it connects.</value>
+  </data>
+  <data name="SecureEndpointConnectorUnavailable" xml:space="preserve">
+    <value>The '{0}' connector is not available, so JIM cannot tell where this Connected System connects.</value>
+  </data>
+  <data name="SecureEndpointConnectorNotEncrypted" xml:space="preserve">
+    <value>The '{0}' connector does not make encrypted connections, so there is no server certificate to look at.</value>
+  </data>
+  <data name="SecureEndpointNotConfigured" xml:space="preserve">
+    <value>The '{0}' Connected System is not configured to make an encrypted connection, so there is no server certificate to look at.</value>
+  </data>
+  <data name="ServerCertificateUnreachable" xml:space="preserve">
+    <value>{0}:{1} could not be reached, so JIM could not read its certificate. This is a connectivity problem rather than a certificate one.</value>
+    <comment>{0} is a host name and {1} a port number.</comment>
+  </data>
+  <data name="SettingNotFound" xml:space="preserve">
+    <value>Setting with key '{0}' not found.</value>
+  </data>
+  <data name="SettingReadOnly" xml:space="preserve">
+    <value>Setting '{0}' is read-only and cannot be modified.</value>
+  </data>
+  <data name="IdpThumbprintRequired" xml:space="preserve">
+    <value>A thumbprint is required. JIM will not trust whatever the identity provider happens to be presenting.</value>
+  </data>
+  <data name="IdpNotConfigured" xml:space="preserve">
+    <value>No identity provider is configured (JIM_SSO_AUTHORITY).</value>
+  </data>
+  <data name="IdpNoAnswer" xml:space="preserve">
+    <value>no answer</value>
+  </data>
+  <data name="IdpUnreachable" xml:space="preserve">
+    <value>JIM could not reach the identity provider at {0}: {1}.</value>
+    <comment>{0} is a host name; {1} is the error, or "no answer".</comment>
+  </data>
+  <data name="IdpPlainHttp" xml:space="preserve">
+    <value>The identity provider at {0} is reached over plain HTTP, so there is no certificate to check. Use HTTPS outside local development.</value>
+  </data>
+  <data name="IdpConfigurationUnreadable" xml:space="preserve">
+    <value>JIM reached {0} but could not read its OpenID Connect configuration: {1}.</value>
+  </data>
+  <data name="IdpNameMismatch" xml:space="preserve">
+    <value>{0}'s certificate was not issued for {0}. Trusting a certificate cannot fix this: the identity provider needs a certificate that names {0}, or JIM_SSO_AUTHORITY must use a name its certificate carries.</value>
+  </data>
+  <data name="IdpUntrusted" xml:space="preserve">
+    <value>JIM does not trust {0}'s certificate: its chain ends at "{1}", and nothing trusted for sign-in vouches for it. Trust that certificate authority for sign-in to enable sign-in.</value>
+  </data>
+  <data name="IdpUntrustedIssuedBy" xml:space="preserve">
+    <value>JIM does not trust {0}'s certificate: its chain ends at "{1}" (issued by "{2}"), and nothing trusted for sign-in vouches for it. Trust that certificate authority for sign-in to enable sign-in.</value>
+  </data>
+  <data name="IdpNoTlsCertificate" xml:space="preserve">
+    <value>JIM reached {0} but it presented no TLS certificate: {1}.</value>
+  </data>
+  <data name="IdpTrustedConfigurationUnreadable" xml:space="preserve">
+    <value>JIM trusts {0}'s certificate but could not read its OpenID Connect configuration: {1}. Check JIM_SSO_AUTHORITY.</value>
+  </data>
+  <data name="IdpTrustedByOperatingSystem" xml:space="preserve">
+    <value>{0}'s certificate is trusted by the operating system.</value>
+  </data>
+  <data name="IdpTrustedByStore" xml:space="preserve">
+    <value>{0}'s certificate is trusted through the JIM certificate store ({1}).</value>
+  </data>
+  <data name="IdpNothingTrusted" xml:space="preserve">
+    <value>Nothing was trusted. {0}</value>
+  </data>
+  <data name="IdpNotPresenting" xml:space="preserve">
+    <value>{0} is not presenting a certificate with that thumbprint now, so nothing was trusted. This is expected if its certificate was renewed since you looked; check its status again.</value>
+  </data>
+  <data name="IdpAlreadyTrusted" xml:space="preserve">
+    <value>'{0}' is already trusted for sign-in.</value>
+  </data>
+  <data name="IdpWouldNotVouch" xml:space="preserve">
+    <value>Trusting '{0}' would not make {1} trusted: a certificate in its chain has expired or is not valid. Nothing was trusted; the identity provider's certificate needs renewing.</value>
+  </data>
+  <data name="IdpWidenedToSignIn" xml:space="preserve">
+    <value>'{0}' was already trusted for Connectors and is now trusted for sign-in as well.</value>
+  </data>
+  <data name="IdpNowTrusted" xml:space="preserve">
+    <value>'{0}' is now trusted for sign-in.</value>
+  </data>
+  <data name="SchedBuiltInCannotDelete" xml:space="preserve">
+    <value>The built-in schedule '{0}' cannot be deleted.</value>
+  </data>
+  <data name="SchedStepsCannotBeAdded" xml:space="preserve">
+    <value>Steps cannot be added to the built-in schedule '{0}'.</value>
+  </data>
+  <data name="SchedStepsCannotBeChanged" xml:space="preserve">
+    <value>Steps cannot be changed on the built-in schedule '{0}'.</value>
+  </data>
+  <data name="SchedStepsCannotBeRemoved" xml:space="preserve">
+    <value>Steps cannot be removed from the built-in schedule '{0}'.</value>
+  </data>
+  <data name="SchedStartFailedStep" xml:space="preserve">
+    <value>The Schedule could not start. Step {0} could not be queued: {1}. No steps ran.</value>
+    <comment>{0} is the 1-based step number; {1} is the reason the step could not be queued.</comment>
+  </data>
+  <data name="SchedStartFailedStepNamed" xml:space="preserve">
+    <value>The Schedule could not start. Step {0}, {1}, could not be queued: {2}. No steps ran.</value>
+    <comment>{0} is the 1-based step number; {1} names what the step runs; {2} is the reason the step could not be queued.</comment>
+  </data>
+</root>
