@@ -812,4 +812,94 @@
   <data name="UrefTooltipLikely" xml:space="preserve">
     <value>Cause probable : {0}. {1} {2}</value>
   </data>
+  <data name="PdlPageTitle" xml:space="preserve">
+    <value>Suppressions en attente</value>
+  </data>
+  <data name="PdlPageInfo" xml:space="preserve">
+    <value>Objets Metaverse engagés dans le circuit de suppression. Comprend les objets Metaverse en cours de déprovisionnement depuis des systèmes connectés, et ceux qui attendent une suppression automatique à l’expiration de leur délai de grâce.</value>
+  </data>
+  <data name="PdlTotalPending" xml:space="preserve">
+    <value>Total en attente</value>
+  </data>
+  <data name="PdlDeprovisioning" xml:space="preserve">
+    <value>Déprovisionnement</value>
+  </data>
+  <data name="PdlTipDeprovisioning" xml:space="preserve">
+    <value>Objets Metaverse encore connectés à d’autres systèmes, en attente de suppression en cascade</value>
+  </data>
+  <data name="PdlAwaitingGrace" xml:space="preserve">
+    <value>En attente du délai de grâce</value>
+  </data>
+  <data name="PdlTipAwaitingGrace" xml:space="preserve">
+    <value>Objets Metaverse entièrement déconnectés, en attente de l’expiration du délai de grâce</value>
+  </data>
+  <data name="PdlReady" xml:space="preserve">
+    <value>Prêts à être supprimés</value>
+  </data>
+  <data name="PdlTipReady" xml:space="preserve">
+    <value>Objets Metaverse éligibles à la suppression (délai de grâce expiré, aucun connecteur)</value>
+  </data>
+  <data name="PdlFilterObjectType" xml:space="preserve">
+    <value>Filtrer par type d’objet</value>
+  </data>
+  <data name="PdlSingular" xml:space="preserve">
+    <value>Suppression en attente</value>
+  </data>
+  <data name="PdlColumnTriggeredBy" xml:space="preserve">
+    <value>Déclenchée par</value>
+  </data>
+  <data name="PdlTipTriggeredBy" xml:space="preserve">
+    <value>Le système connecté dont la déconnexion a déclenché la suppression planifiée</value>
+  </data>
+  <data name="PdlColumnDisconnected" xml:space="preserve">
+    <value>Déconnecté le</value>
+  </data>
+  <data name="PdlColumnEligible" xml:space="preserve">
+    <value>Suppression possible</value>
+  </data>
+  <data name="PdlColumnConnectors" xml:space="preserve">
+    <value>Connecteurs</value>
+  </data>
+  <data name="PdlStatusGrace" xml:space="preserve">
+    <value>Délai de grâce</value>
+  </data>
+  <data name="PdlStatusReady" xml:space="preserve">
+    <value>Prêt</value>
+  </data>
+  <data name="PdlNoConnectorRemains" xml:space="preserve">
+    <value>Aucun connecteur restant</value>
+  </data>
+  <data name="PdlOverdueBy" xml:space="preserve">
+    <value>En retard de {0}</value>
+  </data>
+  <data name="PdlImmediate" xml:space="preserve">
+    <value>Immédiat</value>
+  </data>
+  <data name="PdlDayOne" xml:space="preserve">
+    <value>{0} jour</value>
+  </data>
+  <data name="PdlDayOther" xml:space="preserve">
+    <value>{0} jours</value>
+  </data>
+  <data name="PdlConnectorsRemaining" xml:space="preserve">
+    <value>{0} connecteur(s) restant(s) - en attente de suppression en cascade</value>
+  </data>
+  <data name="PdlNoSearchMatch" xml:space="preserve">
+    <value>Aucune suppression en attente ne correspond à « {0} »</value>
+  </data>
+  <data name="PdlNoneOfType" xml:space="preserve">
+    <value>Aucun objet Metaverse du type sélectionné n’est en attente de suppression</value>
+  </data>
+  <data name="PdlNoneOfTypeHint" xml:space="preserve">
+    <value>Effacez le filtre de type d’objet pour voir toutes les suppressions en attente.</value>
+  </data>
+  <data name="PdlClearFilter" xml:space="preserve">
+    <value>Effacer le filtre</value>
+  </data>
+  <data name="PdlNone" xml:space="preserve">
+    <value>Aucun objet Metaverse n’est en attente de suppression</value>
+  </data>
+  <data name="PdlNoneHint" xml:space="preserve">
+    <value>Les objets Metaverse apparaissent ici lorsqu’une déconnexion planifie leur suppression automatique.</value>
+  </data>
 </root>

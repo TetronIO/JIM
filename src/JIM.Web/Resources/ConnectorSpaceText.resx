@@ -1078,4 +1078,124 @@
     <value>Likely cause: {0}. {1} {2}</value>
     <comment>Tooltip; {0} is the cause, {1} the finding, {2} the remedy</comment>
   </data>
+  <data name="PdlPageTitle" xml:space="preserve">
+    <value>Pending Deletions</value>
+    <comment>Page title, heading, breadcrumb and grid name, plural</comment>
+  </data>
+  <data name="PdlPageInfo" xml:space="preserve">
+    <value>Metaverse Objects in the deletion pipeline. Includes Metaverse Objects being deprovisioned from Connected Systems and those awaiting automatic deletion after their grace period expires.</value>
+    <comment>Page info body</comment>
+  </data>
+  <data name="PdlTotalPending" xml:space="preserve">
+    <value>Total Pending</value>
+    <comment>Summary card</comment>
+  </data>
+  <data name="PdlDeprovisioning" xml:space="preserve">
+    <value>Deprovisioning</value>
+    <comment>Summary card and status chip</comment>
+  </data>
+  <data name="PdlTipDeprovisioning" xml:space="preserve">
+    <value>Metaverse Objects still connected to other systems, awaiting cascade deletion</value>
+    <comment>Tooltip on the Deprovisioning card</comment>
+  </data>
+  <data name="PdlAwaitingGrace" xml:space="preserve">
+    <value>Awaiting Grace Period</value>
+    <comment>Summary card</comment>
+  </data>
+  <data name="PdlTipAwaitingGrace" xml:space="preserve">
+    <value>Metaverse Objects fully disconnected, waiting for grace period to expire</value>
+    <comment>Tooltip on the Awaiting Grace Period card</comment>
+  </data>
+  <data name="PdlReady" xml:space="preserve">
+    <value>Ready for Deletion</value>
+    <comment>Summary card</comment>
+  </data>
+  <data name="PdlTipReady" xml:space="preserve">
+    <value>Metaverse Objects eligible for deletion (grace period expired, no connectors)</value>
+    <comment>Tooltip on the Ready for Deletion card</comment>
+  </data>
+  <data name="PdlFilterObjectType" xml:space="preserve">
+    <value>Filter by Object Type</value>
+    <comment>Filter label</comment>
+  </data>
+  <data name="PdlSingular" xml:space="preserve">
+    <value>Pending Deletion</value>
+    <comment>Grid item name, singular</comment>
+  </data>
+  <data name="PdlColumnTriggeredBy" xml:space="preserve">
+    <value>Triggered By</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="PdlTipTriggeredBy" xml:space="preserve">
+    <value>The Connected System whose disconnection triggered the scheduled deletion</value>
+    <comment>Tooltip on the column header</comment>
+  </data>
+  <data name="PdlColumnDisconnected" xml:space="preserve">
+    <value>Disconnected</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="PdlColumnEligible" xml:space="preserve">
+    <value>Deletion Eligible</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="PdlColumnConnectors" xml:space="preserve">
+    <value>Connectors</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="PdlStatusGrace" xml:space="preserve">
+    <value>Grace Period</value>
+    <comment>Status chip</comment>
+  </data>
+  <data name="PdlStatusReady" xml:space="preserve">
+    <value>Ready</value>
+    <comment>Status chip</comment>
+  </data>
+  <data name="PdlNoConnectorRemains" xml:space="preserve">
+    <value>No connector remains</value>
+    <comment>Shown in Triggered By when no connector is left</comment>
+  </data>
+  <data name="PdlOverdueBy" xml:space="preserve">
+    <value>Overdue by {0}</value>
+    <comment>{0} is a day count</comment>
+  </data>
+  <data name="PdlImmediate" xml:space="preserve">
+    <value>Immediate</value>
+    <comment>Shown when no deletion date applies</comment>
+  </data>
+  <data name="PdlDayOne" xml:space="preserve">
+    <value>{0} day</value>
+    <comment>{0} is the count, formatted</comment>
+  </data>
+  <data name="PdlDayOther" xml:space="preserve">
+    <value>{0} days</value>
+    <comment>{0} is the count, formatted</comment>
+  </data>
+  <data name="PdlConnectorsRemaining" xml:space="preserve">
+    <value>{0} connector(s) remaining - awaiting cascade deletion</value>
+    <comment>Tooltip on the connector count badge; {0} is the count</comment>
+  </data>
+  <data name="PdlNoSearchMatch" xml:space="preserve">
+    <value>No Pending Deletions match "{0}"</value>
+    <comment>{0} is the search text</comment>
+  </data>
+  <data name="PdlNoneOfType" xml:space="preserve">
+    <value>No Metaverse Objects of the selected type are pending deletion</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="PdlNoneOfTypeHint" xml:space="preserve">
+    <value>Clear the Object Type filter to see every pending deletion.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="PdlClearFilter" xml:space="preserve">
+    <value>Clear Filter</value>
+    <comment>Empty state action</comment>
+  </data>
+  <data name="PdlNone" xml:space="preserve">
+    <value>There are no Metaverse Objects pending deletion</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="PdlNoneHint" xml:space="preserve">
+    <value>Metaverse Objects appear here when a disconnection schedules their automatic deletion.</value>
+    <comment>Empty state hint</comment>
+  </data>
 </root>
