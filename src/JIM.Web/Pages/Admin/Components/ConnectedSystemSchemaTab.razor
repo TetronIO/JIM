@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Application.Exceptions
 @using JIM.Models.Core
 @using JIM.Models.Exceptions
@@ -26,7 +27,7 @@
 @if (ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0)
 {
     <MudAlert Severity="Severity.Info" data-testid="jim-schema-retrieve">
-        <MudText>Retrieve the schema from the Connected System, to be able to select which object types and attributes you want to manage with JIM.</MudText>
+        <MudText>@SchemaText.RetrieveSchemaIntro</MudText>
         <AlertButton Severity="Severity.Info"
                      Disabled="@(_schemaBeingRetrieved || _schemaRefreshPreview != null)"
                      OnClick="HandleImportSchemaAsync"
@@ -34,11 +35,11 @@
             @if (_schemaBeingRetrieved)
             {
                 <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                <span class="ms-2">Retrieving Schema</span>
+                <span class="ms-2">@SchemaText.RetrievingSchema</span>
             }
             else
             {
-                <text>Retrieve Schema</text>
+                <text>@SchemaText.RetrieveSchema</text>
             }
         </AlertButton>
     </MudAlert>
@@ -53,37 +54,39 @@
               ShowCloseIcon="true"
               CloseIconClicked="HandleCloseSchemaRefreshResult">
         <MudText Typo="Typo.subtitle1" Class="mb-2">
-            <strong>Schema Refresh @(result.Success ? "Complete" : "Failed")</strong>
+            <strong>@(result.Success ? SchemaText.RefreshCompleteTitle : SchemaText.RefreshFailedTitle)</strong>
         </MudText>
 
         @if (result.Success)
         {
             <MudText Class="mb-2">
-                Found <strong>@result.TotalObjectTypes.ToString("N0")</strong> object type(s) with <strong>@result.TotalAttributes.ToString("N0")</strong> attribute(s).
+                @((MarkupString)string.Format(CultureInfo.CurrentCulture, SchemaText.FoundSummary,
+                    string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(result.TotalObjectTypes, SchemaText.ObjectTypeCountOne, SchemaText.ObjectTypeCountOther), result.TotalObjectTypes.ToString("N0", CultureInfo.CurrentCulture)),
+                    string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(result.TotalAttributes, SchemaText.AttributeCountOne, SchemaText.AttributeCountOther), result.TotalAttributes.ToString("N0", CultureInfo.CurrentCulture))))
             </MudText>
 
             @if (result.AttributesSelectedByConnector.Count > 0)
             {
                 <MudAlert Severity="Severity.Info" Class="mt-2 mb-2">
-                    <strong>Selected because the Connector requires them:</strong>
+                    <strong>@SchemaText.SelectedByConnector</strong>
                     @(string.Join(", ", result.AttributesSelectedByConnector.SelectMany(kvp => kvp.Value).Distinct())).
-                    The Connector cannot work without these attributes' values, so they are always imported and cannot be unselected.
+                    @SchemaText.SelectedByConnectorExplain
                 </MudAlert>
             }
 
             @if (result.BlockedCredentialAttributeCount > 0)
             {
                 <MudAlert Severity="Severity.Info" Class="mt-2 mb-2">
-                    <strong>@result.BlockedCredentialAttributeCount credential attribute(s) blocked:</strong>
+                    <strong>@string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(result.BlockedCredentialAttributeCount, SchemaText.CredentialAttributesBlockedOne, SchemaText.CredentialAttributesBlockedOther), result.BlockedCredentialAttributeCount)</strong>
                     @(string.Join(", ", result.BlockedCredentialAttributes.SelectMany(kvp => kvp.Value).Distinct())).
-                    These hold credential material and are never managed by JIM. Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse.
+                    @SchemaText.CredentialAttributesExplain
                 </MudAlert>
             }
 
             @if (result.DiscoveryWarnings.Count > 0)
             {
                 <MudAlert Severity="Severity.Warning" Class="mt-2 mb-2">
-                    <strong>Discovery warnings:</strong> the Connector could not discover everything and worked around the gaps below. Review them so a missing attribute can be traced to the Connected System rather than JIM.
+                    <strong>@SchemaText.DiscoveryWarningsLabel</strong> @SchemaText.DiscoveryWarningsText
                     <ul class="mt-1 mb-0">
                         @foreach (var warning in result.DiscoveryWarnings)
                         {
@@ -95,7 +98,7 @@
 
             @if (!result.HasChanges)
             {
-                <MudText Color="Color.Success">No changes detected. The schema is up to date.</MudText>
+                <MudText Color="Color.Success">@SchemaText.NoChangesDetected</MudText>
             }
             else
             {
@@ -104,8 +107,8 @@
                 @if (result.ActionRequired)
                 {
                     <MudAlert Severity="Severity.Warning" Class="mt-3">
-                        <strong>Action Required:</strong> Some attributes that were removed are still referenced by Synchronisation Rules.
-                        Please update your Synchronisation Rules to remove references to these attributes.
+                        <strong>@SchemaText.ActionRequiredLabel</strong>
+                        @SchemaText.ActionRequiredText
                     </MudAlert>
                 }
             }
@@ -132,7 +135,7 @@
 <MudDialog @bind-Visible="_editSchemaAttributeDialogVisible" Options="_dialogOptions">
     <TitleContent>
         <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-3" /> Edit Schema Attribute: @_objectTypeAttributeBeingEdited?.Name
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-3" /> @SchemaText.EditSchemaAttributeTitle @_objectTypeAttributeBeingEdited?.Name
         </MudText>
     </TitleContent>
     <DialogContent>
@@ -141,20 +144,20 @@
             @if (!_objectTypeAttributeBeingEditedIsEditable)
             {
                 <MudAlert Severity="Severity.Error">
-                    The data type@(SupportsPlurality ? " and plurality" : string.Empty) of this Connected System attribute cannot be changed as it is being referenced by either a Synchronisation Rule, or has values already populated.
+                    @(SupportsPlurality ? SchemaText.DataTypeLockedPlural : SchemaText.DataTypeLocked)
                 </MudAlert>
             }
             else
             {
                 <MudAlert Severity="Severity.Info">
-                    This Connector supports changing the data type of a Connected System attribute. This might be because the data type
-                    was detected automatically, and might need adjusting if not right.
+                    @SchemaText.DataTypeChangeable
+                    
                 </MudAlert>
             }
 
             <MudSelect
                 T="string"
-                Label="Please choose a data type"
+                Label="@SchemaText.ChooseDataType"
                 Required="true"
                 Variant="Variant.Outlined"
                 Class="mt-5"
@@ -176,12 +179,12 @@
             var booleanChosen = !AttributeDataTypeCapabilities.SupportsMultiValued(EditedAttributeType());
             <div class="mt-5" data-testid="jim-schema-attribute-plurality">
                 <MudSelect T="AttributePlurality"
-                           Label="Values per object"
+                           Label="@SchemaText.ValuesPerObject"
                            Variant="Variant.Outlined"
                            Disabled="@(!_objectTypeAttributeBeingEditedIsEditable || booleanChosen)"
                            @bind-Value="_objectTypeAttributeBeingEditedPlurality">
-                    <MudSelectItem Value="@AttributePlurality.SingleValued">Single-Valued</MudSelectItem>
-                    <MudSelectItem Value="@AttributePlurality.MultiValued">Multi-Valued</MudSelectItem>
+                    <MudSelectItem Value="@AttributePlurality.SingleValued">@SchemaText.SingleValued</MudSelectItem>
+                    <MudSelectItem Value="@AttributePlurality.MultiValued">@SchemaText.MultiValued</MudSelectItem>
                 </MudSelect>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
                     @if (booleanChosen)
@@ -190,10 +193,10 @@
                     }
                     else
                     {
-                        <span>A multi-valued column holds its values separated by the Multi-Value Delimiter, such as <code>CN=Alice|CN=Bob</code>.</span>
+                        <span>@((MarkupString)string.Format(CultureInfo.CurrentCulture, SchemaText.MultiValuedColumnHelp, "<code>CN=Alice|CN=Bob</code>"))</span>
                         @(_objectTypeAttributeBeingEdited?.PluralitySetByAdministrator == true
-                            ? " An administrator set this, so a schema refresh keeps it."
-                            : " Currently as discovered from the file. Changing it makes it yours, and a schema refresh keeps it.")
+                            ? " " + SchemaText.SetByAdministrator
+                            : " " + SchemaText.CurrentlyDiscoveredFromFile)
                     }
                 </MudText>
             </div>
@@ -203,13 +206,13 @@
         @if (SchemaAttributeEdit.OffersCaseExact(EditedAttributeType()))
         {
             <div class="@(ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes ? "mt-5" : string.Empty)" data-testid="jim-schema-attribute-case-exact">
-                <MudCheckBox T="bool" @bind-Value="_objectTypeAttributeBeingEditedCaseExact" Color="Color.Primary" Label="Values are case-exact" />
+                <MudCheckBox T="bool" @bind-Value="_objectTypeAttributeBeingEditedCaseExact" Color="Color.Primary" Label="@SchemaText.ValuesCaseExact" />
                 <MudText Typo="Typo.body2" Class="mud-text-secondary ml-3">
-                    When ticked, values differing only in case identify different things: <code>JBloggs</code> and <code>jbloggs</code> are two values.
-                    When clear, they are the same value, which is how most identifiers behave.
+                    @((MarkupString)string.Format(CultureInfo.CurrentCulture, SchemaText.CaseExactHelp, "<code>JBloggs</code>", "<code>jbloggs</code>"))
+                    
                     @(_objectTypeAttributeBeingEdited?.CaseExactSetByAdministrator == true
-                        ? "An administrator set this, so a schema refresh keeps it."
-                        : "Currently as discovered from the Connected System's schema. Changing it makes it yours, and a schema refresh keeps it.")
+                        ? SchemaText.SetByAdministrator
+                        : SchemaText.CurrentlyDiscoveredFromSchema)
                 </MudText>
             </div>
         }
@@ -218,18 +221,18 @@
         @if (SchemaAttributeEdit.OffersDateTimeResolution(EditedAttributeType()))
         {
             <div class="@(ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes ? "mt-5" : string.Empty)" data-testid="jim-schema-attribute-date-time-resolution">
-                <MudSelect T="DateTimeResolution" Label="Dates are held to" Variant="Variant.Outlined" @bind-Value="_objectTypeAttributeBeingEditedResolution">
+                <MudSelect T="DateTimeResolution" Label="@SchemaText.DatesHeldTo" Variant="Variant.Outlined" @bind-Value="_objectTypeAttributeBeingEditedResolution">
                     @foreach (var resolution in Enum.GetValues<DateTimeResolution>())
                     {
                         <MudSelectItem Value="@resolution">@SchemaAttributeEdit.Describe(resolution)</MudSelectItem>
                     }
                 </MudSelect>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
-                    The finest step of time the Connected System keeps. JIM sends each date taken down to it, and compares at it,
-                    so a fraction the Connected System cannot hold is never exported again and again.
+                    @SchemaText.ResolutionHelp
+                    
                     @(_objectTypeAttributeBeingEdited?.DateTimeResolutionSetByAdministrator == true
-                        ? "An administrator set this, so a schema refresh keeps it."
-                        : "Currently as discovered from the Connected System's schema. Changing it makes it yours, and a schema refresh keeps it.")
+                        ? SchemaText.SetByAdministrator
+                        : SchemaText.CurrentlyDiscoveredFromSchema)
                 </MudText>
             </div>
         }
@@ -240,14 +243,14 @@
             DropShadow="false"
             Variant="Variant.Text"
             OnClick="@(() => _editSchemaAttributeDialogVisible = false)"
-            Class="ma-4">Cancel</MudButton>
+            Class="ma-4">@CommonText.Cancel</MudButton>
         <MudButton
             Disabled="!CanConfirmAttributeEdit()"
             DropShadow="false"
             Variant="Variant.Filled"
             Color="Color.Primary"
             OnClick="HandleEditAttributeButtonClickAsync"
-            Class="ma-4">Confirm Change</MudButton>
+            Class="ma-4">@SchemaText.ConfirmChange</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -271,14 +274,14 @@
                     @* The same count the Object Types tab's "All" chip shows, so the two never disagree: internal
                        types the Connector classified are held back from both until the administrator asks to see them. *@
                     <MudText Typo="Typo.body2" Class="mud-text-secondary text-no-wrap">
-                        @($"{GetVisibleObjectTypes().Count():N0} Object Types, {GetSelectedObjectTypes().Count:N0} selected")
+                        @string.Format(CultureInfo.CurrentCulture, SchemaText.ObjectTypesAndSelected, GetVisibleObjectTypes().Count().ToString("N0", CultureInfo.CurrentCulture), GetSelectedObjectTypes().Count.ToString("N0", CultureInfo.CurrentCulture))
                     </MudText>
-                    <InfoPopover Title="Schema">
-                        The Object Types and Attributes JIM has read from the Connected System. Refreshing retrieves the
-                        latest and shows you what changed before anything is applied. Nothing is deleted by a refresh:
-                        entries the Connected System no longer reports are retained in JIM and flagged for your attention.
-                        Ensure the Connected System identity has the permissions needed to read the full schema; a partial
-                        read can make entries appear removed when they are not.
+                    <InfoPopover Title="@SchemaText.SchemaInfoTitle">
+                        @SchemaText.SchemaInfoBody
+                        
+                        
+                        
+                        
                     </InfoPopover>
                     <MudButton
                                Variant="Variant.Filled"
@@ -290,11 +293,11 @@
                         @if (_schemaBeingRetrieved)
                         {
                             <MudProgressCircular Class="ms-n1" Indeterminate="true" Size="Size.Small" />
-                            <span class="ms-2">Refreshing Schema</span>
+                            <span class="ms-2">@SchemaText.RefreshingSchema</span>
                         }
                         else
                         {
-                            <text>Refresh Schema</text>
+                            <text>@SchemaText.RefreshSchema</text>
                         }
                     </MudButton>
                 </div>
@@ -302,21 +305,21 @@
             <ChildContent>
 
             @* ─── Object type discovery & selection ─── *@
-            <MudTabPanel Icon="@Icons.Material.Filled.Tune" Text="Object Types">
+            <MudTabPanel Icon="@Icons.Material.Filled.Tune" Text="@SchemaText.ObjectTypesTab">
                 @{
                     var visibleObjectTypeCount = GetVisibleObjectTypes().Count();
                     var hiddenInternalCount = GetHiddenInternalObjectTypeCount();
                 }
-                <MudText Typo="Typo.subtitle1" Class="mb-1">Choose which object types JIM should manage</MudText>
+                <MudText Typo="Typo.subtitle1" Class="mb-1">@SchemaText.ChooseObjectTypes</MudText>
                 <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
-                    Each type you select gets its own tab above, where you choose the attributes to import or export. To maximise system performance, select only the types you actually need.
+                    @SchemaText.ChooseObjectTypesHelp
                 </MudText>
 
                 <MudGrid>
                     <MudItem xs="12" md="8">
                         <SearchField @bind-Value="_objectTypeSearchString"
-                                     Label="Search object types"
-                                     HelperText="Show only types whose name contains a specific value"
+                                     Label="@SchemaText.SearchObjectTypes"
+                                     HelperText="@SchemaText.SearchObjectTypesHelp"
                                      IconSize="Size.Small"
                                      Margin="Margin.None" />
                     </MudItem>
@@ -328,12 +331,12 @@
                             <MudChip Value="false"
                                      Color="Color.Default"
                                      Variant="@(!_objectTypeSelectedFilter ? Variant.Filled : Variant.Outlined)">
-                                All (@visibleObjectTypeCount)
+                                @string.Format(CultureInfo.CurrentCulture, SchemaText.ChipAll, visibleObjectTypeCount)
                             </MudChip>
                             <MudChip Value="true"
                                      Color="Color.Primary"
                                      Variant="@(_objectTypeSelectedFilter ? Variant.Filled : Variant.Outlined)">
-                                Selected (@selectedObjectTypes.Count)
+                                @string.Format(CultureInfo.CurrentCulture, SchemaText.ChipSelected, selectedObjectTypes.Count)
                             </MudChip>
                         </MudChipSet>
                     </MudItem>
@@ -344,7 +347,7 @@
                 }
                 @if (discoveryObjectTypes.Count == 0)
                 {
-                    <MudText Class="mt-6 mb-2 mud-text-secondary" Align="Align.Center">No object types match the current filter.</MudText>
+                    <MudText Class="mt-6 mb-2 mud-text-secondary" Align="Align.Center">@SchemaText.NoObjectTypesMatch</MudText>
                 }
                 else
                 {
@@ -365,7 +368,7 @@
                                                    ReadOnly="true"
                                                    Style="pointer-events: none;" />
                                         <span class="flex-grow-1 text-truncate">@objectType.Name</span>
-                                        <MudTooltip Text="@($"{selectedAttributeCount} of {totalAttributeCount} attributes selected")" Arrow="true" Placement="Placement.Top">
+                                        <MudTooltip Text="@string.Format(CultureInfo.CurrentCulture, SchemaText.AttributesSelectedOf, selectedAttributeCount, totalAttributeCount)" Arrow="true" Placement="Placement.Top">
                                             <MudText Typo="Typo.body2" Class="mud-text-secondary">@selectedAttributeCount / @totalAttributeCount</MudText>
                                         </MudTooltip>
                                     </div>
@@ -374,7 +377,7 @@
                         }
                     </MudGrid>
                     <MudText Typo="Typo.body1" Class="mt-4 mud-text-secondary d-block" Align="Align.Center">
-                        Showing @discoveryObjectTypes.Count of @visibleObjectTypeCount object types
+                        @string.Format(CultureInfo.CurrentCulture, SchemaText.ShowingObjectTypes, discoveryObjectTypes.Count, visibleObjectTypeCount)
                     </MudText>
                 }
 
@@ -385,13 +388,13 @@
                     <MudAlert Severity="Severity.Normal" Dense="true" Class="mt-4">
                         <div class="d-flex align-center flex-wrap" style="gap: 8px;">
                             <span class="flex-grow-1">
-                                @hiddenInternalCount internal object @(hiddenInternalCount == 1 ? "type is" : "types are") hidden.
-                                These are classes the Connected System uses for its own configuration or operation.
+                                @string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(hiddenInternalCount, SchemaText.InternalTypesHiddenOne, SchemaText.InternalTypesHiddenOther), hiddenInternalCount)
+                                @SchemaText.InternalTypesExplain
                             </span>
                             <AlertButton Severity="Severity.Normal"
                                          StartIcon="@Icons.Material.Filled.Visibility"
                                          OnClick="@(() => _showInternalObjectTypes = true)">
-                                Show internal object types
+                                @SchemaText.ShowInternalTypes
                             </AlertButton>
                         </div>
                     </MudAlert>
@@ -400,11 +403,11 @@
                 {
                     <MudAlert Severity="Severity.Normal" Dense="true" Class="mt-4">
                         <div class="d-flex align-center flex-wrap" style="gap: 8px;">
-                            <span class="flex-grow-1">Internal object types are shown.</span>
+                            <span class="flex-grow-1">@SchemaText.InternalTypesShown</span>
                             <AlertButton Severity="Severity.Normal"
                                          StartIcon="@Icons.Material.Filled.VisibilityOff"
                                          OnClick="@(() => _showInternalObjectTypes = false)">
-                                Hide internal object types
+                                @SchemaText.HideInternalTypes
                             </AlertButton>
                         </div>
                     </MudAlert>
@@ -432,9 +435,9 @@
             OnSchemaChanged="OnConnectedSystemChanged" />
 
         <MudPaper Outlined="true" Class="pa-4 mt-5" data-testid="jim-schema-attribute-selection">
-            <MudText Typo="Typo.h6" Class="mb-3">Attribute Selection</MudText>
+            <MudText Typo="Typo.h6" Class="mb-3">@SchemaText.AttributeSelection</MudText>
             <MudText>
-                Select which attributes you would like JIM to import, or export for this object type. To maximise system performance, only select those you actually need.
+                @SchemaText.AttributeSelectionHelp
             </MudText>
 
             @* Filtering by name is the grid's own search box, not a second one here: two boxes narrowing the same
@@ -447,12 +450,12 @@
                     <MudItem xs="6">
                         <MudSelect
                             T="string"
-                            Label="Filter by class"
+                            Label="@SchemaText.FilterByClass"
                             MultiSelection="true"
                             @bind-SelectedValues="AttributeClassFilterSelectedValues"
                             @bind-SelectedValues:after="OnSchemaClassFilterChangedAsync"
                             Variant="Variant.Outlined"
-                            HelperText="Show only attributes with a particular class"
+                            HelperText="@SchemaText.FilterByClassHelp"
                             Adornment="Adornment.Start"
                             AdornmentIcon="@Icons.Material.Filled.FilterAlt"
                             IconSize="Size.Small">
@@ -467,9 +470,9 @@
                 <MudItem xs="@(_selectedObjectTypeHasClasses ? 6 : 12)">
                     <MudTextField
                         T="string"
-                        Label="Select attributes via CSV"
+                        Label="@SchemaText.SelectAttributesCsv"
                         @bind-Value="_attributeSelectionCsv"
-                        HelperText="Quick-select by comma-separated list, e.g. DisplayName,sAMAccountName"
+                        HelperText="@SchemaText.SelectAttributesCsvHelp"
                         InputType="InputType.Text"
                         Adornment="Adornment.End"
                         AdornmentIcon="@Icons.Material.Filled.Check"
@@ -481,7 +484,7 @@
 
             <MudStack Row="true" Spacing="6" Class="mt-4 flex-wrap" AlignItems="AlignItems.Start">
                 <div>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Type:</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@SchemaText.TypeFilterLabel</MudText>
                     <MudChipSet T="AttributeDataType"
                                 SelectionMode="SelectionMode.MultiSelection"
                                 SelectedValues="_selectedSchemaTypes"
@@ -491,14 +494,14 @@
                             <MudChip Value="@type.Key"
                                      Color="Color.Primary"
                                      Variant="@(_selectedSchemaTypes.Contains(type.Key) ? Variant.Filled : Variant.Outlined)">
-                                @type.Key.ToString().SplitOnCapitalLetters() (@type.Value)
+                                @DataTypeLabel(type.Key) (@type.Value)
                             </MudChip>
                         }
                     </MudChipSet>
                 </div>
 
                 <div>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Plurality:</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@SchemaText.PluralityFilterLabel</MudText>
                     <MudChipSet T="AttributePlurality"
                                 SelectionMode="SelectionMode.MultiSelection"
                                 SelectedValues="_selectedSchemaPluralites"
@@ -508,7 +511,7 @@
                             <MudChip Value="@plurality.Key"
                                      Color="Color.Info"
                                      Variant="@(_selectedSchemaPluralites.Contains(plurality.Key) ? Variant.Filled : Variant.Outlined)">
-                                @(plurality.Key == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued") (@plurality.Value)
+                                @(plurality.Key == AttributePlurality.SingleValued ? SchemaText.SingleValued : SchemaText.MultiValued) (@plurality.Value)
                             </MudChip>
                         }
                     </MudChipSet>
@@ -517,7 +520,7 @@
                 @if (_selectedObjectTypeHasConstrainedAttributes)
                 {
                     <div>
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Writability:</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@SchemaText.WritabilityFilterLabel</MudText>
                         <MudChipSet T="AttributeWritability"
                                     SelectionMode="SelectionMode.MultiSelection"
                                     SelectedValues="_selectedSchemaWritabilities"
@@ -538,7 +541,7 @@
                     var selectionCounts = GetSchemaSelectionCounts();
                 }
                 <div>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Selection:</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@SchemaText.SelectionFilterLabel</MudText>
                     <MudChipSet T="bool"
                                 SelectionMode="SelectionMode.SingleSelection"
                                 SelectedValue="_attributeSelectedFilter"
@@ -546,12 +549,12 @@
                         <MudChip Value="false"
                                  Color="Color.Default"
                                  Variant="@(!_attributeSelectedFilter ? Variant.Filled : Variant.Outlined)">
-                            All (@selectionCounts.allCount)
+                            @string.Format(CultureInfo.CurrentCulture, SchemaText.ChipAll, selectionCounts.allCount)
                         </MudChip>
                         <MudChip Value="true"
                                  Color="Color.Default"
                                  Variant="@(_attributeSelectedFilter ? Variant.Filled : Variant.Outlined)">
-                            Selected Only (@selectionCounts.selectedCount)
+                            @string.Format(CultureInfo.CurrentCulture, SchemaText.ChipSelectedOnly, selectionCounts.selectedCount)
                         </MudChip>
                     </MudChipSet>
                 </div>
@@ -567,13 +570,13 @@
                 <MudAlert Severity="Severity.Normal" Dense="true" Class="mt-4">
                     <div class="d-flex align-center flex-wrap" style="gap: 8px;">
                         <span class="flex-grow-1">
-                            @hiddenOperationalCount operational @(hiddenOperationalCount == 1 ? "attribute is" : "attributes are") hidden.
-                            The Connected System maintains these for its own operation, such as when an entry was created or when a sign-in last failed; JIM can import them but never export them.
+                            @string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(hiddenOperationalCount, SchemaText.OperationalAttributesHiddenOne, SchemaText.OperationalAttributesHiddenOther), hiddenOperationalCount)
+                            @SchemaText.OperationalAttributesExplain
                         </span>
                         <AlertButton Severity="Severity.Normal"
                                      StartIcon="@Icons.Material.Filled.Visibility"
                                      OnClick="@(() => SetShowOperationalAttributesAsync(true))">
-                            Show operational attributes
+                            @SchemaText.ShowOperationalAttributes
                         </AlertButton>
                     </div>
                 </MudAlert>
@@ -582,11 +585,11 @@
             {
                 <MudAlert Severity="Severity.Normal" Dense="true" Class="mt-4">
                     <div class="d-flex align-center flex-wrap" style="gap: 8px;">
-                        <span class="flex-grow-1">Operational attributes are shown.</span>
+                        <span class="flex-grow-1">@SchemaText.OperationalAttributesShown</span>
                         <AlertButton Severity="Severity.Normal"
                                      StartIcon="@Icons.Material.Filled.VisibilityOff"
                                      OnClick="@(() => SetShowOperationalAttributesAsync(false))">
-                            Hide operational attributes
+                            @SchemaText.HideOperationalAttributes
                         </AlertButton>
                     </div>
                 </MudAlert>
@@ -603,31 +606,31 @@
                              StateKey="@selectedObjectType.Id.ToString()"
                              DefaultSortBy="name"
                              LoadWindow="LoadAttributeWindowAsync"
-                             SingularName="Attribute"
-                             PluralName="Attributes"
-                             SearchPlaceholder="Search by name"
+                             SingularName="@SchemaText.AttributeSingular"
+                             PluralName="@SchemaText.AttributePlural"
+                             SearchPlaceholder="@SchemaText.SearchByName"
                              AlwaysDense="true">
             <Columns>
-                <TemplateColumn Title="Selected" Sortable="false">
+                <TemplateColumn Title="@SchemaText.ColumnSelected" Sortable="false">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Selected" Name="selected" />
+                        <VirtualisedSortHeader Title="@SchemaText.ColumnSelected" Name="selected" />
                     </HeaderTemplate>
                     <CellTemplate>
                         @if (CredentialAttributes.IsCredentialAttribute(context.Item.Name))
                         {
-                            <MudTooltip Text="This attribute holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse; they never flow through an Attribute Flow." Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@SchemaText.CredentialAttributeTooltip" Arrow="true" Placement="Placement.Top">
                                 <MudSwitch Value="false" Color="@Color.Primary" Size="Size.Small" Disabled="true" />
                             </MudTooltip>
                         }
                         else if (context.Item.IsExternalId || context.Item.IsSecondaryExternalId)
                         {
-                            <MudTooltip Text="This attribute cannot be unselected because it is the External ID or Secondary External ID. These attributes must remain selected for sync operations to function correctly." Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@SchemaText.ExternalIdUnselectable" Arrow="true" Placement="Placement.Top">
                                 <MudSwitch Value="@context.Item.Selected" Color="@Color.Primary" Size="Size.Small" Disabled="true" />
                             </MudTooltip>
                         }
                         else if (context.Item.SelectionLocked && context.Item.Selected)
                         {
-                            <MudTooltip Text="This attribute cannot be unselected because the Connector cannot work without its values, so it is always imported." Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@SchemaText.ConnectorNeedsValuesUnselectable" Arrow="true" Placement="Placement.Top">
                                 <MudSwitch Value="true" Color="@Color.Primary" Size="Size.Small" Disabled="true" />
                             </MudTooltip>
                         }
@@ -637,18 +640,18 @@
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="External ID" Sortable="false">
+                <TemplateColumn Title="@SchemaText.ColumnExternalId" Sortable="false">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="External ID" Name="externalid" />
+                        <VirtualisedSortHeader Title="@SchemaText.ColumnExternalId" Name="externalid" />
                     </HeaderTemplate>
                     <CellTemplate>
                         @if (context.Item.IsExternalId)
                         {
-                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text">External ID</MudChip>
+                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text">@SchemaText.ColumnExternalId</MudChip>
                         }
                         else if (context.Item.IsSecondaryExternalId)
                         {
-                            <MudChip T="string" Color="Color.Secondary" Variant="Variant.Text">Secondary ID</MudChip>
+                            <MudChip T="string" Color="Color.Secondary" Variant="Variant.Text">@SchemaText.SecondaryIdChip</MudChip>
                         }
                         else
                         {
@@ -656,9 +659,9 @@
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Name" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn Title="@CommonText.ColumnName" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Name" Name="name" />
+                        <VirtualisedSortHeader Title="@CommonText.ColumnName" Name="name" />
                     </HeaderTemplate>
                     <CellTemplate>
                         @context.Item.Name
@@ -670,15 +673,15 @@
                    whose condition only becomes true after the grid has rendered (each of these three is derived
                    from the selected Object Type's attributes, and the selection changes under the reader) would
                    register last and render at the far right, whatever the markup says. *@
-                <TemplateColumn Title="Class" Sortable="false" Hidden="@(!_selectedObjectTypeHasClasses)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn Title="@SchemaText.ColumnClass" Sortable="false" Hidden="@(!_selectedObjectTypeHasClasses)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Class" Name="class" />
+                        <VirtualisedSortHeader Title="@SchemaText.ColumnClass" Name="class" />
                     </HeaderTemplate>
                     <CellTemplate>
                         @if (context.Item.IsOperational)
                         {
-                            <MudTooltip Text="An operational attribute: the Connected System maintains it for its own operation, and it belongs to no class. JIM can import it but never export it." Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Color="Color.Default" Variant="Variant.Text">Operational</MudChip>
+                            <MudTooltip Text="@SchemaText.OperationalTooltip" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Color="Color.Default" Variant="Variant.Text">@SchemaText.OperationalChip</MudChip>
                             </MudTooltip>
                         }
                         else
@@ -687,9 +690,9 @@
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Type" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn Title="@CommonText.ColumnType" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Type" Name="type" />
+                        <VirtualisedSortHeader Title="@CommonText.ColumnType" Name="type" />
                     </HeaderTemplate>
                     <CellTemplate>
                         @{
@@ -701,41 +704,41 @@
                         }
                         @if (referencedObjectTypeName != null)
                         {
-                            <MudTooltip Text="@($"This Reference attribute declares that it points at the '{referencedObjectTypeName}' Object Type, so references resolve within that Object Type alone. Declared by the Connected System's schema; read-only.")" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@string.Format(CultureInfo.CurrentCulture, SchemaText.ReferenceTypeTooltip, referencedObjectTypeName)" Arrow="true" Placement="Placement.Top">
                                 <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Text">
-                                    @($"Reference ({referencedObjectTypeName})")
+                                    @string.Format(CultureInfo.CurrentCulture, SchemaText.ReferenceChip, referencedObjectTypeName)
                                 </MudChip>
                             </MudTooltip>
                         }
                         else
                         {
                             <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Text">
-                                @context.Item.Type.ToString().SplitOnCapitalLetters()
+                                @DataTypeLabel(context.Item.Type)
                             </MudChip>
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Plurality" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn Title="@SchemaText.ColumnPlurality" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Plurality" Name="plurality" />
+                        <VirtualisedSortHeader Title="@SchemaText.ColumnPlurality" Name="plurality" />
                     </HeaderTemplate>
                     <CellTemplate>
-                        <MudTooltip Text="@(context.Item.PluralitySetByAdministrator ? "Set by an administrator, so a schema refresh keeps it." : "Discovered from the Connected System's schema.")" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@(context.Item.PluralitySetByAdministrator ? SchemaText.PluralitySetTooltip : SchemaText.PluralityDiscoveredTooltip)" Arrow="true" Placement="Placement.Top">
                             <MudChip T="string" Color="@Helpers.GetAttributePluralityChipColour(context.Item.AttributePlurality)" Variant="Variant.Text">
-                                @(context.Item.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                                @(context.Item.AttributePlurality == AttributePlurality.SingleValued ? SchemaText.SingleValued : SchemaText.MultiValued)
                             </MudChip>
                         </MudTooltip>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Case-exact" Sortable="false" Hidden="@(!_selectedObjectTypeHasCaseExactAttributes)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn Title="@SchemaText.ColumnCaseExact" Sortable="false" Hidden="@(!_selectedObjectTypeHasCaseExactAttributes)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Case-exact" Name="caseexact" />
+                        <VirtualisedSortHeader Title="@SchemaText.ColumnCaseExact" Name="caseexact" />
                     </HeaderTemplate>
                     <CellTemplate>
                         @if (context.Item.CaseExact)
                         {
-                            <MudTooltip Text="@(context.Item.CaseExactSetByAdministrator ? "Values differing only in case identify different things. Set by an administrator, so a schema refresh keeps it." : "Values differing only in case identify different things. Discovered from the Connected System's schema.")" Arrow="true" Placement="Placement.Top">
-                                <MudChip T="string" Color="Color.Warning" Variant="Variant.Text">Case-exact</MudChip>
+                            <MudTooltip Text="@(context.Item.CaseExactSetByAdministrator ? SchemaText.CaseExactTooltipSet : SchemaText.CaseExactTooltipDiscovered)" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Color="Color.Warning" Variant="Variant.Text">@SchemaText.ColumnCaseExact</MudChip>
                             </MudTooltip>
                         }
                         else
@@ -744,14 +747,14 @@
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Date Resolution" Sortable="false" Hidden="@(!_selectedObjectTypeHasDateAttributes)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn Title="@SchemaText.ColumnDateResolution" Sortable="false" Hidden="@(!_selectedObjectTypeHasDateAttributes)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Date Resolution" Name="dateresolution" />
+                        <VirtualisedSortHeader Title="@SchemaText.ColumnDateResolution" Name="dateresolution" />
                     </HeaderTemplate>
                     <CellTemplate>
                         @if (SchemaAttributeEdit.OffersDateTimeResolution(context.Item.Type))
                         {
-                            <MudTooltip Text="@(context.Item.DateTimeResolutionSetByAdministrator ? "The finest step of time the Connected System holds these dates to. Set by an administrator, so a schema refresh keeps it." : context.Item.DateTimeResolution.HasValue ? "The finest step of time the Connected System holds these dates to. Discovered from the Connected System's schema." : "Not yet discovered: refresh the schema to discover it. Until then JIM holds and sends these dates to the microsecond.")" Arrow="true" Placement="Placement.Top">
+                            <MudTooltip Text="@(context.Item.DateTimeResolutionSetByAdministrator ? SchemaText.ResolutionTooltipSet : context.Item.DateTimeResolution.HasValue ? SchemaText.ResolutionTooltipDiscovered : SchemaText.ResolutionTooltipUndiscovered)" Arrow="true" Placement="Placement.Top">
                                 <MudChip T="string" Variant="Variant.Text">@SchemaAttributeEdit.Describe(SchemaAttributeEdit.EffectiveDateTimeResolution(context.Item))</MudChip>
                             </MudTooltip>
                         }
@@ -761,9 +764,9 @@
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Writability" Sortable="false" Hidden="@(!_selectedObjectTypeHasConstrainedAttributes)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn Title="@SchemaText.ColumnWritability" Sortable="false" Hidden="@(!_selectedObjectTypeHasConstrainedAttributes)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Writability" Name="writability" />
+                        <VirtualisedSortHeader Title="@SchemaText.ColumnWritability" Name="writability" />
                     </HeaderTemplate>
                     <CellTemplate>
                         <MudTooltip Text="@Helpers.GetAttributeWritabilityDescription(context.Item.Writability)" Arrow="true" Placement="Placement.Top">
@@ -775,9 +778,9 @@
                         </MudTooltip>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Description" Sortable="false" Hidden="@(!_selectedObjectTypeHasDescriptions)" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+                <TemplateColumn Title="@CommonText.ColumnDescription" Sortable="false" Hidden="@(!_selectedObjectTypeHasDescriptions)" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                     <HeaderTemplate>
-                        <VirtualisedSortHeader Title="Description" Name="description" />
+                        <VirtualisedSortHeader Title="@CommonText.ColumnDescription" Name="description" />
                     </HeaderTemplate>
                     <CellTemplate>
                         @* Raw imported LDAP/SCIM text, so its length is the directory's business, not JIM's:
@@ -797,9 +800,9 @@
                     </CellTemplate>
                 </TemplateColumn>
                 @* Every Connector offers an edit now: the case-exact declaration applies to any Text attribute (#2051). *@
-                <TemplateColumn Title="Action" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn Title="@SchemaText.ColumnAction" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Action</MudText>
+                        <MudText Typo="Typo.button">@SchemaText.ColumnAction</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         @if (SchemaAttributeEdit.CanEdit(context.Item, ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes))
@@ -811,7 +814,7 @@
                                 Size="Size.Small"
                                 OnClick="() => HandleShowEditAttributeDialogAsync(context.Item)"
                                 StartIcon="@Icons.Material.Filled.Edit">
-                                Edit
+                                @CommonText.Edit
                             </MudButton>
                         }
                     </CellTemplate>
@@ -821,28 +824,28 @@
                 @if (!string.IsNullOrWhiteSpace(grid.SearchText))
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                     PrimaryText="@($"No attributes match \"{grid.SearchText}\"")"
-                                     SecondaryText="Try a different search term, or clear the search."
-                                     ActionText="Clear Search"
+                                     PrimaryText="@string.Format(CultureInfo.CurrentCulture, SchemaText.NoAttributesMatch, grid.SearchText)"
+                                     SecondaryText="@SchemaText.TryDifferentSearch"
+                                     ActionText="@CommonText.ClearSearch"
                                      OnAction="@(() => grid.ClearSearchAsync())" />
                 }
                 else if (_attributeSelectedFilter)
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
-                                     PrimaryText="No attributes are selected for this object type"
-                                     SecondaryText="Choose All above to see everything the Connected System reported, then select the attributes JIM should manage." />
+                                     PrimaryText="@SchemaText.NoAttributesSelected"
+                                     SecondaryText="@SchemaText.ChooseAllAbove" />
                 }
                 else if (AnySchemaFilterIsActive)
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
-                                     PrimaryText="No attributes match these filters"
-                                     SecondaryText="Clear a class, type, plurality or writability filter above to widen the list." />
+                                     PrimaryText="@SchemaText.NoAttributesMatchFilters"
+                                     SecondaryText="@SchemaText.ClearFilterToWiden" />
                 }
                 else
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
-                                     PrimaryText="No attributes were discovered for this object type"
-                                     SecondaryText="Retrieve the schema again once the Connected System reports attributes for it." />
+                                     PrimaryText="@SchemaText.NoAttributesDiscovered"
+                                     SecondaryText="@SchemaText.RetrieveAgainOnceReported" />
                 }
             </EmptyContent>
         </VirtualisedDataGrid>
@@ -850,17 +853,17 @@
         @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId || ConnectedSystem.SupportsImportMode())
         {
             <MudPaper Outlined="true" Class="pa-4 mt-5" data-testid="jim-schema-object-type-settings">
-                <MudText Typo="Typo.h6" Class="mb-3">Settings</MudText>
+                <MudText Typo="Typo.h6" Class="mb-3">@SchemaText.SettingsHeading</MudText>
                 @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedExternalId)
                 {
-                    <MudText>This connector requires you to select the attribute that is used as the External ID. Please select one below.</MudText>
+                    <MudText>@SchemaText.ExternalIdSelectRequired</MudText>
                     <MudSelect
                         T="ConnectedSystemObjectTypeAttribute"
-                        Label="External ID Attribute"
+                        Label="@SchemaText.ExternalIdAttributeLabel"
                         Variant="Variant.Outlined"
                         Class="mt-3 mb-4"
                         Required="true"
-                        RequiredError="You must select an attribute as the External ID."
+                        RequiredError="@SchemaText.ExternalIdRequiredError"
                         Value="_selectedObjectType.Attributes.SingleOrDefault(q => q.IsExternalId)"
                         ValueChanged="HandleMakeExternalIdAsync">
                         @foreach (var objectTypeAttribute in _selectedObjectType.Attributes.Where(q => q.AttributePlurality == AttributePlurality.SingleValued))
@@ -874,9 +877,9 @@
                     <MudSwitch
                         @bind-Value="@_selectedObjectType.RemoveContributedAttributesOnObsoletion"
                         Color="@Color.Primary"
-                        Label="Remove contributed attributes when source objects are deleted" />
+                        Label="@SchemaText.RemoveContributedLabel" />
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                        When enabled, this will remove attribute values on joined Metaverse Objects contributed by this system, for this object type when the source object is deleted.
+                        @SchemaText.RemoveContributedHelp
                     </MudText>
                 }
             </MudPaper>
@@ -898,14 +901,14 @@
                    OnClick="PreviewSchemaSelectionAsync"
                    Disabled="@_startingSchemaPreview"
                    DropShadow="false">
-            Preview Changes
+            @SchemaText.PreviewChanges
         </MudButton>
         <MudButton
             Color="Color.Primary"
             Variant="Variant.Filled"
             OnClick="HandleObjectTypesAndAttributeSelectionSubmitAsync"
             DropShadow="false"
-            Disabled="DisableSaveSchemaButton()">Save Changes</MudButton>
+            Disabled="DisableSaveSchemaButton()">@CommonText.SaveChanges</MudButton>
     </MudStack>
 
     @if (_schemaPreviewActivityId.HasValue)
@@ -916,13 +919,13 @@
         {
             <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-6"
                       data-testid="jim-schema-preview-stale">
-                The schema selection has been edited since this preview ran, so it no longer describes what saving
-                would do. Preview again for an answer about the current selection.
+                @SchemaText.PreviewStale
+                
             </MudAlert>
         }
 
         <ConfigurationChangePreviewPanel ActivityId="@schemaPreviewActivityId"
-                                         Title="Preview: Schema Selection"
+                                         Title="@SchemaText.SchemaSelectionPreviewTitle"
                                          OnPreviewChanged="OnSchemaPreviewChanged"
                                          OnClose="DiscardSchemaPreview"
                                          Class="mt-6" />
@@ -1004,6 +1007,22 @@
 
     private const string ObjectTypeQueryParameterName = "ot";
     private bool _objectTypeDeepLinkApplied;
+
+    /// <summary>An attribute data type as the portal names it.</summary>
+    private static string DataTypeLabel(AttributeDataType type) => type switch
+    {
+        AttributeDataType.NotSet => SchemaText.DataTypeNotSet,
+        AttributeDataType.Text => SchemaText.DataTypeText,
+        AttributeDataType.Number => SchemaText.DataTypeNumber,
+        AttributeDataType.DateTime => SchemaText.DataTypeDateTime,
+        AttributeDataType.Binary => SchemaText.DataTypeBinary,
+        AttributeDataType.Reference => SchemaText.DataTypeReference,
+        AttributeDataType.Guid => SchemaText.DataTypeGuid,
+        AttributeDataType.Boolean => SchemaText.DataTypeBoolean,
+        AttributeDataType.LongNumber => SchemaText.DataTypeLongNumber,
+        AttributeDataType.Decimal => SchemaText.DataTypeDecimal,
+        _ => type.ToString()
+    };
 
     protected override void OnParametersSet()
     {
@@ -1273,7 +1292,7 @@
             // the persist throws (database faults included, which are not domain exceptions), the administrator
             // must see the failure in the panel rather than have it escape and tear the circuit down.
             Log.Error(ex, "Failed to apply schema refresh for Connected System {SystemId}", ConnectedSystem.Id);
-            Snackbar.Add($"Failed to apply the schema changes: {ex.Message}", Severity.Error, options => options.RequireInteraction = true);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.ApplyFailed, ex.Message), Severity.Error, options => options.RequireInteraction = true);
         }
         finally
         {
@@ -1301,7 +1320,7 @@
         try
         {
             await jim.ConnectedSystems.ApplyConnectedSystemSchemaRefreshAsync(_pendingSchemaRefreshSystem, _schemaRefreshPreview, _schemaRefreshDependents, user);
-            Snackbar.Add("Schema applied; the dependent configuration has been disabled.", Severity.Success);
+            Snackbar.Add(SchemaText.AppliedDisabled, Severity.Success);
             _schemaRefreshResult = _schemaRefreshPreview;
             _schemaRefreshPreview = null;
             _schemaRefreshDependents = null;
@@ -1313,7 +1332,7 @@
         {
             // Same boundary as the plain apply: any failure reaches the administrator, never the circuit.
             Log.Error(ex, "Failed to apply schema refresh with disables for Connected System {SystemId}", ConnectedSystem.Id);
-            Snackbar.Add($"Failed to apply the schema changes: {ex.Message}", Severity.Error, options => options.RequireInteraction = true);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.ApplyFailed, ex.Message), Severity.Error, options => options.RequireInteraction = true);
         }
         finally
         {
@@ -1345,11 +1364,11 @@
                 _pendingSchemaRefreshSystem, _schemaRefreshPreview, _schemaRefreshDependents ?? new SchemaRefreshDependents(), user);
 
             if (creationResult == null)
-                Snackbar.Add("Schema applied; the dependent configuration has been removed.", Severity.Success);
+                Snackbar.Add(SchemaText.AppliedRemoved, Severity.Success);
             else if (creationResult.Success)
-                Snackbar.Add("Schema applied; the dependent configuration has been removed and the data removal queued. Follow it from the Operations tab.", Severity.Success);
+                Snackbar.Add(SchemaText.AppliedRemovedQueued, Severity.Success);
             else
-                Snackbar.Add($"Schema applied and configuration removed, but the data removal could not be queued: {creationResult.ErrorMessage}", Severity.Error, options => options.RequireInteraction = true);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.AppliedRemovedNotQueued, creationResult.ErrorMessage), Severity.Error, options => options.RequireInteraction = true);
 
             _schemaRefreshResult = _schemaRefreshPreview;
             _schemaRefreshPreview = null;
@@ -1362,7 +1381,7 @@
         {
             // Same boundary as the plain apply: any failure reaches the administrator, never the circuit.
             Log.Error(ex, "Failed to apply schema refresh with removals for Connected System {SystemId}", ConnectedSystem.Id);
-            Snackbar.Add($"Failed to apply the schema changes: {ex.Message}", Severity.Error, options => options.RequireInteraction = true);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.ApplyFailed, ex.Message), Severity.Error, options => options.RequireInteraction = true);
         }
         finally
         {
@@ -1534,10 +1553,10 @@
         var encodedName = System.Net.WebUtility.HtmlEncode(connectedSystemObjectType.Name);
         var options = new MessageBoxOptions
         {
-            Title = "Remove object type?",
-            MarkupMessage = (MarkupString)$"Remove <code class=\"jim-code-inline\">{encodedName}</code> from the object types JIM manages? This clears its attribute selection and configuration for this Connected System. You can add it again later, but you will need to reconfigure it.",
-            YesText = "Remove",
-            CancelText = "Cancel"
+            Title = SchemaText.RemoveObjectTypeQuestion,
+            MarkupMessage = (MarkupString)string.Format(CultureInfo.CurrentCulture, SchemaText.RemoveObjectTypeMessage, $"<code class=\"jim-code-inline\">{encodedName}</code>"),
+            YesText = CommonText.Remove,
+            CancelText = CommonText.Cancel
         };
 
         var confirmed = await DialogService.ShowMessageBoxAsync(options);
@@ -1577,7 +1596,7 @@
         // acknowledgement says how many objects that is (#1475).
         var preflight = await jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(ConnectedSystem);
         if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
-                "Connected System", ConnectedSystem.Name,
+                SchemaText.ConnectedSystemTermName, ConnectedSystem.Name,
                 ConfigurationChangePreviewCounts.ForConfirmation(_schemaPreview, SchemaPreviewIsStale),
                 ConfigurationChangePreviewCounts.ForConfirmationVerdict(_schemaPreview, SchemaPreviewIsStale)))
             return;
@@ -1604,9 +1623,9 @@
             return;
         }
         DiscardSchemaPreview();
-        Snackbar.Add("Your attribute changes have been saved.", Severity.Success);
+        Snackbar.Add(SchemaText.AttributeChangesSaved, Severity.Success);
         if (deselectionWarnings.Count > 0)
-            Snackbar.Add($"A deselected attribute is still read by: {string.Join("; ", deselectionWarnings.Select(r => r.Description))}. It is no longer imported, so these read values that are never refreshed.",
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.DeselectedStillRead, string.Join("; ", deselectionWarnings.Select(r => r.Description))),
                 Severity.Warning, options => options.RequireInteraction = true);
 
         await OnConnectedSystemChanged.InvokeAsync();
@@ -1669,7 +1688,7 @@
         {
             DiscardSchemaPreview();
             Log.Error(ex, "Failed to start a schema selection preview for Connected System {ConnectedSystemId}", ConnectedSystem.Id);
-            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.PreviewStartFailed, ex.Message), Severity.Error);
         }
         finally
         {
@@ -1897,10 +1916,10 @@
         await RefreshAttributeGridAsync();
 
         // all done, let the user know
-        Snackbar.Add("Attributes selected.", Severity.Success);
+        Snackbar.Add(SchemaText.AttributesSelected, Severity.Success);
 
         if (skippedCredentialAttributes.Count > 0)
-            Snackbar.Add($"Skipped {string.Join(", ", skippedCredentialAttributes)}: credential attributes cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow.", Severity.Warning);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.SkippedCredentialAttributes, string.Join(", ", skippedCredentialAttributes)), Severity.Warning);
     }
 
     private bool DisableSelectedSchemaObjectType(ConnectedSystemObjectType connectedSystemObjectType)
@@ -1985,7 +2004,7 @@
             var typeOverride = await jim.ConnectedSystems.OverrideAttributeTypeAsync(ConnectedSystem, _objectTypeAttributeBeingEdited, chosenType);
             if (!typeOverride.Success)
             {
-                Snackbar.Add(typeOverride.ErrorMessage ?? "The data type could not be changed.", Severity.Error);
+                Snackbar.Add(typeOverride.ErrorMessage ?? SchemaText.DataTypeNotChanged, Severity.Error);
                 return;
             }
 
@@ -2000,7 +2019,7 @@
             var pluralityOverride = await jim.ConnectedSystems.OverrideAttributePluralityAsync(ConnectedSystem, _objectTypeAttributeBeingEdited, _objectTypeAttributeBeingEditedPlurality);
             if (!pluralityOverride.Success)
             {
-                Snackbar.Add(pluralityOverride.ErrorMessage ?? "The plurality could not be changed.", Severity.Error);
+                Snackbar.Add(pluralityOverride.ErrorMessage ?? SchemaText.PluralityNotChanged, Severity.Error);
                 return;
             }
         }
@@ -2017,8 +2036,8 @@
 
         // all done, let the user know
         Snackbar.Add(madeSingleValued
-            ? "Attribute updated, and made single-valued: a Boolean holds one value. Save your changes to apply it."
-            : "Attribute updated. Save your changes to apply it.", Severity.Success);
+            ? SchemaText.AttributeUpdatedSingleValued
+            : SchemaText.AttributeUpdated, Severity.Success);
     }
 
     private async Task ShowCsvErrorDialogAsync(CsvParsingException ex)
@@ -2039,6 +2058,6 @@
             FullWidth = true
         };
 
-        await DialogService.ShowAsync<CsvErrorDialog>("CSV Parsing Error", parameters, options);
+        await DialogService.ShowAsync<CsvErrorDialog>(SchemaText.CsvParsingErrorTitle, parameters, options);
     }
 }

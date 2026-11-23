@@ -14,7 +14,9 @@
    - the clear button, which passes on no name at once.
    SelectOnActivation is off because highlighting the text on focus is a round trip to the browser: a key typed before
    it lands is highlighted with the rest and replaced by the next key, so clicking in and typing HR left R (#2627). *@
+@* i18n: exempt - ResetValueOnEmptyText is a boolean MudBlazor parameter, not text. *@
 <MudAutocomplete @ref="_autocomplete"
+                 ResetValueOnEmptyText="true"
                  T="string"
                  Label="@Label"
                  Value="@Value"
@@ -24,7 +26,6 @@
                  SearchFunc="SearchAsync"
                  CoerceValue="true"
                  SelectOnActivation="false"
-                 ResetValueOnEmptyText="true"
                  MaxItems="50"
                  ListItemClass="jim-sql-catalogue-item"
                  Clearable="@Clearable"

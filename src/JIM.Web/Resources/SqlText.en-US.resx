@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DeltaImportWatermarkColumnMissing" xml:space="preserve">
+    <value>Delta Import Mode is '{0}' and this Object Type is selected for synchronization, so it needs a watermark column. Choose one, or deselect the Object Type on the Schema tab if JIM never imports it.</value>
+  </data>
+  <data name="ChangeLogTableMissing" xml:space="preserve">
+    <value>Delta Import Mode is '{0}' and this Object Type is selected for synchronization, so it needs a change-log table. Choose one, or deselect the Object Type on the Schema tab if JIM never imports it.</value>
+  </data>
+</root>

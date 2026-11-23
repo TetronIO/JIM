@@ -1,9 +1,11 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using System.Text.Json;
 using JIM.Connectors.Sql;
 using JIM.Models.Staging;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -103,15 +105,16 @@ public sealed class SqlObjectTypesEditorModel
         if (DeltaImportMode == SqlConnectorConstants.DeltaImportModeWatermarkColumn)
         {
             if (string.IsNullOrWhiteSpace(objectType.WatermarkColumn))
-                problems.Add($"Delta Import Mode is '{SqlConnectorConstants.DeltaImportModeWatermarkColumn}' and this Object Type is selected for synchronisation, so it needs a watermark column. Choose one, or deselect the Object Type on the Schema tab if JIM never imports it.");
+                problems.Add(string.Format(CultureInfo.CurrentCulture, SqlText.DeltaImportWatermarkColumnMissing, SqlConnectorConstants.DeltaImportModeWatermarkColumn));
 
             problems.AddRange((objectType.RelatedTables ?? [])
                 .Where(relatedTable => string.IsNullOrWhiteSpace(relatedTable.WatermarkColumn))
-                .Select(relatedTable => $"Delta Import Mode is '{SqlConnectorConstants.DeltaImportModeWatermarkColumn}', so multi-valued attribute '{relatedTable.AttributeName}' needs a watermark column on its own table: a row added to or removed from it changes the object without touching the object's own row."));
+                .Select(relatedTable => string.Format(CultureInfo.CurrentCulture, SqlText.MultiValuedWatermarkColumnMissing,
+                    SqlConnectorConstants.DeltaImportModeWatermarkColumn, relatedTable.AttributeName)));
         }
         else if (DeltaImportMode == SqlConnectorConstants.DeltaImportModeChangeLogTable && objectType.ChangeLog == null)
         {
-            problems.Add($"Delta Import Mode is '{SqlConnectorConstants.DeltaImportModeChangeLogTable}' and this Object Type is selected for synchronisation, so it needs a change-log table. Choose one, or deselect the Object Type on the Schema tab if JIM never imports it.");
+            problems.Add(string.Format(CultureInfo.CurrentCulture, SqlText.ChangeLogTableMissing, SqlConnectorConstants.DeltaImportModeChangeLogTable));
         }
 
         return problems;
@@ -123,10 +126,10 @@ public sealed class SqlObjectTypesEditorModel
     public static string SourceOf(SqlObjectTypeDocument objectType)
     {
         if (!string.IsNullOrWhiteSpace(objectType.Select))
-            return "SELECT statement";
+            return SqlText.SourceSelectStatement;
 
         if (string.IsNullOrWhiteSpace(objectType.Table))
-            return "No source chosen";
+            return SqlText.SourceNoneChosen;
 
         return string.IsNullOrWhiteSpace(objectType.Schema) ? objectType.Table : $"{objectType.Schema}.{objectType.Table}";
     }

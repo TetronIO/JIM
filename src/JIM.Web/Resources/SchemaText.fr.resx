@@ -1,0 +1,1526 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DataFlowPriorityUnranked" xml:space="preserve">
+    <value>Non classé</value>
+  </data>
+  <data name="DataFlowPriorityOfContributors" xml:space="preserve">
+    <value>{0} sur {1}</value>
+  </data>
+  <data name="DataFlowPriorityTooltipOutbound" xml:space="preserve">
+    <value>La priorité ordonne les contributions concurrentes vers le Metaverse ; elle ne s’applique donc qu’aux flux entrants.</value>
+  </data>
+  <data name="DataFlowPriorityTooltipSoleContributorUnranked" xml:space="preserve">
+    <value>C’est le seul contributeur à cet attribut Metaverse : il n’est en concurrence avec aucun autre et n’a jamais eu besoin de position.</value>
+  </data>
+  <data name="DataFlowPriorityTooltipSoleContributorRanked" xml:space="preserve">
+    <value>C’est le seul contributeur à cet attribut Metaverse : sa position ne décide de rien tant qu’une autre règle de synchronisation n’y contribue pas.</value>
+  </data>
+  <data name="DataFlowPriorityTooltipUnpositionedOfMany" xml:space="preserve">
+    <value>Cette contribution n’a jamais reçu de position : elle se classe donc en dernier parmi les {0} contributeurs à cet attribut Metaverse. Attribuez-lui une position pour changer cela.</value>
+  </data>
+  <data name="DataFlowPriorityTooltipOrdered" xml:space="preserve">
+    <value>{0} règles de synchronisation contribuent à cet attribut Metaverse ; la contribution portant le numéro le plus bas, si elle a une valeur, l’emporte.</value>
+  </data>
+  <data name="DataFlowDirectionInbound" xml:space="preserve">
+    <value>Entrant</value>
+  </data>
+  <data name="DataFlowDirectionOutbound" xml:space="preserve">
+    <value>Sortant</value>
+  </data>
+  <data name="ResolutionTenMicroseconds" xml:space="preserve">
+    <value>Dix microsecondes</value>
+  </data>
+  <data name="ResolutionHundredMicroseconds" xml:space="preserve">
+    <value>Cent microsecondes</value>
+  </data>
+  <data name="ResolutionTenMilliseconds" xml:space="preserve">
+    <value>Dix millisecondes</value>
+  </data>
+  <data name="ResolutionHundredMilliseconds" xml:space="preserve">
+    <value>Cent millisecondes</value>
+  </data>
+  <data name="WatermarkNextDeltaImportReadsAfter" xml:space="preserve">
+    <value>La prochaine importation delta lit les modifications postérieures à</value>
+  </data>
+  <data name="WatermarkRecordedAt" xml:space="preserve">
+    <value>Enregistré {0}</value>
+  </data>
+  <data name="WatermarkUnreadable" xml:space="preserve">
+    <value>La marque de progression enregistrée n’a pas pu être lue. La prochaine importation delta lit chaque objet de cette partition, comme le fait une importation complète, et en enregistre une nouvelle.</value>
+  </data>
+  <data name="WatermarkNone" xml:space="preserve">
+    <value>Aucune marque de progression enregistrée. La prochaine importation delta lit chaque objet de cette partition, comme le fait une importation complète, et en enregistre une.</value>
+  </data>
+  <data name="RetrieveSchemaIntro" xml:space="preserve">
+    <value>Récupérez le schéma du système connecté pour pouvoir choisir les types d’objets et les attributs que vous voulez gérer avec JIM.</value>
+  </data>
+  <data name="RetrievingSchema" xml:space="preserve">
+    <value>Récupération du schéma…</value>
+  </data>
+  <data name="RetrieveSchema" xml:space="preserve">
+    <value>Récupérer le schéma</value>
+  </data>
+  <data name="RefreshCompleteTitle" xml:space="preserve">
+    <value>Actualisation du schéma terminée</value>
+  </data>
+  <data name="RefreshFailedTitle" xml:space="preserve">
+    <value>Échec de l’actualisation du schéma</value>
+  </data>
+  <data name="FoundSummary" xml:space="preserve">
+    <value>Trouvé : {0}, avec {1}.</value>
+  </data>
+  <data name="ObjectTypeCountOne" xml:space="preserve">
+    <value>&lt;strong&gt;{0}&lt;/strong&gt; type d’objet</value>
+  </data>
+  <data name="ObjectTypeCountOther" xml:space="preserve">
+    <value>&lt;strong&gt;{0}&lt;/strong&gt; types d’objets</value>
+  </data>
+  <data name="AttributeCountOne" xml:space="preserve">
+    <value>&lt;strong&gt;{0}&lt;/strong&gt; attribut</value>
+  </data>
+  <data name="AttributeCountOther" xml:space="preserve">
+    <value>&lt;strong&gt;{0}&lt;/strong&gt; attributs</value>
+  </data>
+  <data name="SelectedByConnector" xml:space="preserve">
+    <value>Sélectionnés parce que le connecteur les exige :</value>
+  </data>
+  <data name="SelectedByConnectorExplain" xml:space="preserve">
+    <value>Le connecteur ne peut pas fonctionner sans les valeurs de ces attributs : ils sont donc toujours importés et ne peuvent pas être désélectionnés.</value>
+  </data>
+  <data name="CredentialAttributesBlockedOne" xml:space="preserve">
+    <value>{0} attribut d’identifiants bloqué :</value>
+  </data>
+  <data name="CredentialAttributesBlockedOther" xml:space="preserve">
+    <value>{0} attributs d’identifiants bloqués :</value>
+  </data>
+  <data name="CredentialAttributesExplain" xml:space="preserve">
+    <value>Ils contiennent des éléments d’identification et ne sont jamais gérés par JIM. Les mots de passe sont synchronisés par le canal dédié de JIM, qui écrit dans le système connecté sans jamais relire la valeur dans le Metaverse.</value>
+  </data>
+  <data name="DiscoveryWarningsLabel" xml:space="preserve">
+    <value>Avertissements de découverte :</value>
+  </data>
+  <data name="DiscoveryWarningsText" xml:space="preserve">
+    <value>Le connecteur n’a pas tout découvert et a contourné les lacunes ci-dessous. Examinez-les pour qu’un attribut manquant soit imputé au système connecté et non à JIM.</value>
+  </data>
+  <data name="NoChangesDetected" xml:space="preserve">
+    <value>Aucune modification détectée. Le schéma est à jour.</value>
+  </data>
+  <data name="ActionRequiredLabel" xml:space="preserve">
+    <value>Action requise :</value>
+  </data>
+  <data name="ActionRequiredText" xml:space="preserve">
+    <value>Certains attributs supprimés sont encore référencés par des règles de synchronisation. Mettez à jour vos règles de synchronisation pour supprimer les références à ces attributs.</value>
+  </data>
+  <data name="EditSchemaAttributeTitle" xml:space="preserve">
+    <value>Modifier l’attribut de schéma :</value>
+  </data>
+  <data name="DataTypeLockedPlural" xml:space="preserve">
+    <value>Le type de données et la pluralité de cet attribut du système connecté ne peuvent pas être modifiés, car il est référencé par une règle de synchronisation ou contient déjà des valeurs.</value>
+  </data>
+  <data name="DataTypeLocked" xml:space="preserve">
+    <value>Le type de données de cet attribut du système connecté ne peut pas être modifié, car il est référencé par une règle de synchronisation ou contient déjà des valeurs.</value>
+  </data>
+  <data name="DataTypeChangeable" xml:space="preserve">
+    <value>Ce connecteur permet de modifier le type de données d’un attribut du système connecté. Ce type a pu être détecté automatiquement et doit éventuellement être ajusté s’il est incorrect.</value>
+  </data>
+  <data name="ChooseDataType" xml:space="preserve">
+    <value>Choisissez un type de données</value>
+  </data>
+  <data name="ValuesPerObject" xml:space="preserve">
+    <value>Valeurs par objet</value>
+  </data>
+  <data name="SingleValued" xml:space="preserve">
+    <value>Monovalué</value>
+  </data>
+  <data name="MultiValued" xml:space="preserve">
+    <value>Multivalué</value>
+  </data>
+  <data name="MultiValuedColumnHelp" xml:space="preserve">
+    <value>Une colonne multivaluée contient ses valeurs séparées par le délimiteur de valeurs multiples, par exemple {0}.</value>
+  </data>
+  <data name="SetByAdministrator" xml:space="preserve">
+    <value>Un administrateur l’a défini : une actualisation du schéma le conservera.</value>
+  </data>
+  <data name="CurrentlyDiscoveredFromFile" xml:space="preserve">
+    <value>Actuellement tel que découvert dans le fichier. La modifier vous l’approprie, et une actualisation du schéma la conservera.</value>
+  </data>
+  <data name="CurrentlyDiscoveredFromSchema" xml:space="preserve">
+    <value>Actuellement tel que découvert dans le schéma du système connecté. La modifier vous l’approprie, et une actualisation du schéma la conservera.</value>
+  </data>
+  <data name="CaseExactHelp" xml:space="preserve">
+    <value>Lorsque la case est cochée, des valeurs ne différant que par la casse désignent des choses différentes : {0} et {1} sont deux valeurs. Lorsqu’elle est décochée, ce sont la même valeur, comme pour la plupart des identifiants.</value>
+  </data>
+  <data name="ValuesCaseExact" xml:space="preserve">
+    <value>Valeurs sensibles à la casse</value>
+  </data>
+  <data name="DatesHeldTo" xml:space="preserve">
+    <value>Précision des dates</value>
+  </data>
+  <data name="ResolutionHelp" xml:space="preserve">
+    <value>Le plus petit intervalle de temps que le système connecté conserve. JIM envoie chaque date arrondie à cet intervalle et compare à ce niveau, afin qu’une fraction que le système connecté ne peut pas conserver ne soit jamais réexportée encore et encore.</value>
+  </data>
+  <data name="ConfirmChange" xml:space="preserve">
+    <value>Confirmer la modification</value>
+  </data>
+  <data name="ObjectTypesAndSelected" xml:space="preserve">
+    <value>{0} types d’objets, {1} sélectionnés</value>
+  </data>
+  <data name="SchemaInfoTitle" xml:space="preserve">
+    <value>Schéma</value>
+  </data>
+  <data name="SchemaInfoBody" xml:space="preserve">
+    <value>Les types d’objets et les attributs que JIM a lus dans le système connecté. Une actualisation récupère les plus récents et vous montre ce qui a changé avant qu’une modification soit appliquée. Une actualisation ne supprime rien : les entrées que le système connecté ne signale plus sont conservées dans JIM et signalées à votre attention. Vérifiez que l’identité du système connecté dispose des autorisations nécessaires pour lire le schéma complet ; une lecture partielle peut faire apparaître des entrées comme supprimées alors qu’elles ne le sont pas.</value>
+  </data>
+  <data name="RefreshingSchema" xml:space="preserve">
+    <value>Actualisation du schéma…</value>
+  </data>
+  <data name="RefreshSchema" xml:space="preserve">
+    <value>Actualiser le schéma</value>
+  </data>
+  <data name="ChooseObjectTypes" xml:space="preserve">
+    <value>Choisissez les types d’objets que JIM doit gérer</value>
+  </data>
+  <data name="ChooseObjectTypesHelp" xml:space="preserve">
+    <value>Chaque type que vous sélectionnez obtient son propre onglet ci-dessus, où vous choisissez les attributs à importer ou exporter. Pour optimiser les performances du système, ne sélectionnez que les types dont vous avez réellement besoin.</value>
+  </data>
+  <data name="SearchObjectTypes" xml:space="preserve">
+    <value>Rechercher des types d’objets</value>
+  </data>
+  <data name="SearchObjectTypesHelp" xml:space="preserve">
+    <value>Afficher uniquement les types dont le nom contient une valeur donnée</value>
+  </data>
+  <data name="ChipAll" xml:space="preserve">
+    <value>Tous ({0})</value>
+  </data>
+  <data name="ChipSelected" xml:space="preserve">
+    <value>Sélectionnés ({0})</value>
+  </data>
+  <data name="NoObjectTypesMatch" xml:space="preserve">
+    <value>Aucun type d’objet ne correspond au filtre actuel.</value>
+  </data>
+  <data name="AttributesSelectedOf" xml:space="preserve">
+    <value>{0} attributs sur {1} sélectionnés</value>
+  </data>
+  <data name="ShowingObjectTypes" xml:space="preserve">
+    <value>Affichage de {0} types d’objets sur {1}</value>
+  </data>
+  <data name="InternalTypesHiddenOne" xml:space="preserve">
+    <value>{0} type d’objet interne est masqué.</value>
+  </data>
+  <data name="InternalTypesHiddenOther" xml:space="preserve">
+    <value>{0} types d’objets internes sont masqués.</value>
+  </data>
+  <data name="InternalTypesExplain" xml:space="preserve">
+    <value>Il s’agit de classes que le système connecté utilise pour sa propre configuration ou son fonctionnement.</value>
+  </data>
+  <data name="ShowInternalTypes" xml:space="preserve">
+    <value>Afficher les types d’objets internes</value>
+  </data>
+  <data name="InternalTypesShown" xml:space="preserve">
+    <value>Les types d’objets internes sont affichés.</value>
+  </data>
+  <data name="HideInternalTypes" xml:space="preserve">
+    <value>Masquer les types d’objets internes</value>
+  </data>
+  <data name="AttributeSelection" xml:space="preserve">
+    <value>Sélection des attributs</value>
+  </data>
+  <data name="AttributeSelectionHelp" xml:space="preserve">
+    <value>Sélectionnez les attributs que JIM doit importer ou exporter pour ce type d’objet. Pour optimiser les performances du système, ne sélectionnez que ceux dont vous avez réellement besoin.</value>
+  </data>
+  <data name="FilterByClass" xml:space="preserve">
+    <value>Filtrer par classe</value>
+  </data>
+  <data name="FilterByClassHelp" xml:space="preserve">
+    <value>Afficher uniquement les attributs d’une classe donnée</value>
+  </data>
+  <data name="SelectAttributesCsv" xml:space="preserve">
+    <value>Sélectionner les attributs par CSV</value>
+  </data>
+  <data name="SelectAttributesCsvHelp" xml:space="preserve">
+    <value>Sélection rapide par liste séparée par des virgules, par exemple DisplayName,sAMAccountName</value>
+  </data>
+  <data name="TypeFilterLabel" xml:space="preserve">
+    <value>Type :</value>
+  </data>
+  <data name="PluralityFilterLabel" xml:space="preserve">
+    <value>Pluralité :</value>
+  </data>
+  <data name="WritabilityFilterLabel" xml:space="preserve">
+    <value>Modifiabilité :</value>
+  </data>
+  <data name="SelectionFilterLabel" xml:space="preserve">
+    <value>Sélection :</value>
+  </data>
+  <data name="ChipSelectedOnly" xml:space="preserve">
+    <value>Sélectionnés uniquement ({0})</value>
+  </data>
+  <data name="OperationalAttributesHiddenOne" xml:space="preserve">
+    <value>{0} attribut opérationnel est masqué.</value>
+  </data>
+  <data name="OperationalAttributesHiddenOther" xml:space="preserve">
+    <value>{0} attributs opérationnels sont masqués.</value>
+  </data>
+  <data name="OperationalAttributesExplain" xml:space="preserve">
+    <value>Le système connecté les maintient pour son propre fonctionnement, par exemple la date de création d’une entrée ou le dernier échec de connexion ; JIM peut les importer, mais jamais les exporter.</value>
+  </data>
+  <data name="ShowOperationalAttributes" xml:space="preserve">
+    <value>Afficher les attributs opérationnels</value>
+  </data>
+  <data name="OperationalAttributesShown" xml:space="preserve">
+    <value>Les attributs opérationnels sont affichés.</value>
+  </data>
+  <data name="HideOperationalAttributes" xml:space="preserve">
+    <value>Masquer les attributs opérationnels</value>
+  </data>
+  <data name="AttributeSingular" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="AttributePlural" xml:space="preserve">
+    <value>Attributs</value>
+  </data>
+  <data name="SearchByName" xml:space="preserve">
+    <value>Rechercher par nom</value>
+  </data>
+  <data name="ColumnSelected" xml:space="preserve">
+    <value>Sélectionné</value>
+  </data>
+  <data name="ColumnExternalId" xml:space="preserve">
+    <value>ID externe</value>
+  </data>
+  <data name="ColumnClass" xml:space="preserve">
+    <value>Classe</value>
+  </data>
+  <data name="ColumnPlurality" xml:space="preserve">
+    <value>Pluralité</value>
+  </data>
+  <data name="ColumnCaseExact" xml:space="preserve">
+    <value>Sensible à la casse</value>
+  </data>
+  <data name="ColumnDateResolution" xml:space="preserve">
+    <value>Précision des dates</value>
+  </data>
+  <data name="ColumnWritability" xml:space="preserve">
+    <value>Modifiabilité</value>
+  </data>
+  <data name="ColumnAction" xml:space="preserve">
+    <value>Action</value>
+  </data>
+  <data name="CredentialAttributeTooltip" xml:space="preserve">
+    <value>Cet attribut contient des éléments d’identification et ne peut pas être géré par JIM. Les mots de passe sont synchronisés par le canal dédié de JIM, qui écrit dans le système connecté sans jamais relire la valeur dans le Metaverse ; ils ne transitent jamais par un flux d’attributs.</value>
+  </data>
+  <data name="ExternalIdUnselectable" xml:space="preserve">
+    <value>Cet attribut ne peut pas être désélectionné, car il s’agit de l’ID externe ou de l’ID externe secondaire. Ces attributs doivent rester sélectionnés pour que les opérations de synchronisation fonctionnent correctement.</value>
+  </data>
+  <data name="ConnectorNeedsValuesUnselectable" xml:space="preserve">
+    <value>Cet attribut ne peut pas être désélectionné, car le connecteur ne peut pas fonctionner sans ses valeurs : il est donc toujours importé.</value>
+  </data>
+  <data name="SecondaryIdChip" xml:space="preserve">
+    <value>ID secondaire</value>
+  </data>
+  <data name="OperationalTooltip" xml:space="preserve">
+    <value>Un attribut opérationnel : le système connecté le maintient pour son propre fonctionnement, et il n’appartient à aucune classe. JIM peut l’importer, mais jamais l’exporter.</value>
+  </data>
+  <data name="OperationalChip" xml:space="preserve">
+    <value>Opérationnel</value>
+  </data>
+  <data name="ReferenceTypeTooltip" xml:space="preserve">
+    <value>Cet attribut de référence déclare pointer vers le type d’objet « {0} », de sorte que les références ne se résolvent qu’au sein de ce seul type d’objet. Déclaré par le schéma du système connecté ; lecture seule.</value>
+  </data>
+  <data name="ReferenceChip" xml:space="preserve">
+    <value>Référence ({0})</value>
+  </data>
+  <data name="PluralitySetTooltip" xml:space="preserve">
+    <value>Défini par un administrateur : une actualisation du schéma le conservera.</value>
+  </data>
+  <data name="PluralityDiscoveredTooltip" xml:space="preserve">
+    <value>Découvert dans le schéma du système connecté.</value>
+  </data>
+  <data name="CaseExactTooltipSet" xml:space="preserve">
+    <value>Des valeurs ne différant que par la casse désignent des choses différentes. Défini par un administrateur : une actualisation du schéma le conservera.</value>
+  </data>
+  <data name="CaseExactTooltipDiscovered" xml:space="preserve">
+    <value>Des valeurs ne différant que par la casse désignent des choses différentes. Découvert dans le schéma du système connecté.</value>
+  </data>
+  <data name="ResolutionTooltipSet" xml:space="preserve">
+    <value>Le plus petit intervalle de temps auquel le système connecté conserve ces dates. Défini par un administrateur : une actualisation du schéma le conservera.</value>
+  </data>
+  <data name="ResolutionTooltipDiscovered" xml:space="preserve">
+    <value>Le plus petit intervalle de temps auquel le système connecté conserve ces dates. Découvert dans le schéma du système connecté.</value>
+  </data>
+  <data name="ResolutionTooltipUndiscovered" xml:space="preserve">
+    <value>Pas encore découvert : actualisez le schéma pour le découvrir. D’ici là, JIM conserve et envoie ces dates à la microseconde près.</value>
+  </data>
+  <data name="NoAttributesMatch" xml:space="preserve">
+    <value>Aucun attribut ne correspond à « {0} »</value>
+  </data>
+  <data name="TryDifferentSearch" xml:space="preserve">
+    <value>Essayez un autre terme de recherche, ou effacez la recherche.</value>
+  </data>
+  <data name="NoAttributesSelected" xml:space="preserve">
+    <value>Aucun attribut n’est sélectionné pour ce type d’objet</value>
+  </data>
+  <data name="ChooseAllAbove" xml:space="preserve">
+    <value>Choisissez Tous ci-dessus pour voir tout ce que le système connecté a signalé, puis sélectionnez les attributs que JIM doit gérer.</value>
+  </data>
+  <data name="NoAttributesMatchFilters" xml:space="preserve">
+    <value>Aucun attribut ne correspond à ces filtres</value>
+  </data>
+  <data name="ClearFilterToWiden" xml:space="preserve">
+    <value>Effacez un filtre de classe, de type, de pluralité ou de modifiabilité ci-dessus pour élargir la liste.</value>
+  </data>
+  <data name="NoAttributesDiscovered" xml:space="preserve">
+    <value>Aucun attribut n’a été découvert pour ce type d’objet</value>
+  </data>
+  <data name="RetrieveAgainOnceReported" xml:space="preserve">
+    <value>Récupérez de nouveau le schéma une fois que le système connecté signale des attributs pour ce type.</value>
+  </data>
+  <data name="SettingsHeading" xml:space="preserve">
+    <value>Paramètres</value>
+  </data>
+  <data name="ExternalIdSelectRequired" xml:space="preserve">
+    <value>Ce connecteur exige que vous sélectionniez l’attribut utilisé comme ID externe. Veuillez en sélectionner un ci-dessous.</value>
+  </data>
+  <data name="ExternalIdAttributeLabel" xml:space="preserve">
+    <value>Attribut d’ID externe</value>
+  </data>
+  <data name="ExternalIdRequiredError" xml:space="preserve">
+    <value>Vous devez sélectionner un attribut comme ID externe.</value>
+  </data>
+  <data name="RemoveContributedLabel" xml:space="preserve">
+    <value>Supprimer les attributs contribués lorsque les objets source sont supprimés</value>
+  </data>
+  <data name="RemoveContributedHelp" xml:space="preserve">
+    <value>Lorsque cette option est activée, les valeurs d’attributs des objets Metaverse joints que ce système contribue à alimenter, pour ce type d’objet, sont supprimées lorsque l’objet source est supprimé.</value>
+  </data>
+  <data name="PreviewChanges" xml:space="preserve">
+    <value>Aperçu des modifications</value>
+  </data>
+  <data name="PreviewStale" xml:space="preserve">
+    <value>La sélection du schéma a été modifiée depuis cet aperçu : il ne décrit donc plus ce que l’enregistrement ferait. Relancez l’aperçu pour obtenir une réponse sur la sélection actuelle.</value>
+  </data>
+  <data name="SchemaSelectionPreviewTitle" xml:space="preserve">
+    <value>Aperçu : sélection du schéma</value>
+  </data>
+  <data name="ApplyFailed" xml:space="preserve">
+    <value>Échec de l’application des modifications du schéma : {0}</value>
+  </data>
+  <data name="AppliedDisabled" xml:space="preserve">
+    <value>Schéma appliqué ; la configuration dépendante a été désactivée.</value>
+  </data>
+  <data name="AppliedRemoved" xml:space="preserve">
+    <value>Schéma appliqué ; la configuration dépendante a été supprimée.</value>
+  </data>
+  <data name="AppliedRemovedQueued" xml:space="preserve">
+    <value>Schéma appliqué ; la configuration dépendante a été supprimée et la suppression des données mise en file d’attente. Suivez-la depuis l’onglet Opérations.</value>
+  </data>
+  <data name="AppliedRemovedNotQueued" xml:space="preserve">
+    <value>Schéma appliqué et configuration supprimée, mais la suppression des données n’a pas pu être mise en file d’attente : {0}</value>
+  </data>
+  <data name="RemoveObjectTypeQuestion" xml:space="preserve">
+    <value>Supprimer le type d’objet ?</value>
+  </data>
+  <data name="RemoveObjectTypeMessage" xml:space="preserve">
+    <value>Supprimer {0} des types d’objets gérés par JIM ? Cela efface sa sélection d’attributs et sa configuration pour ce système connecté. Vous pourrez l’ajouter de nouveau plus tard, mais il vous faudra le reconfigurer.</value>
+  </data>
+  <data name="ConnectedSystemTermName" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="AttributeChangesSaved" xml:space="preserve">
+    <value>Vos modifications d’attributs ont été enregistrées.</value>
+  </data>
+  <data name="DeselectedStillRead" xml:space="preserve">
+    <value>Un attribut désélectionné est toujours lu par : {0}. Il n’est plus importé : ces valeurs lues ne sont donc jamais actualisées.</value>
+  </data>
+  <data name="PreviewStartFailed" xml:space="preserve">
+    <value>Échec du démarrage de l’aperçu : {0}</value>
+  </data>
+  <data name="AttributesSelected" xml:space="preserve">
+    <value>Attributs sélectionnés.</value>
+  </data>
+  <data name="SkippedCredentialAttributes" xml:space="preserve">
+    <value>{0} ignoré : les attributs d’identifiants ne peuvent pas être gérés par JIM. Les mots de passe sont synchronisés par le canal dédié de JIM, et non par un flux d’attributs.</value>
+  </data>
+  <data name="DataTypeNotChanged" xml:space="preserve">
+    <value>Le type de données n’a pas pu être modifié.</value>
+  </data>
+  <data name="PluralityNotChanged" xml:space="preserve">
+    <value>La pluralité n’a pas pu être modifiée.</value>
+  </data>
+  <data name="AttributeUpdatedSingleValued" xml:space="preserve">
+    <value>Attribut mis à jour et rendu monovalué : un booléen ne contient qu’une valeur. Enregistrez vos modifications pour l’appliquer.</value>
+  </data>
+  <data name="AttributeUpdated" xml:space="preserve">
+    <value>Attribut mis à jour. Enregistrez vos modifications pour l’appliquer.</value>
+  </data>
+  <data name="CsvParsingErrorTitle" xml:space="preserve">
+    <value>Erreur d’analyse CSV</value>
+  </data>
+  <data name="DataTypeNotSet" xml:space="preserve">
+    <value>Non défini</value>
+  </data>
+  <data name="DataTypeText" xml:space="preserve">
+    <value>Texte</value>
+  </data>
+  <data name="DataTypeNumber" xml:space="preserve">
+    <value>Nombre</value>
+  </data>
+  <data name="DataTypeDateTime" xml:space="preserve">
+    <value>Date et heure</value>
+  </data>
+  <data name="DataTypeBinary" xml:space="preserve">
+    <value>Binaire</value>
+  </data>
+  <data name="DataTypeReference" xml:space="preserve">
+    <value>Référence</value>
+  </data>
+  <data name="DataTypeGuid" xml:space="preserve">
+    <value>Identifiant unique</value>
+  </data>
+  <data name="DataTypeBoolean" xml:space="preserve">
+    <value>Booléen</value>
+  </data>
+  <data name="DataTypeLongNumber" xml:space="preserve">
+    <value>Grand nombre</value>
+  </data>
+  <data name="DataTypeDecimal" xml:space="preserve">
+    <value>Décimal</value>
+  </data>
+  <data name="ObjectTypesTab" xml:space="preserve">
+    <value>Types d’objets</value>
+  </data>
+  <data name="ValueOfTotal" xml:space="preserve">
+    <value>{0} sur {1}</value>
+  </data>
+  <data name="ContainersSelected" xml:space="preserve">
+    <value>Conteneurs sélectionnés</value>
+  </data>
+  <data name="PartitionsManagedOne" xml:space="preserve">
+    <value>partition gérée</value>
+  </data>
+  <data name="PartitionsManagedOther" xml:space="preserve">
+    <value>partitions gérées</value>
+  </data>
+  <data name="ContainersExcludedOne" xml:space="preserve">
+    <value>conteneur exclu</value>
+  </data>
+  <data name="ContainersExcludedOther" xml:space="preserve">
+    <value>conteneurs exclus</value>
+  </data>
+  <data name="RetrieveHierarchyIntro" xml:space="preserve">
+    <value>Récupérez la hiérarchie {0} du système connecté, pour pouvoir choisir celles que vous voulez gérer avec JIM.</value>
+  </data>
+  <data name="RetrieveHierarchy" xml:space="preserve">
+    <value>Récupérer la hiérarchie</value>
+  </data>
+  <data name="RetrievingHierarchy" xml:space="preserve">
+    <value>Récupération de la hiérarchie…</value>
+  </data>
+  <data name="HierarchyLastRetrieved" xml:space="preserve">
+    <value>Hiérarchie récupérée {0}</value>
+  </data>
+  <data name="HierarchyAsRetrievedFrom" xml:space="preserve">
+    <value>La hiérarchie telle que récupérée la dernière fois depuis {0}</value>
+  </data>
+  <data name="RefreshingHierarchyTitle" xml:space="preserve">
+    <value>Actualisation de la hiérarchie</value>
+  </data>
+  <data name="RefreshHierarchyInfo" xml:space="preserve">
+    <value>L’actualisation relit les partitions et les conteneurs et conserve vos sélections dans la mesure du possible : les éléments existants sont retrouvés par leur ID externe, de sorte que les éléments renommés ou déplacés gardent leur état de sélection. Les partitions et conteneurs qui n’existent plus dans le système connecté (UO supprimées, modifications d’autorisations) sont supprimés. Vérifiez que l’identité du système connecté dispose des autorisations nécessaires pour récupérer la hiérarchie.</value>
+  </data>
+  <data name="Refreshing" xml:space="preserve">
+    <value>Actualisation…</value>
+  </data>
+  <data name="RefreshButton" xml:space="preserve">
+    <value>Actualiser</value>
+  </data>
+  <data name="HierarchyRefreshedSummary" xml:space="preserve">
+    <value>Hiérarchie actualisée : {0}</value>
+  </data>
+  <data name="SelectedItemsRemoved" xml:space="preserve">
+    <value>Éléments sélectionnés supprimés</value>
+  </data>
+  <data name="RunProfilesDisabled" xml:space="preserve">
+    <value>Profils d’exécution désactivés</value>
+  </data>
+  <data name="PartitionsSelected" xml:space="preserve">
+    <value>Partitions sélectionnées</value>
+  </data>
+  <data name="CopyChanges" xml:space="preserve">
+    <value>Copier les modifications</value>
+  </data>
+  <data name="RunProfileHeader" xml:space="preserve">
+    <value>Profil d’exécution</value>
+  </data>
+  <data name="PartitionRemovedHeader" xml:space="preserve">
+    <value>Partition supprimée</value>
+  </data>
+  <data name="PartitionsSelectedExplain" xml:space="preserve">
+    <value>Un conteneur sélectionné a été déplacé dans chacune de ces partitions. Un conteneur n’est importé que lorsque sa partition est sélectionnée : JIM a donc sélectionné la partition pour le conserver dans le périmètre.</value>
+  </data>
+  <data name="PartitionNoun" xml:space="preserve">
+    <value>Partition</value>
+  </data>
+  <data name="ContainerNoun" xml:space="preserve">
+    <value>Conteneur</value>
+  </data>
+  <data name="ContainersMovedIn" xml:space="preserve">
+    <value>Conteneurs déplacés</value>
+  </data>
+  <data name="WasSelected" xml:space="preserve">
+    <value>Était sélectionné</value>
+  </data>
+  <data name="RemovedHeading" xml:space="preserve">
+    <value>Supprimés</value>
+  </data>
+  <data name="AddedHeading" xml:space="preserve">
+    <value>Ajoutés</value>
+  </data>
+  <data name="RenamedHeading" xml:space="preserve">
+    <value>Renommés</value>
+  </data>
+  <data name="OldName" xml:space="preserve">
+    <value>Ancien nom</value>
+  </data>
+  <data name="NewName" xml:space="preserve">
+    <value>Nouveau nom</value>
+  </data>
+  <data name="MovedHeading" xml:space="preserve">
+    <value>Déplacés</value>
+  </data>
+  <data name="OldParent" xml:space="preserve">
+    <value>Ancien parent</value>
+  </data>
+  <data name="NewParent" xml:space="preserve">
+    <value>Nouveau parent</value>
+  </data>
+  <data name="NoPartitionsSelectedLabel" xml:space="preserve">
+    <value>Aucune partition ni aucun conteneur n’a été sélectionné.</value>
+  </data>
+  <data name="NoPartitionsSelectedBody" xml:space="preserve">
+    <value>Vous devez sélectionner au moins une partition{0} avant de pouvoir configurer les règles de correspondance d’objets ou créer des profils d’exécution.</value>
+  </data>
+  <data name="AndContainerWithinPartition" xml:space="preserve">
+    <value> et au moins un conteneur dans cette partition</value>
+  </data>
+  <data name="ContainerScopeEditorLabel" xml:space="preserve">
+    <value>Éditeur de la portée du conteneur</value>
+  </data>
+  <data name="ScopeTextModeHelp" xml:space="preserve">
+    <value>Une instruction par ligne, dans l’ordre de la hiérarchie. Elle énonce l’ensemble de la portée du conteneur : un conteneur qu’elle ne nomme pas n’est pas géré.</value>
+  </data>
+  <data name="ScopeTreeModeHelp" xml:space="preserve">
+    <value>Cochez les conteneurs à gérer. Avancé exprime le même périmètre sous forme de texte, pour une hiérarchie trop grande pour être parcourue au clic.</value>
+  </data>
+  <data name="ContainerScopeLabel" xml:space="preserve">
+    <value>Portée du conteneur</value>
+  </data>
+  <data name="ScopeTextHelper" xml:space="preserve">
+    <value>include (ou +) ou exclude (ou -), un niveau facultatif, puis le chemin du conteneur. Les lignes vides et celles qui commencent par # sont ignorées.</value>
+  </data>
+  <data name="ScopeNotApplied" xml:space="preserve">
+    <value>Cette portée du conteneur n’a pas été appliquée.</value>
+  </data>
+  <data name="NothingChanged" xml:space="preserve">
+    <value>Rien n’a été modifié.</value>
+  </data>
+  <data name="ScopeErrorLine" xml:space="preserve">
+    <value>Ligne {0} : {1}</value>
+  </data>
+  <data name="ScopeApplyingExplain" xml:space="preserve">
+    <value>Appliquer modifie la sélection ; rien n’atteint le système connecté tant que vous n’avez pas enregistré.</value>
+  </data>
+  <data name="ManagePartition" xml:space="preserve">
+    <value>Gérer cette partition</value>
+  </data>
+  <data name="UnsavedChangesImports" xml:space="preserve">
+    <value>Modifications non enregistrées de ce que ce système connecté importe</value>
+  </data>
+  <data name="NoUnsavedChanges" xml:space="preserve">
+    <value>Aucune modification non enregistrée</value>
+  </data>
+  <data name="ScopePreviewStale" xml:space="preserve">
+    <value>La sélection a été modifiée depuis cet aperçu : elle ne décrit donc plus ce que l’enregistrement ferait. Relancez l’aperçu pour obtenir une réponse sur la sélection actuelle.</value>
+  </data>
+  <data name="ScopePreviewTitle" xml:space="preserve">
+    <value>Aperçu : partitions et conteneurs</value>
+  </data>
+  <data name="ScopeSimple" xml:space="preserve">
+    <value>Simple</value>
+  </data>
+  <data name="ScopeAdvanced" xml:space="preserve">
+    <value>Avancé</value>
+  </data>
+  <data name="ScopeAppliedSave" xml:space="preserve">
+    <value>Portée du conteneur appliquée. Enregistrez vos modifications pour les envoyer au système connecté.</value>
+  </data>
+  <data name="RefreshCancelled" xml:space="preserve">
+    <value>Actualisation de la hiérarchie annulée. Rien n’a été modifié.</value>
+  </data>
+  <data name="RefreshedDisabledOne" xml:space="preserve">
+    <value>Hiérarchie actualisée. {0} profil d’exécution ciblant une partition supprimée a été désactivé.</value>
+  </data>
+  <data name="RefreshedDisabledOther" xml:space="preserve">
+    <value>Hiérarchie actualisée. {0} profils d’exécution ciblant une partition supprimée ont été désactivés.</value>
+  </data>
+  <data name="RefreshedWithWarnings" xml:space="preserve">
+    <value>Hiérarchie actualisée avec des avertissements. Certains éléments sélectionnés ont été supprimés.</value>
+  </data>
+  <data name="RefreshedKeepInScope" xml:space="preserve">
+    <value>Hiérarchie actualisée : {0}, pour conserver dans le périmètre les conteneurs sélectionnés qui y ont été déplacés.</value>
+  </data>
+  <data name="RefreshedNoChanges" xml:space="preserve">
+    <value>Hiérarchie actualisée. Aucune modification détectée.</value>
+  </data>
+  <data name="RefreshFailed" xml:space="preserve">
+    <value>Échec de l’actualisation de la hiérarchie : {0}</value>
+  </data>
+  <data name="RetrieveFailed" xml:space="preserve">
+    <value>Échec de la récupération de la hiérarchie : {0}</value>
+  </data>
+  <data name="DiscardUnsavedTitle" xml:space="preserve">
+    <value>Abandonner les modifications non enregistrées ?</value>
+  </data>
+  <data name="DiscardUnsavedBody" xml:space="preserve">
+    <value>L’actualisation de la hiérarchie abandonne vos modifications non enregistrées de ce que ce système connecté importe.</value>
+  </data>
+  <data name="DiscardAndRefresh" xml:space="preserve">
+    <value>Abandonner et actualiser</value>
+  </data>
+  <data name="ClipboardTitle" xml:space="preserve">
+    <value>Résultats de l’actualisation de la hiérarchie</value>
+  </data>
+  <data name="ClipboardSummary" xml:space="preserve">
+    <value>Résumé : {0}</value>
+  </data>
+  <data name="ClipboardTotalPartitions" xml:space="preserve">
+    <value>Total des partitions : {0}</value>
+  </data>
+  <data name="ClipboardTotalContainers" xml:space="preserve">
+    <value>Total des conteneurs : {0}</value>
+  </data>
+  <data name="ClipboardRunProfilesDisabled" xml:space="preserve">
+    <value>PROFILS D’EXÉCUTION DÉSACTIVÉS :</value>
+  </data>
+  <data name="ClipboardRunProfile" xml:space="preserve">
+    <value>  {0} (partition {1})</value>
+  </data>
+  <data name="ClipboardPartitionsSelected" xml:space="preserve">
+    <value>PARTITIONS SÉLECTIONNÉES (un conteneur sélectionné y a été déplacé) :</value>
+  </data>
+  <data name="ClipboardPartitionSelectedLine" xml:space="preserve">
+    <value>  [Partition] {0} ({1}) : {2}</value>
+  </data>
+  <data name="ClipboardRemoved" xml:space="preserve">
+    <value>SUPPRIMÉS :</value>
+  </data>
+  <data name="ClipboardRemovedPartition" xml:space="preserve">
+    <value>  [Partition] {0} ({1}){2}</value>
+  </data>
+  <data name="ClipboardRemovedContainer" xml:space="preserve">
+    <value>  [Conteneur] {0} ({1}){2}</value>
+  </data>
+  <data name="ClipboardWasSelected" xml:space="preserve">
+    <value> - ÉTAIT SÉLECTIONNÉ !</value>
+  </data>
+  <data name="ClipboardAdded" xml:space="preserve">
+    <value>AJOUTÉS :</value>
+  </data>
+  <data name="ClipboardPartitionLine" xml:space="preserve">
+    <value>  [Partition] {0} ({1})</value>
+  </data>
+  <data name="ClipboardContainerLine" xml:space="preserve">
+    <value>  [Conteneur] {0} ({1})</value>
+  </data>
+  <data name="ClipboardRenamed" xml:space="preserve">
+    <value>RENOMMÉS :</value>
+  </data>
+  <data name="ClipboardRenamedPartition" xml:space="preserve">
+    <value>  [Partition] « {0} » -&gt; « {1} » ({2})</value>
+  </data>
+  <data name="ClipboardRenamedContainer" xml:space="preserve">
+    <value>  [Conteneur] « {0} » -&gt; « {1} » ({2})</value>
+  </data>
+  <data name="ClipboardMoved" xml:space="preserve">
+    <value>DÉPLACÉS :</value>
+  </data>
+  <data name="ClipboardMovedContainer" xml:space="preserve">
+    <value>  [Conteneur] {0} : {1} -&gt; {2}</value>
+  </data>
+  <data name="ClipboardRoot" xml:space="preserve">
+    <value>(racine)</value>
+  </data>
+  <data name="ChangesCopied" xml:space="preserve">
+    <value>Modifications copiées dans le presse-papiers</value>
+  </data>
+  <data name="ChangesCopyFailed" xml:space="preserve">
+    <value>Échec de la copie dans le presse-papiers. Copiez-les manuellement.</value>
+  </data>
+  <data name="HierarchySaved" xml:space="preserve">
+    <value>Vos modifications de hiérarchie ont été enregistrées.</value>
+  </data>
+  <data name="PreviewTitle" xml:space="preserve">
+    <value>Aperçu de l’actualisation du schéma</value>
+  </data>
+  <data name="PreviewIntro" xml:space="preserve">
+    <value>Le système connecté a signalé les modifications ci-dessous. {0} ; examinez-les, puis décidez de la suite.</value>
+  </data>
+  <data name="PreviewNothingApplied" xml:space="preserve">
+    <value>Rien n’a encore été appliqué</value>
+  </data>
+  <data name="PreviewDiscoveryText" xml:space="preserve">
+    <value>Le connecteur n’a pas tout découvert et a contourné les lacunes ci-dessous. Une lecture partielle peut faire apparaître des types d’objets ou des attributs comme supprimés alors qu’ils ne le sont pas ; vérifiez-les avant d’appliquer.</value>
+  </data>
+  <data name="PreviewCredentialExplain" xml:space="preserve">
+    <value>Ils contiennent des éléments d’identification et ne sont jamais gérés par JIM.</value>
+  </data>
+  <data name="PreviewAdditions" xml:space="preserve">
+    <value>Ajouts : applicables sans risque</value>
+  </data>
+  <data name="PreviewAdditionsRenames" xml:space="preserve">
+    <value>Ajouts et renommages : applicables sans risque</value>
+  </data>
+  <data name="PreviewClassificationHeading" xml:space="preserve">
+    <value>Classification des types d’objets : à examiner avant d’appliquer</value>
+  </data>
+  <data name="PreviewReclassifiedBody" xml:space="preserve">
+    <value>Applique l’actualisation peut modifier {0}. Par défaut, chaque objet dont le type d’objet changerait est refusé lors de la prochaine importation et signalé par une erreur {1} ; JIM le conserve exactement tel quel, de sorte que rien n’est déprovisionné. Si la modification est voulue, exécutez un profil d’exécution d’importation complète avec {2} activé pour la réaliser. L’annulation conserve la classification actuelle.</value>
+  </data>
+  <data name="PreviewReclassifiedWhich" xml:space="preserve">
+    <value>à quel type d’objet résolvent les entrées existantes</value>
+  </data>
+  <data name="PreviewObjectTypeChangedError" xml:space="preserve">
+    <value>Type d’objet modifié</value>
+  </data>
+  <data name="PreviewAllowObjectTypeChanges" xml:space="preserve">
+    <value>Autoriser les modifications de type d’objet</value>
+  </data>
+  <data name="PreviewLearnMore" xml:space="preserve">
+    <value>En savoir plus</value>
+  </data>
+  <data name="PreviewDestructiveHeading" xml:space="preserve">
+    <value>Destructif : à examiner avant de continuer</value>
+  </data>
+  <data name="PreviewDependentsHeading" xml:space="preserve">
+    <value>Configuration qui dépend de ces modifications</value>
+  </data>
+  <data name="PreviewSyncRuleWord" xml:space="preserve">
+    <value>Règle de synchronisation</value>
+  </data>
+  <data name="PreviewRuleBoundTo" xml:space="preserve">
+    <value>est liée au type d’objet {0}, avec {1}.</value>
+  </data>
+  <data name="PreviewMappingsOne" xml:space="preserve">
+    <value>{0} mappage</value>
+  </data>
+  <data name="PreviewMappingsOther" xml:space="preserve">
+    <value>{0} mappages</value>
+  </data>
+  <data name="PreviewMappingWord" xml:space="preserve">
+    <value>Mappage</value>
+  </data>
+  <data name="PreviewOnWord" xml:space="preserve">
+    <value>sur</value>
+  </data>
+  <data name="PreviewMappingDisabled" xml:space="preserve">
+    <value>désactivé.</value>
+  </data>
+  <data name="PreviewMappingDeleted" xml:space="preserve">
+    <value>supprimé.</value>
+  </data>
+  <data name="PreviewRuleDisabledSuffix" xml:space="preserve">
+    <value>désactivée, avec {0}.</value>
+  </data>
+  <data name="PreviewRuleDeletedSuffix" xml:space="preserve">
+    <value>supprimée, avec {0}.</value>
+  </data>
+  <data name="PreviewMatchingRule" xml:space="preserve">
+    <value>Règle de correspondance d’objets sur {0} : {1}</value>
+  </data>
+  <data name="PreviewReaderLine" xml:space="preserve">
+    <value>{0} lit un attribut que le système connecté ne signale plus.</value>
+  </data>
+  <data name="PreviewOpen" xml:space="preserve">
+    <value>Ouvrir</value>
+  </data>
+  <data name="PreviewRemovalUnavailable" xml:space="preserve">
+    <value>Appliquer et supprimer est indisponible.</value>
+  </data>
+  <data name="PreviewRemovalRefused" xml:space="preserve">
+    <value>{0} Elle supprimerait des attributs que {1} lisent encore, et JIM ne les retire pas à votre place : un critère de périmètre qui ne lit plus rien fait sortir des objets du périmètre. Modifiez-les d’abord, ou utilisez {2}, qui conserve les attributs.</value>
+  </data>
+  <data name="PreviewReaderCountOne" xml:space="preserve">
+    <value>{0} élément de configuration ci-dessus</value>
+  </data>
+  <data name="PreviewReaderCountOther" xml:space="preserve">
+    <value>{0} éléments de configuration ci-dessus</value>
+  </data>
+  <data name="PreviewRetainedBody" xml:space="preserve">
+    <value>Les types d’objets et les attributs que le système connecté ne signale plus sont {0} dans JIM lorsque vous appliquez ; rien n’est supprimé, mais leurs valeurs cessent d’être actualisées, et les objets d’un type d’objet supprimé seront rendus obsolètes par la prochaine importation complète, que vous appliquiez ou non. Les modifications de définition des attributs sont appliquées, et un mappage validé sur l’ancienne définition peut ne plus se comporter comme prévu.</value>
+  </data>
+  <data name="PreviewRetainedWord" xml:space="preserve">
+    <value>conservés</value>
+  </data>
+  <data name="PreviewActionRequiredText" xml:space="preserve">
+    <value>Certains attributs que le système connecté ne signale plus sont encore référencés par des règles de synchronisation. Mettez à jour vos règles de synchronisation pour supprimer les références à ces attributs.</value>
+  </data>
+  <data name="PreviewApplyButton" xml:space="preserve">
+    <value>Appliquer les modifications du schéma</value>
+  </data>
+  <data name="PreviewApplyDisableButton" xml:space="preserve">
+    <value>Appliquer et désactiver les éléments dépendants…</value>
+  </data>
+  <data name="PreviewApplyRemoveButton" xml:space="preserve">
+    <value>Appliquer et supprimer…</value>
+  </data>
+  <data name="PreviewApplyDisableName" xml:space="preserve">
+    <value>Appliquer et désactiver les éléments dépendants</value>
+  </data>
+  <data name="PreviewApplyRemoveName" xml:space="preserve">
+    <value>Appliquer et supprimer</value>
+  </data>
+  <data name="PreviewDisableDialogTitle" xml:space="preserve">
+    <value>Appliquer le schéma et désactiver les éléments dépendants ?</value>
+  </data>
+  <data name="PreviewDisableIntro" xml:space="preserve">
+    <value>Le nouveau schéma est enregistré, et tout ce qui figure ci-dessous est {0} avec le motif indiqué, afin que rien ne s’exécute sur des entrées que le système connecté ne signale plus. Aucun objet ni aucune valeur n’est modifié. La réactivation se fait manuellement, règle par règle ou mappage par mappage.</value>
+  </data>
+  <data name="PreviewDisabledWord" xml:space="preserve">
+    <value>désactivés</value>
+  </data>
+  <data name="PreviewMatchingNoDisabled" xml:space="preserve">
+    <value>Object Matching n’a pas d’état désactivé : ces éléments nécessitent donc votre attention séparément :</value>
+  </data>
+  <data name="PreviewMatchingReason" xml:space="preserve">
+    <value>{0} : {1}</value>
+  </data>
+  <data name="PreviewBack" xml:space="preserve">
+    <value>Retour</value>
+  </data>
+  <data name="PreviewApplyDisableConfirm" xml:space="preserve">
+    <value>Appliquer et désactiver</value>
+  </data>
+  <data name="PreviewRemoveDialogTitle" xml:space="preserve">
+    <value>Appliquer le schéma et supprimer les éléments dépendants ?</value>
+  </data>
+  <data name="PreviewDeletesLead" xml:space="preserve">
+    <value>Cette opération supprime la configuration et les données d’identité.</value>
+  </data>
+  <data name="PreviewDeletesBody" xml:space="preserve">
+    <value>La configuration ci-dessous est supprimée, et la suppression des données s’exécute en tâche de fond que vous pouvez suivre depuis la file d’opérations.</value>
+  </data>
+  <data name="PreviewConfigDeleted" xml:space="preserve">
+    <value>Configuration supprimée</value>
+  </data>
+  <data name="PreviewDataRemoved" xml:space="preserve">
+    <value>Données supprimées</value>
+  </data>
+  <data name="PreviewObjectsObsoleteOne" xml:space="preserve">
+    <value>{0} objet de système connecté du type d’objet {1} marqué comme obsolète.</value>
+  </data>
+  <data name="PreviewObjectsObsoleteOther" xml:space="preserve">
+    <value>{0} objets de systèmes connectés du type d’objet {1} marqués comme obsolètes.</value>
+  </data>
+  <data name="PreviewStoredValuesOne" xml:space="preserve">
+    <value>{0} valeur stockée de l’attribut {1} sur {2} supprimée.</value>
+  </data>
+  <data name="PreviewStoredValuesOther" xml:space="preserve">
+    <value>{0} valeurs stockées de l’attribut {1} sur {2} supprimées.</value>
+  </data>
+  <data name="PreviewObsoletedBody" xml:space="preserve">
+    <value>Les objets rendus obsolètes suivent le processus de déprovisionnement standard lors de la prochaine exécution de synchronisation : déconnexion, rappel des attributs, délais de grâce et règles de suppression du Metaverse s’appliquent, selon la configuration.</value>
+  </data>
+  <data name="PreviewMatchingNotDeleted" xml:space="preserve">
+    <value>Les règles de correspondance d’objets ne sont pas supprimées par cette option ; ces éléments nécessitent donc votre attention séparément :</value>
+  </data>
+  <data name="PreviewApplyRemoveConfirm" xml:space="preserve">
+    <value>Appliquer et supprimer</value>
+  </data>
+  <data name="PreviewCancelTitle" xml:space="preserve">
+    <value>Annuler sans appliquer ?</value>
+  </data>
+  <data name="PreviewCancelBody" xml:space="preserve">
+    <value>Annuler ne préserve pas le statu quo. La prochaine importation complète ne trouvera aucun objet d’un type d’objet supprimé et les rendra obsolètes de toute façon, et la source envoie désormais des attributs redéfinis sous leur nouvelle forme : les mappages validés sur l’ancienne définition risquent donc de mal se comporter. Vous pouvez relancer l’actualisation à tout moment pour décider.</value>
+  </data>
+  <data name="PreviewCancelRefresh" xml:space="preserve">
+    <value>Annuler l’actualisation</value>
+  </data>
+  <data name="PreviewKeepReviewing" xml:space="preserve">
+    <value>Continuer l’examen</value>
+  </data>
+  <data name="PreviewViaExpression" xml:space="preserve">
+    <value> (lu par son expression)</value>
+  </data>
+  <data name="MatchingRulesSharedIntro" xml:space="preserve">
+    <value>Les règles de correspondance sont définies ici par type d’objet et partagées entre toutes les règles de synchronisation.</value>
+  </data>
+  <data name="MatchingRulesPerRuleIntro" xml:space="preserve">
+    <value>Les règles de correspondance sont configurées sur chaque règle de synchronisation.</value>
+  </data>
+  <data name="AdvancedModeInfo" xml:space="preserve">
+    <value>En mode avancé, les règles de correspondance sont configurées sur chaque règle de synchronisation. Cela permet d’appliquer une logique de correspondance différente selon les scénarios.</value>
+  </data>
+  <data name="GoToSyncRules" xml:space="preserve">
+    <value>Aller aux règles de synchronisation</value>
+  </data>
+  <data name="NoObjectTypesConfigured" xml:space="preserve">
+    <value>Aucun type d’objet n’est configuré. Importez d’abord le schéma pour configurer les règles de correspondance d’objets.</value>
+  </data>
+  <data name="NoObjectTypesSelected" xml:space="preserve">
+    <value>Aucun type d’objet n’est sélectionné. Sélectionnez d’abord des types d’objets dans l’onglet Schéma.</value>
+  </data>
+  <data name="SwitchToMode" xml:space="preserve">
+    <value>Passer en mode {0}</value>
+  </data>
+  <data name="AdvancedModeName" xml:space="preserve">
+    <value>Mode avancé</value>
+  </data>
+  <data name="SimpleModeName" xml:space="preserve">
+    <value>Mode simple</value>
+  </data>
+  <data name="SwitchingToAdvancedBody" xml:space="preserve">
+    <value>Passer en {0} vous permettra de configurer des règles de correspondance différentes pour chaque règle de synchronisation.</value>
+  </data>
+  <data name="MatchingRulesCopiedNote" xml:space="preserve">
+    <value>Les règles de correspondance actuelles seront copiées vers toutes les règles de synchronisation d’importation existantes de ce système connecté, pour vous donner un point de départ à personnaliser.</value>
+  </data>
+  <data name="SwitchingToSimpleBody" xml:space="preserve">
+    <value>Passer en {0} configurera ici les règles de correspondance, partagées entre toutes les règles de synchronisation.</value>
+  </data>
+  <data name="MigrationLabel" xml:space="preserve">
+    <value>Migration :</value>
+  </data>
+  <data name="MigrationBody" xml:space="preserve">
+    <value>Les règles de correspondance issues des règles de synchronisation seront analysées et migrées au niveau du type d’objet :</value>
+  </data>
+  <data name="MigrationSame" xml:space="preserve">
+    <value>Si toutes les règles de synchronisation ont les mêmes règles de correspondance, elles seront utilisées directement.</value>
+  </data>
+  <data name="MigrationDifferent" xml:space="preserve">
+    <value>Si les règles de synchronisation ont des règles de correspondance différentes, la configuration la plus courante sera retenue.</value>
+  </data>
+  <data name="MigrationCleared" xml:space="preserve">
+    <value>Les règles de correspondance seront effacées de toutes les règles de synchronisation après la migration.</value>
+  </data>
+  <data name="ObjectMatchingPreviewImpact" xml:space="preserve">
+    <value>Aperçu de l’impact</value>
+  </data>
+  <data name="SwitchingMode" xml:space="preserve">
+    <value>Changement en cours…</value>
+  </data>
+  <data name="SwitchMode" xml:space="preserve">
+    <value>Changer de mode</value>
+  </data>
+  <data name="PreviewObjectMatchingTitle" xml:space="preserve">
+    <value>Aperçu : impact sur la correspondance d’objets</value>
+  </data>
+  <data name="AddMatchingRule" xml:space="preserve">
+    <value>Ajouter une règle de correspondance</value>
+  </data>
+  <data name="MatchingRulesFor" xml:space="preserve">
+    <value>Règles de correspondance pour {0}</value>
+  </data>
+  <data name="UnworkableOne" xml:space="preserve">
+    <value>{0} règle de correspondance ne peut correspondre à rien.</value>
+  </data>
+  <data name="UnworkableOther" xml:space="preserve">
+    <value>{0} règles de correspondance ne peuvent correspondre à rien.</value>
+  </data>
+  <data name="UnworkableBodyOne" xml:space="preserve">
+    <value>Les objets qui devraient rejoindre un objet Metaverse existant en créeront un nouveau à la place. Supprimez-la et recréez-la :</value>
+  </data>
+  <data name="UnworkableBodyOther" xml:space="preserve">
+    <value>Les objets qui devraient rejoindre un objet Metaverse existant en créeront un nouveau à la place. Supprimez-les et recréez-les :</value>
+  </data>
+  <data name="UnworkableRuleLine" xml:space="preserve">
+    <value>Règle {0} : {1}</value>
+  </data>
+  <data name="ObjectMatchingRuleSingular" xml:space="preserve">
+    <value>règle de correspondance d’objets</value>
+  </data>
+  <data name="ObjectMatchingRulePlural" xml:space="preserve">
+    <value>règles de correspondance d’objets</value>
+  </data>
+  <data name="SearchByAttributeOrExpression" xml:space="preserve">
+    <value>Rechercher par nom d’attribut ou expression</value>
+  </data>
+  <data name="MatchValueColumn" xml:space="preserve">
+    <value>Valeur comparée</value>
+  </data>
+  <data name="OperatorColumn" xml:space="preserve">
+    <value>Opérateur</value>
+  </data>
+  <data name="EqualsOperator" xml:space="preserve">
+    <value>égale à</value>
+  </data>
+  <data name="MetaverseAttributeColumn" xml:space="preserve">
+    <value>Attribut Metaverse</value>
+  </data>
+  <data name="CaseSensitiveColumn" xml:space="preserve">
+    <value>Sensible à la casse</value>
+  </data>
+  <data name="ActionsColumn" xml:space="preserve">
+    <value>Actions</value>
+  </data>
+  <data name="MoveUp" xml:space="preserve">
+    <value>Monter</value>
+  </data>
+  <data name="MoveDown" xml:space="preserve">
+    <value>Descendre</value>
+  </data>
+  <data name="NoRulesMatchSearch" xml:space="preserve">
+    <value>Aucune règle de correspondance d’objets ne correspond à « {0} »</value>
+  </data>
+  <data name="NoRulesConfigured" xml:space="preserve">
+    <value>Aucune règle de correspondance d’objets configurée</value>
+  </data>
+  <data name="NoRulesHint" xml:space="preserve">
+    <value>Les objets de ce type ne correspondront que s’ils sont joints manuellement. Utilisez le panneau Ajouter une règle de correspondance ci-dessus pour en définir une.</value>
+  </data>
+  <data name="MatchingRuleCreated" xml:space="preserve">
+    <value>La règle de correspondance a été créée.</value>
+  </data>
+  <data name="MatchingRuleCreateFailed" xml:space="preserve">
+    <value>Échec de la création de la règle de correspondance. Réessayez ou consultez les journaux du serveur pour plus de détails.</value>
+  </data>
+  <data name="DeleteMatchingRuleTitle" xml:space="preserve">
+    <value>Supprimer la règle de correspondance</value>
+  </data>
+  <data name="DeleteMatchingRuleMessage" xml:space="preserve">
+    <value>Voulez-vous vraiment supprimer cette règle de correspondance ? Cette action est irréversible.</value>
+  </data>
+  <data name="MatchingRuleDeleted" xml:space="preserve">
+    <value>La règle de correspondance a été supprimée.</value>
+  </data>
+  <data name="MatchingRuleDeleteFailed" xml:space="preserve">
+    <value>Échec de la suppression de la règle de correspondance. Réessayez ou consultez les journaux du serveur pour plus de détails.</value>
+  </data>
+  <data name="MatchingRuleCaseState" xml:space="preserve">
+    <value>La règle de correspondance est désormais {0}.</value>
+  </data>
+  <data name="CaseSensitiveWord" xml:space="preserve">
+    <value>sensible à la casse</value>
+  </data>
+  <data name="CaseInsensitiveWord" xml:space="preserve">
+    <value>insensible à la casse</value>
+  </data>
+  <data name="MatchingRuleUpdateFailed" xml:space="preserve">
+    <value>Échec de la mise à jour de la règle de correspondance. Réessayez ou consultez les journaux du serveur pour plus de détails.</value>
+  </data>
+  <data name="MatchingRulesReorderFailed" xml:space="preserve">
+    <value>Échec du réordonnancement des règles de correspondance. Réessayez ou consultez les journaux du serveur pour plus de détails.</value>
+  </data>
+  <data name="ModeSwitchFailed" xml:space="preserve">
+    <value>Échec du changement de mode : {0}</value>
+  </data>
+  <data name="ModeSwitchFailedGeneric" xml:space="preserve">
+    <value>Échec du changement de mode. Réessayez ou consultez les journaux du serveur pour plus de détails.</value>
+  </data>
+  <data name="SwitchedToAdvancedOne" xml:space="preserve">
+    <value>Passage en mode avancé. Règles de correspondance copiées vers {0} règle de synchronisation.</value>
+  </data>
+  <data name="SwitchedToAdvancedOther" xml:space="preserve">
+    <value>Passage en mode avancé. Règles de correspondance copiées vers {0} règles de synchronisation.</value>
+  </data>
+  <data name="SwitchedToSimpleOne" xml:space="preserve">
+    <value>Passage en mode simple. Règles de correspondance définies sur {0} type d’objet.</value>
+  </data>
+  <data name="SwitchedToSimpleOther" xml:space="preserve">
+    <value>Passage en mode simple. Règles de correspondance définies sur {0} types d’objets.</value>
+  </data>
+  <data name="DataFlowIntro" xml:space="preserve">
+    <value>Chaque flux de données d’attribut configuré dans tous les systèmes connectés, dans les deux sens. Utilisez-le pour répondre à « d’où vient la valeur de cet attribut, et qu’est-ce qui l’écrit ? » sans ouvrir chaque règle de synchronisation.</value>
+  </data>
+  <data name="DataFlowDirectionLabel" xml:space="preserve">
+    <value>Sens</value>
+  </data>
+  <data name="DataFlowMetaverseObjectType" xml:space="preserve">
+    <value>Type d’objet Metaverse</value>
+  </data>
+  <data name="DataFlowMetaverseAttribute" xml:space="preserve">
+    <value>Attribut Metaverse</value>
+  </data>
+  <data name="MultipleContributorsTooltip" xml:space="preserve">
+    <value>Affiche uniquement les flux entrants dont l’attribut Metaverse est alimenté par plus d’une règle de synchronisation. C’est une configuration normale : c’est simplement le cas où l’ordre de priorité détermine la valeur retenue.</value>
+  </data>
+  <data name="MultipleContributors" xml:space="preserve">
+    <value>Plusieurs contributeurs</value>
+  </data>
+  <data name="SearchScopeText" xml:space="preserve">
+    <value>La recherche porte sur les règles de synchronisation, les systèmes connectés, les types d’objets, les noms d’attributs des deux côtés et le texte des expressions. Les filtres d’attributs ne peuvent pas retrouver un flux dont le côté concerné est une expression, car les références d’attributs d’une expression se trouvent dans son texte ; la recherche, elle, les trouve.</value>
+  </data>
+  <data name="DataFlowSingular" xml:space="preserve">
+    <value>flux de données</value>
+  </data>
+  <data name="DataFlowPlural" xml:space="preserve">
+    <value>flux de données</value>
+  </data>
+  <data name="SearchDataFlows" xml:space="preserve">
+    <value>Rechercher des flux de données</value>
+  </data>
+  <data name="DataFlowCsObjectType" xml:space="preserve">
+    <value>Type d’objet de système connecté</value>
+  </data>
+  <data name="DataFlowCsAttribute" xml:space="preserve">
+    <value>Attribut de système connecté</value>
+  </data>
+  <data name="DirectionTooltip" xml:space="preserve">
+    <value>{0} : la valeur circule dans ce sens</value>
+  </data>
+  <data name="DataFlowPriority" xml:space="preserve">
+    <value>Priorité</value>
+  </data>
+  <data name="PriorityColumnTooltip" xml:space="preserve">
+    <value>Position d’un flux entrant dans l’ordre de toutes les contributions au même attribut Metaverse, 1 étant la plus élevée. Elle ne décide de quelque chose que lorsque plusieurs règles de synchronisation contribuent, ce que signalent les lignes en surbrillance.</value>
+  </data>
+  <data name="NullIsValueTooltip" xml:space="preserve">
+    <value>Cette contribution affirme de façon définitive « aucune valeur » : une valeur vide l’emporte donc au lieu de passer au contributeur suivant.</value>
+  </data>
+  <data name="DataFlowNullIsValue" xml:space="preserve">
+    <value>Null est une valeur</value>
+  </data>
+  <data name="DriftCorrectionTooltip" xml:space="preserve">
+    <value>La correction de dérive est activée pour cette règle : une valeur modifiée dans le système connecté est ramenée à la valeur du Metaverse.</value>
+  </data>
+  <data name="DataFlowEnforceState" xml:space="preserve">
+    <value>Appliquer l’état</value>
+  </data>
+  <data name="DisabledRuleTooltip" xml:space="preserve">
+    <value>Cette règle de synchronisation est désactivée : ce flux est configuré, mais il ne transfère aucune donnée.</value>
+  </data>
+  <data name="DataFlowNoMatchSearch" xml:space="preserve">
+    <value>Aucun flux de données ne correspond à « {0} »</value>
+  </data>
+  <data name="DataFlowNoMatchFilters" xml:space="preserve">
+    <value>Aucun flux de données ne correspond à ces filtres</value>
+  </data>
+  <data name="DataFlowClearFilter" xml:space="preserve">
+    <value>Effacez l’un des filtres ci-dessus pour élargir la liste.</value>
+  </data>
+  <data name="DataFlowNoneConfigured" xml:space="preserve">
+    <value>Aucun flux de données n’est configuré</value>
+  </data>
+  <data name="DataFlowNoneHint" xml:space="preserve">
+    <value>Ajoutez des flux d’attributs à une règle de synchronisation et ils apparaîtront ici.</value>
+  </data>
+  <data name="DataFlowOptions" xml:space="preserve">
+    <value>Options</value>
+  </data>
+  <data name="AuxDialogTitle" xml:space="preserve">
+    <value>Classes auxiliaires pour {0}</value>
+  </data>
+  <data name="AuxNoneDefined" xml:space="preserve">
+    <value>{0} ne définit aucune classe auxiliaire : il n’y a donc rien à fusionner dans {1}.</value>
+  </data>
+  <data name="AuxIntro" xml:space="preserve">
+    <value>Seules les classes que vous activez ici façonnent le schéma ; les suggestions ne s’appliquent jamais d’elles-mêmes. Les attributs d’une classe fusionnée rejoignent le type d’objet à la prochaine actualisation du schéma.</value>
+  </data>
+  <data name="AuxSearchLabel" xml:space="preserve">
+    <value>Rechercher des classes auxiliaires</value>
+  </data>
+  <data name="AuxChipSuggested" xml:space="preserve">
+    <value>Suggérées ({0})</value>
+  </data>
+  <data name="AuxChipInUse" xml:space="preserve">
+    <value>En usage ({0})</value>
+  </data>
+  <data name="AuxNothingSuggested" xml:space="preserve">
+    <value>Rien n’est suggéré. Lancez la découverte ci-dessous, ou affichez toutes les classes du schéma.</value>
+  </data>
+  <data name="AuxNoMatch" xml:space="preserve">
+    <value>Aucune classe auxiliaire ne correspond à ce nom.</value>
+  </data>
+  <data name="AuxDitContentRuleTooltip" xml:space="preserve">
+    <value>{0} publie une règle de contenu DIT indiquant que cette classe peut s’attacher aux entrées {1}. C’est une déclaration de ce qui est permis, et non de ce qui est utilisé.</value>
+  </data>
+  <data name="AuxSuggestedDit" xml:space="preserve">
+    <value>suggérée : règle de contenu DIT</value>
+  </data>
+  <data name="AuxSuggestedInUse" xml:space="preserve">
+    <value>suggérée : en usage sur {0} entrées</value>
+  </data>
+  <data name="AuxAttributeCountOne" xml:space="preserve">
+    <value>+{0} attribut</value>
+  </data>
+  <data name="AuxAttributeCountOther" xml:space="preserve">
+    <value>+{0} attributs</value>
+  </data>
+  <data name="AuxNoOwnAttributes" xml:space="preserve">
+    <value>Cette classe ne définit aucun attribut qui lui soit propre.</value>
+  </data>
+  <data name="AuxRequired" xml:space="preserve">
+    <value>obligatoire</value>
+  </data>
+  <data name="AuxCredentialNotSelectable" xml:space="preserve">
+    <value>identifiants, jamais sélectionnable</value>
+  </data>
+  <data name="AuxNotYetRead" xml:space="preserve">
+    <value>Ces classes proviennent du schéma. JIM n’a pas encore lu les entrées de {0} pour savoir lesquelles sont en usage.</value>
+  </data>
+  <data name="AuxDiscoverInUse" xml:space="preserve">
+    <value>Rechercher les classes en usage</value>
+  </data>
+  <data name="AuxDiscoverAgain" xml:space="preserve">
+    <value>Rechercher à nouveau</value>
+  </data>
+  <data name="AuxDiscoveryIntro" xml:space="preserve">
+    <value>La découverte lit les entrées de {0} pour savoir quelles classes auxiliaires elles portent réellement. Elle ne fait qu’ajouter des suggestions à la liste ci-dessus ; chaque classe auxiliaire du schéma reste listée pour être activée dans les deux cas.</value>
+  </data>
+  <data name="AuxQuickSample" xml:space="preserve">
+    <value>Échantillon rapide</value>
+  </data>
+  <data name="AuxQuickSampleHelp" xml:space="preserve">
+    <value>Lit les premières entrées de chaque type d’objet. Rapide. Un annuaire renvoie les entrées dans son propre ordre, de sorte qu’une classe rarement utilisée peut passer inaperçue ; les résultats sont des suggestions classées, jamais des limites.</value>
+  </data>
+  <data name="AuxFullScan" xml:space="preserve">
+    <value>Analyse complète</value>
+  </data>
+  <data name="AuxFullScanHelp" xml:space="preserve">
+    <value>Lit chaque entrée du périmètre, en demandant uniquement son appartenance à des classes. Analyse complète, et seul périmètre dont la réponse « cette classe n’est pas en usage » a un sens. Elle peut prendre beaucoup de temps sur un grand annuaire, et s’exécute comme une activité que vous pouvez suivre et annuler.</value>
+  </data>
+  <data name="AuxEntriesPerType" xml:space="preserve">
+    <value>Entrées à lire par type d’objet</value>
+  </data>
+  <data name="AuxApplying" xml:space="preserve">
+    <value>Application…</value>
+  </data>
+  <data name="AuxChangeFailed" xml:space="preserve">
+    <value>Les classes auxiliaires de « {0} » n’ont pas pu être modifiées.</value>
+  </data>
+  <data name="AuxCarriesOne" xml:space="preserve">
+    <value>« {0} » porte désormais {1} classe auxiliaire. Actualisez le schéma pour importer les attributs.</value>
+  </data>
+  <data name="AuxCarriesOther" xml:space="preserve">
+    <value>« {0} » porte désormais {1} classes auxiliaires. Actualisez le schéma pour importer les attributs.</value>
+  </data>
+  <data name="AuxRemovedOne" xml:space="preserve">
+    <value>{0} classe auxiliaire n’est plus fusionnée dans « {1} ».</value>
+  </data>
+  <data name="AuxRemovedOther" xml:space="preserve">
+    <value>{0} classes auxiliaires ne sont plus fusionnées dans « {1} ».</value>
+  </data>
+  <data name="AuxDiscoveryQueued" xml:space="preserve">
+    <value>Découverte mise en file d’attente. Sa progression et ses résultats figurent dans son activité.</value>
+  </data>
+  <data name="AuxDiscoveryNotStarted" xml:space="preserve">
+    <value>La découverte n’a pas pu être démarrée.</value>
+  </data>
+  <data name="AuxObservationTooltip" xml:space="preserve">
+    <value>La dernière découverte a trouvé cette classe sur {0} des entrées lues. Un échantillon rapide ne compte que dans l’échantillon, et non dans la population entière.</value>
+  </data>
+  <data name="AuxStatusRunning" xml:space="preserve">
+    <value>En cours</value>
+  </data>
+  <data name="AuxStatusComplete" xml:space="preserve">
+    <value>Dernière exécution terminée</value>
+  </data>
+  <data name="AuxStatusCancelled" xml:space="preserve">
+    <value>Annulée, partielle</value>
+  </data>
+  <data name="AuxStatusFailed" xml:space="preserve">
+    <value>Échec</value>
+  </data>
+  <data name="AuxStatusNotRun" xml:space="preserve">
+    <value>Jamais exécutée</value>
+  </data>
+  <data name="AuxRunQuickSample" xml:space="preserve">
+    <value>Échantillon rapide ({0} par type d’objet)</value>
+  </data>
+  <data name="AuxRunStarted" xml:space="preserve">
+    <value>démarrée {0}</value>
+  </data>
+  <data name="AuxRunSummary" xml:space="preserve">
+    <value>{0}, {1}, {2} entrées lues</value>
+  </data>
+  <data name="AuxHeading" xml:space="preserve">
+    <value>Classes auxiliaires</value>
+  </data>
+  <data name="AuxPanelInfo" xml:space="preserve">
+    <value>Les classes dont ce type d’objet est composé : sa propre classe structurelle, plus les classes auxiliaires qui y sont fusionnées, dont les attributs rejoignent le type d’objet à la prochaine actualisation du schéma. Seules les classes que vous activez façonnent le schéma ; les suggestions ne s’appliquent jamais d’elles-mêmes.</value>
+  </data>
+  <data name="AuxPanelNoneDefined" xml:space="preserve">
+    <value>{0} ne définit aucune classe auxiliaire : il n’y a donc rien à fusionner dans ce type d’objet.</value>
+  </data>
+  <data name="AuxMadeOf" xml:space="preserve">
+    <value>Composé de</value>
+  </data>
+  <data name="AuxAddClass" xml:space="preserve">
+    <value>Ajouter une classe auxiliaire</value>
+  </data>
+  <data name="AuxMergedCount" xml:space="preserve">
+    <value>{0} classes auxiliaires fusionnées sur {1}</value>
+  </data>
+  <data name="AuxPanelNotYetRead" xml:space="preserve">
+    <value>JIM n’a pas encore lu les entrées de {0} pour savoir quelles classes auxiliaires sont en usage ; ajoutez des propositions de classes auxiliaires pour les découvrir.</value>
+  </data>
+  <data name="AuxViewActivity" xml:space="preserve">
+    <value>Voir l’activité</value>
+  </data>
+  <data name="AuxCancelledRunNote" xml:space="preserve">
+    <value>Une exécution annulée conserve ce qu’elle a trouvé. Ces classes sont réellement en usage ; celles qu’elle n’a jamais atteintes restent simplement inconnues.</value>
+  </data>
+  <data name="AuxCarrierIntro" xml:space="preserve">
+    <value>Chaque entrée de {0} porte exactement une classe structurelle. Indiquez celle que JIM doit écrire avec {1} lorsqu’il crée une entrée de ce type d’objet.</value>
+  </data>
+  <data name="AuxProvisioning" xml:space="preserve">
+    <value>Provisionnement</value>
+  </data>
+  <data name="AuxCarrierLabel" xml:space="preserve">
+    <value>Classe structurelle porteuse</value>
+  </data>
+  <data name="AuxCarrierUnset" xml:space="preserve">
+    <value>Tant qu’aucune classe porteuse n’est choisie, JIM peut importer des objets {0}, mais ne peut pas les créer.</value>
+  </data>
+  <data name="AuxCarrierCreate" xml:space="preserve">
+    <value>À la création, JIM écrit à la fois {0} et {1}.</value>
+  </data>
+  <data name="AuxOfferChangeFailed" xml:space="preserve">
+    <value>« {0} » n’a pas pu être modifié.</value>
+  </data>
+  <data name="AuxMergedMessage" xml:space="preserve">
+    <value>« {0} » fusionnée dans « {1} ». Actualisez le schéma pour importer ses attributs.</value>
+  </data>
+  <data name="AuxUnmergedMessage" xml:space="preserve">
+    <value>« {0} » n’est plus fusionnée dans « {1} ».</value>
+  </data>
+  <data name="AuxCarrierChangeFailed" xml:space="preserve">
+    <value>La classe structurelle porteuse de « {0} » n’a pas pu être modifiée.</value>
+  </data>
+  <data name="AuxCarrierRemoved" xml:space="preserve">
+    <value>« {0} » n’a plus de classe structurelle porteuse : JIM ne peut donc pas créer ses objets.</value>
+  </data>
+  <data name="AuxCarrierSet" xml:space="preserve">
+    <value>Les objets « {0} » seront créés en tant que « {1} ».</value>
+  </data>
+  <data name="AuxRunFinished" xml:space="preserve">
+    <value>L’exécution de la découverte est déjà terminée.</value>
+  </data>
+  <data name="AuxCancelRequested" xml:space="preserve">
+    <value>Annulation demandée. Ce que l’exécution a déjà trouvé est conservé.</value>
+  </data>
+  <data name="AuxRunBy" xml:space="preserve">
+    <value> par {0}</value>
+  </data>
+  <data name="AuxRunSummaryBy" xml:space="preserve">
+    <value>{0}, {1}{2}, {3} entrées lues</value>
+  </data>
+  <data name="DataFlowSources" xml:space="preserve">
+    <value>Sources</value>
+  </data>
+  <data name="ChangeTypeHeader" xml:space="preserve">
+    <value>Type de modification</value>
+  </data>
+  <data name="ChangeDetailsHeader" xml:space="preserve">
+    <value>Détails</value>
+  </data>
+  <data name="ChangeObjectTypesAdded" xml:space="preserve">
+    <value>Types d’objets ajoutés</value>
+  </data>
+  <data name="ChangeObjectTypesUpdated" xml:space="preserve">
+    <value>Types d’objets mis à jour</value>
+  </data>
+  <data name="ChangeObjectTypesRenamed" xml:space="preserve">
+    <value>Types d’objets renommés</value>
+  </data>
+  <data name="ChangeClassificationRecorded" xml:space="preserve">
+    <value>Classification des types d’objets enregistrée</value>
+  </data>
+  <data name="ChangeAttributesAdded" xml:space="preserve">
+    <value>Attributs ajoutés ({0})</value>
+  </data>
+  <data name="ChangeAttributesRenamed" xml:space="preserve">
+    <value>Attributs renommés ({0})</value>
+  </data>
+  <data name="ChangeObjectTypesNoLongerReported" xml:space="preserve">
+    <value>Types d’objets non signalés</value>
+  </data>
+  <data name="ChangeAttributesNoLongerReported" xml:space="preserve">
+    <value>Attributs non signalés ({0})</value>
+  </data>
+  <data name="ChangeAttributeDefinitionsChanged" xml:space="preserve">
+    <value>Définitions d’attributs modifiées ({0})</value>
+  </data>
+  <data name="ChangeClassificationChanged" xml:space="preserve">
+    <value>Classification des types d’objets modifiée ({0})</value>
+  </data>
+  <data name="ChangeAspectDataType" xml:space="preserve">
+    <value>type de données</value>
+  </data>
+  <data name="ChangeAspectPlurality" xml:space="preserve">
+    <value>pluralité</value>
+  </data>
+  <data name="ChangeAspectWritability" xml:space="preserve">
+    <value>modifiabilité</value>
+  </data>
+  <data name="ChangeDefinitionLine" xml:space="preserve">
+    <value>{0} : {1} {2} → {3}</value>
+  </data>
+  <data name="ChangeAspectClassKind" xml:space="preserve">
+    <value>genre de classe</value>
+  </data>
+  <data name="ChangeAspectInheritedClasses" xml:space="preserve">
+    <value>classes héritées</value>
+  </data>
+  <data name="ChangeClassificationLine" xml:space="preserve">
+    <value>{0} {1} → {2}</value>
+  </data>
+  <data name="ChangeNone" xml:space="preserve">
+    <value>aucun</value>
+  </data>
+  <data name="RemovedPartitionIntro" xml:space="preserve">
+    <value>Le système connecté ne contient plus {0} que {1} {2}. Supprimer {3} laisserait {4} lire chaque partition sélectionnée : rien de cette actualisation n’a donc encore été enregistré.</value>
+  </data>
+  <data name="RemovedPartitionPartitionOne" xml:space="preserve">
+    <value>une partition</value>
+  </data>
+  <data name="RemovedPartitionPartitionOther" xml:space="preserve">
+    <value>des partitions</value>
+  </data>
+  <data name="RemovedPartitionRunProfileCountOne" xml:space="preserve">
+    <value>1 profil d’exécution</value>
+  </data>
+  <data name="RemovedPartitionRunProfileCountOther" xml:space="preserve">
+    <value>{0} profils d’exécution</value>
+  </data>
+  <data name="RemovedPartitionTargetsOne" xml:space="preserve">
+    <value>cible</value>
+  </data>
+  <data name="RemovedPartitionTargetsOther" xml:space="preserve">
+    <value>ciblent</value>
+  </data>
+  <data name="RemovedPartitionItOne" xml:space="preserve">
+    <value>elle</value>
+  </data>
+  <data name="RemovedPartitionItOther" xml:space="preserve">
+    <value>elles</value>
+  </data>
+  <data name="RemovedPartitionThatOne" xml:space="preserve">
+    <value>ce profil d’exécution</value>
+  </data>
+  <data name="RemovedPartitionThoseOther" xml:space="preserve">
+    <value>ces profils d’exécution</value>
+  </data>
+  <data name="RemovedPartitionExplain" xml:space="preserve">
+    <value>{0} applique l’actualisation et désactive chacun d’eux, en conservant leurs autres paramètres. Réactivez-le dans l’onglet Profils d’exécution, en choisissant la partition qu’il lit. {1} n’applique rien de cette actualisation.</value>
+  </data>
+  <data name="DisableRunProfiles" xml:space="preserve">
+    <value>Désactiver les profils d’exécution</value>
+  </data>
+  <data name="RunProfilesTargetRemoved" xml:space="preserve">
+    <value>Des profils d’exécution ciblent une partition supprimée</value>
+  </data>
+</root>

@@ -1,0 +1,525 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DeltaImportWatermarkColumnMissing" xml:space="preserve">
+    <value>Delta Import Mode is '{0}' and this Object Type is selected for synchronisation, so it needs a watermark column. Choose one, or deselect the Object Type on the Schema tab if JIM never imports it.</value>
+    <comment>Validation problem. {0} is the Delta Import Mode value (a connector constant).</comment>
+  </data>
+  <data name="MultiValuedWatermarkColumnMissing" xml:space="preserve">
+    <value>Delta Import Mode is '{0}', so multi-valued attribute '{1}' needs a watermark column on its own table: a row added to or removed from it changes the object without touching the object's own row.</value>
+    <comment>Validation problem. {0} is the Delta Import Mode value, {1} the attribute name.</comment>
+  </data>
+  <data name="ChangeLogTableMissing" xml:space="preserve">
+    <value>Delta Import Mode is '{0}' and this Object Type is selected for synchronisation, so it needs a change-log table. Choose one, or deselect the Object Type on the Schema tab if JIM never imports it.</value>
+    <comment>Validation problem. {0} is the Delta Import Mode value.</comment>
+  </data>
+  <data name="SourceSelectStatement" xml:space="preserve">
+    <value>SELECT statement</value>
+    <comment>Card heading: the Object Type's source is a SELECT statement, not a table.</comment>
+  </data>
+  <data name="SourceNoneChosen" xml:space="preserve">
+    <value>No source chosen</value>
+    <comment>Card heading: no table or SELECT chosen yet.</comment>
+  </data>
+  <data name="AddColumn" xml:space="preserve">
+    <value>Add column</value>
+    <comment>Anchor columns picker label.</comment>
+  </data>
+  <data name="JsonViewPlaceholder" xml:space="preserve">
+    <value>Paste or type the document, or insert the example to start from.</value>
+    <comment>Placeholder in the empty JSON editor.</comment>
+  </data>
+  <data name="JsonViewLabel" xml:space="preserve">
+    <value>Object Types document</value>
+    <comment>Accessible name of the JSON editor textarea.</comment>
+  </data>
+  <data name="JsonProblemsFixOne" xml:space="preserve">
+    <value>The cards can show this document once this is fixed.</value>
+    <comment>Alert heading when a single problem stops the cards reading the document.</comment>
+  </data>
+  <data name="JsonProblemsFixOther" xml:space="preserve">
+    <value>The cards can show this document once these are fixed.</value>
+    <comment>Alert heading when several problems, one or more stopping the cards reading the document.</comment>
+  </data>
+  <data name="JsonProblemsCount" xml:space="preserve">
+    <value>{0} problems to fix before this document can be saved.</value>
+    <comment>Alert heading with two or more problems. {0} is the count.</comment>
+  </data>
+  <data name="JsonProblemLine" xml:space="preserve">
+    <value>Line {0}</value>
+    <comment>Link to a problem's line in the JSON editor. {0} is the line number.</comment>
+  </data>
+  <data name="JsonProblemSeparator" xml:space="preserve">
+    <value>: </value>
+    <comment>Separator between a problem's line link and its message.</comment>
+  </data>
+  <data name="ColumnLabel" xml:space="preserve">
+    <value>Column</value>
+    <comment>Label of a column picker in a reference row.</comment>
+  </data>
+  <data name="ObjectTypeLabel" xml:space="preserve">
+    <value>Object Type</value>
+    <comment>Label of the Object Type picker in a reference row.</comment>
+  </data>
+  <data name="RemoveReference" xml:space="preserve">
+    <value>Remove this reference</value>
+    <comment>Tooltip and accessible name of a reference row's remove button.</comment>
+  </data>
+  <data name="EditMultiValuedAttribute" xml:space="preserve">
+    <value>Edit this multi-valued attribute</value>
+    <comment>Tooltip and accessible name of the edit button on a multi-valued attribute row.</comment>
+  </data>
+  <data name="RemoveMultiValuedAttribute" xml:space="preserve">
+    <value>Remove this multi-valued attribute</value>
+    <comment>Tooltip and accessible name of the remove button on a multi-valued attribute row.</comment>
+  </data>
+  <data name="AddMultiValuedAttribute" xml:space="preserve">
+    <value>Add multi-valued attribute</value>
+    <comment>Button under the multi-valued attribute list.</comment>
+  </data>
+  <data name="AddReference" xml:space="preserve">
+    <value>Add reference</value>
+    <comment>Button under the reference list, and the suggestion's accept action.</comment>
+  </data>
+  <data name="Dismiss" xml:space="preserve">
+    <value>Dismiss</value>
+    <comment>Dismisses a suggestion.</comment>
+  </data>
+  <data name="AddObjectTypeForIt" xml:space="preserve">
+    <value>Add an Object Type for it</value>
+    <comment>Suggestion action: create an Object Type for the referenced table. 'elle' refers to the table.</comment>
+  </data>
+  <data name="RelatedTableDescribe" xml:space="preserve">
+    <value>{0} from {1}, joined on {2}</value>
+    <comment>A multi-valued attribute in one line. {0} is the attribute name, {1} the table and value column, {2} the join columns (code).</comment>
+  </data>
+  <data name="RelatedTableReferencing" xml:space="preserve">
+    <value>, referencing {0}</value>
+    <comment>Optional clause appended to the multi-valued attribute line. {0} is an Object Type name.</comment>
+  </data>
+  <data name="RelatedTableWatermark" xml:space="preserve">
+    <value>, watermark {0}</value>
+    <comment>Optional clause appended to the multi-valued attribute line. {0} is the watermark column (code).</comment>
+  </data>
+  <data name="UnnamedAttribute" xml:space="preserve">
+    <value>unnamed</value>
+    <comment>Shown in place of a multi-valued attribute's name when it has none.</comment>
+  </data>
+  <data name="ParentFallbackName" xml:space="preserve">
+    <value>parent</value>
+    <comment>Name of the owning Object Type in the related table dialog when it has no name yet. Used in running text.</comment>
+  </data>
+  <data name="ReferenceSuggestion" xml:space="preserve">
+    <value>{0} has a foreign key to {1}'s anchor, so it looks like a reference to {2}.</value>
+    <comment>Suggestion: a column looks like a reference to an Object Type. {0} is the column (code), {1} and {2} the Object Type name.</comment>
+  </data>
+  <data name="ForeignKeySuggestion" xml:space="preserve">
+    <value>{0} has a foreign key to {1}, which no Object Type reads from yet.</value>
+    <comment>Suggestion: a foreign key whose target no Object Type reads yet. {0} is the column and {1} the table (both code).</comment>
+  </data>
+  <data name="RelatedDialogIntro" xml:space="preserve">
+    <value>A child table holding one row per value. Each row is joined to its {0} object on the columns that hold the parent's anchor.</value>
+    <comment>Intro in the multi-valued attribute dialog. {0} is the parent Object Type's name.</comment>
+  </data>
+  <data name="RelatedAttributeName" xml:space="preserve">
+    <value>Attribute name</value>
+    <comment>Field label in the multi-valued attribute dialog.</comment>
+  </data>
+  <data name="NameTheAttribute" xml:space="preserve">
+    <value>Name the attribute</value>
+    <comment>Required-field error for the attribute name.</comment>
+  </data>
+  <data name="AttributeNameHelper" xml:space="preserve">
+    <value>What the attribute is called on the Object Type.</value>
+    <comment>Helper text under the attribute name field.</comment>
+  </data>
+  <data name="SchemaLabel" xml:space="preserve">
+    <value>Schema</value>
+    <comment>Field label: a database schema.</comment>
+  </data>
+  <data name="TableLabel" xml:space="preserve">
+    <value>Table</value>
+    <comment>Field label: a database table.</comment>
+  </data>
+  <data name="ValueColumnLabel" xml:space="preserve">
+    <value>Value column</value>
+    <comment>Field label: the column holding each value of a multi-valued attribute.</comment>
+  </data>
+  <data name="ValueColumnHelper" xml:space="preserve">
+    <value>The column holding each value.</value>
+    <comment>Helper text under the value column.</comment>
+  </data>
+  <data name="JoinColumnLabel" xml:space="preserve">
+    <value>Column holding {0}</value>
+    <comment>Field label for a join column. {0} is the parent's anchor column name.</comment>
+  </data>
+  <data name="JoinColumnHelper" xml:space="preserve">
+    <value>Joins each row to its parent: one column per anchor column, in the same order.</value>
+    <comment>Helper text on the first join column.</comment>
+  </data>
+  <data name="ValuesReferenceLabel" xml:space="preserve">
+    <value>Values reference</value>
+    <comment>Field label: the Object Type each value references.</comment>
+  </data>
+  <data name="ValuesReferenceHelper" xml:space="preserve">
+    <value>Choose an Object Type when each value holds that Object Type's anchor, as group members do.</value>
+    <comment>Helper text under the values reference picker.</comment>
+  </data>
+  <data name="ValuesReferenceNothing" xml:space="preserve">
+    <value>Nothing: the values are plain values</value>
+    <comment>First option of the values reference picker.</comment>
+  </data>
+  <data name="WatermarkColumnLabel" xml:space="preserve">
+    <value>Watermark column</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="WatermarkColumnHelper" xml:space="preserve">
+    <value>Delta Import Mode is Watermark Column: the last-modified column on this table, so an added or removed value is seen.</value>
+    <comment>Helper text under the watermark column field. The mode name is the Watermark Column option's label.</comment>
+  </data>
+  <data name="Update" xml:space="preserve">
+    <value>Update</value>
+    <comment>Save button when editing an existing multi-valued attribute.</comment>
+  </data>
+  <data name="TableColumnsUnreadable" xml:space="preserve">
+    <value>The table's columns could not be read, so type their names: {0}</value>
+    <comment>Shown when a related table's columns cannot be read. {0} is the reason.</comment>
+  </data>
+  <data name="TableNotVisible" xml:space="preserve">
+    <value>The database account cannot see a table of that name, so its columns cannot be listed.</value>
+    <comment>Shown when no table of the chosen name is visible to the account.</comment>
+  </data>
+  <data name="AddMultiValuedAttributeTitle" xml:space="preserve">
+    <value>Add Multi-Valued Attribute</value>
+    <comment>Dialog title.</comment>
+  </data>
+  <data name="EditMultiValuedAttributeTitle" xml:space="preserve">
+    <value>Edit Multi-Valued Attribute</value>
+    <comment>Dialog title.</comment>
+  </data>
+  <data name="ObjectTypesSummaryOne" xml:space="preserve">
+    <value>1 Object Type. Select it to change it.</value>
+    <comment>Editor summary when there is one Object Type. Plural rule: one form.</comment>
+  </data>
+  <data name="ObjectTypesSummaryOther" xml:space="preserve">
+    <value>{0} Object Types. Select one to change it.</value>
+    <comment>Editor summary when there are several Object Types. {0} is the count.</comment>
+  </data>
+  <data name="DocumentSummary" xml:space="preserve">
+    <value>The document REST and PowerShell send as this setting's value.</value>
+    <comment>Editor summary in JSON view.</comment>
+  </data>
+  <data name="ObjectTypesIntro" xml:space="preserve">
+    <value>Which tables and views JIM reads objects from, and what identifies them.</value>
+    <comment>Editor summary when there are no Object Types yet.</comment>
+  </data>
+  <data name="ViewAsCards" xml:space="preserve">
+    <value>View as cards</value>
+    <comment>Toggle button: show the Object Types as cards.</comment>
+  </data>
+  <data name="ViewAsJson" xml:space="preserve">
+    <value>View as JSON</value>
+    <comment>Toggle button: show the setting as a JSON document.</comment>
+  </data>
+  <data name="InsertExample" xml:space="preserve">
+    <value>Insert Example</value>
+    <comment>Button that fills the empty JSON document with the setting's example.</comment>
+  </data>
+  <data name="AddObjectType" xml:space="preserve">
+    <value>Add Object Type</value>
+    <comment>Button that opens the Add Object Type dialog.</comment>
+  </data>
+  <data name="ReadingCatalogue" xml:space="preserve">
+    <value>Reading the database's tables and views...</value>
+    <comment>Shown while the table list is read.</comment>
+  </data>
+  <data name="CatalogueUnavailable" xml:space="preserve">
+    <value>JIM could not read the database's tables and views, so names are typed rather than chosen.</value>
+    <comment>Warning when the table list cannot be read.</comment>
+  </data>
+  <data name="RemoveObjectTypeTitle" xml:space="preserve">
+    <value>Remove Object Type?</value>
+    <comment>Confirmation dialog title.</comment>
+  </data>
+  <data name="RemovalSubjectUnnamed" xml:space="preserve">
+    <value>this Object Type</value>
+    <comment>Used in the removal confirmation. Fills {0} of the sentence below.</comment>
+  </data>
+  <data name="RemovalSubjectNamed" xml:space="preserve">
+    <value>Object Type &lt;strong&gt;{0}&lt;/strong&gt;</value>
+    <comment>Used in the removal confirmation; {0} is the Object Type's name (encoded).</comment>
+  </data>
+  <data name="RemovalWithoutReferences" xml:space="preserve">
+    <value>Remove {0}? Its objects stop being imported once the settings are saved.</value>
+    <comment>Removal confirmation with no references. {0} is the subject ('this Object Type' or the named type, with markup).</comment>
+  </data>
+  <data name="RemovalWithReferences" xml:space="preserve">
+    <value>Remove {0}? These references to it are removed with it:{1}</value>
+    <comment>Removal confirmation listing references. {0} is the subject; {1} is the list of references (markup).</comment>
+  </data>
+  <data name="RemovalReferenceItem" xml:space="preserve">
+    <value>{0}: {1} {2}</value>
+    <comment>One reference in the removal list: Object Type name, kind of reference, the column name (code).</comment>
+  </data>
+  <data name="RemovalKindMultiValued" xml:space="preserve">
+    <value>multi-valued attribute</value>
+    <comment>Kind of reference: a multi-valued attribute.</comment>
+  </data>
+  <data name="RemovalKindColumn" xml:space="preserve">
+    <value>column</value>
+    <comment>Kind of reference: a column.</comment>
+  </data>
+  <data name="UnnamedObjectType" xml:space="preserve">
+    <value>Unnamed Object Type</value>
+    <comment>Shown in place of an Object Type's name when it has none.</comment>
+  </data>
+  <data name="UnnamedName" xml:space="preserve">
+    <value>unnamed</value>
+    <comment>Shown in place of a name when it has none.</comment>
+  </data>
+  <data name="CopyFailed" xml:space="preserve">
+    <value>The browser would not copy to the clipboard. Select the text and copy it instead.</value>
+    <comment>Warning when the browser refuses the clipboard copy.</comment>
+  </data>
+  <data name="SettingCopied" xml:space="preserve">
+    <value>{0} copied to the clipboard.</value>
+    <comment>Confirmation after copying the JSON. {0} is the setting's name.</comment>
+  </data>
+  <data name="CardProblemsOne" xml:space="preserve">
+    <value>1 problem</value>
+    <comment>Problem marker on a collapsed card. Plural rule: one form.</comment>
+  </data>
+  <data name="CardProblemsOther" xml:space="preserve">
+    <value>{0} problems</value>
+    <comment>Problem marker on a collapsed card. {0} is the count.</comment>
+  </data>
+  <data name="SelectHelp" xml:space="preserve">
+    <value>An Object Type read from a statement can be imported, but JIM cannot export to it.</value>
+    <comment>Helper under the SELECT statement field.</comment>
+  </data>
+  <data name="NameHelp" xml:space="preserve">
+    <value>What JIM calls this Object Type.</value>
+    <comment>Helper under the Name field.</comment>
+  </data>
+  <data name="TableOrView" xml:space="preserve">
+    <value>Table or view</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="ReadFromTableInstead" xml:space="preserve">
+    <value>Read from a table or view instead</value>
+    <comment>Button: switch the source to a table.</comment>
+  </data>
+  <data name="ReadFromSelectInstead" xml:space="preserve">
+    <value>Read from a SELECT statement instead</value>
+    <comment>Button: switch the source to a statement.</comment>
+  </data>
+  <data name="AnchorHeading" xml:space="preserve">
+    <value>Anchor</value>
+    <comment>Section heading.</comment>
+  </data>
+  <data name="AnchorHelp" xml:space="preserve">
+    <value>The column or columns whose values identify a row, in key order.</value>
+    <comment>Section helper.</comment>
+  </data>
+  <data name="PrimaryKeyAnchorSuggestion" xml:space="preserve">
+    <value>The table's primary key is {0}, which identifies each row.</value>
+    <comment>Suggestion. {0} is the primary key's columns (code).</comment>
+  </data>
+  <data name="UsePrimaryKey" xml:space="preserve">
+    <value>Use the primary key</value>
+    <comment>Suggestion action.</comment>
+  </data>
+  <data name="ReferencesHeading" xml:space="preserve">
+    <value>References to other Object Types</value>
+    <comment>Section heading.</comment>
+  </data>
+  <data name="ReferencesHelp" xml:space="preserve">
+    <value>Columns whose values hold another object's anchor, such as a manager.</value>
+    <comment>Section helper.</comment>
+  </data>
+  <data name="MultiValuedHeading" xml:space="preserve">
+    <value>Multi-valued attributes</value>
+    <comment>Section heading.</comment>
+  </data>
+  <data name="MultiValuedHelp" xml:space="preserve">
+    <value>Child tables holding one row per value, such as phone numbers or group members.</value>
+    <comment>Section helper.</comment>
+  </data>
+  <data name="DeltaImportHeading" xml:space="preserve">
+    <value>Delta Import</value>
+    <comment>Section heading.</comment>
+  </data>
+  <data name="WatermarkModeHelp" xml:space="preserve">
+    <value>Delta Import Mode is Watermark Column: a Delta Import reads the rows whose watermark has moved on since the last import.</value>
+    <comment>Section helper for the watermark mode.</comment>
+  </data>
+  <data name="WatermarkColumnHelp" xml:space="preserve">
+    <value>A last-modified timestamp or row version on the source.</value>
+    <comment>Helper under the watermark column.</comment>
+  </data>
+  <data name="ChangeLogModeHelp" xml:space="preserve">
+    <value>Delta Import Mode is Change-Log Table: a Delta Import reads a table recording each change, deletions included.</value>
+    <comment>Section helper for the change-log mode.</comment>
+  </data>
+  <data name="AddChangeLogTable" xml:space="preserve">
+    <value>Add change-log table</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="ChangeLogSchema" xml:space="preserve">
+    <value>Change-log schema</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="ChangeLogTable" xml:space="preserve">
+    <value>Change-log table</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="SequenceColumn" xml:space="preserve">
+    <value>Sequence column</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="SequenceColumnHelp" xml:space="preserve">
+    <value>Orders the changes: a sequence number or timestamp.</value>
+    <comment>Helper.</comment>
+  </data>
+  <data name="ChangeTypeColumn" xml:space="preserve">
+    <value>Change type column</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="ChangeTypeColumnHelp" xml:space="preserve">
+    <value>Says whether a row records a creation, an update or a deletion.</value>
+    <comment>Helper.</comment>
+  </data>
+  <data name="CreatedWhen" xml:space="preserve">
+    <value>Created when</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="CreatedWhenHelp" xml:space="preserve">
+    <value>Values meaning created, separated by commas.</value>
+    <comment>Helper.</comment>
+  </data>
+  <data name="UpdatedWhen" xml:space="preserve">
+    <value>Updated when</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="UpdatedWhenHelp" xml:space="preserve">
+    <value>Values meaning updated.</value>
+    <comment>Helper.</comment>
+  </data>
+  <data name="DeletedWhen" xml:space="preserve">
+    <value>Deleted when</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="DeletedWhenHelp" xml:space="preserve">
+    <value>Values meaning deleted.</value>
+    <comment>Helper.</comment>
+  </data>
+  <data name="RemoveChangeLogTable" xml:space="preserve">
+    <value>Remove change-log table</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="OtherColumnsOne" xml:space="preserve">
+    <value>The other column is discovered and typed automatically on the Schema tab.</value>
+    <comment>Footer. Plural rule: one form.</comment>
+  </data>
+  <data name="OtherColumnsOther" xml:space="preserve">
+    <value>The other {0} columns are discovered and typed automatically on the Schema tab.</value>
+    <comment>Footer. {0} is the count.</comment>
+  </data>
+  <data name="RemoveObjectTypeButton" xml:space="preserve">
+    <value>Remove Object Type</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="StatementColumnsUnreadable" xml:space="preserve">
+    <value>The statement's columns could not be read, so type their names: {0}</value>
+    <comment>Shown when a statement's columns cannot be read. {0} is the reason.</comment>
+  </data>
+  <data name="TableOrViewNotVisible" xml:space="preserve">
+    <value>The database account cannot see a table or view of that name. Check the name, the schema, and the account's permissions.</value>
+    <comment>Shown when no table or view of the chosen name is visible.</comment>
+  </data>
+  <data name="StepsLabel" xml:space="preserve">
+    <value>Steps</value>
+    <comment>Accessible name of the step list.</comment>
+  </data>
+  <data name="StepSource" xml:space="preserve">
+    <value>Source</value>
+    <comment>Step title.</comment>
+  </data>
+  <data name="StepReferences" xml:space="preserve">
+    <value>References</value>
+    <comment>Step title.</comment>
+  </data>
+  <data name="OptionalStep" xml:space="preserve">
+    <value>optional</value>
+    <comment>Marks an optional step.</comment>
+  </data>
+  <data name="AddNameHelp" xml:space="preserve">
+    <value>What JIM calls this Object Type. Use a standard name (User, Group, Person) where one fits, and JIM maps it to the matching Metaverse Object Type.</value>
+    <comment>Helper under the Name field in the Add Object Type dialog.</comment>
+  </data>
+  <data name="WhereObjectsCome" xml:space="preserve">
+    <value>Where the objects come from</value>
+    <comment>Accessible name of the source toggle.</comment>
+  </data>
+  <data name="StatementHelp" xml:space="preserve">
+    <value>A single statement beginning SELECT or WITH, for when a view cannot be created. JIM can import from it, but cannot export to it.</value>
+    <comment>Helper under the SELECT statement field.</comment>
+  </data>
+  <data name="AnchorIntroStatement" xml:space="preserve">
+    <value>The column or columns whose values identify a row of the statement, in key order.</value>
+    <comment>Anchor step intro, when the source is a statement.</comment>
+  </data>
+  <data name="AnchorIntroTable" xml:space="preserve">
+    <value>The column or columns whose values identify a row of {0}, in key order.</value>
+    <comment>Anchor step intro, when the source is a table. {0} is the table, in code (markup).</comment>
+  </data>
+  <data name="ReadingColumns" xml:space="preserve">
+    <value>Reading its columns and keys...</value>
+    <comment>Shown while the source's columns are read.</comment>
+  </data>
+  <data name="AddReferencesIntro" xml:space="preserve">
+    <value>Columns whose values hold another object's anchor, such as a manager. Skip this if there are none; you can add them later.</value>
+    <comment>Intro of the References step.</comment>
+  </data>
+  <data name="AddMultiValuedIntro" xml:space="preserve">
+    <value>Child tables holding one row per value, such as phone numbers or group members. Skip this if there are none; you can add them later.</value>
+    <comment>Intro of the multi-valued attributes step.</comment>
+  </data>
+  <data name="AnchorPreselected" xml:space="preserve">
+    <value>Preselected from the table's primary key, in key order.</value>
+    <comment>Anchor reason.</comment>
+  </data>
+  <data name="AnchorViewNoKeys" xml:space="preserve">
+    <value>A view declares no keys, so JIM cannot suggest an anchor. Choose the column or columns that identify a row.</value>
+    <comment>Anchor reason.</comment>
+  </data>
+  <data name="AnchorTableNoKey" xml:space="preserve">
+    <value>The table declares no primary key, so JIM cannot suggest an anchor. Choose the column or columns that identify a row.</value>
+    <comment>Anchor reason.</comment>
+  </data>
+  <data name="AnchorStatementNoKeys" xml:space="preserve">
+    <value>A SELECT statement declares no keys, so JIM cannot suggest an anchor. Choose the column or columns that identify a row.</value>
+    <comment>Anchor reason.</comment>
+  </data>
+  <data name="AnchorColumnsUnreadable" xml:space="preserve">
+    <value>The columns could not be read, so type their names: {0}</value>
+    <comment>Anchor reason when the columns cannot be read. {0} is the reason.</comment>
+  </data>
+  <data name="AnchorColumnsUnreadableNoReason" xml:space="preserve">
+    <value>The columns could not be read, so type their names.</value>
+    <comment>Anchor reason when the columns cannot be read.</comment>
+  </data>
+</root>

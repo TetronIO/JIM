@@ -3,6 +3,7 @@
 
 using JIM.Models.Core;
 using JIM.Models.Staging;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -57,10 +58,10 @@ public static class SchemaAttributeEdit
     /// </summary>
     public static string Describe(DateTimeResolution resolution) => resolution switch
     {
-        DateTimeResolution.TenMicroseconds => "Ten Microseconds",
-        DateTimeResolution.HundredMicroseconds => "Hundred Microseconds",
-        DateTimeResolution.TenMilliseconds => "Ten Milliseconds",
-        DateTimeResolution.HundredMilliseconds => "Hundred Milliseconds",
+        DateTimeResolution.TenMicroseconds => SchemaText.ResolutionTenMicroseconds,
+        DateTimeResolution.HundredMicroseconds => SchemaText.ResolutionHundredMicroseconds,
+        DateTimeResolution.TenMilliseconds => SchemaText.ResolutionTenMilliseconds,
+        DateTimeResolution.HundredMilliseconds => SchemaText.ResolutionHundredMilliseconds,
         _ => resolution.ToString()
     };
 

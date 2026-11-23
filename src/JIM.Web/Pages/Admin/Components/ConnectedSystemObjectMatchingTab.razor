@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Logic
@@ -19,21 +20,21 @@
         <MudText Typo="Typo.body1">
             @if (ConnectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem)
             {
-                <text>Matching Rules are defined here per object type and shared across all Synchronisation Rules.</text>
+                <text>@SchemaText.MatchingRulesSharedIntro</text>
             }
             else
             {
-                <text>Matching Rules are configured on each individual Synchronisation Rule.</text>
+                <text>@SchemaText.MatchingRulesPerRuleIntro</text>
             }
         </MudText>
     </div>
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-        <MudText Class="mud-text-secondary">Simple</MudText>
+        <MudText Class="mud-text-secondary">@SchemaText.ScopeSimple</MudText>
         <MudSwitch T="bool"
                    Value="@ModeSwitchShowsAdvanced"
                    ValueChanged="HandleObjectMatchingModeToggleAsync"
                    Color="Color.Primary" />
-        <MudText Class="mud-text-secondary">Advanced</MudText>
+        <MudText Class="mud-text-secondary">@SchemaText.ScopeAdvanced</MudText>
     </MudStack>
 </MudStack>
 
@@ -41,8 +42,7 @@
 {
     @* Advanced Mode - matching rules are on Synchronisation Rules *@
     <MudAlert Severity="Severity.Info" Class="mt-4">
-        In Advanced Mode, matching rules are configured on each individual Synchronisation Rule. This allows different
-        matching logic for different scenarios.
+        @SchemaText.AdvancedModeInfo
     </MudAlert>
     <MudButton StartIcon="@Icons.Material.Filled.OpenInNew"
                Variant="Variant.Filled"
@@ -50,13 +50,13 @@
                Color="Color.Primary"
                Class="mt-4"
                DropShadow="false">
-        Go to Synchronisation Rules
+        @SchemaText.GoToSyncRules
     </MudButton>
 }
 else if (ConnectedSystem.ObjectTypes == null || ConnectedSystem.ObjectTypes.Count == 0)
 {
     <MudAlert Severity="Severity.Warning">
-        No object types have been configured. Import the schema first to configure Object Matching Rules.
+        @SchemaText.NoObjectTypesConfigured
     </MudAlert>
 }
 else
@@ -66,7 +66,7 @@ else
     @if (selectedObjectTypes.Count == 0)
     {
         <MudAlert Severity="Severity.Warning">
-            No object types have been selected. Select object types in the Schema tab first.
+            @SchemaText.NoObjectTypesSelected
         </MudAlert>
     }
     else if (selectedObjectTypes.Count == 1)
@@ -100,36 +100,36 @@ else
     <TitleContent>
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Class="mr-3 mb-n1" />
-            Switch to @(_switchingToAdvancedMode ? "Advanced" : "Simple") Mode
+            @string.Format(CultureInfo.CurrentCulture, SchemaText.SwitchToMode, _switchingToAdvancedMode ? SchemaText.ScopeAdvanced : SchemaText.ScopeSimple)
         </MudText>
     </TitleContent>
     <DialogContent>
         @if (_switchingToAdvancedMode)
         {
             <MudText>
-                Switching to <strong>Advanced Mode</strong> will allow you to configure different matching rules for each Synchronisation Rule.
+                @((MarkupString)string.Format(CultureInfo.CurrentCulture, SchemaText.SwitchingToAdvancedBody, Strong(SchemaText.AdvancedModeName)))
             </MudText>
             <MudAlert Severity="Severity.Info" Class="mt-4">
-                The current matching rules will be copied to all existing import Synchronisation Rules for this Connected System, giving you a starting point to customise.
+                @SchemaText.MatchingRulesCopiedNote
             </MudAlert>
         }
         else
         {
             <MudText>
-                Switching to <strong>Simple Mode</strong> will configure matching rules here, shared across all Synchronisation Rules.
+                @((MarkupString)string.Format(CultureInfo.CurrentCulture, SchemaText.SwitchingToSimpleBody, Strong(SchemaText.SimpleModeName)))
             </MudText>
             <MudAlert Severity="Severity.Warning" Class="mt-4">
-                <strong>Migration:</strong> Matching rules from Synchronisation Rules will be analysed and migrated to the object type level:
+                <strong>@SchemaText.MigrationLabel</strong> @SchemaText.MigrationBody
                 <ul class="mt-2 mb-0">
-                    <li>If all Synchronisation Rules have the same matching rules, they will be used directly.</li>
-                    <li>If Synchronisation Rules have different matching rules, the most common configuration will be selected.</li>
-                    <li>Matching rules will be cleared from all Synchronisation Rules after migration.</li>
+                    <li>@SchemaText.MigrationSame</li>
+                    <li>@SchemaText.MigrationDifferent</li>
+                    <li>@SchemaText.MigrationCleared</li>
                 </ul>
             </MudAlert>
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="@(() => _modeSwitchDialogVisible = false)" DropShadow="false" Disabled="_modeSwitchInProgress">Cancel</MudButton>
+        <MudButton OnClick="@(() => _modeSwitchDialogVisible = false)" DropShadow="false" Disabled="_modeSwitchInProgress">@CommonText.Cancel</MudButton>
         @* The switch changes which rules apply without editing a rule, so what it costs is only answerable by
            evaluating it. Offered rather than required: the switch destroys nothing by itself, and an administrator
            who has already reasoned it through should not be made to wait for an answer they have. *@
@@ -138,7 +138,7 @@ else
                    Disabled="@(_modeSwitchInProgress || _startingPreview)"
                    OnClick="PreviewModeSwitchAsync"
                    data-testid="jim-preview-matching-mode-switch">
-            Preview Impact
+            @SchemaText.ObjectMatchingPreviewImpact
         </MudButton>
         <MudButton
             Color="Color.Primary"
@@ -149,11 +149,11 @@ else
             @if (_modeSwitchInProgress)
             {
                 <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                <span class="ms-2">Switching...</span>
+                <span class="ms-2">@SchemaText.SwitchingMode</span>
             }
             else
             {
-                <text>Switch Mode</text>
+                <text>@SchemaText.SwitchMode</text>
             }
         </MudButton>
     </DialogActions>
@@ -162,7 +162,7 @@ else
 @if (_previewActivityId.HasValue)
 {
     <ConfigurationChangePreviewPanel ActivityId="@_previewActivityId.Value"
-                                     Title="Preview: Object Matching Impact"
+                                     Title="@SchemaText.PreviewObjectMatchingTitle"
                                      OnClose="DiscardObjectMatchingPreview"
                                      Class="mt-6" />
 }
@@ -212,6 +212,10 @@ else
     /// Activity, where it can still be read.
     /// </summary>
     private void DiscardObjectMatchingPreview() => _previewActivityId = null;
+
+    private static string Strong(string text) => $"<strong>{System.Net.WebUtility.HtmlEncode(text)}</strong>";
+
+    private static string Span(string? text) => $"<span class=\"jim-title-accent\">{System.Net.WebUtility.HtmlEncode(text)}</span>";
 
     // Mode switch dialog
     private readonly DialogOptions _dialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Small };
@@ -340,7 +344,7 @@ else
         catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
         {
             _previewActivityId = null;
-            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.PreviewStartFailed, ex.Message), Severity.Error);
         }
         finally
         {
@@ -395,7 +399,7 @@ else
 
             draft.Reset();
 
-            Snackbar.Add("Matching rule has been created.", Severity.Success);
+            Snackbar.Add(SchemaText.MatchingRuleCreated, Severity.Success);
             await RefreshMatchingRuleGridAsync(objectType);
             _testCasesReloadKey++;
             StateHasChanged();
@@ -408,17 +412,17 @@ else
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to create matching rule for object type {ObjectTypeId}", objectType.Id);
-            Snackbar.Add("Failed to create matching rule. Please try again or check the server logs for details.", Severity.Error);
+            Snackbar.Add(SchemaText.MatchingRuleCreateFailed, Severity.Error);
         }
     }
 
     private async Task HandleDeleteMatchingRuleAsync(ObjectMatchingRule rule, ConnectedSystemObjectType objectType)
     {
         var confirmationResult = await DialogService.ShowMessageBoxAsync(
-            "Delete Matching Rule",
-            $"Are you sure you want to delete this matching rule? This action cannot be undone.",
-            yesText: "Delete",
-            cancelText: "Cancel");
+            SchemaText.DeleteMatchingRuleTitle,
+            SchemaText.DeleteMatchingRuleMessage,
+            yesText: CommonText.Delete,
+            cancelText: CommonText.Cancel);
 
         if (confirmationResult != true)
             return;
@@ -433,7 +437,7 @@ else
             // Remove from the local list for immediate UI update
             objectType.ObjectMatchingRules.Remove(rule);
 
-            Snackbar.Add("Matching rule has been deleted.", Severity.Success);
+            Snackbar.Add(SchemaText.MatchingRuleDeleted, Severity.Success);
             await RefreshMatchingRuleGridAsync(objectType);
             _testCasesReloadKey++;
             StateHasChanged();
@@ -441,7 +445,7 @@ else
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to delete matching rule {RuleId}", rule.Id);
-            Snackbar.Add("Failed to delete matching rule. Please try again or check the server logs for details.", Severity.Error);
+            Snackbar.Add(SchemaText.MatchingRuleDeleteFailed, Severity.Error);
         }
     }
 
@@ -455,7 +459,7 @@ else
             rule.CaseSensitive = caseSensitive;
             await jim.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule, user);
 
-            Snackbar.Add($"Matching rule is now {(caseSensitive ? "case-sensitive" : "case-insensitive")}.", Severity.Success);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.MatchingRuleCaseState, caseSensitive ? SchemaText.CaseSensitiveWord : SchemaText.CaseInsensitiveWord), Severity.Success);
             StateHasChanged();
         }
         catch (Exception ex)
@@ -463,7 +467,7 @@ else
             // Revert the change on failure
             rule.CaseSensitive = !caseSensitive;
             Log.Error(ex, "Failed to update matching rule {RuleId}", rule.Id);
-            Snackbar.Add("Failed to update matching rule. Please try again or check the server logs for details.", Severity.Error);
+            Snackbar.Add(SchemaText.MatchingRuleUpdateFailed, Severity.Error);
         }
     }
 
@@ -510,7 +514,7 @@ else
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to reorder matching rules");
-            Snackbar.Add("Failed to reorder matching rules. Please try again or check the server logs for details.", Severity.Error);
+            Snackbar.Add(SchemaText.MatchingRulesReorderFailed, Severity.Error);
         }
     }
 
@@ -536,18 +540,18 @@ else
 
             if (!result.Success)
             {
-                Snackbar.Add($"Failed to switch mode: {result.ErrorMessage}", Severity.Error);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SchemaText.ModeSwitchFailed, result.ErrorMessage), Severity.Error);
                 return;
             }
 
             if (_switchingToAdvancedMode)
             {
-                Snackbar.Add($"Switched to Advanced Mode. Matching rules copied to {result.SyncRulesUpdated} Synchronisation Rule(s).", Severity.Success);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(result.SyncRulesUpdated, SchemaText.SwitchedToAdvancedOne, SchemaText.SwitchedToAdvancedOther), result.SyncRulesUpdated), Severity.Success);
             }
             else
             {
                 // Show success message
-                var message = $"Switched to Simple Mode. Matching rules set on {result.ObjectTypesUpdated} object type(s).";
+                var message = string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(result.ObjectTypesUpdated, SchemaText.SwitchedToSimpleOne, SchemaText.SwitchedToSimpleOther), result.ObjectTypesUpdated);
                 Snackbar.Add(message, Severity.Success);
 
                 // Show any warnings about diverging rules
@@ -563,7 +567,7 @@ else
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to switch object matching mode");
-            Snackbar.Add("Failed to switch mode. Please try again or check the server logs for details.", Severity.Error);
+            Snackbar.Add(SchemaText.ModeSwitchFailedGeneric, Severity.Error);
         }
         finally
         {
@@ -579,7 +583,7 @@ else
         _currentMatchingRuleObjectType = objectType;
 
         <MudPaper Outlined="true" Class="pa-4 mb-4">
-            <MudText Typo="Typo.h6" Class="mb-3">Add Matching Rule</MudText>
+            <MudText Typo="Typo.h6" Class="mb-3">@SchemaText.AddMatchingRule</MudText>
 
             @{
                 var draft = DraftFor(objectType);
@@ -597,7 +601,7 @@ else
                                DropShadow="false"
                                Disabled="@(!draft.CanAdd(requireMetaverseObjectType: true))"
                                OnClick="() => HandleAddMatchingRuleAsync(objectType)">
-                        Add Matching Rule
+                        @SchemaText.AddMatchingRule
                     </MudButton>
                     @* Adding a rule takes effect on the next synchronisation, and what it does is invisible until
                        then: an account that joined nothing may now join an identity, or a different one from the
@@ -607,13 +611,13 @@ else
                                Disabled="@(!draft.CanAdd(requireMetaverseObjectType: true) || _startingPreview)"
                                OnClick="() => PreviewProposedRuleAsync(objectType)"
                                data-testid="jim-preview-matching-rule">
-                        Preview Impact
+                        @SchemaText.ObjectMatchingPreviewImpact
                     </MudButton>
                 </MudStack>
             </div>
         </MudPaper>
 
-        <MudText Typo="Typo.h6">Matching Rules for <span class="jim-title-accent">@objectType.Name</span></MudText>
+        <MudText Typo="Typo.h6">@((MarkupString)string.Format(CultureInfo.CurrentCulture, SchemaText.MatchingRulesFor, Span(objectType.Name)))</MudText>
 
         @* Rules already stored in an unworkable shape are named rather than quietly ignored. They were storable
            before the create path validated them (#1458), and the matching engine skips them without saying so, so
@@ -627,13 +631,12 @@ else
         {
             <MudAlert Severity="Severity.Error" Class="mt-2 mb-2"
                       data-testid="jim-matching-rules-unworkable">
-                <strong>@unworkableRules.Count matching @(unworkableRules.Count == 1 ? "rule" : "rules") cannot match anything.</strong>
-                Objects that should join an existing Metaverse Object will project a new one instead. Remove and
-                recreate @(unworkableRules.Count == 1 ? "it" : "them"):
+                <strong>@string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(unworkableRules.Count, SchemaText.UnworkableOne, SchemaText.UnworkableOther), unworkableRules.Count)</strong>
+                @PluralRules.Choose(unworkableRules.Count, SchemaText.UnworkableBodyOne, SchemaText.UnworkableBodyOther)
                 <ul class="mt-2 mb-0">
                     @foreach (var unworkable in unworkableRules)
                     {
-                        <li>Rule @(unworkable.Rule.Order + 1): @unworkable.Reason</li>
+                        <li>@string.Format(CultureInfo.CurrentCulture, SchemaText.UnworkableRuleLine, unworkable.Rule.Order + 1, unworkable.Reason)</li>
                     }
                 </ul>
             </MudAlert>
@@ -651,14 +654,14 @@ else
                              StateKey="@objectType.Id.ToString()"
                              DefaultSortBy="order"
                              LoadWindow="@((request, token) => LoadMatchingRuleWindowAsync(objectType, request, token))"
-                             SingularName="Object Matching Rule"
-                             PluralName="Object Matching Rules"
-                             SearchPlaceholder="Search by attribute name or expression">
+                             SingularName="@SchemaText.ObjectMatchingRuleSingular"
+                             PluralName="@SchemaText.ObjectMatchingRulePlural"
+                             SearchPlaceholder="@SchemaText.SearchByAttributeOrExpression">
             <Columns>
                 @* What the rule compares: a Connected System attribute's values, or an expression's result (#2052). *@
-                <TemplateColumn Title="Match Value" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+                <TemplateColumn Title="@SchemaText.MatchValueColumn" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Match Value</MudText>
+                        <MudText Typo="Typo.button">@SchemaText.MatchValueColumn</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         @{
@@ -678,17 +681,17 @@ else
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Operator" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn Title="@SchemaText.OperatorColumn" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Operator</MudText>
+                        <MudText Typo="Typo.button">@SchemaText.OperatorColumn</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
-                        equals
+                        @SchemaText.EqualsOperator
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Metaverse Attribute" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn Title="@SchemaText.MetaverseAttributeColumn" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Metaverse Attribute</MudText>
+                        <MudText Typo="Typo.button">@SchemaText.MetaverseAttributeColumn</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         @if (context.Item.TargetMetaverseAttribute is { } targetAttribute)
@@ -701,9 +704,9 @@ else
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Case Sensitive" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn Title="@SchemaText.CaseSensitiveColumn" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Case Sensitive</MudText>
+                        <MudText Typo="Typo.button">@SchemaText.CaseSensitiveColumn</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
                         <MudSwitch T="bool" Value="@context.Item.CaseSensitive"
@@ -711,12 +714,12 @@ else
                                    Color="Color.Primary" />
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Actions" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn Title="@SchemaText.ActionsColumn" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <HeaderTemplate>
-                        <MudText Typo="Typo.button">Actions</MudText>
+                        <MudText Typo="Typo.button">@SchemaText.ActionsColumn</MudText>
                     </HeaderTemplate>
                     <CellTemplate>
-                        <MudTooltip Text="Move up" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@SchemaText.MoveUp" Arrow="true" Placement="Placement.Top">
                             <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
                                            Variant="Variant.Filled"
                                            Size="Size.Small"
@@ -724,7 +727,7 @@ else
                                            Disabled="@(context.Item.Order == 0)"
                                            OnClick="() => HandleMoveMatchingRuleUpAsync(context.Item, objectType)" />
                         </MudTooltip>
-                        <MudTooltip Text="Move down" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@SchemaText.MoveDown" Arrow="true" Placement="Placement.Top">
                             <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
                                            Variant="Variant.Filled"
                                            Size="Size.Small"
@@ -732,7 +735,7 @@ else
                                            Disabled="@(context.Item.Order == objectType.ObjectMatchingRules.Max(r => r.Order))"
                                            OnClick="() => HandleMoveMatchingRuleDownAsync(context.Item, objectType)" />
                         </MudTooltip>
-                        <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@CommonText.Delete" Arrow="true" Placement="Placement.Top">
                             <MudIconButton
                                 Icon="@Icons.Material.Filled.Delete"
                                 Variant="Variant.Filled"
@@ -747,16 +750,16 @@ else
                 @if (!string.IsNullOrWhiteSpace(grid.SearchText))
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                     PrimaryText="@($"No Object Matching Rules match \"{grid.SearchText}\"")"
-                                     SecondaryText="Try a different search term, or clear the search."
-                                     ActionText="Clear Search"
+                                     PrimaryText="@string.Format(CultureInfo.CurrentCulture, SchemaText.NoRulesMatchSearch, grid.SearchText)"
+                                     SecondaryText="@SchemaText.TryDifferentSearch"
+                                     ActionText="@CommonText.ClearSearch"
                                      OnAction="@(() => grid.ClearSearchAsync())" />
                 }
                 else
                 {
                     <TableEmptyState Icon="@Icons.Material.Filled.Rule"
-                                     PrimaryText="No Object Matching Rules configured"
-                                     SecondaryText="Objects of this type will only match if they are manually joined. Use the Add Matching Rule panel above to define one." />
+                                     PrimaryText="@SchemaText.NoRulesConfigured"
+                                     SecondaryText="@SchemaText.NoRulesHint" />
                 }
             </EmptyContent>
         </VirtualisedDataGrid>
