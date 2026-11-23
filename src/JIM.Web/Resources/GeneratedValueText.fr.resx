@@ -563,4 +563,151 @@
   <data name="PreviewWidthExceeded" xml:space="preserve">
     <value>Le numéro suivant ne tient plus dans la largeur configurée ; la génération échouera pour cet attribut tant que la largeur ou le compteur ne sera pas corrigé.</value>
   </data>
+  <data name="WhyRejectedFallback" xml:space="preserve">
+    <value>Un système connecté</value>
+  </data>
+  <data name="WhyRejectedFallbackLower" xml:space="preserve">
+    <value>un système connecté</value>
+  </data>
+  <data name="WhyAnchoredFallback" xml:space="preserve">
+    <value>un autre système connecté</value>
+  </data>
+  <data name="WhyThatSystem" xml:space="preserve">
+    <value>ce système connecté</value>
+  </data>
+  <data name="WhyRejectedAnchored" xml:space="preserve">
+    <value> l’a refusée car elle est déjà utilisée ; </value>
+  </data>
+  <data name="WhyAnchoredHas" xml:space="preserve">
+    <value> a provisionné un compte avec cette valeur.</value>
+  </data>
+  <data name="WhyCannotTellJoin" xml:space="preserve">
+    <value> l’a refusée car elle est déjà utilisée ; JIM n’a pas pu déterminer si </value>
+  </data>
+  <data name="WhyCannotTellHolds" xml:space="preserve">
+    <value> la détient.</value>
+  </data>
+  <data name="WhyRemediationLimit" xml:space="preserve">
+    <value>Corrigée {0} et toujours refusée par </value>
+  </data>
+  <data name="WhyTimesOne" xml:space="preserve">
+    <value>une fois</value>
+  </data>
+  <data name="WhyTimesOther" xml:space="preserve">
+    <value>{0} fois</value>
+  </data>
+  <data name="WhyNoValueAvailable" xml:space="preserve">
+    <value> l’a refusée car elle est déjà utilisée, et JIM n’a trouvé aucune autre valeur qu’il puisse attribuer.</value>
+  </data>
+  <data name="WhyRejectedOnly" xml:space="preserve">
+    <value> l’a refusée car elle est déjà utilisée.</value>
+  </data>
+  <data name="WhyCorrectingRenames" xml:space="preserve">
+    <value>La corriger renommerait ce compte.</value>
+  </data>
+  <data name="WhyCannotTell" xml:space="preserve">
+    <value>L’espace connecteur de {0} a été vidé et n’a pas été entièrement importé depuis.</value>
+  </data>
+  <data name="WhyRemediationLimitStop" xml:space="preserve">
+    <value>JIM s’arrête après {0} corrections pour qu’une cible mal configurée ne puisse pas épuiser les valeurs.</value>
+  </data>
+  <data name="WhyNoValueRaise" xml:space="preserve">
+    <value>Augmentez la limite de tentatives du flux d’attributs ou élargissez sa largeur fixe, puis réessayez.</value>
+  </data>
+  <data name="TryAgainTitle" xml:space="preserve">
+    <value>Réessayer</value>
+  </data>
+  <data name="TryAgainReleased" xml:space="preserve">
+    <value>Libérée. La prochaine exécution d’export tente à nouveau la même valeur.</value>
+  </data>
+  <data name="TryAgainHeldOne" xml:space="preserve">
+    <value>{0} valeur retenue</value>
+  </data>
+  <data name="TryAgainHeldOther" xml:space="preserve">
+    <value>{0} valeurs retenues</value>
+  </data>
+  <data name="TryAgainConfirm" xml:space="preserve">
+    <value>Libérer {0} pour que la prochaine exécution d’export tente à nouveau la même valeur ? Toute valeur que la cible refuse de nouveau revient ici.</value>
+  </data>
+  <data name="TryAgainNothingReleased" xml:space="preserve">
+    <value>Aucune libération : aucune valeur correspondant à ces filtres n’attend de décision.</value>
+  </data>
+  <data name="TryAgainReleasedOne" xml:space="preserve">
+    <value>{0} valeur retenue libérée. La prochaine exécution d’export les essaiera de nouveau.</value>
+  </data>
+  <data name="TryAgainReleasedOther" xml:space="preserve">
+    <value>{0} valeurs retenues libérées. La prochaine exécution d’export les essaiera de nouveau.</value>
+  </data>
+  <data name="RoomForMore" xml:space="preserve">
+    <value>Place pour {0} numéros de plus</value>
+  </data>
+  <data name="PillLetterIfTaken" xml:space="preserve">
+    <value>lettre si elle est prise</value>
+  </data>
+  <data name="PillNumberIfTaken" xml:space="preserve">
+    <value>numéro si déjà pris</value>
+  </data>
+  <data name="PillSequenceWidth" xml:space="preserve">
+    <value>Séquence à partir de {0} · largeur {1}</value>
+  </data>
+  <data name="PillSequenceFrom" xml:space="preserve">
+    <value>Séquence à partir de {0}</value>
+  </data>
+  <data name="PillRandomGuid" xml:space="preserve">
+    <value>GUID aléatoire</value>
+  </data>
+  <data name="PillRandomHex" xml:space="preserve">
+    <value>Hexadécimal aléatoire · {0}</value>
+  </data>
+  <data name="PillRandomDigits" xml:space="preserve">
+    <value>Chiffres aléatoires · {0}</value>
+  </data>
+  <data name="PillRandom" xml:space="preserve">
+    <value>Aléatoire</value>
+  </data>
+  <data name="ScaleTrillionOne" xml:space="preserve">
+    <value>billion</value>
+  </data>
+  <data name="ScaleTrillionOther" xml:space="preserve">
+    <value>billions</value>
+  </data>
+  <data name="ScaleBillionOne" xml:space="preserve">
+    <value>milliard</value>
+  </data>
+  <data name="ScaleBillionOther" xml:space="preserve">
+    <value>milliards</value>
+  </data>
+  <data name="ScaleMillionOne" xml:space="preserve">
+    <value>million</value>
+  </data>
+  <data name="ScaleMillionOther" xml:space="preserve">
+    <value>millions</value>
+  </data>
+  <data name="ScaleThousandOne" xml:space="preserve">
+    <value>mille</value>
+  </data>
+  <data name="ScaleThousandOther" xml:space="preserve">
+    <value>milliers</value>
+  </data>
+  <data name="ClashDrawAgain" xml:space="preserve">
+    <value>une collision entraîne un nouveau tirage</value>
+  </data>
+  <data name="ClashBecomeLikely" xml:space="preserve">
+    <value>les collisions deviennent probables au-delà d’environ {0} objets</value>
+  </data>
+  <data name="HintGuid" xml:space="preserve">
+    <value>36 caractères · aucune vérification de collision nécessaire</value>
+  </data>
+  <data name="HintHex" xml:space="preserve">
+    <value>minuscules · {0} valeurs · {1}</value>
+  </data>
+  <data name="HintDigits" xml:space="preserve">
+    <value>{0} valeurs · {1}</value>
+  </data>
+  <data name="TargetMultiValued" xml:space="preserve">
+    <value>Une valeur générée ne peut être attribuée qu’à un attribut à valeur unique.</value>
+  </data>
+  <data name="TargetUnsupported" xml:space="preserve">
+    <value>Une valeur générée ne peut cibler qu’un attribut Texte ou Nombre ; « {0} » n’est pas pris en charge.</value>
+  </data>
 </root>

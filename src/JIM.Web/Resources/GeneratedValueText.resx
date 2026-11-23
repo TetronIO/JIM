@@ -722,4 +722,200 @@
     <value>The next number no longer fits the configured width; generation will fail for this attribute until the width or the counter is corrected.</value>
     <comment>Warning alert</comment>
   </data>
+  <data name="WhyRejectedFallback" xml:space="preserve">
+    <value>A Connected System</value>
+    <comment>Stands in when the rejecting system is deleted; starts a sentence</comment>
+  </data>
+  <data name="WhyRejectedFallbackLower" xml:space="preserve">
+    <value>a Connected System</value>
+    <comment>Stands in when the rejecting system is deleted; mid-sentence</comment>
+  </data>
+  <data name="WhyAnchoredFallback" xml:space="preserve">
+    <value>another Connected System</value>
+    <comment>Stands in when the anchoring system is deleted</comment>
+  </data>
+  <data name="WhyThatSystem" xml:space="preserve">
+    <value>That Connected System</value>
+    <comment>Stands in for a deleted system's name; follows 'de'</comment>
+  </data>
+  <data name="WhyRejectedAnchored" xml:space="preserve">
+    <value> rejected it as already in use; </value>
+    <comment>Follows the rejecting system; 'it' is the value</comment>
+  </data>
+  <data name="WhyAnchoredHas" xml:space="preserve">
+    <value> has provisioned an account with it.</value>
+    <comment>Follows the anchoring system</comment>
+  </data>
+  <data name="WhyCannotTellJoin" xml:space="preserve">
+    <value> rejected it as already in use; JIM could not tell whether </value>
+    <comment>Follows the rejecting system</comment>
+  </data>
+  <data name="WhyCannotTellHolds" xml:space="preserve">
+    <value> holds it.</value>
+    <comment>Follows the anchoring system</comment>
+  </data>
+  <data name="WhyRemediationLimit" xml:space="preserve">
+    <value>Corrected {0} and still rejected by </value>
+    <comment>{0} is 'once' or 'N times'; the rejecting system follows</comment>
+  </data>
+  <data name="WhyTimesOne" xml:space="preserve">
+    <value>once</value>
+    <comment>Count of corrections: one</comment>
+  </data>
+  <data name="WhyTimesOther" xml:space="preserve">
+    <value>{0} times</value>
+    <comment>Count of corrections: more than one</comment>
+  </data>
+  <data name="WhyNoValueAvailable" xml:space="preserve">
+    <value> rejected it as already in use, and JIM found no other value it could issue.</value>
+    <comment>Follows the rejecting system</comment>
+  </data>
+  <data name="WhyRejectedOnly" xml:space="preserve">
+    <value> rejected it as already in use.</value>
+    <comment>Follows the rejecting system</comment>
+  </data>
+  <data name="WhyCorrectingRenames" xml:space="preserve">
+    <value>Correcting it would rename that account.</value>
+    <comment>Second line; 'it' is the value</comment>
+  </data>
+  <data name="WhyCannotTell" xml:space="preserve">
+    <value>{0}'s connector space was cleared and has not been fully imported since.</value>
+    <comment>{0} is the Connected System's name</comment>
+  </data>
+  <data name="WhyRemediationLimitStop" xml:space="preserve">
+    <value>JIM stops after {0} corrections so a misconfigured target cannot use up values.</value>
+    <comment>{0} is the maximum number of corrections</comment>
+  </data>
+  <data name="WhyNoValueRaise" xml:space="preserve">
+    <value>Raise the Attribute Flow's attempt limit or widen its fixed width, then try again.</value>
+    <comment>Second line</comment>
+  </data>
+  <data name="TryAgainTitle" xml:space="preserve">
+    <value>Try again</value>
+    <comment>Dialog title and the confirming button</comment>
+  </data>
+  <data name="TryAgainReleased" xml:space="preserve">
+    <value>Released. The next export run tries the same value again.</value>
+    <comment>Snackbar after one value is released</comment>
+  </data>
+  <data name="TryAgainHeldOne" xml:space="preserve">
+    <value>{0} held value</value>
+    <comment>{0} is the count</comment>
+  </data>
+  <data name="TryAgainHeldOther" xml:space="preserve">
+    <value>{0} held values</value>
+    <comment>{0} is the count</comment>
+  </data>
+  <data name="TryAgainConfirm" xml:space="preserve">
+    <value>Release {0} so the next export run tries the same value again? Any the target rejects again come back here.</value>
+    <comment>{0} is 'N held values' or '1 held value'</comment>
+  </data>
+  <data name="TryAgainNothingReleased" xml:space="preserve">
+    <value>Nothing was released; no value matching these filters needs a decision.</value>
+    <comment>Snackbar when nothing matched</comment>
+  </data>
+  <data name="TryAgainReleasedOne" xml:space="preserve">
+    <value>{0} held value released. The next export run tries them again.</value>
+    <comment>Snackbar; {0} is the count</comment>
+  </data>
+  <data name="TryAgainReleasedOther" xml:space="preserve">
+    <value>{0} held values released. The next export run tries them again.</value>
+    <comment>Snackbar; {0} is the count</comment>
+  </data>
+  <data name="RoomForMore" xml:space="preserve">
+    <value>Room for {0} more numbers</value>
+    <comment>Hint under a fixed-width Width field</comment>
+  </data>
+  <data name="PillLetterIfTaken" xml:space="preserve">
+    <value>letter if taken</value>
+    <comment>Token pill: letter suffix</comment>
+  </data>
+  <data name="PillNumberIfTaken" xml:space="preserve">
+    <value>number if taken</value>
+    <comment>Token pill: number suffix</comment>
+  </data>
+  <data name="PillSequenceWidth" xml:space="preserve">
+    <value>Sequence from {0} · width {1}</value>
+    <comment>Token pill: fixed-width sequence</comment>
+  </data>
+  <data name="PillSequenceFrom" xml:space="preserve">
+    <value>Sequence from {0}</value>
+    <comment>Token pill: sequence</comment>
+  </data>
+  <data name="PillRandomGuid" xml:space="preserve">
+    <value>Random GUID</value>
+    <comment>Token pill</comment>
+  </data>
+  <data name="PillRandomHex" xml:space="preserve">
+    <value>Random hex · {0}</value>
+    <comment>Token pill; {0} is the length</comment>
+  </data>
+  <data name="PillRandomDigits" xml:space="preserve">
+    <value>Random digits · {0}</value>
+    <comment>Token pill; {0} is the length</comment>
+  </data>
+  <data name="PillRandom" xml:space="preserve">
+    <value>Random</value>
+    <comment>Token pill: random, format not known</comment>
+  </data>
+  <data name="ScaleTrillionOne" xml:space="preserve">
+    <value>trillion</value>
+    <comment>Approximate count: below two of this unit</comment>
+  </data>
+  <data name="ScaleTrillionOther" xml:space="preserve">
+    <value>trillion</value>
+    <comment>Approximate count: two or more of this unit</comment>
+  </data>
+  <data name="ScaleBillionOne" xml:space="preserve">
+    <value>billion</value>
+    <comment>Approximate count: below two of this unit</comment>
+  </data>
+  <data name="ScaleBillionOther" xml:space="preserve">
+    <value>billion</value>
+    <comment>Approximate count: two or more of this unit</comment>
+  </data>
+  <data name="ScaleMillionOne" xml:space="preserve">
+    <value>million</value>
+    <comment>Approximate count: below two of this unit</comment>
+  </data>
+  <data name="ScaleMillionOther" xml:space="preserve">
+    <value>million</value>
+    <comment>Approximate count: two or more of this unit</comment>
+  </data>
+  <data name="ScaleThousandOne" xml:space="preserve">
+    <value>thousand</value>
+    <comment>Approximate count: below two of this unit</comment>
+  </data>
+  <data name="ScaleThousandOther" xml:space="preserve">
+    <value>thousand</value>
+    <comment>Approximate count: two or more of this unit</comment>
+  </data>
+  <data name="ClashDrawAgain" xml:space="preserve">
+    <value>clashes draw again</value>
+    <comment>Clash likelihood for a large value space</comment>
+  </data>
+  <data name="ClashBecomeLikely" xml:space="preserve">
+    <value>clashes become likely past ~{0} objects</value>
+    <comment>{0} is the approximate number of objects</comment>
+  </data>
+  <data name="HintGuid" xml:space="preserve">
+    <value>36 characters · no clash checks needed</value>
+    <comment>Random format menu hint for GUID</comment>
+  </data>
+  <data name="HintHex" xml:space="preserve">
+    <value>lower case · {0} values · {1}</value>
+    <comment>Random format menu hint; {0} the value space, {1} the clash likelihood</comment>
+  </data>
+  <data name="HintDigits" xml:space="preserve">
+    <value>{0} values · {1}</value>
+    <comment>Random format menu hint; {0} the value space, {1} the clash likelihood</comment>
+  </data>
+  <data name="TargetMultiValued" xml:space="preserve">
+    <value>A generated value can only be assigned to a single-valued attribute.</value>
+    <comment>Reason a target is disabled</comment>
+  </data>
+  <data name="TargetUnsupported" xml:space="preserve">
+    <value>A generated value can only target a Text or Number attribute; "{0}" is not supported.</value>
+    <comment>Reason a target is disabled; {0} is the data type</comment>
+  </data>
 </root>

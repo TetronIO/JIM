@@ -6,6 +6,7 @@ using System.Numerics;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
+using JIM.Web.Resources;
 
 namespace JIM.Web;
 
@@ -59,7 +60,7 @@ public static class GeneratedValueFormHelpers
         if (room < 0)
             return null;
 
-        return $"Room for {room.ToString("N0", CultureInfo.InvariantCulture)} more numbers";
+        return string.Format(CultureInfo.CurrentCulture, GeneratedValueText.RoomForMore, room.ToString("N0", CultureInfo.CurrentCulture));
     }
 
     /// <summary>
@@ -77,19 +78,25 @@ public static class GeneratedValueFormHelpers
     {
         var label = generation.TokenKind switch
         {
-            GeneratedValueTokenKind.OnlyIfTaken =>
-                $"{(generation.SuffixStyle == GeneratedValueSuffixStyle.Letter ? "letter" : "number")} if taken",
+            GeneratedValueTokenKind.OnlyIfTaken => generation.SuffixStyle == GeneratedValueSuffixStyle.Letter
+                ? GeneratedValueText.PillLetterIfTaken
+                : GeneratedValueText.PillNumberIfTaken,
 
             GeneratedValueTokenKind.Sequence => generation.FixedWidth.HasValue
-                ? $"Sequence from {generation.SequenceStart.ToString(CultureInfo.InvariantCulture)} · width {generation.FixedWidth.Value.ToString(CultureInfo.InvariantCulture)}"
-                : $"Sequence from {generation.SequenceStart.ToString(CultureInfo.InvariantCulture)}",
+                ? string.Format(CultureInfo.CurrentCulture, GeneratedValueText.PillSequenceWidth,
+                    generation.SequenceStart.ToString(CultureInfo.InvariantCulture),
+                    generation.FixedWidth.Value.ToString(CultureInfo.InvariantCulture))
+                : string.Format(CultureInfo.CurrentCulture, GeneratedValueText.PillSequenceFrom,
+                    generation.SequenceStart.ToString(CultureInfo.InvariantCulture)),
 
             GeneratedValueTokenKind.Random => generation.RandomFormat switch
             {
-                GeneratedValueRandomFormat.Guid => "Random GUID",
-                GeneratedValueRandomFormat.Hex => $"Random hex · {generation.RandomLength?.ToString(CultureInfo.InvariantCulture) ?? "?"}",
-                GeneratedValueRandomFormat.Digits => $"Random digits · {generation.RandomLength?.ToString(CultureInfo.InvariantCulture) ?? "?"}",
-                _ => "Random"
+                GeneratedValueRandomFormat.Guid => GeneratedValueText.PillRandomGuid,
+                GeneratedValueRandomFormat.Hex => string.Format(CultureInfo.CurrentCulture, GeneratedValueText.PillRandomHex,
+                    generation.RandomLength?.ToString(CultureInfo.InvariantCulture) ?? "?"),
+                GeneratedValueRandomFormat.Digits => string.Format(CultureInfo.CurrentCulture, GeneratedValueText.PillRandomDigits,
+                    generation.RandomLength?.ToString(CultureInfo.InvariantCulture) ?? "?"),
+                _ => GeneratedValueText.PillRandom
             },
 
             _ => string.Empty
@@ -117,24 +124,27 @@ public static class GeneratedValueFormHelpers
     /// </summary>
     public static string FormatApproximateCount(BigInteger value)
     {
-        (BigInteger Threshold, string Suffix)[] scale =
+        // Each unit has a singular and a plural form, since a language may take a different word for one and for many
+        // (French: "1 milliard", "4,3 milliards"); a scaled value below two takes the singular.
+        (BigInteger Threshold, string One, string Other)[] scale =
         [
-            (BigInteger.Parse("1000000000000", CultureInfo.InvariantCulture), "trillion"),
-            (1_000_000_000, "billion"),
-            (1_000_000, "million"),
-            (1_000, "thousand")
+            (BigInteger.Parse("1000000000000", CultureInfo.InvariantCulture), GeneratedValueText.ScaleTrillionOne, GeneratedValueText.ScaleTrillionOther),
+            (1_000_000_000, GeneratedValueText.ScaleBillionOne, GeneratedValueText.ScaleBillionOther),
+            (1_000_000, GeneratedValueText.ScaleMillionOne, GeneratedValueText.ScaleMillionOther),
+            (1_000, GeneratedValueText.ScaleThousandOne, GeneratedValueText.ScaleThousandOther)
         ];
 
-        foreach (var (threshold, suffix) in scale)
+        foreach (var (threshold, one, other) in scale)
         {
             if (value >= threshold)
             {
                 var scaled = (double)value / (double)threshold;
-                return $"{scaled.ToString("0.#", CultureInfo.InvariantCulture)} {suffix}";
+                var unit = scaled < 2 ? one : other;
+                return $"{scaled.ToString("0.#", CultureInfo.CurrentCulture)} {unit}";
             }
         }
 
-        return value.ToString("N0", CultureInfo.InvariantCulture);
+        return value.ToString("N0", CultureInfo.CurrentCulture);
     }
 
     /// <summary>
@@ -146,10 +156,10 @@ public static class GeneratedValueFormHelpers
     public static string DescribeClashLikelihood(BigInteger valueSpace)
     {
         if (valueSpace >= 1_000_000_000)
-            return "clashes draw again";
+            return GeneratedValueText.ClashDrawAgain;
 
         var threshold = (long)Math.Sqrt((double)valueSpace);
-        return $"clashes become likely past ~{threshold.ToString("N0", CultureInfo.InvariantCulture)} objects";
+        return string.Format(CultureInfo.CurrentCulture, GeneratedValueText.ClashBecomeLikely, threshold.ToString("N0", CultureInfo.CurrentCulture));
     }
 
     /// <summary>
@@ -164,18 +174,20 @@ public static class GeneratedValueFormHelpers
         switch (format)
         {
             case GeneratedValueRandomFormat.Guid:
-                return "36 characters · no clash checks needed";
+                return GeneratedValueText.HintGuid;
 
             case GeneratedValueRandomFormat.Hex when length is > 0:
             {
                 var space = BigInteger.Pow(16, length.Value);
-                return $"lower case · {FormatApproximateCount(space)} values · {DescribeClashLikelihood(space)}";
+                return string.Format(CultureInfo.CurrentCulture, GeneratedValueText.HintHex,
+                    FormatApproximateCount(space), DescribeClashLikelihood(space));
             }
 
             case GeneratedValueRandomFormat.Digits when length is > 0:
             {
                 var space = BigInteger.Pow(10, length.Value);
-                return $"{FormatApproximateCount(space)} values · {DescribeClashLikelihood(space)}";
+                return string.Format(CultureInfo.CurrentCulture, GeneratedValueText.HintDigits,
+                    FormatApproximateCount(space), DescribeClashLikelihood(space));
             }
 
             default:
@@ -203,10 +215,10 @@ public static class GeneratedValueFormHelpers
     public static string? GetGeneratedTargetDisabledReason(AttributeDataType type, AttributePlurality plurality)
     {
         if (plurality == AttributePlurality.MultiValued)
-            return "A generated value can only be assigned to a single-valued attribute.";
+            return GeneratedValueText.TargetMultiValued;
 
         if (type != AttributeDataType.Text && !IsNumberTarget(type))
-            return $"A generated value can only target a Text or Number attribute; \"{type}\" is not supported.";
+            return string.Format(CultureInfo.CurrentCulture, GeneratedValueText.TargetUnsupported, type.ToString());
 
         return null;
     }
