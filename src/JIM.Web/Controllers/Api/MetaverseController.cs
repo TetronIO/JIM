@@ -699,6 +699,18 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         if (attribute.BuiltIn)
             return BadRequest(ApiErrorResponse.BadRequest("Built-in attributes cannot be modified."));
 
+        // Leaving Accumulate lets the next synchronisation remove values it kept (#3059), so it must be confirmed. Checked
+        // before anything is written, so a rename in the same request does not half-apply.
+        if (request.ContributionMode is { } requestedMode &&
+            AttributeContributionModeRules.CanRemoveValues(attribute.ContributionMode, requestedMode) &&
+            !request.ConfirmLeavingAccumulate)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"Changing '{attribute.Name}' from Accumulate to {requestedMode} removes, at each Metaverse Object's next synchronisation, " +
+                $"the values that no contributor supplies any more, and exports remove them from target systems. " +
+                $"Set {nameof(UpdateMetaverseAttributeRequest.ConfirmLeavingAccumulate)} to true to make this change."));
+        }
+
         var apiKey = await GetCurrentApiKeyAsync();
         var user = apiKey == null ? await GetCurrentUserAsync() : null;
 

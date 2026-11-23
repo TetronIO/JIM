@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Models.Staging
@@ -43,7 +44,7 @@
                             <MudSelectItem Value="type">@type.ToString().SplitOnCapitalLetters()</MudSelectItem>
                         }
                     </MudSelect>
-                    <MudSelect @bind-Value="_plurality" T="AttributePlurality" Label="Plurality" Variant="Variant.Outlined"
+                    <MudSelect @bind-Value="_plurality" @bind-Value:after="OnPluralityChanged" T="AttributePlurality" Label="Plurality" Variant="Variant.Outlined"
                                Required="true" Class="flex-grow-1" Disabled="@(ReadOnly || PluralityLocked)" HelperText="@PluralityHelperText()">
                         <MudSelectItem Value="AttributePlurality.SingleValued">Single-valued</MudSelectItem>
                         <MudSelectItem Value="AttributePlurality.MultiValued" Disabled="@(!AttributeDataTypeCapabilities.SupportsMultiValued(_type))">Multi-valued</MudSelectItem>
@@ -59,6 +60,25 @@
                         <MudSelectItem Value="AttributeRenderingHint.ChipSet">Chip set</MudSelectItem>
                         <MudSelectItem Value="AttributeRenderingHint.List">List</MudSelectItem>
                     </MudSelect>
+
+                    @* ─── Contribution mode (#3059) ─── *@
+                    <MudSelect @bind-Value="_contributionMode" T="AttributeContributionMode" Label="@MetaverseAttributeText.ContributionModeLabel"
+                               Variant="Variant.Outlined" Disabled="@ReadOnly" HelperText="@ContributionModeHelperText()">
+                        <MudSelectItem Value="AttributeContributionMode.Priority">@MetaverseAttributeText.ContributionModePriority</MudSelectItem>
+                        <MudSelectItem Value="AttributeContributionMode.Accumulate"
+                                       Disabled="@(!AttributeContributionModeRules.IsPermitted(AttributeContributionMode.Accumulate, _type, _plurality))">@MetaverseAttributeText.ContributionModeAccumulate</MudSelectItem>
+                    </MudSelect>
+                    @if (!ReadOnly && _contributionMode != _originalContributionMode)
+                    {
+                        @if (AttributeContributionModeRules.CanRemoveValues(_originalContributionMode, _contributionMode))
+                        {
+                            <MudAlert Severity="Severity.Warning">@MetaverseAttributeText.LeaveAccumulateNotice</MudAlert>
+                        }
+                        else if (_contributionMode == AttributeContributionMode.Accumulate)
+                        {
+                            <MudAlert Severity="Severity.Info">@MetaverseAttributeText.AccumulateNotice</MudAlert>
+                        }
+                    }
                 }
 
                 @* ─── Create-time bindings (create only) ─── *@
@@ -225,6 +245,7 @@
     private AttributeDataType _type = AttributeDataType.Text;
     private AttributePlurality _plurality = AttributePlurality.SingleValued;
     private AttributeRenderingHint _renderingHint = AttributeRenderingHint.Default;
+    private AttributeContributionMode _contributionMode = AttributeContributionMode.Priority;
     private IReadOnlyCollection<int> _selectedObjectTypeIds = new HashSet<int>();
 
     private string? _nameError;
@@ -236,6 +257,7 @@
     private AttributeDataType _originalType;
     private AttributePlurality _originalPlurality;
     private AttributeRenderingHint _originalRenderingHint;
+    private AttributeContributionMode _originalContributionMode;
 
     private IList<MetaverseObjectType> _objectTypes = new List<MetaverseObjectType>();
 
@@ -263,6 +285,8 @@
             _type = Attribute.Type;
             _plurality = Attribute.AttributePlurality;
             _renderingHint = Attribute.RenderingHint;
+            _contributionMode = Attribute.ContributionMode;
+            _originalContributionMode = Attribute.ContributionMode;
             _originalName = Attribute.Name;
             _originalType = Attribute.Type;
             _originalPlurality = Attribute.AttributePlurality;
@@ -293,7 +317,21 @@
     private void OnTypeChanged()
     {
         _plurality = AttributeDataTypeCapabilities.Constrain(_type, _plurality);
+        OnPluralityChanged();
     }
+
+    /// <summary>
+    /// A contribution mode the attribute can no longer use (Accumulate on a single-valued or Reference attribute) falls
+    /// back to Priority, as the Multi-valued option does for a Boolean (#3059).
+    /// </summary>
+    private void OnPluralityChanged()
+    {
+        _contributionMode = AttributeContributionModeRules.Constrain(_contributionMode, _type, _plurality);
+    }
+
+    private string ContributionModeHelperText() => _type == AttributeDataType.Reference
+        ? MetaverseAttributeText.ContributionModeReferenceHelper
+        : MetaverseAttributeText.ContributionModeHelper;
 
     /// <summary>
     /// True when Metaverse Objects hold values for the attribute being edited. While they do, the only schema change
@@ -404,6 +442,7 @@
         _type != _originalType ||
         _plurality != _originalPlurality ||
         _renderingHint != _originalRenderingHint ||
+        _contributionMode != _originalContributionMode ||
         MappingsChanged();
 
     private bool MappingsChanged()
@@ -510,6 +549,12 @@
                 return;
         }
 
+        // Leaving Accumulate lets the next synchronisation remove the values it kept (#3059): the administrator confirms
+        // by typing the attribute's name, as the REST API and PowerShell require explicit confirmation too.
+        if (_isEdit && AttributeContributionModeRules.CanRemoveValues(_originalContributionMode, _contributionMode) &&
+            !await ConfirmLeavingAccumulateAsync())
+            return;
+
         var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, _isEdit ? "Save" : "Create");
         if (cancelled)
             return;
@@ -531,6 +576,7 @@
                     Type = _type,
                     AttributePlurality = _plurality,
                     RenderingHint = _plurality == AttributePlurality.MultiValued ? _renderingHint : AttributeRenderingHint.Default,
+                    ContributionMode = _contributionMode,
                     Created = DateTime.UtcNow,
                     MetaverseObjectTypes = new List<MetaverseObjectType>()
                 };
@@ -569,6 +615,7 @@
         BuiltIn = Attribute.BuiltIn,
         // Matches ApplyEditAsync, which only writes the rendering hint for a multi-valued attribute.
         RenderingHint = _plurality == AttributePlurality.MultiValued ? _renderingHint : Attribute.RenderingHint,
+        ContributionMode = _contributionMode,
         // Object Type associations are not editable once an attribute exists, so they carry over untouched.
         MetaverseObjectTypes = Attribute.MetaverseObjectTypes,
         StandardMappings = _mappings
@@ -578,6 +625,12 @@
     {
         var attributeId = Attribute!.Id;
         var trimmedName = _name.Trim();
+
+        // A return to Priority goes first, because Priority is valid for any schema and a narrowing to single-valued is
+        // refused while the attribute accumulates; any other mode change goes after the schema change, which it may need.
+        var modeChanged = _contributionMode != _originalContributionMode;
+        if (modeChanged && _contributionMode == AttributeContributionMode.Priority)
+            await UpdateContributionModeAsync(jim, attributeId, user, changeReason);
 
         // Schema change (type / plurality) via the gated path.
         if (_type != _originalType || _plurality != _originalPlurality)
@@ -605,11 +658,45 @@
             }
         }
 
+        if (modeChanged && _contributionMode != AttributeContributionMode.Priority)
+            await UpdateContributionModeAsync(jim, attributeId, user, changeReason);
+
         // Standard Mappings (full replacement of the advisory metadata).
         if (MappingsChanged())
             await jim.Metaverse.UpdateMetaverseAttributeStandardMappingsAsync(attributeId, _mappings, user, changeReason);
 
         Snackbar.Add($"Saved changes to \"{trimmedName}\".", Severity.Success);
+    }
+
+    private async Task UpdateContributionModeAsync(JimApplication jim, int attributeId, MetaverseObject user, string? changeReason)
+    {
+        var attribute = await jim.Metaverse.GetMetaverseAttributeAsync(attributeId);
+        if (attribute == null)
+            return;
+
+        attribute.ContributionMode = _contributionMode;
+        await jim.Metaverse.UpdateMetaverseAttributeAsync(attribute, user, changeReason);
+    }
+
+    /// <summary>
+    /// Asks the administrator to confirm, by typing the attribute's name, a change that lets the next synchronisation
+    /// remove the values Accumulate kept.
+    /// </summary>
+    private async Task<bool> ConfirmLeavingAccumulateAsync()
+    {
+        var name = _originalName;
+        var parameters = new DialogParameters<ConsequenceConfirmationDialog>
+        {
+            { x => x.IrreversibleWarning, string.Format(CultureInfo.CurrentCulture, MetaverseAttributeText.LeaveAccumulateWarning, name) },
+            { x => x.ConfirmationPhrase, name },
+            { x => x.ConfirmButtonText, MetaverseAttributeText.LeaveAccumulateConfirm },
+            { x => x.ConfirmButtonColour, Color.Error }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await DialogService.ShowAsync<ConsequenceConfirmationDialog>(
+            string.Format(CultureInfo.CurrentCulture, MetaverseAttributeText.LeaveAccumulateDialogTitle, name), parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false };
     }
 
     private void Cancel() => MudDialog.Cancel();

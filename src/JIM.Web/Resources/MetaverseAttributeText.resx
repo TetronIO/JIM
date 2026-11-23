@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ContributionModeLabel" xml:space="preserve">
+    <value>Contribution Mode</value>
+    <comment>Field label on the Metaverse attribute editor.</comment>
+  </data>
+  <data name="ContributionModePriority" xml:space="preserve">
+    <value>Priority</value>
+    <comment>A contribution mode: the highest-priority contributor supplies the values.</comment>
+  </data>
+  <data name="ContributionModeAccumulate" xml:space="preserve">
+    <value>Accumulate</value>
+    <comment>A contribution mode: every contributor adds values, and none is removed. An imperative verb, as a mode name.</comment>
+  </data>
+  <data name="ContributionModeHelper" xml:space="preserve">
+    <value>How the values of several Synchronisation Rules are combined. Priority takes them from the highest-priority contributor; Accumulate adds every value and never removes one through synchronisation.</value>
+    <comment>Helper text under the Contribution Mode field. Priority and Accumulate are the mode names (ContributionModePriority, ContributionModeAccumulate).</comment>
+  </data>
+  <data name="ContributionModeReferenceHelper" xml:space="preserve">
+    <value>Accumulate is not available for a Reference attribute, because a reference is removed with the Metaverse Object it points to. To keep a history of references, record them as text in a separate attribute.</value>
+    <comment>Helper text under the Contribution Mode field when the attribute is a Reference attribute.</comment>
+  </data>
+  <data name="AccumulateNotice" xml:space="preserve">
+    <value>From each Metaverse Object's next synchronisation, every contributor adds its values to this attribute, and synchronisation never removes one, even after the account that supplied it is deleted.</value>
+    <comment>Notice shown when an administrator changes an attribute to Accumulate, before saving.</comment>
+  </data>
+  <data name="LeaveAccumulateNotice" xml:space="preserve">
+    <value>At each Metaverse Object's next synchronisation, the values this attribute kept that no contributor supplies any more are removed, and exports remove them from target systems.</value>
+    <comment>Warning shown when an administrator changes an attribute from Accumulate to another mode, before saving.</comment>
+  </data>
+  <data name="LeaveAccumulateDialogTitle" xml:space="preserve">
+    <value>Stop accumulating values in '{0}'?</value>
+    <comment>Title of the confirmation dialog. {0} is the attribute's name.</comment>
+  </data>
+  <data name="LeaveAccumulateWarning" xml:space="preserve">
+    <value>Changing '{0}' to Priority removes, at each Metaverse Object's next synchronisation, the values that no contributor supplies any more, and exports then remove them from target systems. They cannot be recovered.</value>
+    <comment>Body of the confirmation dialog. {0} is the attribute's name; Priority is the mode name.</comment>
+  </data>
+  <data name="LeaveAccumulateConfirm" xml:space="preserve">
+    <value>Stop accumulating</value>
+    <comment>Confirm button of the dialog.</comment>
+  </data>
+  <data name="PriorityListAccumulateNotice" xml:space="preserve">
+    <value>This attribute uses the Accumulate contribution mode: every Synchronisation Rule below adds its values and none is preferred, so there is no order to set, and "Null is a value" has no effect.</value>
+    <comment>Shown above an Accumulate attribute's contributors, where a Priority attribute shows its priority order. "Null is a value" is a setting's name.</comment>
+  </data>
+  <data name="PendingContributorThisMapping" xml:space="preserve">
+    <value>this mapping, once saved</value>
+    <comment>Stands in the Synchronisation Rule column for the mapping being created, which has no rule row yet.</comment>
+  </data>
+  <data name="ColumnConnectedSystem" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="ColumnSynchronisationRule" xml:space="preserve">
+    <value>Synchronisation Rule</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="NullIsValueAccumulateTooltip" xml:space="preserve">
+    <value>"Null is a value" has no effect on an Accumulate attribute: every contributor adds its values, so there is no winner for a missing value to override.</value>
+    <comment>Tooltip on the disabled "Null is a value" switch in the Attribute Flow editor.</comment>
+  </data>
+  <data name="ExportAccumulateAdvisory" xml:space="preserve">
+    <value>This Metaverse attribute accumulates values, so this Attribute Flow exports every value it has kept, including those from accounts that have since been deleted.</value>
+    <comment>Advisory in the Attribute Flow editor when an outbound flow's source attribute uses the Accumulate mode.</comment>
+  </data>
+</root>

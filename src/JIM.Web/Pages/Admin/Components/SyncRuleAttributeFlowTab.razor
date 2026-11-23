@@ -564,7 +564,11 @@
                         @if (ShowAttributePriorityContext() && _attributeFlowMapping.TargetMetaverseAttribute is { } targetAttribute)
                         {
                             var alreadyContributes = MappingAlreadyContributesToSelectedAttribute();
+                            var targetAccumulates = targetAttribute.ContributionMode == AttributeContributionMode.Accumulate;
                             <MudAlert Severity="Severity.Info" Class="mt-5">
+                                @* An Accumulate attribute has no order (#3059); the list below says so itself. *@
+                                @if (!targetAccumulates)
+                                {
                                 <MudText Typo="Typo.body1">
                                     @if (alreadyContributes)
                                     {
@@ -575,6 +579,7 @@
                                         @($"{targetAttribute.Name} already has contributors. This mapping is added at the lowest priority and will not win resolution until it is promoted.")
                                     }
                                 </MudText>
+                                }
                                 <div class="mt-3">
                                     <AttributePriorityList MetaverseObjectTypeId="SyncRule.MetaverseObjectTypeId"
                                                            MetaverseAttributeId="targetAttribute.Id"
@@ -584,11 +589,14 @@
                                                            PendingContributorSystemName="@(alreadyContributes ? null : SyncRule.ConnectedSystem?.Name)"
                                                            PendingContributorNullIsValue="_attributeFlowMapping.NullIsValue" />
                                 </div>
+                                @if (!targetAccumulates)
+                                {
                                 <MudText Typo="Typo.body2" Class="mt-3">
                                     <MudLink Href="@($"/admin/schema/object-types/{SyncRule.MetaverseObjectTypeId}")" Target="_blank">
                                         Manage priority on the @(SyncRule.MetaverseObjectType?.Name ?? "Metaverse") Object Type page
                                     </MudLink>
                                 </MudText>
+                                }
                             </MudAlert>
                         }
 
@@ -596,14 +604,18 @@
                             <SettingsSection Title="Value handling" Class="mt-5"
                                              Summary="@AttributeFlowSectionSummaries.ValueHandling(_attributeFlowMapping, _attributeFlowMapping.TargetMetaverseAttribute?.Type == AttributeDataType.Text)"
                                              Attention="@(_attributeFlowMapping.NullIsValue ? "A blank clears the value" : null)">
-                            @* ─── Null is a value (#91) ─── *@
-                            <MudCheckBox T="bool" Dense="true" Class="mt-5"
-                                @bind-Value="_attributeFlowMapping.NullIsValue"
-                                Label="Null is a value" />
+                            @* ─── Null is a value (#91); no effect on an Accumulate target (#3059) ─── *@
+                            <MudTooltip Arrow="true" Placement="Placement.Top" Inline="false"
+                                        Disabled="@(!TargetAccumulates())" Text="@MetaverseAttributeText.NullIsValueAccumulateTooltip">
+                                <MudCheckBox T="bool" Dense="true" Class="mt-5"
+                                    @bind-Value="_attributeFlowMapping.NullIsValue"
+                                    Disabled="@TargetAccumulates()"
+                                    Label="Null is a value" />
+                            </MudTooltip>
                             <MudText Typo="Typo.body2" Class="mud-text-secondary">
                                 When this Synchronisation Rule applies to a Connected System Object that is joined to a Metaverse Object, but contributes no value, treat that as an authoritative "no value": clear the Metaverse Object attribute value rather than falling back to a lower-priority contributor. A rule that results in no opinion (rule disabled, Connected System Object not joined, or out of scope) is skipped regardless.
                             </MudText>
-                            @if (_attributeFlowMapping.NullIsValue)
+                            @if (_attributeFlowMapping.NullIsValue && !TargetAccumulates())
                             {
                                 <MudAlert Severity="Severity.Warning" Class="mt-3">
                                     Wherever this Synchronisation Rule wins priority, a blank in the Connected System now clears the Metaverse Object attribute value rather than leaving it alone. A truncated or empty import therefore clears the attribute across every object this rule covers.
@@ -643,6 +655,11 @@
                         }
                         else if (SyncRule.Direction == SyncRuleDirection.Export)
                         {
+                        @* ─── Exporting an Accumulate attribute (#3059): every kept value goes out ─── *@
+                        @if (SourceAccumulates())
+                        {
+                            <MudAlert Severity="Severity.Info" Class="mt-5">@MetaverseAttributeText.ExportAccumulateAdvisory</MudAlert>
+                        }
                         @* ─── Initial Export Only (#223) ─── *@
                         <MudCheckBox T="bool" Dense="true" Class="mt-5"
                             @bind-Value="_attributeFlowMapping.InitialExportOnly"
@@ -748,6 +765,14 @@
     private SettingsSection? _expressionMissingInputSection;
 
     /// <summary>A Generated Value's target attribute type, by direction; null until one is chosen.</summary>
+    /// <summary>Whether the import mapping being edited targets an Accumulate attribute (#3059).</summary>
+    private bool TargetAccumulates() =>
+        _attributeFlowMapping?.TargetMetaverseAttribute?.ContributionMode == AttributeContributionMode.Accumulate;
+
+    /// <summary>Whether the export mapping being edited reads an Accumulate attribute (#3059).</summary>
+    private bool SourceAccumulates() =>
+        _attributeFlowMapping?.Sources.Any(source => source.MetaverseAttribute?.ContributionMode == AttributeContributionMode.Accumulate) == true;
+
     private AttributeDataType? GeneratedTargetType => SyncRule.Direction == SyncRuleDirection.Import
         ? _attributeFlowMapping?.TargetMetaverseAttribute?.Type
         : _attributeFlowMapping?.TargetConnectedSystemAttribute?.Type;

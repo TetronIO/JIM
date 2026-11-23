@@ -77,6 +77,13 @@ public class UpdateMetaverseAttributeRequest
     public AttributeContributionMode? ContributionMode { get; set; }
 
     /// <summary>
+    /// Must be true to change an Accumulate attribute to another mode. At each Metaverse Object's next synchronisation,
+    /// the values Accumulate kept that no contributor supplies any more are removed, and exports remove them from target
+    /// systems. Ignored for any other change.
+    /// </summary>
+    public bool ConfirmLeavingAccumulate { get; set; }
+
+    /// <summary>
     /// The attribute's full set of Standard Mappings. Omitted (or null) leaves them unchanged; a supplied list
     /// replaces them entirely, so an empty list clears them. Each mapping requires a standard and a counterpart
     /// attribute name, unique in combination.

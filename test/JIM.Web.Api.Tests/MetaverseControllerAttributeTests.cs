@@ -320,6 +320,55 @@ public class MetaverseControllerAttributeTests
     }
 
     [Test]
+    public async Task UpdateAttributeAsync_LeavingAccumulateWithoutConfirmation_ReturnsBadRequestAndChangesNothingAsync()
+    {
+        // Leaving Accumulate lets the next synchronisation remove the values it kept, so it must be confirmed.
+        var attribute = Attr(1, "accountAuditLog");
+        attribute.AttributePlurality = AttributePlurality.MultiValued;
+        attribute.ContributionMode = AttributeContributionMode.Accumulate;
+
+        var result = await _controller.UpdateAttributeAsync(1, new UpdateMetaverseAttributeRequest { ContributionMode = AttributeContributionMode.Priority });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var error = (((BadRequestObjectResult)result).Value as ApiErrorResponse)!;
+        Assert.That(error.Message, Does.Contain(nameof(UpdateMetaverseAttributeRequest.ConfirmLeavingAccumulate)));
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateAttributeAsync_LeavingAccumulateConfirmed_UpdatesItAsync()
+    {
+        var attribute = Attr(1, "accountAuditLog");
+        attribute.AttributePlurality = AttributePlurality.MultiValued;
+        attribute.ContributionMode = AttributeContributionMode.Accumulate;
+
+        var result = await _controller.UpdateAttributeAsync(1, new UpdateMetaverseAttributeRequest
+        {
+            ContributionMode = AttributeContributionMode.Priority, ConfirmLeavingAccumulate = true
+        });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.Is<MetaverseAttribute>(a => a.ContributionMode == AttributeContributionMode.Priority)), Times.Once);
+    }
+
+    [Test]
+    public async Task UpdateAttributeAsync_LeavingAccumulateWithoutConfirmation_RenamesNothingEitherAsync()
+    {
+        // The gate is checked before anything is written, so a rename sent in the same request does not half-apply.
+        var attribute = Attr(1, "accountAuditLog");
+        attribute.AttributePlurality = AttributePlurality.MultiValued;
+        attribute.ContributionMode = AttributeContributionMode.Accumulate;
+
+        var result = await _controller.UpdateAttributeAsync(1, new UpdateMetaverseAttributeRequest
+        {
+            Name = "renamed", ContributionMode = AttributeContributionMode.Priority
+        });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    [Test]
     public async Task ChangeAttributeSchemaAsync_AccumulateToSingleValued_ReturnsBadRequestAsync()
     {
         var attribute = Attr(1, "accountAuditLog");

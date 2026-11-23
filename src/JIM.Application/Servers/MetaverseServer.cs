@@ -1107,7 +1107,7 @@ public partial class MetaverseServer
     /// </summary>
     private static void EnsureContributionModeCompatible(AttributeContributionMode mode, AttributeDataType type, AttributePlurality plurality)
     {
-        if (mode == AttributeContributionMode.Priority)
+        if (AttributeContributionModeRules.IsPermitted(mode, type, plurality))
             return;
 
         if (plurality != AttributePlurality.MultiValued)
@@ -1118,6 +1118,9 @@ public partial class MetaverseServer
             throw new UnsupportedContributionModeException(mode, type, plurality,
                 $"The {mode} contribution mode is not available for Reference attributes, because a reference is removed when the Metaverse Object it points to is deleted. " +
                 "To keep a history of references, record the referenced object's identifier as text in a separate multi-valued text attribute.");
+
+        throw new UnsupportedContributionModeException(mode, type, plurality,
+            $"The {mode} contribution mode is not available for a {type} attribute.");
     }
 
     /// <summary>

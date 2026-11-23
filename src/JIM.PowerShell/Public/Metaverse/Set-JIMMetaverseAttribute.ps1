@@ -61,6 +61,11 @@ function Set-JIMMetaverseAttribute {
         Standard (Scim, Ldap or Jim), a CounterpartName (the attribute's name in that standard) and optional Notes.
         Standard Mappings are guidance only and never affect synchronisation.
 
+    .PARAMETER Force
+        Confirms changing an Accumulate attribute to another mode. At each Metaverse Object's next synchronisation, the
+        values Accumulate kept that no contributor supplies any more are removed, and exports remove them from target
+        systems, so JIM refuses the change without it. Has no other effect.
+
     .PARAMETER ChangeReason
         An optional reason for the change, recorded in the attribute's Configuration Change History.
 
@@ -84,6 +89,12 @@ function Set-JIMMetaverseAttribute {
         Set-JIMMetaverseAttribute -Id 42 -ContributionMode Accumulate -ChangeReason "Keep every account identifier for audit"
 
         Makes a multi-valued attribute keep every value any contributor supplies, from its next synchronisation on.
+
+    .EXAMPLE
+        Set-JIMMetaverseAttribute -Id 42 -ContributionMode Priority -Force -ChangeReason "Audit log retired"
+
+        Returns an Accumulate attribute to Priority. At each Metaverse Object's next synchronisation, the values no
+        contributor supplies any more are removed. Run it with -WhatIf first to check which attribute it changes.
 
     .EXAMPLE
         Set-JIMMetaverseAttribute -Id 42 -StandardMappings @(@{ Standard = 'Scim'; CounterpartName = 'costCenter'; Notes = 'SCIM Enterprise User extension.' })
@@ -144,6 +155,8 @@ function Set-JIMMetaverseAttribute {
         [ValidateNotNullOrEmpty()]
         [string]$ChangeReason,
 
+        [switch]$Force,
+
         [switch]$PassThru
     )
 
@@ -201,6 +214,21 @@ function Set-JIMMetaverseAttribute {
             return
         }
 
+        # Leaving Accumulate lets the next synchronisation remove the values it kept (#3059), so JIM refuses it unless
+        # it is confirmed; -Force is that confirmation. Checked before anything is sent.
+        $confirmLeavingAccumulate = $false
+        if ($PSBoundParameters.ContainsKey('ContributionMode') -and $ContributionMode -ne 'Accumulate') {
+            $currentAttribute = Invoke-JIMApi -Endpoint "/api/v1/metaverse/attributes/$attrId"
+            if ($currentAttribute.contributionMode -eq 'Accumulate') {
+                if (-not $Force) {
+                    Write-Error ("Changing '$($currentAttribute.name)' from Accumulate to $ContributionMode removes, at each Metaverse Object's next " +
+                        "synchronisation, the values that no contributor supplies any more. Run the command again with -Force to make this change.")
+                    return
+                }
+                $confirmLeavingAccumulate = $true
+            }
+        }
+
         try {
             # Schema change (type / plurality). The endpoint requires both values, so read the
             # current schema to fill whichever was not supplied.
@@ -238,6 +266,7 @@ function Set-JIMMetaverseAttribute {
                 if ($PSBoundParameters.ContainsKey('Name')) { $body.name = $Name }
                 if ($PSBoundParameters.ContainsKey('RenderingHint')) { $body.renderingHint = $RenderingHint }
                 if ($PSBoundParameters.ContainsKey('ContributionMode')) { $body.contributionMode = $ContributionMode }
+                if ($confirmLeavingAccumulate) { $body.confirmLeavingAccumulate = $true }
                 if ($null -ne $mappingsBody) { $body.standardMappings = $mappingsBody }
                 if ($ChangeReason) { $body.changeReason = $ChangeReason }
 

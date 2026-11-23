@@ -690,6 +690,57 @@ Describe 'Set-JIMMetaverseAttribute' {
         }
     }
 
+    Context 'Leaving Accumulate (#3059)' {
+
+        It 'Refuses to leave Accumulate without -Force and sends nothing' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Account Audit Log'; contributionMode = 'Accumulate' } }
+
+                { Set-JIMMetaverseAttribute -Id 1 -ContributionMode Priority -Confirm:$false -ErrorAction Stop } | Should -Throw '*-Force*'
+
+                Should -Invoke Invoke-JIMApi -Times 0 -ParameterFilter { $Method -eq 'PATCH' }
+            }
+        }
+
+        It 'Leaves Accumulate with -Force, confirming the removal to JIM' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Account Audit Log'; contributionMode = 'Accumulate' } }
+
+                Set-JIMMetaverseAttribute -Id 1 -ContributionMode Priority -Force -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Body.contributionMode -eq 'Priority' -and $Body.confirmLeavingAccumulate -eq $true
+                }
+            }
+        }
+
+        It 'Does not confirm anything when the attribute is not in Accumulate' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Department'; contributionMode = 'Priority' } }
+
+                Set-JIMMetaverseAttribute -Id 1 -ContributionMode Priority -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and -not $Body.ContainsKey('confirmLeavingAccumulate')
+                }
+            }
+        }
+
+        It 'Does not preview a change under -WhatIf even with -Force' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Account Audit Log'; contributionMode = 'Accumulate' } }
+
+                Set-JIMMetaverseAttribute -Id 1 -ContributionMode Priority -Force -WhatIf | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 0 -ParameterFilter { $Method -eq 'PATCH' }
+            }
+        }
+    }
+
     Context 'Endpoint routing' {
 
         It 'Routes a rename to a PATCH on the attribute endpoint' {
