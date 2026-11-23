@@ -962,4 +962,130 @@
   <data name="FactoryResetComplete" xml:space="preserve">
     <value>La réinitialisation d’usine est terminée. Vous allez être déconnecté.</value>
   </data>
+  <data name="AttrEditorNameRequired" xml:space="preserve">
+    <value>Un nom est requis.</value>
+  </data>
+  <data name="AttrEditorNameTaken" xml:space="preserve">
+    <value>Un attribut nommé « {0} » existe déjà. Les noms ne distinguent pas les majuscules des minuscules.</value>
+  </data>
+  <data name="AttrEditorDataType" xml:space="preserve">
+    <value>Type de données</value>
+  </data>
+  <data name="AttrEditorDataTypeRequired" xml:space="preserve">
+    <value>Un type de données est requis.</value>
+  </data>
+  <data name="AttrEditorSingleValued" xml:space="preserve">
+    <value>Monovalué</value>
+  </data>
+  <data name="AttrEditorMultiValued" xml:space="preserve">
+    <value>Multivalué</value>
+  </data>
+  <data name="AttrEditorTypeLocked" xml:space="preserve">
+    <value>Verrouillé, car {0} pour cet attribut, et un type de données différent les rendrait invalides.</value>
+  </data>
+  <data name="AttrEditorValuesHeldOne" xml:space="preserve">
+    <value>{0} objet Metaverse détient une valeur</value>
+  </data>
+  <data name="AttrEditorValuesHeldOther" xml:space="preserve">
+    <value>{0} objets Metaverse détiennent des valeurs</value>
+  </data>
+  <data name="AttrEditorBooleanHelper" xml:space="preserve">
+    <value>Un attribut booléen ne contient qu’une valeur ; il est donc toujours monovalué.</value>
+  </data>
+  <data name="AttrEditorPluralityLocked" xml:space="preserve">
+    <value>Verrouillé, car {0} pour cet attribut, et le format monovalué ne pourrait pas toutes les conserver.</value>
+  </data>
+  <data name="AttrEditorPluralityWiden" xml:space="preserve">
+    <value>Peut être élargi au multivalué ; toutes les valeurs déjà détenues sont conservées.</value>
+  </data>
+  <data name="AttrEditorRenderingHint" xml:space="preserve">
+    <value>Indication d’affichage</value>
+  </data>
+  <data name="AttrEditorRenderingHelper" xml:space="preserve">
+    <value>Comment le contenu multivalué est affiché sur les pages de détail des objets.</value>
+  </data>
+  <data name="AttrEditorRenderDefault" xml:space="preserve">
+    <value>Par défaut (automatique)</value>
+  </data>
+  <data name="AttrEditorRenderTable" xml:space="preserve">
+    <value>Tableau</value>
+  </data>
+  <data name="AttrEditorRenderChipSet" xml:space="preserve">
+    <value>Ensemble de pastilles</value>
+  </data>
+  <data name="AttrEditorRenderList" xml:space="preserve">
+    <value>Liste</value>
+  </data>
+  <data name="AttrEditorAddToObjectTypes" xml:space="preserve">
+    <value>Ajouter aux types d’objets (facultatif)</value>
+  </data>
+  <data name="AttrEditorObjectTypesHelper" xml:space="preserve">
+    <value>Liez le nouvel attribut à ces types d’objets à sa création. Laissez vide pour le créer sans liaison et l’affecter plus tard.</value>
+  </data>
+  <data name="AttrEditorStandardMappings" xml:space="preserve">
+    <value>Mappages standard</value>
+  </data>
+  <data name="AttrEditorStandardMappingsIntro" xml:space="preserve">
+    <value>Cet attribut correspond à ses équivalents dans les standards SCIM 2.0 et LDAP/Active Directory, pour vous guider lors de la conception des flux d’attributs. À titre indicatif uniquement : ce qui se synchronise est toujours déterminé par vos flux d’attributs, jamais par ces mappages.</value>
+  </data>
+  <data name="AttrEditorBuiltInMaintained" xml:space="preserve">
+    <value>JIM tient ces éléments à jour automatiquement pour les attributs intégrés.</value>
+  </data>
+  <data name="AttrEditorNoMappings" xml:space="preserve">
+    <value>Aucun mappage standard.</value>
+  </data>
+  <data name="AttrEditorColStandard" xml:space="preserve">
+    <value>Standard</value>
+  </data>
+  <data name="AttrEditorColCounterpart" xml:space="preserve">
+    <value>Attribut équivalent</value>
+  </data>
+  <data name="AttrEditorColNotes" xml:space="preserve">
+    <value>Remarques</value>
+  </data>
+  <data name="AttrEditorEditMapping" xml:space="preserve">
+    <value>Modifier le mappage standard</value>
+  </data>
+  <data name="AttrEditorRemoveMapping" xml:space="preserve">
+    <value>Supprimer le mappage standard</value>
+  </data>
+  <data name="AttrEditorAddMapping" xml:space="preserve">
+    <value>Ajouter un mappage standard</value>
+  </data>
+  <data name="AttrEditorCounterpartHelper" xml:space="preserve">
+    <value>Le nom d’attribut équivalent dans le standard choisi, par exemple name.givenName (SCIM) ou givenName (LDAP).</value>
+  </data>
+  <data name="AttrEditorNotesOptional" xml:space="preserve">
+    <value>Remarques (facultatives)</value>
+  </data>
+  <data name="AttrEditorMappingDuplicate" xml:space="preserve">
+    <value>Un mappage {0} vers « {1} » existe déjà.</value>
+  </data>
+  <data name="AttrEditorUpdate" xml:space="preserve">
+    <value>Mettre à jour</value>
+  </data>
+  <data name="AttrEditorCreateButton" xml:space="preserve">
+    <value>Créer un attribut</value>
+  </data>
+  <data name="AttrEditorCreated" xml:space="preserve">
+    <value>Attribut « {0} » créé.</value>
+  </data>
+  <data name="AttrEditorSaveFailed" xml:space="preserve">
+    <value>Échec de l’enregistrement de l’attribut : {0}</value>
+  </data>
+  <data name="AttrEditorRenameBlocked" xml:space="preserve">
+    <value>« {0} » ne peut pas être renommé tant que des expressions le lisent par son nom. Modifiez-les d’abord : {1}.</value>
+  </data>
+  <data name="AttrEditorSchemaRefused" xml:space="preserve">
+    <value>Impossible de modifier le schéma : {0} objet(s) Metaverse détiennent une valeur enregistrée, et seul un élargissement au multivalué les conserve.</value>
+  </data>
+  <data name="AttrEditorSaved" xml:space="preserve">
+    <value>Modifications enregistrées pour « {0} ».</value>
+  </data>
+  <data name="AttrEditorViewTitle" xml:space="preserve">
+    <value>Afficher « {0} »</value>
+  </data>
+  <data name="AttrEditorEditTitle" xml:space="preserve">
+    <value>Modifier « {0} »</value>
+  </data>
 </root>

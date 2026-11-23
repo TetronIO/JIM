@@ -1278,4 +1278,172 @@
     <value>Factory reset complete. You will be signed out.</value>
     <comment>Snackbar</comment>
   </data>
+  <data name="AttrEditorNameRequired" xml:space="preserve">
+    <value>A name is required.</value>
+    <comment>Validation message on the name field</comment>
+  </data>
+  <data name="AttrEditorNameTaken" xml:space="preserve">
+    <value>An attribute named "{0}" already exists. Names are case-insensitive.</value>
+    <comment>Shown under the name field; {0} is the name typed</comment>
+  </data>
+  <data name="AttrEditorDataType" xml:space="preserve">
+    <value>Data Type</value>
+    <comment>Field label</comment>
+  </data>
+  <data name="AttrEditorDataTypeRequired" xml:space="preserve">
+    <value>A data type is required.</value>
+    <comment>Validation message on the data type field</comment>
+  </data>
+  <data name="AttrEditorSingleValued" xml:space="preserve">
+    <value>Single-valued</value>
+    <comment>Plurality option</comment>
+  </data>
+  <data name="AttrEditorMultiValued" xml:space="preserve">
+    <value>Multi-valued</value>
+    <comment>Plurality option</comment>
+  </data>
+  <data name="AttrEditorTypeLocked" xml:space="preserve">
+    <value>Locked because {0} for this attribute, and a different data type would invalidate them.</value>
+    <comment>Helper text on a locked data type; {0} is the count phrase</comment>
+  </data>
+  <data name="AttrEditorValuesHeldOne" xml:space="preserve">
+    <value>{0} Metaverse Object holds a value</value>
+    <comment>Count phrase, singular; {0} is the formatted count</comment>
+  </data>
+  <data name="AttrEditorValuesHeldOther" xml:space="preserve">
+    <value>{0} Metaverse Objects hold values</value>
+    <comment>Count phrase, plural; {0} is the formatted count</comment>
+  </data>
+  <data name="AttrEditorBooleanHelper" xml:space="preserve">
+    <value>A Boolean attribute holds one value, so it is always single-valued.</value>
+    <comment>Helper text on the plurality field for a Boolean attribute</comment>
+  </data>
+  <data name="AttrEditorPluralityLocked" xml:space="preserve">
+    <value>Locked because {0} for this attribute, and single-valued could not keep them all.</value>
+    <comment>Helper text on a locked plurality; {0} is the count phrase</comment>
+  </data>
+  <data name="AttrEditorPluralityWiden" xml:space="preserve">
+    <value>Can be widened to multi-valued; every value already held is kept.</value>
+    <comment>Helper text when plurality can be widened</comment>
+  </data>
+  <data name="AttrEditorRenderingHint" xml:space="preserve">
+    <value>Rendering Hint</value>
+    <comment>Field label</comment>
+  </data>
+  <data name="AttrEditorRenderingHelper" xml:space="preserve">
+    <value>How multi-valued content is displayed on object detail pages.</value>
+    <comment>Helper text on the rendering hint</comment>
+  </data>
+  <data name="AttrEditorRenderDefault" xml:space="preserve">
+    <value>Default (auto)</value>
+    <comment>Rendering hint option</comment>
+  </data>
+  <data name="AttrEditorRenderTable" xml:space="preserve">
+    <value>Table</value>
+    <comment>Rendering hint option</comment>
+  </data>
+  <data name="AttrEditorRenderChipSet" xml:space="preserve">
+    <value>Chip set</value>
+    <comment>Rendering hint option</comment>
+  </data>
+  <data name="AttrEditorRenderList" xml:space="preserve">
+    <value>List</value>
+    <comment>Rendering hint option</comment>
+  </data>
+  <data name="AttrEditorAddToObjectTypes" xml:space="preserve">
+    <value>Add to Object Types (optional)</value>
+    <comment>Field label on the create form</comment>
+  </data>
+  <data name="AttrEditorObjectTypesHelper" xml:space="preserve">
+    <value>Bind the new attribute to these Object Types on creation. Leave empty to create it unbound and assign later.</value>
+    <comment>Helper text on the create form</comment>
+  </data>
+  <data name="AttrEditorStandardMappings" xml:space="preserve">
+    <value>Standard Mappings</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="AttrEditorStandardMappingsIntro" xml:space="preserve">
+    <value>How this attribute corresponds to its counterparts in the SCIM 2.0 and LDAP/Active Directory standards, to guide you when designing Attribute Flows. For reference only: what synchronises is always determined by your Attribute Flows, never by these mappings.</value>
+    <comment>Explanation under the Standard Mappings heading</comment>
+  </data>
+  <data name="AttrEditorBuiltInMaintained" xml:space="preserve">
+    <value>JIM maintains these automatically for built-in attributes.</value>
+    <comment>Added to the explanation for a built-in attribute</comment>
+  </data>
+  <data name="AttrEditorNoMappings" xml:space="preserve">
+    <value>No Standard Mappings.</value>
+    <comment>Shown when the attribute has no Standard Mappings</comment>
+  </data>
+  <data name="AttrEditorColStandard" xml:space="preserve">
+    <value>Standard</value>
+    <comment>Table heading and the Standard field label</comment>
+  </data>
+  <data name="AttrEditorColCounterpart" xml:space="preserve">
+    <value>Counterpart Attribute</value>
+    <comment>Table heading and field label</comment>
+  </data>
+  <data name="AttrEditorColNotes" xml:space="preserve">
+    <value>Notes</value>
+    <comment>Table heading</comment>
+  </data>
+  <data name="AttrEditorEditMapping" xml:space="preserve">
+    <value>Edit Standard Mapping</value>
+    <comment>Tooltip on an icon button</comment>
+  </data>
+  <data name="AttrEditorRemoveMapping" xml:space="preserve">
+    <value>Remove Standard Mapping</value>
+    <comment>Tooltip on an icon button</comment>
+  </data>
+  <data name="AttrEditorAddMapping" xml:space="preserve">
+    <value>Add Standard Mapping</value>
+    <comment>Button</comment>
+  </data>
+  <data name="AttrEditorCounterpartHelper" xml:space="preserve">
+    <value>The equivalent attribute name in the chosen standard, e.g. name.givenName (SCIM) or givenName (LDAP).</value>
+    <comment>Helper text on the counterpart field</comment>
+  </data>
+  <data name="AttrEditorNotesOptional" xml:space="preserve">
+    <value>Notes (optional)</value>
+    <comment>Field label</comment>
+  </data>
+  <data name="AttrEditorMappingDuplicate" xml:space="preserve">
+    <value>A {0} mapping to "{1}" already exists.</value>
+    <comment>Shown when a mapping duplicates another; {0} is the standard, {1} the counterpart name</comment>
+  </data>
+  <data name="AttrEditorUpdate" xml:space="preserve">
+    <value>Update</value>
+    <comment>Button that saves an edited Standard Mapping</comment>
+  </data>
+  <data name="AttrEditorCreateButton" xml:space="preserve">
+    <value>Create Attribute</value>
+    <comment>Create dialog confirm button</comment>
+  </data>
+  <data name="AttrEditorCreated" xml:space="preserve">
+    <value>Created attribute "{0}".</value>
+    <comment>Snackbar; {0} is the name</comment>
+  </data>
+  <data name="AttrEditorSaveFailed" xml:space="preserve">
+    <value>Failed to save attribute: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="AttrEditorRenameBlocked" xml:space="preserve">
+    <value>"{0}" cannot be renamed while Expressions read it by name. Change these first: {1}.</value>
+    <comment>Snackbar; {0} is the attribute name, {1} the list of expressions</comment>
+  </data>
+  <data name="AttrEditorSchemaRefused" xml:space="preserve">
+    <value>Cannot change the schema: {0} Metaverse Object(s) hold a stored value, and only a widening to multi-valued keeps them.</value>
+    <comment>Snackbar; {0} is the count</comment>
+  </data>
+  <data name="AttrEditorSaved" xml:space="preserve">
+    <value>Saved changes to "{0}".</value>
+    <comment>Snackbar; {0} is the name</comment>
+  </data>
+  <data name="AttrEditorViewTitle" xml:space="preserve">
+    <value>View "{0}"</value>
+    <comment>Dialog title for a read-only view; {0} is the name</comment>
+  </data>
+  <data name="AttrEditorEditTitle" xml:space="preserve">
+    <value>Edit "{0}"</value>
+    <comment>Dialog title for an edit; {0} is the name</comment>
+  </data>
 </root>

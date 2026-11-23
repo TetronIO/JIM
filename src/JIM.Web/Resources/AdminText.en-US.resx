@@ -23,4 +23,7 @@
   <data name="FactoryResetRemovesSynchronisation" xml:space="preserve">
     <value>All Synchronization Rules, Schedules, Run Profiles and Pending Exports</value>
   </data>
+  <data name="AttrEditorStandardMappingsIntro" xml:space="preserve">
+    <value>How this attribute corresponds to its counterparts in the SCIM 2.0 and LDAP/Active Directory standards, to guide you when designing Attribute Flows. For reference only: what synchronizes is always determined by your Attribute Flows, never by these mappings.</value>
+  </data>
 </root>
