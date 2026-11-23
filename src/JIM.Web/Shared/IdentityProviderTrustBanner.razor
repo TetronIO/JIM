@@ -23,13 +23,13 @@
         <span class="jim-service-health-banner-links">
             @if (_content.OfferToTrust)
             {
-                <AlertButton Severity="@_content.Severity" Size="Size.Small" OnClick="ReviewAndTrustAsync">Review and trust</AlertButton>
+                <AlertButton Severity="@_content.Severity" Size="Size.Small" OnClick="ReviewAndTrustAsync">@AdminText.IdpBannerReviewTrust</AlertButton>
             }
             @if (_content.LinkToCertificates)
             {
-                <MudLink Href="/admin/certificates" Color="Color.Inherit" Underline="Underline.Always">Certificates</MudLink>
+                <MudLink Href="/admin/certificates" Color="Color.Inherit" Underline="Underline.Always">@AdminText.CertificateBreadcrumb</MudLink>
             }
-            <MudLink Href="@IdentityProviderTrustMonitor.DocsUrl" Target="_blank" Color="Color.Inherit" Underline="Underline.Always">How to fix it</MudLink>
+            <MudLink Href="@IdentityProviderTrustMonitor.DocsUrl" Target="_blank" Color="Color.Inherit" Underline="Underline.Always">@AdminText.IdpBannerHowToFix</MudLink>
         </span>
     </MudAlert>
 }

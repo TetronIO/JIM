@@ -1,0 +1,1849 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="SchemaPageTitle" xml:space="preserve">
+    <value>Schema</value>
+    <comment>Browser and breadcrumb title for the Schema page</comment>
+  </data>
+  <data name="SchemaHeading" xml:space="preserve">
+    <value>Schema:</value>
+    <comment>Heading label before the name of the active tab</comment>
+  </data>
+  <data name="SchemaPageInfo" xml:space="preserve">
+    <value>Manage Metaverse Object Types and their attributes, and see how data flows into and out of them.</value>
+    <comment>Page information popover</comment>
+  </data>
+  <data name="SchemaTabObjectTypes" xml:space="preserve">
+    <value>Object Types</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="SchemaTabAttributes" xml:space="preserve">
+    <value>Attributes</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="SchemaTabDataFlow" xml:space="preserve">
+    <value>Data Flow</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="SchemaDeletionRule" xml:space="preserve">
+    <value>Deletion Rule</value>
+    <comment>Column heading and filter label</comment>
+  </data>
+  <data name="SchemaDeletionRuleManual" xml:space="preserve">
+    <value>Manual</value>
+    <comment>Deletion Rule value shown as a chip</comment>
+  </data>
+  <data name="SchemaDeletionRuleAuto" xml:space="preserve">
+    <value>Auto</value>
+    <comment>Deletion Rule value shown as a chip: deletes when the last connector disconnects</comment>
+  </data>
+  <data name="SchemaDeletionRuleAuthoritativeSource" xml:space="preserve">
+    <value>Authoritative Source</value>
+    <comment>Deletion Rule value shown as a chip</comment>
+  </data>
+  <data name="SchemaPredefinedSearches" xml:space="preserve">
+    <value>Predefined Searches?</value>
+    <comment>Column heading and filter label: whether the Object Type has Predefined Searches</comment>
+  </data>
+  <data name="SchemaBuiltIn" xml:space="preserve">
+    <value>Built-in?</value>
+    <comment>Column heading and filter label</comment>
+  </data>
+  <data name="SchemaNewObjectType" xml:space="preserve">
+    <value>New Object Type</value>
+    <comment>Toolbar button</comment>
+  </data>
+  <data name="SchemaNewAttribute" xml:space="preserve">
+    <value>New Attribute</value>
+    <comment>Toolbar button</comment>
+  </data>
+  <data name="SchemaEditObjectType" xml:space="preserve">
+    <value>Edit Object Type</value>
+    <comment>Tooltip on an icon button</comment>
+  </data>
+  <data name="SchemaDeleteObjectType" xml:space="preserve">
+    <value>Delete Object Type</value>
+    <comment>Tooltip on an icon button</comment>
+  </data>
+  <data name="SchemaBuiltInObjectTypeLocked" xml:space="preserve">
+    <value>Built-in Object Types cannot be renamed or deleted.</value>
+    <comment>Tooltip on a disabled lock icon</comment>
+  </data>
+  <data name="SchemaChangeHistory" xml:space="preserve">
+    <value>Change history</value>
+    <comment>Tooltip on an icon button</comment>
+  </data>
+  <data name="SchemaSearchByName" xml:space="preserve">
+    <value>Search by name</value>
+    <comment>Search box placeholder on the Object Types tab</comment>
+  </data>
+  <data name="SchemaNoObjectTypesMatchSearch" xml:space="preserve">
+    <value>No Metaverse Object Types match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="SchemaNoObjectTypesMatchFilters" xml:space="preserve">
+    <value>No Metaverse Object Types match the current filters</value>
+    <comment>Empty state when filters exclude everything</comment>
+  </data>
+  <data name="SchemaTryDifferentFilters" xml:space="preserve">
+    <value>Try different filters, or clear them.</value>
+    <comment>Empty state secondary text</comment>
+  </data>
+  <data name="SchemaClearFilters" xml:space="preserve">
+    <value>Clear Filters</value>
+    <comment>Empty state action button</comment>
+  </data>
+  <data name="SchemaNoObjectTypesYet" xml:space="preserve">
+    <value>No Metaverse Object Types yet</value>
+    <comment>Empty state when there are no Object Types</comment>
+  </data>
+  <data name="SchemaUseNewObjectTypeButton" xml:space="preserve">
+    <value>Use the New Object Type button to create one.</value>
+    <comment>Empty state secondary text; quotes the toolbar button label</comment>
+  </data>
+  <data name="SchemaNoAttributesMatchSearch" xml:space="preserve">
+    <value>No Metaverse Attributes match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="SchemaNoAttributesMatchFilters" xml:space="preserve">
+    <value>No Metaverse Attributes match the current filters</value>
+    <comment>Empty state when filters exclude everything</comment>
+  </data>
+  <data name="SchemaNoAttributesYet" xml:space="preserve">
+    <value>No Metaverse Attributes yet</value>
+    <comment>Empty state when there are no attributes</comment>
+  </data>
+  <data name="SchemaUseNewAttributeButton" xml:space="preserve">
+    <value>Use the New Attribute button to create one.</value>
+    <comment>Empty state secondary text; quotes the toolbar button label</comment>
+  </data>
+  <data name="SchemaSingleValued" xml:space="preserve">
+    <value>Single-Valued</value>
+    <comment>Attribute plurality value</comment>
+  </data>
+  <data name="SchemaMultiValued" xml:space="preserve">
+    <value>Multi-Valued</value>
+    <comment>Attribute plurality value</comment>
+  </data>
+  <data name="SchemaPlurality" xml:space="preserve">
+    <value>Plurality</value>
+    <comment>Column heading and filter label</comment>
+  </data>
+  <data name="SchemaCustom" xml:space="preserve">
+    <value>Custom</value>
+    <comment>Shown in the Built-in column for an attribute that is not built in</comment>
+  </data>
+  <data name="SchemaBuiltInAttribute" xml:space="preserve">
+    <value>Built-in attribute</value>
+    <comment>Tooltip on a lock icon</comment>
+  </data>
+  <data name="SchemaObjectTypes" xml:space="preserve">
+    <value>Object Types</value>
+    <comment>Column heading and the bound Object Types panel heading</comment>
+  </data>
+  <data name="SchemaNotAssigned" xml:space="preserve">
+    <value>Not assigned</value>
+    <comment>Chip for a custom attribute bound to no Object Type</comment>
+  </data>
+  <data name="SchemaNotAssignedTooltip" xml:space="preserve">
+    <value>This custom attribute is not bound to any Object Type, so it is not collecting data.</value>
+    <comment>Tooltip on the Not assigned chip</comment>
+  </data>
+  <data name="SchemaEditAttribute" xml:space="preserve">
+    <value>Edit attribute</value>
+    <comment>Tooltip on an icon button</comment>
+  </data>
+  <data name="SchemaDeleteAttribute" xml:space="preserve">
+    <value>Delete attribute</value>
+    <comment>Tooltip on an icon button</comment>
+  </data>
+  <data name="SchemaViewAttributeAndMappings" xml:space="preserve">
+    <value>View attribute and Standard Mappings</value>
+    <comment>Tooltip on a view icon for a built-in attribute</comment>
+  </data>
+  <data name="SchemaObjectTypeFilter" xml:space="preserve">
+    <value>Object Type</value>
+    <comment>Filter label for the attribute's Object Type</comment>
+  </data>
+  <data name="SchemaNounObjectTypeSingular" xml:space="preserve">
+    <value>Metaverse Object Type</value>
+    <comment>Noun used in the count and in the change history dialog</comment>
+  </data>
+  <data name="SchemaNounObjectTypePlural" xml:space="preserve">
+    <value>Metaverse Object Types</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="SchemaNounAttributeSingular" xml:space="preserve">
+    <value>Metaverse Attribute</value>
+    <comment>Noun used in the count and in the change history dialog</comment>
+  </data>
+  <data name="SchemaNounAttributePlural" xml:space="preserve">
+    <value>Metaverse Attributes</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="SchemaGracePeriodDayOne" xml:space="preserve">
+    <value>{0} day</value>
+    <comment>Grace period, singular; {0} is a number</comment>
+  </data>
+  <data name="SchemaGracePeriodDayOther" xml:space="preserve">
+    <value>{0} days</value>
+    <comment>Grace period, plural; {0} is a number</comment>
+  </data>
+  <data name="SchemaGracePeriodHourOne" xml:space="preserve">
+    <value>{0} hour</value>
+    <comment>Grace period, singular; {0} is a number</comment>
+  </data>
+  <data name="SchemaGracePeriodHourOther" xml:space="preserve">
+    <value>{0} hours</value>
+    <comment>Grace period, plural; {0} is a number</comment>
+  </data>
+  <data name="SchemaGracePeriodMinuteOne" xml:space="preserve">
+    <value>{0} minute</value>
+    <comment>Grace period, singular; {0} is a number</comment>
+  </data>
+  <data name="SchemaGracePeriodMinuteOther" xml:space="preserve">
+    <value>{0} minutes</value>
+    <comment>Grace period, plural; {0} is a number</comment>
+  </data>
+  <data name="SchemaGracePeriodSeparator" xml:space="preserve">
+    <value>, </value>
+    <comment>Separates the parts of a grace period such as "1 day, 2 hours"</comment>
+  </data>
+  <data name="SchemaGracePeriodWithDelay" xml:space="preserve">
+    <value>({0} grace period)</value>
+    <comment>Parenthesised grace period in a Deletion Rule tooltip; {0} is the duration</comment>
+  </data>
+  <data name="SchemaGracePeriodImmediate" xml:space="preserve">
+    <value>(immediate)</value>
+    <comment>Shown in a Deletion Rule tooltip when there is no grace period</comment>
+  </data>
+  <data name="SchemaTooltipManualDeletion" xml:space="preserve">
+    <value>Manual deletion only - objects are never automatically deleted</value>
+    <comment>Deletion Rule tooltip for Manual</comment>
+  </data>
+  <data name="SchemaTooltipDeleteWhenAllDisconnect" xml:space="preserve">
+    <value>Delete when all connectors disconnect {0}</value>
+    <comment>Deletion Rule tooltip for Auto; {0} is the grace period or immediate</comment>
+  </data>
+  <data name="SchemaTooltipAllSourcesDisconnect" xml:space="preserve">
+    <value>All sources disconnect: delete only once every selected authoritative source has disconnected {0}</value>
+    <comment>Deletion Rule tooltip; {0} is the grace period or immediate</comment>
+  </data>
+  <data name="SchemaTooltipSpecificSourceDisconnect" xml:space="preserve">
+    <value>Specific source(s) disconnect: delete when any one of the selected authoritative sources disconnects {0}</value>
+    <comment>Deletion Rule tooltip; {0} is the grace period or immediate</comment>
+  </data>
+  <data name="SchemaTooltipUnknownRule" xml:space="preserve">
+    <value>Unknown deletion rule</value>
+    <comment>Deletion Rule tooltip for a value the portal does not recognise</comment>
+  </data>
+  <data name="CertificatePageTitle" xml:space="preserve">
+    <value>Trusted Certificates</value>
+    <comment>Browser title and page heading</comment>
+  </data>
+  <data name="CertificatePageInfo" xml:space="preserve">
+    <value>Manage the certificates JIM trusts: for Connectors' secure connections (LDAPS, HTTPS, SQL Server), for signing in through your identity provider, or both. Certificates can be uploaded directly or referenced from the connector-files mount.</value>
+    <comment>Page information popover</comment>
+  </data>
+  <data name="CertificateBreadcrumb" xml:space="preserve">
+    <value>Certificates</value>
+    <comment>Breadcrumb for the Trusted Certificates page</comment>
+  </data>
+  <data name="CertificateNounSingular" xml:space="preserve">
+    <value>Trusted Certificate</value>
+    <comment>Noun used in the count and in the change history dialog</comment>
+  </data>
+  <data name="CertificateNounPlural" xml:space="preserve">
+    <value>Trusted Certificates</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="CertificateUploadButton" xml:space="preserve">
+    <value>Upload Certificate</value>
+    <comment>Toolbar button and upload dialog title</comment>
+  </data>
+  <data name="CertificateReferenceFileButton" xml:space="preserve">
+    <value>Reference File Path</value>
+    <comment>Toolbar button</comment>
+  </data>
+  <data name="CertificateMenuViewDetails" xml:space="preserve">
+    <value>View Details</value>
+    <comment>Row menu item</comment>
+  </data>
+  <data name="CertificateMenuChangeHistory" xml:space="preserve">
+    <value>Change History</value>
+    <comment>Row menu item</comment>
+  </data>
+  <data name="CertificateTrustedFor" xml:space="preserve">
+    <value>Trusted for</value>
+    <comment>Column heading and Details field label</comment>
+  </data>
+  <data name="CertificateSubject" xml:space="preserve">
+    <value>Subject</value>
+    <comment>Column heading and Details field label: the certificate subject</comment>
+  </data>
+  <data name="CertificateSource" xml:space="preserve">
+    <value>Source</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="CertificateExpires" xml:space="preserve">
+    <value>Expires</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="CertificateUploaded" xml:space="preserve">
+    <value>Uploaded</value>
+    <comment>Source chip: the certificate was uploaded</comment>
+  </data>
+  <data name="CertificateFilePath" xml:space="preserve">
+    <value>File Path</value>
+    <comment>Source chip, dialog field label and Details field label</comment>
+  </data>
+  <data name="CertificatePurposeSignIn" xml:space="preserve">
+    <value>Sign-in</value>
+    <comment>Trusted-for value and chip</comment>
+  </data>
+  <data name="CertificatePurposeConnectors" xml:space="preserve">
+    <value>Connectors</value>
+    <comment>Trusted-for value and chip</comment>
+  </data>
+  <data name="CertificatePurposeBoth" xml:space="preserve">
+    <value>Sign-in and Connectors</value>
+    <comment>Trusted-for value when both purposes are set</comment>
+  </data>
+  <data name="CertificateDaysUntilExpiryOne" xml:space="preserve">
+    <value>{0} day</value>
+    <comment>Expiry chip, singular; {0} is a number</comment>
+  </data>
+  <data name="CertificateDaysUntilExpiryOther" xml:space="preserve">
+    <value>{0} days</value>
+    <comment>Expiry chip, plural; {0} is a number</comment>
+  </data>
+  <data name="CertificateExpired" xml:space="preserve">
+    <value>Expired</value>
+    <comment>Expiry chip</comment>
+  </data>
+  <data name="CertificateInUseBySignIn" xml:space="preserve">
+    <value>In use by sign-in</value>
+    <comment>Status chip</comment>
+  </data>
+  <data name="CertificateInUseBySignInTooltip" xml:space="preserve">
+    <value>Your identity provider's certificate chains to this one, so sign-in relies on it. Checked {0}.</value>
+    <comment>Tooltip; {0} is when the identity provider was last checked, relative (for example, 2 hours ago)</comment>
+  </data>
+  <data name="CertificateEmptySearch" xml:space="preserve">
+    <value>No Trusted Certificates match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="CertificateEmptyNone" xml:space="preserve">
+    <value>No Trusted Certificates have been added yet</value>
+    <comment>Empty state when there are no certificates</comment>
+  </data>
+  <data name="CertificateEmptyNoneHint" xml:space="preserve">
+    <value>Use the Upload Certificate or Reference File Path buttons to add one.</value>
+    <comment>Empty state secondary text; quotes the toolbar button labels</comment>
+  </data>
+  <data name="CertificateNameHelper" xml:space="preserve">
+    <value>A friendly name for this certificate (e.g., 'Corp Root CA')</value>
+    <comment>Upload dialog helper text</comment>
+  </data>
+  <data name="CertificateNameRequired" xml:space="preserve">
+    <value>A name is required</value>
+    <comment>Validation message on the name field</comment>
+  </data>
+  <data name="CertificateSelectFile" xml:space="preserve">
+    <value>Select Certificate File</value>
+    <comment>Upload button before a file is chosen</comment>
+  </data>
+  <data name="CertificateFormats" xml:space="preserve">
+    <value>Supported formats: PEM (.pem, .crt) or DER (.cer, .der)</value>
+    <comment>Upload dialog caption</comment>
+  </data>
+  <data name="CertificateNotes" xml:space="preserve">
+    <value>Notes</value>
+    <comment>Field label</comment>
+  </data>
+  <data name="CertificateNotesHelper" xml:space="preserve">
+    <value>Optional notes about this certificate</value>
+    <comment>Field helper text</comment>
+  </data>
+  <data name="CertificateUploading" xml:space="preserve">
+    <value>Uploading</value>
+    <comment>Button text while the upload runs</comment>
+  </data>
+  <data name="CertificateReferenceDialogTitle" xml:space="preserve">
+    <value>Reference Certificate File</value>
+    <comment>Reference dialog title</comment>
+  </data>
+  <data name="CertificateFilePathRequired" xml:space="preserve">
+    <value>A file path is required</value>
+    <comment>Validation message on the file path field</comment>
+  </data>
+  <data name="CertificateReferenceNameHelper" xml:space="preserve">
+    <value>A friendly name for this certificate</value>
+    <comment>Reference dialog name helper text</comment>
+  </data>
+  <data name="CertificateFilePathHelper" xml:space="preserve">
+    <value>Full path to the certificate file (e.g., /connector-files/certs/root-ca.pem)</value>
+    <comment>Helper text on the file path field</comment>
+  </data>
+  <data name="CertificateAddButton" xml:space="preserve">
+    <value>Add Certificate</value>
+    <comment>Reference dialog confirm button</comment>
+  </data>
+  <data name="CertificateAdding" xml:space="preserve">
+    <value>Adding</value>
+    <comment>Button text while the certificate is added</comment>
+  </data>
+  <data name="CertificateDetailsTitle" xml:space="preserve">
+    <value>Certificate Details</value>
+    <comment>Details dialog title</comment>
+  </data>
+  <data name="CertificateIssuer" xml:space="preserve">
+    <value>Issuer</value>
+    <comment>Details field label</comment>
+  </data>
+  <data name="CertificateValidFrom" xml:space="preserve">
+    <value>Valid From</value>
+    <comment>Details field label</comment>
+  </data>
+  <data name="CertificateValidTo" xml:space="preserve">
+    <value>Valid To</value>
+    <comment>Details field label</comment>
+  </data>
+  <data name="CertificateThumbprint" xml:space="preserve">
+    <value>Thumbprint</value>
+    <comment>Details field label</comment>
+  </data>
+  <data name="CertificateSerialNumber" xml:space="preserve">
+    <value>Serial Number</value>
+    <comment>Details field label</comment>
+  </data>
+  <data name="CertificateSourceType" xml:space="preserve">
+    <value>Source Type</value>
+    <comment>Details field label</comment>
+  </data>
+  <data name="CertificateEditTitle" xml:space="preserve">
+    <value>Edit Certificate</value>
+    <comment>Edit dialog title</comment>
+  </data>
+  <data name="CertificateSaving" xml:space="preserve">
+    <value>Saving</value>
+    <comment>Button text while the change is saved</comment>
+  </data>
+  <data name="CertificateUploadedSuccess" xml:space="preserve">
+    <value>Certificate uploaded successfully.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="CertificateAddedSuccess" xml:space="preserve">
+    <value>Certificate added successfully.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="CertificateUpdatedSuccess" xml:space="preserve">
+    <value>Certificate updated successfully.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="CertificateDeletedSuccess" xml:space="preserve">
+    <value>Certificate deleted successfully.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="CertificateUploadFailed" xml:space="preserve">
+    <value>Failed to upload certificate: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="CertificateAddFailed" xml:space="preserve">
+    <value>Failed to add certificate: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="CertificateUpdateFailed" xml:space="preserve">
+    <value>Failed to update certificate: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="CertificateDeleteFailed" xml:space="preserve">
+    <value>Failed to delete certificate: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="CertificateDeleteTitle" xml:space="preserve">
+    <value>Delete Certificate</value>
+    <comment>Confirmation dialog title</comment>
+  </data>
+  <data name="CertificateDeleteMessage" xml:space="preserve">
+    <value>Are you sure you want to delete the certificate '{0}'? This action cannot be undone.</value>
+    <comment>Confirmation dialog message; {0} is the certificate name</comment>
+  </data>
+  <data name="CertificateStopSignInTitle" xml:space="preserve">
+    <value>Stop sign-in through '{0}'?</value>
+    <comment>Lockout confirmation dialog title; {0} is the certificate name</comment>
+  </data>
+  <data name="CertificateUploadVerb" xml:space="preserve">
+    <value>Upload</value>
+    <comment>Upload dialog confirm button, and the change reason dialog confirm button</comment>
+  </data>
+  <data name="ApiKeyPageTitle" xml:space="preserve">
+    <value>API Keys</value>
+    <comment>Browser title, page heading and breadcrumb</comment>
+  </data>
+  <data name="ApiKeyPageInfo" xml:space="preserve">
+    <value>Manage API keys for non-interactive authentication. API keys can be used for CI/CD pipelines, integration testing, and automation scripts. Keys for an identity provider to call a SCIM endpoint are listed here too, marked SCIM, but are created and managed on their Connected System's SCIM tab.</value>
+    <comment>Page information popover</comment>
+  </data>
+  <data name="ApiKeyNounSingular" xml:space="preserve">
+    <value>API Key</value>
+    <comment>Noun used in the count, the empty state and the Created dialog label</comment>
+  </data>
+  <data name="ApiKeyNounPlural" xml:space="preserve">
+    <value>API Keys</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="ApiKeyCreateButton" xml:space="preserve">
+    <value>Create API Key</value>
+    <comment>Toolbar button and create dialog title</comment>
+  </data>
+  <data name="ApiKeyPrefix" xml:space="preserve">
+    <value>Key Prefix</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ApiKeyRoles" xml:space="preserve">
+    <value>Roles</value>
+    <comment>Column heading, dialog section heading and the roles overflow title</comment>
+  </data>
+  <data name="ApiKeyInfrastructureTooltip" xml:space="preserve">
+    <value>Infrastructure key auto-created from the JIM_INFRASTRUCTURE_API_KEY environment variable.</value>
+    <comment>Tooltip on the Infrastructure chip; JIM_INFRASTRUCTURE_API_KEY is an environment variable name</comment>
+  </data>
+  <data name="ApiKeyInfrastructure" xml:space="preserve">
+    <value>Infrastructure</value>
+    <comment>Chip marking the infrastructure key</comment>
+  </data>
+  <data name="ApiKeyScopedTooltip" xml:space="preserve">
+    <value>Works only on one Connected System's SCIM endpoint. Manage it on that Connected System's SCIM tab.</value>
+    <comment>Tooltip on the SCIM chip of a key scoped to one Connected System</comment>
+  </data>
+  <data name="ApiKeyNoRoles" xml:space="preserve">
+    <value>No roles</value>
+    <comment>Shown in the Roles column when a key has none</comment>
+  </data>
+  <data name="ApiKeyLastUsed" xml:space="preserve">
+    <value>Last Used</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ApiKeyLastUsedTooltip" xml:space="preserve">
+    <value>{0} from IP: {1}</value>
+    <comment>Tooltip on the last used time; {0} is the date and time, {1} the IP address or Unknown</comment>
+  </data>
+  <data name="ApiKeyExpires" xml:space="preserve">
+    <value>Expires</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ApiKeyEditOnScimTab" xml:space="preserve">
+    <value>Edit this key on its Connected System's SCIM tab</value>
+    <comment>Tooltip on a disabled edit button for a SCIM key</comment>
+  </data>
+  <data name="ApiKeyEmptySearch" xml:space="preserve">
+    <value>No API Keys match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="ApiKeyEmptyNone" xml:space="preserve">
+    <value>No API Keys have been created yet</value>
+    <comment>Empty state when there are no keys</comment>
+  </data>
+  <data name="ApiKeyEmptyNoneHint" xml:space="preserve">
+    <value>Use the Create API Key button to create one.</value>
+    <comment>Empty state secondary text; quotes the toolbar button label</comment>
+  </data>
+  <data name="ApiKeyNameRequired" xml:space="preserve">
+    <value>A name is required</value>
+    <comment>Validation message on the name field</comment>
+  </data>
+  <data name="ApiKeyNameHelper" xml:space="preserve">
+    <value>A friendly name for this API key (e.g., 'CI/CD Pipeline')</value>
+    <comment>Create and edit dialog helper text</comment>
+  </data>
+  <data name="ApiKeyDescriptionHelper" xml:space="preserve">
+    <value>Optional description of what this key is used for</value>
+    <comment>Helper text on the description field</comment>
+  </data>
+  <data name="ApiKeyRolesHint" xml:space="preserve">
+    <value>Select the roles to assign to this API key. Roles determine what actions the key can perform.</value>
+    <comment>Create dialog caption above the role tick boxes</comment>
+  </data>
+  <data name="ApiKeyExpiresOptional" xml:space="preserve">
+    <value>Expires (Optional)</value>
+    <comment>Date field label</comment>
+  </data>
+  <data name="ApiKeyNoExpiryHint" xml:space="preserve">
+    <value>Leave empty for no expiration</value>
+    <comment>Helper text on the expiry date field</comment>
+  </data>
+  <data name="ApiKeyCreating" xml:space="preserve">
+    <value>Creating</value>
+    <comment>Button text while the key is created</comment>
+  </data>
+  <data name="ApiKeyCreatedTitle" xml:space="preserve">
+    <value>API Key Created</value>
+    <comment>Dialog title shown once the key exists</comment>
+  </data>
+  <data name="ApiKeyCopyNowWarning" xml:space="preserve">
+    <value>Copy this API key now. It will not be possible to show it again.</value>
+    <comment>Warning alert in the Created dialog</comment>
+  </data>
+  <data name="ApiKeyBearerHint" xml:space="preserve">
+    <value>Send this key as a bearer token in the Authorization header when making API requests.</value>
+    <comment>Caption in the Created dialog; Authorization is an HTTP header name</comment>
+  </data>
+  <data name="ApiKeyExampleUsage" xml:space="preserve">
+    <value>Example usage:</value>
+    <comment>Label above the example request</comment>
+  </data>
+  <data name="ApiKeyDone" xml:space="preserve">
+    <value>Done</value>
+    <comment>Button closing the Created dialog</comment>
+  </data>
+  <data name="ApiKeyEditTitle" xml:space="preserve">
+    <value>Edit API Key</value>
+    <comment>Edit dialog title</comment>
+  </data>
+  <data name="ApiKeyCreatedSuccess" xml:space="preserve">
+    <value>API key created successfully.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="ApiKeyCopiedSuccess" xml:space="preserve">
+    <value>API key copied to clipboard.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="ApiKeyCopyFailed" xml:space="preserve">
+    <value>Failed to copy to clipboard. Please copy manually.</value>
+    <comment>Snackbar when the clipboard is unavailable</comment>
+  </data>
+  <data name="ApiKeyUpdatedSuccess" xml:space="preserve">
+    <value>API key updated successfully.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="ApiKeyDeletedSuccess" xml:space="preserve">
+    <value>API key deleted successfully.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="ApiKeyCreateFailed" xml:space="preserve">
+    <value>Failed to create API key: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="ApiKeyUpdateFailed" xml:space="preserve">
+    <value>Failed to update API key: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="ApiKeyDeleteFailed" xml:space="preserve">
+    <value>Failed to delete API key: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="ApiKeyDeleteTitle" xml:space="preserve">
+    <value>Delete API Key</value>
+    <comment>Confirmation dialog title</comment>
+  </data>
+  <data name="ApiKeyDeleteMessage" xml:space="preserve">
+    <value>Are you sure you want to delete the API key '{0}'? Any requests using this key will immediately fail.</value>
+    <comment>Confirmation dialog message; {0} is the key name</comment>
+  </data>
+  <data name="SettingsPageInfo" xml:space="preserve">
+    <value>Configure service-wide settings. Read-only settings are defined by environment variables and cannot be modified here.</value>
+    <comment>Page information popover</comment>
+  </data>
+  <data name="ServiceSettingNounSingular" xml:space="preserve">
+    <value>Service Setting</value>
+    <comment>Noun used in the count, the change history dialog and the acknowledgement dialog</comment>
+  </data>
+  <data name="ServiceSettingNounPlural" xml:space="preserve">
+    <value>Service Settings</value>
+    <comment>Page title, breadcrumb and noun used in the count</comment>
+  </data>
+  <data name="SettingsSearchPlaceholder" xml:space="preserve">
+    <value>Search settings</value>
+    <comment>Search box placeholder</comment>
+  </data>
+  <data name="SettingsShowConfigurableOnly" xml:space="preserve">
+    <value>Show configurable only</value>
+    <comment>Toolbar check box</comment>
+  </data>
+  <data name="SettingsShowOverriddenOnly" xml:space="preserve">
+    <value>Show overridden only</value>
+    <comment>Toolbar check box</comment>
+  </data>
+  <data name="SettingsShowPreviewFeaturesOnly" xml:space="preserve">
+    <value>Show preview features only</value>
+    <comment>Toolbar check box</comment>
+  </data>
+  <data name="SettingsColumnCategory" xml:space="preserve">
+    <value>Category</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="SettingsColumnSetting" xml:space="preserve">
+    <value>Setting</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="SettingsColumnValue" xml:space="preserve">
+    <value>Value</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="SettingsCategorySso" xml:space="preserve">
+    <value>Single Sign-On (SSO)</value>
+    <comment>Category name shown in the Category column</comment>
+  </data>
+  <data name="SettingsCategorySynchronisation" xml:space="preserve">
+    <value>Synchronisation</value>
+    <comment>Category name shown in the Category column</comment>
+  </data>
+  <data name="SettingsCategoryMaintenance" xml:space="preserve">
+    <value>Maintenance</value>
+    <comment>Category name shown in the Category column</comment>
+  </data>
+  <data name="SettingsCategoryHistory" xml:space="preserve">
+    <value>History</value>
+    <comment>Category name shown in the Category column</comment>
+  </data>
+  <data name="SettingsCategorySecurity" xml:space="preserve">
+    <value>Security</value>
+    <comment>Category name shown in the Category column</comment>
+  </data>
+  <data name="SettingsCategoryInstance" xml:space="preserve">
+    <value>Instance</value>
+    <comment>Category name shown in the Category column</comment>
+  </data>
+  <data name="SettingsCategoryPreviewFeatures" xml:space="preserve">
+    <value>Preview Features</value>
+    <comment>Category name for feature flags</comment>
+  </data>
+  <data name="SettingsInDevelopment" xml:space="preserve">
+    <value>In development</value>
+    <comment>Chip on a feature flag that is in development</comment>
+  </data>
+  <data name="SettingsNotSet" xml:space="preserve">
+    <value>(not set)</value>
+    <comment>Shown in place of an empty value</comment>
+  </data>
+  <data name="SettingsCopyToClipboard" xml:space="preserve">
+    <value>Copy to clipboard</value>
+    <comment>Tooltip on the copy button</comment>
+  </data>
+  <data name="SettingsReadOnly" xml:space="preserve">
+    <value>Read-only</value>
+    <comment>Status chip for a value fixed by an environment variable</comment>
+  </data>
+  <data name="SettingsModifiedOn" xml:space="preserve">
+    <value>Modified {0}</value>
+    <comment>Tooltip on the Modified chip; {0} is the date and time</comment>
+  </data>
+  <data name="SettingsModifiedBy" xml:space="preserve">
+    <value>by {0}</value>
+    <comment>Tooltip on the Modified chip; {0} is the name of the person who changed it</comment>
+  </data>
+  <data name="SettingsDefault" xml:space="preserve">
+    <value>Default</value>
+    <comment>Status chip for a value at its default</comment>
+  </data>
+  <data name="SettingsRevertToDefault" xml:space="preserve">
+    <value>Revert to Default</value>
+    <comment>Tooltip on the revert button and the revert dialog title</comment>
+  </data>
+  <data name="SettingsRevert" xml:space="preserve">
+    <value>Revert</value>
+    <comment>Revert confirm button and the reason dialog confirm button</comment>
+  </data>
+  <data name="SettingsRevertConfirm" xml:space="preserve">
+    <value>Are you sure you want to revert '{0}' to its default value?</value>
+    <comment>Revert dialog message; {0} is the setting name</comment>
+  </data>
+  <data name="SettingsRevertedSuccess" xml:space="preserve">
+    <value>Setting '{0}' reverted to default.</value>
+    <comment>Snackbar; {0} is the setting name</comment>
+  </data>
+  <data name="SettingsRevertFailed" xml:space="preserve">
+    <value>Failed to revert setting: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="SettingsUpdatedSuccess" xml:space="preserve">
+    <value>Setting '{0}' updated.</value>
+    <comment>Snackbar; {0} is the setting name</comment>
+  </data>
+  <data name="SettingsUpdateFailed" xml:space="preserve">
+    <value>Failed to update setting: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="SettingsEditTitle" xml:space="preserve">
+    <value>Edit {0}</value>
+    <comment>Edit dialog title; {0} is the setting name</comment>
+  </data>
+  <data name="SettingsDecryptionFailedTitle" xml:space="preserve">
+    <value>Decryption Failed</value>
+    <comment>Dialog title</comment>
+  </data>
+  <data name="SettingsDecryptionFailedMessage" xml:space="preserve">
+    <value>Unable to decrypt this value. The encryption key may have changed or been deleted (e.g. after a environment reset). Edit and re-save this setting to re-encrypt it with the current key.</value>
+    <comment>Dialog message</comment>
+  </data>
+  <data name="SettingsCopiedToClipboard" xml:space="preserve">
+    <value>Copied to clipboard.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="SettingsCopyFailed" xml:space="preserve">
+    <value>Failed to copy to clipboard.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="SettingsEmptySearch" xml:space="preserve">
+    <value>No Service Settings match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="SettingsEmptyFilters" xml:space="preserve">
+    <value>No Service Settings match the filters</value>
+    <comment>Empty state when filters exclude everything</comment>
+  </data>
+  <data name="SettingsEmptyFiltersHint" xml:space="preserve">
+    <value>Clear the filters above to see every setting, including the read-only ones defined by environment variables.</value>
+    <comment>Empty state secondary text</comment>
+  </data>
+  <data name="SettingsEmptyNone" xml:space="preserve">
+    <value>No Service Settings are available</value>
+    <comment>Empty state when there are no settings</comment>
+  </data>
+  <data name="SettingsEmptyNoneHint" xml:space="preserve">
+    <value>Service Settings are seeded when JIM starts; if none are listed, the service has not finished initialising.</value>
+    <comment>Empty state secondary text</comment>
+  </data>
+  <data name="SettingsModified" xml:space="preserve">
+    <value>Modified</value>
+    <comment>Status chip for a value changed from its default</comment>
+  </data>
+  <data name="SettingsOk" xml:space="preserve">
+    <value>OK</value>
+    <comment>Button on the decryption failure dialog</comment>
+  </data>
+  <data name="LogsPageTitle" xml:space="preserve">
+    <value>Logs</value>
+    <comment>Browser title, page heading and breadcrumb</comment>
+  </data>
+  <data name="LogsPageInfo" xml:space="preserve">
+    <value>View and search logs from all JIM services. Each service keeps its 100 most recent log files.</value>
+    <comment>Page information popover</comment>
+  </data>
+  <data name="LogsService" xml:space="preserve">
+    <value>Service</value>
+    <comment>Filter label and column heading</comment>
+  </data>
+  <data name="LogsAllServices" xml:space="preserve">
+    <value>All Services</value>
+    <comment>Placeholder of the service filter</comment>
+  </data>
+  <data name="LogsDate" xml:space="preserve">
+    <value>Date</value>
+    <comment>Filter label</comment>
+  </data>
+  <data name="LogsToday" xml:space="preserve">
+    <value>Today</value>
+    <comment>Placeholder of the date filter</comment>
+  </data>
+  <data name="LogsLevels" xml:space="preserve">
+    <value>Level(s)</value>
+    <comment>Filter label</comment>
+  </data>
+  <data name="LogsAllLevels" xml:space="preserve">
+    <value>All Levels</value>
+    <comment>Placeholder of the level filter, and the selection text when every level is chosen</comment>
+  </data>
+  <data name="LogsLevelCountOne" xml:space="preserve">
+    <value>{0} level</value>
+    <comment>Level filter selection text, singular; {0} is a number</comment>
+  </data>
+  <data name="LogsLevelCountOther" xml:space="preserve">
+    <value>{0} levels</value>
+    <comment>Level filter selection text, plural; {0} is a number</comment>
+  </data>
+  <data name="LogsLevelVerbose" xml:space="preserve">
+    <value>Verbose</value>
+    <comment>Log level name in the filter and the detail panel</comment>
+  </data>
+  <data name="LogsLevelDebug" xml:space="preserve">
+    <value>Debug</value>
+    <comment>Log level name in the filter and the detail panel</comment>
+  </data>
+  <data name="LogsLevelInformation" xml:space="preserve">
+    <value>Information</value>
+    <comment>Log level name in the filter and the detail panel</comment>
+  </data>
+  <data name="LogsLevelWarning" xml:space="preserve">
+    <value>Warning</value>
+    <comment>Log level name in the filter and the detail panel</comment>
+  </data>
+  <data name="LogsLevelError" xml:space="preserve">
+    <value>Error</value>
+    <comment>Log level name in the filter and the detail panel</comment>
+  </data>
+  <data name="LogsLevelFatal" xml:space="preserve">
+    <value>Fatal</value>
+    <comment>Log level name in the filter and the detail panel</comment>
+  </data>
+  <data name="LogsAutoRefresh" xml:space="preserve">
+    <value>Auto-refresh (5s)</value>
+    <comment>Switch label</comment>
+  </data>
+  <data name="LogsSearchPlaceholder" xml:space="preserve">
+    <value>Search messages...</value>
+    <comment>Search box placeholder</comment>
+  </data>
+  <data name="LogsColumnTime" xml:space="preserve">
+    <value>Time</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="LogsColumnLevel" xml:space="preserve">
+    <value>Level</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="LogsColumnMessage" xml:space="preserve">
+    <value>Message</value>
+    <comment>Column heading and detail panel heading</comment>
+  </data>
+  <data name="LogsHasException" xml:space="preserve">
+    <value>Has exception</value>
+    <comment>Tooltip on the exception icon</comment>
+  </data>
+  <data name="LogsPropertyCountOne" xml:space="preserve">
+    <value>{0} property</value>
+    <comment>Chip showing how many properties an entry has, singular; {0} is a number</comment>
+  </data>
+  <data name="LogsPropertyCountOther" xml:space="preserve">
+    <value>{0} properties</value>
+    <comment>Chip showing how many properties an entry has, plural; {0} is a number</comment>
+  </data>
+  <data name="LogsEmptySearch" xml:space="preserve">
+    <value>No log entries match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="LogsEmptyFilters" xml:space="preserve">
+    <value>No log entries match your filters</value>
+    <comment>Empty state when the applied filters exclude everything</comment>
+  </data>
+  <data name="LogsEmptyFiltersHint" xml:space="preserve">
+    <value>Adjust the filters above and select Refresh, or clear them to view the latest log entries.</value>
+    <comment>Empty state secondary text</comment>
+  </data>
+  <data name="LogsEmptyNone" xml:space="preserve">
+    <value>No log entries found</value>
+    <comment>Empty state when there are no entries</comment>
+  </data>
+  <data name="LogsEmptyNoneHint" xml:space="preserve">
+    <value>Log entries appear here as JIM services write to their logs.</value>
+    <comment>Empty state secondary text</comment>
+  </data>
+  <data name="LogsNounSingular" xml:space="preserve">
+    <value>log entry</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="LogsNounPlural" xml:space="preserve">
+    <value>log entries</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="LogsDetailsTitle" xml:space="preserve">
+    <value>Log Entry Details</value>
+    <comment>Detail panel heading</comment>
+  </data>
+  <data name="LogsPropertiesHeading" xml:space="preserve">
+    <value>Properties ({0})</value>
+    <comment>Expansion panel heading; {0} is the number of properties</comment>
+  </data>
+  <data name="LogsPropertyKey" xml:space="preserve">
+    <value>Key</value>
+    <comment>Table heading in the properties table</comment>
+  </data>
+  <data name="LogsException" xml:space="preserve">
+    <value>Exception</value>
+    <comment>Expansion panel heading</comment>
+  </data>
+  <data name="LogsRawJson" xml:space="preserve">
+    <value>Raw JSON</value>
+    <comment>Expansion panel heading</comment>
+  </data>
+  <data name="LogsCopiedToClipboard" xml:space="preserve">
+    <value>Copied to clipboard</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="LogsLoadFailed" xml:space="preserve">
+    <value>Failed to load logs: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="ApiKeyDetailPageTitle" xml:space="preserve">
+    <value>API Key: {0}</value>
+    <comment>Browser title; {0} is the key name</comment>
+  </data>
+  <data name="ApiKeyHeading" xml:space="preserve">
+    <value>API Key:</value>
+    <comment>Heading label before the key name</comment>
+  </data>
+  <data name="ApiKeyDetailPageInfo" xml:space="preserve">
+    <value>An API Key lets a script or another system call JIM's REST API without signing in. Its Roles decide what it may do.</value>
+    <comment>Page information popover</comment>
+  </data>
+  <data name="ApiKeyDetailNotFound" xml:space="preserve">
+    <value>Not Found</value>
+    <comment>Breadcrumb shown while the key cannot be found</comment>
+  </data>
+  <data name="ApiKeyDetailsTab" xml:space="preserve">
+    <value>Details</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="ApiKeyActivityTab" xml:space="preserve">
+    <value>Activity</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="ApiKeyChangesTab" xml:space="preserve">
+    <value>Changes</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="ApiKeyMetadata" xml:space="preserve">
+    <value>Metadata</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="ApiKeyIdLabel" xml:space="preserve">
+    <value>ID:</value>
+    <comment>Label</comment>
+  </data>
+  <data name="ApiKeyPrefixLabel" xml:space="preserve">
+    <value>Key Prefix:</value>
+    <comment>Label</comment>
+  </data>
+  <data name="ApiKeyPrefixTooltip" xml:space="preserve">
+    <value>Only the key's prefix is stored, for security. The full key is shown once at creation and cannot be retrieved again.</value>
+    <comment>Tooltip on the key prefix</comment>
+  </data>
+  <data name="ApiKeyStatusLabel" xml:space="preserve">
+    <value>Status:</value>
+    <comment>Label</comment>
+  </data>
+  <data name="ApiKeyExpiresLabel" xml:space="preserve">
+    <value>Expires:</value>
+    <comment>Label</comment>
+  </data>
+  <data name="ApiKeyExpiredOn" xml:space="preserve">
+    <value>Expired ({0})</value>
+    <comment>Chip for a key past its expiry; {0} is the expiry date and time</comment>
+  </data>
+  <data name="ApiKeyLastUsedLabel" xml:space="preserve">
+    <value>Last Used:</value>
+    <comment>Label</comment>
+  </data>
+  <data name="ApiKeyFrom" xml:space="preserve">
+    <value>from</value>
+    <comment>Shown between the last used date and the IP address</comment>
+  </data>
+  <data name="ApiKeyIpTooltip" xml:space="preserve">
+    <value>The IP address the most recent request authenticated with this key came from.</value>
+    <comment>Tooltip on the IP address</comment>
+  </data>
+  <data name="ApiKeyRolesLabel" xml:space="preserve">
+    <value>Roles:</value>
+    <comment>Label</comment>
+  </data>
+  <data name="ApiKeyNoRolesAssigned" xml:space="preserve">
+    <value>No roles assigned</value>
+    <comment>Shown when the key has no roles</comment>
+  </data>
+  <data name="ApiKeyTypeLabel" xml:space="preserve">
+    <value>Type:</value>
+    <comment>Label</comment>
+  </data>
+  <data name="ApiKeyInfrastructureKey" xml:space="preserve">
+    <value>Infrastructure Key</value>
+    <comment>Chip marking an infrastructure key</comment>
+  </data>
+  <data name="ApiKeyActivitiesIntro" xml:space="preserve">
+    <value>All Activities initiated by this API Key.</value>
+    <comment>Intro text on the Activity tab</comment>
+  </data>
+  <data name="ApiKeyActivityNounSingular" xml:space="preserve">
+    <value>Activity</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="ApiKeyActivityNounPlural" xml:space="preserve">
+    <value>Activities</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="ApiKeyActivitySearchPlaceholder" xml:space="preserve">
+    <value>Search type or target</value>
+    <comment>Search box placeholder</comment>
+  </data>
+  <data name="ApiKeyActivityTarget" xml:space="preserve">
+    <value>Target</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ApiKeyActivityOperation" xml:space="preserve">
+    <value>Operation</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ApiKeyActivityExecutionTime" xml:space="preserve">
+    <value>Execution Time</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ApiKeyActivityNoName" xml:space="preserve">
+    <value>(no name)</value>
+    <comment>Shown when an Activity's target has no name</comment>
+  </data>
+  <data name="ApiKeyActivityEmptySearch" xml:space="preserve">
+    <value>No Activities match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="ApiKeyActivityEmptyNone" xml:space="preserve">
+    <value>No Activities have been recorded for this API Key</value>
+    <comment>Empty state when the key has no Activities</comment>
+  </data>
+  <data name="ApiKeyActivityEmptyNoneHint" xml:space="preserve">
+    <value>Activities appear here once this API Key is used to call the REST API.</value>
+    <comment>Empty state secondary text</comment>
+  </data>
+  <data name="ApiKeyNotFound" xml:space="preserve">
+    <value>API Key not found. It may have been deleted.</value>
+    <comment>Warning alert when the key does not exist</comment>
+  </data>
+  <data name="FactoryResetTitle" xml:space="preserve">
+    <value>Factory Reset</value>
+    <comment>Page title, heading, breadcrumb, PageInfo title and the reset button label</comment>
+  </data>
+  <data name="FactoryResetConfirmTitle" xml:space="preserve">
+    <value>Confirm factory reset</value>
+    <comment>Confirmation dialog title</comment>
+  </data>
+  <data name="FactoryResetPageInfo" xml:space="preserve">
+    <value>Wipe all data and configuration to return JIM to a fresh state.</value>
+    <comment>Page information popover</comment>
+  </data>
+  <data name="FactoryResetWhatItDoes" xml:space="preserve">
+    <value>What a factory reset does</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="FactoryResetBackupFirst" xml:space="preserve">
+    <value>Take a database backup before continuing.</value>
+    <comment>Bold lead of the warning; the markup supplies the bold</comment>
+  </data>
+  <data name="FactoryResetDeletesPermanently" xml:space="preserve">
+    <value> This operation permanently deletes data and </value>
+    <comment>Continues the warning after the bold lead; the leading and trailing spaces are significant</comment>
+  </data>
+  <data name="FactoryResetCannotBeUndone" xml:space="preserve">
+    <value>cannot be undone</value>
+    <comment>Bold phrase in the warnings</comment>
+  </data>
+  <data name="FactoryResetBackupOnly" xml:space="preserve">
+    <value>; if anything is wrong, a backup is the only way to recover.</value>
+    <comment>Ends the warning after the bold phrase</comment>
+  </data>
+  <data name="FactoryResetRemoves" xml:space="preserve">
+    <value>Permanently removes:</value>
+    <comment>Heading of the list of what a reset deletes</comment>
+  </data>
+  <data name="FactoryResetRemovesConnectedSystems" xml:space="preserve">
+    <value>All Connected Systems and their Connector Space objects</value>
+    <comment>List item</comment>
+  </data>
+  <data name="FactoryResetRemovesSynchronisation" xml:space="preserve">
+    <value>All Synchronisation Rules, Schedules, Run Profiles and Pending Exports</value>
+    <comment>List item</comment>
+  </data>
+  <data name="FactoryResetRemovesMetaverse" xml:space="preserve">
+    <value>All Metaverse Objects and their change history</value>
+    <comment>List item</comment>
+  </data>
+  <data name="FactoryResetRemovesActivities" xml:space="preserve">
+    <value>All Activities and all custom configuration (object types, attributes, roles, connectors, searches, example data)</value>
+    <comment>List item</comment>
+  </data>
+  <data name="FactoryResetRemovesKeys" xml:space="preserve">
+    <value>API keys (except the infrastructure key) and trusted certificates</value>
+    <comment>List item</comment>
+  </data>
+  <data name="FactoryResetPreserves" xml:space="preserve">
+    <value>Preserves:</value>
+    <comment>Heading of the list of what a reset keeps</comment>
+  </data>
+  <data name="FactoryResetPreservesSchema" xml:space="preserve">
+    <value>The database schema and built-in configuration</value>
+    <comment>List item</comment>
+  </data>
+  <data name="FactoryResetPreservesKey" xml:space="preserve">
+    <value>The infrastructure API key and service settings</value>
+    <comment>List item</comment>
+  </data>
+  <data name="FactoryResetAdminUsers" xml:space="preserve">
+    <value>Administrator users</value>
+    <comment>Bold lead of a list item</comment>
+  </data>
+  <data name="FactoryResetAdminUsersUnless" xml:space="preserve">
+    <value> (unless you choose to remove them below)</value>
+    <comment>Continues the list item after the bold lead</comment>
+  </data>
+  <data name="FactoryResetRecordWritten" xml:space="preserve">
+    <value>A record of this reset is written to the Activity log, and </value>
+    <comment>Start of the closing paragraph</comment>
+  </data>
+  <data name="FactoryResetSignedOut" xml:space="preserve">
+    <value>every signed-in user (including you) is signed out</value>
+    <comment>Bold phrase in the closing paragraph</comment>
+  </data>
+  <data name="FactoryResetAuthenticateAgain" xml:space="preserve">
+    <value> and must authenticate again.</value>
+    <comment>End of the closing paragraph</comment>
+  </data>
+  <data name="FactoryResetAlsoDeleteAdmins" xml:space="preserve">
+    <value>Also delete administrator users</value>
+    <comment>Check box label</comment>
+  </data>
+  <data name="FactoryResetAdminCaption" xml:space="preserve">
+    <value>Leaves a true brand-new install. Only use this if you intend to hand the system over or start completely fresh.</value>
+    <comment>Caption under the check box</comment>
+  </data>
+  <data name="FactoryResetLockoutIntro" xml:space="preserve">
+    <value>After this, the only ways to regain administrative access are:</value>
+    <comment>Warning alert introduction</comment>
+  </data>
+  <data name="FactoryResetLockoutApiKeyPrefix" xml:space="preserve">
+    <value>the </value>
+    <comment>Warning alert list item; the words before the bold key</comment>
+  </data>
+  <data name="FactoryResetLockoutApiKey" xml:space="preserve">
+    <value>infrastructure API key</value>
+    <comment>Bold part of the warning alert list item</comment>
+  </data>
+  <data name="FactoryResetLockoutApiKeySuffix" xml:space="preserve">
+    <value> (REST API / PowerShell module), and </value>
+    <comment>Warning alert list item; the words after the bold key</comment>
+  </data>
+  <data name="FactoryResetLockoutAdminPrefix" xml:space="preserve">
+    <value>the </value>
+    <comment>Warning alert list item; the words before the bold key, with the French elision</comment>
+  </data>
+  <data name="FactoryResetLockoutAdminKey" xml:space="preserve">
+    <value>default administrator</value>
+    <comment>Bold part of the warning alert list item</comment>
+  </data>
+  <data name="FactoryResetLockoutAdminSuffix" xml:space="preserve">
+    <value>, recreated when they next sign in via SSO (requires the initial administrator to be configured in the .env file).</value>
+    <comment>Warning alert list item; the words after the bold key</comment>
+  </data>
+  <data name="FactoryResetLockoutNeither" xml:space="preserve">
+    <value>If neither is available, you will be locked out of the portal.</value>
+    <comment>Warning alert closing sentence</comment>
+  </data>
+  <data name="FactoryResetAcknowledge" xml:space="preserve">
+    <value>I understand the administrator lockout risk and want to proceed</value>
+    <comment>Check box label</comment>
+  </data>
+  <data name="FactoryResetConfirmLabel" xml:space="preserve">
+    <value>Type RESET to confirm</value>
+    <comment>Label of the confirmation field; RESET is the word the code requires, so it is not translated</comment>
+  </data>
+  <data name="FactoryResetInProgress" xml:space="preserve">
+    <value>Resetting...</value>
+    <comment>Button text while the reset runs</comment>
+  </data>
+  <data name="FactoryResetAdminsRemoved" xml:space="preserve">
+    <value>Administrators WILL be removed. The portal may be inaccessible afterwards.</value>
+    <comment>Confirmation dialog text when administrators are removed</comment>
+  </data>
+  <data name="FactoryResetAdminsPreserved" xml:space="preserve">
+    <value>Administrators will be preserved.</value>
+    <comment>Confirmation dialog text when administrators are kept</comment>
+  </data>
+  <data name="FactoryResetWipeWarning" xml:space="preserve">
+    <value>This permanently wipes all data and configuration and </value>
+    <comment>Start of the confirmation warning</comment>
+  </data>
+  <data name="FactoryResetWipeWarningEnd" xml:space="preserve">
+    <value>. Make sure you have a database backup.</value>
+    <comment>End of the confirmation warning</comment>
+  </data>
+  <data name="FactoryResetWipeButton" xml:space="preserve">
+    <value>Wipe everything</value>
+    <comment>Confirm button in the confirmation dialog</comment>
+  </data>
+  <data name="FactoryResetRefused" xml:space="preserve">
+    <value>Reset refused: {0}</value>
+    <comment>Snackbar; {0} is the reason</comment>
+  </data>
+  <data name="FactoryResetComplete" xml:space="preserve">
+    <value>Factory reset complete. You will be signed out.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="AttrEditorNameRequired" xml:space="preserve">
+    <value>A name is required.</value>
+    <comment>Validation message on the name field</comment>
+  </data>
+  <data name="AttrEditorNameTaken" xml:space="preserve">
+    <value>An attribute named "{0}" already exists. Names are case-insensitive.</value>
+    <comment>Shown under the name field; {0} is the name typed</comment>
+  </data>
+  <data name="AttrEditorDataType" xml:space="preserve">
+    <value>Data Type</value>
+    <comment>Field label</comment>
+  </data>
+  <data name="AttrEditorDataTypeRequired" xml:space="preserve">
+    <value>A data type is required.</value>
+    <comment>Validation message on the data type field</comment>
+  </data>
+  <data name="AttrEditorSingleValued" xml:space="preserve">
+    <value>Single-valued</value>
+    <comment>Plurality option</comment>
+  </data>
+  <data name="AttrEditorMultiValued" xml:space="preserve">
+    <value>Multi-valued</value>
+    <comment>Plurality option</comment>
+  </data>
+  <data name="AttrEditorTypeLocked" xml:space="preserve">
+    <value>Locked because {0} for this attribute, and a different data type would invalidate them.</value>
+    <comment>Helper text on a locked data type; {0} is the count phrase</comment>
+  </data>
+  <data name="AttrEditorValuesHeldOne" xml:space="preserve">
+    <value>{0} Metaverse Object holds a value</value>
+    <comment>Count phrase, singular; {0} is the formatted count</comment>
+  </data>
+  <data name="AttrEditorValuesHeldOther" xml:space="preserve">
+    <value>{0} Metaverse Objects hold values</value>
+    <comment>Count phrase, plural; {0} is the formatted count</comment>
+  </data>
+  <data name="AttrEditorBooleanHelper" xml:space="preserve">
+    <value>A Boolean attribute holds one value, so it is always single-valued.</value>
+    <comment>Helper text on the plurality field for a Boolean attribute</comment>
+  </data>
+  <data name="AttrEditorPluralityLocked" xml:space="preserve">
+    <value>Locked because {0} for this attribute, and single-valued could not keep them all.</value>
+    <comment>Helper text on a locked plurality; {0} is the count phrase</comment>
+  </data>
+  <data name="AttrEditorPluralityWiden" xml:space="preserve">
+    <value>Can be widened to multi-valued; every value already held is kept.</value>
+    <comment>Helper text when plurality can be widened</comment>
+  </data>
+  <data name="AttrEditorRenderingHint" xml:space="preserve">
+    <value>Rendering Hint</value>
+    <comment>Field label</comment>
+  </data>
+  <data name="AttrEditorRenderingHelper" xml:space="preserve">
+    <value>How multi-valued content is displayed on object detail pages.</value>
+    <comment>Helper text on the rendering hint</comment>
+  </data>
+  <data name="AttrEditorRenderDefault" xml:space="preserve">
+    <value>Default (auto)</value>
+    <comment>Rendering hint option</comment>
+  </data>
+  <data name="AttrEditorRenderTable" xml:space="preserve">
+    <value>Table</value>
+    <comment>Rendering hint option</comment>
+  </data>
+  <data name="AttrEditorRenderChipSet" xml:space="preserve">
+    <value>Chip set</value>
+    <comment>Rendering hint option</comment>
+  </data>
+  <data name="AttrEditorRenderList" xml:space="preserve">
+    <value>List</value>
+    <comment>Rendering hint option</comment>
+  </data>
+  <data name="AttrEditorAddToObjectTypes" xml:space="preserve">
+    <value>Add to Object Types (optional)</value>
+    <comment>Field label on the create form</comment>
+  </data>
+  <data name="AttrEditorObjectTypesHelper" xml:space="preserve">
+    <value>Bind the new attribute to these Object Types on creation. Leave empty to create it unbound and assign later.</value>
+    <comment>Helper text on the create form</comment>
+  </data>
+  <data name="AttrEditorStandardMappings" xml:space="preserve">
+    <value>Standard Mappings</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="AttrEditorStandardMappingsIntro" xml:space="preserve">
+    <value>How this attribute corresponds to its counterparts in the SCIM 2.0 and LDAP/Active Directory standards, to guide you when designing Attribute Flows. For reference only: what synchronises is always determined by your Attribute Flows, never by these mappings.</value>
+    <comment>Explanation under the Standard Mappings heading</comment>
+  </data>
+  <data name="AttrEditorBuiltInMaintained" xml:space="preserve">
+    <value>JIM maintains these automatically for built-in attributes.</value>
+    <comment>Added to the explanation for a built-in attribute</comment>
+  </data>
+  <data name="AttrEditorNoMappings" xml:space="preserve">
+    <value>No Standard Mappings.</value>
+    <comment>Shown when the attribute has no Standard Mappings</comment>
+  </data>
+  <data name="AttrEditorColStandard" xml:space="preserve">
+    <value>Standard</value>
+    <comment>Table heading and the Standard field label</comment>
+  </data>
+  <data name="AttrEditorColCounterpart" xml:space="preserve">
+    <value>Counterpart Attribute</value>
+    <comment>Table heading and field label</comment>
+  </data>
+  <data name="AttrEditorColNotes" xml:space="preserve">
+    <value>Notes</value>
+    <comment>Table heading</comment>
+  </data>
+  <data name="AttrEditorEditMapping" xml:space="preserve">
+    <value>Edit Standard Mapping</value>
+    <comment>Tooltip on an icon button</comment>
+  </data>
+  <data name="AttrEditorRemoveMapping" xml:space="preserve">
+    <value>Remove Standard Mapping</value>
+    <comment>Tooltip on an icon button</comment>
+  </data>
+  <data name="AttrEditorAddMapping" xml:space="preserve">
+    <value>Add Standard Mapping</value>
+    <comment>Button</comment>
+  </data>
+  <data name="AttrEditorCounterpartHelper" xml:space="preserve">
+    <value>The equivalent attribute name in the chosen standard, e.g. name.givenName (SCIM) or givenName (LDAP).</value>
+    <comment>Helper text on the counterpart field</comment>
+  </data>
+  <data name="AttrEditorNotesOptional" xml:space="preserve">
+    <value>Notes (optional)</value>
+    <comment>Field label</comment>
+  </data>
+  <data name="AttrEditorMappingDuplicate" xml:space="preserve">
+    <value>A {0} mapping to "{1}" already exists.</value>
+    <comment>Shown when a mapping duplicates another; {0} is the standard, {1} the counterpart name</comment>
+  </data>
+  <data name="AttrEditorUpdate" xml:space="preserve">
+    <value>Update</value>
+    <comment>Button that saves an edited Standard Mapping</comment>
+  </data>
+  <data name="AttrEditorCreateButton" xml:space="preserve">
+    <value>Create Attribute</value>
+    <comment>Create dialog confirm button</comment>
+  </data>
+  <data name="AttrEditorCreated" xml:space="preserve">
+    <value>Created attribute "{0}".</value>
+    <comment>Snackbar; {0} is the name</comment>
+  </data>
+  <data name="AttrEditorSaveFailed" xml:space="preserve">
+    <value>Failed to save attribute: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="AttrEditorRenameBlocked" xml:space="preserve">
+    <value>"{0}" cannot be renamed while Expressions read it by name. Change these first: {1}.</value>
+    <comment>Snackbar; {0} is the attribute name, {1} the list of expressions</comment>
+  </data>
+  <data name="AttrEditorSchemaRefused" xml:space="preserve">
+    <value>Cannot change the schema: {0} Metaverse Object(s) hold a stored value, and only a widening to multi-valued keeps them.</value>
+    <comment>Snackbar; {0} is the count</comment>
+  </data>
+  <data name="AttrEditorSaved" xml:space="preserve">
+    <value>Saved changes to "{0}".</value>
+    <comment>Snackbar; {0} is the name</comment>
+  </data>
+  <data name="AttrEditorViewTitle" xml:space="preserve">
+    <value>View "{0}"</value>
+    <comment>Dialog title for a read-only view; {0} is the name</comment>
+  </data>
+  <data name="AttrEditorEditTitle" xml:space="preserve">
+    <value>Edit "{0}"</value>
+    <comment>Dialog title for an edit; {0} is the name</comment>
+  </data>
+  <data name="ClaimsPageTitle" xml:space="preserve">
+    <value>Your Claims</value>
+    <comment>Browser title, page heading and PageInfo title</comment>
+  </data>
+  <data name="ClaimsPageInfo" xml:space="preserve">
+    <value>Claims are what your identity provider asserted about you when you signed in. JIM uses them to establish who you are, show your name and decide what you may do. This page lists every claim on your session, which helps when diagnosing sign-in, authorisation or identity mapping problems.</value>
+    <comment>Page information popover</comment>
+  </data>
+  <data name="ClaimsNounSingular" xml:space="preserve">
+    <value>Claim</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="ClaimsNounPlural" xml:space="preserve">
+    <value>Claims</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="ClaimsSearchPlaceholder" xml:space="preserve">
+    <value>Search claims</value>
+    <comment>Search box placeholder</comment>
+  </data>
+  <data name="ClaimsColumnType" xml:space="preserve">
+    <value>Claim Type</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ClaimsColumnValue" xml:space="preserve">
+    <value>Claim Value</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ClaimsEmptySearch" xml:space="preserve">
+    <value>No claims match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="ClaimsEmptyNone" xml:space="preserve">
+    <value>Your session carries no claims</value>
+    <comment>Empty state when the session has no claims</comment>
+  </data>
+  <data name="ClaimsEmptyNoneHint" xml:space="preserve">
+    <value>Claims are asserted by your identity provider during sign-in; an empty list means it sent none.</value>
+    <comment>Empty state secondary text</comment>
+  </data>
+  <data name="ClaimsIdpHeading" xml:space="preserve">
+    <value>Identity Provider</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="ClaimsIdpIntro" xml:space="preserve">
+    <value>Non-sensitive details about the identity provider JIM is configured to trust, together with runtime information about how your current session was authenticated. Secrets (client secret, tokens) are deliberately excluded.</value>
+    <comment>Section introduction</comment>
+  </data>
+  <data name="ClaimsSettingNounSingular" xml:space="preserve">
+    <value>Setting</value>
+    <comment>Noun used in the count of identity provider rows</comment>
+  </data>
+  <data name="ClaimsSettingNounPlural" xml:space="preserve">
+    <value>Settings</value>
+    <comment>Noun used in the count of identity provider rows</comment>
+  </data>
+  <data name="ClaimsIdpEmptySearch" xml:space="preserve">
+    <value>No identity provider settings match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="ClaimsIdpEmptyNone" xml:space="preserve">
+    <value>No identity provider details are available</value>
+    <comment>Empty state when no details are available</comment>
+  </data>
+  <data name="ClaimsIdpEmptyNoneHint" xml:space="preserve">
+    <value>Single Sign-On has not been configured yet; configure it under Service Settings.</value>
+    <comment>Empty state secondary text</comment>
+  </data>
+  <data name="ClaimsIdpAuthority" xml:space="preserve">
+    <value>Authority</value>
+    <comment>Identity provider row label</comment>
+  </data>
+  <data name="ClaimsIdpClientId" xml:space="preserve">
+    <value>Client ID</value>
+    <comment>Identity provider row label</comment>
+  </data>
+  <data name="ClaimsIdpUniqueClaim" xml:space="preserve">
+    <value>Unique identifier claim</value>
+    <comment>Identity provider row label</comment>
+  </data>
+  <data name="ClaimsIdpMappedAttribute" xml:space="preserve">
+    <value>Mapped metaverse attribute</value>
+    <comment>Identity provider row label</comment>
+  </data>
+  <data name="ClaimsIdpSignOutEnabled" xml:space="preserve">
+    <value>Sign-out enabled</value>
+    <comment>Identity provider row label</comment>
+  </data>
+  <data name="ClaimsIdpTokenIssuer" xml:space="preserve">
+    <value>Token issuer (iss)</value>
+    <comment>Identity provider row label; iss is the claim name</comment>
+  </data>
+  <data name="ClaimsIdpAuthType" xml:space="preserve">
+    <value>Authentication type</value>
+    <comment>Identity provider row label</comment>
+  </data>
+  <data name="ClaimsIdpIsAuthenticated" xml:space="preserve">
+    <value>Is authenticated</value>
+    <comment>Identity provider row label</comment>
+  </data>
+  <data name="ClaimsIdpNameClaimType" xml:space="preserve">
+    <value>Name claim type</value>
+    <comment>Identity provider row label</comment>
+  </data>
+  <data name="ClaimsIdpRoleClaimType" xml:space="preserve">
+    <value>Role claim type</value>
+    <comment>Identity provider row label</comment>
+  </data>
+  <data name="AdminIntro" xml:space="preserve">
+    <value>Manage system configuration, operations, and security.</value>
+    <comment>Introduction on the Administration landing page</comment>
+  </data>
+  <data name="AdminSectionOperations" xml:space="preserve">
+    <value>Operations &amp; Monitoring</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="AdminSectionSyncConfig" xml:space="preserve">
+    <value>Synchronisation Configuration</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="AdminSectionData" xml:space="preserve">
+    <value>Data Management</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="AdminSectionSecurity" xml:space="preserve">
+    <value>Security &amp; Settings</value>
+    <comment>Section heading</comment>
+  </data>
+  <data name="AdminTileOperations" xml:space="preserve">
+    <value>Operations</value>
+    <comment>Tile title</comment>
+  </data>
+  <data name="AdminTileOperationsDesc" xml:space="preserve">
+    <value>Manage sync operations, schedules, run history and password delivery</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminOperationsAttention" xml:space="preserve">
+    <value>A JIM service is not reporting; open Operations.</value>
+    <comment>Tooltip on the red dot of the Operations tile</comment>
+  </data>
+  <data name="AdminTileLogsDesc" xml:space="preserve">
+    <value>View application and synchronisation logs</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTilePendingDeletions" xml:space="preserve">
+    <value>Pending Deletions</value>
+    <comment>Tile title</comment>
+  </data>
+  <data name="AdminTilePendingDeletionsDesc" xml:space="preserve">
+    <value>Review Metaverse Objects awaiting deletion before it is finalised</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTilePredefinedSearches" xml:space="preserve">
+    <value>Predefined Searches</value>
+    <comment>Tile title</comment>
+  </data>
+  <data name="AdminTilePredefinedSearchesDesc" xml:space="preserve">
+    <value>Create and manage saved search queries</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileExampleData" xml:space="preserve">
+    <value>Example Data</value>
+    <comment>Tile title</comment>
+  </data>
+  <data name="AdminTileExampleDataDesc" xml:space="preserve">
+    <value>Generate test data from templates</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileDeletedObjects" xml:space="preserve">
+    <value>Deleted Objects</value>
+    <comment>Tile title</comment>
+  </data>
+  <data name="AdminTileDeletedObjectsDesc" xml:space="preserve">
+    <value>View the history of deleted objects</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileSettings" xml:space="preserve">
+    <value>Settings</value>
+    <comment>Tile title</comment>
+  </data>
+  <data name="AdminTileSettingsDesc" xml:space="preserve">
+    <value>Configure service settings</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileDangerZone" xml:space="preserve">
+    <value>Danger Zone</value>
+    <comment>Expander title</comment>
+  </data>
+  <data name="AdminTileDefineFlow" xml:space="preserve">
+    <value>Define how attributes flow between systems</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileConnectedSystemsDesc" xml:space="preserve">
+    <value>Configure external system connections</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileSchemaDesc" xml:space="preserve">
+    <value>Manage object types and attributes</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileApiKeysDesc" xml:space="preserve">
+    <value>Manage API authentication keys</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileCertificatesDesc" xml:space="preserve">
+    <value>Manage trusted certificates</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="AdminTileFactoryResetDesc" xml:space="preserve">
+    <value>Wipe all data and configuration to start fresh</value>
+    <comment>Tile description</comment>
+  </data>
+  <data name="EditSettingValueWithFormat" xml:space="preserve">
+    <value>Value (format: d.hh:mm:ss)</value>
+    <comment>Field label for a duration setting</comment>
+  </data>
+  <data name="EditSettingDurationError" xml:space="preserve">
+    <value>Enter a valid duration in the format d.hh:mm:ss</value>
+    <comment>Validation message on a duration setting</comment>
+  </data>
+  <data name="EditSettingDurationExample" xml:space="preserve">
+    <value>Example: 30.00:00:00 for 30 days</value>
+    <comment>Helper text on a duration setting</comment>
+  </data>
+  <data name="EditSettingTogglePassword" xml:space="preserve">
+    <value>Toggle password visibility</value>
+    <comment>Accessible name of the reveal button on a secret setting</comment>
+  </data>
+  <data name="EditSettingDefault" xml:space="preserve">
+    <value>Default: {0}</value>
+    <comment>Caption under a setting; {0} is the default value</comment>
+  </data>
+  <data name="DeleteEvaluatingImpact" xml:space="preserve">
+    <value>Evaluating deletion impact...</value>
+    <comment>Shown while the deletion impact is worked out</comment>
+  </data>
+  <data name="DeleteBusy" xml:space="preserve">
+    <value>Deleting...</value>
+    <comment>Button text while the deletion runs</comment>
+  </data>
+  <data name="DeleteObjectTypeSafe" xml:space="preserve">
+    <value>No Metaverse Objects of this type exist and no Synchronisation Rule targets it. Safe to delete.</value>
+    <comment>Shown when a Metaverse Object Type can be deleted without consequence</comment>
+  </data>
+  <data name="DeleteObjectTypeBuiltInHeadline" xml:space="preserve">
+    <value>This is a built-in Metaverse Object Type</value>
+    <comment>Blocker headline</comment>
+  </data>
+  <data name="DeleteObjectTypeBuiltInBody" xml:space="preserve">
+    <value>Built-in Object Types are part of JIM's own schema and cannot be deleted.</value>
+    <comment>Blocker explanation</comment>
+  </data>
+  <data name="DeleteObjectTypeObjectsHeadline" xml:space="preserve">
+    <value>{0} Metaverse Object(s) of this type exist</value>
+    <comment>Blocker headline; {0} is the count</comment>
+  </data>
+  <data name="DeleteObjectTypeObjectsBody" xml:space="preserve">
+    <value>A type cannot be deleted while Metaverse Objects of it exist. Delete those objects first (stop the source flows and let them deprovision, or delete them manually), then delete the type.</value>
+    <comment>Blocker explanation</comment>
+  </data>
+  <data name="DeleteViewObjects" xml:space="preserve">
+    <value>View these Metaverse Objects</value>
+    <comment>Link in a blocker</comment>
+  </data>
+  <data name="DeleteObjectTypeRulesHeadline" xml:space="preserve">
+    <value>{0} Synchronisation Rule(s) target this type</value>
+    <comment>Blocker headline; {0} is the count</comment>
+  </data>
+  <data name="DeleteObjectTypeRulesBody" xml:space="preserve">
+    <value>Remove these Synchronisation Rules first; deleting the type would otherwise remove the whole rule.</value>
+    <comment>Blocker explanation</comment>
+  </data>
+  <data name="DeleteReferencesHeadline" xml:space="preserve">
+    <value>These {0} reference(s) will also be removed</value>
+    <comment>Consequence headline; {0} is the count</comment>
+  </data>
+  <data name="DeleteObjectTypeReferencesNote" xml:space="preserve">
+    <value>Bound attributes themselves are kept; only their bindings to this type are removed.</value>
+    <comment>Note under the consequences</comment>
+  </data>
+  <data name="DeleteWithReferences" xml:space="preserve">
+    <value>Delete + {0} reference(s)</value>
+    <comment>Confirm button when references will also be removed; {0} is the count</comment>
+  </data>
+  <data name="DeleteReferencePredefinedSearch" xml:space="preserve">
+    <value>Predefined Search: {0}</value>
+    <comment>Consequence item; {0} is the search description</comment>
+  </data>
+  <data name="DeleteReferenceExampleData" xml:space="preserve">
+    <value>Example Data Template: {0}</value>
+    <comment>Consequence item; {0} is the template description</comment>
+  </data>
+  <data name="DeleteReferenceAttributeBinding" xml:space="preserve">
+    <value>Attribute binding: {0}</value>
+    <comment>Consequence item; {0} is the binding description</comment>
+  </data>
+  <data name="DeleteObjectTypeFailedRefresh" xml:space="preserve">
+    <value>The Object Type could not be deleted; its state may have changed. Refresh and try again.</value>
+    <comment>Snackbar warning</comment>
+  </data>
+  <data name="DeleteObjectTypeSuccess" xml:space="preserve">
+    <value>Deleted Object Type "{0}".</value>
+    <comment>Snackbar; {0} is the name</comment>
+  </data>
+  <data name="DeleteObjectTypeFailed" xml:space="preserve">
+    <value>Failed to delete Object Type: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="DeleteObjectTypeTitle" xml:space="preserve">
+    <value>Delete "{0}" Object Type</value>
+    <comment>Dialog title; {0} is the name</comment>
+  </data>
+  <data name="DeleteAttributeSafe" xml:space="preserve">
+    <value>No object holds a value for this attribute. Safe to delete; no object data will be lost.</value>
+    <comment>Shown when a Metaverse Attribute can be deleted without consequence</comment>
+  </data>
+  <data name="DeleteAttributeBuiltInHeadline" xml:space="preserve">
+    <value>This is a built-in attribute</value>
+    <comment>Blocker headline</comment>
+  </data>
+  <data name="DeleteAttributeBuiltInBody" xml:space="preserve">
+    <value>Built-in attributes are part of JIM's own schema and cannot be deleted.</value>
+    <comment>Blocker explanation</comment>
+  </data>
+  <data name="DeleteAttributeValuesHeadline" xml:space="preserve">
+    <value>{0} object(s) have a value</value>
+    <comment>Blocker headline; {0} is the count</comment>
+  </data>
+  <data name="DeleteAttributeValueCount" xml:space="preserve">
+    <value>{0}: {1} with a value</value>
+    <comment>Item under the values blocker; {0} is the object type, {1} the count</comment>
+  </data>
+  <data name="DeleteAttributeValuesBody" xml:space="preserve">
+    <value>Clear these values first (stop the source flow and let it deprovision, or bulk-clear), then delete.</value>
+    <comment>Blocker explanation</comment>
+  </data>
+  <data name="DeleteAttributeReadersHeadline" xml:space="preserve">
+    <value>{0} configuration item(s) read this attribute</value>
+    <comment>Blocker headline; {0} is the count</comment>
+  </data>
+  <data name="DeleteAttributeReadersBody" xml:space="preserve">
+    <value>Change or remove each one first, then delete. JIM does not remove them for you: a Scoping Criterion removed from a Synchronisation Rule changes which objects the rule manages.</value>
+    <comment>Blocker explanation</comment>
+  </data>
+  <data name="DeleteAttributeTitle" xml:space="preserve">
+    <value>Delete "{0}" Attribute</value>
+    <comment>Dialog title; {0} is the name</comment>
+  </data>
+  <data name="DeleteAttributeFailedRefresh" xml:space="preserve">
+    <value>The attribute could not be deleted; it may now hold stored values, or configuration may now read it. Refresh and try again.</value>
+    <comment>Snackbar warning</comment>
+  </data>
+  <data name="DeleteAttributeSuccess" xml:space="preserve">
+    <value>Deleted attribute "{0}".</value>
+    <comment>Snackbar; {0} is the name</comment>
+  </data>
+  <data name="DeleteAttributeFailed" xml:space="preserve">
+    <value>Failed to delete attribute: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="IdpBannerReviewTrust" xml:space="preserve">
+    <value>Review and trust</value>
+    <comment>Button on the identity provider certificate banner</comment>
+  </data>
+  <data name="IdpBannerHowToFix" xml:space="preserve">
+    <value>How to fix it</value>
+    <comment>Link on the identity provider certificate banner</comment>
+  </data>
+  <data name="CertificateUnknown" xml:space="preserve">
+    <value>unknown</value>
+    <comment>Shown in place of a thumbprint that is missing</comment>
+  </data>
+  <data name="CertificateSourceSentByServer" xml:space="preserve">
+    <value>Sent by server</value>
+    <comment>Where a certificate in a chain was found</comment>
+  </data>
+  <data name="CertificateSourceDownloaded" xml:space="preserve">
+    <value>Downloaded</value>
+    <comment>Where a certificate in a chain was found</comment>
+  </data>
+  <data name="CertificateSourceInStore" xml:space="preserve">
+    <value>In Trusted Certificates</value>
+    <comment>Where a certificate in a chain was found</comment>
+  </data>
+  <data name="CertificateSourceOperatingSystem" xml:space="preserve">
+    <value>Operating system</value>
+    <comment>Where a certificate in a chain was found</comment>
+  </data>
+  <data name="CertificateRoleRoot" xml:space="preserve">
+    <value>Root</value>
+    <comment>Role of a certificate in a chain</comment>
+  </data>
+  <data name="CertificateRoleIntermediate" xml:space="preserve">
+    <value>Intermediate</value>
+    <comment>Role of a certificate in a chain</comment>
+  </data>
+  <data name="CertificateRoleServer" xml:space="preserve">
+    <value>Server</value>
+    <comment>Role of a certificate in a chain</comment>
+  </data>
+</root>

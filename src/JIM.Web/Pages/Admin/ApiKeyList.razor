@@ -1,5 +1,6 @@
 @page "/admin/apikeys"
 @attribute [Authorize(Roles = "Administrator")]
+@using System.Globalization
 @using JIM.Application.Utilities
 @using JIM.Models.Security
 @using JIM.Web
@@ -14,12 +15,10 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>API Keys</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Api" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />API Keys
-    <PageInfo Title="API Keys" DocsPage="configuration/api-keys.md">
-        Manage API keys for non-interactive authentication. API keys can be used for CI/CD pipelines, integration testing, and automation scripts.
-        Keys for an identity provider to call a SCIM endpoint are listed here too, marked SCIM, but are created and managed on
-        their Connected System's SCIM tab.
+<PageTitle>@AdminText.ApiKeyPageTitle</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Api" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@AdminText.ApiKeyPageTitle
+    <PageInfo Title="@AdminText.ApiKeyPageTitle" DocsPage="configuration/api-keys.md">
+        @AdminText.ApiKeyPageInfo
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
@@ -31,29 +30,29 @@
                      ContainerId="api-key-list"
                      DefaultSortBy="name"
                      LoadWindow="LoadApiKeyWindowAsync"
-                     SingularName="API Key"
-                     PluralName="API Keys">
+                     SingularName="@AdminText.ApiKeyNounSingular"
+                     PluralName="@AdminText.ApiKeyNounPlural">
     <ToolBarExtras>
         <MudButton OnClick="ShowCreateDialog" StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary"
-                   DropShadow="false">Create API Key</MudButton>
+                   DropShadow="false">@AdminText.ApiKeyCreateButton</MudButton>
     </ToolBarExtras>
     <Columns>
-        <TemplateColumn Title="Name" Sortable="false">
+        <TemplateColumn Title="@CommonText.ColumnName" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Name" Name="name" />
+                <VirtualisedSortHeader Title="@CommonText.ColumnName" Name="name" />
             </HeaderTemplate>
             <CellTemplate>
                 <div class="d-flex align-center gap-2">
                     <MudLink Href="@($"/admin/apikeys/{context.Item.Id}")">@context.Item.Name</MudLink>
                     @if (context.Item.IsInfrastructureKey)
                     {
-                        <MudTooltip Text="Infrastructure key auto-created from the JIM_INFRASTRUCTURE_API_KEY environment variable." Arrow="true" Placement="Placement.Top">
-                            <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Icon="@Icons.Material.Filled.Construction">Infrastructure</MudChip>
+                        <MudTooltip Text="@AdminText.ApiKeyInfrastructureTooltip" Arrow="true" Placement="Placement.Top">
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Icon="@Icons.Material.Filled.Construction">@AdminText.ApiKeyInfrastructure</MudChip>
                         </MudTooltip>
                     }
                     @if (context.Item.ScopeConnectedSystemId is { } scopedTo)
                     {
-                        <MudTooltip Text="Works only on one Connected System's SCIM endpoint. Manage it on that Connected System's SCIM tab." Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@AdminText.ApiKeyScopedTooltip" Arrow="true" Placement="Placement.Top">
                             <MudLink Href="@($"/admin/connected-systems/{scopedTo}?t=scim")">
                                 <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Icon="@Icons.Material.Filled.Link">SCIM</MudChip>
                             </MudLink>
@@ -62,52 +61,52 @@
                 </div>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Key Prefix" Sortable="false">
+        <TemplateColumn Title="@AdminText.ApiKeyPrefix" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Key Prefix" Name="prefix" />
+                <VirtualisedSortHeader Title="@AdminText.ApiKeyPrefix" Name="prefix" />
             </HeaderTemplate>
             <CellTemplate>
                 <span class="jim-text-code">@context.Item.KeyPrefix...</span>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Roles" Sortable="false">
+        <TemplateColumn Title="@AdminText.ApiKeyRoles" Sortable="false">
             <HeaderTemplate>
-                <MudText Typo="Typo.button">Roles</MudText>
+                <MudText Typo="Typo.button">@AdminText.ApiKeyRoles</MudText>
             </HeaderTemplate>
             <CellTemplate>
                 @* A row in a virtualised grid is one line, so a chip per role is a row that grows with the key's
                    roles; the first is shown and the rest open in a dialog. *@
-                <OverflowList TItem="Role" Items="@context.Item.Roles" Title="Roles">
+                <OverflowList TItem="Role" Items="@context.Item.Roles" Title="@AdminText.ApiKeyRoles">
                     <ItemTemplate Context="role">
                         <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="mr-1">@role.Name</MudChip>
                     </ItemTemplate>
                     <EmptyContent>
-                        <span class="mud-text-secondary">No roles</span>
+                        <span class="mud-text-secondary">@AdminText.ApiKeyNoRoles</span>
                     </EmptyContent>
                 </OverflowList>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Last Used" Sortable="false">
+        <TemplateColumn Title="@AdminText.ApiKeyLastUsed" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Last Used" Name="lastused" />
+                <VirtualisedSortHeader Title="@AdminText.ApiKeyLastUsed" Name="lastused" />
             </HeaderTemplate>
             <CellTemplate>
                 @if (context.Item.LastUsedAt.HasValue)
                 {
                     var lastUsed = context.Item.LastUsedAt.Value.ToLocalTime();
-                    <MudTooltip Text="@($"{lastUsed.ToFriendlyDate()} from IP: {context.Item.LastUsedFromIp ?? "Unknown"}")" Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="@string.Format(CultureInfo.CurrentCulture, AdminText.ApiKeyLastUsedTooltip, lastUsed.ToFriendlyDate(), context.Item.LastUsedFromIp ?? CommonText.Unknown)" Arrow="true" Placement="Placement.Top">
                         @lastUsed.ToRelativeTime()
                     </MudTooltip>
                 }
                 else
                 {
-                    <span class="mud-text-secondary">Never</span>
+                    <span class="mud-text-secondary">@CommonText.Never</span>
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Expires" Sortable="false">
+        <TemplateColumn Title="@AdminText.ApiKeyExpires" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Expires" Name="expires" />
+                <VirtualisedSortHeader Title="@AdminText.ApiKeyExpires" Name="expires" />
             </HeaderTemplate>
             <CellTemplate>
                 @if (context.Item.ExpiresAt.HasValue)
@@ -117,14 +116,14 @@
                     {
                         <MudTooltip Text="@expiresAt.ToLocalTime().ToFriendlyDate()"
                             Arrow="true" Placement="Placement.Top">
-                            <MudChip T="string" Variant="Variant.Text" Color="Color.Error">Expired</MudChip>
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Error">@AdminText.CertificateExpired</MudChip>
                         </MudTooltip>
                     }
                     else if (expiresAt < DateTime.UtcNow.AddDays(7))
                     {
                         <MudTooltip Text="@expiresAt.ToLocalTime().ToFriendlyDate()"
                             Arrow="true" Placement="Placement.Top">
-                            <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">@((expiresAt - DateTime.UtcNow).Humanize(precision: 2, minUnit: Humanizer.TimeUnit.Minute))</MudChip>
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">@((expiresAt - DateTime.UtcNow).Humanize(precision: 2, culture: CultureInfo.CurrentCulture, minUnit: Humanizer.TimeUnit.Minute))</MudChip>
                         </MudTooltip>
                     }
                     else
@@ -137,38 +136,38 @@
                 }
                 else
                 {
-                    <span class="mud-text-secondary">Never</span>
+                    <span class="mud-text-secondary">@CommonText.Never</span>
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Status" Sortable="false">
+        <TemplateColumn Title="@CommonText.ColumnStatus" Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Status" Name="status" />
+                <VirtualisedSortHeader Title="@CommonText.ColumnStatus" Name="status" />
             </HeaderTemplate>
             <CellTemplate>
                 @if (context.Item.IsEnabled)
                 {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Success">Enabled</MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Success">@CommonText.Enabled</MudChip>
                 }
                 else
                 {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default">Disabled</MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default">@CommonText.Disabled</MudChip>
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Title="Actions" Sortable="false">
+        <TemplateColumn Title="@CommonText.ColumnActions" Sortable="false">
             <HeaderTemplate>
-                <MudText Typo="Typo.button">Actions</MudText>
+                <MudText Typo="Typo.button">@CommonText.ColumnActions</MudText>
             </HeaderTemplate>
             <CellTemplate>
                 <div class="d-flex justify-end gap-2">
                     @* A SCIM key has no Roles and must expire, which this dialog cannot respect; it is edited on its
                        Connected System's SCIM tab instead. *@
-                    <MudTooltip Text="@(context.Item.ScopeConnectedSystemId.HasValue ? "Edit this key on its Connected System's SCIM tab" : "Edit")" Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="@(context.Item.ScopeConnectedSystemId.HasValue ? AdminText.ApiKeyEditOnScimTab : CommonText.Edit)" Arrow="true" Placement="Placement.Top">
                         <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Size="Size.Small"
                                        Disabled="@context.Item.ScopeConnectedSystemId.HasValue" OnClick="_ => ShowEditDialog(context.Item)" />
                     </MudTooltip>
-                    <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="@CommonText.Delete" Arrow="true" Placement="Placement.Top">
                         <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Size="Size.Small" Color="Color.Error" OnClick="_ => HandleDeleteAsync(context.Item)" />
                     </MudTooltip>
                 </div>
@@ -179,16 +178,16 @@
         @if (!string.IsNullOrWhiteSpace(grid.SearchText))
         {
             <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                             PrimaryText="@($"No API Keys match \"{grid.SearchText}\"")"
-                             SecondaryText="Try a different search term, or clear the search."
-                             ActionText="Clear Search"
+                             PrimaryText="@string.Format(CultureInfo.CurrentCulture, AdminText.ApiKeyEmptySearch, grid.SearchText)"
+                             SecondaryText="@CommonText.TrySearchAgain"
+                             ActionText="@CommonText.ClearSearch"
                              OnAction="@(() => grid.ClearSearchAsync())" />
         }
         else
         {
             <TableEmptyState Icon="@Icons.Material.Filled.Api"
-                             PrimaryText="No API Keys have been created yet"
-                             SecondaryText="Use the Create API Key button to create one." />
+                             PrimaryText="@AdminText.ApiKeyEmptyNone"
+                             SecondaryText="@AdminText.ApiKeyEmptyNoneHint" />
         }
     </EmptyContent>
 </VirtualisedDataGrid>
@@ -197,39 +196,39 @@
 <MudDialog @bind-Visible="_createDialogVisible" Options="_dialogOptions">
     <TitleContent>
         <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-3" /> Create API Key
+            <MudIcon Icon="@Icons.Material.Filled.Key" Class="mr-3" /> @AdminText.ApiKeyCreateButton
         </MudText>
     </TitleContent>
     <DialogContent>
-        <MudTextField T="string" @bind-Value="_createName" Label="Name" Required="true"
-            RequiredError="A name is required" Immediate="true" Variant="Variant.Outlined" Class="mt-3"
-            HelperText="A friendly name for this API key (e.g., 'CI/CD Pipeline')" />
-        <MudTextField T="string" @bind-Value="_createDescription" Label="Description" Lines="2" MaxLines="6" Sizing="InputSizing.Auto"
-            Variant="Variant.Outlined" Class="mt-4" HelperText="Optional description of what this key is used for" />
-        <MudText Typo="Typo.subtitle2" Class="mt-5 mb-2">Roles</MudText>
+        <MudTextField T="string" @bind-Value="_createName" Label="@CommonText.FieldName" Required="true"
+            RequiredError="@AdminText.ApiKeyNameRequired" Immediate="true" Variant="Variant.Outlined" Class="mt-3"
+            HelperText="@AdminText.ApiKeyNameHelper" />
+        <MudTextField T="string" @bind-Value="_createDescription" Label="@CommonText.FieldDescription" Lines="2" MaxLines="6" Sizing="InputSizing.Auto"
+            Variant="Variant.Outlined" Class="mt-4" HelperText="@AdminText.ApiKeyDescriptionHelper" />
+        <MudText Typo="Typo.subtitle2" Class="mt-5 mb-2">@AdminText.ApiKeyRoles</MudText>
         <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
-            Select the roles to assign to this API key. Roles determine what actions the key can perform.
+            @AdminText.ApiKeyRolesHint
         </MudText>
         @foreach (var role in _availableRoles)
         {
             <MudCheckBox T="bool" Value="@_createSelectedRoleIds.Contains(role.Id)"
                 ValueChanged="@(value => ToggleRole(role.Id, value))" Label="@role.Name" Class="ml-n2" />
         }
-        <MudDatePicker @bind-Date="_createExpiresAt" Label="Expires (Optional)" Variant="Variant.Outlined" Class="mt-4"
-            HelperText="Leave empty for no expiration" Clearable="true" />
+        <MudDatePicker @bind-Date="_createExpiresAt" Label="@AdminText.ApiKeyExpiresOptional" Variant="Variant.Outlined" Class="mt-4"
+            HelperText="@AdminText.ApiKeyNoExpiryHint" Clearable="true" />
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="() => _createDialogVisible = false" DropShadow="false">Cancel</MudButton>
+        <MudButton OnClick="() => _createDialogVisible = false" DropShadow="false">@CommonText.Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
             Disabled="@(string.IsNullOrWhiteSpace(_createName) || _creating)" OnClick="HandleCreateAsync">
             @if (_creating)
             {
                 <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                <span class="ms-2">Creating</span>
+                <span class="ms-2">@AdminText.ApiKeyCreating</span>
             }
             else
             {
-                <text>Create</text>
+                <text>@CommonText.Create</text>
             }
         </MudButton>
     </DialogActions>
@@ -239,27 +238,27 @@
 <MudDialog @bind-Visible="_createdKeyDialogVisible" Options="_dialogOptions">
     <TitleContent>
         <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Class="mr-3" /> API Key Created
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Class="mr-3" /> @AdminText.ApiKeyCreatedTitle
         </MudText>
     </TitleContent>
     <DialogContent>
         <MudAlert Severity="Severity.Warning" Class="mb-4">
-            Copy this API key now. It will not be possible to show it again.
+            @AdminText.ApiKeyCopyNowWarning
         </MudAlert>
-        <MudTextField T="string" Value="@_createdFullKey" Label="API Key" ReadOnly="true" Variant="Variant.Outlined"
+        <MudTextField T="string" Value="@_createdFullKey" Label="@AdminText.ApiKeyNounSingular" ReadOnly="true" Variant="Variant.Outlined"
             Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy"
             OnAdornmentClick="CopyKeyToClipboard" />
         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
-            Send this key as a bearer token in the Authorization header when making API requests.
+            @AdminText.ApiKeyBearerHint
         </MudText>
         <MudText Typo="Typo.body2" Class="mt-4">
-            <strong>Example usage:</strong>
+            <strong>@AdminText.ApiKeyExampleUsage</strong>
         </MudText>
         <pre class="jim-code-block mt-2"><code>@((MarkupString)Helpers.HighlightShell(ExampleCurlCommand, ShellLanguage.Bash))</code></pre>
     </DialogContent>
     <DialogActions>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
-            OnClick="() => _createdKeyDialogVisible = false">Done</MudButton>
+            OnClick="() => _createdKeyDialogVisible = false">@AdminText.ApiKeyDone</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -267,36 +266,36 @@
 <MudDialog @bind-Visible="_editDialogVisible" Options="_dialogOptions">
     <TitleContent>
         <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-3" /> Edit API Key
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-3" /> @AdminText.ApiKeyEditTitle
         </MudText>
     </TitleContent>
     <DialogContent>
-        <MudTextField T="string" @bind-Value="_editName" Label="Name" Required="true" RequiredError="A name is required"
+        <MudTextField T="string" @bind-Value="_editName" Label="@CommonText.FieldName" Required="true" RequiredError="@AdminText.ApiKeyNameRequired"
             Immediate="true" Variant="Variant.Outlined" Class="mt-3" />
-        <MudTextField T="string" @bind-Value="_editDescription" Label="Description" Lines="2" MaxLines="6" Sizing="InputSizing.Auto" Variant="Variant.Outlined"
+        <MudTextField T="string" @bind-Value="_editDescription" Label="@CommonText.FieldDescription" Lines="2" MaxLines="6" Sizing="InputSizing.Auto" Variant="Variant.Outlined"
             Class="mt-4" />
-        <MudText Typo="Typo.subtitle2" Class="mt-5 mb-2">Roles</MudText>
+        <MudText Typo="Typo.subtitle2" Class="mt-5 mb-2">@AdminText.ApiKeyRoles</MudText>
         @foreach (var role in _availableRoles)
         {
             <MudCheckBox T="bool" Value="@_editSelectedRoleIds.Contains(role.Id)"
                 ValueChanged="@(value => ToggleEditRole(role.Id, value))" Label="@role.Name" Class="ml-n2" />
         }
-        <MudDatePicker @bind-Date="_editExpiresAt" Label="Expires (Optional)" Variant="Variant.Outlined" Class="mt-4"
-            HelperText="Leave empty for no expiration" Clearable="true" />
-        <MudSwitch @bind-Value="_editEnabled" Color="Color.Primary" Label="Enabled" Class="mt-4" />
+        <MudDatePicker @bind-Date="_editExpiresAt" Label="@AdminText.ApiKeyExpiresOptional" Variant="Variant.Outlined" Class="mt-4"
+            HelperText="@AdminText.ApiKeyNoExpiryHint" Clearable="true" />
+        <MudSwitch @bind-Value="_editEnabled" Color="Color.Primary" Label="@CommonText.Enabled" Class="mt-4" />
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="() => _editDialogVisible = false" DropShadow="false">Cancel</MudButton>
+        <MudButton OnClick="() => _editDialogVisible = false" DropShadow="false">@CommonText.Cancel</MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
             Disabled="@(string.IsNullOrWhiteSpace(_editName) || _saving)" OnClick="HandleSaveEditAsync">
             @if (_saving)
             {
                 <MudProgressCircular Class="ms-n1" Indeterminate="true" />
-                <span class="ms-2">Saving</span>
+                <span class="ms-2">@AdminText.CertificateSaving</span>
             }
             else
             {
-                <text>Save Changes</text>
+                <text>@CommonText.SaveChanges</text>
             }
         </MudButton>
     </DialogActions>
@@ -312,9 +311,9 @@
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new()
     {
-        new("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new("Administration", href: "/admin"),
-        new("API Keys", href: null, disabled: true)
+        new(LayoutText.NavHome, href: "/", icon: Icons.Material.Filled.Home),
+        new(LayoutText.NavAdministration, href: "/admin"),
+        new(AdminText.ApiKeyPageTitle, href: null, disabled: true)
     };
 
     private readonly DialogOptions _dialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Small };
@@ -438,7 +437,7 @@
         try
         {
             // offer an optional reason for the configuration change history; cancelling aborts the create
-            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Create");
+            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, CommonText.Create);
             if (cancelled)
                 return;
 
@@ -465,7 +464,7 @@
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
             await jim.Security.CreateApiKeyAsync(apiKey, user, changeReason);
 
-            Snackbar.Add("API key created successfully.", Severity.Success);
+            Snackbar.Add(AdminText.ApiKeyCreatedSuccess, Severity.Success);
             _createDialogVisible = false;
 
             // Show the created key dialog
@@ -476,7 +475,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Failed to create API key: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.ApiKeyCreateFailed, ex.Message), Severity.Error);
         }
         finally
         {
@@ -489,11 +488,11 @@
         try
         {
             await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", _createdFullKey);
-            Snackbar.Add("API key copied to clipboard.", Severity.Info);
+            Snackbar.Add(AdminText.ApiKeyCopiedSuccess, Severity.Info);
         }
         catch
         {
-            Snackbar.Add("Failed to copy to clipboard. Please copy manually.", Severity.Warning);
+            Snackbar.Add(AdminText.ApiKeyCopyFailed, Severity.Warning);
         }
     }
 
@@ -540,13 +539,13 @@
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
             await jim.Security.UpdateApiKeyAsync(updatedKey, user, changeReason);
 
-            Snackbar.Add("API key updated successfully.", Severity.Success);
+            Snackbar.Add(AdminText.ApiKeyUpdatedSuccess, Severity.Success);
             _editDialogVisible = false;
             await ReloadListAsync();
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Failed to update API key: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.ApiKeyUpdateFailed, ex.Message), Severity.Error);
         }
         finally
         {
@@ -557,16 +556,16 @@
     private async Task HandleDeleteAsync(ApiKey apiKey)
     {
         var result = await DialogService.ShowMessageBoxAsync(
-        "Delete API Key",
-        $"Are you sure you want to delete the API key '{apiKey.Name}'? Any requests using this key will immediately fail.",
-        yesText: "Delete",
-        cancelText: "Cancel");
+        AdminText.ApiKeyDeleteTitle,
+        string.Format(CultureInfo.CurrentCulture, AdminText.ApiKeyDeleteMessage, apiKey.Name),
+        yesText: CommonText.Delete,
+        cancelText: CommonText.Cancel);
 
         if (result != true)
             return;
 
         // offer an optional reason for the configuration change history; cancelling aborts the delete
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, CommonText.Delete);
         if (cancelled)
             return;
 
@@ -576,12 +575,12 @@
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
             await jim.Security.DeleteApiKeyAsync(apiKey.Id, user, changeReason);
 
-            Snackbar.Add("API key deleted successfully.", Severity.Success);
+            Snackbar.Add(AdminText.ApiKeyDeletedSuccess, Severity.Success);
             await ReloadListAsync();
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Failed to delete API key: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.ApiKeyDeleteFailed, ex.Message), Severity.Error);
         }
     }
 }
