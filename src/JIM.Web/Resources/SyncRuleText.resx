@@ -2124,4 +2124,64 @@
     <value>Failed to save attribute priority order: {0}</value>
     <comment>Snackbar on failure. {0} is the error message.</comment>
   </data>
+  <data name="GateTitleOne" xml:space="preserve">
+    <value>This change stops a configuration test case passing</value>
+    <comment>Dialog title when one test case stops passing. Singular.</comment>
+  </data>
+  <data name="GateTitleOther" xml:space="preserve">
+    <value>This change stops {0} configuration test cases passing</value>
+    <comment>Dialog title when several test cases stop passing. {0} is the count.</comment>
+  </data>
+  <data name="GateNothingSavedOne" xml:space="preserve">
+    <value>Nothing has been saved. This case passed before the change, and does not with it.</value>
+    <comment>Explains the refusal. Singular.</comment>
+  </data>
+  <data name="GateNothingSavedOther" xml:space="preserve">
+    <value>Nothing has been saved. These cases passed before the change, and do not with it.</value>
+    <comment>Explains the refusal. Plural.</comment>
+  </data>
+  <data name="GateTestCase" xml:space="preserve">
+    <value>Test case</value>
+    <comment>Table heading: the test case.</comment>
+  </data>
+  <data name="GateWithChange" xml:space="preserve">
+    <value>With this change</value>
+    <comment>Table heading: what the test case gives with the change.</comment>
+  </data>
+  <data name="GateNowFails" xml:space="preserve">
+    <value>Now fails</value>
+    <comment>Status of a test case that fails with the change.</comment>
+  </data>
+  <data name="GateNeedsReview" xml:space="preserve">
+    <value>Now needs review</value>
+    <comment>Status of a test case that needs review with the change.</comment>
+  </data>
+  <data name="GateCouldNotRun" xml:space="preserve">
+    <value>Could not run</value>
+    <comment>Status of a test case that could not run with the change.</comment>
+  </data>
+  <data name="GatePasses" xml:space="preserve">
+    <value>Passes</value>
+    <comment>Status of a test case that still passes with the change.</comment>
+  </data>
+  <data name="GateRecordedNote" xml:space="preserve">
+    <value>Accepting or saving anyway is recorded with the change in Configuration History, naming each case.</value>
+    <comment>Note at the foot of the dialog.</comment>
+  </data>
+  <data name="GateKeepEditing" xml:space="preserve">
+    <value>Keep editing</value>
+    <comment>Button leaving the edit unsaved on the page.</comment>
+  </data>
+  <data name="GateAcceptOne" xml:space="preserve">
+    <value>Accept new result</value>
+    <comment>Button accepting the new result. Singular.</comment>
+  </data>
+  <data name="GateAcceptOther" xml:space="preserve">
+    <value>Accept new results</value>
+    <comment>Button accepting the new results. Plural.</comment>
+  </data>
+  <data name="GateSaveAnyway" xml:space="preserve">
+    <value>Save anyway</value>
+    <comment>Button saving despite the failing test cases.</comment>
+  </data>
 </root>

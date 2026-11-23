@@ -1616,4 +1616,49 @@
   <data name="PriorityOrderFailed" xml:space="preserve">
     <value>Échec de l’enregistrement de l’ordre de priorité des attributs : {0}</value>
   </data>
+  <data name="GateTitleOne" xml:space="preserve">
+    <value>Cette modification empêche un cas de test de configuration de réussir</value>
+  </data>
+  <data name="GateTitleOther" xml:space="preserve">
+    <value>Cette modification empêche {0} cas de test de configuration de réussir</value>
+  </data>
+  <data name="GateNothingSavedOne" xml:space="preserve">
+    <value>Rien n’a été enregistré. Ce cas réussissait avant la modification, et ne réussit plus avec elle.</value>
+  </data>
+  <data name="GateNothingSavedOther" xml:space="preserve">
+    <value>Rien n’a été enregistré. Ces cas réussissaient avant la modification, et ne réussissent plus avec elle.</value>
+  </data>
+  <data name="GateTestCase" xml:space="preserve">
+    <value>Cas de test</value>
+  </data>
+  <data name="GateWithChange" xml:space="preserve">
+    <value>Avec cette modification</value>
+  </data>
+  <data name="GateNowFails" xml:space="preserve">
+    <value>Échoue désormais</value>
+  </data>
+  <data name="GateNeedsReview" xml:space="preserve">
+    <value>Doit désormais être vérifié</value>
+  </data>
+  <data name="GateCouldNotRun" xml:space="preserve">
+    <value>Impossible à exécuter</value>
+  </data>
+  <data name="GatePasses" xml:space="preserve">
+    <value>Réussit</value>
+  </data>
+  <data name="GateRecordedNote" xml:space="preserve">
+    <value>Accepter ou enregistrer malgré tout est consigné avec la modification dans l’historique de configuration, en nommant chaque cas.</value>
+  </data>
+  <data name="GateKeepEditing" xml:space="preserve">
+    <value>Continuer la modification</value>
+  </data>
+  <data name="GateAcceptOne" xml:space="preserve">
+    <value>Accepter le nouveau résultat</value>
+  </data>
+  <data name="GateAcceptOther" xml:space="preserve">
+    <value>Accepter les nouveaux résultats</value>
+  </data>
+  <data name="GateSaveAnyway" xml:space="preserve">
+    <value>Enregistrer malgré tout</value>
+  </data>
 </root>
