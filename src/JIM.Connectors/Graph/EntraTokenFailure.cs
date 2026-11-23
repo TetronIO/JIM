@@ -42,10 +42,19 @@ internal static partial class EntraTokenFailure
 
     /// <summary>
     /// The refusals Entra ID gives while it is still applying a credential added moments ago, and how long JIM waits
-    /// before each fresh token request: about half a minute in all.
+    /// before each fresh token request. A run waits up to three minutes in all: Entra ID has been seen refusing a
+    /// certificate for over a minute and a half after accepting it elsewhere, and a scheduled run that waits beats one
+    /// that fails. The connection test waits half a minute, because an administrator is waiting on the form, and its
+    /// message already says to try again shortly.
     /// </summary>
-    public static OAuthStillBeingAppliedRetry StillBeingAppliedRetry { get; } =
-        new(IsStillBeingApplied, [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(15)]);
+    internal static OAuthStillBeingAppliedRetry StillBeingAppliedRetryFor(GraphClientPurpose purpose) =>
+        purpose == GraphClientPurpose.ConnectionTest ? ConnectionTestRetry : RunRetry;
+
+    private static readonly OAuthStillBeingAppliedRetry RunRetry = new(IsStillBeingApplied,
+        [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60)]);
+
+    private static readonly OAuthStillBeingAppliedRetry ConnectionTestRetry = new(IsStillBeingApplied,
+        [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(15)]);
 
     /// <summary>
     /// Whether Entra ID refused the token request only because it has not yet applied a newly uploaded certificate

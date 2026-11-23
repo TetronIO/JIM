@@ -31,6 +31,30 @@ public class EntraTokenFailureTests
     }
 
     [Test]
+    public void StillBeingAppliedRetryFor_Run_KeepsAskingForSeveralMinutes()
+    {
+        // Entra ID has been seen refusing a certificate for over a minute and a half after accepting it elsewhere; an
+        // unattended run waits that out rather than failing.
+        var total = EntraTokenFailure.StillBeingAppliedRetryFor(GraphClientPurpose.Run).Delays.Aggregate(TimeSpan.Zero, (sum, d) => sum + d);
+
+        Assert.That(total, Is.GreaterThanOrEqualTo(TimeSpan.FromMinutes(2)));
+    }
+
+    [Test]
+    public void StillBeingAppliedRetryFor_ConnectionTest_GivesUpWithinHalfAMinute()
+    {
+        // The connection test runs while an administrator waits on the form, so it reports the refusal sooner.
+        var delays = EntraTokenFailure.StillBeingAppliedRetryFor(GraphClientPurpose.ConnectionTest).Delays;
+        var total = delays.Aggregate(TimeSpan.Zero, (sum, d) => sum + d);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(delays, Is.Not.Empty);
+            Assert.That(total, Is.LessThanOrEqualTo(TimeSpan.FromSeconds(30)));
+        }
+    }
+
+    [Test]
     public void IsStillBeingApplied_CertificateNotYetKnown_IsTrue()
     {
         // Entra ID learns a newly uploaded certificate unevenly, so a token request signed with it can be refused for

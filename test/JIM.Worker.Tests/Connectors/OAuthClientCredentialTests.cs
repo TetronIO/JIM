@@ -5,6 +5,9 @@ using System.Net;
 using System.Text;
 using JIM.Connectors.Http;
 using NUnit.Framework;
+using Serilog;
+using Serilog.Core;
+using Serilog.Events;
 
 namespace JIM.Worker.Tests.Connectors;
 
@@ -124,6 +127,31 @@ public class OAuthClientCredentialTests
     }
 
     [Test]
+    public async Task ApplyAsync_RefusalStillBeingApplied_LogsAWarningBeforeEachWaitAsync()
+    {
+        // Each wait is logged, so a run that was slowed (or failed) by a credential still being applied says so.
+        var handler = new StubHttpMessageHandler((_, call) => Task.FromResult(call <= 2 ? StillApplyingRefusal() : TokenResponse()));
+        using var tokenClient = new HttpClient(handler);
+        var sink = new CapturingSink();
+        using var logger = new LoggerConfiguration().MinimumLevel.Verbose().WriteTo.Sink(sink).CreateLogger();
+        var strategy = new OAuthClientCredentialsAuthentication(tokenClient, new Uri(TokenEndpoint), "client-id", new RecordingCredential(), scope: null, () => Start,
+            describeFailure: (status, _) => $"described {(int)status}",
+            stillBeingApplied: new OAuthStillBeingAppliedRetry(IsStillApplying, [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3)]),
+            delay: (_, _) => Task.CompletedTask,
+            logger: logger);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "https://graph.example.com/v1.0/users");
+
+        await strategy.ApplyAsync(request, CancellationToken.None);
+
+        var warnings = sink.Events.Where(e => e.Level == LogEventLevel.Warning).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(warnings, Has.Count.EqualTo(2));
+            Assert.That(warnings.Select(w => w.RenderMessage()), Has.All.Contains("described 401"), "the warning says what the refusal was");
+        }
+    }
+
+    [Test]
     public void ApplyAsync_RefusalStillBeingAppliedEveryTime_ThrowsTheDescribedRefusalAfterTheLastDelay()
     {
         var handler = new StubHttpMessageHandler(_ => StillApplyingRefusal());
@@ -191,6 +219,13 @@ public class OAuthClientCredentialTests
     };
 
     private static bool IsStillApplying(HttpStatusCode status, string? body) => body?.Contains("700027") == true;
+
+    private sealed class CapturingSink : ILogEventSink
+    {
+        internal List<LogEvent> Events { get; } = [];
+
+        public void Emit(LogEvent logEvent) => Events.Add(logEvent);
+    }
 
     private sealed class RecordingCredential : IOAuthClientCredential
     {

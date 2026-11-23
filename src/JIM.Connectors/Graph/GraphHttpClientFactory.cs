@@ -24,7 +24,8 @@ internal static class GraphHttpClientFactory
         List<ConnectedSystemSettingValue> settingValues,
         IReadOnlyList<X509Certificate2> trustedCertificates,
         ICredentialProtection? credentialProtection,
-        ILogger logger)
+        ILogger logger,
+        GraphClientPurpose purpose = GraphClientPurpose.Run)
     {
         ArgumentNullException.ThrowIfNull(settingValues);
         ArgumentNullException.ThrowIfNull(trustedCertificates);
@@ -51,7 +52,7 @@ internal static class GraphHttpClientFactory
         {
             // The token client shares the transport, so a TLS-inspecting proxy's CA trusted for Graph is trusted for
             // the token service too.
-            authentication = CreateAuthentication(settingValues, credentialProtection, httpClient, out ownedCredential);
+            authentication = CreateAuthentication(settingValues, credentialProtection, httpClient, out ownedCredential, purpose: purpose, logger: logger);
         }
         catch (HttpAuthenticationException)
         {
@@ -67,13 +68,19 @@ internal static class GraphHttpClientFactory
     /// managed identity's token is fetched with; otherwise null.
     /// </param>
     /// <param name="identityHandler">Reaches the instance metadata service; replaced in tests. By default a direct connection.</param>
+    /// <param name="purpose">Decides how long to wait for Entra ID to apply a newly uploaded certificate.</param>
+    /// <param name="logger">Where those waits are logged.</param>
+    /// <param name="delay">Waiting seam, so the waits are testable without waiting.</param>
     /// <exception cref="HttpAuthenticationException">A value is missing, the Cloud is unknown, or the certificate is unusable.</exception>
     public static IHttpAuthenticationStrategy CreateAuthentication(
         List<ConnectedSystemSettingValue> settingValues,
         ICredentialProtection? credentialProtection,
         HttpClient tokenClient,
         out IDisposable? ownedCredential,
-        HttpMessageHandler? identityHandler = null)
+        HttpMessageHandler? identityHandler = null,
+        GraphClientPurpose purpose = GraphClientPurpose.Run,
+        ILogger? logger = null,
+        Func<TimeSpan, CancellationToken, Task>? delay = null)
     {
         ArgumentNullException.ThrowIfNull(settingValues);
         ArgumentNullException.ThrowIfNull(tokenClient);
@@ -111,7 +118,7 @@ internal static class GraphHttpClientFactory
         }
 
         return new OAuthClientCredentialsAuthentication(tokenClient, tokenEndpoint, clientId, credential, cloud.Scope, describeFailure: EntraTokenFailure.Describe,
-            stillBeingApplied: EntraTokenFailure.StillBeingAppliedRetry);
+            stillBeingApplied: EntraTokenFailure.StillBeingAppliedRetryFor(purpose), delay: delay, logger: logger);
     }
 
     private static GraphManagedIdentityTokenSource CreateManagedIdentitySource(List<ConnectedSystemSettingValue> settingValues, GraphCloud cloud,

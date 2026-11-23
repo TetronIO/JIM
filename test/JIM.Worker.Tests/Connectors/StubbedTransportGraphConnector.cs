@@ -28,10 +28,15 @@ internal sealed class StubbedTransportGraphConnector : GraphConnector
             ? GraphTestTokens.TokenResponse(roles.Length > 0 ? roles : GraphTestTokens.AllPermissions)
             : new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent("""{"value":[]}""") });
 
-    internal override Task<GraphHttpClient> CreateClientAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    /// <summary>Each wait before asking Entra ID for a token again, in order; nothing actually waits.</summary>
+    public List<TimeSpan> TokenWaits { get; } = [];
+
+    internal override Task<GraphHttpClient> CreateClientAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger,
+        GraphClientPurpose purpose = GraphClientPurpose.Run)
     {
         var httpClient = new HttpClient(_handler, disposeHandler: false);
-        var authentication = GraphHttpClientFactory.CreateAuthentication(settingValues, CredentialProtection, httpClient, out var owned);
+        var authentication = GraphHttpClientFactory.CreateAuthentication(settingValues, CredentialProtection, httpClient, out var owned, purpose: purpose,
+            logger: logger, delay: (wait, _) => { TokenWaits.Add(wait); return Task.CompletedTask; });
         GraphCloud.TryResolve(settingValues.SingleOrDefault(s => s.Setting.Name == GraphConnectorConstants.SettingCloud)?.StringValue, out var cloud);
 
         var client = new GraphHttpClient(
