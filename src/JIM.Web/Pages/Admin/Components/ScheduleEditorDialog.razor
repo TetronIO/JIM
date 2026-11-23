@@ -41,7 +41,7 @@
                                       ReadOnly="@_schedule.BuiltIn"
                                       HelperText="@(_schedule.BuiltIn ? OperationsText.ScheduleEditorNameBuiltInHelp : OperationsText.ScheduleEditorNameHelp)" />
 
-                        <MudTextField @bind-Value="_schedule.Description" Label="Description" Variant="Variant.Outlined"
+                        <MudTextField @bind-Value="_schedule.Description" Label="@CommonText.ColumnDescription" Variant="Variant.Outlined"
                                       Lines="2" MaxLines="6" Sizing="InputSizing.Auto"
                                       HelperText="@OperationsText.ScheduleEditorDescriptionHelp" />
 

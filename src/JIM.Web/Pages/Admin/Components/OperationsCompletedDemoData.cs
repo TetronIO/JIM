@@ -14,6 +14,7 @@ namespace JIM.Web.Pages.Admin.Components;
 /// </summary>
 public static class OperationsCompletedDemoData
 {
+    // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
     private const string LongSystemName = "Corporate Directory (Northern Europe and Asia Pacific)";
 
     public static List<Activity> Build(DateTime now)
@@ -25,6 +26,7 @@ public static class OperationsCompletedDemoData
         return
         [
             // A Schedule's synchronisation, with every outcome a synchronisation reports.
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             Run("HR System", "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation, ActivityStatus.CompleteWithError, Ago(), 42, Schedule(nightly),
                 a =>
                 {
@@ -32,22 +34,32 @@ public static class OperationsCompletedDemoData
                     a.TotalDisconnectedOutOfScope = 87; a.TotalOutOfScopeRetainJoin = 23; a.TotalDeleted = 5_000;
                     a.TotalDriftCorrections = 9; a.TotalProvisioned = 1_198; a.TotalPendingExports = 10_421; a.TotalErrors = 3;
                 }),
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             Run("Yellowstone APAC", "Full Sync", ConnectedSystemRunType.FullSynchronisation, ActivityStatus.Complete, Ago(), 1_212, ApiKey(),
                 a => { a.TotalProjected = 524_997; a.TotalJoined = 524_997; a.TotalAttributeFlows = 524_997; a.TotalPendingExports = 524_997; }),
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             Run(LongSystemName, "Full Import (Scoped)", ConnectedSystemRunType.FullImport, ActivityStatus.Complete, Ago(), 1_486, ApiKey(),
                 a => a.TotalAdded = 524_997),
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             Run("HR System", "Delta Import", ConnectedSystemRunType.DeltaImport, ActivityStatus.CompleteWithWarning, Ago(), 9, Schedule(nightly),
+                // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
                 a => { a.TotalAdded = 12; a.TotalUpdated = 5_000; a.TotalDeleted = 1; a.WarningMessage = "2 rows were skipped: no employee number."; }),
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             Run("Glitterband EMEA", "Export", ConnectedSystemRunType.Export, ActivityStatus.Complete, Ago(), 51, Schedule(nightly),
                 a => { a.TotalExported = 5_421; a.TotalDeprovisioned = 5_000; }),
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             Run("Glitterband EMEA", "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation, ActivityStatus.Complete, Ago(), 0.3, Person()),
             Run("Azure AD", "Export", ConnectedSystemRunType.Export, ActivityStatus.FailedWithError, Ago(), 4, Schedule(nightly),
+                // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
                 a => { a.TotalExported = 17; a.TotalErrors = 1_208; a.ErrorMessage = "The service refused the connection: the credential has expired."; }),
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             Run("LDAP Directory", "Full Import", ConnectedSystemRunType.FullImport, ActivityStatus.Cancelled, Ago(), 63, Person(),
                 a => a.TotalAdded = 31_200),
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             Run("HR System", "Full Sync", ConnectedSystemRunType.FullSynchronisation, ActivityStatus.Complete, Ago(), 0.1, SystemInitiated()),
             ConnectedSystemOperation(LongSystemName, ActivityTargetOperationType.Clear, ActivityStatus.Complete, Ago(), 2, Person(),
                 a => { a.ClearedConnectedSystemObjectCount = 10_000; a.ClearedPendingExportCount = 214; a.ClearedJoinRecordCount = 9_412; }),
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             ConnectedSystemOperation("Retired Payroll", ActivityTargetOperationType.Delete, ActivityStatus.Complete, Ago(), 6, ApiKey()),
         ];
     }
@@ -95,6 +107,7 @@ public static class OperationsCompletedDemoData
     {
         a.InitiatedByType = ActivityInitiatorType.ApiKey;
         a.InitiatedById = Guid.NewGuid();
+        // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
         a.InitiatedByName = "Infrastructure Key";
     };
 
@@ -110,6 +123,7 @@ public static class OperationsCompletedDemoData
     private static Action<Activity> Schedule(Guid executionId) => a =>
     {
         a.InitiatedByType = ActivityInitiatorType.System;
+        // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
         a.ScheduledByScheduleName = "Nightly Full Sync";
         a.ScheduleExecutionId = executionId;
     };

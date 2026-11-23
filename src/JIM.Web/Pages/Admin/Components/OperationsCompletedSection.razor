@@ -688,17 +688,7 @@
     }
 
     /// <summary>The status as a person reads it: one key per status, so a new status is a compile-time gap.</summary>
-    private static string StatusLabel(ActivityStatus status) => status switch
-    {
-        ActivityStatus.NotSet => OperationsText.CompletedStatusNotSet,
-        ActivityStatus.InProgress => OperationsText.CompletedStatusInProgress,
-        ActivityStatus.Complete => OperationsText.CompletedStatusComplete,
-        ActivityStatus.CompleteWithWarning => OperationsText.CompletedStatusCompleteWithWarning,
-        ActivityStatus.CompleteWithError => OperationsText.CompletedStatusCompleteWithError,
-        ActivityStatus.FailedWithError => OperationsText.CompletedStatusFailedWithError,
-        ActivityStatus.Cancelled => OperationsText.CompletedStatusCancelled,
-        _ => status.ToString().SplitOnCapitalLetters()
-    };
+    private static string StatusLabel(ActivityStatus status) => OperationsActivityFilters.ResultLabel(status);
 
     /// <summary>
     /// The operation as a person reads it. Only the operations this list shows are keyed (the Completed grid filters to

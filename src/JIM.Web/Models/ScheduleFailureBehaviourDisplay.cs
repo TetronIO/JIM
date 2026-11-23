@@ -1,7 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
+
 using JIM.Models.Scheduling;
+using JIM.Web.Resources;
 using MudBlazor;
 
 namespace JIM.Web.Models;
@@ -21,8 +24,8 @@ public static class ScheduleFailureBehaviourDisplay
     /// An option of the Schedule's "When a step fails" setting.
     /// </summary>
     public static string ScheduleOption(ScheduleFailureBehaviour behaviour) => behaviour == ScheduleFailureBehaviour.Continue
-        ? "Continue the Schedule"
-        : "Stop the Schedule";
+        ? OperationsText.FailContinueSchedule
+        : OperationsText.FailStopSchedule;
 
     /// <summary>
     /// An option of a step's "When this step fails" setting. Following the Schedule states what the Schedule is
@@ -30,15 +33,15 @@ public static class ScheduleFailureBehaviourDisplay
     /// </summary>
     public static string StepOption(ScheduleStepFailureBehaviour option, ScheduleFailureBehaviour scheduleBehaviour) => option switch
     {
-        ScheduleStepFailureBehaviour.Stop => "Stop the Schedule",
-        ScheduleStepFailureBehaviour.Continue => "Continue the Schedule",
-        _ => $"Follow the Schedule (currently: {(scheduleBehaviour == ScheduleFailureBehaviour.Continue ? "continue" : "stop")})"
+        ScheduleStepFailureBehaviour.Stop => OperationsText.FailStopSchedule,
+        ScheduleStepFailureBehaviour.Continue => OperationsText.FailContinueSchedule,
+        _ => string.Format(CultureInfo.CurrentCulture, OperationsText.FailFollowSchedule, scheduleBehaviour == ScheduleFailureBehaviour.Continue ? OperationsText.FailWordContinue : OperationsText.FailWordStop)
     };
 
     /// <summary>
     /// What a step does to its Schedule when it fails.
     /// </summary>
-    public static string Effective(bool continuesOnFailure) => continuesOnFailure ? "Continues on failure" : "Stops on failure";
+    public static string Effective(bool continuesOnFailure) => continuesOnFailure ? OperationsText.FailEffectiveContinues : OperationsText.FailEffectiveStops;
 
     /// <summary>
     /// The chip colour for <see cref="Effective"/>. Continuing is the exception worth noticing, because it lets later
@@ -50,8 +53,8 @@ public static class ScheduleFailureBehaviourDisplay
     /// Where a step's effective behaviour comes from.
     /// </summary>
     public static string Source(ScheduleFailureBehaviourSource source) => source == ScheduleFailureBehaviourSource.Schedule
-        ? "From the Schedule"
-        : "Set on this step";
+        ? OperationsText.FailFromSchedule
+        : OperationsText.FailSetOnStep;
 
     /// <summary>
     /// The step row indicator for a step of the given Schedule: what it does when it fails, the chip colour for that,
@@ -68,6 +71,6 @@ public static class ScheduleFailureBehaviourDisplay
     /// Why a Schedule Execution carried on past a step that failed, for the marker beside that step's status.
     /// </summary>
     public static string ContinuedAfterFailure(ScheduleFailureBehaviourSource source) => source == ScheduleFailureBehaviourSource.Schedule
-        ? "This step follows the Schedule, which is set to continue when a step fails."
-        : "This step is set to let the Schedule continue when it fails.";
+        ? OperationsText.FailContinuedFromSchedule
+        : OperationsText.FailContinuedOnStep;
 }

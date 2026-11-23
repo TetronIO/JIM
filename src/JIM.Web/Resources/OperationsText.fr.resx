@@ -174,7 +174,7 @@
     <value>Script SQL</value>
   </data>
   <data name="ScheduleEditorStepTypeTemporal" xml:space="preserve">
-    <value>Réconciliation de la portée temporelle</value>
+    <value>Réconciliation du périmètre temporel</value>
   </data>
   <data name="ScheduleEditorStepTypeHistory" xml:space="preserve">
     <value>Nettoyage de la rétention de l’historique</value>
@@ -719,7 +719,7 @@
   <data name="PasswordsCancelledTooltip" xml:space="preserve">
     <value>Un administrateur a arrêté la livraison de ces modifications. Elles sont comptées plutôt que masquées, car le mot de passe de l’objet Metaverse diverge toujours sur ce système, et ce compte est la seule indication de cet écart.</value>
   </data>
-  <data name="PasswordsShowingOne" xml:space="preserve">
+  <data name="PasswordsShowingNarrowed" xml:space="preserve">
     <value>Affichage des modifications de mot de passe en file d’attente d’un seul objet Metaverse. Les totaux ci-dessus concernent toute la file.</value>
   </data>
   <data name="PasswordsShowWhole" xml:space="preserve">
@@ -878,7 +878,7 @@
   <data name="ExchangeNotMadeOther" xml:space="preserve">
     <value>{0} sont des changements de type de destinataire non effectués</value>
   </data>
-  <data name="ExchangeShowingOne" xml:space="preserve">
+  <data name="ExchangeShowingNarrowed" xml:space="preserve">
     <value>Affichage des modifications Exchange en file d’attente d’un seul objet Metaverse. Les totaux ci-dessus concernent toute la file.</value>
   </data>
   <data name="ExchangeSingularName" xml:space="preserve">
@@ -1327,5 +1327,92 @@
   </data>
   <data name="OpsTabGenerated" xml:space="preserve">
     <value>Valeurs générées</value>
+  </data>
+  <data name="ExStopTitle" xml:space="preserve">
+    <value>Arrêter le provisionnement des destinataires Exchange ?</value>
+  </data>
+  <data name="ExStopIntroOne" xml:space="preserve">
+    <value>Cela supprime le {0} flux d’attributs qui définissent des attributs Exchange sur</value>
+  </data>
+  <data name="ExStopIntroOther" xml:space="preserve">
+    <value>Cela supprime les {0} flux d’attributs qui définissent des attributs Exchange sur</value>
+  </data>
+  <data name="ExStopThisRule" xml:space="preserve">
+    <value>cette règle de synchronisation</value>
+  </data>
+  <data name="ExStopIntroTail" xml:space="preserve">
+    <value>, une fois la règle enregistrée.</value>
+  </data>
+  <data name="ExStopAlertHead" xml:space="preserve">
+    <value>Les destinataires existants sont conservés en l’état.</value>
+  </data>
+  <data name="ExStopAlertBody" xml:space="preserve">
+    <value>Les objets déjà provisionnés conservent leurs destinataires : leur type de destinataire déclaré devient « Aucun », ce qui est signalé pour chaque objet et n’est pas appliqué dans Exchange. Les objets provisionnés à partir de maintenant n’ont aucun destinataire.</value>
+  </data>
+  <data name="ExStopConfirmOne" xml:space="preserve">
+    <value>Supprimer {0} flux d’attributs</value>
+  </data>
+  <data name="ExStopConfirmOther" xml:space="preserve">
+    <value>Supprimer {0} flux d’attributs</value>
+  </data>
+  <data name="QueueHeaderOpenTooltip" xml:space="preserve">
+    <value>Ouvrir cette exécution de planification : durées par étape, erreurs et activité produite par chaque étape</value>
+  </data>
+  <data name="QueueHeaderViewExecution" xml:space="preserve">
+    <value>Voir l’exécution</value>
+  </data>
+  <data name="QueueHeaderCancelSchedule" xml:space="preserve">
+    <value>Annuler la planification</value>
+  </data>
+  <data name="OpsChipConnectedSystem" xml:space="preserve">
+    <value>Système connecté : {0}</value>
+  </data>
+  <data name="OpsChipRunProfile" xml:space="preserve">
+    <value>Profil d’exécution : {0}</value>
+  </data>
+  <data name="OpsChipSchedule" xml:space="preserve">
+    <value>Planification : {0}</value>
+  </data>
+  <data name="OpsChipUnknownSchedule" xml:space="preserve">
+    <value>Planification inconnue</value>
+  </data>
+  <data name="OpsChipResult" xml:space="preserve">
+    <value>Résultat : {0}</value>
+  </data>
+  <data name="FailContinueSchedule" xml:space="preserve">
+    <value>Poursuivre la planification</value>
+  </data>
+  <data name="FailStopSchedule" xml:space="preserve">
+    <value>Arrêter la planification</value>
+  </data>
+  <data name="FailFollowSchedule" xml:space="preserve">
+    <value>Suivre la planification (actuellement : {0})</value>
+  </data>
+  <data name="FailWordContinue" xml:space="preserve">
+    <value>poursuivre</value>
+  </data>
+  <data name="FailWordStop" xml:space="preserve">
+    <value>arrêter</value>
+  </data>
+  <data name="FailEffectiveContinues" xml:space="preserve">
+    <value>Se poursuit en cas d’échec</value>
+  </data>
+  <data name="FailEffectiveStops" xml:space="preserve">
+    <value>S’arrête en cas d’échec</value>
+  </data>
+  <data name="FailFromSchedule" xml:space="preserve">
+    <value>Depuis la planification</value>
+  </data>
+  <data name="FailSetOnStep" xml:space="preserve">
+    <value>Défini sur cette étape</value>
+  </data>
+  <data name="FailContinuedFromSchedule" xml:space="preserve">
+    <value>Cette étape suit la planification, qui est configurée pour se poursuivre en cas d’échec d’une étape.</value>
+  </data>
+  <data name="FailContinuedOnStep" xml:space="preserve">
+    <value>Cette étape est configurée pour laisser la planification se poursuivre en cas d’échec.</value>
+  </data>
+  <data name="ScheduleExecOfTotal" xml:space="preserve">
+    <value>{0} sur {1}</value>
   </data>
 </root>

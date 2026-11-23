@@ -324,7 +324,7 @@
                         <CellTemplate>
                             @if (context.Item.TotalSteps > 0)
                             {
-                                <span>@(Math.Min(context.Item.CurrentStepIndex + 1, context.Item.TotalSteps)) of @context.Item.TotalSteps</span>
+                                <span>@string.Format(CultureInfo.CurrentCulture, OperationsText.ScheduleExecOfTotal, Math.Min(context.Item.CurrentStepIndex + 1, context.Item.TotalSteps), context.Item.TotalSteps)</span>
                             }
                             else
                             {

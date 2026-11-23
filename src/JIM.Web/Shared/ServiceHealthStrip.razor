@@ -29,6 +29,7 @@
    the activity line's "· 12 min" and the condition line's "Heartbeat 3 seconds ago · up 54 s" were derived at the
    same instant and cannot disagree. Each poll brings a new report, so nothing goes stale. *@
 
+@* i18n: exempt - a CSS class list, not user-visible text *@
 <MudPaper Outlined="true" Class="@($"pa-4 jim-service-health-strip {Class}".Trim())" data-collapsed="@(Collapsed ? "true" : "false")">
     <div class="jim-service-health-header">
         <MudText Typo="Typo.h6" Class="jim-service-health-title">@OperationsText.HealthStripTitle</MudText>

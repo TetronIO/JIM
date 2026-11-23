@@ -1,10 +1,12 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using System.Web;
 using JIM.Models.Activities;
 using JIM.Models.Tasking.DTOs;
 using JIM.Utilities;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -78,19 +80,34 @@ public sealed record OperationsActivityFilters
     {
         var chips = new List<ActiveFilterChip>();
         if (ConnectedSystems.Count > 0)
-            chips.Add(new ActiveFilterChip(ActivityFilterKind.ConnectedSystems, $"Connected System: {string.Join(", ", ConnectedSystems)}"));
+            chips.Add(new ActiveFilterChip(ActivityFilterKind.ConnectedSystems, string.Format(CultureInfo.CurrentCulture, OperationsText.OpsChipConnectedSystem, string.Join(", ", ConnectedSystems))));
         if (RunProfiles.Count > 0)
-            chips.Add(new ActiveFilterChip(ActivityFilterKind.RunProfiles, $"Run Profile: {string.Join(", ", RunProfiles)}"));
+            chips.Add(new ActiveFilterChip(ActivityFilterKind.RunProfiles, string.Format(CultureInfo.CurrentCulture, OperationsText.OpsChipRunProfile, string.Join(", ", RunProfiles))));
         if (Schedules.Count > 0)
-            chips.Add(new ActiveFilterChip(ActivityFilterKind.Schedules, $"Schedule: {string.Join(", ", Schedules.Select(id => scheduleName(id) ?? "Unknown Schedule"))}"));
+            chips.Add(new ActiveFilterChip(ActivityFilterKind.Schedules, string.Format(CultureInfo.CurrentCulture, OperationsText.OpsChipSchedule, string.Join(", ", Schedules.Select(id => scheduleName(id) ?? OperationsText.OpsChipUnknownSchedule)))));
         if (Results.Count > 0)
-            chips.Add(new ActiveFilterChip(ActivityFilterKind.Results, $"Result: {string.Join(", ", Results.Select(r => r.ToString().SplitOnCapitalLetters()))}"));
+            chips.Add(new ActiveFilterChip(ActivityFilterKind.Results, string.Format(CultureInfo.CurrentCulture, OperationsText.OpsChipResult, string.Join(", ", Results.Select(ResultLabel)))));
         if (HasChildActivities)
-            chips.Add(new ActiveFilterChip(ActivityFilterKind.HasChildActivities, "Has child activities"));
+            chips.Add(new ActiveFilterChip(ActivityFilterKind.HasChildActivities, OperationsText.OpsHasChildren));
         if (ScheduledOnly)
-            chips.Add(new ActiveFilterChip(ActivityFilterKind.ScheduledOnly, "Scheduled only"));
+            chips.Add(new ActiveFilterChip(ActivityFilterKind.ScheduledOnly, OperationsText.OpsScheduledOnly));
         return chips;
     }
+
+    /// <summary>
+    /// A result as a person reads it, for the Result chip: one key per status, so a new status is a compile-time gap.
+    /// </summary>
+    public static string ResultLabel(ActivityStatus status) => status switch
+    {
+        ActivityStatus.NotSet => OperationsText.CompletedStatusNotSet,
+        ActivityStatus.InProgress => OperationsText.CompletedStatusInProgress,
+        ActivityStatus.Complete => OperationsText.CompletedStatusComplete,
+        ActivityStatus.CompleteWithWarning => OperationsText.CompletedStatusCompleteWithWarning,
+        ActivityStatus.CompleteWithError => OperationsText.CompletedStatusCompleteWithError,
+        ActivityStatus.FailedWithError => OperationsText.CompletedStatusFailedWithError,
+        ActivityStatus.Cancelled => OperationsText.CompletedStatusCancelled,
+        _ => status.ToString().SplitOnCapitalLetters()
+    };
 
     /// <summary>These filters with one of them back at its default: what closing that filter's chip does.</summary>
     public OperationsActivityFilters Without(ActivityFilterKind kind)

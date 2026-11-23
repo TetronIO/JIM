@@ -38,4 +38,25 @@
   <data name="QueueDialogAdded" xml:space="preserve">
     <value>Synchronization task added.</value>
   </data>
+  <data name="ExStopThisRule" xml:space="preserve">
+    <value>this Synchronization Rule</value>
+  </data>
+  <data name="PasswordsCancelOneTooltip" xml:space="preserve">
+    <value>Stop delivering this change. It stays, marked Canceled, because the Metaverse Object's password is still divergent on that system.</value>
+  </data>
+  <data name="PasswordsNothingCancelled" xml:space="preserve">
+    <value>Nothing was canceled; no queued password change matched.</value>
+  </data>
+  <data name="QueueCancelRequested" xml:space="preserve">
+    <value>Worker task cancelation requested.</value>
+  </data>
+  <data name="QueueCancelExecConfirm" xml:space="preserve">
+    <value>Are you sure you want to cancel '{0}'? All tasks will be canceled immediately, including any that are currently processing.</value>
+  </data>
+  <data name="QueueExecCancelled" xml:space="preserve">
+    <value>Schedule execution canceled.</value>
+  </data>
+  <data name="OpsPageInfo" xml:space="preserve">
+    <value>What JIM is doing now, what it did, and what is scheduled. Synchronization and password delivery both report here.</value>
+  </data>
 </root>

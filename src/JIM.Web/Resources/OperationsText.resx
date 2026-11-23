@@ -952,7 +952,7 @@
     <value>An administrator stopped these being delivered. Counted rather than hidden, because the Metaverse Object's password is still divergent on that system and this count is the only thing that says so.</value>
     <comment>Tooltip on the Cancelled card.</comment>
   </data>
-  <data name="PasswordsShowingOne" xml:space="preserve">
+  <data name="PasswordsShowingNarrowed" xml:space="preserve">
     <value>Showing one Metaverse Object's queued password changes. The counts above are for the whole queue.</value>
     <comment>Notice when the page is narrowed to one Metaverse Object.</comment>
   </data>
@@ -1164,7 +1164,7 @@
     <value>{0} are recipient type changes not made</value>
     <comment>Refused card line for several changes not made. {0} is the count.</comment>
   </data>
-  <data name="ExchangeShowingOne" xml:space="preserve">
+  <data name="ExchangeShowingNarrowed" xml:space="preserve">
     <value>Showing one Metaverse Object's queued Exchange changes. The counts above are for the whole queue.</value>
     <comment>Notice when the page is narrowed to one Metaverse Object.</comment>
   </data>
@@ -1763,5 +1763,121 @@
   <data name="OpsTabGenerated" xml:space="preserve">
     <value>Generated Values</value>
     <comment>Tab heading: generated values held for a decision.</comment>
+  </data>
+  <data name="ExStopTitle" xml:space="preserve">
+    <value>Stop provisioning Exchange recipients?</value>
+    <comment>Title of the confirmation before stopping Exchange recipients on a Synchronisation Rule.</comment>
+  </data>
+  <data name="ExStopIntroOne" xml:space="preserve">
+    <value>This removes the {0} Attribute Flow that set Exchange attributes on</value>
+    <comment>Confirmation text, one flow. {0} is the count. The Synchronisation Rule's name follows in bold.</comment>
+  </data>
+  <data name="ExStopIntroOther" xml:space="preserve">
+    <value>This removes the {0} Attribute Flows that set Exchange attributes on</value>
+    <comment>Confirmation text, several flows. {0} is the count.</comment>
+  </data>
+  <data name="ExStopThisRule" xml:space="preserve">
+    <value>this Synchronisation Rule</value>
+    <comment>Stands in for the rule's name when it is not known.</comment>
+  </data>
+  <data name="ExStopIntroTail" xml:space="preserve">
+    <value>, when the rule is saved.</value>
+    <comment>Ends the confirmation text, after the rule's name.</comment>
+  </data>
+  <data name="ExStopAlertHead" xml:space="preserve">
+    <value>Existing recipients are left as they are.</value>
+    <comment>Bold opening of the notice about recipients already made.</comment>
+  </data>
+  <data name="ExStopAlertBody" xml:space="preserve">
+    <value>Objects already provisioned keep their recipients: their declared recipient type becomes None, which is reported against each object and not made in Exchange. Objects provisioned from now on get no recipient.</value>
+    <comment>Rest of the notice about recipients.</comment>
+  </data>
+  <data name="ExStopConfirmOne" xml:space="preserve">
+    <value>Remove {0} Attribute Flow</value>
+    <comment>Confirm button, one flow. {0} is the count.</comment>
+  </data>
+  <data name="ExStopConfirmOther" xml:space="preserve">
+    <value>Remove {0} Attribute Flows</value>
+    <comment>Confirm button, several flows. {0} is the count.</comment>
+  </data>
+  <data name="QueueHeaderOpenTooltip" xml:space="preserve">
+    <value>Open this Schedule Execution: per-step durations, errors and the Activity each step produced</value>
+    <comment>Tooltip on the button that opens a Schedule Execution.</comment>
+  </data>
+  <data name="QueueHeaderViewExecution" xml:space="preserve">
+    <value>View execution</value>
+    <comment>Button that opens a Schedule Execution.</comment>
+  </data>
+  <data name="QueueHeaderCancelSchedule" xml:space="preserve">
+    <value>Cancel Schedule</value>
+    <comment>Tooltip and label of the button that cancels a Schedule Execution.</comment>
+  </data>
+  <data name="OpsChipConnectedSystem" xml:space="preserve">
+    <value>Connected System: {0}</value>
+    <comment>Filter chip above the Activity tab. {0} is the names chosen.</comment>
+  </data>
+  <data name="OpsChipRunProfile" xml:space="preserve">
+    <value>Run Profile: {0}</value>
+    <comment>Filter chip above the Activity tab. {0} is the names chosen.</comment>
+  </data>
+  <data name="OpsChipSchedule" xml:space="preserve">
+    <value>Schedule: {0}</value>
+    <comment>Filter chip above the Activity tab. {0} is the names chosen.</comment>
+  </data>
+  <data name="OpsChipUnknownSchedule" xml:space="preserve">
+    <value>Unknown Schedule</value>
+    <comment>Shown for a chosen Schedule that no longer exists.</comment>
+  </data>
+  <data name="OpsChipResult" xml:space="preserve">
+    <value>Result: {0}</value>
+    <comment>Filter chip above the Activity tab. {0} is the results chosen.</comment>
+  </data>
+  <data name="FailContinueSchedule" xml:space="preserve">
+    <value>Continue the Schedule</value>
+    <comment>Option of the Schedule's 'When a step fails' setting.</comment>
+  </data>
+  <data name="FailStopSchedule" xml:space="preserve">
+    <value>Stop the Schedule</value>
+    <comment>Option of the Schedule's 'When a step fails' setting.</comment>
+  </data>
+  <data name="FailFollowSchedule" xml:space="preserve">
+    <value>Follow the Schedule (currently: {0})</value>
+    <comment>Option of a step's failure setting. {0} is what the Schedule is set to: continue or stop.</comment>
+  </data>
+  <data name="FailWordContinue" xml:space="preserve">
+    <value>continue</value>
+    <comment>The word for continue, inside 'Follow the Schedule (currently: ...)'.</comment>
+  </data>
+  <data name="FailWordStop" xml:space="preserve">
+    <value>stop</value>
+    <comment>The word for stop, inside 'Follow the Schedule (currently: ...)'.</comment>
+  </data>
+  <data name="FailEffectiveContinues" xml:space="preserve">
+    <value>Continues on failure</value>
+    <comment>Chip: the step lets its Schedule continue when it fails.</comment>
+  </data>
+  <data name="FailEffectiveStops" xml:space="preserve">
+    <value>Stops on failure</value>
+    <comment>Chip: the step stops its Schedule when it fails.</comment>
+  </data>
+  <data name="FailFromSchedule" xml:space="preserve">
+    <value>From the Schedule</value>
+    <comment>Where a step's failure behaviour comes from: the Schedule.</comment>
+  </data>
+  <data name="FailSetOnStep" xml:space="preserve">
+    <value>Set on this step</value>
+    <comment>Where a step's failure behaviour comes from: the step itself.</comment>
+  </data>
+  <data name="FailContinuedFromSchedule" xml:space="preserve">
+    <value>This step follows the Schedule, which is set to continue when a step fails.</value>
+    <comment>Marker on a failed step that the run continued past: the Schedule's setting.</comment>
+  </data>
+  <data name="FailContinuedOnStep" xml:space="preserve">
+    <value>This step is set to let the Schedule continue when it fails.</value>
+    <comment>Marker on a failed step that the run continued past: the step's own setting.</comment>
+  </data>
+  <data name="ScheduleExecOfTotal" xml:space="preserve">
+    <value>{0} of {1}</value>
+    <comment>Position of a Schedule Execution step. {0} is the step, {1} the total.</comment>
   </data>
 </root>
