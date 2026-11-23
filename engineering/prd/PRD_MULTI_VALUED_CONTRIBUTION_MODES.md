@@ -29,7 +29,7 @@ The storage already supports both: each `MetaverseObjectAttributeValue` row reco
 
 ## Non-Goals
 
-- A per-Attribute Flow "keep on deletion" switch. It was considered and parked: Accumulate meets the audit log need, and in Priority mode a kept value is overwritten as soon as another contributor wins. Revisit if a single-valued retention need appears.
+- A per-Attribute Flow recall setting (keep or recall a flow's values when its source object leaves). It is tracked separately as #3064, which covers single-valued attributes that Accumulate cannot; this PRD only fixes how the two interact (see Precedence with recall settings).
 - Changing `RemoveContributedAttributesOnObsoletion` or Priority mode behaviour.
 - Contribution modes for single-valued attributes.
 - Keeping an Accumulate attribute after its Metaverse Object is deleted. The Metaverse Object's deletion record already keeps its last values for the history retention period; long-term retention beyond that is out of scope.
@@ -197,6 +197,16 @@ flowchart TD
 11. None of the recall paths in requirement 9, nor obsoletion, scope exit or disconnection, removes an Accumulate value. Previews of those actions (Synchronisation Rule deletion, Attribute Flow removal, Connected System deletion, Connector Space clearing) say that the attribute's values will be kept.
 12. A value already in the set is not added a second time when a later contributor supplies it; the set holds each distinct value once, keeping the first contributor recorded.
 13. If a Synchronisation Rule that contributed Accumulate values is deleted, the values stay and keep their recorded Connected System (`ContributedBySystemId`), as provenance does today.
+
+**Precedence with recall settings**
+
+When a contributor's source object leaves, whether its values are kept is decided by the most specific setting, in this order:
+
+- **First:** the attribute's mode is Accumulate. The values are always kept, whatever the settings below say.
+- **Then:** the Attribute Flow's own recall setting (Recall or Keep), once #3064 adds it.
+- **Otherwise:** the Connected System object type's `RemoveContributedAttributesOnObsoletion`.
+
+Accumulate is therefore an exception to recall that is configured on the Metaverse attribute, not on the Connected System. It also covers removals the object type setting never controlled: value changes in a live account, and withdrawal by Synchronisation Rule deletion, Attribute Flow removal, Connected System deletion and Connector Space clearing.
 
 **Manual removal (Accumulate only)**
 
