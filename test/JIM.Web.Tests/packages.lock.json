@@ -752,8 +752,8 @@
       },
       "MudBlazor": {
         "type": "Transitive",
-        "resolved": "9.13.0",
-        "contentHash": "li89Y1afb7LAbdh6I/3PAoXx1zUtyjhA6LuVQC8hGAItRCu4tpITAmL7o3KhK2b7PTlzl8PMZ43lAZgXJOVfzw==",
+        "resolved": "9.14.0",
+        "contentHash": "VmMM/u4upqpc0lJoXmo30Zj1d/Zq3BjdS11+q/eB/+p20pV1WXbLS0C17WbV4xqLM1i9Kpco6emt6M4s2R/BUA==",
         "dependencies": {
           "Microsoft.AspNetCore.Components": "10.0.1",
           "Microsoft.AspNetCore.Components.Web": "10.0.1",
@@ -772,30 +772,30 @@
       },
       "Npgsql": {
         "type": "Transitive",
-        "resolved": "10.0.3",
-        "contentHash": "7nb5YzXuvWWJxB0J8DiyL3we+X4FOctZrt0fIBnucOIaIevFEEwGQVZKtiu9olXdlNAK1eNgqSral6r/jlhI4w==",
+        "resolved": "10.0.4",
+        "contentHash": "m2VCpcU9MKD8lLxTn+YaNIRWd+Gz3y/9wIaM+2ifDF24xZ2Kvvjx4CDB2BIgobr1Gj6a/gsdmfz1sQ+kmd7liw==",
         "dependencies": {
           "Microsoft.Extensions.Logging.Abstractions": "10.0.0"
         }
       },
       "Npgsql.EntityFrameworkCore.PostgreSQL": {
         "type": "Transitive",
-        "resolved": "10.0.3",
-        "contentHash": "IPGrrZnRkuW7OlHDhUESZz4G5DLkW7Nej/O3Cx+0iTsgyU5XJxBgpsvTHLloo3WWuAKKbDHXBvWPVkX1deRh1Q==",
+        "resolved": "10.0.4",
+        "contentHash": "KRFbmHOn260bgSSQTKZsKtvEFW1k1AaZUtb/IPmW31M47qMkzAOglP7FHQgMeqpZeMJ2rjRwczfEUP5lyWUAdA==",
         "dependencies": {
-          "Microsoft.EntityFrameworkCore": "[10.0.4, 11.0.0)",
-          "Microsoft.EntityFrameworkCore.Relational": "[10.0.4, 11.0.0)",
-          "Npgsql": "10.0.3"
+          "Microsoft.EntityFrameworkCore": "[10.0.15, 11.0.0)",
+          "Microsoft.EntityFrameworkCore.Relational": "[10.0.15, 11.0.0)",
+          "Npgsql": "10.0.4"
         }
       },
       "Oracle.ManagedDataAccess.Core": {
         "type": "Transitive",
-        "resolved": "23.26.400",
-        "contentHash": "PWVJunbl2LVcdFBluW5R3678MvrTLlTrQBdXe9wR4YCauISa4zCceJ7fLHVFFiGog8/ZPxo2cY4adpVQCJf+YQ==",
+        "resolved": "23.26.401",
+        "contentHash": "Cdl0yviHUbmDyHvKHft8r6z44Xm6pY6esHnNXRXXBqImDanuMzapXWxRZu68pNw59X8v/qso+r9wYBibBe/VXw==",
         "dependencies": {
           "System.Diagnostics.PerformanceCounter": "8.0.0",
           "System.DirectoryServices.Protocols": "8.0.2",
-          "System.Security.Cryptography.Pkcs": "8.0.1"
+          "System.Security.Cryptography.Pkcs": "10.0.13"
         }
       },
       "Scalar.AspNetCore": {
@@ -1002,11 +1002,11 @@
         "type": "Project",
         "dependencies": {
           "DynamicExpresso.Core": "[2.19.6, )",
-          "JIM.Connectors": "[0.17.0, )",
-          "JIM.Data": "[0.17.0, )",
-          "JIM.Models": "[0.17.0, )",
-          "JIM.Scim": "[0.17.0, )",
-          "JIM.Utilities": "[0.17.0, )",
+          "JIM.Connectors": "[1.0.0, )",
+          "JIM.Data": "[1.0.0, )",
+          "JIM.Models": "[1.0.0, )",
+          "JIM.Scim": "[1.0.0, )",
+          "JIM.Utilities": "[1.0.0, )",
           "Microsoft.AspNetCore.DataProtection": "[10.0.15, )",
           "Microsoft.AspNetCore.DataProtection.Extensions": "[10.0.15, )",
           "Microsoft.Extensions.Hosting.Abstractions": "[10.0.15, )",
@@ -1019,20 +1019,20 @@
         "type": "Project",
         "dependencies": {
           "CsvHelper": "[33.1.0, )",
-          "JIM.Models": "[0.17.0, )",
-          "JIM.Scim": "[0.17.0, )",
-          "JIM.Utilities": "[0.17.0, )",
+          "JIM.Models": "[1.0.0, )",
+          "JIM.Scim": "[1.0.0, )",
+          "JIM.Utilities": "[1.0.0, )",
           "Microsoft.Data.SqlClient": "[7.1.2, )",
-          "Oracle.ManagedDataAccess.Core": "[23.26.400, )",
+          "Oracle.ManagedDataAccess.Core": "[23.26.401, )",
           "System.DirectoryServices.Protocols": "[10.0.15, )",
           "System.Security.Cryptography.Pkcs": "[10.0.15, )",
-          "Tetron.PowerShellRemoting": "[0.17.0, )"
+          "Tetron.PowerShellRemoting": "[1.0.0, )"
         }
       },
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.17.0, )"
+          "JIM.Models": "[1.0.0, )"
         }
       },
       "jim.models": {
@@ -1045,26 +1045,26 @@
       "jim.postgresdata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.17.0, )",
-          "JIM.Models": "[0.17.0, )",
-          "JIM.Utilities": "[0.17.0, )",
+          "JIM.Data": "[1.0.0, )",
+          "JIM.Models": "[1.0.0, )",
+          "JIM.Utilities": "[1.0.0, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.15, )",
-          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
+          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.4, )",
           "Serilog": "[4.4.0, )"
         }
       },
       "jim.scim": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.17.0, )",
-          "JIM.Utilities": "[0.17.0, )"
+          "JIM.Models": "[1.0.0, )",
+          "JIM.Utilities": "[1.0.0, )"
         }
       },
       "jim.testsupport": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.17.0, )",
-          "JIM.Models": "[0.17.0, )",
+          "JIM.Data": "[1.0.0, )",
+          "JIM.Models": "[1.0.0, )",
           "NUnit": "[4.6.1, )",
           "Npgsql": "[10.0.3, )"
         }
@@ -1072,7 +1072,7 @@
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.17.0, )",
+          "JIM.Models": "[1.0.0, )",
           "Serilog": "[4.4.0, )"
         }
       },
@@ -1082,16 +1082,16 @@
           "Asp.Versioning.Mvc": "[10.2.1, )",
           "Asp.Versioning.Mvc.ApiExplorer": "[10.2.1, )",
           "Humanizer.Core": "[3.0.10, )",
-          "JIM.Application": "[0.17.0, )",
-          "JIM.Models": "[0.17.0, )",
-          "JIM.PostgresData": "[0.17.0, )",
-          "JIM.Utilities": "[0.17.0, )",
+          "JIM.Application": "[1.0.0, )",
+          "JIM.Models": "[1.0.0, )",
+          "JIM.PostgresData": "[1.0.0, )",
+          "JIM.Utilities": "[1.0.0, )",
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.15, )",
           "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.15, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.15, )",
           "Microsoft.OpenApi": "[2.13.0, )",
           "Microsoft.VisualStudio.Azure.Containers.Tools.Targets": "[1.23.0, )",
-          "MudBlazor": "[9.13.0, )",
+          "MudBlazor": "[9.14.0, )",
           "Scalar.AspNetCore": "[2.21.0, )",
           "Serilog.AspNetCore": "[10.0.0, )"
         }
