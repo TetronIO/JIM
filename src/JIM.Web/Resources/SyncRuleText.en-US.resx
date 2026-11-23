@@ -248,4 +248,10 @@
   <data name="PreviewSizeCappedHelp" xml:space="preserve">
     <value>Up to {0:N0} rows per summary group. Groups showing a sample are labeled as such.</value>
   </data>
+  <data name="DependentFlowsColumnRule" xml:space="preserve">
+    <value>Synchronization Rule</value>
+  </data>
+  <data name="DependentFlowsAfterwards" xml:space="preserve">
+    <value>Each one then follows its Missing Input Behavior at the next synchronization. Values already on Metaverse Objects stay until then.</value>
+  </data>
 </root>

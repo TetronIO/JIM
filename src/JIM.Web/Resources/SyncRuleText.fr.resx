@@ -2111,4 +2111,16 @@
   <data name="TestObjectLoadedFrom" xml:space="preserve">
     <value>Valeurs chargées depuis {0}. Modifiez-en une pour essayer une variante.</value>
   </data>
+  <data name="DependentFlowsColumnFlow" xml:space="preserve">
+    <value>flux d’attributs dérivé</value>
+  </data>
+  <data name="DependentFlowsColumnRule" xml:space="preserve">
+    <value>règle de synchronisation</value>
+  </data>
+  <data name="DependentFlowsColumnReads" xml:space="preserve">
+    <value>Lit</value>
+  </data>
+  <data name="DependentFlowsAfterwards" xml:space="preserve">
+    <value>Chacun suit ensuite son comportement en cas d’entrée manquante lors de la prochaine synchronisation. Les valeurs déjà présentes sur les objets Metaverse restent en place jusqu’alors.</value>
+  </data>
 </root>
