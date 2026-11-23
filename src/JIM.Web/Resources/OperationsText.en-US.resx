@@ -20,4 +20,16 @@
   <data name="CompletedSyncRule" xml:space="preserve">
     <value>Synchronization Rule</value>
   </data>
+  <data name="PasswordsQueueHeading" xml:space="preserve">
+    <value>Password Synchronization queue</value>
+  </data>
+  <data name="PasswordsHeldTooltip" xml:space="preserve">
+    <value>Password Synchronization is switched off on this Connected System, so the change is being kept rather than attempted. Switching it on delivers everything that accumulated, unless it expires first.</value>
+  </data>
+  <data name="PasswordsCancelShownConfirm" xml:space="preserve">
+    <value>Stop delivering the {0} shown? Each of those people keeps their old password on the target system until a new change is synchronized. Any that is the first password of a Connected System Object JIM provisioned leaves that Connected System Object without a password from JIM.</value>
+  </data>
+  <data name="ExchangeRefusedTooltip" xml:space="preserve">
+    <value>JIM did not ask Exchange to make these, because what is declared cannot be made, such as a mailbox on a contact, or is a change of recipient type JIM does not make. Retrying cannot help. Correct what is declared for the account, and the next synchronization replaces the change.</value>
+  </data>
 </root>

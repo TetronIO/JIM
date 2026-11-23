@@ -912,4 +912,336 @@
     <value>The Schedule finished, but one or more steps failed. They are set to let the Schedule continue; the step statuses below show which.</value>
     <comment>Shown on a Complete With Error execution that recorded no message of its own.</comment>
   </data>
+  <data name="PasswordsQueueHeading" xml:space="preserve">
+    <value>Password Synchronisation queue</value>
+    <comment>Heading of the password queue on the Operations page.</comment>
+  </data>
+  <data name="PasswordsQueueIntro" xml:space="preserve">
+    <value>Password changes waiting to reach a Connected System. A change leaves this queue once it is delivered; anything listed here is still owed, or has stopped being attempted.</value>
+    <comment>Intro under the heading.</comment>
+  </data>
+  <data name="PasswordsStatusWaiting" xml:space="preserve">
+    <value>Waiting</value>
+    <comment>Status of a change waiting to be delivered: card title and filter option.</comment>
+  </data>
+  <data name="PasswordsDueNow" xml:space="preserve">
+    <value>{0} due now</value>
+    <comment>Card line. {0} is the count of changes a delivery pass would attempt now.</comment>
+  </data>
+  <data name="PasswordsWaitingTooltip" xml:space="preserve">
+    <value>How many of the waiting changes a delivery pass would attempt right now. The rest are waiting out a retry backoff. A large waiting count with nothing due is a queue working through its backoffs; a large due count is a queue that is not being drained.</value>
+    <comment>Tooltip on the Waiting card.</comment>
+  </data>
+  <data name="PasswordsStatusParked" xml:space="preserve">
+    <value>Parked</value>
+    <comment>Status: the target refused the change or it ran out of attempts. Feminine, agreeing with 'modification'.</comment>
+  </data>
+  <data name="PasswordsParkedTooltip" xml:space="preserve">
+    <value>The target refused these, or they ran out of attempts. JIM has stopped trying, so they wait on a person. Deal with the reason, then retry them.</value>
+    <comment>Tooltip on the Parked card.</comment>
+  </data>
+  <data name="PasswordsStatusExpired" xml:space="preserve">
+    <value>Expired</value>
+    <comment>Status: the change outlived its Connected System's time to live. Feminine, agreeing with 'modification'.</comment>
+  </data>
+  <data name="PasswordsExpiredTooltip" xml:space="preserve">
+    <value>These outlived their Connected System's time to live. The password each carried is gone, so nothing can deliver them now. They need a password set by other means.</value>
+    <comment>Tooltip on the Expired card.</comment>
+  </data>
+  <data name="PasswordsCancelledTooltip" xml:space="preserve">
+    <value>An administrator stopped these being delivered. Counted rather than hidden, because the Metaverse Object's password is still divergent on that system and this count is the only thing that says so.</value>
+    <comment>Tooltip on the Cancelled card.</comment>
+  </data>
+  <data name="PasswordsShowingOne" xml:space="preserve">
+    <value>Showing one Metaverse Object's queued password changes. The counts above are for the whole queue.</value>
+    <comment>Notice when the page is narrowed to one Metaverse Object.</comment>
+  </data>
+  <data name="PasswordsShowWhole" xml:space="preserve">
+    <value>Show the whole queue</value>
+    <comment>Button that clears the narrowing to one Metaverse Object.</comment>
+  </data>
+  <data name="PasswordsFailureReasonLabel" xml:space="preserve">
+    <value>Failure reason</value>
+    <comment>Filter label: why the delivery attempt failed.</comment>
+  </data>
+  <data name="PasswordsSingularName" xml:space="preserve">
+    <value>queued password change</value>
+    <comment>Noun in the toolbar count (one).</comment>
+  </data>
+  <data name="PasswordsPluralName" xml:space="preserve">
+    <value>queued password changes</value>
+    <comment>Noun in the toolbar count (several).</comment>
+  </data>
+  <data name="PasswordsSearchPlaceholder" xml:space="preserve">
+    <value>Search Metaverse Objects and Connected Systems...</value>
+    <comment>Placeholder of the search box.</comment>
+  </data>
+  <data name="PasswordsRetryShown" xml:space="preserve">
+    <value>Retry shown</value>
+    <comment>Bulk action: retry every change the grid shows.</comment>
+  </data>
+  <data name="PasswordsCancelShown" xml:space="preserve">
+    <value>Cancel shown</value>
+    <comment>Bulk action: cancel every change the grid shows.</comment>
+  </data>
+  <data name="PasswordsIdentityTooltip" xml:space="preserve">
+    <value>The queue holds one change per Metaverse Object per Connected System. The Metaverse Object is what you scan for; the row opens it, where the same change is visible against every one of its Connected System Objects.</value>
+    <comment>Tooltip on the Metaverse Object column heading.</comment>
+  </data>
+  <data name="PasswordsColAttempts" xml:space="preserve">
+    <value>Attempts</value>
+    <comment>Column heading: how many delivery attempts were made.</comment>
+  </data>
+  <data name="PasswordsColNextAttempt" xml:space="preserve">
+    <value>Next attempt</value>
+    <comment>Column heading: when the next delivery attempt falls due.</comment>
+  </data>
+  <data name="PasswordsNextAttemptTooltip" xml:space="preserve">
+    <value>When the next delivery attempt falls due. Read it alongside the attempt count: two attempts with a retry booked is a system having a bad morning, and six with none is a system that has given up.</value>
+    <comment>Tooltip on the Next attempt heading.</comment>
+  </data>
+  <data name="PasswordsHeldTooltip" xml:space="preserve">
+    <value>Password Synchronisation is switched off on this Connected System, so the change is being kept rather than attempted. Switching it on delivers everything that accumulated, unless it expires first.</value>
+    <comment>Tooltip on Held: the Connected System has password synchronisation switched off.</comment>
+  </data>
+  <data name="PasswordsHeld" xml:space="preserve">
+    <value>Held</value>
+    <comment>Next attempt cell: the Connected System holds the change.</comment>
+  </data>
+  <data name="PasswordsDeliveringNow" xml:space="preserve">
+    <value>Delivering now</value>
+    <comment>Next attempt cell: a delivery attempt is happening.</comment>
+  </data>
+  <data name="PasswordsDueNowLabel" xml:space="preserve">
+    <value>Due now</value>
+    <comment>Next attempt cell: the change is due at once.</comment>
+  </data>
+  <data name="PasswordsRetryOneAria" xml:space="preserve">
+    <value>Retry this password change</value>
+    <comment>Accessible name of the retry button on a row.</comment>
+  </data>
+  <data name="PasswordsCancelOneAria" xml:space="preserve">
+    <value>Cancel this password change</value>
+    <comment>Accessible name of the cancel button on a row.</comment>
+  </data>
+  <data name="PasswordsCancelOneTooltip" xml:space="preserve">
+    <value>Stop delivering this change. It stays, marked Cancelled, because the Metaverse Object's password is still divergent on that system.</value>
+    <comment>Tooltip on the cancel button of a row.</comment>
+  </data>
+  <data name="PasswordsNoSearchMatch" xml:space="preserve">
+    <value>No queued password changes match "{0}"</value>
+    <comment>Empty state. {0} is the search text.</comment>
+  </data>
+  <data name="PasswordsNoFilterMatch" xml:space="preserve">
+    <value>No queued password changes match these filters</value>
+    <comment>Empty state when the filters match nothing.</comment>
+  </data>
+  <data name="PasswordsNoFilterHint" xml:space="preserve">
+    <value>Clear the filters to see the whole queue.</value>
+    <comment>Empty state hint.</comment>
+  </data>
+  <data name="PasswordsEmptyTitle" xml:space="preserve">
+    <value>Nothing is waiting to be delivered</value>
+    <comment>Empty state when the queue is empty: the healthy state.</comment>
+  </data>
+  <data name="PasswordsEmptyHint" xml:space="preserve">
+    <value>Password changes appear here while they are on their way to a Connected System, and leave once they arrive.</value>
+    <comment>Empty state hint.</comment>
+  </data>
+  <data name="PasswordsDescribeOne" xml:space="preserve">
+    <value>1 password change</value>
+    <comment>A count of one change, used inside a sentence.</comment>
+  </data>
+  <data name="PasswordsDescribeOther" xml:space="preserve">
+    <value>{0} password changes</value>
+    <comment>A count of several changes, used inside a sentence. {0} is the count.</comment>
+  </data>
+  <data name="PasswordsRetryShownConfirm" xml:space="preserve">
+    <value>Attempt delivery again for the {0} shown?</value>
+    <comment>Confirmation before retrying. {0} is the count with its noun, such as '3 password changes'.</comment>
+  </data>
+  <data name="PasswordsCancelShownConfirm" xml:space="preserve">
+    <value>Stop delivering the {0} shown? Each of those people keeps their old password on the target system until a new change is synchronised. Any that is the first password of a Connected System Object JIM provisioned leaves that Connected System Object without a password from JIM.</value>
+    <comment>Confirmation before cancelling. {0} is the count with its noun. Long consequence text: keep each sentence whole.</comment>
+  </data>
+  <data name="PasswordsRetryTitle" xml:space="preserve">
+    <value>Retry password changes</value>
+    <comment>Title of the retry confirmation.</comment>
+  </data>
+  <data name="PasswordsCancelTitle" xml:space="preserve">
+    <value>Cancel password changes</value>
+    <comment>Title of the cancel confirmation.</comment>
+  </data>
+  <data name="PasswordsRetryYes" xml:space="preserve">
+    <value>Retry</value>
+    <comment>Confirm button of the retry confirmation.</comment>
+  </data>
+  <data name="PasswordsCancelDeliveryYes" xml:space="preserve">
+    <value>Cancel delivery</value>
+    <comment>Confirm button of the cancel confirmation.</comment>
+  </data>
+  <data name="PasswordsNothingRetried" xml:space="preserve">
+    <value>Nothing was retried; no queued password change matched.</value>
+    <comment>Notice when a retry matched nothing.</comment>
+  </data>
+  <data name="PasswordsNothingCancelled" xml:space="preserve">
+    <value>Nothing was cancelled; no queued password change matched.</value>
+    <comment>Notice when a cancel matched nothing.</comment>
+  </data>
+  <data name="PasswordsAttemptedAgain" xml:space="preserve">
+    <value>{0} will be attempted again.</value>
+    <comment>Success notice after a retry. {0} is the count with its noun.</comment>
+  </data>
+  <data name="PasswordsNotDelivered" xml:space="preserve">
+    <value>{0} will not be delivered.</value>
+    <comment>Success notice after a cancel. {0} is the count with its noun.</comment>
+  </data>
+  <data name="PasswordsRetryPending" xml:space="preserve">
+    <value>Attempt delivery now rather than waiting for the next scheduled attempt.</value>
+    <comment>Tooltip on retry for a waiting change.</comment>
+  </data>
+  <data name="PasswordsRetryCancelled" xml:space="preserve">
+    <value>Put this change back on the queue and attempt delivery. It is delivered only if it has not expired in the meantime.</value>
+    <comment>Tooltip on retry for a cancelled change.</comment>
+  </data>
+  <data name="PasswordsRetryDefault" xml:space="preserve">
+    <value>Attempt delivery again. Deal with the reason the target refused it first, or it will simply park again.</value>
+    <comment>Tooltip on retry for a parked change.</comment>
+  </data>
+  <data name="ExchangeQueueHeading" xml:space="preserve">
+    <value>Exchange queue</value>
+    <comment>Heading of the Exchange queue on the Operations page.</comment>
+  </data>
+  <data name="ExchangeQueueIntro" xml:space="preserve">
+    <value>Recipient changes JIM has queued for Exchange. A change leaves this queue once Exchange has made it, or once it is no longer wanted; anything listed here is still owed, or waits on a person.</value>
+    <comment>Intro under the heading.</comment>
+  </data>
+  <data name="ExchangeQueuedTooltip" xml:space="preserve">
+    <value>Changes waiting for their first attempt, or being applied by Exchange now. Nothing is needed from anyone.</value>
+    <comment>Tooltip on the Queued card.</comment>
+  </data>
+  <data name="ExchangeBeingApplied" xml:space="preserve">
+    <value>{0} being applied now</value>
+    <comment>Queued card line. {0} is the count.</comment>
+  </data>
+  <data name="ExchangeHeldOne" xml:space="preserve">
+    <value>1 more held</value>
+    <comment>Queued card line for one change held. Held means its Connected System does not manage Exchange recipients.</comment>
+  </data>
+  <data name="ExchangeHeldOther" xml:space="preserve">
+    <value>{0} more held</value>
+    <comment>Queued card line for several changes held. {0} is the count.</comment>
+  </data>
+  <data name="ExchangeHeldTooltip" xml:space="preserve">
+    <value>These Connected Systems do not manage Exchange recipients now, so their changes wait unattempted. They are delivered once each manages Exchange recipients again.</value>
+    <comment>Tooltip on the held count.</comment>
+  </data>
+  <data name="ExchangeRetrying" xml:space="preserve">
+    <value>Retrying</value>
+    <comment>Card title: a change that may clear by itself and is being tried again.</comment>
+  </data>
+  <data name="ExchangeRetryingTooltip" xml:space="preserve">
+    <value>An attempt failed in a way that may clear by itself, such as replication or a server that did not answer. JIM tries again with a growing interval, and parks the change if it is still failing after 24 hours.</value>
+    <comment>Tooltip on the Retrying card.</comment>
+  </data>
+  <data name="ExchangeParkedTooltip" xml:space="preserve">
+    <value>Exchange refused these, JIM lacks the permission to make them, or they kept failing for 24 hours. JIM has stopped trying, so they wait on a person. Deal with the reason Exchange gave, then retry them.</value>
+    <comment>Tooltip on the Parked card.</comment>
+  </data>
+  <data name="ExchangeRefused" xml:space="preserve">
+    <value>Refused</value>
+    <comment>Card title: a change JIM did not ask Exchange to make. Feminine, agreeing with 'modification'.</comment>
+  </data>
+  <data name="ExchangeRefusedTooltip" xml:space="preserve">
+    <value>JIM did not ask Exchange to make these, because what is declared cannot be made, such as a mailbox on a contact, or is a change of recipient type JIM does not make. Retrying cannot help. Correct what is declared for the account, and the next synchronisation replaces the change.</value>
+    <comment>Tooltip on the Refused card.</comment>
+  </data>
+  <data name="ExchangeNotMadeOne" xml:space="preserve">
+    <value>1 is a recipient type change not made</value>
+    <comment>Refused card line for one change not made.</comment>
+  </data>
+  <data name="ExchangeNotMadeOther" xml:space="preserve">
+    <value>{0} are recipient type changes not made</value>
+    <comment>Refused card line for several changes not made. {0} is the count.</comment>
+  </data>
+  <data name="ExchangeShowingOne" xml:space="preserve">
+    <value>Showing one Metaverse Object's queued Exchange changes. The counts above are for the whole queue.</value>
+    <comment>Notice when the page is narrowed to one Metaverse Object.</comment>
+  </data>
+  <data name="ExchangeSingularName" xml:space="preserve">
+    <value>queued Exchange change</value>
+    <comment>Noun in the toolbar count (one).</comment>
+  </data>
+  <data name="ExchangePluralName" xml:space="preserve">
+    <value>queued Exchange changes</value>
+    <comment>Noun in the toolbar count (several).</comment>
+  </data>
+  <data name="ExchangeColChange" xml:space="preserve">
+    <value>Change</value>
+    <comment>Column heading: what the change does.</comment>
+  </data>
+  <data name="ExchangeStatusTooltip" xml:space="preserve">
+    <value>Where the change stands, and what it is waiting for. Sorted by the next attempt, so the changes about to be tried come first.</value>
+    <comment>Tooltip on the Status column heading.</comment>
+  </data>
+  <data name="ExchangeColReason" xml:space="preserve">
+    <value>Reason</value>
+    <comment>Column heading: why the change has not been made.</comment>
+  </data>
+  <data name="ExchangeReasonTooltip" xml:space="preserve">
+    <value>Why the change has not been made, in Exchange's own words where Exchange gave any. The remedy is usually outside JIM: a permission, a policy, or a value already in use.</value>
+    <comment>Tooltip on the Reason column heading.</comment>
+  </data>
+  <data name="ExchangeRetryOneAria" xml:space="preserve">
+    <value>Retry this Exchange change</value>
+    <comment>Accessible name of the retry button on a row.</comment>
+  </data>
+  <data name="ExchangeNoSearchMatch" xml:space="preserve">
+    <value>No queued Exchange changes match "{0}"</value>
+    <comment>Empty state. {0} is the search text.</comment>
+  </data>
+  <data name="ExchangeNoFilterMatch" xml:space="preserve">
+    <value>No queued Exchange changes match these filters</value>
+    <comment>Empty state when the filters match nothing.</comment>
+  </data>
+  <data name="ExchangeEmptyTitle" xml:space="preserve">
+    <value>Nothing is waiting for Exchange</value>
+    <comment>Empty state when the queue is empty: the healthy state.</comment>
+  </data>
+  <data name="ExchangeEmptyHint" xml:space="preserve">
+    <value>Recipient changes appear here while they are on their way to Exchange, and leave once Exchange has made them.</value>
+    <comment>Empty state hint.</comment>
+  </data>
+  <data name="ExchangeDescribeOne" xml:space="preserve">
+    <value>1 Exchange change</value>
+    <comment>A count of one change, used inside a sentence.</comment>
+  </data>
+  <data name="ExchangeDescribeOther" xml:space="preserve">
+    <value>{0} Exchange changes</value>
+    <comment>A count of several changes, used inside a sentence. {0} is the count.</comment>
+  </data>
+  <data name="ExchangeRetryShownConfirm" xml:space="preserve">
+    <value>Attempt the {0} shown again? Parked and retrying changes are retried; any others are already due, being applied, or waiting on a change to what is declared.</value>
+    <comment>Confirmation before retrying. {0} is the count with its noun.</comment>
+  </data>
+  <data name="ExchangeRetryTitle" xml:space="preserve">
+    <value>Retry Exchange changes</value>
+    <comment>Title of the retry confirmation.</comment>
+  </data>
+  <data name="ExchangeNothingRetried" xml:space="preserve">
+    <value>Nothing was retried: no matching change is parked or retrying.</value>
+    <comment>Notice when a retry matched nothing.</comment>
+  </data>
+  <data name="ExchangeAttemptedAgain" xml:space="preserve">
+    <value>{0} will be attempted again within seconds.</value>
+    <comment>Success notice after a retry. {0} is the count with its noun.</comment>
+  </data>
+  <data name="ExchangeRetryNow" xml:space="preserve">
+    <value>Attempt it now rather than waiting for the next scheduled attempt.</value>
+    <comment>Tooltip on retry for a change being retried.</comment>
+  </data>
+  <data name="ExchangeRetryDefault" xml:space="preserve">
+    <value>Attempt it again, with its attempts and 24-hour clock reset. Deal with the reason Exchange gave first, or it will park again.</value>
+    <comment>Tooltip on retry for a parked change.</comment>
+  </data>
 </root>

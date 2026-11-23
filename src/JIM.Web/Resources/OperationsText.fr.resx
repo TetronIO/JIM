@@ -689,4 +689,253 @@
   <data name="ScheduleExecCompleteWithErrorFallback" xml:space="preserve">
     <value>La planification s’est terminée, mais une ou plusieurs étapes ont échoué. Elles sont configurées pour laisser la planification se poursuivre ; les états des étapes ci-dessous indiquent lesquelles.</value>
   </data>
+  <data name="PasswordsQueueHeading" xml:space="preserve">
+    <value>File d’attente de synchronisation des mots de passe</value>
+  </data>
+  <data name="PasswordsQueueIntro" xml:space="preserve">
+    <value>Modifications de mot de passe en attente d’atteindre un système connecté. Une modification quitte cette file une fois livrée ; tout ce qui figure ici reste dû, ou n’est plus tenté.</value>
+  </data>
+  <data name="PasswordsStatusWaiting" xml:space="preserve">
+    <value>En attente</value>
+  </data>
+  <data name="PasswordsDueNow" xml:space="preserve">
+    <value>{0} à traiter maintenant</value>
+  </data>
+  <data name="PasswordsWaitingTooltip" xml:space="preserve">
+    <value>Le nombre de modifications en attente qu’une passe de livraison tenterait maintenant. Les autres attendent la fin de leur délai avant nouvelle tentative. Un grand nombre en attente sans rien à traiter signifie qu’une file parcourt ses délais ; un grand nombre à traiter signifie qu’une file ne se vide pas.</value>
+  </data>
+  <data name="PasswordsStatusParked" xml:space="preserve">
+    <value>Suspendue</value>
+  </data>
+  <data name="PasswordsParkedTooltip" xml:space="preserve">
+    <value>La cible a refusé ces modifications, ou elles ont épuisé leurs tentatives. JIM a cessé d’essayer : elles attendent une intervention humaine. Traitez la cause, puis relancez-les.</value>
+  </data>
+  <data name="PasswordsStatusExpired" xml:space="preserve">
+    <value>Expirée</value>
+  </data>
+  <data name="PasswordsExpiredTooltip" xml:space="preserve">
+    <value>Ces modifications ont dépassé la durée de vie de leur système connecté. Le mot de passe qu’elles portaient n’existe plus : rien ne peut donc les livrer. Un mot de passe doit être défini par d’autres moyens.</value>
+  </data>
+  <data name="PasswordsCancelledTooltip" xml:space="preserve">
+    <value>Un administrateur a arrêté la livraison de ces modifications. Elles sont comptées plutôt que masquées, car le mot de passe de l’objet Metaverse diverge toujours sur ce système, et ce compte est la seule indication de cet écart.</value>
+  </data>
+  <data name="PasswordsShowingOne" xml:space="preserve">
+    <value>Affichage des modifications de mot de passe en file d’attente d’un seul objet Metaverse. Les totaux ci-dessus concernent toute la file.</value>
+  </data>
+  <data name="PasswordsShowWhole" xml:space="preserve">
+    <value>Afficher toute la file</value>
+  </data>
+  <data name="PasswordsFailureReasonLabel" xml:space="preserve">
+    <value>Motif de l’échec</value>
+  </data>
+  <data name="PasswordsSingularName" xml:space="preserve">
+    <value>modification de mot de passe en file d’attente</value>
+  </data>
+  <data name="PasswordsPluralName" xml:space="preserve">
+    <value>modifications de mot de passe en file d’attente</value>
+  </data>
+  <data name="PasswordsSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher des objets Metaverse et des systèmes connectés…</value>
+  </data>
+  <data name="PasswordsRetryShown" xml:space="preserve">
+    <value>Relancer les éléments affichés</value>
+  </data>
+  <data name="PasswordsCancelShown" xml:space="preserve">
+    <value>Annuler les éléments affichés</value>
+  </data>
+  <data name="PasswordsIdentityTooltip" xml:space="preserve">
+    <value>La file contient une modification par objet Metaverse et par système connecté. L’objet Metaverse est ce que vous recherchez ; la ligne l’ouvre, où la même modification est visible pour chacun de ses objets de systèmes connectés.</value>
+  </data>
+  <data name="PasswordsColAttempts" xml:space="preserve">
+    <value>Tentatives</value>
+  </data>
+  <data name="PasswordsColNextAttempt" xml:space="preserve">
+    <value>Prochaine tentative</value>
+  </data>
+  <data name="PasswordsNextAttemptTooltip" xml:space="preserve">
+    <value>Date d’échéance de la prochaine tentative de livraison. Lisez-la avec le nombre de tentatives : deux tentatives avec une relance programmée signifient un système en difficulté passagère ; six tentatives sans relance signifient un système qui a abandonné.</value>
+  </data>
+  <data name="PasswordsHeldTooltip" xml:space="preserve">
+    <value>La synchronisation des mots de passe est désactivée sur ce système connecté : la modification est conservée sans être tentée. L’activer livre tout ce qui s’est accumulé, sauf si cela expire d’abord.</value>
+  </data>
+  <data name="PasswordsHeld" xml:space="preserve">
+    <value>Retenue</value>
+  </data>
+  <data name="PasswordsDeliveringNow" xml:space="preserve">
+    <value>Livraison en cours</value>
+  </data>
+  <data name="PasswordsDueNowLabel" xml:space="preserve">
+    <value>À traiter maintenant</value>
+  </data>
+  <data name="PasswordsRetryOneAria" xml:space="preserve">
+    <value>Relancer cette modification de mot de passe</value>
+  </data>
+  <data name="PasswordsCancelOneAria" xml:space="preserve">
+    <value>Annuler cette modification de mot de passe</value>
+  </data>
+  <data name="PasswordsCancelOneTooltip" xml:space="preserve">
+    <value>Arrêter la livraison de cette modification. Elle reste, marquée « Annulé », car le mot de passe de l’objet Metaverse diverge toujours sur ce système.</value>
+  </data>
+  <data name="PasswordsNoSearchMatch" xml:space="preserve">
+    <value>Aucune modification de mot de passe en file d’attente ne correspond à « {0} »</value>
+  </data>
+  <data name="PasswordsNoFilterMatch" xml:space="preserve">
+    <value>Aucune modification de mot de passe en file d’attente ne correspond à ces filtres</value>
+  </data>
+  <data name="PasswordsNoFilterHint" xml:space="preserve">
+    <value>Effacez les filtres pour voir toute la file.</value>
+  </data>
+  <data name="PasswordsEmptyTitle" xml:space="preserve">
+    <value>Aucune modification n’attend d’être livrée</value>
+  </data>
+  <data name="PasswordsEmptyHint" xml:space="preserve">
+    <value>Les modifications de mot de passe apparaissent ici pendant leur acheminement vers un système connecté, et quittent la file dès leur arrivée.</value>
+  </data>
+  <data name="PasswordsDescribeOne" xml:space="preserve">
+    <value>1 modification de mot de passe</value>
+  </data>
+  <data name="PasswordsDescribeOther" xml:space="preserve">
+    <value>{0} modifications de mot de passe</value>
+  </data>
+  <data name="PasswordsRetryShownConfirm" xml:space="preserve">
+    <value>Relancer la livraison de tout ce qui est affiché ({0}) ?</value>
+  </data>
+  <data name="PasswordsCancelShownConfirm" xml:space="preserve">
+    <value>Arrêter la livraison de tout ce qui est affiché ({0}) ? Chacune de ces personnes conserve son ancien mot de passe sur le système cible jusqu’à la synchronisation d’une nouvelle modification. Toute modification qui est le premier mot de passe d’un objet de système connecté provisionné par JIM laisse cet objet de système connecté sans mot de passe fourni par JIM.</value>
+  </data>
+  <data name="PasswordsRetryTitle" xml:space="preserve">
+    <value>Relancer les modifications de mot de passe</value>
+  </data>
+  <data name="PasswordsCancelTitle" xml:space="preserve">
+    <value>Annuler les modifications de mot de passe</value>
+  </data>
+  <data name="PasswordsRetryYes" xml:space="preserve">
+    <value>Relancer</value>
+  </data>
+  <data name="PasswordsCancelDeliveryYes" xml:space="preserve">
+    <value>Arrêter la livraison</value>
+  </data>
+  <data name="PasswordsNothingRetried" xml:space="preserve">
+    <value>Aucune modification relancée : aucune modification de mot de passe en file d’attente ne correspond.</value>
+  </data>
+  <data name="PasswordsNothingCancelled" xml:space="preserve">
+    <value>Aucune modification annulée : aucune modification de mot de passe en file d’attente ne correspond.</value>
+  </data>
+  <data name="PasswordsAttemptedAgain" xml:space="preserve">
+    <value>Une nouvelle tentative de livraison sera effectuée pour {0}.</value>
+  </data>
+  <data name="PasswordsNotDelivered" xml:space="preserve">
+    <value>La livraison de {0} est arrêtée.</value>
+  </data>
+  <data name="PasswordsRetryPending" xml:space="preserve">
+    <value>Tenter la livraison maintenant plutôt que d’attendre la prochaine tentative prévue.</value>
+  </data>
+  <data name="PasswordsRetryCancelled" xml:space="preserve">
+    <value>Remettre cette modification dans la file et tenter la livraison. Elle n’est livrée que si elle n’a pas expiré entre-temps.</value>
+  </data>
+  <data name="PasswordsRetryDefault" xml:space="preserve">
+    <value>Tenter à nouveau la livraison. Traitez d’abord la cause du refus par la cible, sinon la modification sera à nouveau suspendue.</value>
+  </data>
+  <data name="ExchangeQueueHeading" xml:space="preserve">
+    <value>File d’attente Exchange</value>
+  </data>
+  <data name="ExchangeQueueIntro" xml:space="preserve">
+    <value>Modifications de destinataires que JIM a mises en file pour Exchange. Une modification quitte cette file une fois qu’Exchange l’a appliquée ou qu’elle n’est plus voulue ; tout ce qui figure ici reste dû ou attend une intervention humaine.</value>
+  </data>
+  <data name="ExchangeQueuedTooltip" xml:space="preserve">
+    <value>Modifications en attente de leur première tentative, ou en cours d’application par Exchange. Personne n’a rien à faire.</value>
+  </data>
+  <data name="ExchangeBeingApplied" xml:space="preserve">
+    <value>{0} en cours d’application</value>
+  </data>
+  <data name="ExchangeHeldOne" xml:space="preserve">
+    <value>1 de plus en attente</value>
+  </data>
+  <data name="ExchangeHeldOther" xml:space="preserve">
+    <value>{0} de plus en attente</value>
+  </data>
+  <data name="ExchangeHeldTooltip" xml:space="preserve">
+    <value>Ces systèmes connectés ne gèrent plus les destinataires Exchange : leurs modifications attendent sans être tentées. Elles sont livrées dès que chacun gère de nouveau les destinataires Exchange.</value>
+  </data>
+  <data name="ExchangeRetrying" xml:space="preserve">
+    <value>Nouvelle tentative</value>
+  </data>
+  <data name="ExchangeRetryingTooltip" xml:space="preserve">
+    <value>Une tentative a échoué d’une manière susceptible de se résorber d’elle-même, par exemple une réplication en cours ou un serveur qui n’a pas répondu. JIM réessaie à intervalles croissants, et suspend la modification si l’échec persiste au-delà de 24 heures.</value>
+  </data>
+  <data name="ExchangeParkedTooltip" xml:space="preserve">
+    <value>Exchange a refusé ces modifications, JIM n’a pas la permission de les effectuer, ou elles ont continué d’échouer pendant 24 heures. JIM a cessé d’essayer : elles attendent une intervention humaine. Traitez la cause donnée par Exchange, puis relancez-les.</value>
+  </data>
+  <data name="ExchangeRefused" xml:space="preserve">
+    <value>Refusée</value>
+  </data>
+  <data name="ExchangeRefusedTooltip" xml:space="preserve">
+    <value>JIM n’a pas demandé à Exchange d’effectuer ces modifications, car ce qui est déclaré ne peut pas être effectué, par exemple une boîte aux lettres sur un contact, ou il s’agit d’un changement de type de destinataire que JIM n’effectue pas. Une nouvelle tentative ne peut rien y changer. Corrigez ce qui est déclaré pour le compte : la prochaine synchronisation remplacera la modification.</value>
+  </data>
+  <data name="ExchangeNotMadeOne" xml:space="preserve">
+    <value>1 est un changement de type de destinataire non effectué</value>
+  </data>
+  <data name="ExchangeNotMadeOther" xml:space="preserve">
+    <value>{0} sont des changements de type de destinataire non effectués</value>
+  </data>
+  <data name="ExchangeShowingOne" xml:space="preserve">
+    <value>Affichage des modifications Exchange en file d’attente d’un seul objet Metaverse. Les totaux ci-dessus concernent toute la file.</value>
+  </data>
+  <data name="ExchangeSingularName" xml:space="preserve">
+    <value>modification Exchange en file d’attente</value>
+  </data>
+  <data name="ExchangePluralName" xml:space="preserve">
+    <value>modifications Exchange en file d’attente</value>
+  </data>
+  <data name="ExchangeColChange" xml:space="preserve">
+    <value>Modification</value>
+  </data>
+  <data name="ExchangeStatusTooltip" xml:space="preserve">
+    <value>État de la modification et de ce qu’elle attend. Triée par prochaine tentative : les modifications sur le point d’être tentées viennent en premier.</value>
+  </data>
+  <data name="ExchangeColReason" xml:space="preserve">
+    <value>Motif</value>
+  </data>
+  <data name="ExchangeReasonTooltip" xml:space="preserve">
+    <value>Pourquoi la modification n’a pas été effectuée, dans les mots d’Exchange lorsqu’Exchange en a donné. La solution se trouve en général hors de JIM : une permission, une stratégie ou une valeur déjà utilisée.</value>
+  </data>
+  <data name="ExchangeRetryOneAria" xml:space="preserve">
+    <value>Relancer cette modification Exchange</value>
+  </data>
+  <data name="ExchangeNoSearchMatch" xml:space="preserve">
+    <value>Aucune modification Exchange en file d’attente ne correspond à « {0} »</value>
+  </data>
+  <data name="ExchangeNoFilterMatch" xml:space="preserve">
+    <value>Aucune modification Exchange en file d’attente ne correspond à ces filtres</value>
+  </data>
+  <data name="ExchangeEmptyTitle" xml:space="preserve">
+    <value>Aucune modification n’attend Exchange</value>
+  </data>
+  <data name="ExchangeEmptyHint" xml:space="preserve">
+    <value>Les modifications de destinataires apparaissent ici pendant leur acheminement vers Exchange, et quittent la file une fois qu’Exchange les a appliquées.</value>
+  </data>
+  <data name="ExchangeDescribeOne" xml:space="preserve">
+    <value>1 modification Exchange</value>
+  </data>
+  <data name="ExchangeDescribeOther" xml:space="preserve">
+    <value>{0} modifications Exchange</value>
+  </data>
+  <data name="ExchangeRetryShownConfirm" xml:space="preserve">
+    <value>Relancer tout ce qui est affiché ({0}) ? Les modifications suspendues et en nouvelle tentative sont relancées ; les autres sont déjà dues, en cours d’application, ou attendent une modification de ce qui est déclaré.</value>
+  </data>
+  <data name="ExchangeRetryTitle" xml:space="preserve">
+    <value>Relancer les modifications Exchange</value>
+  </data>
+  <data name="ExchangeNothingRetried" xml:space="preserve">
+    <value>Aucune relance : aucune modification correspondante n’est suspendue ou en nouvelle tentative.</value>
+  </data>
+  <data name="ExchangeAttemptedAgain" xml:space="preserve">
+    <value>Une nouvelle tentative sera effectuée dans quelques secondes pour {0}.</value>
+  </data>
+  <data name="ExchangeRetryNow" xml:space="preserve">
+    <value>Tenter la modification maintenant plutôt que d’attendre la prochaine tentative prévue.</value>
+  </data>
+  <data name="ExchangeRetryDefault" xml:space="preserve">
+    <value>Tenter à nouveau la modification, avec ses tentatives et son délai de 24 heures remis à zéro. Traitez d’abord la cause donnée par Exchange, sinon elle sera à nouveau suspendue.</value>
+  </data>
 </root>
