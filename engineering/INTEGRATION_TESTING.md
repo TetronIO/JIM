@@ -1589,6 +1589,8 @@ PRD Scenario 5 (re-derivation after Collision Remediation) joins #242 release 4'
 
 **Running it.** It uses no directory, so it runs on any directory type, but needs `JIM_SSO_ENTRA_TENANT_ID`, `JIM_SSO_ENTRA_CI_CLIENT_ID` and a Graph token that may manage the Connector app's credentials: in GitHub Actions the CI app's federated credential, elsewhere `JIM_SSO_ENTRA_GRAPH_TOKEN` (a delegated token of the app's owner or an Application Administrator works). Two runs at once break each other, since each replaces the certificate JIM holds. The lab host must reach `login.microsoftonline.com` and `graph.microsoft.com`.
 
+**Running it before a merge.** The AD lab runs only from `main`. To run Scenarios 036 and 037 live from a branch, dispatch `entra-connector.yml` (`gh workflow run entra-connector.yml --ref <branch> -f scenario=All`): a GitHub-hosted job in the `jim-entra-tenant` environment, which signs in through the CI app's federated credential for that environment and needs a reviewer's approval for every run, since the sign-in can rotate the credentials of an app holding User Administrator in the tenant. It brings up JIM with OpenLDAP as the unused directory. Do not dispatch it while the AD lab's Entra ID Connector step is running.
+
 **Runner handling.** `Test-ScenarioRunsOnItsOwn` keeps it out of every sweep, Pre-Release included, since only the lab runner holds the tenant's credentials; `ad-lab.yml` runs it as a step of its own, so a tenant outage shows as `jim-entra-connector` alone.
 
 #### Scenario 037: Entra ID as a Source
