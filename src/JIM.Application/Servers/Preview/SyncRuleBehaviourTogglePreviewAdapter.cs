@@ -77,7 +77,7 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.BehaviourSameSettings)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourSameSettings)),
                 nameof(SyncRule.Enabled)));
             return findings;
         }
@@ -86,7 +86,7 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Blocking,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.BehaviourDirectionImmutable), DirectionName(stored.Direction), DirectionName(proposal.Direction)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourDirectionImmutable), DirectionName(stored.Direction), DirectionName(proposal.Direction)),
                 nameof(SyncRule.Direction)));
             return findings;
         }
@@ -96,8 +96,8 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
                 proposal.Enabled
-                    ? JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.BehaviourEnabling))
-                    : JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.BehaviourDisabling)),
+                    ? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourEnabling))
+                    : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourDisabling)),
                 nameof(SyncRule.Enabled)));
         }
 
@@ -105,7 +105,7 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.BehaviourProjectOn)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourProjectOn)),
                 nameof(SyncRule.ProjectToMetaverse)));
         }
 
@@ -113,7 +113,7 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.BehaviourProvisionOn)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourProvisionOn)),
                 nameof(SyncRule.ProvisionToConnectedSystem)));
         }
 
@@ -121,7 +121,7 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.BehaviourEnforceStateOff)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourEnforceStateOff)),
                 nameof(SyncRule.EnforceState)));
         }
 
@@ -134,7 +134,7 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.BehaviourRuleDisabled)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourRuleDisabled)),
                 nameof(SyncRule.Enabled)));
         }
 
@@ -431,21 +431,21 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
         if (stored.Direction == SyncRuleDirection.Import)
         {
             if (proposal.EnforceState != stored.EnforceState)
-                yield return JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.BehaviourEnforceStateImportOnly));
+                yield return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourEnforceStateImportOnly));
 
             if (proposal.ProvisionToConnectedSystem != stored.ProvisionToConnectedSystem)
-                yield return JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.BehaviourProvisionExportOnly));
+                yield return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourProvisionExportOnly));
         }
         else if (proposal.ProjectToMetaverse != stored.ProjectToMetaverse)
         {
-            yield return JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.BehaviourProjectImportOnly));
+            yield return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourProjectImportOnly));
         }
     }
 
     /// <summary>A Synchronisation Rule's direction named inside a sentence, in the reader's language.</summary>
     private static MessageArgument DirectionName(SyncRuleDirection direction) => direction == SyncRuleDirection.Export
-        ? JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DirectionExport))
-        : JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DirectionImport));
+        ? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DirectionExport))
+        : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DirectionImport));
 
     private async Task<SyncRule> GetRuleAsync(PreviewContext context)
     {

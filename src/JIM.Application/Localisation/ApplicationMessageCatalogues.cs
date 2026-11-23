@@ -8,7 +8,7 @@ namespace JIM.Application.Localisation;
 /// <c>"&lt;assembly&gt;:&lt;resource file&gt;"</c> as <see cref="JIM.Models.Localisation.JimMessage"/> expects. Each is declared
 /// once here so no call site writes the string.
 /// </summary>
-public static class MessageCatalogues
+public static partial class ApplicationMessageCatalogues
 {
     /// <summary>What a Configuration Change Preview tells an administrator: findings, estimates, warnings and progress.</summary>
     public const string Preview = "JIM.Application:PreviewMessages";

@@ -120,8 +120,8 @@ public static class ScopeTester
             if (attribute == null)
             {
                 var objectTypeName = exporting ? syncRule.MetaverseObjectType?.Name : syncRule.ConnectedSystemObjectType?.Name;
-                MessageArgument typeLabel = objectTypeName == null ? (MessageArgument)JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ScopeTestTheObjectType)) : $"'{objectTypeName}'";
-                var notFound = JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ScopeTestAttributeNotFound), input.AttributeName, typeLabel);
+                MessageArgument typeLabel = objectTypeName == null ? (MessageArgument)JimMessage.Create(ApplicationMessageCatalogues.Scoping, nameof(ScopingMessages.ScopeTestTheObjectType)) : $"'{objectTypeName}'";
+                var notFound = JimMessage.Create(ApplicationMessageCatalogues.Scoping, nameof(ScopingMessages.ScopeTestAttributeNotFound), input.AttributeName, typeLabel);
                 errors.Add(notFound.ToEnglish());
                 errorDetails[notFound.ToEnglish()] = notFound;
                 continue;
@@ -135,7 +135,7 @@ public static class ScopeTester
             return new ScopeTestResult
             {
                 InputErrors = errors,
-                InputErrorDetails = [.. errors.Select(error => errorDetails.GetValueOrDefault(error) ?? JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.Verbatim), error))]
+                InputErrorDetails = [.. errors.Select(error => errorDetails.GetValueOrDefault(error) ?? JimMessage.Create(ApplicationMessageCatalogues.Scoping, nameof(ScopingMessages.Verbatim), error))]
             };
 
         var scoping = new ScopingEvaluationServer();

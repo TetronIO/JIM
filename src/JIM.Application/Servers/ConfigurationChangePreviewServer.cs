@@ -347,7 +347,7 @@ public class ConfigurationChangePreviewServer
                 preview.DeltasStatus = ConfigurationChangePreviewStageStatus.NotApplicable;
                 await _application.Repository.ConfigurationChangePreviews.UpdatePreviewAsync(preview);
 
-                activity.MessageDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ActivityCannotBeApplied));
+                activity.MessageDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ActivityCannotBeApplied));
                 await _application.Activities.CompleteActivityWithWarningAsync(activity);
                 return new ConfigurationChangePreviewStartResult(activity.Id, findings);
             }
@@ -361,7 +361,7 @@ public class ConfigurationChangePreviewServer
         {
             // Sanctioned broad catch (see src/CLAUDE.md, Activity execution boundaries): an adapter failure that
             // escaped here would leave a preview Activity in progress for ever, with nothing anywhere saying why.
-            await FailPreviewAsync(preview, activity, ex, JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ActivityWhileValidating)),
+            await FailPreviewAsync(preview, activity, ex, JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ActivityWhileValidating)),
                 p =>
                 {
                     if (p.ValidationStatus != ConfigurationChangePreviewStageStatus.Complete)
@@ -454,7 +454,7 @@ public class ConfigurationChangePreviewServer
         if (!await RunEvaluationAsync(preview, activity, adapter, context, impactCounter, cancellationToken))
             return;
 
-        activity.MessageDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ActivityComplete));
+        activity.MessageDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ActivityComplete));
         await _application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -470,7 +470,7 @@ public class ConfigurationChangePreviewServer
         preview.ImpactCountsStarted = DateTime.UtcNow;
         await _application.Repository.ConfigurationChangePreviews.UpdatePreviewAsync(preview);
 
-        activity.MessageDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ActivityCounting));
+        activity.MessageDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ActivityCounting));
         activity.ObjectsToProcess = ClampToInt(preview.EstimatedDeltaRows);
         await _application.Activities.UpdateActivityAsync(activity);
 
@@ -498,7 +498,7 @@ public class ConfigurationChangePreviewServer
         catch (Exception ex)
         {
             // Sanctioned broad catch (see src/CLAUDE.md, Activity execution boundaries).
-            await FailPreviewAsync(preview, activity, ex, JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ActivityWhileCounting)),
+            await FailPreviewAsync(preview, activity, ex, JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ActivityWhileCounting)),
                 p => p.ImpactCountsStatus = ConfigurationChangePreviewStageStatus.Failed);
             return (false, null);
         }
@@ -535,7 +535,7 @@ public class ConfigurationChangePreviewServer
         preview.DeltasStarted = startedAt;
         await _application.Repository.ConfigurationChangePreviews.UpdatePreviewAsync(preview);
 
-        activity.MessageDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ActivityEvaluating));
+        activity.MessageDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ActivityEvaluating));
         await _application.Activities.UpdateActivityAsync(activity);
 
         // Read from the preview row, not from the request: a preview handed to JIM.Worker is run from the row, and
@@ -602,7 +602,7 @@ public class ConfigurationChangePreviewServer
         catch (Exception ex)
         {
             // Sanctioned broad catch (see src/CLAUDE.md, Activity execution boundaries).
-            await FailPreviewAsync(preview, activity, ex, JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ActivityWhileEvaluating)), p =>
+            await FailPreviewAsync(preview, activity, ex, JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ActivityWhileEvaluating)), p =>
             {
                 if (impactCounter != null)
                     p.ImpactCountsStatus = ConfigurationChangePreviewStageStatus.Failed;
@@ -630,7 +630,7 @@ public class ConfigurationChangePreviewServer
         // The exception message is about the configuration and the failure, never about the objects evaluated:
         // delta values are personal data and must not reach an Activity's error text any more than a log line.
         Log.Error(exception, "Configuration change preview {ActivityId} failed while {WhileDoing}", activity.Id, whileDoing.ToEnglish());
-        activity.MessageDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ActivityFailedWhile), whileDoing);
+        activity.MessageDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ActivityFailedWhile), whileDoing);
         await _application.Activities.FailActivityWithErrorAsync(activity, exception);
     }
 
@@ -640,7 +640,7 @@ public class ConfigurationChangePreviewServer
         markStages(preview);
         await _application.Repository.ConfigurationChangePreviews.UpdatePreviewAsync(preview);
 
-        activity.MessageDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ActivityCancelled));
+        activity.MessageDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ActivityCancelled));
         await _application.Activities.CancelActivityAsync(activity);
     }
 
@@ -651,7 +651,7 @@ public class ConfigurationChangePreviewServer
             TargetType = ConfigurationChangePreviewSurfaces.ToActivityTargetType(request.Surface),
             TargetOperationType = ActivityTargetOperationType.Preview,
             TargetName = request.TargetName,
-            MessageDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ActivityValidating))
+            MessageDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ActivityValidating))
         };
 
         // The per-target-type id column, so the preview is findable from the object it previewed. Which column that

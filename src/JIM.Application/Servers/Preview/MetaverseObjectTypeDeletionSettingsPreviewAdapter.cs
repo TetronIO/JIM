@@ -70,7 +70,7 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapter : IConfigurationC
             // other one has a configuration that does something they did not ask for, silently.
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Blocking,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DeletionSettingsNeedsAuthoritativeSource)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DeletionSettingsNeedsAuthoritativeSource)),
                 nameof(MetaverseObjectType.DeletionTriggerConnectedSystemIds)));
         }
 
@@ -78,7 +78,7 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapter : IConfigurationC
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Blocking,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DeletionSettingsNegativeGracePeriod)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DeletionSettingsNegativeGracePeriod)),
                 nameof(MetaverseObjectType.DeletionGracePeriod)));
         }
 
@@ -90,7 +90,7 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapter : IConfigurationC
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DeletionSettingsSourcesChanged)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DeletionSettingsSourcesChanged)),
                 sourcesChanged
                     ? nameof(MetaverseObjectType.DeletionTriggerConnectedSystemIds)
                     : nameof(MetaverseObjectType.DeletionTriggerMode)));

@@ -81,7 +81,7 @@ public class ConnectedSystemScopeSelectionPreviewAdapter : IConfigurationChangeP
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Blocking,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ScopeSelectionNoPartitions), connectedSystem.Name),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopeSelectionNoPartitions), connectedSystem.Name),
                 nameof(ConnectedSystem.Partitions)));
 
             // Nothing below this can say anything useful about a system with no partitions.
@@ -94,7 +94,7 @@ public class ConnectedSystemScopeSelectionPreviewAdapter : IConfigurationChangeP
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ScopeSelectionNothingSelected), WithSelection(connectedSystem, proposal).BuildPartitionSelectionDiagnostic()),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopeSelectionNothingSelected), WithSelection(connectedSystem, proposal).BuildPartitionSelectionDiagnostic()),
                 nameof(ConnectedSystemPartition.Selected)));
         }
 
@@ -103,7 +103,7 @@ public class ConnectedSystemScopeSelectionPreviewAdapter : IConfigurationChangeP
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ScopeSelectionInoperableRunProfiles), inoperableRunProfiles.Count.ToString(), string.Join(", ", inoperableRunProfiles)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopeSelectionInoperableRunProfiles), inoperableRunProfiles.Count.ToString(), string.Join(", ", inoperableRunProfiles)),
                 nameof(ConnectedSystemRunProfile.Partition)));
         }
 
@@ -112,7 +112,7 @@ public class ConnectedSystemScopeSelectionPreviewAdapter : IConfigurationChangeP
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ScopeSelectionContainersNotMeasured), connectedSystem.ConnectorDefinition.Name),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopeSelectionContainersNotMeasured), connectedSystem.ConnectorDefinition.Name),
                 nameof(ConnectedSystemContainer.Selected)));
         }
 
@@ -120,7 +120,7 @@ public class ConnectedSystemScopeSelectionPreviewAdapter : IConfigurationChangeP
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ScopeSelectionBringsNewScope)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopeSelectionBringsNewScope)),
                 nameof(ConnectedSystemContainer.Selected)));
         }
 

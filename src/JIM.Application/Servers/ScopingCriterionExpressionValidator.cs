@@ -70,17 +70,17 @@ public sealed class ScopingCriterionExpressionValidator
         var expression = criterion.Expression!;
         if (criterion.MetaverseAttributeId.HasValue || criterion.MetaverseAttribute != null ||
             criterion.ConnectedSystemAttributeId.HasValue || criterion.ConnectedSystemAttribute != null)
-            return JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionBothAttributeAndExpression));
+            return JimMessage.Create(ApplicationMessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionBothAttributeAndExpression));
 
         if (criterion.CompareAs is not { } compareAs || !CompareAsTypes.Contains(compareAs))
-            return JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionNeedsCompareAs));
+            return JimMessage.Create(ApplicationMessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionNeedsCompareAs));
 
         if (expression.Length > DynamicExpressoEvaluator.MaxExpressionLength)
-            return JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionTooLong), expression.Length, DynamicExpressoEvaluator.MaxExpressionLength);
+            return JimMessage.Create(ApplicationMessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionTooLong), expression.Length, DynamicExpressoEvaluator.MaxExpressionLength);
 
         var parsed = _expressionEvaluator.Validate(expression);
         if (!parsed.IsValid)
-            return JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionDoesNotParse), parsed.ErrorMessage);
+            return JimMessage.Create(ApplicationMessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionDoesNotParse), parsed.ErrorMessage);
 
         var exporting = direction == SyncRuleDirection.Export;
         var scopedSide = exporting ? ExpressionInputSource.Metaverse : ExpressionInputSource.ConnectedSystem;
@@ -89,26 +89,26 @@ public sealed class ScopingCriterionExpressionValidator
         var otherSideInput = inputs.FirstOrDefault(input => input.Source != scopedSide);
         if (otherSideInput != null)
             return exporting
-                ? JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionReadsConnectedSystemOnExport), otherSideInput.Accessor)
-                : JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionReadsMetaverseOnImport), otherSideInput.Accessor);
+                ? JimMessage.Create(ApplicationMessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionReadsConnectedSystemOnExport), otherSideInput.Accessor)
+                : JimMessage.Create(ApplicationMessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionReadsMetaverseOnImport), otherSideInput.Accessor);
 
         var scopedInputs = inputs.Where(input => input.Source == scopedSide).ToList();
         if (scopedInputs.Count == 0)
             return exporting
-                ? JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionReadsNoAttributeOnExport))
-                : JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionReadsNoAttributeOnImport));
+                ? JimMessage.Create(ApplicationMessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionReadsNoAttributeOnExport))
+                : JimMessage.Create(ApplicationMessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionReadsNoAttributeOnImport));
 
         // Inputs are looked up ignoring case when the expression runs, so they are here too.
         var unknown = scopedInputs.FirstOrDefault(input =>
             !attributeNames.Any(name => string.Equals(name, input.AttributeName, StringComparison.OrdinalIgnoreCase)));
         if (unknown != null)
-            return JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionUnknownAttribute), unknown.Accessor, objectTypeName);
+            return JimMessage.Create(ApplicationMessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionUnknownAttribute), unknown.Accessor, objectTypeName);
 
         // An expression that reads the clock would put objects in and out of scope with nothing to notice it: no
         // change arrives, and temporal reconciliation only revisits criteria compared against a relative date.
         var nonRepeatable = NonRepeatableFunctionDetector.Find(expression);
         if (nonRepeatable.Count > 0)
-            return JimMessage.Create(MessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionNonRepeatable), string.Join(", ", nonRepeatable));
+            return JimMessage.Create(ApplicationMessageCatalogues.Scoping, nameof(ScopingMessages.ExpressionNonRepeatable), string.Join(", ", nonRepeatable));
 
         return null;
     }

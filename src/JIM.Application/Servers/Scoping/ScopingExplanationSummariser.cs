@@ -45,7 +45,7 @@ internal static class ScopingExplanationSummariser
     #region Message helpers
 
     private static JimMessage M(string key, params MessageArgument[] arguments) =>
-        JimMessage.Create(MessageCatalogues.Scoping, key, arguments);
+        JimMessage.Create(ApplicationMessageCatalogues.Scoping, key, arguments);
 
     /// <summary>Text shown as it is: a value, a name, punctuation, or English produced elsewhere.</summary>
     private static JimMessage V(string text) => M(nameof(ScopingMessages.Verbatim), text);

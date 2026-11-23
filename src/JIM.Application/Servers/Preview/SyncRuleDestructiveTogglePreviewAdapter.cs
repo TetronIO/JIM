@@ -96,7 +96,7 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DestructiveNoChange)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DestructiveNoChange)),
                 nameof(SyncRule.OutboundDeprovisionAction)));
             return findings;
         }
@@ -105,7 +105,7 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DestructiveOutboundOnExport)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DestructiveOutboundOnExport)),
                 nameof(SyncRule.OutboundDeprovisionAction)));
         }
 
@@ -113,7 +113,7 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DestructiveInboundOnImport)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DestructiveInboundOnImport)),
                 nameof(SyncRule.InboundOutOfScopeAction)));
         }
 
@@ -123,7 +123,7 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DestructiveRuleDisabled)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DestructiveRuleDisabled)),
                 nameof(SyncRule.Enabled)));
         }
 
@@ -142,7 +142,7 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
                 var names = string.Join(", ", SyncEngine.InNameOrder(keepingSiblings).Select(sibling => $"'{sibling.Name}'"));
                 findings.Add(PreviewValidationFinding.Of(
                     PreviewValidationSeverity.Warning,
-                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DestructiveSiblingKeepsJoin), names),
+                    JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DestructiveSiblingKeepsJoin), names),
                     nameof(SyncRule.InboundOutOfScopeAction)));
             }
         }

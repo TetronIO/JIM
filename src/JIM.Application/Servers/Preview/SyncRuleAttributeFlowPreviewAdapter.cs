@@ -94,7 +94,7 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowSameAsStored)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowSameAsStored)),
                 nameof(SyncRule.AttributeFlowRules)));
             return findings;
         }
@@ -106,7 +106,7 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowRemovesEveryMapping)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowRemovesEveryMapping)),
                 nameof(SyncRule.AttributeFlowRules)));
         }
 
@@ -114,7 +114,7 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowRuleDisabled)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowRuleDisabled)),
                 nameof(SyncRule.Enabled)));
         }
 
@@ -556,9 +556,9 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
         foreach (var mapping in withdrawn)
         {
             MessageArgument attributeName = mapping.TargetMetaverseAttribute?.Name
-                ?? (MessageArgument)JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.MetaverseAttributeNumbered), mapping.TargetMetaverseAttributeId ?? 0);
+                ?? (MessageArgument)JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.MetaverseAttributeNumbered), mapping.TargetMetaverseAttributeId ?? 0);
             var attributeLabel = mapping.TargetMetaverseAttribute?.Name
-                ?? JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.MetaverseAttributeNumbered), mapping.TargetMetaverseAttributeId ?? 0).ToEnglish();
+                ?? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.MetaverseAttributeNumbered), mapping.TargetMetaverseAttributeId ?? 0).ToEnglish();
 
             var others = contributors
                 .Where(contributor => contributor.RuleId != rule.Id
@@ -577,7 +577,7 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
             {
                 findings.Add(PreviewValidationFinding.Of(
                     PreviewValidationSeverity.Warning,
-                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowRemovedKeepValues), attributeName),
+                    JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowRemovedKeepValues), attributeName),
                     nameof(SyncRule.AttributeFlowRules),
                     attributeLabel));
 
@@ -585,7 +585,7 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
                 {
                     findings.Add(PreviewValidationFinding.Of(
                         PreviewValidationSeverity.Information,
-                        JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowKeptAlsoWrittenBy), attributeName, Describe(others)),
+                        JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowKeptAlsoWrittenBy), attributeName, Describe(others)),
                         nameof(SyncRule.AttributeFlowRules),
                         attributeLabel));
                 }
@@ -594,7 +594,7 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
             {
                 findings.Add(PreviewValidationFinding.Of(
                     PreviewValidationSeverity.Warning,
-                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowRemovedRecalled), attributeName),
+                    JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowRemovedRecalled), attributeName),
                     nameof(SyncRule.AttributeFlowRules),
                     attributeLabel));
 
@@ -602,7 +602,7 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
                 {
                     findings.Add(PreviewValidationFinding.Of(
                         PreviewValidationSeverity.Information,
-                        JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowRecallReElects), attributeName, Describe(others)),
+                        JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowRecallReElects), attributeName, Describe(others)),
                         nameof(SyncRule.AttributeFlowRules),
                         attributeLabel));
                 }
@@ -640,11 +640,11 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
 
             MessageArgument attributeName = contributors
                 .FirstOrDefault(contributor => contributor.AttributeId == attributeId)?.AttributeName
-                ?? (MessageArgument)JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.MetaverseAttributeNumbered), attributeId);
+                ?? (MessageArgument)JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.MetaverseAttributeNumbered), attributeId);
 
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowBelowPriority), attributeName, Describe(winners)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowBelowPriority), attributeName, Describe(winners)),
                 nameof(SyncRule.AttributeFlowRules)));
         }
 
@@ -686,14 +686,14 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
 
         // The derived flow validator's reasons are English produced elsewhere, shown as they are until it is converted.
         findings.AddRange(assessment.Validation.Errors.Select(message =>
-            PreviewValidationFinding.Of(PreviewValidationSeverity.Blocking, JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), message), nameof(SyncRule.AttributeFlowRules))));
+            PreviewValidationFinding.Of(PreviewValidationSeverity.Blocking, JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), message), nameof(SyncRule.AttributeFlowRules))));
         findings.AddRange(assessment.Validation.Warnings.Select(warning =>
-            PreviewValidationFinding.Of(PreviewValidationSeverity.Warning, JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), warning.Message), nameof(SyncRule.AttributeFlowRules))));
+            PreviewValidationFinding.Of(PreviewValidationSeverity.Warning, JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), warning.Message), nameof(SyncRule.AttributeFlowRules))));
 
         var dependants = DerivedFlowDependentDetector.Detect(assessment.SyncRulesBefore, assessment.SyncRulesAfter, assessment.MetaverseObjectTypes);
         findings.AddRange(dependants.Select(dependant => PreviewValidationFinding.Of(
             PreviewValidationSeverity.Warning,
-            JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowDependantMissingInput), dependant.Flow.TargetAttributeName, dependant.Flow.SyncRule.Name, DescribeMissingInputs(dependant.MissingInputs)),
+            JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowDependantMissingInput), dependant.Flow.TargetAttributeName, dependant.Flow.SyncRule.Name, DescribeMissingInputs(dependant.MissingInputs)),
             nameof(SyncRule.AttributeFlowRules),
             dependant.Flow.TargetAttributeName)));
 
@@ -704,9 +704,9 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
     private static JimMessage DescribeMissingInputs(IReadOnlyList<DerivedFlowMissingInput> missingInputs) =>
         missingInputs
             .Select(input => input.ThroughDerivedFlows
-                ? JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowMissingInputThroughDerived), input.MetaverseAttributeName)
-                : JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowMissingInputNoFlow), input.MetaverseAttributeName))
-            .Aggregate((joined, next) => JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ListAnd), joined, next));
+                ? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowMissingInputThroughDerived), input.MetaverseAttributeName)
+                : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowMissingInputNoFlow), input.MetaverseAttributeName))
+            .Aggregate((joined, next) => JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ListAnd), joined, next));
 
     /// <summary>
     /// The enabled derived flows on other Connected Systems' rules that read, directly or through other derived
@@ -757,14 +757,14 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
             .ThenBy(pair => pair.Key.TargetAttributeId))
         {
             MessageArgument changedName = attributeNames.GetValueOrDefault(changedAttributeId)
-                ?? (MessageArgument)JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.MetaverseAttributeNumbered), changedAttributeId);
+                ?? (MessageArgument)JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.MetaverseAttributeNumbered), changedAttributeId);
             var relation = direct
-                ? JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowReadsChangedDirect), changedName)
-                : JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowReadsChangedThrough), changedName);
+                ? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowReadsChangedDirect), changedName)
+                : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowReadsChangedThrough), changedName);
 
             yield return PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowOtherSystemReader), flow.TargetAttributeName, flow.SyncRule.Name, relation),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowOtherSystemReader), flow.TargetAttributeName, flow.SyncRule.Name, relation),
                 nameof(SyncRule.AttributeFlowRules),
                 flow.TargetAttributeName);
         }
@@ -805,20 +805,20 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
     private static JimMessage? DescribeIfUnwritable(SyncRuleMappingProposal mapping, bool wantsMetaverseTarget)
     {
         if (mapping.TargetMetaverseAttributeId == null && mapping.TargetConnectedSystemAttributeId == null)
-            return JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowNoTargetAttribute));
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowNoTargetAttribute));
 
         if (wantsMetaverseTarget && mapping.TargetConnectedSystemAttributeId != null)
         {
-            return JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowWritesConnectedSystemOnImport));
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowWritesConnectedSystemOnImport));
         }
 
         if (!wantsMetaverseTarget && mapping.TargetMetaverseAttributeId != null)
         {
-            return JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowWritesMetaverseOnExport));
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowWritesMetaverseOnExport));
         }
 
         if (mapping.Sources.Count == 0)
-            return JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowNoSource));
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.AttributeFlowNoSource));
 
         return null;
     }
@@ -856,7 +856,7 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
     private sealed record ImportContributor(int RuleId, string RuleName, int AttributeId, string? AttributeName, int Priority);
 
     private static JimMessage Describe(List<string> ruleNames) =>
-        JimMessage.Counted(MessageCatalogues.Preview, nameof(PreviewMessages.RuleNamesOne), ruleNames.Count,
+        JimMessage.Counted(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.RuleNamesOne), ruleNames.Count,
             ruleNames.Count == 1 ? ruleNames[0] : string.Join(", ", ruleNames.Select(name => $"'{name}'")));
 
     #endregion

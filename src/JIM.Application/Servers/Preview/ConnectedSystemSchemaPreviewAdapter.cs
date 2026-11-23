@@ -88,7 +88,7 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaSameAsStored)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SchemaSameAsStored)),
                 nameof(ConnectedSystemObjectType.Selected)));
             return findings;
         }
@@ -387,7 +387,7 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
         {
             yield return PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaSelectingObjectType), change.ObjectTypeName),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SchemaSelectingObjectType), change.ObjectTypeName),
                 nameof(ConnectedSystemObjectType.Selected));
             yield break;
         }
@@ -396,7 +396,7 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
         // manages it. What the administrator needs is to know it is a cascade, and when it happens.
         yield return PreviewValidationFinding.Of(
             PreviewValidationSeverity.Warning,
-            JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaDeselectingObjectType), change.ObjectTypeName),
+            JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SchemaDeselectingObjectType), change.ObjectTypeName),
             nameof(ConnectedSystemObjectType.Selected));
     }
 
@@ -458,7 +458,7 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
                 return null;
 
             return OverlapWarning(
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaOverlapDeselectFallsToOther), changedName, otherName));
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SchemaOverlapDeselectFallsToOther), changedName, otherName));
         }
 
         if (otherSelectedAfter)
@@ -468,7 +468,7 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
                 return null;
 
             return OverlapWarning(
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaOverlapSelectTakesFromOther), changedName, otherName, MoveInstruction(from: otherName, to: changedName)));
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SchemaOverlapSelectTakesFromOther), changedName, otherName, MoveInstruction(from: otherName, to: changedName)));
         }
 
         // Selecting one type while deselecting the other: before, only the other could hold the entries carrying
@@ -478,11 +478,11 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
             return null;
 
         return OverlapWarning(
-            JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaOverlapSelectAndDeselect), changedName, otherName, MoveInstruction(from: otherName, to: changedName)));
+            JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SchemaOverlapSelectAndDeselect), changedName, otherName, MoveInstruction(from: otherName, to: changedName)));
     }
 
     private static JimMessage MoveInstruction(string from, string to) =>
-        JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaMoveInstruction), from, to);
+        JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SchemaMoveInstruction), from, to);
 
     private static PreviewValidationFinding OverlapWarning(JimMessage message) =>
         PreviewValidationFinding.Of(PreviewValidationSeverity.Warning, message, nameof(ConnectedSystemObjectType.Selected));
@@ -509,7 +509,7 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
                 // The refusal's words are shared with the save, which owns them; shown as they are until that is converted.
                 yield return PreviewValidationFinding.Of(
                     PreviewValidationSeverity.Blocking,
-                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), ObjectTypeDeselectionMessages.StillManaged(storedType.Name, boundRules)),
+                    JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), ObjectTypeDeselectionMessages.StillManaged(storedType.Name, boundRules)),
                     nameof(ConnectedSystemObjectType.Selected));
             }
         }
@@ -525,20 +525,20 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
 
         foreach (var attributeId in change.AttributesDeselected)
         {
-            MessageArgument attributeName = stored.AttributeName(change.ObjectTypeId, attributeId) ?? (MessageArgument)JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaThisAttribute));
+            MessageArgument attributeName = stored.AttributeName(change.ObjectTypeId, attributeId) ?? (MessageArgument)JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SchemaThisAttribute));
 
             if (stored.IsAnchor(change.ObjectTypeId, attributeId))
             {
                 yield return PreviewValidationFinding.Of(
                     PreviewValidationSeverity.Blocking,
-                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaAnchorCannotDeselect), attributeName, change.ObjectTypeName),
+                    JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SchemaAnchorCannotDeselect), attributeName, change.ObjectTypeName),
                     nameof(ConnectedSystemObjectTypeAttribute.Selected));
                 continue;
             }
 
             yield return PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaDeselectingAttribute), attributeName, change.ObjectTypeName),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SchemaDeselectingAttribute), attributeName, change.ObjectTypeName),
                 nameof(ConnectedSystemObjectTypeAttribute.Selected));
 
             var readingRules = syncRules
@@ -551,7 +551,7 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
             {
                 yield return PreviewValidationFinding.Of(
                     PreviewValidationSeverity.Warning,
-                    JimMessage.Counted(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaFlowMappingsReadOne), readingRules.Count,
+                    JimMessage.Counted(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SchemaFlowMappingsReadOne), readingRules.Count,
                         readingRules.Count, attributeName, string.Join(", ", readingRules)),
                     nameof(ConnectedSystemObjectTypeAttribute.Selected));
             }
@@ -566,8 +566,8 @@ public class ConnectedSystemSchemaPreviewAdapter : IConfigurationChangePreviewAd
         yield return PreviewValidationFinding.Of(
             PreviewValidationSeverity.Warning,
             change.ProposedRemoveContributedAttributesOnObsoletion
-                ? JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaObsoletionWithdraws), change.ObjectTypeName)
-                : JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SchemaObsoletionLeavesInPlace), change.ObjectTypeName),
+                ? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SchemaObsoletionWithdraws), change.ObjectTypeName)
+                : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SchemaObsoletionLeavesInPlace), change.ObjectTypeName),
             nameof(ConnectedSystemObjectType.RemoveContributedAttributesOnObsoletion));
     }
 

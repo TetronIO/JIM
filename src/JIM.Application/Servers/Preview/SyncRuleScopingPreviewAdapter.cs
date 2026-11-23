@@ -92,7 +92,7 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalSameAsStored)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalSameAsStored)),
                 nameof(SyncRule.ObjectScopingCriteriaGroups)));
             return findings;
         }
@@ -105,10 +105,10 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
 
         if (proposal.IsUnscoped && !storedScope.IsUnscoped)
         {
-            MessageArgument typeName = rule.ConnectedSystemObjectType?.Name ?? (MessageArgument)JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ScopingConfiguredType));
+            MessageArgument typeName = rule.ConnectedSystemObjectType?.Name ?? (MessageArgument)JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingConfiguredType));
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalRemovesEveryCriterion), typeName),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalRemovesEveryCriterion), typeName),
                 nameof(SyncRule.ObjectScopingCriteriaGroups)));
         }
 
@@ -116,7 +116,7 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalRuleDisabled)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalRuleDisabled)),
                 nameof(SyncRule.Enabled)));
         }
 
@@ -130,8 +130,8 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
                 findings.Add(PreviewValidationFinding.Of(
                     PreviewValidationSeverity.Warning,
                     rule.InboundOutOfScopeAction == InboundOutOfScopeAction.Disconnect
-                        ? JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalUnscopedSiblingDisconnect), unscopedSibling.Name)
-                        : JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalUnscopedSiblingRemainJoined), unscopedSibling.Name),
+                        ? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalUnscopedSiblingDisconnect), unscopedSibling.Name)
+                        : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalUnscopedSiblingRemainJoined), unscopedSibling.Name),
                     nameof(SyncRule.ObjectScopingCriteriaGroups)));
             }
         }
@@ -575,23 +575,23 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
             return otherSideInput == null
                 ? null
                 : wantsConnectedSystemAttribute
-                    ? JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalExpressionReadsMetaverseOnImport), otherSideInput.Accessor)
-                    : JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalExpressionReadsConnectedSystemOnExport), otherSideInput.Accessor);
+                    ? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalExpressionReadsMetaverseOnImport), otherSideInput.Accessor)
+                    : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalExpressionReadsConnectedSystemOnExport), otherSideInput.Accessor);
         }
 
         if (criterion.MetaverseAttributeId == null && criterion.ConnectedSystemAttributeId == null)
         {
-            return JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalNamesNoAttribute));
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalNamesNoAttribute));
         }
 
         if (wantsConnectedSystemAttribute && criterion.MetaverseAttributeId != null)
         {
-            return JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalReadsMetaverseOnImport));
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalReadsMetaverseOnImport));
         }
 
         if (!wantsConnectedSystemAttribute && criterion.ConnectedSystemAttributeId != null)
         {
-            return JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalReadsConnectedSystemOnExport));
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopingProposalReadsConnectedSystemOnExport));
         }
 
         return null;

@@ -51,30 +51,30 @@ public class ConnectedSystemFullSynchronisationPreviewAdapter : IConfigurationCh
         var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(ConnectedSystemId(context));
         if (connectedSystem == null)
         {
-            return [Blocking(JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.FullSyncSystemGone)))];
+            return [Blocking(JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.FullSyncSystemGone)))];
         }
 
         if (connectedSystem.Status == ConnectedSystemStatus.Deleting)
         {
-            return [Blocking(JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.FullSyncSystemDeleting)), nameof(connectedSystem.Status))];
+            return [Blocking(JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.FullSyncSystemDeleting)), nameof(connectedSystem.Status))];
         }
 
         var proposal = Proposal(context);
         if (proposal.MaxObjects is < 1)
         {
-            return [Blocking(JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.FullSyncCapTooLow)),
+            return [Blocking(JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.FullSyncCapTooLow)),
                 nameof(proposal.MaxObjects))];
         }
 
         var runProfiles = await _application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(connectedSystem.Id);
         if (!runProfiles.Exists(profile => profile.RunType == ConnectedSystemRunType.FullSynchronisation))
         {
-            return [Blocking(JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.FullSyncNoRunProfile)))];
+            return [Blocking(JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.FullSyncNoRunProfile)))];
         }
 
         if (await _application.ConnectedSystems.GetDerivedFlowCycleAsync() is { } cycle)
         {
-            return [Blocking(JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.FullSyncDerivedFlowCycle), cycle))];
+            return [Blocking(JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.FullSyncDerivedFlowCycle), cycle))];
         }
 
         // A stopped import (#2521) is warned of by the framework, from GetEvaluatedConnectorSpacesAsync (#3014).
@@ -85,7 +85,7 @@ public class ConnectedSystemFullSynchronisationPreviewAdapter : IConfigurationCh
             if (cap < population)
             {
                 findings.Add(PreviewValidationFinding.Of(PreviewValidationSeverity.Warning,
-                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.FullSyncCapped), cap, population),
+                    JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.FullSyncCapped), cap, population),
                     nameof(proposal.MaxObjects)));
             }
         }

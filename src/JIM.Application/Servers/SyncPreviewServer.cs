@@ -88,7 +88,7 @@ public class SyncPreviewServer
             result.Errors.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.ObjectNotFound,
-                LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewMetaverseObjectGone), metaverseObjectId.ToString())
+                LocalisedDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewMetaverseObjectGone), metaverseObjectId.ToString())
             });
             return result;
         }
@@ -271,7 +271,7 @@ public class SyncPreviewServer
             notFound.Errors.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.ObjectNotFound,
-                LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewConnectedSystemObjectGone), connectedSystemObjectId.ToString(), connectedSystemId.ToString()),
+                LocalisedDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewConnectedSystemObjectGone), connectedSystemObjectId.ToString(), connectedSystemId.ToString()),
                 ConnectedSystemId = connectedSystemId
             });
             return notFound;
@@ -880,7 +880,7 @@ public class SyncPreviewServer
             result.Warnings.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.NoApplicableSyncRule,
-                LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewNoImportRule)),
+                LocalisedDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewNoImportRule)),
                 ConnectedSystemId = connectedSystemId
             });
 
@@ -931,8 +931,8 @@ public class SyncPreviewServer
             {
                 Code = SyncPreviewMessageCode.OutOfScope,
                 LocalisedDetail = joinKeptForExportRule
-                    ? JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewOutOfScopeJoinKept))
-                    : JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewOutOfScopeAction), OutOfScopeActionName(outOfScopeAction)),
+                    ? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewOutOfScopeJoinKept))
+                    : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewOutOfScopeAction), OutOfScopeActionName(outOfScopeAction)),
                 ConnectedSystemId = connectedSystemId
             });
 
@@ -967,7 +967,7 @@ public class SyncPreviewServer
                 result.Errors.Add(new SyncPreviewMessage
                 {
                     Code = SyncPreviewMessageCode.ObjectNotFound,
-                    LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewJoinedObjectNotLoaded), cso.MetaverseObjectId?.ToString() ?? string.Empty),
+                    LocalisedDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewJoinedObjectNotLoaded), cso.MetaverseObjectId?.ToString() ?? string.Empty),
                     ConnectedSystemId = connectedSystemId
                 });
                 return result;
@@ -1010,7 +1010,7 @@ public class SyncPreviewServer
                     result.Warnings.Add(new SyncPreviewMessage
                     {
                         Code = SyncPreviewMessageCode.NoApplicableSyncRule,
-                        LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewNoMatchNoProjection)),
+                        LocalisedDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewNoMatchNoProjection)),
                         ConnectedSystemId = connectedSystemId
                     });
                     return result;
@@ -1063,7 +1063,7 @@ public class SyncPreviewServer
                     result.Errors.Add(new SyncPreviewMessage
                     {
                         Code = SyncPreviewMessageCode.ExpressionEvaluationError,
-                        LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewExpressionFailed), expressionEx.Message),
+                        LocalisedDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewExpressionFailed), expressionEx.Message),
                         SyncRuleId = rule.Id,
                         SyncRuleName = rule.Name,
                         ConnectedSystemId = connectedSystemId
@@ -1113,7 +1113,7 @@ public class SyncPreviewServer
                     result.Errors.Add(new SyncPreviewMessage
                     {
                         Code = SyncPreviewMessageCode.ExpressionEvaluationError,
-                        LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewExpressionFailedHandingOver), expressionEx.Message),
+                        LocalisedDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewExpressionFailedHandingOver), expressionEx.Message),
                         SyncRuleName = expressionEx.SyncRuleName,
                         ConnectedSystemId = connectedSystemId,
                         AttributeName = expressionEx.TargetAttributeName
@@ -1172,7 +1172,7 @@ public class SyncPreviewServer
 
             // Only the derived pass stamps the error with its hosting rule (#1750); named as the worker names it.
             if (flowError.SyncRuleName != null)
-                detail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDerivedFlowHost), detail, flowError.SyncRuleName);
+                detail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDerivedFlowHost), detail, flowError.SyncRuleName);
 
             result.Errors.Add(new SyncPreviewMessage
             {
@@ -1414,8 +1414,8 @@ public class SyncPreviewServer
     /// <summary>An Inbound Out-of-Scope Action named inside a sentence, as the product has always named it there.</summary>
     private static MessageArgument OutOfScopeActionName(InboundOutOfScopeAction action) => action switch
     {
-        InboundOutOfScopeAction.Disconnect => JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.OutOfScopeActionDisconnect)),
-        InboundOutOfScopeAction.RemainJoined => JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.OutOfScopeActionRemainJoined)),
+        InboundOutOfScopeAction.Disconnect => JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.OutOfScopeActionDisconnect)),
+        InboundOutOfScopeAction.RemainJoined => JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.OutOfScopeActionRemainJoined)),
         _ => action.ToString()
     };
 
@@ -1430,28 +1430,28 @@ public class SyncPreviewServer
         {
             AttributeFlowErrorKind.MultiValuedToSingleValued => (
                 SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowMultiValuedToSingle), flowError.SourceAttributeName ?? string.Empty, flowError.ValueCount.ToString(), flowError.TargetAttributeName)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowMultiValuedToSingle), flowError.SourceAttributeName ?? string.Empty, flowError.ValueCount.ToString(), flowError.TargetAttributeName)),
             AttributeFlowErrorKind.GeneratedBaseNotSingleValue => (
                 SyncPreviewMessageCode.ExpressionEvaluationError,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowBaseNotSingleValue), flowError.TargetAttributeName, flowError.Expression ?? string.Empty)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowBaseNotSingleValue), flowError.TargetAttributeName, flowError.Expression ?? string.Empty)),
             AttributeFlowErrorKind.ExpressionResultNotConvertible => (
                 SyncPreviewMessageCode.ExpressionEvaluationError,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowNotConvertible), flowError.TargetAttributeName, flowError.Value ?? string.Empty, flowError.TargetAttributeType?.ToString() ?? string.Empty, flowError.Expression ?? string.Empty)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowNotConvertible), flowError.TargetAttributeName, flowError.Value ?? string.Empty, flowError.TargetAttributeType?.ToString() ?? string.Empty, flowError.Expression ?? string.Empty)),
             AttributeFlowErrorKind.ExpressionResultMultiValued when flowError.SourceAttributeName != null => (
                 SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowResultMultiValuedFromSource), flowError.SourceAttributeName ?? string.Empty, flowError.ValueCount.ToString(), flowError.TargetAttributeName, flowError.Expression ?? string.Empty, "Where, Join, Count, Min", "Max")),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowResultMultiValuedFromSource), flowError.SourceAttributeName ?? string.Empty, flowError.ValueCount.ToString(), flowError.TargetAttributeName, flowError.Expression ?? string.Empty, "Where, Join, Count, Min", "Max")),
             AttributeFlowErrorKind.DatesCollapseAtTargetResolution => (
                 SyncPreviewMessageCode.DatesCollapseAtTargetResolution,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowDatesCollapse), flowError.ValueCount.ToString(), flowError.TargetAttributeName, flowError.TargetValueCount.ToString(), flowError.TargetDateTimeResolution?.ToString() ?? string.Empty)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowDatesCollapse), flowError.ValueCount.ToString(), flowError.TargetAttributeName, flowError.TargetValueCount.ToString(), flowError.TargetDateTimeResolution?.ToString() ?? string.Empty)),
             AttributeFlowErrorKind.CredentialAttributeTarget => (
                 SyncPreviewMessageCode.CredentialAttributeNotExported,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowCredentialTarget), flowError.TargetAttributeName)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowCredentialTarget), flowError.TargetAttributeName)),
             AttributeFlowErrorKind.ExpressionResultMultiValued => (
                 SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowResultMultiValued), flowError.TargetAttributeName, flowError.ValueCount.ToString(), flowError.Expression ?? string.Empty)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowResultMultiValued), flowError.TargetAttributeName, flowError.ValueCount.ToString(), flowError.Expression ?? string.Empty)),
             _ => (
                 SyncPreviewMessageCode.ExpressionEvaluationError,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowNotEvaluated), flowError.TargetAttributeName))
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowNotEvaluated), flowError.TargetAttributeName))
         };
 
     /// <summary>
@@ -1484,7 +1484,7 @@ public class SyncPreviewServer
             result.Errors.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.ScopingCriterionFailed,
-                LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDriftNotChecked), scopingEx.Message),
+                LocalisedDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDriftNotChecked), scopingEx.Message),
                 ConnectedSystemId = context.ConnectedSystemId
             });
             return 0;
@@ -1496,7 +1496,7 @@ public class SyncPreviewServer
             result.Errors.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.ExpressionEvaluationError,
-                LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDriftNotChecked), JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewExpressionFailed), expressionEx.Message)),
+                LocalisedDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDriftNotChecked), JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewExpressionFailed), expressionEx.Message)),
                 ConnectedSystemId = context.ConnectedSystemId,
                 AttributeName = expressionEx.TargetAttributeName
             });
@@ -1507,7 +1507,7 @@ public class SyncPreviewServer
             result.Errors.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.ExpressionEvaluationError,
-                LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDriftNotChecked), missingInputEx.DescribeForAdministrator()),
+                LocalisedDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDriftNotChecked), missingInputEx.DescribeForAdministrator()),
                 ConnectedSystemId = context.ConnectedSystemId,
                 AttributeName = missingInputEx.TargetAttributeName
             });
@@ -1608,7 +1608,7 @@ public class SyncPreviewServer
         errors.Add(new SyncPreviewMessage
         {
             Code = SyncPreviewMessageCode.DerivedFlowCycle,
-            LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDerivedFlowCycle), context.DerivedFlowCycleMessage),
+            LocalisedDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDerivedFlowCycle), context.DerivedFlowCycleMessage),
             ConnectedSystemId = context.ConnectedSystemId
         });
         return true;
@@ -1667,7 +1667,7 @@ public class SyncPreviewServer
                 result.Errors.Add(new SyncPreviewMessage
                 {
                     Code = SyncPreviewMessageCode.ExpressionEvaluationError,
-                    LocalisedDetail = DescribeDerivedHost(JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewExpressionFailed), expressionEx.Message), expressionEx.SyncRuleName),
+                    LocalisedDetail = DescribeDerivedHost(JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewExpressionFailed), expressionEx.Message), expressionEx.SyncRuleName),
                     SyncRuleId = FindHostingRule(inScopeRules, expressionEx.SyncRuleName)?.Id,
                     SyncRuleName = expressionEx.SyncRuleName,
                     ConnectedSystemId = context.ConnectedSystemId,
@@ -1695,7 +1695,7 @@ public class SyncPreviewServer
         return outcomes;
 
         static JimMessage DescribeDerivedHost(JimMessage message, string? syncRuleName) =>
-            syncRuleName == null ? message : JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDerivedFlowHost), message, syncRuleName);
+            syncRuleName == null ? message : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDerivedFlowHost), message, syncRuleName);
     }
 
     /// <summary>
@@ -1885,7 +1885,7 @@ public class SyncPreviewServer
                             result.Warnings.Add(new SyncPreviewMessage
                             {
                                 Code = SyncPreviewMessageCode.GeneratedValueWaiting,
-                                LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewGeneratedValueWaiting), attributeName, waitingFor),
+                                LocalisedDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewGeneratedValueWaiting), attributeName, waitingFor),
                                 ConnectedSystemId = context.ConnectedSystemId,
                                 AttributeName = attributeName
                             });
@@ -1904,8 +1904,8 @@ public class SyncPreviewServer
                         {
                             Code = SyncPreviewMessageCode.GeneratedValueWouldFail,
                             LocalisedDetail = outcome.FailureMessage != null
-                                ? JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), outcome.FailureMessage)
-                                : JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewGeneratedValueUnresolved)),
+                                ? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), outcome.FailureMessage)
+                                : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewGeneratedValueUnresolved)),
                             ConnectedSystemId = context.ConnectedSystemId,
                             AttributeName = request.Mapping.TargetMetaverseAttribute!.Name
                         });
@@ -2608,7 +2608,7 @@ public class SyncPreviewServer
                 result.Warnings.Add(new SyncPreviewMessage
                 {
                     Code = SyncPreviewMessageCode.DownstreamDisconnectOnly,
-                    LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDownstreamDisconnectOnly), targetSystemName ?? downstreamCso.ConnectedSystemId.ToString()),
+                    LocalisedDetail = JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDownstreamDisconnectOnly), targetSystemName ?? downstreamCso.ConnectedSystemId.ToString()),
                     ConnectedSystemId = downstreamCso.ConnectedSystemId
                 });
                 continue;

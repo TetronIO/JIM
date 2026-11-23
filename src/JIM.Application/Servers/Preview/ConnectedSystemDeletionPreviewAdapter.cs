@@ -68,7 +68,7 @@ public class ConnectedSystemDeletionPreviewAdapter : IConfigurationChangePreview
             return
             [
                 PreviewValidationFinding.Of(PreviewValidationSeverity.Blocking,
-                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DeletionSystemGone)))
+                    JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DeletionSystemGone)))
             ];
         }
 
@@ -77,7 +77,7 @@ public class ConnectedSystemDeletionPreviewAdapter : IConfigurationChangePreview
             return
             [
                 PreviewValidationFinding.Of(PreviewValidationSeverity.Blocking,
-                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DeletionAlreadyDeleting)),
+                    JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DeletionAlreadyDeleting)),
                     nameof(connectedSystem.Status))
             ];
         }
@@ -89,7 +89,7 @@ public class ConnectedSystemDeletionPreviewAdapter : IConfigurationChangePreview
             [
                 .. derivedReaders.Select(reader => PreviewValidationFinding.Of(
                     PreviewValidationSeverity.Warning,
-                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DeletionDerivedFlowsRead), string.Join(", ", reader.HostingSystemNames), reader.MetaverseAttributeName),
+                    JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DeletionDerivedFlowsRead), string.Join(", ", reader.HostingSystemNames), reader.MetaverseAttributeName),
                     metaverseAttributeName: reader.MetaverseAttributeName))
             ];
         }
@@ -98,7 +98,7 @@ public class ConnectedSystemDeletionPreviewAdapter : IConfigurationChangePreview
             return
             [
                 PreviewValidationFinding.Of(PreviewValidationSeverity.Blocking,
-                    JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.DeletionDerivedFlowCycle), exception.Message))
+                    JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DeletionDerivedFlowCycle), exception.Message))
             ];
         }
     }

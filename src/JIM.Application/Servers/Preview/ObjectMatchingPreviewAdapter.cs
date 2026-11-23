@@ -85,7 +85,7 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
         {
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingSameAsStored)),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingSameAsStored)),
                 nameof(ConnectedSystem.ObjectMatchingRuleMode)));
             return findings;
         }
@@ -93,7 +93,7 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
         // Said first, and said on every matching preview: it is the single most common misreading of this change.
         findings.Add(PreviewValidationFinding.Of(
             PreviewValidationSeverity.Information,
-            JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingOnlyUnjoined)),
+            JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingOnlyUnjoined)),
             nameof(ConnectedSystem.ObjectMatchingRuleMode)));
 
         if (proposal.Mode != configuration.StoredProposal.Mode)
@@ -101,8 +101,8 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
                 proposal.Mode == ObjectMatchingRuleMode.SyncRule
-                    ? JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingSwitchToAdvanced))
-                    : JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingSwitchToSimple)),
+                    ? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingSwitchToAdvanced))
+                    : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingSwitchToSimple)),
                 nameof(ConnectedSystem.ObjectMatchingRuleMode)));
         }
 
@@ -123,10 +123,10 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
                      .Distinct())
         {
             MessageArgument objectTypeName = configuration.ObjectTypesById.GetValueOrDefault(objectTypeId)?.Name
-                ?? (MessageArgument)JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingThisType));
+                ?? (MessageArgument)JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingThisType));
             findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingTypeLeftWithNoRule), objectTypeName),
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingTypeLeftWithNoRule), objectTypeName),
                 nameof(ConnectedSystemObjectType.ObjectMatchingRules)));
         }
 
@@ -460,11 +460,11 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
             var where = DescribeRule(rule, configuration);
 
             if (proposal.Mode == ObjectMatchingRuleMode.ConnectedSystem && rule.MetaverseObjectTypeId == null)
-                yield return Blocking(JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingNoMetaverseObjectType), where));
+                yield return Blocking(JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingNoMetaverseObjectType), where));
 
             var problem = DescribeComparisonProblem(rule, configuration);
             if (problem != null)
-                yield return Blocking(JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingRuleProblem), where, problem));
+                yield return Blocking(JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingRuleProblem), where, problem));
         }
     }
 
@@ -478,18 +478,18 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
         // The validator's reasons are English produced in JIM.Models, shown as they are until that is converted.
         var shape = materialised.DescribeComparisonInvalidity();
         if (shape != null)
-            return JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), shape);
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), shape);
 
         if (materialised.TargetMetaverseAttribute is not { } target)
-            return JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingTargetAttributeGone));
+            return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingTargetAttributeGone));
 
         if (ObjectTypeOf(rule, configuration) is { } objectTypeId && configuration.ObjectTypesById.TryGetValue(objectTypeId, out var objectType))
         {
             var problem = Validator.DescribeProblem(materialised, objectType, target);
-            return problem == null ? null : JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), problem);
+            return problem == null ? null : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), problem);
         }
 
-        return JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingTypeNotInSchema));
+        return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingTypeNotInSchema));
     }
 
     private static PreviewValidationFinding Blocking(JimMessage message) =>
@@ -501,10 +501,10 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
     private static JimMessage DescribeRule(ObjectMatchingRuleProposal rule, MatchingConfiguration configuration)
     {
         MessageArgument owner = rule.SyncRuleId is { } syncRuleId
-            ? configuration.SyncRules.FirstOrDefault(candidate => candidate.Id == syncRuleId)?.Name ?? (MessageArgument)JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingOwnerSyncRule))
-            : configuration.ObjectTypesById.GetValueOrDefault(rule.ConnectedSystemObjectTypeId ?? 0)?.Name ?? (MessageArgument)JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingOwnerObjectType));
+            ? configuration.SyncRules.FirstOrDefault(candidate => candidate.Id == syncRuleId)?.Name ?? (MessageArgument)JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingOwnerSyncRule))
+            : configuration.ObjectTypesById.GetValueOrDefault(rule.ConnectedSystemObjectTypeId ?? 0)?.Name ?? (MessageArgument)JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingOwnerObjectType));
 
-        return JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingRuleNamed), rule.Order + 1, owner);
+        return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ObjectMatchingRuleNamed), rule.Order + 1, owner);
     }
 
     #endregion
