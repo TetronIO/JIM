@@ -938,4 +938,106 @@
   <data name="ExchangeRetryDefault" xml:space="preserve">
     <value>Tenter à nouveau la modification, avec ses tentatives et son délai de 24 heures remis à zéro. Traitez d’abord la cause donnée par Exchange, sinon elle sera à nouveau suspendue.</value>
   </data>
+  <data name="QueueNothingMatches" xml:space="preserve">
+    <value>Aucun élément en file ne correspond aux filtres.</value>
+  </data>
+  <data name="QueueNothingQueued" xml:space="preserve">
+    <value>Rien n’est en file d’attente.</value>
+  </data>
+  <data name="QueueNextAtBottom" xml:space="preserve">
+    <value>Prochaine exécution en bas, près des tâches en cours</value>
+  </data>
+  <data name="QueueNothingRunningMatches" xml:space="preserve">
+    <value>Aucune tâche en cours ne correspond aux filtres.</value>
+  </data>
+  <data name="QueueNothingRunning" xml:space="preserve">
+    <value>Aucune tâche n’est en cours.</value>
+  </data>
+  <data name="QueueColRuns" xml:space="preserve">
+    <value>Ordre</value>
+  </data>
+  <data name="QueueColEstStart" xml:space="preserve">
+    <value>Début estimé</value>
+  </data>
+  <data name="QueueColEstFinish" xml:space="preserve">
+    <value>Fin estimée</value>
+  </data>
+  <data name="QueueColProgress" xml:space="preserve">
+    <value>Progression</value>
+  </data>
+  <data name="QueueEstStartTooltip" xml:space="preserve">
+    <value>Moment où chaque tâche devrait démarrer. Estimé à partir de la médiane des cinq dernières exécutions réussies de chaque profil d’exécution qui la précède. Vide lorsqu’il n’y a rien à estimer.</value>
+  </data>
+  <data name="QueueEstFinishTooltip" xml:space="preserve">
+    <value>Moment où chaque exécution devrait se terminer. Estimé à partir de la médiane des cinq dernières exécutions réussies du profil d’exécution, et jamais plus tôt que ne l’exige son étape en cours. Vide lorsqu’il n’y a rien à estimer.</value>
+  </data>
+  <data name="QueueSameTimeQueued" xml:space="preserve">
+    <value>Démarre en même temps que les autres tâches de son étape de planification</value>
+  </data>
+  <data name="QueueSameTimeRunning" xml:space="preserve">
+    <value>En cours en même temps que les autres tâches de son étape de planification</value>
+  </data>
+  <data name="QueueWaitingPrevious" xml:space="preserve">
+    <value>En attente de l’étape précédente</value>
+  </data>
+  <data name="QueueProcessing" xml:space="preserve">
+    <value>En traitement</value>
+  </data>
+  <data name="QueueCancelling" xml:space="preserve">
+    <value>Annulation en cours</value>
+  </data>
+  <data name="QueueShowFewer" xml:space="preserve">
+    <value>Afficher moins</value>
+  </data>
+  <data name="QueueShowMore" xml:space="preserve">
+    <value>Afficher {0} de plus</value>
+  </data>
+  <data name="QueueCollapseSection" xml:space="preserve">
+    <value>Replier « {0} »</value>
+  </data>
+  <data name="QueueExpandSection" xml:space="preserve">
+    <value>Déplier « {0} »</value>
+  </data>
+  <data name="QueueCancelTask" xml:space="preserve">
+    <value>Annuler la tâche</value>
+  </data>
+  <data name="QueueKeepIt" xml:space="preserve">
+    <value>Conserver</value>
+  </data>
+  <data name="QueueCancelTaskConfirm" xml:space="preserve">
+    <value>Voulez-vous vraiment annuler la tâche « {0} » ?</value>
+  </data>
+  <data name="QueueCancelRequested" xml:space="preserve">
+    <value>Annulation de la tâche demandée.</value>
+  </data>
+  <data name="QueueCancelExecTitle" xml:space="preserve">
+    <value>Annuler l’exécution de planification</value>
+  </data>
+  <data name="QueueThisExecution" xml:space="preserve">
+    <value>cette exécution de planification</value>
+  </data>
+  <data name="QueueCancelExecConfirm" xml:space="preserve">
+    <value>Voulez-vous vraiment annuler « {0} » ? Toutes les tâches seront annulées immédiatement, y compris celles en cours de traitement.</value>
+  </data>
+  <data name="QueueCancelExec" xml:space="preserve">
+    <value>Annuler l’exécution</value>
+  </data>
+  <data name="QueueKeepRunning" xml:space="preserve">
+    <value>Laisser en cours</value>
+  </data>
+  <data name="QueueExecCancelled" xml:space="preserve">
+    <value>Exécution de planification annulée.</value>
+  </data>
+  <data name="QueueExecCancelFailed" xml:space="preserve">
+    <value>Impossible d’annuler l’exécution ; elle est peut-être déjà terminée.</value>
+  </data>
+  <data name="QueueTasksCount" xml:space="preserve">
+    <value>{0} tâches</value>
+  </data>
+  <data name="QueueStepOf" xml:space="preserve">
+    <value>Étape {0} sur {1}</value>
+  </data>
+  <data name="QueueTasksAcross" xml:space="preserve">
+    <value>{0} tâches réparties sur {1} étapes</value>
+  </data>
 </root>

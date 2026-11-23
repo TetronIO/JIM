@@ -1244,4 +1244,140 @@
     <value>Attempt it again, with its attempts and 24-hour clock reset. Deal with the reason Exchange gave first, or it will park again.</value>
     <comment>Tooltip on retry for a parked change.</comment>
   </data>
+  <data name="QueueNothingMatches" xml:space="preserve">
+    <value>Nothing queued matches the filters.</value>
+    <comment>Empty Queued section while filters are applied.</comment>
+  </data>
+  <data name="QueueNothingQueued" xml:space="preserve">
+    <value>Nothing is queued.</value>
+    <comment>Empty Queued section.</comment>
+  </data>
+  <data name="QueueNextAtBottom" xml:space="preserve">
+    <value>Next run at the bottom, nearest In Progress</value>
+    <comment>Note beside the Queued heading: the order of the list.</comment>
+  </data>
+  <data name="QueueNothingRunningMatches" xml:space="preserve">
+    <value>Nothing running matches the filters.</value>
+    <comment>Empty In Progress section while filters are applied.</comment>
+  </data>
+  <data name="QueueNothingRunning" xml:space="preserve">
+    <value>Nothing is running.</value>
+    <comment>Empty In Progress section.</comment>
+  </data>
+  <data name="QueueColRuns" xml:space="preserve">
+    <value>Runs</value>
+    <comment>Column heading: the order in which queued tasks run.</comment>
+  </data>
+  <data name="QueueColEstStart" xml:space="preserve">
+    <value>Est. Start</value>
+    <comment>Column heading: when a queued task is expected to start.</comment>
+  </data>
+  <data name="QueueColEstFinish" xml:space="preserve">
+    <value>Est. Finish</value>
+    <comment>Column heading: when a running task is expected to finish.</comment>
+  </data>
+  <data name="QueueColProgress" xml:space="preserve">
+    <value>Progress</value>
+    <comment>Column heading: how far a running task has got.</comment>
+  </data>
+  <data name="QueueEstStartTooltip" xml:space="preserve">
+    <value>When each task is expected to start. Estimated from the median of the last five successful runs of each Run Profile ahead of it. Left blank where there is nothing to estimate from.</value>
+    <comment>Tooltip on the Est. Start heading.</comment>
+  </data>
+  <data name="QueueEstFinishTooltip" xml:space="preserve">
+    <value>When each run is expected to finish. Estimated from the median of the Run Profile's last five successful runs, and never sooner than its current step needs. Left blank where there is nothing to estimate from.</value>
+    <comment>Tooltip on the Est. Finish heading.</comment>
+  </data>
+  <data name="QueueSameTimeQueued" xml:space="preserve">
+    <value>Starts at the same time as the other tasks of its Schedule step</value>
+    <comment>Tooltip on the parallel icon of a queued task.</comment>
+  </data>
+  <data name="QueueSameTimeRunning" xml:space="preserve">
+    <value>Running at the same time as the other tasks of its Schedule step</value>
+    <comment>Tooltip on the parallel icon of a running task.</comment>
+  </data>
+  <data name="QueueWaitingPrevious" xml:space="preserve">
+    <value>Waiting for previous step</value>
+    <comment>Status chip of a queued task that waits for an earlier step.</comment>
+  </data>
+  <data name="QueueProcessing" xml:space="preserve">
+    <value>Processing</value>
+    <comment>Status chip of a running task.</comment>
+  </data>
+  <data name="QueueCancelling" xml:space="preserve">
+    <value>Cancelling</value>
+    <comment>Status chip of a running task whose cancellation was requested.</comment>
+  </data>
+  <data name="QueueShowFewer" xml:space="preserve">
+    <value>Show fewer</value>
+    <comment>Button that folds the queued rows back to the budget.</comment>
+  </data>
+  <data name="QueueShowMore" xml:space="preserve">
+    <value>Show {0} more</value>
+    <comment>Button that unfolds the queued rows. {0} is the hidden count.</comment>
+  </data>
+  <data name="QueueCollapseSection" xml:space="preserve">
+    <value>Collapse {0}</value>
+    <comment>Chevron tooltip and label. {0} is the section name.</comment>
+  </data>
+  <data name="QueueExpandSection" xml:space="preserve">
+    <value>Expand {0}</value>
+    <comment>Chevron tooltip and label. {0} is the section name.</comment>
+  </data>
+  <data name="QueueCancelTask" xml:space="preserve">
+    <value>Cancel Task</value>
+    <comment>Tooltip and label of the cancel button, and the confirmation's yes button.</comment>
+  </data>
+  <data name="QueueKeepIt" xml:space="preserve">
+    <value>Keep It</value>
+    <comment>Cancel button of the cancel task confirmation.</comment>
+  </data>
+  <data name="QueueCancelTaskConfirm" xml:space="preserve">
+    <value>Are you sure you want to cancel the task '{0}'?</value>
+    <comment>Confirmation. {0} is the task's name.</comment>
+  </data>
+  <data name="QueueCancelRequested" xml:space="preserve">
+    <value>Worker task cancellation requested.</value>
+    <comment>Success notice.</comment>
+  </data>
+  <data name="QueueCancelExecTitle" xml:space="preserve">
+    <value>Cancel Schedule Execution</value>
+    <comment>Title of the cancel confirmation for a Schedule Execution.</comment>
+  </data>
+  <data name="QueueThisExecution" xml:space="preserve">
+    <value>this schedule execution</value>
+    <comment>Used when the Schedule Execution's name is unknown.</comment>
+  </data>
+  <data name="QueueCancelExecConfirm" xml:space="preserve">
+    <value>Are you sure you want to cancel '{0}'? All tasks will be cancelled immediately, including any that are currently processing.</value>
+    <comment>Confirmation. {0} is the Schedule Execution's name.</comment>
+  </data>
+  <data name="QueueCancelExec" xml:space="preserve">
+    <value>Cancel Execution</value>
+    <comment>Confirm button of the Schedule Execution cancel confirmation.</comment>
+  </data>
+  <data name="QueueKeepRunning" xml:space="preserve">
+    <value>Keep Running</value>
+    <comment>Cancel button of the Schedule Execution cancel confirmation.</comment>
+  </data>
+  <data name="QueueExecCancelled" xml:space="preserve">
+    <value>Schedule execution cancelled.</value>
+    <comment>Success notice.</comment>
+  </data>
+  <data name="QueueExecCancelFailed" xml:space="preserve">
+    <value>Could not cancel execution; it may have already completed.</value>
+    <comment>Warning notice.</comment>
+  </data>
+  <data name="QueueTasksCount" xml:space="preserve">
+    <value>{0} tasks</value>
+    <comment>Header of a Schedule Execution in the queue. {0} is the count.</comment>
+  </data>
+  <data name="QueueStepOf" xml:space="preserve">
+    <value>Step {0} of {1}</value>
+    <comment>Header of a Schedule Execution. {0} is the step, {1} the total.</comment>
+  </data>
+  <data name="QueueTasksAcross" xml:space="preserve">
+    <value>{0} tasks across {1} steps</value>
+    <comment>Header of a Schedule Execution with no step shown. {0} tasks, {1} steps.</comment>
+  </data>
 </root>
