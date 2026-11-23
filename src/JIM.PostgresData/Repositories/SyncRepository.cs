@@ -650,7 +650,7 @@ public partial class SyncRepository : ISyncRepository
         var objectsToProcessParam = BulkSqlHelpers.NullableParam(
             activity.ObjectsToProcess, NpgsqlTypes.NpgsqlDbType.Integer);
         await _context.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""Activities"" SET ""Message"" = {0}, ""ObjectsProcessed"" = {1}, ""ObjectsToProcess"" = {2} WHERE ""Id"" = {3}",
+            @"UPDATE ""Activities"" SET ""Message"" = {0}, ""MessageDetailJson"" = NULL, ""ObjectsProcessed"" = {1}, ""ObjectsToProcess"" = {2} WHERE ""Id"" = {3}",
             message, objectsProcessedParam, objectsToProcessParam, activity.Id);
     }
 

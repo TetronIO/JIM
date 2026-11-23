@@ -4,6 +4,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
 
 namespace JIM.Models.Activities;
@@ -115,6 +116,28 @@ public class ActivityRunProfileExecutionItem
     /// Null when no error occurred.
     /// </summary>
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// The error as a <see cref="JimMessage"/>, stored as JSON so the portal can show it in the reader's language
+    /// (#3039). Null for an error recorded as English only (one written before messages existed, or by a writer not yet
+    /// converted), which the portal shows from <see cref="ErrorMessage"/>. Set it through <see cref="ErrorMessageDetail"/>.
+    /// </summary>
+    public string? ErrorMessageDetailJson { get; set; }
+
+    /// <summary>
+    /// The error as a message. Setting it also sets <see cref="ErrorMessage"/> to its British English, which the REST
+    /// API, logs and older readers keep reading, so the two can never disagree.
+    /// </summary>
+    [NotMapped]
+    public JimMessage? ErrorMessageDetail
+    {
+        get => MessageJson.Deserialise(ErrorMessageDetailJson);
+        set
+        {
+            ErrorMessageDetailJson = MessageJson.Serialise(value);
+            ErrorMessage = value?.ToEnglish();
+        }
+    }
 
     /// <summary>
     /// Stack trace captured from the exception, for diagnostic purposes.

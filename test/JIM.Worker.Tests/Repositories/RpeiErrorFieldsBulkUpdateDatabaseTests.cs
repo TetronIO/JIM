@@ -88,6 +88,7 @@ public class RpeiErrorFieldsBulkUpdateDatabaseTests
         rpei.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
         rpei.ErrorMessage = "The referenced object could not be resolved.";
         rpei.ErrorStackTrace = "at JIM.Application.Servers.SyncEngine...";
+        rpei.ErrorMessageDetailJson = "{\"Catalogue\":\"JIM.Worker:SyncMessages\",\"Key\":\"ReferenceUnresolved\",\"Arguments\":[]}";
         await using (var updateContext = NewContext())
         {
             var repository = new PostgresDataRepository(updateContext);
@@ -101,6 +102,9 @@ public class RpeiErrorFieldsBulkUpdateDatabaseTests
         Assert.That(persisted.ErrorMessage, Is.EqualTo("The referenced object could not be resolved."));
         Assert.That(persisted.ErrorStackTrace, Is.EqualTo("at JIM.Application.Servers.SyncEngine..."),
             "ErrorStackTrace is co-mutated with ErrorType/ErrorMessage and must be persisted with them.");
+        Assert.That(persisted.ErrorMessageDetailJson,
+            Is.EqualTo("{\"Catalogue\":\"JIM.Worker:SyncMessages\",\"Key\":\"ReferenceUnresolved\",\"Arguments\":[]}"),
+            "The message behind the English (#3039) travels with the other error columns and must be persisted with them.");
     }
 
     /// <summary>

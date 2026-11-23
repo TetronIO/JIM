@@ -100,6 +100,7 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
             ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError,
             ErrorMessage = "the connector rejected the change",
             ErrorStackTrace = "at Foo.Bar()",
+            ErrorMessageDetailJson = "{\"Catalogue\":\"JIM.Worker:SyncMessages\",\"Key\":\"ConnectorRejected\",\"Arguments\":[]}",
             AttributeFlowCount = 3,
             UnresolvedReferenceCount = 4,
             OutcomeSummary = "Updated 3 attributes",
@@ -174,6 +175,8 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedRpei.ErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.UnhandledError));
             Assert.That(storedRpei.ErrorMessage, Is.EqualTo("the connector rejected the change"));
             Assert.That(storedRpei.ErrorStackTrace, Is.EqualTo("at Foo.Bar()"));
+            Assert.That(storedRpei.ErrorMessageDetailJson,
+                Is.EqualTo("{\"Catalogue\":\"JIM.Worker:SyncMessages\",\"Key\":\"ConnectorRejected\",\"Arguments\":[]}"));
             Assert.That(storedRpei.AttributeFlowCount, Is.EqualTo(3));
             Assert.That(storedRpei.UnresolvedReferenceCount, Is.EqualTo(4));
             Assert.That(storedRpei.OutcomeSummary, Is.EqualTo("Updated 3 attributes"));
