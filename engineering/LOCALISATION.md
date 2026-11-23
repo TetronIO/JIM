@@ -7,6 +7,7 @@
 - [The rule](#the-rule)
 - [How it works](#how-it-works)
 - [Writing portal text](#writing-portal-text)
+- [Text from other layers](#text-from-other-layers)
 - [Translating](#translating)
 - [Guards](#guards)
 - [Adding a language](#adding-a-language)
@@ -50,9 +51,21 @@ Resource lookup falls back through parent cultures: de-AT is served `de`, en-AU 
 - **Layout:** leave room for German, which runs about 30% longer than English, and write new CSS with logical properties (`margin-inline-start`, `padding-inline-end`, `inset-inline-start`) rather than left and right, so a right-to-left language does not need a stylesheet rewrite.
 - **Not text:** CSS classes, routes, query keys, log messages, exception messages that only reach logs, and identifiers stay in code. A product name, a protocol or a font name that the scanner misreads takes an `i18n: exempt - <why>` comment on its line or one of the two above.
 
+## Text from other layers
+
+The application layer, the Worker, the Scheduler and the Connectors produce text the portal shows: refusals, validation findings, previews, Activity messages. They never render it in the reader's language themselves. They build a `JimMessage` (a catalogue, a key and typed arguments), keep the British English beside it for everything that is not the portal, and the portal renders the message.
+
+- **Catalogues** are resource files in the producing project, `src/<Project>/Resources/<Area>Messages.resx` (plus `.fr` and, where the spelling differs, `.en-US`), imported with `Import-PortalText.ps1 -ResourceFolder`. Each is declared once as a constant: `MessageCatalogues` in JIM.Models, the partial class `ApplicationMessageCatalogues` in JIM.Application (one file per area, `ApplicationMessageCatalogues.<Area>.cs`), `ConnectorMessageCatalogues` in JIM.Connectors. Text the Worker or the Scheduler writes has its catalogue in JIM.Application: the portal references neither project, so it could not load a catalogue there.
+- **Build** with `JimMessage.Create(catalogue, nameof(XMessages.Key), arguments)`, counts with `JimMessage.Counted(catalogue, nameof(XMessages.ThingOne), count, ...)`. An argument that is data (a name, an identifier, another system's own words) is a string and is never translated; a number or a UTC moment is typed, so it formats in the reader's language.
+- **Results and DTOs** gain a `Detail` (a `JimMessage`) beside their English string, which becomes `Detail.ToEnglish()`. The REST API, PowerShell, logs and stored rows keep reading the same English, byte for byte. A type the REST API serialises as it is takes `[JsonIgnore]` on the message property; a message never changes an API response's shape. Generate the OpenAPI document to check (`scripts/Generate-OpenApiDoc.ps1`): no `JimMessage` schema may appear.
+- **Exceptions:** throw `JimMessageException`, or keep the framework type the callers catch and attach the message with `LocalisedExceptions.InvalidOperation(...)`, `.Argument(...)`, `.NotSupported(...)`, `.FileNotFound(...)` or `.Attach(exception, message)`. Its `.Message` is the English. An exception type of JIM's own that carries a message implements `IJimMessageCarrier`. The portal shows any exception with `ex.ToDisplayText()`, which reads `ex.DetailOf()`.
+- **Stored text** (Activity and Run Profile Execution Item messages) is written as the English plus the message's JSON in the matching `*DetailJson` column (#3039); setting `MessageDetail` sets both. A row written before that, or by a writer not yet converted, shows its English.
+- **The portal** renders with `message.Show()`, or `MessageDisplay.Show(detail, english)` where the detail may be missing.
+- **Display-time maps** suit text keyed by a stable identifier that is stored or declared in English: Connector settings, Run Profile phases, Service Settings, built-in Schedules and Roles, enum values (`EnumDisplay`). The portal looks the identifier up in a resource file and falls back to the stored English for an identifier it does not know (a third-party Connector, a customer-created Schedule).
+
 ## Translating
 
-Write German and French as a fluent technical writer would for an administrator: formal address in German (*Sie*), standard French typography (a space before `:`, `;`, `?` and `!`, *guillemets* « » around quoted text, the typographic apostrophe ’). German quotes use „…“. Keep every placeholder exactly as the English has it.
+Write German and French as a fluent technical writer would for an administrator: formal address in German (*Sie*), standard French typography (a space before `:`, `;`, `?` and `!`, *guillemets* « » around quoted text, the typographic apostrophe ’, which `French_ElidesWithTheTypographicApostrophe` enforces). German quotes use „…“. Keep every placeholder exactly as the English has it.
 
 **Use the glossary's word for every JIM term.** The proper-noun vocabulary (Connected System, Synchronisation Rule, Metaverse Object and the rest) is a product contract in English, and each language needs one fixed word for each term or the portal reads as several products. `glossary.json` holds a pattern per language, and `EveryLanguage_UsesTheGlossaryTermForEachJimTerm` fails a translation that uses anything else. Adding a JIM term to the portal means adding it to the glossary in the same change. German and French write these terms as ordinary nouns, lower case mid-sentence in French, rather than in English Title Case.
 
@@ -135,8 +148,8 @@ The baseline started at 7,635 hard-coded strings in 333 files (7,121 once the de
 |---------|-----------|-----|
 | Portal pages, components, dialogs, snackbars | Yes | The product's user interface. |
 | MudBlazor's own component text | Yes | Part of every page. |
-| Error and sign-in problem pages | Yes (being converted) | Shown to users. |
-| Activity and Run Profile Execution Item messages | Not yet | Stored in the database as rendered English. They are to be stored as message keys plus arguments so history renders in each viewer's language; that changes the synchronisation write path and the API response shape, so it is its own issue ([#3039](https://github.com/TetronIO/JIM/issues/3039)). |
+| Error and sign-in problem pages | Yes | Shown to users. |
+| Activity and Run Profile Execution Item messages | Yes (being converted) | Stored as the English plus the message, so history renders in each viewer's language while the REST API keeps returning the English ([#3039](https://github.com/TetronIO/JIM/issues/3039)). |
 | REST API and SCIM | No | A machine-readable contract under semantic versioning. Request localisation is not applied to `/api` or `/scim`, so a client's `Accept-Language` cannot change a response. |
 | PowerShell module | No | Cmdlet names, parameters and output are a scripting contract. Help text may follow later. |
 | Logs | No | Read by support and engineering. |
