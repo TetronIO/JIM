@@ -2460,4 +2460,60 @@
     <value>Change one of these expressions so it stops reading the next attribute in the loop.</value>
     <comment>Tells the administrator how to break a loop.</comment>
   </data>
+  <data name="ScopingNoCriteria" xml:space="preserve">
+    <value>In scope: no scoping criteria.</value>
+    <comment>Shown when a rule has no scoping criteria, so every object is in scope.</comment>
+  </data>
+  <data name="ScopingAnyOfGroups" xml:space="preserve">
+    <value>Any one of these groups</value>
+    <comment>Heading above the top-level groups, which are alternatives.</comment>
+  </data>
+  <data name="ScopingExpressionReadAria" xml:space="preserve">
+    <value>Attributes the expression read</value>
+    <comment>Accessible name of the list of attributes an expression read.</comment>
+  </data>
+  <data name="ScopingHeldHidden" xml:space="preserve">
+    <value>held a hidden value</value>
+    <comment>What an expression input held, when the value is hidden.</comment>
+  </data>
+  <data name="ScopingHeldNone" xml:space="preserve">
+    <value>held no value</value>
+    <comment>What an expression input held, when it held none.</comment>
+  </data>
+  <data name="ScopingHeld" xml:space="preserve">
+    <value>held {0}</value>
+    <comment>What an expression input held. {0} is the quoted values.</comment>
+  </data>
+  <data name="ScopingHeldMore" xml:space="preserve">
+    <value>held {0} and {1} more</value>
+    <comment>What an expression input held, when some values are not listed. {0} is the listed values, {1} the number not listed.</comment>
+  </data>
+  <data name="ScopingNotInScope" xml:space="preserve">
+    <value>Not in scope</value>
+    <comment>Outcome: the object is not in scope.</comment>
+  </data>
+  <data name="ScopingCannotEvaluate" xml:space="preserve">
+    <value>Cannot be evaluated</value>
+    <comment>Outcome: the rule cannot be evaluated.</comment>
+  </data>
+  <data name="ScopingMet" xml:space="preserve">
+    <value>Met</value>
+    <comment>Criterion outcome: met.</comment>
+  </data>
+  <data name="ScopingNotMet" xml:space="preserve">
+    <value>Not met</value>
+    <comment>Criterion outcome: not met.</comment>
+  </data>
+  <data name="ScopingNoValueNotMet" xml:space="preserve">
+    <value>No value, so not met</value>
+    <comment>Criterion outcome: no value, so not met.</comment>
+  </data>
+  <data name="ScopingReferencesNone" xml:space="preserve">
+    <value>References no attribute</value>
+    <comment>Criterion outcome: it references no attribute.</comment>
+  </data>
+  <data name="ScopingInvalid" xml:space="preserve">
+    <value>Invalid; cannot be evaluated</value>
+    <comment>Criterion outcome: the criterion is invalid.</comment>
+  </data>
 </root>

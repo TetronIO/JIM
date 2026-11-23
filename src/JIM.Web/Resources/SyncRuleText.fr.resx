@@ -1868,4 +1868,46 @@
   <data name="DerivedLoopChange" xml:space="preserve">
     <value>Modifiez l’une de ces expressions pour qu’elle ne lise plus l’attribut suivant de la boucle.</value>
   </data>
+  <data name="ScopingNoCriteria" xml:space="preserve">
+    <value>Dans le périmètre : aucun critère de périmètre.</value>
+  </data>
+  <data name="ScopingAnyOfGroups" xml:space="preserve">
+    <value>N’importe lequel de ces groupes</value>
+  </data>
+  <data name="ScopingExpressionReadAria" xml:space="preserve">
+    <value>Attributs lus par l’expression</value>
+  </data>
+  <data name="ScopingHeldHidden" xml:space="preserve">
+    <value>détenait une valeur masquée</value>
+  </data>
+  <data name="ScopingHeldNone" xml:space="preserve">
+    <value>ne détenait aucune valeur</value>
+  </data>
+  <data name="ScopingHeld" xml:space="preserve">
+    <value>détenait {0}</value>
+  </data>
+  <data name="ScopingHeldMore" xml:space="preserve">
+    <value>détenait {0} et {1} de plus</value>
+  </data>
+  <data name="ScopingNotInScope" xml:space="preserve">
+    <value>Hors du périmètre</value>
+  </data>
+  <data name="ScopingCannotEvaluate" xml:space="preserve">
+    <value>Impossible à évaluer</value>
+  </data>
+  <data name="ScopingMet" xml:space="preserve">
+    <value>Respecté</value>
+  </data>
+  <data name="ScopingNotMet" xml:space="preserve">
+    <value>Non respecté</value>
+  </data>
+  <data name="ScopingNoValueNotMet" xml:space="preserve">
+    <value>Aucune valeur, donc non respecté</value>
+  </data>
+  <data name="ScopingReferencesNone" xml:space="preserve">
+    <value>Ne fait référence à aucun attribut</value>
+  </data>
+  <data name="ScopingInvalid" xml:space="preserve">
+    <value>Invalide ; impossible à évaluer</value>
+  </data>
 </root>
