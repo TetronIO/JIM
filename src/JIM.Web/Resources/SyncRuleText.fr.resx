@@ -2150,4 +2150,16 @@
   <data name="InsertFunctionNoMatch" xml:space="preserve">
     <value>Aucune fonction ne correspond à « {0} ».</value>
   </data>
+  <data name="MissingInputHeading" xml:space="preserve">
+    <value>Si une entrée n’a pas de valeur</value>
+  </data>
+  <data name="MissingInputChangeLink" xml:space="preserve">
+    <value>Modifier</value>
+  </data>
+  <data name="ExpressionSuggestionsLabel" xml:space="preserve">
+    <value>Suggestions</value>
+  </data>
+  <data name="ExpressionKeyHint" xml:space="preserve">
+    <value>↑↓ pour choisir · Entrée ou Tab pour insérer · Échap pour fermer</value>
+  </data>
 </root>

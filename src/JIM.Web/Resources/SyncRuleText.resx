@@ -2836,4 +2836,20 @@
     <value>No functions match "{0}".</value>
     <comment>Shown when the filter matches no function. {0} is the filter text.</comment>
   </data>
+  <data name="MissingInputHeading" xml:space="preserve">
+    <value>If an input has no value</value>
+    <comment>Caption heading the test's table of what happens when an input has no value.</comment>
+  </data>
+  <data name="MissingInputChangeLink" xml:space="preserve">
+    <value>Change</value>
+    <comment>Link beside the Missing Input Behaviour that opens the setting.</comment>
+  </data>
+  <data name="ExpressionSuggestionsLabel" xml:space="preserve">
+    <value>Suggestions</value>
+    <comment>Accessible name of the list of suggested attributes and functions beneath an expression.</comment>
+  </data>
+  <data name="ExpressionKeyHint" xml:space="preserve">
+    <value>↑↓ to choose · Enter or Tab to insert · Esc to close</value>
+    <comment>Keyboard hint shown beneath the expression suggestions.</comment>
+  </data>
 </root>
