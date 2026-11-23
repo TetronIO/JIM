@@ -67,8 +67,10 @@ public class ConnectorMessageLocalisationTests
     }
 
     [Test]
-    public void ServerCertificateDiagnostic_RemediationDetail_SurvivesBeingStoredAsJson()
+    public void ServerCertificateDiagnostic_StoredAsJson_KeepsTheEnglishAndLeavesTheMessageOut()
     {
+        // The diagnostic is returned by the REST API as it is and stored in an Activity's error detail, so its shape stays
+        // as it was: the English remediation travels, the portal's message does not. The live probe result keeps it.
         var diagnostic = new ServerCertificateDiagnostic { Host = "dc1", Port = 636 };
         diagnostic.SetRemediation(JimMessage.Create(JIM.Connectors.ConnectorMessageCatalogues.Connectors, "CertExpired",
             JimMessage.Create(JIM.Connectors.ConnectorMessageCatalogues.Connectors, "CertServerDirectoryServer")));
@@ -79,10 +81,11 @@ public class ConnectorMessageLocalisationTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(diagnostic.Remediation, Is.EqualTo("The certificate expired. Renew it on the directory server; trusting its issuer does not waive the expiry date."));
-            Assert.That(read.Remediation, Is.EqualTo(diagnostic.Remediation));
-            Assert.That(read.RemediationDetail, Is.Not.Null);
-            Assert.That(MessageRenderer.Render(read.RemediationDetail!, French, French),
+            Assert.That(MessageRenderer.Render(diagnostic.RemediationDetail!, French, French),
                 Is.EqualTo("Le certificat a expiré. Renouvelez-le sur le serveur d’annuaire ; faire confiance à son émetteur n’annule pas la date d’expiration."));
+            Assert.That(stored, Does.Not.Contain(nameof(ServerCertificateDiagnostic.RemediationDetail)));
+            Assert.That(read.Remediation, Is.EqualTo(diagnostic.Remediation));
+            Assert.That(read.RemediationDetail, Is.Null);
         }
     }
 }

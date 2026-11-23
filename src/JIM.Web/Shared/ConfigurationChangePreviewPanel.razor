@@ -175,7 +175,7 @@
                             }
                             @if (!string.IsNullOrEmpty(finding.PropertyName))
                             {
-                                <span class="mud-text-secondary"> (@finding.PropertyName.SplitOnCapitalLetters())</span>
+                                <span class="mud-text-secondary"> (@PreviewPropertyDisplay.Name(finding.PropertyName))</span>
                             }
                         </MudAlert>
                     }
