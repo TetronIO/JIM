@@ -78,3 +78,20 @@ jobs:
             if ($LASTEXITCODE -ne 0) { $failed += $number }
           }
           if ($failed.Count -gt 0) { Write-Host "::error::Entra ID Connector scenario(s) failed: $($failed -join ', ')"; exit 1 }
+
+      # The scenario logs and, on a failure, the diagnostics the runner saved while JIM's database still held them
+      # (the failed Activity's error and stack): without them a failure here cannot be diagnosed once the runner is
+      # gone. The same files the AD lab uploads for these scenarios.
+      - name: Upload the run's artefacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: jim-entra-connector-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test/integration/results/
+            !test/integration/results/README.md
+            !test/integration/results/docker-stats-*
+            !test/integration/results/docker-events-*
+            !test/integration/results/jim-web-tls/**
+          if-no-files-found: warn
+          retention-days: 30

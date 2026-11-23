@@ -54,7 +54,7 @@
          package references a patched version. -->
     <PackageReference Include="Scalar.AspNetCore" Version="2.21.0" />
     <PackageReference Include="Microsoft.OpenApi" Version="2.13.1" />
-    <PackageReference Include="MudBlazor" Version="9.13.0" />
+    <PackageReference Include="MudBlazor" Version="9.14.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -146,7 +146,7 @@ services:
     # JIM_DB_IMAGE is for air-gapped installations only. Docker's classic image store drops the registry digest when
     # it loads the release bundle's image, so the pinned reference never resolves; the installer then checks the
     # loaded image's ID against the one the bundle recorded and sets JIM_DB_IMAGE to that ID. Leave it unset otherwise.
-    image: ${JIM_DB_IMAGE:-docker.io/library/postgres:18.7@sha256:2ea8630df176ad090ec92136dee850397c5af8781e4bcf2e4162593691c61bbc}
+    image: ${JIM_DB_IMAGE:-docker.io/library/postgres:18.7@sha256:eb63372c1e05c755f55fa30cbd07aecc443676fc6c0fa90b9002d01537841e1a}
     profiles:
       - with-db
     # PostgreSQL tuning. The memory settings come from .env, where setup.sh sizes them to the host's memory
