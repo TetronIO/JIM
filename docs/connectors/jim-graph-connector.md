@@ -171,7 +171,7 @@ The **Cloud** setting reaches a tenant in the US Government L4 (GCC High), US Go
 
 ### Outbound proxy {#outbound-proxy}
 
-Where JIM reaches the internet through a proxy, set `HTTPS_PROXY`, and `NO_PROXY` for the hosts JIM reaches directly, as the [Configuration Reference](../administration/configuration.md#outbound-proxy) describes; the installer asks for both. JIM reads a server's certificate through the same proxy, so behind a TLS-inspecting proxy the certificate you are shown is the proxy's.
+Where JIM reaches the internet through a proxy, set `HTTPS_PROXY`, and `NO_PROXY` for the hosts JIM reaches directly, in `.env` on Docker or `jim-config.yaml` on Podman, as the [Configuration Reference](../administration/configuration.md#outbound-proxy) describes; the installer asks for both. JIM reads a server's certificate through the same proxy, so behind a TLS-inspecting proxy the certificate you are shown is the proxy's.
 
 ## :material-wrench-outline: Troubleshooting
 

@@ -304,7 +304,7 @@ JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Sche
 
 ## :material-earth-arrow-right: Outbound Proxy {#outbound-proxy}
 
-Set these when JIM must reach the internet through a proxy, as the [Microsoft Entra ID Connector](../connectors/jim-graph-connector.md) does. They are the standard variables; the installer asks for them.
+Set these when JIM must reach the internet through a proxy, as the [Microsoft Entra ID Connector](../connectors/jim-graph-connector.md) does. The installer asks for them; otherwise add them to `.env` on Docker, or `jim-config.yaml` on Podman, and restart JIM.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
