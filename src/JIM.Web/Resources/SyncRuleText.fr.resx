@@ -2078,4 +2078,25 @@
   <data name="ExprTestCouldNotParse" xml:space="preserve">
     <value>L’Expression n’a pas pu être analysée.</value>
   </data>
+  <data name="TestInputAddValue" xml:space="preserve">
+    <value>Ajouter la valeur</value>
+  </data>
+  <data name="TestInputPlaceholderDateTime" xml:space="preserve">
+    <value>2026-03-15 ou 2026-03-15T10:30:00Z</value>
+  </data>
+  <data name="TestInputPlaceholderWholeNumber" xml:space="preserve">
+    <value>Un nombre entier</value>
+  </data>
+  <data name="TestInputPlaceholderDecimal" xml:space="preserve">
+    <value>Un nombre, par exemple 12.5</value>
+  </data>
+  <data name="TestInputPlaceholderGuid" xml:space="preserve">
+    <value>Un GUID</value>
+  </data>
+  <data name="TestInputPlaceholderReference" xml:space="preserve">
+    <value>L’identifiant de l’objet auquel il renvoie</value>
+  </data>
+  <data name="TestInputPlaceholderBinary" xml:space="preserve">
+    <value>Base64</value>
+  </data>
 </root>

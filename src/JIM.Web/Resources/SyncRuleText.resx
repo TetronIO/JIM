@@ -2740,4 +2740,32 @@
     <value>The Expression could not be parsed.</value>
     <comment>Shown when an expression fails to parse and the evaluator gives no message of its own.</comment>
   </data>
+  <data name="TestInputAddValue" xml:space="preserve">
+    <value>Add value</value>
+    <comment>Button adding the typed value to a multi-valued test input.</comment>
+  </data>
+  <data name="TestInputPlaceholderDateTime" xml:space="preserve">
+    <value>2026-03-15 or 2026-03-15T10:30:00Z</value>
+    <comment>Placeholder for a Date Time test input: the two accepted formats.</comment>
+  </data>
+  <data name="TestInputPlaceholderWholeNumber" xml:space="preserve">
+    <value>A whole number</value>
+    <comment>Placeholder for a Number or Long Number test input.</comment>
+  </data>
+  <data name="TestInputPlaceholderDecimal" xml:space="preserve">
+    <value>A number, such as 12.5</value>
+    <comment>Placeholder for a Decimal test input.</comment>
+  </data>
+  <data name="TestInputPlaceholderGuid" xml:space="preserve">
+    <value>A GUID</value>
+    <comment>Placeholder for a GUID test input.</comment>
+  </data>
+  <data name="TestInputPlaceholderReference" xml:space="preserve">
+    <value>The id of the object it refers to</value>
+    <comment>Placeholder for a Reference test input.</comment>
+  </data>
+  <data name="TestInputPlaceholderBinary" xml:space="preserve">
+    <value>Base64</value>
+    <comment>Placeholder for a Binary test input: the encoding it takes.</comment>
+  </data>
 </root>
