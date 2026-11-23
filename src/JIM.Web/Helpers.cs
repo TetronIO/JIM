@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -17,7 +18,9 @@ using JIM.Models.Logic;
 using JIM.Utilities;
 using JIM.Web.Shared;
 using JIM.Web.Causality;
+using JIM.Web.Localisation;
 using JIM.Web.Models;
+using JIM.Web.Resources;
 using Microsoft.AspNetCore.Components.Authorization;
 using MudBlazor;
 namespace JIM.Web;
@@ -272,26 +275,31 @@ public static class Helpers
         var distance = timeSpan.Duration();
 
         if (distance.TotalSeconds < 60)
-            return isFuture ? "in under a minute" : "just now";
+            return isFuture ? TimeText.RelativeUnderAMinute : TimeText.RelativeJustNow;
 
         var amount = DescribeRelativeDistance(distance);
-        return isFuture ? $"in {amount}" : $"{amount} ago";
+        return Format(isFuture ? TimeText.RelativeIn : TimeText.RelativeAgo, amount);
     }
 
     private static string DescribeRelativeDistance(TimeSpan distance)
     {
         if (distance.TotalMinutes < 60)
-            return CountOf((int)distance.TotalMinutes, "minute");
+            return CountOf((int)distance.TotalMinutes, TimeText.RelativeMinuteOne, TimeText.RelativeMinuteOther);
         if (distance.TotalHours < 24)
-            return CountOf((int)distance.TotalHours, "hour");
+            return CountOf((int)distance.TotalHours, TimeText.RelativeHourOne, TimeText.RelativeHourOther);
         if (distance.TotalDays < 30)
-            return CountOf((int)distance.TotalDays, "day");
+            return CountOf((int)distance.TotalDays, TimeText.RelativeDayOne, TimeText.RelativeDayOther);
         if (distance.TotalDays < 365)
-            return CountOf((int)(distance.TotalDays / 30), "month");
-        return CountOf((int)(distance.TotalDays / 365), "year");
+            return CountOf((int)(distance.TotalDays / 30), TimeText.RelativeMonthOne, TimeText.RelativeMonthOther);
+        return CountOf((int)(distance.TotalDays / 365), TimeText.RelativeYearOne, TimeText.RelativeYearOther);
     }
 
-    private static string CountOf(int count, string unit) => $"{count} {unit}{(count == 1 ? "" : "s")}";
+    private static string CountOf(int count, string one, string other) =>
+        Format(PluralRules.Choose(count, one, other), count);
+
+    /// <summary>Fills a resource string's placeholders in the viewer's formatting culture.</summary>
+    private static string Format(string template, params object[] arguments) =>
+        string.Format(CultureInfo.CurrentCulture, template, arguments);
 
     /// <summary>
     /// Extension method that converts a TimeSpan into a human-readable string with abbreviated units.

@@ -62,6 +62,7 @@ reviewers) can see the reason.
 - [ ] My commit messages are descriptive and reference the relevant Issue (if any)
 - [ ] My code follows the conventions in [`engineering/DEVELOPER_GUIDE.md`](engineering/DEVELOPER_GUIDE.md)
 - [ ] User-facing text uses British English (en-GB)
+- [ ] New or changed portal text is in a resource file with its German, French and (where spelling differs) en-US entries, using the glossary's terms ([`engineering/LOCALISATION.md`](engineering/LOCALISATION.md))
 - [ ] This PR does **not** include security-sensitive information (real credentials, customer data, internal hostnames)
 
 ## Additional context

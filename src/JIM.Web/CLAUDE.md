@@ -8,6 +8,18 @@ Universal text rules (British English, no em dashes, copyright headers) and gene
 
 Prefer enforcement over documentation. When a UI convention is repeated across pages, the right home for it is a **shared component or CSS class** that makes the wrong thing inexpressible, not a paragraph here that every author must remember. A convention only lives as prose in this file when it genuinely cannot be componentised (sizing defaults, spacing, comment style). If you find yourself copy-pasting the same markup onto a third page, extract a component into `JIM.Web/Shared/` and document it in the table below instead of adding another prose rule.
 
+## Localisation (every string, every language, same change)
+
+**No user-visible text is written into a `.razor` or `.cs` file.** It goes in `Resources/<Area>Text.resx` (English, en-GB) and is read through the generated typed accessor (`@LayoutText.SignOut`, `Title="@CommonText.ColumnName"`), with its German (`.de.resx`) and French (`.fr.resx`) translation, and an en-US entry where the spelling differs, **in the same change**. This applies to new pages and to every edit of existing wording: changing the English means changing each translation. You write the translations yourself; nobody else will.
+
+- Values go in placeholders (`string.Format(CultureInfo.CurrentCulture, HomeText.NoSchedulesMatch, search)`), never concatenated; counts use `PluralRules.Choose(count, XOne, XOther)`, never an appended "s".
+- Use the glossary's word for every JIM term (`engineering/localisation/glossary.json`); a new term goes in the glossary in the same change.
+- New CSS uses logical properties (`margin-inline-start`, not `margin-left`), and layouts leave room for German, about 30% longer.
+- `HardCodedTextConventionTests` fails the build for hard-coded text beyond its file's count in the baseline, and for any in a new file; `LocalisationResourceTests` fails a dropped placeholder, a missing en-US spelling, an off-glossary term or an incomplete released language. Something genuinely not for translation (a product or font name the scanner misreads) takes an `i18n: exempt - <why>` comment on its line or directly above.
+- When you touch a file that still has hard-coded text, convert what you touch and lower the baseline (`JIM_UPDATE_LOCALISATION_BASELINE=1 dotnet test test/JIM.Web.Tests --filter HardCodedTextConventionTests`). Never raise it.
+
+Full guide, including key naming, translating conventions and adding a language: `engineering/LOCALISATION.md`.
+
 ## Shared UI components (use these; do not hand-roll)
 
 These components exist so a convention has a single source of truth. Prefer the component over copy-pasting markup; they live in `JIM.Web/Shared/` and are globally available (no `@using` needed).

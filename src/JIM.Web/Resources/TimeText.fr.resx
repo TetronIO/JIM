@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="RelativeJustNow" xml:space="preserve">
+    <value>à l’instant</value>
+  </data>
+  <data name="RelativeUnderAMinute" xml:space="preserve">
+    <value>dans moins d’une minute</value>
+  </data>
+  <data name="RelativeAgo" xml:space="preserve">
+    <value>il y a {0}</value>
+  </data>
+  <data name="RelativeIn" xml:space="preserve">
+    <value>dans {0}</value>
+  </data>
+  <data name="RelativeMinuteOne" xml:space="preserve">
+    <value>{0} minute</value>
+  </data>
+  <data name="RelativeMinuteOther" xml:space="preserve">
+    <value>{0} minutes</value>
+  </data>
+  <data name="RelativeHourOne" xml:space="preserve">
+    <value>{0} heure</value>
+  </data>
+  <data name="RelativeHourOther" xml:space="preserve">
+    <value>{0} heures</value>
+  </data>
+  <data name="RelativeDayOne" xml:space="preserve">
+    <value>{0} jour</value>
+  </data>
+  <data name="RelativeDayOther" xml:space="preserve">
+    <value>{0} jours</value>
+  </data>
+  <data name="RelativeMonthOne" xml:space="preserve">
+    <value>{0} mois</value>
+  </data>
+  <data name="RelativeMonthOther" xml:space="preserve">
+    <value>{0} mois</value>
+  </data>
+  <data name="RelativeYearOne" xml:space="preserve">
+    <value>{0} an</value>
+  </data>
+  <data name="RelativeYearOther" xml:space="preserve">
+    <value>{0} ans</value>
+  </data>
+</root>

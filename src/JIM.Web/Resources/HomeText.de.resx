@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="PageTitle" xml:space="preserve">
+    <value>JIM-Startseite</value>
+  </data>
+  <data name="Welcome" xml:space="preserve">
+    <value>Willkommen</value>
+  </data>
+  <data name="WelcomeSubtitle" xml:space="preserve">
+    <value>bei Junctional Identity Manager</value>
+  </data>
+  <data name="GettingStarted" xml:space="preserve">
+    <value>Erste Schritte</value>
+  </data>
+  <data name="GettingStartedIntro" xml:space="preserve">
+    <value>Führen Sie diese Schritte aus, um mit der Synchronisierung verbundener Systeme zu beginnen.</value>
+  </data>
+  <data name="CreateConnectedSystem" xml:space="preserve">
+    <value>Verbundenes System erstellen</value>
+  </data>
+  <data name="CreateSynchronisationRules" xml:space="preserve">
+    <value>Synchronisierungsregeln erstellen</value>
+  </data>
+  <data name="CreateSchedule" xml:space="preserve">
+    <value>Zeitplan erstellen</value>
+  </data>
+  <data name="RunFirstSynchronisation" xml:space="preserve">
+    <value>Erste Synchronisierung ausführen</value>
+  </data>
+  <data name="StatUsers" xml:space="preserve">
+    <value>Benutzer</value>
+  </data>
+  <data name="StatGroups" xml:space="preserve">
+    <value>Gruppen</value>
+  </data>
+  <data name="StatConnectedSystems" xml:space="preserve">
+    <value>Verbundene Systeme</value>
+  </data>
+  <data name="StatSynchronisationRules" xml:space="preserve">
+    <value>Synchronisierungsregeln</value>
+  </data>
+  <data name="SchedulesHeading" xml:space="preserve">
+    <value>Zeitpläne</value>
+  </data>
+  <data name="ScheduleSingular" xml:space="preserve">
+    <value>Zeitplan</value>
+  </data>
+  <data name="SchedulePlural" xml:space="preserve">
+    <value>Zeitpläne</value>
+  </data>
+  <data name="SearchSchedules" xml:space="preserve">
+    <value>Zeitpläne durchsuchen</value>
+  </data>
+  <data name="ColumnTrigger" xml:space="preserve">
+    <value>Auslöser</value>
+  </data>
+  <data name="ColumnLastRun" xml:space="preserve">
+    <value>Letzte Ausführung</value>
+  </data>
+  <data name="ColumnNextRun" xml:space="preserve">
+    <value>Nächste Ausführung</value>
+  </data>
+  <data name="TriggerManual" xml:space="preserve">
+    <value>Manuell</value>
+  </data>
+  <data name="NoSchedulesMatch" xml:space="preserve">
+    <value>Keine Zeitpläne entsprechen „{0}“</value>
+  </data>
+  <data name="NoSchedulesYet" xml:space="preserve">
+    <value>Es wurden noch keine Zeitpläne erstellt</value>
+  </data>
+  <data name="NoSchedulesYetHint" xml:space="preserve">
+    <value>Ein Zeitplan führt Ausführungsprofile nach einem wiederkehrenden Auslöser aus. Erstellen Sie einen, um ohne Aufsicht zu synchronisieren.</value>
+  </data>
+  <data name="QuickLinks" xml:space="preserve">
+    <value>Schnellzugriff</value>
+  </data>
+  <data name="QuickUsers" xml:space="preserve">
+    <value>Benutzer</value>
+  </data>
+  <data name="QuickGroups" xml:space="preserve">
+    <value>Gruppen</value>
+  </data>
+  <data name="QuickActivity" xml:space="preserve">
+    <value>Aktivität</value>
+  </data>
+  <data name="QuickOperations" xml:space="preserve">
+    <value>Betrieb</value>
+  </data>
+  <data name="QuickConnectedSystems" xml:space="preserve">
+    <value>Verbundene Systeme</value>
+  </data>
+  <data name="QuickSynchronisationRules" xml:space="preserve">
+    <value>Synchronisierungsregeln</value>
+  </data>
+  <data name="QuickSettings" xml:space="preserve">
+    <value>Einstellungen</value>
+  </data>
+</root>

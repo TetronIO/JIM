@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AuthorisingHeading" xml:space="preserve">
+    <value>Autorisation en cours</value>
+  </data>
+  <data name="AuthorisingMessage" xml:space="preserve">
+    <value>Visible uniquement pendant l’autorisation.</value>
+  </data>
+  <data name="NotFoundTitle" xml:space="preserve">
+    <value>Introuvable</value>
+  </data>
+  <data name="NotFoundMessage" xml:space="preserve">
+    <value>Désolé, il n’y a rien à cette adresse.</value>
+  </data>
+  <data name="LogoAlt" xml:space="preserve">
+    <value>Logo JIM</value>
+  </data>
+  <data name="CollapseSidebar" xml:space="preserve">
+    <value>Réduire la barre latérale</value>
+  </data>
+  <data name="PinSidebarOpen" xml:space="preserve">
+    <value>Épingler la barre latérale</value>
+  </data>
+  <data name="FooterAllRightsReserved" xml:space="preserve">
+    <value>Tous droits réservés</value>
+  </data>
+  <data name="NavHome" xml:space="preserve">
+    <value>Accueil</value>
+  </data>
+  <data name="NavUsers" xml:space="preserve">
+    <value>Utilisateurs</value>
+  </data>
+  <data name="NavAllUsers" xml:space="preserve">
+    <value>Tous les utilisateurs</value>
+  </data>
+  <data name="NavPeople" xml:space="preserve">
+    <value>Personnes</value>
+  </data>
+  <data name="NavServicePrincipals" xml:space="preserve">
+    <value>Principaux de service</value>
+  </data>
+  <data name="NavGroups" xml:space="preserve">
+    <value>Groupes</value>
+  </data>
+  <data name="NavAllGroups" xml:space="preserve">
+    <value>Tous les groupes</value>
+  </data>
+  <data name="NavSecurityGroups" xml:space="preserve">
+    <value>Groupes de sécurité</value>
+  </data>
+  <data name="NavDistributionGroups" xml:space="preserve">
+    <value>Groupes de distribution</value>
+  </data>
+  <data name="NavActivityGroup" xml:space="preserve">
+    <value>Activité</value>
+  </data>
+  <data name="NavActivity" xml:space="preserve">
+    <value>Activité</value>
+  </data>
+  <data name="NavMyActivity" xml:space="preserve">
+    <value>Mon activité</value>
+  </data>
+  <data name="NavObjectChanges" xml:space="preserve">
+    <value>Modifications d’objets</value>
+  </data>
+  <data name="NavAdmin" xml:space="preserve">
+    <value>Admin</value>
+  </data>
+  <data name="NavOperations" xml:space="preserve">
+    <value>Opérations</value>
+  </data>
+  <data name="NavConnectedSystems" xml:space="preserve">
+    <value>Systèmes connectés</value>
+  </data>
+  <data name="NavSynchronisationRules" xml:space="preserve">
+    <value>Règles de synchronisation</value>
+  </data>
+  <data name="NavAdministration" xml:space="preserve">
+    <value>Administration</value>
+  </data>
+  <data name="UserMenuDarkMode" xml:space="preserve">
+    <value>Mode sombre</value>
+  </data>
+  <data name="UserMenuLanguage" xml:space="preserve">
+    <value>Langue</value>
+  </data>
+  <data name="UserMenuViewClaims" xml:space="preserve">
+    <value>Afficher les revendications</value>
+  </data>
+  <data name="UserMenuSignOut" xml:space="preserve">
+    <value>Se déconnecter</value>
+  </data>
+  <data name="LanguagePreview" xml:space="preserve">
+    <value>{0} (aperçu)</value>
+  </data>
+  <data name="SignOutDialogTitle" xml:space="preserve">
+    <value>Déconnexion</value>
+  </data>
+  <data name="SignOutDialogMessage" xml:space="preserve">
+    <value>Voulez-vous vraiment vous déconnecter ?</value>
+  </data>
+  <data name="SignOutDialogConfirm" xml:space="preserve">
+    <value>Se déconnecter</value>
+  </data>
+  <data name="ReconnectMessage" xml:space="preserve">
+    <value>Tentative de reconnexion à JIM…</value>
+  </data>
+  <data name="ReconnectReloading" xml:space="preserve">
+    <value>Rechargement…</value>
+  </data>
+  <data name="ReconnectAttempt" xml:space="preserve">
+    <value>Tentative {0} sur {1}…</value>
+  </data>
+  <data name="ErrorProduction" xml:space="preserve">
+    <value>Une erreur s’est produite. L’application risque de ne plus répondre tant qu’elle n’aura pas été rechargée.</value>
+  </data>
+  <data name="ErrorDevelopment" xml:space="preserve">
+    <value>Une exception non gérée s’est produite. Consultez les outils de développement du navigateur pour plus de détails.</value>
+  </data>
+  <data name="ErrorReload" xml:space="preserve">
+    <value>Recharger</value>
+  </data>
+  <data name="ErrorDismiss" xml:space="preserve">
+    <value>Fermer</value>
+  </data>
+</root>

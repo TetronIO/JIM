@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="PageTitle" xml:space="preserve">
+    <value>JIM Home</value>
+    <comment>Browser tab title.</comment>
+  </data>
+  <data name="Welcome" xml:space="preserve">
+    <value>Welcome</value>
+    <comment>Home page heading.</comment>
+  </data>
+  <data name="WelcomeSubtitle" xml:space="preserve">
+    <value>To Junctional Identity Manager</value>
+    <comment>Continues the Welcome heading. The product name is not translated.</comment>
+  </data>
+  <data name="GettingStarted" xml:space="preserve">
+    <value>Getting Started</value>
+    <comment>Heading of the administrators' setup checklist.</comment>
+  </data>
+  <data name="GettingStartedIntro" xml:space="preserve">
+    <value>Complete these steps to start synchronising Connected Systems.</value>
+  </data>
+  <data name="CreateConnectedSystem" xml:space="preserve">
+    <value>Create a Connected System</value>
+    <comment>Checklist step.</comment>
+  </data>
+  <data name="CreateSynchronisationRules" xml:space="preserve">
+    <value>Create Synchronisation Rules</value>
+    <comment>Checklist step.</comment>
+  </data>
+  <data name="CreateSchedule" xml:space="preserve">
+    <value>Create a Schedule</value>
+    <comment>Checklist step, and the action on an empty Schedules table.</comment>
+  </data>
+  <data name="RunFirstSynchronisation" xml:space="preserve">
+    <value>Run your first synchronisation</value>
+    <comment>Checklist step.</comment>
+  </data>
+  <data name="StatUsers" xml:space="preserve">
+    <value>Users</value>
+    <comment>Count card.</comment>
+  </data>
+  <data name="StatGroups" xml:space="preserve">
+    <value>Groups</value>
+    <comment>Count card.</comment>
+  </data>
+  <data name="StatConnectedSystems" xml:space="preserve">
+    <value>Connected Systems</value>
+    <comment>Count card.</comment>
+  </data>
+  <data name="StatSynchronisationRules" xml:space="preserve">
+    <value>Synchronisation Rules</value>
+    <comment>Count card.</comment>
+  </data>
+  <data name="SchedulesHeading" xml:space="preserve">
+    <value>Schedules</value>
+    <comment>Section heading.</comment>
+  </data>
+  <data name="ScheduleSingular" xml:space="preserve">
+    <value>Schedule</value>
+    <comment>The table's object count, one item.</comment>
+  </data>
+  <data name="SchedulePlural" xml:space="preserve">
+    <value>Schedules</value>
+    <comment>The table's object count, several items.</comment>
+  </data>
+  <data name="SearchSchedules" xml:space="preserve">
+    <value>Search Schedules</value>
+    <comment>Search box placeholder.</comment>
+  </data>
+  <data name="ColumnTrigger" xml:space="preserve">
+    <value>Trigger</value>
+    <comment>Table column heading: what starts a Schedule.</comment>
+  </data>
+  <data name="ColumnLastRun" xml:space="preserve">
+    <value>Last Run</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="ColumnNextRun" xml:space="preserve">
+    <value>Next Run</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="TriggerManual" xml:space="preserve">
+    <value>Manual</value>
+    <comment>A Schedule that only runs when started by hand.</comment>
+  </data>
+  <data name="NoSchedulesMatch" xml:space="preserve">
+    <value>No Schedules match "{0}"</value>
+    <comment>{0} is the search text.</comment>
+  </data>
+  <data name="NoSchedulesYet" xml:space="preserve">
+    <value>No Schedules have been created yet</value>
+  </data>
+  <data name="NoSchedulesYetHint" xml:space="preserve">
+    <value>A Schedule runs Run Profiles on a recurring trigger; create one to start synchronising unattended.</value>
+  </data>
+  <data name="QuickLinks" xml:space="preserve">
+    <value>Quick Links</value>
+    <comment>Section heading.</comment>
+  </data>
+  <data name="QuickUsers" xml:space="preserve">
+    <value>Users</value>
+    <comment>Quick link.</comment>
+  </data>
+  <data name="QuickGroups" xml:space="preserve">
+    <value>Groups</value>
+    <comment>Quick link.</comment>
+  </data>
+  <data name="QuickActivity" xml:space="preserve">
+    <value>Activity</value>
+    <comment>Quick link.</comment>
+  </data>
+  <data name="QuickOperations" xml:space="preserve">
+    <value>Operations</value>
+    <comment>Quick link.</comment>
+  </data>
+  <data name="QuickConnectedSystems" xml:space="preserve">
+    <value>Connected Systems</value>
+    <comment>Quick link.</comment>
+  </data>
+  <data name="QuickSynchronisationRules" xml:space="preserve">
+    <value>Synchronisation Rules</value>
+    <comment>Quick link.</comment>
+  </data>
+  <data name="QuickSettings" xml:space="preserve">
+    <value>Settings</value>
+    <comment>Quick link.</comment>
+  </data>
+</root>

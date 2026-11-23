@@ -8,6 +8,10 @@
 
 JIM is a .NET-based Identity Management (IDM) system implementing the metaverse pattern for centralised identity governance. It synchronises identities across heterogeneous systems (Active Directory, OpenLDAP, 389 DS, and other RFC 4512-compliant directories, files, databases, etc.) with bi-directional Attribute Flows, provisioning rules, and compliance tracking.
 
+## Localisation
+
+Portal text lives in resource files and ships with every language in the change that writes it; the REST API, PowerShell module, logs and documentation stay British English. Rules, guards and how to add a language: [`LOCALISATION.md`](LOCALISATION.md). The vocabulary below has a fixed word in each portal language, held in [`localisation/glossary.json`](localisation/glossary.json).
+
 ## Vocabulary
 
 JIM's product nouns are fixed, and the portal, REST API and PowerShell surfaces all use them consistently (#1667, #1668). Each row below is one thing (or one thing and the place it lives), named once:

@@ -1,11 +1,13 @@
 ﻿@using Microsoft.AspNetCore.Components.Web
+@using System.Globalization
 @using JIM.Web.Models
+@using JIM.Web.Resources
 @namespace JIM.Web.Pages
 @addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
 @inject ThemeSettings ThemeSettings
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="@CultureInfo.CurrentUICulture.Name">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -27,23 +29,24 @@
     @RenderBody()
 
     <!-- Blazor Server reconnection UI -->
-    <div id="components-reconnect-modal" class="jim-reconnect-modal">
+    <div id="components-reconnect-modal" class="jim-reconnect-modal"
+         data-reloading-text="@LayoutText.ReconnectReloading" data-attempt-format="@LayoutText.ReconnectAttempt">
         <div class="jim-reconnect-content">
             <div class="jim-reconnect-spinner"></div>
-            <p class="jim-reconnect-message">Attempting to reconnect to JIM...</p>
+            <p class="jim-reconnect-message">@LayoutText.ReconnectMessage</p>
             <p class="jim-reconnect-retry" aria-live="polite"></p>
         </div>
     </div>
 
     <div id="blazor-error-ui">
         <environment include="Staging,Production">
-            An error has occurred. This application may no longer respond until reloaded.
+            @LayoutText.ErrorProduction
         </environment>
         <environment include="Development">
-            An unhandled exception has occurred. See browser dev tools for details.
+            @LayoutText.ErrorDevelopment
         </environment>
-        <a href="" class="reload">Reload</a>
-        <a class="dismiss">🗙</a>
+        <a href="" class="reload">@LayoutText.ErrorReload</a>
+        <a class="dismiss" aria-label="@LayoutText.ErrorDismiss">🗙</a>
     </div>
     <script src="_framework/blazor.server.js" autostart="false"></script>
     <script>
@@ -78,11 +81,12 @@
                         if (retries > options.maxRetries) {
                             clearInterval(jimReconnectInterval);
                             jimReconnectInterval = null;
-                            if (retryText) retryText.textContent = 'Reloading...';
+                            if (retryText) retryText.textContent = modal.dataset.reloadingText;
                             location.reload();
                             return;
                         }
-                        if (retryText) retryText.textContent = 'Attempt ' + retries + ' of ' + options.maxRetries + '...';
+                        if (retryText) retryText.textContent = modal.dataset.attemptFormat
+                            .replace('{0}', retries).replace('{1}', options.maxRetries);
                         try {
                             var result = await Blazor.reconnect();
                             if (result) {

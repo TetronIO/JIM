@@ -21,6 +21,7 @@ using JIM.Utilities;
 using JIM.Web.Extensions;
 using JIM.Web.Extensions.Api;
 using JIM.Web.Hubs;
+using JIM.Web.Localisation;
 using JIM.Web.Logging;
 using JIM.Web.Middleware;
 using JIM.Web.Scim;
@@ -538,6 +539,10 @@ try
         config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.BottomCenter;
     });
 
+    // Portal languages (#3030). MudBlazor's own component text comes from JIM's resources too, so a translated page
+    // has no English left inside its grids and dialogs. Registered after AddMudServices so it replaces the default.
+    builder.Services.AddTransient<MudLocalizer, JimMudLocalizer>();
+
     // User preferences service for storing UI settings in browser localStorage
     builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
     builder.Services.AddScoped<TrustedCertificateChanges>();
@@ -740,6 +745,16 @@ try
     // a redirect that counts as healthy.
     app.UseHttpsRedirectionExceptHealthProbes(app.Environment);
     app.UseStaticFiles();
+
+    // Portal language (#3030): the culture cookie the language picker sets, else the browser's Accept-Language, else
+    // en-GB. Unreleased languages are offered in Development only. The REST API and SCIM are left out on purpose: their
+    // contract is machine-readable and stays culture-independent, so a client's Accept-Language must not change how a
+    // response formats anything.
+    var includeUnreleasedLanguages = app.Environment.IsDevelopment();
+    app.UseWhen(
+        context => !context.Request.Path.StartsWithSegments("/api") && !ScimRoutes.IsScimRequest(context.Request),
+        appBuilder => appBuilder.UseRequestLocalization(PortalLocalisation.CreateOptions(includeUnreleasedLanguages)));
+
     app.UseRouting();
 
     // Global exception handler for API endpoints
@@ -797,6 +812,12 @@ try
     // An unknown /scim path is a SCIM 404, never the portal's page (whose default policy would answer a SCIM client
     // with a refusal instead).
     app.MapFallback("/scim/{**path}", context => ScimResponses.WriteErrorAsync(context, StatusCodes.Status404NotFound));
+
+    // The language picker's target: remember the choice in the culture cookie, then return to the page.
+    app.MapGet(CultureSelection.Path, (HttpContext context, string? culture, string? returnUrl) =>
+            PortalLocalisation.ApplySelection(context, culture, returnUrl, includeUnreleasedLanguages))
+        .RequireAuthorization()
+        .ExcludeFromDescription();
 
     app.MapFallbackToPage("/_Host");
 

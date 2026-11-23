@@ -2261,6 +2261,12 @@ body.jim-dark-mode .jim-instance-bar .jim-title-accent {
     width: 100%;
 }
 
+/* The languages listed under the user menu's Language row, indented beneath it. A logical property, so the indent
+   follows the reading direction once a right-to-left language ships (#3030). */
+html[lang] .jim-user-menu-language.mud-list-item {
+    padding-inline-start: 24px;
+}
+
 /* Let clicks on the switch bubble up to the list item so the whole row toggles
    as one, instead of the switch intercepting the click. */
 .jim-user-menu-switch {
