@@ -1638,4 +1638,94 @@
     <value>Expects</value>
     <comment>Heading of the expected result of a test case.</comment>
   </data>
+  <data name="TestCasesHeading" xml:space="preserve">
+    <value>Test cases</value>
+    <comment>Heading of the test cases panel.</comment>
+  </data>
+  <data name="RunAllButton" xml:space="preserve">
+    <value>Run all</value>
+    <comment>Button running every test case.</comment>
+  </data>
+  <data name="NewTestCaseMenu" xml:space="preserve">
+    <value>New test case</value>
+    <comment>Menu button to add a test case.</comment>
+  </data>
+  <data name="TestCasesIntroConnectedSystem" xml:space="preserve">
+    <value>Each case gives an Object Matching Rule inputs and says what match values it should give. Runs test the rules as saved.</value>
+    <comment>Intro of the Object Matching tab.</comment>
+  </data>
+  <data name="TestCasesIntroRule" xml:space="preserve">
+    <value>Each case gives this Synchronisation Rule's Scope, an Attribute Flow or an Object Matching Rule inputs, and says what it should give. Runs test the rule as saved: save edits on the other tabs first.</value>
+    <comment>Intro of the Tests tab.</comment>
+  </data>
+  <data name="NoTestCasesYet" xml:space="preserve">
+    <value>No test cases yet</value>
+    <comment>Empty state of the test cases panel.</comment>
+  </data>
+  <data name="NoTestCasesYetConnectedSystem" xml:space="preserve">
+    <value>Save one from an Object Matching Rule's Try it, or create one here.</value>
+  </data>
+  <data name="NoTestCasesYetRule" xml:space="preserve">
+    <value>Save one from a tester on the Scope, Matching or Attribute Flow tab, or create one here.</value>
+  </data>
+  <data name="TestsColumn" xml:space="preserve">
+    <value>Tests</value>
+    <comment>Table heading: what a test case covers.</comment>
+  </data>
+  <data name="TestStatusPassed" xml:space="preserve">
+    <value>Passed</value>
+    <comment>Status of a test case that passed.</comment>
+  </data>
+  <data name="TestStatusFailed" xml:space="preserve">
+    <value>Failed</value>
+    <comment>Status of a test case that failed.</comment>
+  </data>
+  <data name="TestStatusNeedsReview" xml:space="preserve">
+    <value>Needs review</value>
+    <comment>Status of a test case whose configuration needs review.</comment>
+  </data>
+  <data name="TestStatusError" xml:space="preserve">
+    <value>Error</value>
+    <comment>Status of a test case that could not run.</comment>
+  </data>
+  <data name="RanAsOfNowTooltip" xml:space="preserve">
+    <value>This configuration reads the clock and the case has no run-as-of time, so it ran as of now and can give a different result tomorrow.</value>
+    <comment>Tooltip on the clock icon.</comment>
+  </data>
+  <data name="NotRun" xml:space="preserve">
+    <value>Not run</value>
+    <comment>A test case that has not run yet.</comment>
+  </data>
+  <data name="RunTooltip" xml:space="preserve">
+    <value>Run</value>
+    <comment>Tooltip on the run button.</comment>
+  </data>
+  <data name="RunNamedAria" xml:space="preserve">
+    <value>Run {0}</value>
+    <comment>Accessible name of the run button. {0} is the test case name.</comment>
+  </data>
+  <data name="EditNamedAria" xml:space="preserve">
+    <value>Edit {0}</value>
+    <comment>Accessible name of the edit button. {0} is the test case name.</comment>
+  </data>
+  <data name="DeleteNamedAria" xml:space="preserve">
+    <value>Delete {0}</value>
+    <comment>Accessible name of the delete button. {0} is the test case name.</comment>
+  </data>
+  <data name="CoverageScope" xml:space="preserve">
+    <value>Scope</value>
+    <comment>Coverage of a test case: the Scope.</comment>
+  </data>
+  <data name="DeleteTestCaseTitle" xml:space="preserve">
+    <value>Delete test case?</value>
+    <comment>Title of the confirmation before deleting a test case.</comment>
+  </data>
+  <data name="DeleteTestCaseQuestion" xml:space="preserve">
+    <value>Delete the test case '{0}'? Nothing it tests changes.</value>
+    <comment>Confirmation before deleting. {0} is the test case name.</comment>
+  </data>
+  <data name="TestCaseDeleted" xml:space="preserve">
+    <value>Deleted test case '{0}'.</value>
+    <comment>Snackbar after deleting. {0} is the test case name.</comment>
+  </data>
 </root>

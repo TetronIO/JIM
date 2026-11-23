@@ -1250,4 +1250,73 @@
   <data name="ExpectsHeading" xml:space="preserve">
     <value>Attendu</value>
   </data>
+  <data name="TestCasesHeading" xml:space="preserve">
+    <value>Cas de test</value>
+  </data>
+  <data name="RunAllButton" xml:space="preserve">
+    <value>Tout exécuter</value>
+  </data>
+  <data name="NewTestCaseMenu" xml:space="preserve">
+    <value>Nouveau cas de test</value>
+  </data>
+  <data name="TestCasesIntroConnectedSystem" xml:space="preserve">
+    <value>Chaque cas fournit à une règle de correspondance d’objets des entrées et indique les valeurs de correspondance attendues. Les exécutions testent les règles telles qu’enregistrées.</value>
+  </data>
+  <data name="TestCasesIntroRule" xml:space="preserve">
+    <value>Chaque cas fournit au périmètre de cette règle de synchronisation, à un flux d’attributs ou à une règle de correspondance d’objets des entrées, et indique le résultat attendu. Les exécutions testent la règle telle qu’enregistrée : enregistrez d’abord les modifications des autres onglets.</value>
+  </data>
+  <data name="NoTestCasesYet" xml:space="preserve">
+    <value>Aucun cas de test pour le moment</value>
+  </data>
+  <data name="NoTestCasesYetConnectedSystem" xml:space="preserve">
+    <value>Enregistrez-en un depuis « Essayer » d’une règle de correspondance d’objets, ou créez-en un ici.</value>
+  </data>
+  <data name="NoTestCasesYetRule" xml:space="preserve">
+    <value>Enregistrez-en un depuis un testeur des onglets Périmètre, Correspondance ou Flux d’attributs, ou créez-en un ici.</value>
+  </data>
+  <data name="TestsColumn" xml:space="preserve">
+    <value>Couvre</value>
+  </data>
+  <data name="TestStatusPassed" xml:space="preserve">
+    <value>Réussi</value>
+  </data>
+  <data name="TestStatusFailed" xml:space="preserve">
+    <value>Échec</value>
+  </data>
+  <data name="TestStatusNeedsReview" xml:space="preserve">
+    <value>À vérifier</value>
+  </data>
+  <data name="TestStatusError" xml:space="preserve">
+    <value>Erreur</value>
+  </data>
+  <data name="RanAsOfNowTooltip" xml:space="preserve">
+    <value>Cette configuration lit l’horloge et le cas n’a pas d’heure d’exécution ; il a donc été exécuté à l’instant présent et peut donner un résultat différent demain.</value>
+  </data>
+  <data name="NotRun" xml:space="preserve">
+    <value>Non exécuté</value>
+  </data>
+  <data name="RunTooltip" xml:space="preserve">
+    <value>Exécuter</value>
+  </data>
+  <data name="RunNamedAria" xml:space="preserve">
+    <value>Exécuter {0}</value>
+  </data>
+  <data name="EditNamedAria" xml:space="preserve">
+    <value>Modifier {0}</value>
+  </data>
+  <data name="DeleteNamedAria" xml:space="preserve">
+    <value>Supprimer {0}</value>
+  </data>
+  <data name="CoverageScope" xml:space="preserve">
+    <value>Périmètre</value>
+  </data>
+  <data name="DeleteTestCaseTitle" xml:space="preserve">
+    <value>Supprimer le cas de test ?</value>
+  </data>
+  <data name="DeleteTestCaseQuestion" xml:space="preserve">
+    <value>Supprimer le cas de test « {0} » ? Ce qu’il teste ne change pas.</value>
+  </data>
+  <data name="TestCaseDeleted" xml:space="preserve">
+    <value>Cas de test « {0} » supprimé.</value>
+  </data>
 </root>

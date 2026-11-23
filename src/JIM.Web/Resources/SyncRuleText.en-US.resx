@@ -188,4 +188,7 @@
   <data name="RuleEnabledHelp" xml:space="preserve">
     <value>Synchronization Rules are not evaluated when disabled. Use this to prepare a rule in advance of it being needed, or to temporarily stop a rule from being evaluated. Where another Attribute Flow also contributes an attribute, its value takes over at the next synchronization; values only this rule contributed stay in place until it is re-enabled or deleted.</value>
   </data>
+  <data name="TestCasesIntroRule" xml:space="preserve">
+    <value>Each case gives this Synchronization Rule's Scope, an Attribute Flow or an Object Matching Rule inputs, and says what it should give. Runs test the rule as saved: save edits on the other tabs first.</value>
+  </data>
 </root>
