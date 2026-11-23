@@ -2138,4 +2138,7 @@
   <data name="TestCaseOutOfScopeName" xml:space="preserve">
     <value>Hors du périmètre</value>
   </data>
+  <data name="InitialPasswordIssuePrefix" xml:space="preserve">
+    <value>Mot de passe initial : {0}</value>
+  </data>
 </root>

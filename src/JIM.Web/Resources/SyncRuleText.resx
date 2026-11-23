@@ -2820,4 +2820,8 @@
     <value>Out of scope</value>
     <comment>Name of a saved Scope test case whose expectation is out of scope.</comment>
   </data>
+  <data name="InitialPasswordIssuePrefix" xml:space="preserve">
+    <value>Initial Password: {0}</value>
+    <comment>Prefixes each problem with the initial-password settings in the save bar's list. {0} is the problem, written by the application layer.</comment>
+  </data>
 </root>
