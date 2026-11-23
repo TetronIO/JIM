@@ -1592,4 +1592,176 @@
     <value>{0}. {1}</value>
     <comment>Tooltip on the condition line. {0} the condition, {1} when it started.</comment>
   </data>
+  <data name="GenValTitle" xml:space="preserve">
+    <value>Generated values held for a decision</value>
+    <comment>Heading of the Generated Values tab.</comment>
+  </data>
+  <data name="GenValIntro" xml:space="preserve">
+    <value>A target rejected these generated values as already in use, and JIM could not safely correct them. Their exports are held until you allow the rename or try the same value again.</value>
+    <comment>Intro under the heading.</comment>
+  </data>
+  <data name="GenValNeedsDecision" xml:space="preserve">
+    <value>Needs a decision</value>
+    <comment>Tile title and filter option: a held value that needs a person.</comment>
+  </data>
+  <data name="GenValExportsHeld" xml:space="preserve">
+    <value>Exports held until you act</value>
+    <comment>Tile line under the Needs a decision count.</comment>
+  </data>
+  <data name="GenValRenameAllowed" xml:space="preserve">
+    <value>Rename allowed</value>
+    <comment>Tile title and filter option: a rename was allowed.</comment>
+  </data>
+  <data name="GenValRenamedNext" xml:space="preserve">
+    <value>Renamed at the next export</value>
+    <comment>Tile line under the Rename allowed count.</comment>
+  </data>
+  <data name="GenValCorrectedTitle" xml:space="preserve">
+    <value>Corrected, last 7 days</value>
+    <comment>Tile title: values JIM corrected on its own in the last seven days.</comment>
+  </data>
+  <data name="GenValCorrectedTooltip" xml:space="preserve">
+    <value>Values a target rejected as already in use that JIM corrected on its own since {0}. Each one's history is on its Metaverse Object.</value>
+    <comment>Tooltip on the Corrected count. {0} is the date the count starts from.</comment>
+  </data>
+  <data name="GenValNoAction" xml:space="preserve">
+    <value>No action needed</value>
+    <comment>Tile line under the Corrected count.</comment>
+  </data>
+  <data name="GenValAll" xml:space="preserve">
+    <value>All</value>
+    <comment>Placeholder of a filter: no filter applied.</comment>
+  </data>
+  <data name="GenValColAttribute" xml:space="preserve">
+    <value>Attribute</value>
+    <comment>Column heading: the attribute that holds the value.</comment>
+  </data>
+  <data name="GenValColValue" xml:space="preserve">
+    <value>Value</value>
+    <comment>Column heading: the generated value.</comment>
+  </data>
+  <data name="GenValColWhy" xml:space="preserve">
+    <value>Why it is held</value>
+    <comment>Column heading: why the value is held.</comment>
+  </data>
+  <data name="GenValColSince" xml:space="preserve">
+    <value>Since</value>
+    <comment>Column heading: when the value was held.</comment>
+  </data>
+  <data name="GenValSingular" xml:space="preserve">
+    <value>held value</value>
+    <comment>Noun in the toolbar count (one).</comment>
+  </data>
+  <data name="GenValPlural" xml:space="preserve">
+    <value>held values</value>
+    <comment>Noun in the toolbar count (several).</comment>
+  </data>
+  <data name="GenValTryAllCount" xml:space="preserve">
+    <value>Try again for all {0}</value>
+    <comment>Bulk action label. {0} is the count of values needing a decision.</comment>
+  </data>
+  <data name="GenValAllowRename" xml:space="preserve">
+    <value>Allow the rename…</value>
+    <comment>Row action: allow JIM to rename the value.</comment>
+  </data>
+  <data name="GenValTryAgain" xml:space="preserve">
+    <value>Try again</value>
+    <comment>Row action: try the same value again.</comment>
+  </data>
+  <data name="GenValNoFilterMatch" xml:space="preserve">
+    <value>No held values match these filters</value>
+    <comment>Empty state when the filters match nothing.</comment>
+  </data>
+  <data name="GenValNoFilterHint" xml:space="preserve">
+    <value>Clear the filters to see every held value.</value>
+    <comment>Empty state hint.</comment>
+  </data>
+  <data name="GenValEmptyTitle" xml:space="preserve">
+    <value>Nothing needs a decision</value>
+    <comment>Empty state: the healthy state.</comment>
+  </data>
+  <data name="GenValEmptyHint" xml:space="preserve">
+    <value>A generated value appears here when a target rejects it as already in use and JIM cannot safely correct it.</value>
+    <comment>Empty state hint.</comment>
+  </data>
+  <data name="OpsFilters" xml:space="preserve">
+    <value>Filters</value>
+    <comment>Button that opens the filter row on the Activity tab.</comment>
+  </data>
+  <data name="OpsClear" xml:space="preserve">
+    <value>Clear</value>
+    <comment>Button that clears every filter on the Activity tab.</comment>
+  </data>
+  <data name="OpsQueueRunProfile" xml:space="preserve">
+    <value>Queue a Run Profile</value>
+    <comment>Button that queues a Run Profile for execution.</comment>
+  </data>
+  <data name="OpsHasChildren" xml:space="preserve">
+    <value>Has child activities</value>
+    <comment>Filter checkbox: only Activities that have child Activities.</comment>
+  </data>
+  <data name="OpsScheduledOnly" xml:space="preserve">
+    <value>Scheduled only</value>
+    <comment>Filter checkbox: only work a Schedule started.</comment>
+  </data>
+  <data name="OpsSelectedCount" xml:space="preserve">
+    <value>{0} selected</value>
+    <comment>Multi-select text when several values are chosen. {0} is the count.</comment>
+  </data>
+  <data name="QueueDialogNoSystemBefore" xml:space="preserve">
+    <value>Please create a</value>
+    <comment>Warning alert when no Connected System exists. The link follows, then 'first.'</comment>
+  </data>
+  <data name="QueueDialogNoSystemAfter" xml:space="preserve">
+    <value>first.</value>
+    <comment>Ends the warning alert after the Connected System link.</comment>
+  </data>
+  <data name="QueueDialogIntro" xml:space="preserve">
+    <value>The run joins the end of the queue. If nothing else is queued or running, it starts straight away.</value>
+    <comment>Intro of the Queue a Run Profile dialog.</comment>
+  </data>
+  <data name="QueueDialogSelectSystem" xml:space="preserve">
+    <value>Please select a Connected System</value>
+    <comment>Validation message for the Connected System select.</comment>
+  </data>
+  <data name="QueueDialogProfileRequired" xml:space="preserve">
+    <value>A Run Profile is required</value>
+    <comment>Validation message for the Run Profile select.</comment>
+  </data>
+  <data name="QueueDialogDisabled" xml:space="preserve">
+    <value>{0} (disabled)</value>
+    <comment>A disabled Run Profile in the list. {0} is its name.</comment>
+  </data>
+  <data name="QueueDialogQueue" xml:space="preserve">
+    <value>Queue</value>
+    <comment>Button that queues the run.</comment>
+  </data>
+  <data name="QueueDialogFailed" xml:space="preserve">
+    <value>Failed to create task.</value>
+    <comment>Error shown when a task could not be created, when the server gave no reason.</comment>
+  </data>
+  <data name="QueueDialogAdded" xml:space="preserve">
+    <value>Synchronisation task added.</value>
+    <comment>Success notice after queueing a run.</comment>
+  </data>
+  <data name="OpsPageInfo" xml:space="preserve">
+    <value>What JIM is doing now, what it did, and what is scheduled. Synchronisation and password delivery both report here.</value>
+    <comment>Info popover on the Operations page title.</comment>
+  </data>
+  <data name="OpsDemoMode" xml:space="preserve">
+    <value>Demo mode: every section below shows sample data, and actions that would change anything are switched off.</value>
+    <comment>Notice shown in demo mode (Development only).</comment>
+  </data>
+  <data name="OpsTabPasswords" xml:space="preserve">
+    <value>Passwords</value>
+    <comment>Tab heading: the password synchronisation queue.</comment>
+  </data>
+  <data name="OpsTabExchange" xml:space="preserve">
+    <value>Exchange</value>
+    <comment>Tab heading: the Exchange queue. Exchange is a product name.</comment>
+  </data>
+  <data name="OpsTabGenerated" xml:space="preserve">
+    <value>Generated Values</value>
+    <comment>Tab heading: generated values held for a decision.</comment>
+  </data>
 </root>

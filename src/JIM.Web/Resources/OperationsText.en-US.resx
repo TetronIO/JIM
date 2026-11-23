@@ -35,4 +35,7 @@
   <data name="QueueCancelling" xml:space="preserve">
     <value>Canceling</value>
   </data>
+  <data name="QueueDialogAdded" xml:space="preserve">
+    <value>Synchronization task added.</value>
+  </data>
 </root>

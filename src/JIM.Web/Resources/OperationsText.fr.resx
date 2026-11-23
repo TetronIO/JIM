@@ -1199,4 +1199,133 @@
   <data name="HealthStripConditionTitle" xml:space="preserve">
     <value>{0}. {1}</value>
   </data>
+  <data name="GenValTitle" xml:space="preserve">
+    <value>Valeurs générées en attente d’une décision</value>
+  </data>
+  <data name="GenValIntro" xml:space="preserve">
+    <value>Une cible a refusé ces valeurs générées, car elles étaient déjà utilisées, et JIM n’a pas pu les corriger en toute sécurité. Leurs exportations sont suspendues jusqu’à ce que vous autorisiez le renommage ou que vous retentiez la même valeur.</value>
+  </data>
+  <data name="GenValNeedsDecision" xml:space="preserve">
+    <value>Décision requise</value>
+  </data>
+  <data name="GenValExportsHeld" xml:space="preserve">
+    <value>Exportations suspendues jusqu’à votre action</value>
+  </data>
+  <data name="GenValRenameAllowed" xml:space="preserve">
+    <value>Renommage autorisé</value>
+  </data>
+  <data name="GenValRenamedNext" xml:space="preserve">
+    <value>Renommée à la prochaine exportation</value>
+  </data>
+  <data name="GenValCorrectedTitle" xml:space="preserve">
+    <value>Corrigées, 7 derniers jours</value>
+  </data>
+  <data name="GenValCorrectedTooltip" xml:space="preserve">
+    <value>Valeurs qu’une cible a refusées car déjà utilisées, et que JIM a corrigées seule depuis le {0}. L’historique de chacune figure sur son objet Metaverse.</value>
+  </data>
+  <data name="GenValNoAction" xml:space="preserve">
+    <value>Aucune action requise</value>
+  </data>
+  <data name="GenValAll" xml:space="preserve">
+    <value>Tous</value>
+  </data>
+  <data name="GenValColAttribute" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="GenValColValue" xml:space="preserve">
+    <value>Valeur</value>
+  </data>
+  <data name="GenValColWhy" xml:space="preserve">
+    <value>Motif de la mise en attente</value>
+  </data>
+  <data name="GenValColSince" xml:space="preserve">
+    <value>Depuis</value>
+  </data>
+  <data name="GenValSingular" xml:space="preserve">
+    <value>valeur en attente</value>
+  </data>
+  <data name="GenValPlural" xml:space="preserve">
+    <value>valeurs en attente</value>
+  </data>
+  <data name="GenValTryAllCount" xml:space="preserve">
+    <value>Réessayer toutes les {0}</value>
+  </data>
+  <data name="GenValAllowRename" xml:space="preserve">
+    <value>Autoriser le renommage…</value>
+  </data>
+  <data name="GenValTryAgain" xml:space="preserve">
+    <value>Réessayer</value>
+  </data>
+  <data name="GenValNoFilterMatch" xml:space="preserve">
+    <value>Aucune valeur en attente ne correspond à ces filtres</value>
+  </data>
+  <data name="GenValNoFilterHint" xml:space="preserve">
+    <value>Effacez les filtres pour voir toutes les valeurs en attente.</value>
+  </data>
+  <data name="GenValEmptyTitle" xml:space="preserve">
+    <value>Aucune décision n’est requise</value>
+  </data>
+  <data name="GenValEmptyHint" xml:space="preserve">
+    <value>Une valeur générée apparaît ici lorsqu’une cible la refuse car elle est déjà utilisée et que JIM ne peut pas la corriger en toute sécurité.</value>
+  </data>
+  <data name="OpsFilters" xml:space="preserve">
+    <value>Filtres</value>
+  </data>
+  <data name="OpsClear" xml:space="preserve">
+    <value>Effacer</value>
+  </data>
+  <data name="OpsQueueRunProfile" xml:space="preserve">
+    <value>Mettre un profil d’exécution en file</value>
+  </data>
+  <data name="OpsHasChildren" xml:space="preserve">
+    <value>Avec des activités enfants</value>
+  </data>
+  <data name="OpsScheduledOnly" xml:space="preserve">
+    <value>Planifiées uniquement</value>
+  </data>
+  <data name="OpsSelectedCount" xml:space="preserve">
+    <value>{0} sélectionnés</value>
+  </data>
+  <data name="QueueDialogNoSystemBefore" xml:space="preserve">
+    <value>Veuillez d’abord créer un</value>
+  </data>
+  <data name="QueueDialogNoSystemAfter" xml:space="preserve">
+    <value>.</value>
+  </data>
+  <data name="QueueDialogIntro" xml:space="preserve">
+    <value>L’exécution rejoint la fin de la file. Si rien d’autre n’est en file ni en cours, elle démarre immédiatement.</value>
+  </data>
+  <data name="QueueDialogSelectSystem" xml:space="preserve">
+    <value>Sélectionnez un système connecté</value>
+  </data>
+  <data name="QueueDialogProfileRequired" xml:space="preserve">
+    <value>Un profil d’exécution est obligatoire</value>
+  </data>
+  <data name="QueueDialogDisabled" xml:space="preserve">
+    <value>{0} (désactivé)</value>
+  </data>
+  <data name="QueueDialogQueue" xml:space="preserve">
+    <value>Mettre en file</value>
+  </data>
+  <data name="QueueDialogFailed" xml:space="preserve">
+    <value>Échec de la création de la tâche.</value>
+  </data>
+  <data name="QueueDialogAdded" xml:space="preserve">
+    <value>Tâche de synchronisation ajoutée.</value>
+  </data>
+  <data name="OpsPageInfo" xml:space="preserve">
+    <value>Ce que JIM fait actuellement, ce qu’il a fait et ce qui est planifié. La synchronisation et la livraison des mots de passe remontent ici.</value>
+  </data>
+  <data name="OpsDemoMode" xml:space="preserve">
+    <value>Mode démonstration : chaque section ci-dessous affiche des données d’exemple, et les actions qui modifieraient quoi que ce soit sont désactivées.</value>
+  </data>
+  <data name="OpsTabPasswords" xml:space="preserve">
+    <value>Mots de passe</value>
+  </data>
+  <data name="OpsTabExchange" xml:space="preserve">
+    <value>Exchange</value>
+  </data>
+  <data name="OpsTabGenerated" xml:space="preserve">
+    <value>Valeurs générées</value>
+  </data>
 </root>
