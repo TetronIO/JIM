@@ -1199,4 +1199,55 @@
   <data name="ConnectedSystemObjectTypeLabel" xml:space="preserve">
     <value>Type d’objets de système connecté</value>
   </data>
+  <data name="EditTestCaseTitle" xml:space="preserve">
+    <value>Modifier le cas de test</value>
+  </data>
+  <data name="SaveTestCaseTitle" xml:space="preserve">
+    <value>Enregistrer le cas de test</value>
+  </data>
+  <data name="TestCasePersonalData" xml:space="preserve">
+    <value>Les entrées de test sont enregistrées comme configuration, sans chiffrement. Si vous les avez copiées depuis un objet réel, remplacez toutes les données personnelles par des valeurs fictives avant d’enregistrer.</value>
+  </data>
+  <data name="TestCaseNameHelp" xml:space="preserve">
+    <value>Ce que le cas vérifie, dans vos propres mots. Il est consigné dans l’historique de configuration, n’y mettez donc pas de valeurs.</value>
+  </data>
+  <data name="InputsHeading" xml:space="preserve">
+    <value>Entrées</value>
+  </data>
+  <data name="NoAttributesReadWithConnections" xml:space="preserve">
+    <value>Ce cas teste ne lit aucun attribut, seulement les connexions ci-dessous.</value>
+  </data>
+  <data name="NoAttributesReadAtAll" xml:space="preserve">
+    <value>Ce cas teste ne lit aucun attribut : il donne donc le même résultat pour chaque objet.</value>
+  </data>
+  <data name="NoLongerRead" xml:space="preserve">
+    <value>Plus lu : {0}</value>
+  </data>
+  <data name="RemoveInputTooltip" xml:space="preserve">
+    <value>Retirer cette entrée</value>
+  </data>
+  <data name="RemoveInputAria" xml:space="preserve">
+    <value>Retirer {0}</value>
+  </data>
+  <data name="ResultLabel" xml:space="preserve">
+    <value>Résultat</value>
+  </data>
+  <data name="AddValueLabel" xml:space="preserve">
+    <value>Ajouter une valeur</value>
+  </data>
+  <data name="AddValueHelp" xml:space="preserve">
+    <value>Appuyez sur Entrée pour ajouter. Une date peut s’écrire 2026-03-02 ; chaque valeur est comparée selon le type que donne la configuration.</value>
+  </data>
+  <data name="AddValueAria" xml:space="preserve">
+    <value>Ajouter une valeur</value>
+  </data>
+  <data name="InOrderLabel" xml:space="preserve">
+    <value>Dans cet ordre</value>
+  </data>
+  <data name="TestCaseSaved" xml:space="preserve">
+    <value>Cas de test « {0} » enregistré.</value>
+  </data>
+  <data name="ExpectsHeading" xml:space="preserve">
+    <value>Attendu</value>
+  </data>
 </root>

@@ -1570,4 +1570,72 @@
     <value>Connected System Object Type</value>
     <comment>Label of the Connected System Object Type field.</comment>
   </data>
+  <data name="EditTestCaseTitle" xml:space="preserve">
+    <value>Edit test case</value>
+    <comment>Dialog title when editing a configuration test case.</comment>
+  </data>
+  <data name="SaveTestCaseTitle" xml:space="preserve">
+    <value>Save test case</value>
+    <comment>Dialog title when saving a new configuration test case.</comment>
+  </data>
+  <data name="TestCasePersonalData" xml:space="preserve">
+    <value>Test inputs are saved as configuration, unencrypted. If you copied them from a real object, replace any personal data with made-up values before you save.</value>
+    <comment>Warning on a test case dialog.</comment>
+  </data>
+  <data name="TestCaseNameHelp" xml:space="preserve">
+    <value>What the case checks, in your own words. It is recorded in Configuration History, so keep values out of it.</value>
+    <comment>Helper text under the test case name.</comment>
+  </data>
+  <data name="InputsHeading" xml:space="preserve">
+    <value>Inputs</value>
+    <comment>Heading of the test case inputs.</comment>
+  </data>
+  <data name="NoAttributesReadWithConnections" xml:space="preserve">
+    <value>What this case tests reads no attributes, only the connections below.</value>
+    <comment>Shown when the case reads no attributes but has connections.</comment>
+  </data>
+  <data name="NoAttributesReadAtAll" xml:space="preserve">
+    <value>What this case tests reads no attributes, so it gives the same result for every object.</value>
+    <comment>Shown when the case reads no attributes and has no connections.</comment>
+  </data>
+  <data name="NoLongerRead" xml:space="preserve">
+    <value>No longer read: {0}</value>
+    <comment>An input the configuration no longer reads, with its saved values. {0} is the values.</comment>
+  </data>
+  <data name="RemoveInputTooltip" xml:space="preserve">
+    <value>Remove this input</value>
+    <comment>Tooltip on the button removing an input.</comment>
+  </data>
+  <data name="RemoveInputAria" xml:space="preserve">
+    <value>Remove {0}</value>
+    <comment>Accessible name of the button removing an input. {0} is the attribute name.</comment>
+  </data>
+  <data name="ResultLabel" xml:space="preserve">
+    <value>Result</value>
+    <comment>Label of the expected result field.</comment>
+  </data>
+  <data name="AddValueLabel" xml:space="preserve">
+    <value>Add a value</value>
+    <comment>Label of the field adding an expected value.</comment>
+  </data>
+  <data name="AddValueHelp" xml:space="preserve">
+    <value>Press Enter to add. A date can be written as 2026-03-02; each value is compared as the type the configuration gives.</value>
+    <comment>Helper text under the add value field.</comment>
+  </data>
+  <data name="AddValueAria" xml:space="preserve">
+    <value>Add value</value>
+    <comment>Accessible name of the add value button.</comment>
+  </data>
+  <data name="InOrderLabel" xml:space="preserve">
+    <value>In this order</value>
+    <comment>Checkbox: the expected values must come in this order.</comment>
+  </data>
+  <data name="TestCaseSaved" xml:space="preserve">
+    <value>Saved test case '{0}'.</value>
+    <comment>Snackbar after saving. {0} is the test case name.</comment>
+  </data>
+  <data name="ExpectsHeading" xml:space="preserve">
+    <value>Expects</value>
+    <comment>Heading of the expected result of a test case.</comment>
+  </data>
 </root>
