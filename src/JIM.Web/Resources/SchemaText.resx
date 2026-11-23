@@ -1886,4 +1886,144 @@
     <value>{0}, {1}{2}, {3} entries read</value>
     <comment>Describes a discovery run. {2} is ' by name' or nothing.</comment>
   </data>
+  <data name="DataFlowSources" xml:space="preserve">
+    <value>Sources</value>
+    <comment>Title of the list of a flow's sources, opened from the first one.</comment>
+  </data>
+  <data name="ChangeTypeHeader" xml:space="preserve">
+    <value>Change Type</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="ChangeDetailsHeader" xml:space="preserve">
+    <value>Details</value>
+    <comment>Table column heading.</comment>
+  </data>
+  <data name="ChangeObjectTypesAdded" xml:space="preserve">
+    <value>Object Types Added</value>
+    <comment>Change row.</comment>
+  </data>
+  <data name="ChangeObjectTypesUpdated" xml:space="preserve">
+    <value>Object Types Updated</value>
+    <comment>Change row.</comment>
+  </data>
+  <data name="ChangeObjectTypesRenamed" xml:space="preserve">
+    <value>Object Types Renamed</value>
+    <comment>Change row.</comment>
+  </data>
+  <data name="ChangeClassificationRecorded" xml:space="preserve">
+    <value>Object Type Classification Recorded</value>
+    <comment>Change row.</comment>
+  </data>
+  <data name="ChangeAttributesAdded" xml:space="preserve">
+    <value>Attributes Added ({0})</value>
+    <comment>Change row. {0} is the Object Type.</comment>
+  </data>
+  <data name="ChangeAttributesRenamed" xml:space="preserve">
+    <value>Attributes Renamed ({0})</value>
+    <comment>Change row. {0} is the Object Type.</comment>
+  </data>
+  <data name="ChangeObjectTypesNoLongerReported" xml:space="preserve">
+    <value>Object Types No Longer Reported</value>
+    <comment>Change row.</comment>
+  </data>
+  <data name="ChangeAttributesNoLongerReported" xml:space="preserve">
+    <value>Attributes No Longer Reported ({0})</value>
+    <comment>Change row. {0} is the Object Type.</comment>
+  </data>
+  <data name="ChangeAttributeDefinitionsChanged" xml:space="preserve">
+    <value>Attribute Definitions Changed ({0})</value>
+    <comment>Change row. {0} is the Object Type.</comment>
+  </data>
+  <data name="ChangeClassificationChanged" xml:space="preserve">
+    <value>Object Type Classification Changed ({0})</value>
+    <comment>Change row. {0} is the Object Type.</comment>
+  </data>
+  <data name="ChangeAspectDataType" xml:space="preserve">
+    <value>data type</value>
+    <comment>The aspect of an attribute that changed.</comment>
+  </data>
+  <data name="ChangeAspectPlurality" xml:space="preserve">
+    <value>plurality</value>
+    <comment>The aspect of an attribute that changed.</comment>
+  </data>
+  <data name="ChangeAspectWritability" xml:space="preserve">
+    <value>writability</value>
+    <comment>The aspect of an attribute that changed.</comment>
+  </data>
+  <data name="ChangeDefinitionLine" xml:space="preserve">
+    <value>{0}: {1} {2} → {3}</value>
+    <comment>An attribute definition change. {0} attribute name, {1} the aspect, {2} the old value, {3} the new value.</comment>
+  </data>
+  <data name="ChangeAspectClassKind" xml:space="preserve">
+    <value>class kind</value>
+    <comment>The aspect of a classification that changed.</comment>
+  </data>
+  <data name="ChangeAspectInheritedClasses" xml:space="preserve">
+    <value>inherited classes</value>
+    <comment>The aspect of a classification that changed.</comment>
+  </data>
+  <data name="ChangeClassificationLine" xml:space="preserve">
+    <value>{0} {1} → {2}</value>
+    <comment>A classification change. {0} the aspect, {1} the old values, {2} the new values.</comment>
+  </data>
+  <data name="ChangeNone" xml:space="preserve">
+    <value>none</value>
+    <comment>Shown for an empty list of classes.</comment>
+  </data>
+  <data name="RemovedPartitionIntro" xml:space="preserve">
+    <value>The Connected System no longer has {0} that {1} {2}. Removing {3} would leave {4} reading every selected partition, so nothing from this refresh has been saved yet.</value>
+    <comment>Dialog intro. {0} is the partition phrase, {1} the Run Profile count, {2} the verb, {3} the pronoun, {4} the Run Profile reference.</comment>
+  </data>
+  <data name="RemovedPartitionPartitionOne" xml:space="preserve">
+    <value>a partition</value>
+    <comment>Partition phrase, one partition. Plural rule: one form.</comment>
+  </data>
+  <data name="RemovedPartitionPartitionOther" xml:space="preserve">
+    <value>partitions</value>
+    <comment>Partition phrase, several partitions.</comment>
+  </data>
+  <data name="RemovedPartitionRunProfileCountOne" xml:space="preserve">
+    <value>1 Run Profile</value>
+    <comment>Run Profile count, one. Plural rule: one form.</comment>
+  </data>
+  <data name="RemovedPartitionRunProfileCountOther" xml:space="preserve">
+    <value>{0} Run Profiles</value>
+    <comment>Run Profile count, several. {0} is the count.</comment>
+  </data>
+  <data name="RemovedPartitionTargetsOne" xml:space="preserve">
+    <value>targets</value>
+    <comment>Verb, one Run Profile. Plural rule: one form.</comment>
+  </data>
+  <data name="RemovedPartitionTargetsOther" xml:space="preserve">
+    <value>target</value>
+    <comment>Verb, several Run Profiles.</comment>
+  </data>
+  <data name="RemovedPartitionItOne" xml:space="preserve">
+    <value>it</value>
+    <comment>Pronoun for one partition.</comment>
+  </data>
+  <data name="RemovedPartitionItOther" xml:space="preserve">
+    <value>them</value>
+    <comment>Pronoun for several partitions.</comment>
+  </data>
+  <data name="RemovedPartitionThatOne" xml:space="preserve">
+    <value>that Run Profile</value>
+    <comment>Reference to one Run Profile.</comment>
+  </data>
+  <data name="RemovedPartitionThoseOther" xml:space="preserve">
+    <value>those Run Profiles</value>
+    <comment>Reference to several Run Profiles.</comment>
+  </data>
+  <data name="RemovedPartitionExplain" xml:space="preserve">
+    <value>{0} applies the refresh and disables each one, keeping its other settings. Enable it again on the Run Profiles tab, choosing the partition it reads. {1} applies nothing from this refresh.</value>
+    <comment>Explains the choices. {0} is the Disable button's name, {1} the Cancel button's name.</comment>
+  </data>
+  <data name="DisableRunProfiles" xml:space="preserve">
+    <value>Disable Run Profiles</value>
+    <comment>Button that applies the refresh with the Run Profiles disabled.</comment>
+  </data>
+  <data name="RunProfilesTargetRemoved" xml:space="preserve">
+    <value>Run Profiles target a removed partition</value>
+    <comment>Dialog title.</comment>
+  </data>
 </root>

@@ -1418,4 +1418,109 @@
   <data name="AuxRunSummaryBy" xml:space="preserve">
     <value>{0}, {1}{2}, {3} entrées lues</value>
   </data>
+  <data name="DataFlowSources" xml:space="preserve">
+    <value>Sources</value>
+  </data>
+  <data name="ChangeTypeHeader" xml:space="preserve">
+    <value>Type de modification</value>
+  </data>
+  <data name="ChangeDetailsHeader" xml:space="preserve">
+    <value>Détails</value>
+  </data>
+  <data name="ChangeObjectTypesAdded" xml:space="preserve">
+    <value>Types d’objets ajoutés</value>
+  </data>
+  <data name="ChangeObjectTypesUpdated" xml:space="preserve">
+    <value>Types d’objets mis à jour</value>
+  </data>
+  <data name="ChangeObjectTypesRenamed" xml:space="preserve">
+    <value>Types d’objets renommés</value>
+  </data>
+  <data name="ChangeClassificationRecorded" xml:space="preserve">
+    <value>Classification des types d’objets enregistrée</value>
+  </data>
+  <data name="ChangeAttributesAdded" xml:space="preserve">
+    <value>Attributs ajoutés ({0})</value>
+  </data>
+  <data name="ChangeAttributesRenamed" xml:space="preserve">
+    <value>Attributs renommés ({0})</value>
+  </data>
+  <data name="ChangeObjectTypesNoLongerReported" xml:space="preserve">
+    <value>Types d’objets non signalés</value>
+  </data>
+  <data name="ChangeAttributesNoLongerReported" xml:space="preserve">
+    <value>Attributs non signalés ({0})</value>
+  </data>
+  <data name="ChangeAttributeDefinitionsChanged" xml:space="preserve">
+    <value>Définitions d’attributs modifiées ({0})</value>
+  </data>
+  <data name="ChangeClassificationChanged" xml:space="preserve">
+    <value>Classification des types d’objets modifiée ({0})</value>
+  </data>
+  <data name="ChangeAspectDataType" xml:space="preserve">
+    <value>type de données</value>
+  </data>
+  <data name="ChangeAspectPlurality" xml:space="preserve">
+    <value>pluralité</value>
+  </data>
+  <data name="ChangeAspectWritability" xml:space="preserve">
+    <value>modifiabilité</value>
+  </data>
+  <data name="ChangeDefinitionLine" xml:space="preserve">
+    <value>{0} : {1} {2} → {3}</value>
+  </data>
+  <data name="ChangeAspectClassKind" xml:space="preserve">
+    <value>genre de classe</value>
+  </data>
+  <data name="ChangeAspectInheritedClasses" xml:space="preserve">
+    <value>classes héritées</value>
+  </data>
+  <data name="ChangeClassificationLine" xml:space="preserve">
+    <value>{0} {1} → {2}</value>
+  </data>
+  <data name="ChangeNone" xml:space="preserve">
+    <value>aucun</value>
+  </data>
+  <data name="RemovedPartitionIntro" xml:space="preserve">
+    <value>Le système connecté ne contient plus {0} que {1} {2}. Supprimer {3} laisserait {4} lire chaque partition sélectionnée : rien de cette actualisation n’a donc encore été enregistré.</value>
+  </data>
+  <data name="RemovedPartitionPartitionOne" xml:space="preserve">
+    <value>une partition</value>
+  </data>
+  <data name="RemovedPartitionPartitionOther" xml:space="preserve">
+    <value>des partitions</value>
+  </data>
+  <data name="RemovedPartitionRunProfileCountOne" xml:space="preserve">
+    <value>1 profil d’exécution</value>
+  </data>
+  <data name="RemovedPartitionRunProfileCountOther" xml:space="preserve">
+    <value>{0} profils d’exécution</value>
+  </data>
+  <data name="RemovedPartitionTargetsOne" xml:space="preserve">
+    <value>cible</value>
+  </data>
+  <data name="RemovedPartitionTargetsOther" xml:space="preserve">
+    <value>ciblent</value>
+  </data>
+  <data name="RemovedPartitionItOne" xml:space="preserve">
+    <value>elle</value>
+  </data>
+  <data name="RemovedPartitionItOther" xml:space="preserve">
+    <value>elles</value>
+  </data>
+  <data name="RemovedPartitionThatOne" xml:space="preserve">
+    <value>ce profil d’exécution</value>
+  </data>
+  <data name="RemovedPartitionThoseOther" xml:space="preserve">
+    <value>ces profils d’exécution</value>
+  </data>
+  <data name="RemovedPartitionExplain" xml:space="preserve">
+    <value>{0} applique l’actualisation et désactive chacun d’eux, en conservant leurs autres paramètres. Réactivez-le dans l’onglet Profils d’exécution, en choisissant la partition qu’il lit. {1} n’applique rien de cette actualisation.</value>
+  </data>
+  <data name="DisableRunProfiles" xml:space="preserve">
+    <value>Désactiver les profils d’exécution</value>
+  </data>
+  <data name="RunProfilesTargetRemoved" xml:space="preserve">
+    <value>Des profils d’exécution ciblent une partition supprimée</value>
+  </data>
 </root>

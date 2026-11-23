@@ -341,4 +341,58 @@
   <data name="TableOrViewNotVisible" xml:space="preserve">
     <value>Le compte de base de données ne voit aucune table ni aucune vue de ce nom. Vérifiez le nom, le schéma et les autorisations du compte.</value>
   </data>
+  <data name="StepsLabel" xml:space="preserve">
+    <value>Étapes</value>
+  </data>
+  <data name="StepSource" xml:space="preserve">
+    <value>Source</value>
+  </data>
+  <data name="StepReferences" xml:space="preserve">
+    <value>Références</value>
+  </data>
+  <data name="OptionalStep" xml:space="preserve">
+    <value>facultatif</value>
+  </data>
+  <data name="AddNameHelp" xml:space="preserve">
+    <value>Le nom que JIM donne à ce type d’objet. Utilisez un nom standard (User, Group, Person) lorsqu’il en existe un, et JIM le relie au type d’objet Metaverse correspondant.</value>
+  </data>
+  <data name="WhereObjectsCome" xml:space="preserve">
+    <value>D’où viennent les objets</value>
+  </data>
+  <data name="StatementHelp" xml:space="preserve">
+    <value>Une seule instruction commençant par SELECT ou WITH, pour le cas où une vue ne peut pas être créée. JIM peut importer depuis elle, mais ne peut pas exporter vers elle.</value>
+  </data>
+  <data name="AnchorIntroStatement" xml:space="preserve">
+    <value>La ou les colonnes dont les valeurs identifient une ligne de l’instruction, dans l’ordre de la clé.</value>
+  </data>
+  <data name="AnchorIntroTable" xml:space="preserve">
+    <value>La ou les colonnes dont les valeurs identifient une ligne de {0}, dans l’ordre de la clé.</value>
+  </data>
+  <data name="ReadingColumns" xml:space="preserve">
+    <value>Lecture de ses colonnes et de ses clés…</value>
+  </data>
+  <data name="AddReferencesIntro" xml:space="preserve">
+    <value>Colonnes dont les valeurs contiennent l’ancre d’un autre objet, par exemple un responsable. Passez cette étape s’il n’y en a aucune ; vous pourrez les ajouter plus tard.</value>
+  </data>
+  <data name="AddMultiValuedIntro" xml:space="preserve">
+    <value>Tables enfants contenant une ligne par valeur, par exemple des numéros de téléphone ou des membres de groupe. Passez cette étape s’il n’y en a aucune ; vous pourrez les ajouter plus tard.</value>
+  </data>
+  <data name="AnchorPreselected" xml:space="preserve">
+    <value>Présélectionnée à partir de la clé primaire de la table, dans l’ordre de la clé.</value>
+  </data>
+  <data name="AnchorViewNoKeys" xml:space="preserve">
+    <value>Une vue ne déclare aucune clé : JIM ne peut donc pas suggérer d’ancre. Choisissez la ou les colonnes qui identifient une ligne.</value>
+  </data>
+  <data name="AnchorTableNoKey" xml:space="preserve">
+    <value>La table ne déclare aucune clé primaire : JIM ne peut donc pas suggérer d’ancre. Choisissez la ou les colonnes qui identifient une ligne.</value>
+  </data>
+  <data name="AnchorStatementNoKeys" xml:space="preserve">
+    <value>Une instruction SELECT ne déclare aucune clé : JIM ne peut donc pas suggérer d’ancre. Choisissez la ou les colonnes qui identifient une ligne.</value>
+  </data>
+  <data name="AnchorColumnsUnreadable" xml:space="preserve">
+    <value>Impossible de lire les colonnes ; saisissez donc leurs noms : {0}</value>
+  </data>
+  <data name="AnchorColumnsUnreadableNoReason" xml:space="preserve">
+    <value>Impossible de lire les colonnes ; saisissez donc leurs noms.</value>
+  </data>
 </root>

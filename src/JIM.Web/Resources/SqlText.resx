@@ -450,4 +450,76 @@
     <value>The database account cannot see a table or view of that name. Check the name, the schema, and the account's permissions.</value>
     <comment>Shown when no table or view of the chosen name is visible.</comment>
   </data>
+  <data name="StepsLabel" xml:space="preserve">
+    <value>Steps</value>
+    <comment>Accessible name of the step list.</comment>
+  </data>
+  <data name="StepSource" xml:space="preserve">
+    <value>Source</value>
+    <comment>Step title.</comment>
+  </data>
+  <data name="StepReferences" xml:space="preserve">
+    <value>References</value>
+    <comment>Step title.</comment>
+  </data>
+  <data name="OptionalStep" xml:space="preserve">
+    <value>optional</value>
+    <comment>Marks an optional step.</comment>
+  </data>
+  <data name="AddNameHelp" xml:space="preserve">
+    <value>What JIM calls this Object Type. Use a standard name (User, Group, Person) where one fits, and JIM maps it to the matching Metaverse Object Type.</value>
+    <comment>Helper under the Name field in the Add Object Type dialog.</comment>
+  </data>
+  <data name="WhereObjectsCome" xml:space="preserve">
+    <value>Where the objects come from</value>
+    <comment>Accessible name of the source toggle.</comment>
+  </data>
+  <data name="StatementHelp" xml:space="preserve">
+    <value>A single statement beginning SELECT or WITH, for when a view cannot be created. JIM can import from it, but cannot export to it.</value>
+    <comment>Helper under the SELECT statement field.</comment>
+  </data>
+  <data name="AnchorIntroStatement" xml:space="preserve">
+    <value>The column or columns whose values identify a row of the statement, in key order.</value>
+    <comment>Anchor step intro, when the source is a statement.</comment>
+  </data>
+  <data name="AnchorIntroTable" xml:space="preserve">
+    <value>The column or columns whose values identify a row of {0}, in key order.</value>
+    <comment>Anchor step intro, when the source is a table. {0} is the table, in code (markup).</comment>
+  </data>
+  <data name="ReadingColumns" xml:space="preserve">
+    <value>Reading its columns and keys...</value>
+    <comment>Shown while the source's columns are read.</comment>
+  </data>
+  <data name="AddReferencesIntro" xml:space="preserve">
+    <value>Columns whose values hold another object's anchor, such as a manager. Skip this if there are none; you can add them later.</value>
+    <comment>Intro of the References step.</comment>
+  </data>
+  <data name="AddMultiValuedIntro" xml:space="preserve">
+    <value>Child tables holding one row per value, such as phone numbers or group members. Skip this if there are none; you can add them later.</value>
+    <comment>Intro of the multi-valued attributes step.</comment>
+  </data>
+  <data name="AnchorPreselected" xml:space="preserve">
+    <value>Preselected from the table's primary key, in key order.</value>
+    <comment>Anchor reason.</comment>
+  </data>
+  <data name="AnchorViewNoKeys" xml:space="preserve">
+    <value>A view declares no keys, so JIM cannot suggest an anchor. Choose the column or columns that identify a row.</value>
+    <comment>Anchor reason.</comment>
+  </data>
+  <data name="AnchorTableNoKey" xml:space="preserve">
+    <value>The table declares no primary key, so JIM cannot suggest an anchor. Choose the column or columns that identify a row.</value>
+    <comment>Anchor reason.</comment>
+  </data>
+  <data name="AnchorStatementNoKeys" xml:space="preserve">
+    <value>A SELECT statement declares no keys, so JIM cannot suggest an anchor. Choose the column or columns that identify a row.</value>
+    <comment>Anchor reason.</comment>
+  </data>
+  <data name="AnchorColumnsUnreadable" xml:space="preserve">
+    <value>The columns could not be read, so type their names: {0}</value>
+    <comment>Anchor reason when the columns cannot be read. {0} is the reason.</comment>
+  </data>
+  <data name="AnchorColumnsUnreadableNoReason" xml:space="preserve">
+    <value>The columns could not be read, so type their names.</value>
+    <comment>Anchor reason when the columns cannot be read.</comment>
+  </data>
 </root>

@@ -13,6 +13,7 @@
    document, and the problems the parser finds are listed above it and marked on their lines.
    The textarea's value stays an @bind (get/set) for the reason ExpressionEditor gives: value plus @oninput loses
    characters typed while a keystroke is in flight. *@
+@* i18n: exempt - a CSS class name and a test id, not text. *@
 <div class="@($"jim-sql-json-view {Class}".Trim())" data-testid="jim-sql-json-view">
     @if (Problems.Count > 0)
     {
