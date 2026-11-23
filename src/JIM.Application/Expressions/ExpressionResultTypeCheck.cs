@@ -1,8 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Resources;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
+using JIM.Models.Localisation;
 
 namespace JIM.Application.Expressions;
 
@@ -50,20 +52,23 @@ public static class ExpressionResultTypeCheck
     /// Why <paramref name="expression"/>'s result can never suit <paramref name="targetType"/>, naming the function and
     /// <paramref name="targetName"/>; or null when it can, or when that is not known until it runs.
     /// </summary>
-    public static string? DescribeProblem(string? expression, AttributeDataType targetType, string targetName)
+    public static string? DescribeProblem(string? expression, AttributeDataType targetType, string targetName) =>
+        DescribeProblemMessage(expression, targetType, targetName)?.ToEnglish();
+
+    /// <summary>
+    /// <see cref="DescribeProblem"/> as a message (#3030), so the portal can show it in the viewer's language.
+    /// </summary>
+    public static JimMessage? DescribeProblemMessage(string? expression, AttributeDataType targetType, string targetName)
     {
         var function = OutermostFunction(expression);
         if (function == null || !CanNeverHold(function.ResultType, targetType))
             return null;
 
-        return $"{function.Name} returns {function.Returns}, which '{targetName}' can never hold as {Describe(targetType)} attribute.";
+        // The function's own wording of what it returns, in the reader's language where the catalogue holds it as a message.
+        MessageArgument returns = function.ReturnsDetail is { } detail ? detail : function.Returns;
+        return ExpressionMessage.Of(nameof(ExpressionMessages.ProblemResultTypeMismatch), function.Name, returns, targetName, Describe(targetType));
     }
 
-    /// <summary>
-    /// The catalogue function <paramref name="expression"/> is one call to, or null: the expression must be a function
-    /// name, its opening bracket, and the bracket that closes it as the last character. Brackets inside string literals
-    /// are text, not structure.
-    /// </summary>
     private static ExpressionFunction? OutermostFunction(string? expression)
     {
         var text = expression?.Trim();
@@ -125,17 +130,17 @@ public static class ExpressionResultTypeCheck
         return -1;
     }
 
-    private static string Describe(AttributeDataType type) => type switch
+    private static JimMessage Describe(AttributeDataType type) => type switch
     {
-        AttributeDataType.Text => "a Text",
-        AttributeDataType.Number => "a Number",
-        AttributeDataType.LongNumber => "a Long Number",
-        AttributeDataType.Decimal => "a Decimal",
-        AttributeDataType.DateTime => "a Date Time",
-        AttributeDataType.Boolean => "a Boolean",
-        AttributeDataType.Guid => "a Guid",
-        AttributeDataType.Binary => "a Binary",
-        AttributeDataType.Reference => "a Reference",
-        _ => "this"
+        AttributeDataType.Text => ExpressionMessage.Of(nameof(ExpressionMessages.AttributeKindText)),
+        AttributeDataType.Number => ExpressionMessage.Of(nameof(ExpressionMessages.AttributeKindNumber)),
+        AttributeDataType.LongNumber => ExpressionMessage.Of(nameof(ExpressionMessages.AttributeKindLongNumber)),
+        AttributeDataType.Decimal => ExpressionMessage.Of(nameof(ExpressionMessages.AttributeKindDecimal)),
+        AttributeDataType.DateTime => ExpressionMessage.Of(nameof(ExpressionMessages.AttributeKindDateTime)),
+        AttributeDataType.Boolean => ExpressionMessage.Of(nameof(ExpressionMessages.AttributeKindBoolean)),
+        AttributeDataType.Guid => ExpressionMessage.Of(nameof(ExpressionMessages.AttributeKindGuid)),
+        AttributeDataType.Binary => ExpressionMessage.Of(nameof(ExpressionMessages.AttributeKindBinary)),
+        AttributeDataType.Reference => ExpressionMessage.Of(nameof(ExpressionMessages.AttributeKindReference)),
+        _ => ExpressionMessage.Of(nameof(ExpressionMessages.AttributeKindOther))
     };
 }

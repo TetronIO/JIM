@@ -3,8 +3,11 @@
 
 using System.Security.Cryptography.X509Certificates;
 using JIM.Application.Interfaces;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Application.Services;
 using JIM.Models.Core;
+using JIM.Models.Localisation;
 using JIM.Models.Security;
 using JIM.Utilities;
 using Serilog;
@@ -99,7 +102,7 @@ public class IdentityProviderTrustServer
             return new IdentityProviderCertificateTrustResult
             {
                 Outcome = IdentityProviderCertificateTrustOutcome.ThumbprintNotPresented,
-                Message = "A thumbprint is required. JIM will not trust whatever the identity provider happens to be presenting."
+                Detail = ServerMessage.Create(nameof(ServerMessages.IdpThumbprintRequired))
             };
         }
 
@@ -109,9 +112,9 @@ public class IdentityProviderTrustServer
             switch (status.State)
             {
                 case IdentityProviderTrustState.NotChecked or IdentityProviderTrustState.Unreachable or IdentityProviderTrustState.NotHttps:
-                    return Result(IdentityProviderCertificateTrustOutcome.IdentityProviderUnavailable, status, $"Nothing was trusted. {status.Message}");
+                    return Result(IdentityProviderCertificateTrustOutcome.IdentityProviderUnavailable, status, ServerMessage.Create(nameof(ServerMessages.IdpNothingTrusted), StatusDetail(status)));
                 case IdentityProviderTrustState.NameMismatch:
-                    return Result(IdentityProviderCertificateTrustOutcome.NameMismatch, status, $"Nothing was trusted. {status.Message}");
+                    return Result(IdentityProviderCertificateTrustOutcome.NameMismatch, status, ServerMessage.Create(nameof(ServerMessages.IdpNothingTrusted), StatusDetail(status)));
             }
 
             var chosen = status.PresentedChain.FirstOrDefault(c => NormaliseThumbprint(c.Thumbprint) == expected);
@@ -119,17 +122,17 @@ public class IdentityProviderTrustServer
             {
                 Log.Warning("Refused to trust a certificate for sign-in: {Host} is not presenting {Expected}", LogSanitiser.Sanitise(status.Host), LogSanitiser.Sanitise(expected));
                 return Result(IdentityProviderCertificateTrustOutcome.ThumbprintNotPresented, status,
-                    $"{status.Host} is not presenting a certificate with that thumbprint now, so nothing was trusted. This is expected if its certificate was renewed since you looked; check its status again.");
+                    ServerMessage.Create(nameof(ServerMessages.IdpNotPresenting), status.Host));
             }
 
             var existing = await Application.Repository.TrustedCertificates.GetByThumbprintAsync(chosen.Thumbprint);
             if (existing != null && existing.TrustedFor.HasFlag(CertificateTrustPurpose.SignIn))
-                return Result(IdentityProviderCertificateTrustOutcome.AlreadyTrusted, status, $"'{existing.Name}' is already trusted for sign-in.", existing);
+                return Result(IdentityProviderCertificateTrustOutcome.AlreadyTrusted, status, ServerMessage.Create(nameof(ServerMessages.IdpAlreadyTrusted), existing.Name), existing);
 
             if (!WouldVouchForTheIdentityProvider(chosen, probe))
             {
                 return Result(IdentityProviderCertificateTrustOutcome.InvalidChain, status,
-                    $"Trusting '{chosen.CommonName}' would not make {status.Host} trusted: a certificate in its chain has expired or is not valid. Nothing was trusted; the identity provider's certificate needs renewing.");
+                    ServerMessage.Create(nameof(ServerMessages.IdpWouldNotVouch), chosen.CommonName, status.Host));
             }
 
             var reason = string.IsNullOrWhiteSpace(changeReason)
@@ -141,12 +144,12 @@ public class IdentityProviderTrustServer
                 await updateTrustedForAsync(existing.Id, existing.TrustedFor | CertificateTrustPurpose.SignIn, reason);
                 var widened = await Application.Repository.TrustedCertificates.GetByIdAsync(existing.Id) ?? existing;
                 return Result(IdentityProviderCertificateTrustOutcome.TrustedForSignInAsWell, status,
-                    $"'{widened.Name}' was already trusted for Connectors and is now trusted for sign-in as well.", widened);
+                    ServerMessage.Create(nameof(ServerMessages.IdpWidenedToSignIn), widened.Name), widened);
             }
 
             var notes = $"Trusted for sign-in from the identity provider {status.Host}, which presented it.";
             var added = await addAsync(string.IsNullOrWhiteSpace(name) ? chosen.CommonName : name.Trim(), chosen.Data, notes, reason);
-            return Result(IdentityProviderCertificateTrustOutcome.Trusted, status, $"'{added.Name}' is now trusted for sign-in.", added);
+            return Result(IdentityProviderCertificateTrustOutcome.Trusted, status, ServerMessage.Create(nameof(ServerMessages.IdpNowTrusted), added.Name), added);
         }
         finally
         {
@@ -165,7 +168,7 @@ public class IdentityProviderTrustServer
                 State = IdentityProviderTrustState.NotChecked,
                 Authority = authority,
                 CheckedUtc = now,
-                Message = "No identity provider is configured (JIM_SSO_AUTHORITY)."
+                Detail = ServerMessage.Create(nameof(ServerMessages.IdpNotConfigured))
             }, null);
         }
 
@@ -206,7 +209,7 @@ public class IdentityProviderTrustServer
             .Select(c => c!)
             .ToList();
 
-        var (state, message) = Judge(metadataAddress, probe, presented, unsentIssuer, vouching);
+        var (state, detail) = Judge(metadataAddress, probe, presented, unsentIssuer, vouching);
 
         return new IdentityProviderTrustStatus
         {
@@ -218,46 +221,46 @@ public class IdentityProviderTrustServer
             UnsentIssuer = unsentIssuer,
             UnsentIssuerCommonName = unsentIssuer == null ? null : CommonNameOf(unsentIssuer),
             VouchingCertificates = state == IdentityProviderTrustState.Trusted ? vouching : [],
-            Message = message,
+            Detail = detail,
             CheckedUtc = now
         };
     }
 
-    private static (IdentityProviderTrustState State, string Message) Judge(Uri metadataAddress, IdentityProviderProbeResult probe,
+    private static (IdentityProviderTrustState State, JimMessage Detail) Judge(Uri metadataAddress, IdentityProviderProbeResult probe,
         List<IdentityProviderCertificate> presented, string? unsentIssuer, List<IdentityProviderCertificate> vouching)
     {
         var host = metadataAddress.Host;
 
         if (!probe.Reached)
-            return (IdentityProviderTrustState.Unreachable, $"JIM could not reach the identity provider at {host}: {probe.Error ?? "no answer"}.");
+            return (IdentityProviderTrustState.Unreachable, ServerMessage.Create(nameof(ServerMessages.IdpUnreachable), host, ProbeError(probe)));
 
         if (metadataAddress.Scheme == Uri.UriSchemeHttp)
         {
             return probe.DocumentRead
-                ? (IdentityProviderTrustState.NotHttps, $"The identity provider at {host} is reached over plain HTTP, so there is no certificate to check. Use HTTPS outside local development.")
-                : (IdentityProviderTrustState.Unreachable, $"JIM reached {host} but could not read its OpenID Connect configuration: {probe.Error ?? "no answer"}.");
+                ? (IdentityProviderTrustState.NotHttps, ServerMessage.Create(nameof(ServerMessages.IdpPlainHttp), host))
+                : (IdentityProviderTrustState.Unreachable, ServerMessage.Create(nameof(ServerMessages.IdpConfigurationUnreadable), host, ProbeError(probe)));
         }
 
         switch (probe.Decision?.Outcome)
         {
             case CertificateStoreTrustOutcome.NameMismatch:
                 return (IdentityProviderTrustState.NameMismatch,
-                    $"{host}'s certificate was not issued for {host}. Trusting a certificate cannot fix this: the identity provider needs a certificate that names {host}, or JIM_SSO_AUTHORITY must use a name its certificate carries.");
+                    ServerMessage.Create(nameof(ServerMessages.IdpNameMismatch), host));
             case CertificateStoreTrustOutcome.Untrusted:
                 var top = presented.LastOrDefault();
-                var issuedBy = unsentIssuer == null ? string.Empty : $" (issued by \"{CommonNameOf(unsentIssuer)}\")";
-                return (IdentityProviderTrustState.Untrusted,
-                    $"JIM does not trust {host}'s certificate: its chain ends at \"{top?.CommonName}\"{issuedBy}, and nothing trusted for sign-in vouches for it. Trust that certificate authority for sign-in to enable sign-in.");
+                return (IdentityProviderTrustState.Untrusted, unsentIssuer == null
+                    ? ServerMessage.Create(nameof(ServerMessages.IdpUntrusted), host, top?.CommonName ?? string.Empty)
+                    : ServerMessage.Create(nameof(ServerMessages.IdpUntrustedIssuedBy), host, top?.CommonName ?? string.Empty, CommonNameOf(unsentIssuer)));
             case CertificateStoreTrustOutcome.NoCertificate or null:
-                return (IdentityProviderTrustState.Unreachable, $"JIM reached {host} but it presented no TLS certificate: {probe.Error ?? "no answer"}.");
+                return (IdentityProviderTrustState.Unreachable, ServerMessage.Create(nameof(ServerMessages.IdpNoTlsCertificate), host, ProbeError(probe)));
         }
 
         if (!probe.DocumentRead)
-            return (IdentityProviderTrustState.Unreachable, $"JIM trusts {host}'s certificate but could not read its OpenID Connect configuration: {probe.Error ?? "no answer"}. Check JIM_SSO_AUTHORITY.");
+            return (IdentityProviderTrustState.Unreachable, ServerMessage.Create(nameof(ServerMessages.IdpTrustedConfigurationUnreadable), host, ProbeError(probe)));
 
         return probe.Decision.Outcome == CertificateStoreTrustOutcome.TrustedByOperatingSystem
-            ? (IdentityProviderTrustState.Trusted, $"{host}'s certificate is trusted by the operating system.")
-            : (IdentityProviderTrustState.Trusted, $"{host}'s certificate is trusted through the JIM certificate store ({string.Join(", ", vouching.Select(v => $"'{v.CommonName}'"))}).");
+            ? (IdentityProviderTrustState.Trusted, ServerMessage.Create(nameof(ServerMessages.IdpTrustedByOperatingSystem), host))
+            : (IdentityProviderTrustState.Trusted, ServerMessage.Create(nameof(ServerMessages.IdpTrustedByStore), host, string.Join(", ", vouching.Select(v => $"'{v.CommonName}'"))));
     }
 
     /// <summary>
@@ -355,13 +358,21 @@ public class IdentityProviderTrustServer
         string.IsNullOrWhiteSpace(thumbprint) ? string.Empty : new string(thumbprint.Where(char.IsAsciiLetterOrDigit).ToArray()).ToUpperInvariant();
 
     private static IdentityProviderCertificateTrustResult Result(IdentityProviderCertificateTrustOutcome outcome, IdentityProviderTrustStatus status,
-        string message, TrustedCertificate? certificate = null) => new()
+        JimMessage detail, TrustedCertificate? certificate = null) => new()
     {
         Outcome = outcome,
         Certificate = certificate,
-        Message = message,
+        Detail = detail,
         Status = status
     };
+
+    /// <summary>The status's explanation as a message to nest in another, or its English where it has none.</summary>
+    private static MessageArgument StatusDetail(IdentityProviderTrustStatus status) =>
+        status.Detail is { } detail ? detail : status.Message ?? string.Empty;
+
+    /// <summary>What the probe reported going wrong, or "no answer" where it said nothing.</summary>
+    private static MessageArgument ProbeError(IdentityProviderProbeResult probe) =>
+        probe.Error is { } error ? error : ServerMessage.Create(nameof(ServerMessages.IdpNoAnswer));
 
     private static void DisposeCertificates(IdentityProviderProbeResult? probe)
     {

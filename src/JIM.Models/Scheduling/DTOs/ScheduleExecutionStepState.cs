@@ -1,7 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text.Json.Serialization;
 using JIM.Models.Activities;
+using JIM.Models.Localisation;
 
 namespace JIM.Models.Scheduling.DTOs;
 
@@ -87,10 +89,24 @@ public class ScheduleExecutionStepState
     public string? ErrorMessage { get; set; }
 
     /// <summary>
+    /// The error as a message the portal shows in the viewer's language (#3039); null where the Activity recorded English
+    /// only. Not part of the REST API's shape.
+    /// </summary>
+    [JsonIgnore]
+    public JimMessage? ErrorMessageDetail { get; set; }
+
+    /// <summary>
     /// Why a Cancelled step did not run (#1768), such as "Not run: an earlier step stopped the Schedule.". Null for a
     /// step in any other state, and for one that was already running when it was cancelled, since that step did run.
     /// </summary>
     public string? CancellationReason { get; set; }
+
+    /// <summary>
+    /// <see cref="CancellationReason"/> as a message the portal shows in the viewer's language (#3039). Not part of the
+    /// REST API's shape.
+    /// </summary>
+    [JsonIgnore]
+    public JimMessage? CancellationReasonDetail { get; set; }
 
     /// <summary>
     /// The Activity this step produced, if one exists.

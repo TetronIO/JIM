@@ -17,10 +17,10 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Connector Space: @_connectedSystemHeader?.Name</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connector Space:</span> <span class="mud-primary-text">@_connectedSystemHeader?.Name</span>
-    <PageInfo Title="Connector Space" DocsPage="configuration/connector-space.md" Term="Term.ConnectorSpace">
-        The Connector Space holds this Connected System's Connected System Objects. Inbound changes from the system are held here before being committed to the Metaverse. Outbound changes are held here ahead of synchronisation to the Connected System.
+<PageTitle>@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.CsoListPageTitle, _connectedSystemHeader?.Name)</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@ConnectorSpaceText.CsoListHeadingLabel</span> <span class="mud-primary-text">@_connectedSystemHeader?.Name</span>
+    <PageInfo Title="@ConnectorSpaceText.CsoBreadcrumbConnectorSpace" DocsPage="configuration/connector-space.md" Term="Term.ConnectorSpace">
+        @ConnectorSpaceText.CsoListPageInfo
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
@@ -29,7 +29,7 @@
     @* Filter Chips *@
     <MudStack Row="true" Spacing="6" Class="mt-4 mb-3 flex-wrap" AlignItems="AlignItems.Start">
         <div>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Status:</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@ConnectorSpaceText.CsoListFilterStatus</MudText>
             <MudChipSet T="ConnectedSystemObjectStatus"
                         SelectionMode="SelectionMode.MultiSelection"
                         SelectedValues="_selectedStatuses"
@@ -40,7 +40,7 @@
                              Color="@(_selectedStatuses.Contains(status) ? Color.Default : GetStatusColor(status))"
                              Variant="@(_selectedStatuses.Contains(status) ? Variant.Filled : Variant.Outlined)"
                              SelectedColor="@GetStatusColor(status)">
-                        @status.ToString().SplitOnCapitalLetters()
+                        @status.ForDisplay()
                     </MudChip>
                 }
             </MudChipSet>
@@ -49,7 +49,7 @@
         @if (_objectTypes.Count > 1)
         {
             <div>
-                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Object Type:</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@ConnectorSpaceText.CsoListFilterObjectType</MudText>
                 <MudChipSet T="int"
                             SelectionMode="SelectionMode.MultiSelection"
                             SelectedValues="_selectedObjectTypeIds"
@@ -68,7 +68,7 @@
         }
 
         <div>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Join Type:</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@ConnectorSpaceText.CsoListFilterJoinType</MudText>
             <MudChipSet T="ConnectedSystemObjectJoinType"
                         SelectionMode="SelectionMode.MultiSelection"
                         SelectedValues="_selectedJoinTypes"
@@ -79,7 +79,7 @@
                              Color="Color.Default"
                              Variant="@(_selectedJoinTypes.Contains(joinType) ? Variant.Filled : Variant.Outlined)"
                              SelectedColor="Color.Default">
-                        @joinType.ToString().SplitOnCapitalLetters()
+                        @joinType.ForDisplay()
                     </MudChip>
                 }
             </MudChipSet>
@@ -88,7 +88,7 @@
         @* Unresolved references (#959): the objects holding a reference value that could not be linked. Amber, as the
            Connected System page's signpost that links here is. *@
         <div>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by References:</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@ConnectorSpaceText.CsoListFilterReferences</MudText>
             <MudChipSet T="string"
                         SelectionMode="SelectionMode.MultiSelection"
                         SelectedValues="_selectedReferenceFilters"
@@ -97,7 +97,7 @@
                          Color="@(FilteredToUnresolvedReferences ? Color.Default : Color.Warning)"
                          Variant="@(FilteredToUnresolvedReferences ? Variant.Filled : Variant.Outlined)"
                          SelectedColor="Color.Warning">
-                    Unresolved
+                    @ConnectorSpaceText.CsoListUnresolved
                 </MudChip>
             </MudChipSet>
         </div>
@@ -110,7 +110,7 @@
                    DropShadow="false"
                    OnClick="HandleDeleteAllObjectsClickAsync"
                    Style="align-self: end;">
-            Delete All Objects
+            @ConnectorSpaceText.CsoListDeleteAll
         </MudButton>
     </MudStack>
 
@@ -129,9 +129,9 @@
                          DefaultSortDescending="true"
                          LoadWindow="LoadWindowAsync"
                          RowClicked="HandleRowClicked"
-                         SingularName="Connected System Object"
-                         PluralName="Connected System Objects"
-                         SearchPlaceholder="Search external ID, secondary ID, or display name">
+                         SingularName="@ConnectorSpaceText.CsoTerm"
+                         PluralName="@ConnectorSpaceText.CsoPluralName"
+                         SearchPlaceholder="@ConnectorSpaceText.CsoListSearchPlaceholder">
         @* Which identifier an administrator reads differs by Connector (an LDAP directory's DN, a SCIM service's
            external ID), so the two identifier columns can be hidden, remembered per Connected System in this
            browser. Checkboxes rather than menu items, so the menu stays open while both are set. Search still
@@ -139,11 +139,11 @@
         <ToolBarExtras>
             @* The menu's own button, not an ActivatorContent one: MudMenu wraps a custom activator in a focusable
                role="button" div, which would give keyboard users two tab stops for one control. *@
-            <MudMenu Label="Columns" StartIcon="@Icons.Material.Filled.ViewColumn" Variant="Variant.Filled"
+            <MudMenu Label="@ConnectorSpaceText.CsoListColumnsMenu" StartIcon="@Icons.Material.Filled.ViewColumn" Variant="Variant.Filled"
                      Size="Size.Small" DropShadow="false" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
                 <ChildContent>
                     <div class="jim-column-menu">
-                        <MudText Typo="Typo.overline" Class="mud-text-secondary jim-column-menu-heading">Show columns</MudText>
+                        <MudText Typo="Typo.overline" Class="mud-text-secondary jim-column-menu-heading">@ConnectorSpaceText.CsoListShowColumns</MudText>
                         <MudCheckBox T="bool" Value="_showExternalId" Dense="true" Label="@_externalIdColumnHeader"
                                      ValueChanged="@(v => SetColumnVisibleAsync(ConnectorSpaceColumn.ExternalId, v))" />
                         @if (_hasSecondaryExternalId)
@@ -152,7 +152,7 @@
                                          ValueChanged="@(v => SetColumnVisibleAsync(ConnectorSpaceColumn.SecondaryExternalId, v))" />
                         }
                         <MudText Typo="Typo.caption" Class="mud-text-secondary jim-column-menu-hint">
-                            Remembered for @_connectedSystemHeader?.Name in this browser.
+                            @string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.CsoListColumnsHint, _connectedSystemHeader?.Name)
                         </MudText>
                     </div>
                 </ChildContent>
@@ -170,7 +170,7 @@
                                    Size="Size.Small"
                                    Color="Color.Primary"
                                    Href="@(Utilities.GetConnectedSystemObjectHref(context.Item))">
-                            View
+                            @ConnectorSpaceText.DeletedView
                         </MudButton>
                     </span>
                 </CellTemplate>
@@ -228,7 +228,7 @@
             </TemplateColumn>
             <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Display Name" Name="displayname" />
+                    <VirtualisedSortHeader Title="@ConnectorSpaceText.DeletedColumnDisplayName" Name="displayname" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @if (!string.IsNullOrEmpty(context.Item.DisplayName))
@@ -247,7 +247,7 @@
             </TemplateColumn>
             <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Type" Name="type" />
+                    <VirtualisedSortHeader Title="@CommonText.ColumnType" Name="type" />
                 </HeaderTemplate>
                 <CellTemplate>
                     <MudChip T="string" Text="@context.Item.TypeName" Variant="Variant.Text" Color="@_typeChipColors.GetColor(context.Item.TypeName)" Class="ma-0" />
@@ -258,7 +258,7 @@
                JIM.Web/CLAUDE.md). Not sortable: the count is read per window. *@
             <TemplateColumn Sortable="false" Hidden="@(!FilteredToUnresolvedReferences)" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
-                    <MudText Typo="Typo.subtitle2">Unresolved</MudText>
+                    <MudText Typo="Typo.subtitle2">@ConnectorSpaceText.CsoListUnresolved</MudText>
                 </HeaderTemplate>
                 <CellTemplate>
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Class="ma-0">@context.Item.UnresolvedReferenceCount.ToString("N0")</MudChip>
@@ -266,7 +266,7 @@
             </TemplateColumn>
             <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Created" Name="created" />
+                    <VirtualisedSortHeader Title="@CommonText.ColumnCreated" Name="created" />
                 </HeaderTemplate>
                 <CellTemplate>
                     <MudTooltip Text="@context.Item.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -276,7 +276,7 @@
             </TemplateColumn>
             <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Date Joined" Name="datejoined" />
+                    <VirtualisedSortHeader Title="@ConnectorSpaceText.CsoListColumnDateJoined" Name="datejoined" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @if (context.Item.DateJoined.HasValue)
@@ -294,10 +294,10 @@
             </TemplateColumn>
             <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Status" Name="status" />
+                    <VirtualisedSortHeader Title="@CommonText.ColumnStatus" Name="status" />
                 </HeaderTemplate>
                 <CellTemplate>
-                    <MudChip T="string" Text="@context.Item.Status.ToString().SplitOnCapitalLetters()" Variant="Variant.Text" Class="ma-0" />
+                    <MudChip T="string" Text="@context.Item.Status.ForDisplay()" Variant="Variant.Text" Class="ma-0" />
                 </CellTemplate>
             </TemplateColumn>
             @* The derived State, the same one the Metaverse Object's Connections tab shows (#1519, D-S7):
@@ -306,7 +306,7 @@
                sorting by it would only order the window, not the Connector Space. *@
             <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
-                    <MudText Typo="Typo.subtitle2">State</MudText>
+                    <MudText Typo="Typo.subtitle2">@ConnectorSpaceText.CsoListColumnState</MudText>
                 </HeaderTemplate>
                 <CellTemplate>
                     <ConnectionStateChip State="context.Item.State" />
@@ -314,11 +314,11 @@
             </TemplateColumn>
             <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Join Type" Name="jointype" />
+                    <VirtualisedSortHeader Title="@ConnectorSpaceText.CsoListColumnJoinType" Name="jointype" />
                 </HeaderTemplate>
                 <CellTemplate>
                     <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetJoinTypeColor(context.Item.JoinType)" Class="ma-0">
-                        @context.Item.JoinType.ToString().SplitOnCapitalLetters()
+                        @context.Item.JoinType.ForDisplay()
                     </MudChip>
                 </CellTemplate>
             </TemplateColumn>
@@ -330,28 +330,28 @@
             @if (!string.IsNullOrWhiteSpace(grid.SearchText))
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                 PrimaryText="@($"No Connected System Objects match \"{grid.SearchText}\"")"
-                                 SecondaryText="Try a different search term, or clear the search."
-                                 ActionText="Clear Search"
+                                 PrimaryText="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.CsoListNoSearchMatch, grid.SearchText)"
+                                 SecondaryText="@CommonText.TrySearchAgain"
+                                 ActionText="@CommonText.ClearSearch"
                                  OnAction="@(() => grid.ClearSearchAsync())" />
             }
             else if (FilteredToUnresolvedReferences && _selectedStatuses.Count == 0 && _selectedObjectTypeIds.Count == 0 && _selectedJoinTypes.Count == 0)
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.Link"
-                                 PrimaryText="Every reference has resolved"
-                                 SecondaryText="@($"No Connected System Object in {_connectedSystemHeader.Name} holds a reference value that could not be linked.")" />
+                                 PrimaryText="@ConnectorSpaceText.CsoListEveryReferenceResolved"
+                                 SecondaryText="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.CsoListNoUnresolvedInSystem, _connectedSystemHeader.Name)" />
             }
             else if (HasActiveChipFilters)
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
-                                 PrimaryText="No Connected System Objects match the selected filters"
-                                 SecondaryText="Clear the filter chips above to browse the whole Connector Space." />
+                                 PrimaryText="@ConnectorSpaceText.CsoListNoFilterMatch"
+                                 SecondaryText="@ConnectorSpaceText.CsoListClearFilterHint" />
             }
             else
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.Cable"
-                                 PrimaryText="No Connected System Objects yet"
-                                 SecondaryText="Objects appear here once an import brings them in from the Connected System." />
+                                 PrimaryText="@ConnectorSpaceText.CsoListNoneYet"
+                                 SecondaryText="@ConnectorSpaceText.CsoListNoneYetHint" />
             }
         </EmptyContent>
     </VirtualisedDataGrid>
@@ -359,52 +359,41 @@
     <MudDialog @bind-Visible="_clearDialogVisible" Options="_clearDialogOptions">
         <TitleContent>
             <MudText Typo="Typo.h6">
-                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-3" /> Clear Connector Space
+                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-3" /> @ConnectorSpaceText.CsoListClearTitle
             </MudText>
         </TitleContent>
         <DialogContent>
             <MudAlert Severity="Severity.Warning" Class="mb-4">
-                This action will delete all Connected System Objects from JIM.
+                @ConnectorSpaceText.CsoListClearWarning
             </MudAlert>
 
             <MudText>
-                Clearing does not touch the external system. It discards the Connector Space objects, their
-                Metaverse joins, and any Pending Exports to this Connected System; the Metaverse itself is not
-                changed by the clear.
+                @ConnectorSpaceText.CsoListClearExplain1
             </MudText>
 
             <MudText Class="mt-3">
-                Run a Full Import to rebuild the Connector Space. At the first Full Synchronisation after that
-                import completes successfully, Metaverse values contributed by objects that did not return are
-                recalled automatically. Each Metaverse object's type Deletion Rule is then applied for objects
-                that did not return, with its configured grace period.
+                @ConnectorSpaceText.CsoListClearExplain2
             </MudText>
 
             <MudText Class="mt-3">
-                Note: A Full Synchronisation run before then does nothing beyond ordinary synchronisation. The
-                reconciliation refuses, leaving everything as it was, if far fewer objects return than were
-                cleared; re-import the rest, or raise the allowed share in Service Settings, then run a Full
-                Synchronisation again.
+                @ConnectorSpaceText.CsoListClearExplain3
             </MudText>
 
             <MudText Class="mt-3">
-                Any Metaverse Object deletes will be executed via a task and may take some time to process.
-                Check the <MudLink Href="/admin/operations" Target="_blank">Operations</MudLink> page or refresh
-                this one to see progress.
+                @ConnectorSpaceText.CsoListClearExplain4Lead <MudLink Href="/admin/operations" Target="_blank">@ConnectorSpaceText.CsoListOperationsLink</MudLink> @ConnectorSpaceText.CsoListClearExplain4Trail
             </MudText>
 
             <MudCheckBox @bind-Value="_clearDeleteChangeHistory" Class="mt-4" Color="Color.Primary">
-                <MudText>Delete change history for cleared objects</MudText>
+                <MudText>@ConnectorSpaceText.CsoListDeleteHistory</MudText>
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                    When enabled, all change history records for the cleared Connected System Objects will also be deleted.
-                    This is recommended when clearing for re-import as the old history becomes irrelevant.
+                    @ConnectorSpaceText.CsoListDeleteHistoryHint
                 </MudText>
             </MudCheckBox>
         </DialogContent>
         <DialogActions>
-            <MudButton OnClick="@(() => _clearDialogVisible = false)" DropShadow="false">Cancel</MudButton>
+            <MudButton OnClick="@(() => _clearDialogVisible = false)" DropShadow="false">@CommonText.Cancel</MudButton>
             <MudButton Variant="Variant.Filled" Color="Color.Error" DropShadow="false" StartIcon="@Icons.Material.Filled.DeleteForever" OnClick="HandleClearConfirmedAsync">
-                Clear Connector Space
+                @ConnectorSpaceText.CsoListClearTitle
             </MudButton>
         </DialogActions>
     </MudDialog>
@@ -453,8 +442,8 @@ else
     // attributes, and the Secondary External Id column only exists when any row carries (or is about to carry) a
     // secondary external id. Recomputed per window by UpdateColumnHeaders.
     private bool _hasSecondaryExternalId;
-    private string _externalIdColumnHeader = "External Id";
-    private string _secondaryExternalIdColumnHeader = "Secondary External Id";
+    private string _externalIdColumnHeader = ConnectorSpaceText.CsoListExternalIdHeader;
+    private string _secondaryExternalIdColumnHeader = ConnectorSpaceText.CsoListSecondaryExternalIdHeader;
 
     // The administrator's column choices for this Connected System (see the Columns menu), loaded once the circuit
     // can reach the browser's storage; both shown until then, which is also the default with no choice stored.
@@ -499,11 +488,11 @@ else
 
         _breadcrumbs = new List<BreadcrumbItem>
         {
-            new("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new("Administration", href: "/admin"),
-            new("Connected Systems", href: "/admin/connected-systems/"),
+            new(ConnectorSpaceText.DeletedHomeBreadcrumb, href: "/", icon: Icons.Material.Filled.Home),
+            new(ConnectorSpaceText.DeletedAdministrationBreadcrumb, href: "/admin"),
+            new(ConnectorSpaceText.CsoBreadcrumbConnectedSystems, href: "/admin/connected-systems/"),
             new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
-            new("Connector Space", href: null, disabled: true)
+            new(ConnectorSpaceText.CsoBreadcrumbConnectorSpace, href: null, disabled: true)
         };
 
         _objectTypes = (await jim.ConnectedSystems.GetObjectTypesAsync(Id))
@@ -580,16 +569,16 @@ else
     {
         if (results.Count == 0)
         {
-            _externalIdColumnHeader = "External Id";
-            _secondaryExternalIdColumnHeader = "Secondary External Id";
+            _externalIdColumnHeader = ConnectorSpaceText.CsoListExternalIdHeader;
+            _secondaryExternalIdColumnHeader = ConnectorSpaceText.CsoListSecondaryExternalIdHeader;
             _hasSecondaryExternalId = false;
             return;
         }
 
         var first = results.First();
         _externalIdColumnHeader = string.IsNullOrEmpty(first.ExternalIdAttributeName)
-            ? "External Id"
-            : $"External Id ({first.ExternalIdAttributeName})";
+            ? ConnectorSpaceText.CsoListExternalIdHeader
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.CsoListExternalIdHeaderNamed, first.ExternalIdAttributeName);
 
         // Show secondary external ID column if any confirmed OR pending values exist
         _hasSecondaryExternalId = results.Any(r =>
@@ -599,8 +588,8 @@ else
             var secondaryAttrName = results
                 .FirstOrDefault(r => !string.IsNullOrEmpty(r.SecondaryExternalIdValue))?.SecondaryExternalIdAttributeName;
             _secondaryExternalIdColumnHeader = string.IsNullOrEmpty(secondaryAttrName)
-                ? "Secondary External Id"
-                : $"Secondary External Id ({secondaryAttrName})";
+                ? ConnectorSpaceText.CsoListSecondaryExternalIdHeader
+                : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.CsoListSecondaryExternalIdHeaderNamed, secondaryAttrName);
         }
     }
 
@@ -626,11 +615,11 @@ else
 
         if (!result.Success)
         {
-            Snackbar.Add(result.ErrorMessage ?? "Failed to create task.", Severity.Error);
+            Snackbar.Add(result.ErrorMessage ?? ConnectorSpaceText.CsoListTaskFailed, Severity.Error);
             return;
         }
 
-        Snackbar.Add("Connected System Objects queued for deletion.", Severity.Info);
+        Snackbar.Add(ConnectorSpaceText.CsoListQueuedForDeletion, Severity.Info);
     }
 
     private static IEnumerable<ConnectedSystemObjectStatus> GetAvailableStatuses()

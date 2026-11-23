@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JimUtilities = JIM.Utilities.Utilities;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Causality;
 
@@ -17,7 +18,7 @@ public sealed class CausalityPageLinks : ICausalityLinks
     }
 
     /// <inheritdoc />
-    public string ItemLinkText => "View activity item";
+    public string ItemLinkText => CausalityText.ItemLinkViewActivityItem;
 
     /// <inheritdoc />
     public string ItemHref(Guid runProfileExecutionItemId) => $"/activity/item/{runProfileExecutionItemId}";

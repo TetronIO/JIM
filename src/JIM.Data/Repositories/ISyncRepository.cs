@@ -8,6 +8,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Exchange;
+using JIM.Models.Localisation;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
@@ -1717,6 +1718,13 @@ public interface ISyncRepository
     /// Convenience method that updates only the Message property.
     /// </summary>
     Task UpdateActivityMessageAsync(Activity activity, string message);
+
+    /// <summary>
+    /// Updates an activity's message field with a message the portal shows in the viewer's language (#3039); the English
+    /// written beside it is the message's British English. For a run's outcome, which stays on the Activity: progress
+    /// narration is written as English text only.
+    /// </summary>
+    Task UpdateActivityMessageAsync(Activity activity, JimMessage message);
 
     /// <summary>
     /// Updates activity progress fields using an independent database connection,

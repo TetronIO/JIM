@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using JIM.Application.Expressions;
 using JIM.Application.Servers.ConfigurationTests;
 using JIM.Application.Servers.Scoping;
@@ -222,7 +224,7 @@ public class ConfigurationTestServer
         var activity = new Activity
         {
             // The case's name only: its inputs and expectation are never written to an Activity.
-            TargetName = $"{Activity.ConfigurationTestCaseTargetNamePrefix}'{testCase.Name}'",
+            TargetNameDetail = ActivityMessage.Create(nameof(ActivityMessages.TargetTestCase), testCase.Name),
             TargetContext = owner.Name,
             TargetType = owner.TargetType,
             TargetOperationType = operation

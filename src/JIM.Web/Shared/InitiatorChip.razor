@@ -26,7 +26,7 @@
 else if (!string.IsNullOrEmpty(ScheduleName))
 {
     <span class="jim-initiator-chip" data-testid="jim-initiator-schedule">
-        <ObjectChip Kind="ObjectChipKind.Schedule" Name="@ScheduleName" Class="ma-0" Tooltip="@($"Schedule: {ScheduleName}")"
+        <ObjectChip Kind="ObjectChipKind.Schedule" Name="@ScheduleName" Class="ma-0" Tooltip="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityInitiatorScheduleTooltip, ScheduleName)"
                     Href="@(ScheduleExecutionId is { } executionId ? $"/admin/operations/schedule-executions/{executionId}" : null)" />
     </span>
 }
@@ -34,7 +34,7 @@ else if (InitiatedByType == ActivityInitiatorType.System
          || (InitiatedByType == ActivityInitiatorType.NotSet && ChangeInitiatorType == MetaverseObjectChangeInitiatorType.System))
 {
     <span class="jim-initiator-chip" data-testid="jim-initiator-system">
-        <ObjectChip Kind="ObjectChipKind.System" Name="System" Class="ma-0" />
+        <ObjectChip Kind="ObjectChipKind.System" Name="@ActivityText.ActivityInitiatorSystem" Class="ma-0" />
     </span>
 }
 else if (InitiatedByType == ActivityInitiatorType.User)
@@ -46,15 +46,15 @@ else if (InitiatedByType == ActivityInitiatorType.User)
 else if (InitiatedByType == ActivityInitiatorType.ApiKey)
 {
     <span class="jim-initiator-chip" data-testid="jim-initiator-api-key">
-        <ObjectChip Kind="ObjectChipKind.ApiKey" Name="@(InitiatedByName ?? "API Key")" Class="ma-0"
-                    Tooltip="@(InitiatedByName is { } keyName ? $"API Key: {keyName}" : "API Key")"
+        <ObjectChip Kind="ObjectChipKind.ApiKey" Name="@(InitiatedByName ?? ActivityText.ActivityInitiatorApiKey)" Class="ma-0"
+                    Tooltip="@(InitiatedByName is { } keyName ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityInitiatorApiKeyNamed, keyName) : ActivityText.ActivityInitiatorApiKey)"
                     Href="@(InitiatedById is { } keyId ? $"/admin/apikeys/{keyId}" : null)" />
     </span>
 }
 else if (InitiatedByType == ActivityInitiatorType.Anonymous)
 {
     @* An unidentified, unauthenticated caller (a failed sign-in attempt): nothing in JIM, so no chip and no link. *@
-    <span class="mud-text-secondary" data-testid="jim-initiator-anonymous">Anonymous</span>
+    <span class="mud-text-secondary" data-testid="jim-initiator-anonymous">@ActivityText.ActivityInitiatorAnonymous</span>
 }
 else if (!string.IsNullOrEmpty(InitiatedByName))
 {
@@ -127,7 +127,7 @@ else
     [Parameter]
     public bool UserLookedUp { get; set; }
 
-    private string DisplayName => InitiatedByName ?? InitiatedById?.ToString() ?? "Unknown";
+    private string DisplayName => InitiatedByName ?? InitiatedById?.ToString() ?? ActivityText.ActivityInitiatorUnknown;
 
     private string? SyncRuleHref => SyncRuleId is { } id ? $"/admin/sync-rules/{id}" : null;
 

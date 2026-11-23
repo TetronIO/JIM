@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Graph_user_employeeId" xml:space="preserve">
+    <value>The organization's identifier for the employee.</value>
+  </data>
+  <data name="Graph_user_usageLocation" xml:space="preserve">
+    <value>A two-letter country code, required before Microsoft 365 licenses can be assigned.</value>
+  </data>
+  <data name="Graph_user_userType" xml:space="preserve">
+    <value>Member, or Guest for an account invited from outside the organization.</value>
+  </data>
+  <data name="Graph_user_onPremisesSyncEnabled" xml:space="preserve">
+    <value>True while the object is synchronized from on-premises Active Directory.</value>
+  </data>
+  <data name="Graph_user_onPremisesLastSyncDateTime" xml:space="preserve">
+    <value>When the object was last synchronized from on-premises Active Directory.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute1" xml:space="preserve">
+    <value>Exchange custom attribute 1. For a synchronized user, written in on-premises Active Directory instead.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute2" xml:space="preserve">
+    <value>Exchange custom attribute 2. For a synchronized user, written in on-premises Active Directory instead.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute3" xml:space="preserve">
+    <value>Exchange custom attribute 3. For a synchronized user, written in on-premises Active Directory instead.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute4" xml:space="preserve">
+    <value>Exchange custom attribute 4. For a synchronized user, written in on-premises Active Directory instead.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute5" xml:space="preserve">
+    <value>Exchange custom attribute 5. For a synchronized user, written in on-premises Active Directory instead.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute6" xml:space="preserve">
+    <value>Exchange custom attribute 6. For a synchronized user, written in on-premises Active Directory instead.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute7" xml:space="preserve">
+    <value>Exchange custom attribute 7. For a synchronized user, written in on-premises Active Directory instead.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute8" xml:space="preserve">
+    <value>Exchange custom attribute 8. For a synchronized user, written in on-premises Active Directory instead.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute9" xml:space="preserve">
+    <value>Exchange custom attribute 9. For a synchronized user, written in on-premises Active Directory instead.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute10" xml:space="preserve">
+    <value>Exchange custom attribute 10. For a synchronized user, written in on-premises Active Directory instead.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute11" xml:space="preserve">
+    <value>Exchange custom attribute 11. For a synchronized user, written in on-premises Active Directory instead.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute12" xml:space="preserve">
+    <value>Exchange custom attribute 12. For a synchronized user, written in on-premises Active Directory instead.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute13" xml:space="preserve">
+    <value>Exchange custom attribute 13. For a synchronized user, written in on-premises Active Directory instead.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute14" xml:space="preserve">
+    <value>Exchange custom attribute 14. For a synchronized user, written in on-premises Active Directory instead.</value>
+  </data>
+  <data name="Graph_user_extensionAttribute15" xml:space="preserve">
+    <value>Exchange custom attribute 15. For a synchronized user, written in on-premises Active Directory instead.</value>
+  </data>
+  <data name="Graph_user_sourceOfAuthority" xml:space="preserve">
+    <value>Where the user is managed, derived by JIM: cloud (in Entra ID, so JIM can write to it through Microsoft Graph), onPremisesDirectory (synchronized from Active Directory, so most attributes are written there instead) or externalEntraDirectory (a guest from another tenant). An object whose Source of Authority was switched to Entra ID reads as cloud only with Track Source of Authority Changes on. Flow it into a Metaverse Attribute to scope export Synchronization Rules on it.</value>
+  </data>
+  <data name="Graph_group_onPremisesSyncEnabled" xml:space="preserve">
+    <value>True while the object is synchronized from on-premises Active Directory.</value>
+  </data>
+  <data name="Graph_group_onPremisesLastSyncDateTime" xml:space="preserve">
+    <value>When the object was last synchronized from on-premises Active Directory.</value>
+  </data>
+  <data name="Graph_group_sourceOfAuthority" xml:space="preserve">
+    <value>Where the group is managed, derived by JIM: cloud (in Entra ID, so JIM can write to it through Microsoft Graph), onPremisesDirectory (synchronized from Active Directory, so most attributes are written there instead) or externalEntraDirectory (a guest from another tenant). An object whose Source of Authority was switched to Entra ID reads as cloud only with Track Source of Authority Changes on. Flow it into a Metaverse Attribute to scope export Synchronization Rules on it.</value>
+  </data>
+</root>

@@ -76,6 +76,7 @@ public sealed class SignInProblemLog
                     Expected = expected,
                     Received = received,
                     Fix = report.Fix,
+                    Text = BoundText(report, expected, received),
                     FirstSeen = now,
                     LastSeen = now,
                     Count = 1,
@@ -113,6 +114,19 @@ public sealed class SignInProblemLog
         lock (_lock)
             return _problems.Find(p => p.Id == id);
     }
+
+    /// <summary>
+    /// The report's messages, with a value the log shortened or cleaned replaced by what it kept, so the portal never
+    /// shows more than the English the REST API returns.
+    /// </summary>
+    private static SignInProblemText? BoundText(SignInProblemReport report, string expected, string received) =>
+        report.Text is not { } text
+            ? null
+            : text with
+            {
+                Expected = expected == report.Expected ? text.Expected : SignInProblemDiagnosis.Value(expected),
+                Received = received == report.Received ? text.Received : SignInProblemDiagnosis.Value(received)
+            };
 
     private static string Bound(string value)
     {

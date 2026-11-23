@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Logic
 @using JIM.Web.Models
 
@@ -13,7 +14,7 @@
 <div class="@(ShowHeading ? "mt-5" : null)" data-testid="generated-value-availability-panel">
     @if (ShowHeading)
     {
-        <MudText Typo="Typo.subtitle2" Class="mb-1">Checked for availability in</MudText>
+        <MudText Typo="Typo.subtitle2" Class="mb-1">@GeneratedValueText.AvailabilityHeading</MudText>
     }
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">@GeneratedValueAvailabilityWording.PanelHelperText</MudText>
 
@@ -32,11 +33,11 @@
         <MudSimpleTable Elevation="0" Outlined="true" Class="jim-availability-table">
             <thead>
                 <tr>
-                    <th>Connected System</th>
-                    <th>Exported as</th>
-                    <th>Checked</th>
-                    <th>Reports collisions</th>
-                    <th class="jim-availability-include">Include</th>
+                    <th>@GeneratedValueText.RenameColumnConnectedSystem</th>
+                    <th>@GeneratedValueText.AvailabilityColumnExported</th>
+                    <th>@GeneratedValueText.AvailabilityColumnChecked</th>
+                    <th>@GeneratedValueText.AvailabilityColumnReports</th>
+                    <th class="jim-availability-include">@GeneratedValueText.AvailabilityColumnInclude</th>
                 </tr>
             </thead>
             <tbody>
@@ -76,12 +77,12 @@
                             <MudChip T="string" Variant="Variant.Text" Class="ma-0" data-testid="generated-value-availability-reports-collisions"
                                      data-reports="@(participant.ReportsCollisions ? "true" : "false")"
                                      Color="@(participant.ReportsCollisions ? Color.Success : Color.Default)">
-                                @(participant.ReportsCollisions ? "Yes" : "No")
+                                @(participant.ReportsCollisions ? CommonText.Yes : CommonText.No)
                             </MudChip>
                             @if (!participant.ReportsCollisions)
                             {
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1" data-testid="generated-value-availability-collision-note">
-                                    A collision here is an ordinary export error.
+                                    @GeneratedValueText.AvailabilityCollisionNote
                                 </MudText>
                             }
                         </td>
@@ -89,7 +90,7 @@
                             @if (participant.CanBeExcluded)
                             {
                                 <MudSwitch T="bool" Value="@(!excluded)" ValueChanged="@(include => OnIncludeChangedAsync(participant, include))"
-                                           Color="Color.Primary" Disabled="Disabled" aria-label="@($"Check {participant.ConnectedSystemName} for availability")"
+                                           Color="Color.Primary" Disabled="Disabled" aria-label="@string.Format(CultureInfo.CurrentCulture, GeneratedValueText.AvailabilityIncludeAria, participant.ConnectedSystemName)"
                                            data-testid="generated-value-availability-include" />
                             }
                             else

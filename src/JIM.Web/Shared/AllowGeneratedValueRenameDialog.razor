@@ -1,3 +1,5 @@
+@using System.Globalization
+@using System.Net
 @using JIM.Models.Transactional
 @using JIM.Models.Transactional.DTOs
 @inject IJimApplicationFactory JimFactory
@@ -14,14 +16,14 @@
 
 <MudDialog>
     <TitleContent>
-        <MudText Typo="Typo.h6">Allow the rename</MudText>
+        <MudText Typo="Typo.h6">@GeneratedValueText.RenameTitle</MudText>
     </TitleContent>
     <DialogContent>
         @if (_preview == null)
         {
             <div class="d-flex justify-center align-center pa-8">
                 <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
-                <MudText Class="ml-4">Working out what will change...</MudText>
+                <MudText Class="ml-4">@GeneratedValueText.RenameWorking</MudText>
             </div>
         }
         else
@@ -29,8 +31,7 @@
             var decision = _preview.Decision;
             <MudStack Spacing="4">
                 <MudText Typo="Typo.body1" data-testid="allow-rename-intro">
-                    @(decision.RejectedByConnectedSystemName ?? "A Connected System") rejected <code class="jim-code-inline">@decision.Value</code> as already in use@(AnchorClause(decision)).
-                    If you allow the rename, JIM chooses the next free value at the next export and applies it everywhere@(RenameClause(decision)).
+                    @IntroText(decision)
                 </MudText>
 
                 @if (_preview.Changes.Count > 0)
@@ -38,9 +39,9 @@
                     <MudSimpleTable Elevation="0" Outlined="true" Dense="true" data-testid="allow-rename-changes">
                         <thead>
                             <tr>
-                                <th>Connected System</th>
-                                <th>Change</th>
-                                <th>When</th>
+                                <th>@GeneratedValueText.RenameColumnConnectedSystem</th>
+                                <th>@GeneratedValueText.RenameColumnChange</th>
+                                <th>@GeneratedValueText.RenameColumnWhen</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -54,7 +55,7 @@
                                     <td>
                                         <MudChip T="string" Variant="Variant.Text" Color="@ChangeColour(change.Kind)" Class="ma-0">@change.Kind</MudChip>
                                     </td>
-                                    <td class="mud-text-secondary">Next export run</td>
+                                    <td class="mud-text-secondary">@GeneratedValueText.RenameNextExportRun</td>
                                 </tr>
                             }
                         </tbody>
@@ -62,29 +63,29 @@
                 }
 
                 <MudPaper Outlined="true" Class="pa-3">
-                    <MudText Typo="Typo.subtitle2" Class="mb-1">New value</MudText>
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">@GeneratedValueText.RenameNewValueHeading</MudText>
                     <dl class="jim-allow-rename-value">
                         @if (!string.IsNullOrEmpty(_preview.LikelyValue))
                         {
-                            <dt>Likely</dt>
+                            <dt>@GeneratedValueText.RenameLikely</dt>
                             <dd><code class="jim-code-inline" data-testid="allow-rename-likely">@_preview.LikelyValue</code></dd>
                         }
-                        <dt>Decided</dt>
-                        <dd>At the next export, after checking every system again</dd>
+                        <dt>@GeneratedValueText.RenameDecided</dt>
+                        <dd>@GeneratedValueText.RenameDecidedAtNextExport</dd>
                     </dl>
                 </MudPaper>
 
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                    Recorded in @(decision.MetaverseObjectDisplayName ?? "the object")'s history and as an Activity, as allowed by you.
+                    @string.Format(CultureInfo.CurrentCulture, GeneratedValueText.RenameRecorded, decision.MetaverseObjectDisplayName ?? GeneratedValueText.RenameTheObject)
                 </MudText>
             </MudStack>
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel" Disabled="_busy">Cancel</MudButton>
+        <MudButton OnClick="Cancel" Disabled="_busy">@CommonText.Cancel</MudButton>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AllowAsync" Disabled="@(_busy || _preview == null)"
                    data-testid="allow-rename-confirm">
-            Allow the rename
+            @GeneratedValueText.RenameTitle
         </MudButton>
     </DialogActions>
 </MudDialog>
@@ -109,7 +110,7 @@
         _preview = await jim.GeneratedValueDecisions.GetRenamePreviewAsync(AssignmentId);
         if (_preview == null)
         {
-            Snackbar.Add("That generated value no longer exists.", Severity.Info);
+            Snackbar.Add(GeneratedValueText.RenameNoLongerExists, Severity.Info);
             MudDialog.Close(DialogResult.Ok(false));
         }
     }
@@ -125,8 +126,8 @@
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
             var outcome = await jim.GeneratedValueDecisions.AllowRenameAsync(AssignmentId, user, null);
             Snackbar.Add(outcome == GeneratedValueDecisionActionOutcome.Done
-                    ? "Rename allowed. The next export run chooses the new value."
-                    : "Nothing was changed; the value is no longer waiting on a decision.",
+                    ? GeneratedValueText.RenameAllowedDone
+                    : GeneratedValueText.RenameNothingChanged,
                 outcome == GeneratedValueDecisionActionOutcome.Done ? Severity.Success : Severity.Info);
             MudDialog.Close(DialogResult.Ok(outcome == GeneratedValueDecisionActionOutcome.Done));
         }
@@ -136,14 +137,28 @@
         }
     }
 
+    /// <summary>
+    /// The intro sentence, with the rejected value set in a code element. Built as markup from encoded parts, since the
+    /// value and the names are data an administrator or a Connected System supplied.
+    /// </summary>
+    private MarkupString IntroText(GeneratedValueDecisionHeader decision) => new(string.Format(
+        CultureInfo.CurrentCulture,
+        GeneratedValueText.RenameIntro,
+        Encode(decision.RejectedByConnectedSystemName ?? GeneratedValueText.RenameRejectedFallback),
+        $"<code class=\"jim-code-inline\">{Encode(decision.Value)}</code>",
+        AnchorClause(decision),
+        RenameClause(decision)));
+
+    private static string Encode(string? text) => WebUtility.HtmlEncode(text ?? string.Empty);
+
     private static string AnchorClause(GeneratedValueDecisionHeader decision) =>
         decision.Reason == GeneratedValueNeedsDecisionReason.AnchoredElsewhere && decision.AnchoredByConnectedSystemName != null
-            ? $", and {decision.AnchoredByConnectedSystemName} has an account with that value"
+            ? string.Format(CultureInfo.CurrentCulture, GeneratedValueText.RenameAnchorClause, Encode(decision.AnchoredByConnectedSystemName))
             : string.Empty;
 
     private static string RenameClause(GeneratedValueDecisionHeader decision) =>
         decision.Reason == GeneratedValueNeedsDecisionReason.AnchoredElsewhere && decision.AnchoredByConnectedSystemName != null
-            ? $", renaming the {decision.AnchoredByConnectedSystemName} account"
+            ? string.Format(CultureInfo.CurrentCulture, GeneratedValueText.RenameRenameClause, Encode(decision.AnchoredByConnectedSystemName))
             : string.Empty;
 
     private static Color ChangeColour(GeneratedValueRenameChangeKind kind) => kind switch

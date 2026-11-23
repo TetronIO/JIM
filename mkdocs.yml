@@ -179,6 +179,7 @@ nav:
   - Administration:
       - administration/index.md
       - Working with Lists: administration/portal-lists.md
+      - Portal Language: administration/portal-language.md
       - Deployment: administration/deployment.md
       - TLS and Reverse Proxy: administration/tls-and-reverse-proxy.md
       - Running on Podman: administration/podman.md

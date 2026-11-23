@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Web.Localisation;
+using JIM.Web.Resources;
+using System.Globalization;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
@@ -34,12 +37,12 @@ public static class PendingPasswordChangeDisplay
 
         return change.Status switch
         {
-            PendingPasswordChangeStatus.Pending => "Waiting",
-            PendingPasswordChangeStatus.Delivering => "Delivering",
-            PendingPasswordChangeStatus.Parked => "Parked",
-            PendingPasswordChangeStatus.Expired => "Expired",
-            PendingPasswordChangeStatus.Cancelled => "Cancelled",
-            _ => change.Status.ToString()
+            PendingPasswordChangeStatus.Pending => DisplayText.PasswordChangeStatusWaiting,
+            PendingPasswordChangeStatus.Delivering => DisplayText.PasswordChangeStatusDelivering,
+            PendingPasswordChangeStatus.Parked => DisplayText.PasswordChangeStatusParked,
+            PendingPasswordChangeStatus.Expired => DisplayText.PasswordChangeStatusExpired,
+            PendingPasswordChangeStatus.Cancelled => DisplayText.PasswordChangeStatusCancelled,
+            _ => change.Status.ForDisplay()
         };
     }
 
@@ -59,8 +62,8 @@ public static class PendingPasswordChangeDisplay
         if (change.Status == PendingPasswordChangeStatus.Cancelled)
         {
             return change.CancelledByName == null
-                ? "Cancelled by an administrator"
-                : $"Cancelled by {change.CancelledByName}";
+                ? DisplayText.PasswordChangeCancelledByAdministrator
+                : string.Format(CultureInfo.CurrentCulture, DisplayText.PasswordChangeCancelledBy, change.CancelledByName);
         }
 
         // Held is answered before the failure, and before returning nothing. A change waiting on a switched-off
@@ -68,11 +71,13 @@ public static class PendingPasswordChangeDisplay
         // which is the one state where what it is waiting for is a person rather than a retry.
         if (change.IsHeld)
         {
-            return change.FailureReason is null or PasswordSetFailureReason.None
-                ? "Waiting for Password Synchronisation to be switched on for this Connected System"
-                : $"Waiting for Password Synchronisation to be switched on for this Connected System. " +
-                  $"Last attempt: {Reason(change.FailureReason.Value)}" +
-                  (string.IsNullOrWhiteSpace(change.TargetMessage) ? string.Empty : $": {change.TargetMessage}");
+            if (change.FailureReason is null or PasswordSetFailureReason.None)
+                return DisplayText.PasswordChangeHeld;
+
+            var lastAttempt = Reason(change.FailureReason.Value);
+            if (!string.IsNullOrWhiteSpace(change.TargetMessage))
+                lastAttempt = string.Format(CultureInfo.CurrentCulture, DisplayText.PasswordChangeLastAttemptTargetMessage, lastAttempt, change.TargetMessage);
+            return string.Format(CultureInfo.CurrentCulture, DisplayText.PasswordChangeHeldAfterAttempt, lastAttempt);
         }
 
         if (change.FailureReason is null or PasswordSetFailureReason.None)
@@ -81,12 +86,14 @@ public static class PendingPasswordChangeDisplay
             // "Waiting" indistinguishable from an ordinary propagated change, when what it is actually waiting
             // for is its very first delivery attempt (#1697).
             return change.Origin == PendingPasswordChangeOrigin.Provisioned
-                ? "Initial password for a newly provisioned Connected System Object"
+                ? DisplayText.PasswordChangeInitial
                 : null;
         }
 
         var reason = Reason(change.FailureReason.Value);
-        return string.IsNullOrWhiteSpace(change.TargetMessage) ? reason : $"{reason}: {change.TargetMessage}";
+        return string.IsNullOrWhiteSpace(change.TargetMessage)
+            ? reason
+            : string.Format(CultureInfo.CurrentCulture, DisplayText.PasswordChangeLastAttemptTargetMessage, reason, change.TargetMessage);
     }
 
     /// <summary>
@@ -94,12 +101,12 @@ public static class PendingPasswordChangeDisplay
     /// </summary>
     public static string Reason(PasswordSetFailureReason reason) => reason switch
     {
-        PasswordSetFailureReason.Transient => "Target unavailable",
-        PasswordSetFailureReason.ConfigurationFault => "Configuration fault",
-        PasswordSetFailureReason.PolicyRejection => "Policy rejection",
-        PasswordSetFailureReason.TargetObjectNotFound => "Connected System Object not found",
-        PasswordSetFailureReason.UnsupportedOperation => "Unsupported operation",
-        _ => reason.ToString()
+        PasswordSetFailureReason.Transient => DisplayText.PasswordFailureTransient,
+        PasswordSetFailureReason.ConfigurationFault => DisplayText.PasswordFailureConfigurationFault,
+        PasswordSetFailureReason.PolicyRejection => DisplayText.PasswordFailurePolicyRejection,
+        PasswordSetFailureReason.TargetObjectNotFound => DisplayText.PasswordFailureTargetObjectNotFound,
+        PasswordSetFailureReason.UnsupportedOperation => DisplayText.PasswordFailureUnsupportedOperation,
+        _ => reason.ForDisplay()
     };
 
     /// <summary>
@@ -108,9 +115,9 @@ public static class PendingPasswordChangeDisplay
     /// </summary>
     public static string OriginLabel(PendingPasswordChangeOrigin origin) => origin switch
     {
-        PendingPasswordChangeOrigin.Explicit => "Set",
-        PendingPasswordChangeOrigin.Provisioned => "Initial",
-        _ => "Propagated"
+        PendingPasswordChangeOrigin.Explicit => DisplayText.PasswordOriginSet,
+        PendingPasswordChangeOrigin.Provisioned => DisplayText.PasswordOriginInitial,
+        _ => DisplayText.PasswordOriginPropagated
     };
 
     /// <summary>
@@ -128,16 +135,12 @@ public static class PendingPasswordChangeDisplay
     /// The secondary marker beside the kind chip of a set or propagated change that is also a Connected System Object's
     /// first password (#2160, <see cref="PendingPasswordChangeHeader.CarriesFirstPassword"/>).
     /// </summary>
-    public const string FirstPasswordLabel = "First password";
+    public static string FirstPasswordLabel => DisplayText.PasswordFirstPasswordLabel;
 
     /// <summary>
     /// What the "First password" marker means, for its tooltip.
     /// </summary>
-    public const string FirstPasswordTooltip =
-        "This change is also the first password of a Connected System Object JIM provisioned while it was waiting. " +
-        "Delivering it applies the provisioning Synchronisation Rule's Initial Password settings for enabling the Connected " +
-        "System Object and for whether its password never expires. Cancelling it leaves that Connected System Object " +
-        "without a password from JIM.";
+    public static string FirstPasswordTooltip => DisplayText.PasswordFirstPasswordTooltip;
 
     /// <summary>
     /// The question asked before cancelling one change: whose change, to where, and what cancelling leaves behind,
@@ -148,14 +151,13 @@ public static class PendingPasswordChangeDisplay
     {
         ArgumentNullException.ThrowIfNull(change);
 
-        var who = change.MetaverseObjectDisplayName ?? "this Metaverse Object";
-        var question = $"Stop delivering {who}'s password change to {change.ConnectedSystemName}?";
+        var who = change.MetaverseObjectDisplayName ?? DisplayText.PasswordCancelThisMetaverseObject;
+        var question = string.Format(CultureInfo.CurrentCulture, DisplayText.PasswordCancelQuestion, who, change.ConnectedSystemName);
 
-        return OwesFirstPassword(change)
-            ? $"{question} It is the first password of a Connected System Object JIM provisioned there, so cancelling it leaves " +
-              "that Connected System Object without a password from JIM, and it is not enabled as its Synchronisation Rule's " +
-              "Initial Password asks, until a password is set on it."
-            : $"{question} Their password stays as it was on that system until a new change is synchronised.";
+        return string.Format(
+            CultureInfo.CurrentCulture,
+            OwesFirstPassword(change) ? DisplayText.PasswordCancelFirstPasswordConsequence : DisplayText.PasswordCancelOrdinaryConsequence,
+            question);
     }
 
     /// <summary>

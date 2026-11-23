@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="SSO_Authority" xml:space="preserve">
+    <value>SSO authority</value>
+    <comment>Service setting display name (SSO.Authority).</comment>
+  </data>
+  <data name="SSO_Authority_Description" xml:space="preserve">
+    <value>The OIDC authority URL for single sign-on authentication.</value>
+    <comment>Service setting description (SSO.Authority).</comment>
+  </data>
+  <data name="SSO_ClientId" xml:space="preserve">
+    <value>SSO client ID</value>
+    <comment>Service setting display name (SSO.ClientId).</comment>
+  </data>
+  <data name="SSO_ClientId_Description" xml:space="preserve">
+    <value>The OIDC client identifier for JIM.</value>
+    <comment>Service setting description (SSO.ClientId).</comment>
+  </data>
+  <data name="SSO_Secret" xml:space="preserve">
+    <value>SSO secret</value>
+    <comment>Service setting display name (SSO.Secret).</comment>
+  </data>
+  <data name="SSO_Secret_Description" xml:space="preserve">
+    <value>The OIDC client secret for JIM.</value>
+    <comment>Service setting description (SSO.Secret).</comment>
+  </data>
+  <data name="SSO_ApiScope" xml:space="preserve">
+    <value>SSO API scope</value>
+    <comment>Service setting display name (SSO.ApiScope).</comment>
+  </data>
+  <data name="SSO_ApiScope_Description" xml:space="preserve">
+    <value>The OIDC API scope required for accessing JIM.</value>
+    <comment>Service setting description (SSO.ApiScope).</comment>
+  </data>
+  <data name="SSO_ClaimType" xml:space="preserve">
+    <value>SSO claim type</value>
+    <comment>Service setting display name (SSO.ClaimType).</comment>
+  </data>
+  <data name="SSO_ClaimType_Description" xml:space="preserve">
+    <value>The claim type used to identify the user in SSO tokens.</value>
+    <comment>Service setting description (SSO.ClaimType).</comment>
+  </data>
+  <data name="SSO_MvAttribute" xml:space="preserve">
+    <value>SSO Metaverse attribute</value>
+    <comment>Service setting display name (SSO.MvAttribute).</comment>
+  </data>
+  <data name="SSO_MvAttribute_Description" xml:space="preserve">
+    <value>The Metaverse attribute used to match SSO claims to JIM users.</value>
+    <comment>Service setting description (SSO.MvAttribute).</comment>
+  </data>
+  <data name="SSO_EnableLogOut" xml:space="preserve">
+    <value>SSO enable log-out</value>
+    <comment>Service setting display name (SSO.EnableLogOut).</comment>
+  </data>
+  <data name="SSO_EnableLogOut_Description" xml:space="preserve">
+    <value>When enabled, users can log out of JIM and be redirected to the SSO provider's logout endpoint.</value>
+    <comment>Service setting description (SSO.EnableLogOut).</comment>
+  </data>
+  <data name="Sync_PartitionValidationMode" xml:space="preserve">
+    <value>Run Profile partition validation</value>
+    <comment>Service setting display name (Sync.PartitionValidationMode).</comment>
+  </data>
+  <data name="Sync_PartitionValidationMode_Description" xml:space="preserve">
+    <value>Controls how JIM behaves when a Run Profile is executed for a Connected System that supports partitions but has none selected. 'Error' blocks execution; 'Warning' allows execution but logs a warning.</value>
+    <comment>Service setting description (Sync.PartitionValidationMode).</comment>
+  </data>
+  <data name="History_RetentionPeriod" xml:space="preserve">
+    <value>History retention period</value>
+    <comment>Service setting display name (History.RetentionPeriod).</comment>
+  </data>
+  <data name="History_RetentionPeriod_Description" xml:space="preserve">
+    <value>The duration for which activity and audit history is retained. Format: d.hh:mm:ss (e.g., '90.00:00:00' for 90 days).</value>
+    <comment>Service setting description (History.RetentionPeriod).</comment>
+  </data>
+  <data name="History_ConfigurationChangeRetentionPeriod" xml:space="preserve">
+    <value>Configuration change retention period</value>
+    <comment>Service setting display name (History.ConfigurationChangeRetentionPeriod).</comment>
+  </data>
+  <data name="History_ConfigurationChangeRetentionPeriod_Description" xml:space="preserve">
+    <value>The duration for which configuration change history (versioned Connected System, Synchronisation Rule, and Schedule snapshots) is retained. Kept separately from, and typically much longer than, the history retention period. Format: d.hh:mm:ss (e.g., '3650.00:00:00' for ~10 years).</value>
+    <comment>Service setting description (History.ConfigurationChangeRetentionPeriod).</comment>
+  </data>
+  <data name="History_CleanupBatchSize" xml:space="preserve">
+    <value>History cleanup batch size</value>
+    <comment>Service setting display name (History.CleanupBatchSize).</comment>
+  </data>
+  <data name="History_CleanupBatchSize_Description" xml:space="preserve">
+    <value>Maximum number of records to delete per cleanup batch during housekeeping. Lower values reduce database load but take longer to clean up large volumes. Higher values are faster but may cause temporary performance impact.</value>
+    <comment>Service setting description (History.CleanupBatchSize).</comment>
+  </data>
+  <data name="History_SecurityEventRetentionPeriod" xml:space="preserve">
+    <value>Security event retention period</value>
+    <comment>Service setting display name (History.SecurityEventRetentionPeriod).</comment>
+  </data>
+  <data name="History_SecurityEventRetentionPeriod_Description" xml:space="preserve">
+    <value>The duration for which security audit event Activities (interactive sign-in success/failure, and failed API key or SSO access token authentication) are retained. Kept separately from the history and configuration change retention periods. Format: d.hh:mm:ss (e.g., '365.00:00:00' for ~1 year).</value>
+    <comment>Service setting description (History.SecurityEventRetentionPeriod).</comment>
+  </data>
+  <data name="History_PasswordEventRetentionPeriod" xml:space="preserve">
+    <value>Password Synchronisation retention period</value>
+    <comment>Service setting display name (History.PasswordEventRetentionPeriod).</comment>
+  </data>
+  <data name="History_PasswordEventRetentionPeriod_Description" xml:space="preserve">
+    <value>The duration for which Password Synchronisation history is kept: the Activities recording what happened to each password change, and the queue rows that reached a terminal state (parked, expired, or cancelled). Changes still owed to a Connected System are never removed, however old. Shorten this to bound how long JIM holds an encrypted password it can no longer deliver. Format: d.hh:mm:ss (e.g., '365.00:00:00' for ~1 year).</value>
+    <comment>Service setting description (History.PasswordEventRetentionPeriod).</comment>
+  </data>
+  <data name="ChangeTracking_CsoChanges_Enabled" xml:space="preserve">
+    <value>Track CSO changes</value>
+    <comment>Service setting display name (ChangeTracking.CsoChanges.Enabled).</comment>
+  </data>
+  <data name="ChangeTracking_CsoChanges_Enabled_Description" xml:space="preserve">
+    <value>When enabled, change history is recorded for all Connected System Object create/update/delete operations. Disable to improve performance at the expense of audit trail.</value>
+    <comment>Service setting description (ChangeTracking.CsoChanges.Enabled).</comment>
+  </data>
+  <data name="ChangeTracking_MvoChanges_Enabled" xml:space="preserve">
+    <value>Track MVO changes</value>
+    <comment>Service setting display name (ChangeTracking.MvoChanges.Enabled).</comment>
+  </data>
+  <data name="ChangeTracking_MvoChanges_Enabled_Description" xml:space="preserve">
+    <value>When enabled, change history is recorded for all Metaverse Object create/update/delete operations. Disable to improve performance at the expense of audit trail.</value>
+    <comment>Service setting description (ChangeTracking.MvoChanges.Enabled).</comment>
+  </data>
+  <data name="ChangeTracking_ConfigurationChanges_Enabled" xml:space="preserve">
+    <value>Track configuration changes</value>
+    <comment>Service setting display name (ChangeTracking.ConfigurationChanges.Enabled).</comment>
+  </data>
+  <data name="ChangeTracking_ConfigurationChanges_Enabled_Description" xml:space="preserve">
+    <value>When enabled, a redacted, versioned configuration snapshot is recorded on the Activity for every configuration create/update/delete (Synchronisation Rules, Connected Systems). Disable to stop capturing configuration change history.</value>
+    <comment>Service setting description (ChangeTracking.ConfigurationChanges.Enabled).</comment>
+  </data>
+  <data name="ChangeTracking_SyncOutcomes_Level" xml:space="preserve">
+    <value>Sync outcome tracking level</value>
+    <comment>Service setting display name (ChangeTracking.SyncOutcomes.Level).</comment>
+  </data>
+  <data name="ChangeTracking_SyncOutcomes_Level_Description" xml:space="preserve">
+    <value>Controls how much detail is recorded for sync outcome graphs on each Run Profile execution item. None: no outcome tracking (legacy behaviour). Standard: root-level outcomes (enables stat chips). Detailed: full causal chain with nested outcomes (default). Higher levels provide richer audit trails but increase storage usage.</value>
+    <comment>Service setting description (ChangeTracking.SyncOutcomes.Level).</comment>
+  </data>
+  <data name="Worker_StaleTaskTimeout" xml:space="preserve">
+    <value>Stale task timeout</value>
+    <comment>Service setting display name (Worker.StaleTaskTimeout).</comment>
+  </data>
+  <data name="Worker_StaleTaskTimeout_Description" xml:space="preserve">
+    <value>How long a running Worker task may go without a heartbeat before JIM treats its Worker as crashed: the Scheduler then fails the task's Activity and removes the task, so the work can be run again. Format: d.hh:mm:ss.</value>
+    <comment>Service setting description (Worker.StaleTaskTimeout).</comment>
+  </data>
+  <data name="Sync_PageSize" xml:space="preserve">
+    <value>Sync page size</value>
+    <comment>Service setting display name (Sync.PageSize).</comment>
+  </data>
+  <data name="Sync_PageSize_Description" xml:space="preserve">
+    <value>The most Connected System Objects to process per database page during sync operations. A page also ends once its objects hold 100,000 attribute values, so very large groups never share a page. Larger values improve throughput by reducing database round trips. UI progress updates occur every 100 objects regardless of page size. Recommended range: 200-1000.</value>
+    <comment>Service setting description (Sync.PageSize).</comment>
+  </data>
+  <data name="Sync_PostClearReconciliation_MaxMissingPercent" xml:space="preserve">
+    <value>Post-clear reconciliation: maximum missing share</value>
+    <comment>Service setting display name (Sync.PostClearReconciliation.MaxMissingPercent).</comment>
+  </data>
+  <data name="Sync_PostClearReconciliation_MaxMissingPercent_Description" xml:space="preserve">
+    <value>The maximum share, as a percentage, of objects recorded at a Connector Space clear that may still be missing a re-join before the post-clear reconciliation sweep refuses to run. Above this, the sweep assumes the re-import was broken (a filter or base DN change) rather than a genuine mass departure, and refuses until you re-import the Connected System or raise this setting.</value>
+    <comment>Service setting description (Sync.PostClearReconciliation.MaxMissingPercent).</comment>
+  </data>
+  <data name="Preview_WorkerThreshold" xml:space="preserve">
+    <value>Preview worker threshold</value>
+    <comment>Service setting display name (Preview.WorkerThreshold).</comment>
+  </data>
+  <data name="Preview_WorkerThreshold_Description" xml:space="preserve">
+    <value>The estimated number of affected objects above which a configuration change preview is evaluated by JIM.Worker rather than in the portal's own process. Smaller previews run in-process so they return without waiting for the worker to pick them up. Both paths produce identical results.</value>
+    <comment>Service setting description (Preview.WorkerThreshold).</comment>
+  </data>
+  <data name="Preview_FullDataSetPromptThreshold" xml:space="preserve">
+    <value>Preview full data set prompt threshold</value>
+    <comment>Service setting display name (Preview.FullDataSetPromptThreshold).</comment>
+  </data>
+  <data name="Preview_FullDataSetPromptThreshold_Description" xml:space="preserve">
+    <value>The estimated number of object-level rows above which a configuration change preview asks whether to keep the full data set or only a sample of each summary group. Below this, previews keep a sample without asking. Summary counts are exact either way; the choice only affects how much can be drilled into, and how much storage the preview uses.</value>
+    <comment>Service setting description (Preview.FullDataSetPromptThreshold).</comment>
+  </data>
+  <data name="Security_EncryptionKeyPath" xml:space="preserve">
+    <value>Encryption key storage path</value>
+    <comment>Service setting display name (Security.EncryptionKeyPath).</comment>
+  </data>
+  <data name="Security_EncryptionKeyPath_Description" xml:space="preserve">
+    <value>The file system path where encryption keys are stored. Set via JIM_ENCRYPTION_KEY_PATH environment variable. If not set, defaults to /data/keys (Docker) or the application data directory.</value>
+    <comment>Service setting description (Security.EncryptionKeyPath).</comment>
+  </data>
+  <data name="Security_RateLimiting_Enabled" xml:space="preserve">
+    <value>API rate limiting enabled</value>
+    <comment>Service setting display name (Security.RateLimiting.Enabled).</comment>
+  </data>
+  <data name="Security_RateLimiting_Enabled_Description" xml:space="preserve">
+    <value>When enabled, REST API requests are throttled per client (see the authenticated and unauthenticated request limits below). When disabled, no limiter is applied to any API request.</value>
+    <comment>Service setting description (Security.RateLimiting.Enabled).</comment>
+  </data>
+  <data name="Security_RateLimiting_AuthenticatedRequestsPerMinute" xml:space="preserve">
+    <value>Authenticated API requests per minute</value>
+    <comment>Service setting display name (Security.RateLimiting.AuthenticatedRequestsPerMinute).</comment>
+  </data>
+  <data name="Security_RateLimiting_AuthenticatedRequestsPerMinute_Description" xml:space="preserve">
+    <value>The maximum number of REST API requests an authenticated client (a signed-in user or an API key) may make per rolling minute. Each authenticated principal is limited independently.</value>
+    <comment>Service setting description (Security.RateLimiting.AuthenticatedRequestsPerMinute).</comment>
+  </data>
+  <data name="Security_RateLimiting_UnauthenticatedRequestsPerMinute" xml:space="preserve">
+    <value>Unauthenticated API requests per minute</value>
+    <comment>Service setting display name (Security.RateLimiting.UnauthenticatedRequestsPerMinute).</comment>
+  </data>
+  <data name="Security_RateLimiting_UnauthenticatedRequestsPerMinute_Description" xml:space="preserve">
+    <value>The maximum number of REST API requests an unauthenticated client may make per one-minute window, identified by client IP address. Applies to anonymous endpoints and requests that failed API key authentication.</value>
+    <comment>Service setting description (Security.RateLimiting.UnauthenticatedRequestsPerMinute).</comment>
+  </data>
+  <data name="Security_RateLimiting_ScimServiceProviderRequestsPerMinute" xml:space="preserve">
+    <value>SCIM Service Provider requests per minute</value>
+    <comment>Service setting display name (Security.RateLimiting.ScimServiceProviderRequestsPerMinute).</comment>
+  </data>
+  <data name="Security_RateLimiting_ScimServiceProviderRequestsPerMinute_Description" xml:space="preserve">
+    <value>The maximum number of requests the SCIM clients of one Connected System may make to its SCIM 2.0 Service Provider endpoint per rolling minute. Shared by all of that Connected System's keys.</value>
+    <comment>Service setting description (Security.RateLimiting.ScimServiceProviderRequestsPerMinute).</comment>
+  </data>
+  <data name="UI_ProgressUpdateInterval" xml:space="preserve">
+    <value>Progress update interval</value>
+    <comment>Service setting display name (UI.ProgressUpdateInterval).</comment>
+  </data>
+  <data name="UI_ProgressUpdateInterval_Description" xml:space="preserve">
+    <value>How often JIM reports progress while it generates Example Data from a template. Format: d.hh:mm:ss.</value>
+    <comment>Service setting description (UI.ProgressUpdateInterval).</comment>
+  </data>
+  <data name="Instance_Name" xml:space="preserve">
+    <value>Service Name</value>
+    <comment>Service setting display name (Instance.Name).</comment>
+  </data>
+  <data name="Instance_Name_Description" xml:space="preserve">
+    <value>A friendly, editable name for this JIM instance. Appears in the sidebar, browser tab title, and footer so you can tell instances apart.</value>
+    <comment>Service setting description (Instance.Name).</comment>
+  </data>
+  <data name="Instance_Id" xml:space="preserve">
+    <value>Service ID</value>
+    <comment>Service setting display name (Instance.Id).</comment>
+  </data>
+  <data name="Instance_Id_Description" xml:space="preserve">
+    <value>A stable, immutable identifier generated once when this JIM instance was created. Used by tooling, logs, and telemetry to identify this instance. Cannot be changed.</value>
+    <comment>Service setting description (Instance.Id).</comment>
+  </data>
+  <data name="Security_ConfigurationChangeHashKey" xml:space="preserve">
+    <value>Configuration change hash key</value>
+    <comment>A Service Setting name.</comment>
+  </data>
+  <data name="Security_ConfigurationChangeHashKey_Description" xml:space="preserve">
+    <value>Server-held key used to detect changes to secret configuration values in change history without storing the values. Generated automatically; never displayed or edited.</value>
+    <comment>The Service Setting description.</comment>
+  </data>
+</root>

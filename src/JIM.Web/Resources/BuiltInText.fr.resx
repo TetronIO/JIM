@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Schedule_TemporalScopeReconciliation" xml:space="preserve">
+    <value>Réconciliation du périmètre temporel</value>
+  </data>
+  <data name="Schedule_TemporalScopeReconciliation_Description" xml:space="preserve">
+    <value>Planification intégrée qui réévalue le périmètre, défini par des dates relatives, des objets dont l’appartenance change avec le temps (par exemple un départ dont la date de fin est dépassée) mais dont les données source n’ont pas changé. Sans elle, les chemins de synchronisation et d’exportation les ignoreraient.</value>
+  </data>
+  <data name="Schedule_HistoryRetentionCleanup" xml:space="preserve">
+    <value>Nettoyage de la conservation de l’historique</value>
+  </data>
+  <data name="Schedule_HistoryRetentionCleanup_Description" xml:space="preserve">
+    <value>Planification intégrée qui supprime l’historique des modifications, les activités, les enregistrements de mots de passe initiaux et les modifications de mot de passe en attente arrivées à leur état final, une fois dépassée la durée de conservation définie pour leur type. Les enregistrements encore en cours de traitement ne sont jamais supprimés, quel que soit leur âge.</value>
+  </data>
+  <data name="Role_Administrator" xml:space="preserve">
+    <value>Administrateur</value>
+  </data>
+</root>

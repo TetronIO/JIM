@@ -15,7 +15,9 @@
 
 @if (Status == WorkerTaskStatus.Processing)
 {
-    var stepName = Steps?.CurrentStepName;
+    var stepName = Steps is { CurrentStepName: { } englishStepName, CurrentStepKey: { } stepKey }
+        ? RunPhaseDisplay.Name(stepKey, englishStepName)
+        : Steps?.CurrentStepName;
 
     <div class="jim-queue-progress">
         @if (Steps != null)
@@ -54,11 +56,11 @@
 }
 else if (Status == WorkerTaskStatus.Queued)
 {
-    <MudText Typo="Typo.caption" Class="mud-text-secondary">Waiting...</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">@ActivityText.ActivityWorkerTaskWaiting</MudText>
 }
 else if (Status == WorkerTaskStatus.WaitingForPreviousStep)
 {
-    <MudText Typo="Typo.caption" Class="mud-text-secondary">Waiting for previous step...</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">@ActivityText.ActivityWorkerTaskWaitingPreviousStep</MudText>
 }
 
 @code {
@@ -86,7 +88,7 @@ else if (Status == WorkerTaskStatus.WaitingForPreviousStep)
     /// both print, so a run reads the same wherever it is being watched from.
     /// </summary>
     private static string StepPosition(RunPhaseSummary steps, string stepName) =>
-        $"Step {steps.CurrentStepNumber} of {steps.TotalSteps}: {stepName}";
+        string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityStepScope, steps.CurrentStepNumber, steps.TotalSteps, stepName);
 
     /// <summary>
     /// The one line beneath the bar: which step the figures measure, and the figures.
@@ -104,9 +106,11 @@ else if (Status == WorkerTaskStatus.WaitingForPreviousStep)
         var figures = $"{processed:N0} / {total:N0}";
 
         if (stepName != null)
-            return $"{StepPosition(Steps!, stepName)} - {figures}";
+            return string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityCaptionJoined, StepPosition(Steps!, stepName), figures);
 
-        return string.IsNullOrEmpty(ProgressMessage) ? figures : $"{figures} - {ProgressMessage}";
+        return string.IsNullOrEmpty(ProgressMessage)
+            ? figures
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityCaptionJoined, figures, ProgressMessage);
     }
 
     /// <summary>

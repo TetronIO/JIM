@@ -3,6 +3,8 @@
 
 using JIM.Models.Logic.Scoping;
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Staging.DTOs;
 
 /// <summary>
@@ -24,6 +26,9 @@ public sealed class ConnectionObjectTypeConflict
 
     /// <summary>The conflict in words, generated on the server so every surface says the same thing.</summary>
     public string Description { get; set; } = string.Empty;
+
+    /// <summary><see cref="Description"/> as a <see cref="JimMessage"/> (#3030).</summary>
+    public JimMessage? DescriptionDetail { get; set; }
 
     /// <summary>
     /// The rule's scoping evaluated against the Metaverse Object now: in scope means synchronisation reports the

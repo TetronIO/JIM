@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Expressions;
 
 /// <summary>
@@ -28,6 +30,15 @@ public sealed record ExpressionFunction(
     string Example,
     bool IsRepeatable = true)
 {
+    /// <summary>
+    /// <see cref="Description"/> as a message, so the portal can show it in the viewer's language; the REST API and the
+    /// documentation read <see cref="Description"/>, which is this message's British English.
+    /// </summary>
+    public JimMessage? DescriptionDetail { get; init; }
+
+    /// <summary><see cref="Returns"/> as a message, for the portal; see <see cref="DescriptionDetail"/>.</summary>
+    public JimMessage? ReturnsDetail { get; init; }
+
     /// <summary>
     /// The call as the reference writes it: optional parameters in square brackets, such as
     /// <c>StartsWith(value, prefix[, ignoreCase])</c>.

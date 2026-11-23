@@ -6,6 +6,7 @@ using System.Text.Json;
 using JIM.Application.Servers;
 using JIM.Application.Servers.Scoping;
 using JIM.Models.Core;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Logic.Scoping;
 using JIM.Models.Search;
@@ -182,6 +183,53 @@ public class ScopingExplanationSummariserTests
                 (ExplanationSegmentKind.Text, ")")
             }));
             Assert.That(bullets[1].Segments.Where(s => s.Kind == ExplanationSegmentKind.NoValue).Select(s => s.Text), Is.EqualTo(new[] { "no value" }));
+        }
+    }
+
+    private static readonly CultureInfo French = CultureInfo.GetCultureInfo("fr");
+
+    /// <summary>A line in the viewer's language: each segment's message where it has one, else its data as it is.</summary>
+    private static string InFrench(ExplanationBullet bullet) =>
+        string.Concat(bullet.Segments.Select(s => s.Message == null ? s.Text : MessageRenderer.Render(s.Message, French, French)));
+
+    [Test]
+    public void ToComeIntoScope_InFrench_WordsEachBulletInFrenchAndLeavesTheEnglishUnchanged()
+    {
+        var bullets = ScopingExplanationSummariser.ToComeIntoScope(Explain(FinanceAppRule()));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(bullets.Select(Joined), Is.EqualTo(new[]
+            {
+                "Department must equal Finance (currently Engineering)",
+                "and either Cost Centre starts with FIN (currently no value), or Job Title contains Accountant (currently Software Engineer)"
+            }), "the English the REST API and PowerShell read is what it always was");
+            Assert.That(bullets.Select(InFrench), Is.EqualTo(new[]
+            {
+                "Department doit être égal à Finance (actuellement Engineering)",
+                "et soit Cost Centre commence par FIN (actuellement aucune valeur), soit Job Title contient Accountant (actuellement Software Engineer)"
+            }), "attribute names and values are data and are never translated");
+            Assert.That(bullets[0].PlainTextDetail, Is.Not.Null);
+            Assert.That(MessageRenderer.Render(bullets[0].PlainTextDetail!, French, French),
+                Is.EqualTo("Department doit être égal à « Finance » (actuellement « Engineering »)"));
+        }
+    }
+
+    [Test]
+    public void Describe_InFrench_CarriesTheTreeLinesAndTheHintAsMessages()
+    {
+        var explanation = Explain(FinanceAppRule());
+        ScopingExplanationSummariser.Describe(explanation);
+        var group = explanation.Groups.Single();
+        var department = group.Criteria.Single(c => c.AttributeName == "Department");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(MessageRenderer.Render(group.DescriptionDetail!, French, French), Is.EqualTo("Toutes doivent être remplies (non remplie)"));
+            Assert.That(MessageRenderer.Render(department.DescriptionDetail!, French, French), Is.EqualTo("Department est égal à Finance"));
+            Assert.That(MessageRenderer.Render(department.ActualDescriptionDetail!, French, French), Is.EqualTo("est Engineering"));
+            Assert.That(explanation.Hint, Is.EqualTo(explanation.HintDetail!.ToEnglish()));
+            Assert.That(MessageRenderer.Render(explanation.HintDetail!, French, French), Does.StartWith("Échoue sur Department"));
         }
     }
 

@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Utilities
@@ -15,13 +16,13 @@
 @* rules. See engineering/plans/done/CONFIGURATION_CHANGE_PREVIEW.md (Phase 2). *@
 
 <ConsequenceConfirmationDialog Loading="@(_impact == null)"
-                               LoadingText="Evaluating deletion impact..."
+                               LoadingText="@AdminText.DeleteEvaluatingImpact"
                                Blockers="@BuildBlockers()"
-                               SafeMessage="No object holds a value for this attribute. Safe to delete; no object data will be lost."
+                               SafeMessage="@AdminText.DeleteAttributeSafe"
                                Consequences="@BuildConsequences()"
                                ConfirmationPhrase="@BuildConfirmationPhrase()"
                                ConfirmButtonText="@BuildConfirmButtonText()"
-                               BusyText="Deleting..."
+                               BusyText="@AdminText.DeleteBusy"
                                OnConfirmAsync="DeleteAsync" />
 
 @code {
@@ -53,8 +54,8 @@
         {
             blockers.Add(new ConsequenceBlocker
             {
-                Headline = "This is a built-in attribute",
-                Body = "Built-in attributes are part of JIM's own schema and cannot be deleted."
+                Headline = AdminText.DeleteAttributeBuiltInHeadline,
+                Body = AdminText.DeleteAttributeBuiltInBody
             });
         }
 
@@ -62,14 +63,14 @@
         {
             blockers.Add(new ConsequenceBlocker
             {
-                Headline = $"{_impact.TotalObjectsWithValues:N0} object(s) have a value",
+                Headline = string.Format(CultureInfo.CurrentCulture, AdminText.DeleteAttributeValuesHeadline, _impact.TotalObjectsWithValues.ToString("N0", CultureInfo.CurrentCulture)),
                 Items = _impact.ObjectTypeValueCounts.Select(count => new ConsequenceItem
                 {
-                    Text = $"{count.MetaverseObjectTypeName}: {count.ObjectCount:N0} with a value",
+                    Text = string.Format(CultureInfo.CurrentCulture, AdminText.DeleteAttributeValueCount, count.MetaverseObjectTypeName, count.ObjectCount.ToString("N0", CultureInfo.CurrentCulture)),
                     Icon = Icons.Material.Filled.Person,
                     Href = Utilities.GetMetaverseObjectHasAttributeSearchHref(count.MetaverseObjectTypePluralName, _impact.AttributeName)
                 }).ToList(),
-                Body = "Clear these values first (stop the source flow and let it deprovision, or bulk-clear), then delete."
+                Body = AdminText.DeleteAttributeValuesBody
             });
         }
 
@@ -77,14 +78,14 @@
         {
             blockers.Add(new ConsequenceBlocker
             {
-                Headline = $"{_impact.Readers.Count:N0} configuration item(s) read this attribute",
+                Headline = string.Format(CultureInfo.CurrentCulture, AdminText.DeleteAttributeReadersHeadline, _impact.Readers.Count.ToString("N0", CultureInfo.CurrentCulture)),
                 Items = _impact.Readers.Select(reader => new ConsequenceItem
                 {
-                    Text = reader.Description,
+                    Text = reader.ShowDescription(),
                     Icon = Icons.Material.Filled.Link,
                     Href = Helpers.AttributeReaderHref(reader)
                 }).ToList(),
-                Body = "Change or remove each one first, then delete. JIM does not remove them for you: a Scoping Criterion removed from a Synchronisation Rule changes which objects the rule manages."
+                Body = AdminText.DeleteAttributeReadersBody
             });
         }
 
@@ -98,7 +99,7 @@
 
         return new ConsequenceGroup
         {
-            Headline = $"These {_impact.References.Count} reference(s) will also be removed",
+            Headline = string.Format(CultureInfo.CurrentCulture, AdminText.DeleteReferencesHeadline, _impact.References.Count),
             Items = _impact.References.Select(reference => new ConsequenceItem
             {
                 Text = reference.Description,
@@ -115,16 +116,16 @@
     {
         // A refused delete removes nothing, so its button promises nothing.
         if (_impact == null || _impact.BlockedByValues || _impact.BlockedByReaders)
-            return "Delete";
+            return CommonText.Delete;
 
         return _impact.References.Count > 0
-            ? $"Delete + {_impact.References.Count} reference(s)"
-            : "Delete";
+            ? string.Format(CultureInfo.CurrentCulture, AdminText.DeleteWithReferences, _impact.References.Count)
+            : CommonText.Delete;
     }
 
     private async Task<bool> DeleteAsync()
     {
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, CommonText.Delete);
         if (cancelled)
             return false;
 
@@ -135,15 +136,15 @@
             var impact = await jim.Metaverse.DeleteMetaverseAttributeWithCascadeAsync(Attribute, user, changeReason);
             if (!impact.Deleted)
             {
-                Snackbar.Add("The attribute could not be deleted; it may now hold stored values, or configuration may now read it. Refresh and try again.", Severity.Warning);
+                Snackbar.Add(AdminText.DeleteAttributeFailedRefresh, Severity.Warning);
                 return false;
             }
 
-            Snackbar.Add($"Deleted attribute \"{impact.AttributeName}\".", Severity.Success);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.DeleteAttributeSuccess, impact.AttributeName), Severity.Success);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Snackbar.Add($"Failed to delete attribute: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.DeleteAttributeFailed, ex.ToDisplayText()), Severity.Error);
             return false;
         }
 
@@ -160,7 +161,7 @@
             { x => x.Attribute, attribute }
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
-        var dialog = await dialogService.ShowAsync<DeleteMetaverseAttributeDialog>($"Delete \"{attribute.Name}\" Attribute", parameters, options);
+        var dialog = await dialogService.ShowAsync<DeleteMetaverseAttributeDialog>(string.Format(CultureInfo.CurrentCulture, AdminText.DeleteAttributeTitle, attribute.Name), parameters, options);
         var result = await dialog.Result;
         return result is { Canceled: false, Data: true };
     }

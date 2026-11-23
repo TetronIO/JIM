@@ -14,7 +14,7 @@
 @if (_execution is { } execution)
 {
     var href = $"/admin/operations/schedule-executions/{execution.Id}";
-    var statusText = execution.Status.ToString().SplitOnCapitalLetters();
+    var statusText = StatusText(execution.Status);
     var statusColour = Helpers.GetScheduleExecutionMudBlazorColorForStatus(execution.Status);
 
     if (Compact)
@@ -22,7 +22,7 @@
         @* Panel-section treatment, matching the sibling sections of the Operations History side panel. *@
         var contextText = BuildCompactContextText(execution);
         <MudPaper Elevation="0" Class="@CompactClass" Outlined="true">
-            <MudText Typo="Typo.subtitle2" Class="mb-2" Color="Color.Primary">Schedule</MudText>
+            <MudText Typo="Typo.subtitle2" Class="mb-2" Color="Color.Primary">@ActivityText.ActivityScheduleHeading</MudText>
             <div class="d-flex align-center flex-wrap gap-2">
                 <MudIcon Icon="@Icons.Material.Filled.Schedule" />
                 <MudLink Href="@href">@contextText</MudLink>
@@ -38,10 +38,10 @@
            chip especially so, because the Activity carries a status chip of its own and an unlabelled second
            chip describing the whole run reads as a contradiction. *@
         <MudPaper Outlined="true" Class="@PanelClass">
-            <MudText Typo="Typo.h5" Class="mb-4">Part of a Schedule</MudText>
+            <MudText Typo="Typo.h5" Class="mb-4">@ActivityText.ActivityScheduleHeadingPanel</MudText>
             <MudGrid Spacing="4">
                 <MudItem xs="12" sm="6" md="4">
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Schedule:</MudText><br />
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityScheduleFieldSchedule</MudText><br />
                     <MudLink Href="@href">@execution.ScheduleName</MudLink>
                 </MudItem>
 
@@ -51,17 +51,17 @@
                 {
                     var stepIndex = ScheduleStepIndex.Value;
                     <MudItem xs="12" sm="6" md="4">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Step:</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityScheduleFieldStep</MudText>
                         @* ScheduleStepIndex is stored 0-based and read 1-based. *@
-                        <MudText>@(stepIndex + 1) of @execution.TotalSteps</MudText>
+                        <MudText>@string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityScheduleStepOf, stepIndex + 1, execution.TotalSteps)</MudText>
                     </MudItem>
                 }
 
                 <MudItem xs="12" sm="6" md="4">
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Schedule Execution:</MudText>
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityScheduleFieldExecution</MudText>
                     <div class="d-flex align-center flex-wrap gap-2">
                         <MudChip T="string" Variant="Variant.Text" Class="ml-0" Color="@statusColour">@statusText</MudChip>
-                        <MudLink Href="@href">View Schedule Execution</MudLink>
+                        <MudLink Href="@href">@ActivityText.ActivityScheduleViewExecution</MudLink>
                     </div>
                 </MudItem>
             </MudGrid>
@@ -106,6 +106,21 @@
     /// </summary>
     private Guid? _loadedExecutionId;
 
+    /// <summary>
+    /// The Schedule Execution's status in the viewer's language.
+    /// </summary>
+    private static string StatusText(ScheduleExecutionStatus status) => status switch
+    {
+        ScheduleExecutionStatus.Queued => ActivityText.ActivityScheduleStatusQueued,
+        ScheduleExecutionStatus.InProgress => ActivityText.ActivityScheduleStatusInProgress,
+        ScheduleExecutionStatus.Complete => ActivityText.ActivityStatusComplete,
+        ScheduleExecutionStatus.Failed => ActivityText.ActivityPreviewStatusFailed,
+        ScheduleExecutionStatus.Cancelled => ActivityText.ActivityStatusCancelled,
+        ScheduleExecutionStatus.Paused => ActivityText.ActivityScheduleStatusPaused,
+        ScheduleExecutionStatus.CompleteWithError => ActivityText.ActivityStatusFilterCompleteWithError,
+        _ => status.ForDisplay()
+    };
+
     private string CompactClass => string.IsNullOrWhiteSpace(Class) ? "pa-3" : $"pa-3 {Class}";
 
     private string PanelClass => string.IsNullOrWhiteSpace(Class) ? "pa-4" : $"pa-4 {Class}";
@@ -136,9 +151,9 @@
         if (ScheduleStepIndex.HasValue && execution.TotalSteps > 0)
         {
             var stepIndex = ScheduleStepIndex.Value;
-            return $"Part of {execution.ScheduleName}, step {stepIndex + 1} of {execution.TotalSteps}";
+            return string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityScheduleCompactWithStep, execution.ScheduleName, stepIndex + 1, execution.TotalSteps);
         }
 
-        return $"Part of {execution.ScheduleName}";
+        return string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityScheduleCompact, execution.ScheduleName);
     }
 }

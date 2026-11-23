@@ -1,0 +1,184 @@
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Activities;
+using JIM.Models.Localisation;
+using JIM.PostgresData;
+using JIM.PostgresData.Repositories;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using NUnit.Framework;
+
+namespace JIM.Worker.Tests.Repositories;
+
+/// <summary>
+/// Real-PostgreSQL round trip of the localisable message an Activity stores beside its English (#3039): the entity save
+/// writes all three detail columns, and each raw statement that writes the English of a progress message clears the detail
+/// beside it, so the two can never disagree. Opt-in via JIM_TEST_RESET_*; ignored when absent.
+/// </summary>
+[TestFixture]
+[Category("RequiresPostgres")]
+public class ActivityMessageDetailDatabaseTests
+{
+    private string _connectionString = null!;
+
+    private JimDbContext NewContext()
+    {
+        var options = new DbContextOptionsBuilder<JimDbContext>()
+            .UseNpgsql(_connectionString)
+            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+            .Options;
+        return new JimDbContext(options);
+    }
+
+    [OneTimeSetUp]
+    public void OneTimeSetUp()
+    {
+        var dbName = Environment.GetEnvironmentVariable("JIM_TEST_RESET_DB");
+        if (string.IsNullOrEmpty(dbName))
+            Assert.Ignore("JIM_TEST_RESET_DB not set; skipping real-PostgreSQL Activity message detail tests.");
+
+        var host = Environment.GetEnvironmentVariable("JIM_TEST_RESET_HOST") ?? "localhost";
+        var user = Environment.GetEnvironmentVariable("JIM_TEST_RESET_USER") ?? "postgres";
+        var pass = Environment.GetEnvironmentVariable("JIM_TEST_RESET_PASSWORD") ?? "postgres";
+        var port = Environment.GetEnvironmentVariable("JIM_TEST_RESET_PORT") ?? "5432";
+        _connectionString = $"Host={host};Port={port};Database={dbName};Username={user};Password={pass}";
+
+        using var ctx = NewContext();
+        ctx.Database.Migrate();
+    }
+
+    private static JimMessage Sample(string key, params MessageArgument[] arguments) =>
+        JimMessage.Create(ApplicationMessageCatalogues.Activities, key, arguments);
+
+    private static async Task<Guid> SeedActivityAsync(JimDbContext context, Action<Activity>? configure = null)
+    {
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            Status = ActivityStatus.InProgress,
+            InitiatedByType = ActivityInitiatorType.System
+        };
+        configure?.Invoke(activity);
+        context.Activities.Add(activity);
+        await context.SaveChangesAsync();
+        return activity.Id;
+    }
+
+    [Test]
+    public async Task UpdateActivityAsync_AllThreeMessageDetails_AreWrittenBesideTheirEnglishAsync()
+    {
+        // Arrange
+        await using var seed = NewContext();
+        var activityId = await SeedActivityAsync(seed);
+
+        // Act: the way ActivityServer completes an Activity, through the repository's entity update.
+        await using (var context = NewContext())
+        {
+            var activity = await context.Activities.SingleAsync(a => a.Id == activityId);
+            activity.ErrorMessageDetail = Sample(nameof(ActivityMessages.FailureWithCause), "outer", "inner");
+            activity.WarningMessageDetail = Sample(nameof(ActivityMessages.FailureWithCause), "warned", "because");
+            activity.MessageDetail = Sample(nameof(ActivityMessages.FailureWithCause), "said", "so");
+            await new PostgresDataRepository(context).Activity.UpdateActivityAsync(activity);
+        }
+
+        // Assert
+        await using var read = NewContext();
+        var stored = await read.Activities.AsNoTracking().SingleAsync(a => a.Id == activityId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.ErrorMessage, Is.EqualTo("outer --> inner"));
+            Assert.That(stored.ErrorMessageDetail, Is.EqualTo(Sample(nameof(ActivityMessages.FailureWithCause), "outer", "inner")).Using(MessageComparer));
+            Assert.That(stored.WarningMessage, Is.EqualTo("warned --> because"));
+            Assert.That(stored.WarningMessageDetail?.ToEnglish(), Is.EqualTo("warned --> because"));
+            Assert.That(stored.Message, Is.EqualTo("said --> so"));
+            Assert.That(stored.MessageDetail?.ToEnglish(), Is.EqualTo("said --> so"));
+        }
+    }
+
+    [Test]
+    public async Task UpdateActivityMessageAsync_RawStatement_WritesTheEnglishAndClearsTheDetailAsync()
+    {
+        // Arrange: an Activity whose message carries a detail
+        await using var seed = NewContext();
+        var activityId = await SeedActivityAsync(seed, a => a.MessageDetail = Sample(nameof(ActivityMessages.FailureWithCause), "a", "b"));
+
+        // Act
+        await using (var context = NewContext())
+        {
+            var sync = (SyncRepository)new PostgresDataRepository(context).Sync;
+            await sync.UpdateActivityMessageAsync(new Activity { Id = activityId, Message = "Saving changes" }, "Saving changes");
+        }
+
+        // Assert
+        await using var read = NewContext();
+        var stored = await read.Activities.AsNoTracking().SingleAsync(a => a.Id == activityId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Message, Is.EqualTo("Saving changes"));
+            Assert.That(stored.MessageDetailJson, Is.Null, "A detail left beside different English would show the old text");
+        }
+    }
+
+    [Test]
+    public async Task UpdateActivityMessageAsync_Message_WritesTheEnglishAndTheMessageAsync()
+    {
+        // Arrange
+        await using var seed = NewContext();
+        var activityId = await SeedActivityAsync(seed);
+
+        // Act
+        await using (var context = NewContext())
+        {
+            var sync = (SyncRepository)new PostgresDataRepository(context).Sync;
+            await sync.UpdateActivityMessageAsync(new Activity { Id = activityId }, Sample(nameof(ActivityMessages.FailureWithCause), "Export", "cancelled"));
+        }
+
+        // Assert
+        await using var read = NewContext();
+        var stored = await read.Activities.AsNoTracking().SingleAsync(a => a.Id == activityId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Message, Is.EqualTo("Export --> cancelled"));
+            Assert.That(stored.MessageDetail?.ToEnglish(), Is.EqualTo("Export --> cancelled"));
+        }
+    }
+
+    [Test]
+    public async Task ProgressWriter_WritesTheEnglishAndClearsTheDetailAsync()
+    {
+        // Arrange
+        await using var seed = NewContext();
+        var activityId = await SeedActivityAsync(seed, a => a.MessageDetail = Sample(nameof(ActivityMessages.FailureWithCause), "a", "b"));
+
+        // Act
+        await using (var context = NewContext())
+        {
+            var sync = (SyncRepository)new PostgresDataRepository(context).Sync;
+            sync.ConnectionStringForParallelWrites = _connectionString;
+            await sync.CreateActivityProgressWriter()!.WriteAsync(new ActivityProgressWrite(activityId, "Reading page 2", 10, 100, []));
+        }
+
+        // Assert
+        await using var read = NewContext();
+        var stored = await read.Activities.AsNoTracking().SingleAsync(a => a.Id == activityId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.Message, Is.EqualTo("Reading page 2"));
+            Assert.That(stored.MessageDetailJson, Is.Null);
+        }
+    }
+
+    /// <summary>Two messages are equal when they say the same thing; the record's list arguments compare by reference.</summary>
+    private static readonly IEqualityComparer<JimMessage?> MessageComparer = new EnglishComparer();
+
+    private sealed class EnglishComparer : IEqualityComparer<JimMessage?>
+    {
+        public bool Equals(JimMessage? x, JimMessage? y) => x?.ToEnglish() == y?.ToEnglish();
+
+        public int GetHashCode(JimMessage? obj) => obj?.ToEnglish().GetHashCode() ?? 0;
+    }
+}

@@ -890,7 +890,8 @@ function Test-PageShape {
 
 # The glossary's entries: "Term { #anchor }" or "Term (ABBR) { #anchor }" lines of its definition list.
 # TUT-2: every label a tutorial's Portal tab names in bold is one the portal shows. The portal's text
-# lives in its Razor markup and C#, and a Connector's setting names in its own source, so a label is
+# lives in its resource files (#3030; the British English values, never a translation), with what is
+# left in its Razor markup and C#, and a Connector's setting names in its own source, so a label is
 # checked by finding it there; case is ignored, since MudBlazor upper-cases buttons and tabs on screen.
 # A label the portal builds from data ("Project Users to the Metaverse?") is excused with a marker.
 function Get-PortalLabelText {
@@ -902,6 +903,13 @@ function Get-PortalLabelText {
         Get-ChildItem -LiteralPath $full -Recurse -File -Include '*.razor', '*.cs' |
             Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' } |
             ForEach-Object { [void]$text.AppendLine([System.IO.File]::ReadAllText($_.FullName)) }
+        # A neutral resource file (Name.resx, not Name.fr.resx) holds the English the portal shows.
+        Get-ChildItem -LiteralPath $full -Recurse -File -Filter '*.resx' |
+            Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' -and $_.BaseName -notmatch '\.' } |
+            ForEach-Object {
+                [xml]$resources = [System.IO.File]::ReadAllText($_.FullName)
+                foreach ($data in $resources.root.data) { [void]$text.AppendLine([string]$data.value) }
+            }
     }
     $text.ToString().ToLowerInvariant()
 }

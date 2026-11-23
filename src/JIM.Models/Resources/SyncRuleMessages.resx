@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NameMustBeSet" xml:space="preserve">
+    <value>Name must be set</value>
+  </data>
+  <data name="ConnectedSystemMustBeSet" xml:space="preserve">
+    <value>Connected System must be set</value>
+  </data>
+  <data name="ConnectedSystemObjectTypeMustBeSet" xml:space="preserve">
+    <value>Connected System Object Type must be set</value>
+  </data>
+  <data name="MetaverseObjectTypeMustBeSet" xml:space="preserve">
+    <value>Metaverse Object Type must be set</value>
+  </data>
+  <data name="DirectionMustBeSet" xml:space="preserve">
+    <value>Direction must be set</value>
+  </data>
+  <data name="NoObjectMatchingRules" xml:space="preserve">
+    <value>No Object Matching Rules have been defined. Whilst valid, this is not recommended. Object Matching Rules help minimise synchronisation errors in uncommon, but important scenarios</value>
+  </data>
+  <data name="NoAttributeFlowRules" xml:space="preserve">
+    <value>No Attribute Flow Rules have been defined. Whilst valid, this means no data will flow between the two systems</value>
+  </data>
+  <data name="CredentialAttributeFlow" xml:space="preserve">
+    <value>The Attribute Flow using '{0}' must be removed: it holds credentials, which JIM never imports or exports through an Attribute Flow. JIM delivers passwords only through Password Synchronisation, on Connected Systems whose Connector supports it.</value>
+    <comment>{0} is the attribute name.</comment>
+  </data>
+  <data name="CredentialLikeAttributeFlow" xml:space="preserve">
+    <value>The Attribute Flow targeting '{0}' looks like it may carry a password. If it does, use Password Synchronisation on the Connected System instead: a password flowed as an attribute is stored in Metaverse Object and Connected System Object attribute values, change history, Pending Exports, export previews, search results and database backups. If this attribute is not a password, no action is needed.</value>
+    <comment>{0} is the attribute name.</comment>
+  </data>
+</root>

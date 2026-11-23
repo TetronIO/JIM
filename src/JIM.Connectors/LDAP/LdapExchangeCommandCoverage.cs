@@ -1,7 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Connectors.Resources;
 using JIM.Models.Exchange;
+using JIM.Models.Localisation;
 
 namespace JIM.Connectors.LDAP;
 
@@ -36,7 +38,11 @@ internal static class LdapExchangeCommandCoverage
     /// </summary>
     /// <param name="principal">The account, as it signed in.</param>
     /// <param name="visibleCommands">The commands the account can see. Compared ignoring case, as PowerShell does.</param>
-    internal static string? WarningFor(string principal, IReadOnlySet<string> visibleCommands)
+    internal static string? WarningFor(string principal, IReadOnlySet<string> visibleCommands) =>
+        WarningMessageFor(principal, visibleCommands)?.ToEnglish();
+
+    /// <summary>The same warning as <see cref="WarningFor"/>, held as a message the portal shows in the viewer's language.</summary>
+    internal static JimMessage? WarningMessageFor(string principal, IReadOnlySet<string> visibleCommands)
     {
         var visible = new HashSet<string>(visibleCommands, StringComparer.OrdinalIgnoreCase);
         var missing = RequiredCommands.Where(command => !visible.Contains(command)).ToList();
@@ -48,12 +54,11 @@ internal static class LdapExchangeCommandCoverage
             .Select(entry => entry.Type)
             .ToList();
 
-        return $"The account {principal} cannot run {JoinNames(missing)} in Exchange, so JIM cannot manage these recipient types: " +
-               $"{string.Join(", ", affectedTypes)}. Their changes will fail for insufficient permissions until it can. " +
-               "Add the account to Exchange's Recipient Management role group, or give it a role that includes those commands.";
+        return JimMessage.Create(ConnectorMessageCatalogues.Connectors, nameof(ConnectorMessages.LdapExchangeCommandsMissing),
+            principal, JoinNames(missing), string.Join(", ", affectedTypes));
     }
 
-    private static string JoinNames(IReadOnlyList<string> names) => names.Count == 1
+    private static MessageArgument JoinNames(IReadOnlyList<string> names) => names.Count == 1
         ? names[0]
-        : $"{string.Join(", ", names.Take(names.Count - 1))} or {names[^1]}";
+        : JimMessage.Create(ConnectorMessageCatalogues.Connectors, nameof(ConnectorMessages.ListOr), string.Join(", ", names.Take(names.Count - 1)), names[^1]);
 }

@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using System.Runtime.CompilerServices;
 using JIM.Application.Interfaces;
 using JIM.Models.Activities;
@@ -72,80 +75,66 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
 
         if (stored.DescribesSameSettingsAs(proposal))
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                "The proposed settings match the ones this Synchronisation Rule already has, so nothing would " +
-                "change and no impact is counted below.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourSameSettings)),
                 nameof(SyncRule.Enabled)));
             return findings;
         }
 
         if (proposal.Direction != stored.Direction)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Blocking,
-                $"Direction cannot be changed on a saved Synchronisation Rule. This rule's Attribute Flow " +
-                $"mappings and Object Matching Rules are written for {stored.Direction}, and would all address " +
-                $"the wrong side as {proposal.Direction}. Create a rule in the direction you need instead.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourDirectionImmutable), DirectionName(stored.Direction), DirectionName(proposal.Direction)),
                 nameof(SyncRule.Direction)));
             return findings;
         }
 
         if (proposal.Enabled != stored.Enabled)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
                 proposal.Enabled
-                    ? "Enabling this Synchronisation Rule starts it contributing on the next synchronisation: it " +
-                      "begins flowing its Attribute Flow mappings, and whatever it projects or provisions starts " +
-                      "being created."
-                    : "Disabling this Synchronisation Rule stops it contributing on the next synchronisation. " +
-                      "Attribute values it currently owns pass to another contributor where there is one, and are " +
-                      "kept, ready for the rule to be enabled again, where it was the only one. It stops projecting " +
-                      "and provisioning.",
+                    ? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourEnabling))
+                    : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourDisabling)),
                 nameof(SyncRule.Enabled)));
         }
 
         if (proposal.ProjectToMetaverse && !stored.ProjectToMetaverse)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                "Turning Project To Metaverse on creates a new Metaverse Object for every in-scope object this " +
-                "rule manages that matches none, which is how identities are created in bulk.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourProjectOn)),
                 nameof(SyncRule.ProjectToMetaverse)));
         }
 
         if (proposal.ProvisionToConnectedSystem && !stored.ProvisionToConnectedSystem)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                "Turning Provision To Connected System on creates a Connected System Object in the target system for " +
-                "every in-scope Metaverse Object that has none. This is object creation at scale, and the count " +
-                "below is how many.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourProvisionOn)),
                 nameof(SyncRule.ProvisionToConnectedSystem)));
         }
 
         if (!proposal.EnforceState && stored.EnforceState)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                "Turning Enforce State off stops this rule correcting drift, so the objects it manages are free " +
-                "to diverge from what JIM holds from the moment it is saved. Nothing is corrected until it is " +
-                "turned back on.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourEnforceStateOff)),
                 nameof(SyncRule.EnforceState)));
         }
 
         // Toggles that do nothing in this rule's direction are said plainly. Counted as zero they would read as
         // "nothing is affected", which is a different statement from "this setting does not apply here".
         foreach (var message in DescribeInapplicableToggles(stored, proposal))
-            findings.Add(new PreviewValidationFinding(PreviewValidationSeverity.Information, message, nameof(SyncRule.Direction)));
+            findings.Add(PreviewValidationFinding.Of(PreviewValidationSeverity.Information, message, nameof(SyncRule.Direction)));
 
         if (!rule.Enabled && !proposal.Enabled)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                "This Synchronisation Rule is disabled, so no synchronisation applies it today. The impact below " +
-                "describes what the next synchronisation would do once it is enabled.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourRuleDisabled)),
                 nameof(SyncRule.Enabled)));
         }
 
@@ -436,22 +425,27 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
     /// them as zero. "Nothing is affected" and "this setting does not apply here" are different statements, and
     /// only one of them explains an empty result.
     /// </summary>
-    private static IEnumerable<string> DescribeInapplicableToggles(SyncRuleBehaviourToggleProposal stored,
+    private static IEnumerable<JimMessage> DescribeInapplicableToggles(SyncRuleBehaviourToggleProposal stored,
         SyncRuleBehaviourToggleProposal proposal)
     {
         if (stored.Direction == SyncRuleDirection.Import)
         {
             if (proposal.EnforceState != stored.EnforceState)
-                yield return "Enforce State governs drift correction on Export rules only, so changing it on this Import rule has no effect.";
+                yield return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourEnforceStateImportOnly));
 
             if (proposal.ProvisionToConnectedSystem != stored.ProvisionToConnectedSystem)
-                yield return "Provision To Connected System applies to Export rules only, so changing it on this Import rule has no effect.";
+                yield return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourProvisionExportOnly));
         }
         else if (proposal.ProjectToMetaverse != stored.ProjectToMetaverse)
         {
-            yield return "Project To Metaverse applies to Import rules only, so changing it on this Export rule has no effect.";
+            yield return JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.BehaviourProjectImportOnly));
         }
     }
+
+    /// <summary>A Synchronisation Rule's direction named inside a sentence, in the reader's language.</summary>
+    private static MessageArgument DirectionName(SyncRuleDirection direction) => direction == SyncRuleDirection.Export
+        ? JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DirectionExport))
+        : JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DirectionImport));
 
     private async Task<SyncRule> GetRuleAsync(PreviewContext context)
     {

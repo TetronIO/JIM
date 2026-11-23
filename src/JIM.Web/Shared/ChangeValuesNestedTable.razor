@@ -17,21 +17,21 @@
                          ExpectedItemCount="@Total"
                          DefaultSortBy="order"
                          LoadWindow="LoadValueWindowAsync"
-                         SearchPlaceholder="Search values..."
-                         SingularName="Value Change"
-                         PluralName="Value Changes">
+                         SearchPlaceholder="@MetaverseText.CvnSearch"
+                         SingularName="@MetaverseText.CvnValueChange"
+                         PluralName="@MetaverseText.CvnValueChanges">
         <Columns>
-            <TemplateColumn Title="Change" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <TemplateColumn Title="@MetaverseText.CvnChange" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                 <HeaderTemplate>
-                    <MudText Typo="Typo.button">Change</MudText>
+                    <MudText Typo="Typo.button">@MetaverseText.CvnChange</MudText>
                 </HeaderTemplate>
                 <CellTemplate>
                     <span class="mud-text-secondary">@context.Item.DisplayChangeType</span>
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Value" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+            <TemplateColumn Title="@MetaverseText.MvaValue" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                 <HeaderTemplate>
-                    <MudText Typo="Typo.button">Value</MudText>
+                    <MudText Typo="Typo.button">@MetaverseText.MvaValue</MudText>
                 </HeaderTemplate>
                 <CellTemplate>
                     <ChangeValueCell Change="@context.Item" />

@@ -2,10 +2,13 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Expressions;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 
@@ -193,7 +196,7 @@ public partial class MetaverseServer
             // Defensive: GetAttributePriorityOrderAsync always Includes the owning Synchronisation Rule, but a
             // mapping cannot be evaluated without knowing which Connected System and Object Type join it against.
             candidate.State = AttributeSourceState.NotEvaluated;
-            candidate.Note = "Synchronisation Rule not available.";
+            candidate.NoteDetail = ServerMessage.Create(nameof(ServerMessages.ProvSyncRuleUnavailable));
             return candidate;
         }
 
@@ -210,7 +213,12 @@ public partial class MetaverseServer
         {
             candidate.State = fixedState.Value;
             if (fixedState.Value == AttributeSourceState.NotEvaluated)
-                candidate.Note = ProvenanceLogic.NoteForFixedState(sourceType);
+                candidate.NoteDetail = sourceType switch
+                {
+                    SyncRuleMappingSourcesType.AdvancedMapping => ServerMessage.Create(nameof(ServerMessages.ProvAdvancedNotEvaluated)),
+                    SyncRuleMappingSourcesType.NotSet => ServerMessage.Create(nameof(ServerMessages.ProvNoSource)),
+                    _ => null
+                };
             return candidate;
         }
 
@@ -219,7 +227,7 @@ public partial class MetaverseServer
         {
             var (values, note) = EvaluateAttributeSourceCandidateValues(mapping, cso!, targetAttribute.Type, candidateValueCap);
             candidate.CandidateValues = values;
-            candidate.Note = note;
+            candidate.NoteDetail = note;
         }
         else if (sourceType == SyncRuleMappingSourcesType.GeneratedMapping)
         {
@@ -235,7 +243,7 @@ public partial class MetaverseServer
             if (note != null)
             {
                 candidate.State = AttributeSourceState.NotEvaluated;
-                candidate.Note = note;
+                candidate.NoteDetail = note;
                 return candidate;
             }
         }
@@ -252,7 +260,7 @@ public partial class MetaverseServer
     /// them (#2319), not the target's. A source holding the attribute only under another data type shows the value it
     /// holds, with a note: synchronisation leaves the Metaverse Object's value as it is until an import reads it (#2184).
     /// </summary>
-    private static (List<string> Values, string? Note) EvaluateAttributeSourceCandidateValues(
+    private static (List<string> Values, JimMessage? Note) EvaluateAttributeSourceCandidateValues(
         SyncRuleMapping mapping, ConnectedSystemObject cso, AttributeDataType targetAttributeType, int cap)
     {
         var source = mapping.Sources.OrderBy(s => s.Order).FirstOrDefault(s => s.ConnectedSystemAttributeId.HasValue);
@@ -279,8 +287,7 @@ public partial class MetaverseServer
                 .Take(cap)
                 .ToList();
             return (heldValues,
-                $"Held as {heldType} until the next import: a schema refresh changed this attribute to {sourceAttributeType}, so " +
-                "synchronisation leaves the Metaverse Object's value as it is until an import reads the attribute again.");
+                ServerMessage.Create(nameof(ServerMessages.ProvHeldUnderAnotherType), heldType.ToString(), sourceAttributeType.ToString()));
         }
 
         var values = sourceAttributeType == AttributeDataType.Text
@@ -312,7 +319,7 @@ public partial class MetaverseServer
     /// Returns an empty list with a null note on a clean null result (a legitimate "no value" outcome); on an
     /// evaluation failure returns an empty list with the failure message as the note.
     /// </summary>
-    private (List<string> Values, string? Note) EvaluateExpressionSourceCandidateValues(
+    private (List<string> Values, JimMessage? Note) EvaluateExpressionSourceCandidateValues(
         SyncRuleMapping mapping, ConnectedSystemObject cso, MetaverseAttribute targetAttribute,
         SyncRuleMappingSource? expressionSource, int cap)
     {
@@ -329,8 +336,7 @@ public partial class MetaverseServer
             if (heldInputs.Count > 0)
             {
                 return (new List<string>(),
-                    $"Not evaluated: {string.Join(", ", heldInputs)} until the next import, because a schema refresh changed its data " +
-                    "type. Synchronisation leaves the Metaverse Object's value as it is until an import reads it again.");
+                    ServerMessage.Create(nameof(ServerMessages.ProvInputsHeld), string.Join(", ", heldInputs)));
             }
         }
 
@@ -343,7 +349,7 @@ public partial class MetaverseServer
         }
         catch (ExpressionEvaluationException ex)
         {
-            return (new List<string>(), ex.Message);
+            return (new List<string>(), ServerMessage.Create(nameof(ServerMessages.ProvExpressionFailed), ex.Message));
         }
 
         // The engine's own result handler (#2179), so the inspector shows exactly what a synchronisation would flow,
@@ -354,11 +360,9 @@ public partial class MetaverseServer
         {
             ExpressionResultResolutionKind.Values => (resolution.Values.Take(cap).Select(ExpressionText.Describe).ToList(), null),
             ExpressionResultResolutionKind.NotConvertible => (new List<string>(),
-                $"The Expression returned '{resolution.UnconvertibleValue}', which this {targetAttribute.Type} attribute cannot hold, so this source " +
-                "would supply no value and synchronisation reports an expression error."),
+                ServerMessage.Create(nameof(ServerMessages.ProvValueNotConvertible), resolution.UnconvertibleValue?.ToString() ?? string.Empty, targetAttribute.Type.ToString())),
             ExpressionResultResolutionKind.SeveralValues => (new List<string>(),
-                $"The Expression returned {resolution.ValueCount} values, but this attribute is single-valued, so this source would supply " +
-                "no value and synchronisation reports an error."),
+                ServerMessage.Create(nameof(ServerMessages.ProvSeveralValues), resolution.ValueCount.ToString())),
             _ => (new List<string>(), null)
         };
     }

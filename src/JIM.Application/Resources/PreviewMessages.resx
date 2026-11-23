@@ -1,0 +1,489 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FullSyncSystemGone" xml:space="preserve">
+    <value>This Connected System no longer exists, so there is no Full Synchronisation to preview.</value>
+  </data>
+  <data name="FullSyncSystemDeleting" xml:space="preserve">
+    <value>This Connected System is being deleted, so it will not be synchronised again.</value>
+  </data>
+  <data name="FullSyncCapTooLow" xml:space="preserve">
+    <value>A preview capped at fewer than one object would evaluate nothing. Leave the cap out to evaluate every object.</value>
+  </data>
+  <data name="FullSyncNoRunProfile" xml:space="preserve">
+    <value>This Connected System has no Full Synchronisation Run Profile, so a Full Synchronisation cannot be run. Create one on its Run Profiles tab, then preview it.</value>
+  </data>
+  <data name="FullSyncDerivedFlowCycle" xml:space="preserve">
+    <value>A Full Synchronisation would refuse to start, because the enabled derived Attribute Flows form a dependency cycle: {0}</value>
+    <comment>{0} describes the cycle, built from attribute names, and is not translated.</comment>
+  </data>
+  <data name="FullSyncCapped" xml:space="preserve">
+    <value>This preview evaluates only the first {0} of the system's {1} objects. Its counts describe those objects, not the whole system, and a Full Synchronisation could do more than it shows.</value>
+    <comment>{0} is the cap, {1} the number of objects in the system.</comment>
+  </data>
+  <data name="DeletionSystemGone" xml:space="preserve">
+    <value>This Connected System no longer exists, so there is no deletion to preview.</value>
+  </data>
+  <data name="DeletionAlreadyDeleting" xml:space="preserve">
+    <value>This Connected System is already being deleted. Part of what a preview would describe has already happened, so it cannot be previewed; its deletion Activity reports the progress.</value>
+  </data>
+  <data name="DeletionDerivedFlowsRead" xml:space="preserve">
+    <value>Derived flows on {0} read '{1}', which this deletion clears or changes. The deletion marks the objects affected so those flows recompute at the next synchronisation of the system hosting them; this preview shows the change to '{1}' but not the derived values that follow from it.</value>
+    <comment>{0} is a comma-separated list of Connected System names; {1} is a Metaverse Attribute name. Keep the straight quotes around {1}: the portal swaps that quoted name for an attribute chip.</comment>
+  </data>
+  <data name="DeletionDerivedFlowCycle" xml:space="preserve">
+    <value>The remaining Synchronisation Rules' derived flows form a cycle, which Synchronised Deprovisioning refuses to run with: {0}</value>
+    <comment>{0} is the cycle's description, English text produced elsewhere.</comment>
+  </data>
+  <data name="ScopeSelectionNoPartitions" xml:space="preserve">
+    <value>'{0}' uses a Connector that does not have partitions, so there is no partition or container selection to preview.</value>
+    <comment>{0} is a Connected System name.</comment>
+  </data>
+  <data name="ScopeSelectionNothingSelected" xml:space="preserve">
+    <value>This selection leaves nothing for JIM to manage on this Connected System: {0}. Run Profiles cannot be executed against it, and every object already imported would be taken out of scope.</value>
+    <comment>{0} is a short diagnostic of what is selected, English text produced elsewhere.</comment>
+  </data>
+  <data name="ScopeSelectionInoperableRunProfiles" xml:space="preserve">
+    <value>{0} Run Profile(s) target a partition this selection deselects and would be refused when run: {1}. Point them at a selected partition, or keep the partition selected.</value>
+    <comment>{0} is a count; {1} a comma-separated list of quoted Run Profile names.</comment>
+  </data>
+  <data name="ScopeSelectionContainersNotMeasured" xml:space="preserve">
+    <value>The '{0}' Connector has containers but cannot say whether an object sits inside one, so this preview counts only what changing the partition selection would do. Container changes are not measured, and the counts below are not a complete answer.</value>
+    <comment>{0} is a Connector name.</comment>
+  </data>
+  <data name="ScopeSelectionBringsNewScope" xml:space="preserve">
+    <value>This selection brings scope into JIM that it does not currently import. Objects JIM already holds there are counted below; objects it has never imported cannot be, because there is nothing to count until a Full Import runs and discovers them.</value>
+  </data>
+  <data name="ActivityValidating" xml:space="preserve">
+    <value>Validating the proposed configuration</value>
+    <comment>The preview Activity's progress message while its structural checks run.</comment>
+  </data>
+  <data name="ActivityCannotBeApplied" xml:space="preserve">
+    <value>The proposed configuration cannot be applied</value>
+  </data>
+  <data name="ActivityCounting" xml:space="preserve">
+    <value>Counting affected objects</value>
+  </data>
+  <data name="ActivityEvaluating" xml:space="preserve">
+    <value>Evaluating what the change would do</value>
+  </data>
+  <data name="ActivityComplete" xml:space="preserve">
+    <value>Preview complete</value>
+  </data>
+  <data name="ActivityCancelled" xml:space="preserve">
+    <value>The preview was cancelled</value>
+  </data>
+  <data name="ActivityFailedWhile" xml:space="preserve">
+    <value>The preview failed while {0}</value>
+    <comment>{0} is one of the ActivityWhile... phrases.</comment>
+  </data>
+  <data name="ActivityWhileValidating" xml:space="preserve">
+    <value>validating the proposed configuration</value>
+    <comment>Completes "The preview failed while ...". French: noun phrase after "pendant".</comment>
+  </data>
+  <data name="ActivityWhileCounting" xml:space="preserve">
+    <value>counting the objects the change would affect</value>
+    <comment>Completes "The preview failed while ...". French: noun phrase after "pendant".</comment>
+  </data>
+  <data name="ActivityWhileEvaluating" xml:space="preserve">
+    <value>evaluating what the change would do</value>
+    <comment>Completes "The preview failed while ...". French: noun phrase after "pendant".</comment>
+  </data>
+  <data name="EnglishFromElsewhere" xml:space="preserve">
+    <value>{0}</value>
+    <comment>Carries text that is produced outside JIM.Application and is not yet a message (for instance a validator's reason). It is shown as it is, in English, until its producer is converted.</comment>
+  </data>
+  <data name="ObjectMatchingSameAsStored" xml:space="preserve">
+    <value>The proposed Object Matching Rules match the ones this Connected System already has, so no object would join differently and no impact is counted below.</value>
+  </data>
+  <data name="ObjectMatchingOnlyUnjoined" xml:space="preserve">
+    <value>Object Matching Rules are evaluated only for objects that are not already joined to a Metaverse Object. Objects already joined keep the Metaverse Object they have, whatever this change does, so the impact below covers the unjoined population only.</value>
+  </data>
+  <data name="ObjectMatchingSwitchToAdvanced" xml:space="preserve">
+    <value>The proposal switches this Connected System to Advanced matching, so the rules held against each Connected System Object Type stop being used and each Synchronisation Rule's own rules apply instead. A Synchronisation Rule carrying no rules of its own joins nothing.</value>
+  </data>
+  <data name="ObjectMatchingSwitchToSimple" xml:space="preserve">
+    <value>The proposal switches this Connected System to Simple matching, so each Synchronisation Rule's own rules stop being used and the rules held against each Connected System Object Type apply instead. An Object Type carrying no rules of its own joins nothing.</value>
+  </data>
+  <data name="ObjectMatchingTypeLeftWithNoRule" xml:space="preserve">
+    <value>The proposal leaves '{0}' with no Object Matching Rule, so no object of that type would ever join an existing Metaverse Object. Every unjoined object would project a new identity instead, which is how duplicate identities are created.</value>
+    <comment>{0} is an Object Type name, or the ObjectMatchingThisType phrase where the type is unknown.</comment>
+  </data>
+  <data name="ObjectMatchingThisType" xml:space="preserve">
+    <value>this type</value>
+    <comment>Stands in for an Object Type's name inside quotes where the type can no longer be found.</comment>
+  </data>
+  <data name="ObjectMatchingOwnerSyncRule" xml:space="preserve">
+    <value>a Synchronisation Rule</value>
+    <comment>Stands in for the owner's name inside quotes where the Synchronisation Rule can no longer be found.</comment>
+  </data>
+  <data name="ObjectMatchingOwnerObjectType" xml:space="preserve">
+    <value>an Object Type</value>
+    <comment>Stands in for the owner's name inside quotes where the Object Type can no longer be found.</comment>
+  </data>
+  <data name="ObjectMatchingRuleNamed" xml:space="preserve">
+    <value>Object Matching Rule {0} on '{1}'</value>
+    <comment>{0} is the rule's position (1 first); {1} is the Object Type or Synchronisation Rule holding it.</comment>
+  </data>
+  <data name="ObjectMatchingNoMetaverseObjectType" xml:space="preserve">
+    <value>{0} names no Metaverse Object Type to search. Simple mode rules must name one; in Advanced mode the Synchronisation Rule supplies it.</value>
+    <comment>{0} is an ObjectMatchingRuleNamed phrase.</comment>
+  </data>
+  <data name="ObjectMatchingRuleProblem" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>{0} is an ObjectMatchingRuleNamed phrase; {1} is why the rule cannot be evaluated.</comment>
+  </data>
+  <data name="ObjectMatchingTargetAttributeGone" xml:space="preserve">
+    <value>It targets a Metaverse Attribute that no longer exists.</value>
+  </data>
+  <data name="ObjectMatchingTypeNotInSchema" xml:space="preserve">
+    <value>It belongs to a Connected System Object Type that is not part of this system's schema.</value>
+  </data>
+  <data name="DirectionImport" xml:space="preserve">
+    <value>Import</value>
+    <comment>The direction of a Synchronisation Rule, named inside a sentence.</comment>
+  </data>
+  <data name="DirectionExport" xml:space="preserve">
+    <value>Export</value>
+    <comment>The direction of a Synchronisation Rule, named inside a sentence.</comment>
+  </data>
+  <data name="BehaviourSameSettings" xml:space="preserve">
+    <value>The proposed settings match the ones this Synchronisation Rule already has, so nothing would change and no impact is counted below.</value>
+  </data>
+  <data name="BehaviourDirectionImmutable" xml:space="preserve">
+    <value>Direction cannot be changed on a saved Synchronisation Rule. This rule's Attribute Flow mappings and Object Matching Rules are written for {0}, and would all address the wrong side as {1}. Create a rule in the direction you need instead.</value>
+    <comment>{0} and {1} are DirectionImport or DirectionExport.</comment>
+  </data>
+  <data name="BehaviourEnabling" xml:space="preserve">
+    <value>Enabling this Synchronisation Rule starts it contributing on the next synchronisation: it begins flowing its Attribute Flow mappings, and whatever it projects or provisions starts being created.</value>
+  </data>
+  <data name="BehaviourDisabling" xml:space="preserve">
+    <value>Disabling this Synchronisation Rule stops it contributing on the next synchronisation. Attribute values it currently owns pass to another contributor where there is one, and are kept, ready for the rule to be enabled again, where it was the only one. It stops projecting and provisioning.</value>
+  </data>
+  <data name="BehaviourProjectOn" xml:space="preserve">
+    <value>Turning Project To Metaverse on creates a new Metaverse Object for every in-scope object this rule manages that matches none, which is how identities are created in bulk.</value>
+  </data>
+  <data name="BehaviourProvisionOn" xml:space="preserve">
+    <value>Turning Provision To Connected System on creates a Connected System Object in the target system for every in-scope Metaverse Object that has none. This is object creation at scale, and the count below is how many.</value>
+  </data>
+  <data name="BehaviourEnforceStateOff" xml:space="preserve">
+    <value>Turning Enforce State off stops this rule correcting drift, so the objects it manages are free to diverge from what JIM holds from the moment it is saved. Nothing is corrected until it is turned back on.</value>
+  </data>
+  <data name="BehaviourRuleDisabled" xml:space="preserve">
+    <value>This Synchronisation Rule is disabled, so no synchronisation applies it today. The impact below describes what the next synchronisation would do once it is enabled.</value>
+  </data>
+  <data name="BehaviourEnforceStateImportOnly" xml:space="preserve">
+    <value>Enforce State governs drift correction on Export rules only, so changing it on this Import rule has no effect.</value>
+  </data>
+  <data name="BehaviourProvisionExportOnly" xml:space="preserve">
+    <value>Provision To Connected System applies to Export rules only, so changing it on this Import rule has no effect.</value>
+  </data>
+  <data name="BehaviourProjectImportOnly" xml:space="preserve">
+    <value>Project To Metaverse applies to Import rules only, so changing it on this Export rule has no effect.</value>
+  </data>
+  <data name="DestructiveNoChange" xml:space="preserve">
+    <value>Neither destructive setting changes under this proposal, so no object's fate changes and no impact is counted below.</value>
+  </data>
+  <data name="DestructiveOutboundOnExport" xml:space="preserve">
+    <value>The Outbound Deprovision Action is read only by export Synchronisation Rules, so changing it on this import rule changes no object's fate and is not counted below.</value>
+  </data>
+  <data name="DestructiveInboundOnImport" xml:space="preserve">
+    <value>The Inbound Out-of-Scope Action is read only by import Synchronisation Rules, so changing it on this export rule changes no object's fate and is not counted below.</value>
+  </data>
+  <data name="DestructiveRuleDisabled" xml:space="preserve">
+    <value>This Synchronisation Rule is disabled, so no synchronisation applies its settings today. The counts below describe what the next synchronisation would do once it is enabled.</value>
+  </data>
+  <data name="DestructiveSiblingKeepsJoin" xml:space="preserve">
+    <value>{0} also covers this object type and keeps its objects joined (Remain Joined). Where an object leaves every import Synchronisation Rule, the rules that held it decide, and Remain Joined from any of them keeps the join, so this change disconnects only objects those rules never held. The counts below include only those.</value>
+    <comment>{0} is a comma-separated list of quoted Synchronisation Rule names. Remain Joined is the name of an Inbound Out-of-Scope Action option.</comment>
+  </data>
+  <data name="DeletionSettingsNeedsAuthoritativeSource" xml:space="preserve">
+    <value>Deleting when an authoritative source disconnects needs at least one Connected System named as an authoritative source. Without one, synchronisation falls back to deleting when the last connector disconnects, which is a different rule from the one selected.</value>
+  </data>
+  <data name="DeletionSettingsNegativeGracePeriod" xml:space="preserve">
+    <value>A Deletion Grace Period cannot be negative.</value>
+  </data>
+  <data name="DeletionSettingsSourcesChanged" xml:space="preserve">
+    <value>The authoritative sources have changed. This decides what happens the next time a Connected System Object disconnects, so it moves no Metaverse Object's deletion date today and is not counted below.</value>
+  </data>
+  <data name="ScopingProposalSameAsStored" xml:space="preserve">
+    <value>The proposed Scoping Criteria match the ones this Synchronisation Rule already has, so no object changes scope and no impact is counted below.</value>
+  </data>
+  <data name="ScopingProposalRemovesEveryCriterion" xml:space="preserve">
+    <value>The proposal removes every Scoping Criterion, so this Synchronisation Rule would manage every object of type '{0}' rather than a selected population.</value>
+    <comment>{0} is an Object Type name, or the ScopingConfiguredType phrase where the type is unknown.</comment>
+  </data>
+  <data name="ScopingConfiguredType" xml:space="preserve">
+    <value>the configured type</value>
+    <comment>Stands in for an Object Type's name inside quotes where it cannot be found.</comment>
+  </data>
+  <data name="ScopingProposalRuleDisabled" xml:space="preserve">
+    <value>This Synchronisation Rule is disabled, so no synchronisation applies its scope today. The counts below describe what the next synchronisation would do once it is enabled.</value>
+  </data>
+  <data name="ScopingProposalUnscopedSiblingDisconnect" xml:space="preserve">
+    <value>Import Synchronisation Rule '{0}' covers this object type with no Scoping Criteria, so every object stays joined whatever this rule says: narrowing this rule's criteria disconnects nothing. An object that leaves this rule's scope stops receiving its Attribute Flow; under its Out-of-Scope Action, Disconnect, the values this rule contributed are handed to the rules that still cover the object.</value>
+    <comment>{0} is a Synchronisation Rule name. Disconnect is the name of an Inbound Out-of-Scope Action option.</comment>
+  </data>
+  <data name="ScopingProposalUnscopedSiblingRemainJoined" xml:space="preserve">
+    <value>Import Synchronisation Rule '{0}' covers this object type with no Scoping Criteria, so every object stays joined whatever this rule says: narrowing this rule's criteria disconnects nothing. An object that leaves this rule's scope stops receiving its Attribute Flow; under its Out-of-Scope Action, Remain Joined, the values this rule contributed stay as they are.</value>
+    <comment>{0} is a Synchronisation Rule name. Remain Joined is the name of an Inbound Out-of-Scope Action option.</comment>
+  </data>
+  <data name="ScopingProposalExpressionReadsMetaverseOnImport" xml:space="preserve">
+    <value>A proposed Scoping Criterion's expression reads {0}, but an import Synchronisation Rule evaluates its scope against Connected System attributes (cs["..."]), so that input would never hold a value.</value>
+    <comment>{0} is an expression accessor such as mv["name"].</comment>
+  </data>
+  <data name="ScopingProposalExpressionReadsConnectedSystemOnExport" xml:space="preserve">
+    <value>A proposed Scoping Criterion's expression reads {0}, but an export Synchronisation Rule evaluates its scope against Metaverse Attributes (mv["..."]), so that input would never hold a value.</value>
+    <comment>{0} is an expression accessor such as cs["name"].</comment>
+  </data>
+  <data name="ScopingProposalNamesNoAttribute" xml:space="preserve">
+    <value>A proposed Scoping Criterion names no attribute, so there is nothing for it to evaluate and it would narrow nothing.</value>
+  </data>
+  <data name="ScopingProposalReadsMetaverseOnImport" xml:space="preserve">
+    <value>A proposed Scoping Criterion reads a Metaverse Attribute, but an import Synchronisation Rule evaluates its scope against Connected System attributes, so the criterion would never match and the scope would be wider than it appears.</value>
+  </data>
+  <data name="ScopingProposalReadsConnectedSystemOnExport" xml:space="preserve">
+    <value>A proposed Scoping Criterion reads a Connected System attribute, but an export Synchronisation Rule evaluates its scope against Metaverse Attributes, so the criterion would never match and the scope would be wider than it appears.</value>
+  </data>
+  <data name="ListAnd" xml:space="preserve">
+    <value>{0} and {1}</value>
+    <comment>Joins two items of a list; a longer list nests it.</comment>
+  </data>
+  <data name="MetaverseAttributeNumbered" xml:space="preserve">
+    <value>Metaverse Attribute {0}</value>
+    <comment>Stands in for an attribute's name where only its id is known. {0} is the id.</comment>
+  </data>
+  <data name="RuleNamesOne" xml:space="preserve">
+    <value>Synchronisation Rule '{0}'</value>
+    <comment>One Synchronisation Rule named inside a sentence; {0} is its name.</comment>
+  </data>
+  <data name="RuleNamesOther" xml:space="preserve">
+    <value>Synchronisation Rules {0}</value>
+    <comment>Several Synchronisation Rules named inside a sentence; {0} is a comma-separated list of quoted names.</comment>
+  </data>
+  <data name="AttributeFlowSameAsStored" xml:space="preserve">
+    <value>The proposed Attribute Flow matches the mappings this Synchronisation Rule already has, so no object changes and no impact is counted below.</value>
+  </data>
+  <data name="AttributeFlowRemovesEveryMapping" xml:space="preserve">
+    <value>The proposal removes every mapping, so this Synchronisation Rule would flow nothing.</value>
+  </data>
+  <data name="AttributeFlowRuleDisabled" xml:space="preserve">
+    <value>This Synchronisation Rule is disabled, so no synchronisation applies its Attribute Flow today. The values below describe what the next synchronisation would write once it is enabled.</value>
+  </data>
+  <data name="AttributeFlowRemovedKeepValues" xml:space="preserve">
+    <value>The proposal removes this Synchronisation Rule's Attribute Flow to '{0}', and you chose to keep the values it contributed. They remain in place with no record of where they came from, and no synchronisation will ever recall them; no value change is counted below for them.</value>
+    <comment>{0} is a Metaverse Attribute name. Keep the straight quotes: the portal swaps that quoted name for an attribute chip.</comment>
+  </data>
+  <data name="AttributeFlowKeptAlsoWrittenBy" xml:space="preserve">
+    <value>'{0}' is also written by {1}. The kept values remain until one of those rules next writes the attribute and wins Attribute Priority; what it would write is not counted below.</value>
+    <comment>{0} is a Metaverse Attribute name; {1} is a RuleNames phrase.</comment>
+  </data>
+  <data name="AttributeFlowRemovedRecalled" xml:space="preserve">
+    <value>The proposal removes this Synchronisation Rule's Attribute Flow to '{0}'. The values it contributed are recalled at the next synchronisation of the contributing Connected System, Delta or Full: where another Attribute Flow also contributes the attribute its value takes over, otherwise the attribute is cleared. No value change is counted below for them, because the recall happens in that synchronisation rather than in this save.</value>
+    <comment>{0} is a Metaverse Attribute name. Keep the straight quotes: the portal swaps that quoted name for an attribute chip.</comment>
+  </data>
+  <data name="AttributeFlowRecallReElects" xml:space="preserve">
+    <value>'{0}' is also written by {1}, so the recall re-elects among them rather than clearing the attribute; what they would write in place of the withdrawn values is not counted below.</value>
+    <comment>{0} is a Metaverse Attribute name; {1} is a RuleNames phrase.</comment>
+  </data>
+  <data name="AttributeFlowBelowPriority" xml:space="preserve">
+    <value>The proposed mapping for '{0}' sits below {1} in Attribute Priority, so a synchronisation would evaluate it and then write nothing. Raise its priority to make it the contributor that wins the attribute.</value>
+    <comment>{0} is a Metaverse Attribute name; {1} is a RuleNames phrase.</comment>
+  </data>
+  <data name="AttributeFlowDependantMissingInput" xml:space="preserve">
+    <value>Once this proposal is saved, the Attribute Flow to '{0}' on Synchronisation Rule '{1}' would be missing an input: it reads {2}. Its Missing Input Behaviour then decides what it writes.</value>
+    <comment>{0} is a Metaverse Attribute name; {1} a Synchronisation Rule name; {2} lists the missing inputs.</comment>
+  </data>
+  <data name="AttributeFlowMissingInputThroughDerived" xml:space="preserve">
+    <value>'{0}', whose only remaining contributors are themselves missing an input</value>
+    <comment>Describes one missing input of a derived Attribute Flow.</comment>
+  </data>
+  <data name="AttributeFlowMissingInputNoFlow" xml:space="preserve">
+    <value>'{0}', which would have no enabled Attribute Flow contributing it</value>
+    <comment>Describes one missing input of a derived Attribute Flow.</comment>
+  </data>
+  <data name="AttributeFlowReadsChangedDirect" xml:space="preserve">
+    <value>reads '{0}'</value>
+    <comment>How a derived Attribute Flow relates to an attribute the proposal changes.</comment>
+  </data>
+  <data name="AttributeFlowReadsChangedThrough" xml:space="preserve">
+    <value>depends on '{0}', through other derived attributes</value>
+    <comment>How a derived Attribute Flow relates to an attribute the proposal changes.</comment>
+  </data>
+  <data name="AttributeFlowOtherSystemReader" xml:space="preserve">
+    <value>The Attribute Flow to '{0}' on Synchronisation Rule '{1}' {2}, which this proposal changes. It runs in that Synchronisation Rule's own Connected System, so it is re-evaluated when that Connected System next synchronises; what it would write is not counted below.</value>
+    <comment>{0} is a Metaverse Attribute name; {1} a Synchronisation Rule name; {2} is the AttributeFlowReadsChanged phrase.</comment>
+  </data>
+  <data name="AttributeFlowNoTargetAttribute" xml:space="preserve">
+    <value>A proposed Attribute Flow mapping names no target attribute, so it has nowhere to write.</value>
+  </data>
+  <data name="AttributeFlowWritesConnectedSystemOnImport" xml:space="preserve">
+    <value>A proposed Attribute Flow mapping writes a Connected System attribute, but an import Synchronisation Rule flows into the Metaverse, so the mapping would write nothing.</value>
+  </data>
+  <data name="AttributeFlowWritesMetaverseOnExport" xml:space="preserve">
+    <value>A proposed Attribute Flow mapping writes a Metaverse Attribute, but an export Synchronisation Rule flows out to a Connected System, so the mapping would write nothing.</value>
+  </data>
+  <data name="AttributeFlowNoSource" xml:space="preserve">
+    <value>A proposed Attribute Flow mapping has no source, so there is no value for it to write.</value>
+  </data>
+  <data name="SchemaSameAsStored" xml:space="preserve">
+    <value>The proposed schema selection matches the one this Connected System already has, so nothing would change and no impact is counted below.</value>
+  </data>
+  <data name="SchemaSelectingObjectType" xml:space="preserve">
+    <value>Selecting {0} brings its objects into scope for import on the next Import Run Profile.</value>
+    <comment>{0} is a Connected System Object Type name.</comment>
+  </data>
+  <data name="SchemaDeselectingObjectType" xml:space="preserve">
+    <value>Deselecting {0} takes its objects out of management. The next Full Import no longer returns them, so the objects already imported become obsolete, and the following synchronisation disconnects them from their Metaverse Objects, which may leave those eligible for deletion. The Run Profile's deletion limits apply to them as to any other deleted object.</value>
+    <comment>{0} is a Connected System Object Type name.</comment>
+  </data>
+  <data name="SchemaOverlapDeselectFallsToOther" xml:space="preserve">
+    <value>Deselecting {0} does not take its objects that also carry {1} out of management: with {0} deselected, those entries resolve to {1}, so the import returns them as {1} objects rather than as the {0} objects JIM holds. By default each import refuses them, reports each as an Object Type Changed error and keeps it as {0} rather than obsoleting it, so the number of objects described as becoming obsolete overstates what happens to them. If the intent is to stop managing those objects, scope them out by container or partition instead, because deselecting {0} changes their Object Type rather than removing them. If they should become {1} objects, run a Full Import with Allow Object Type Changes enabled on its Run Profile: JIM retires the {0} objects and imports them as new {1} objects, in scope of the Synchronisation Rules for {1}.</value>
+    <comment>{0} is the Object Type being deselected; {1} is another Object Type whose entries it overlaps. "Object Type Changed" is the name of an import error; "Allow Object Type Changes" is the name of a Run Profile setting.</comment>
+  </data>
+  <data name="SchemaOverlapSelectTakesFromOther" xml:space="preserve">
+    <value>Selecting {0} changes the Object Type of {1} objects that also carry {0}: with both selected, those entries resolve to {0}, so the import returns them as {0} objects rather than as the {1} objects JIM holds. By default each import refuses them, reports each as an Object Type Changed error and keeps it as {1}. {2}</value>
+    <comment>{0} is the Object Type being selected; {1} is another Object Type; {2} is the SchemaMoveInstruction text.</comment>
+  </data>
+  <data name="SchemaOverlapSelectAndDeselect" xml:space="preserve">
+    <value>Selecting {0} while deselecting {1} changes the Object Type of {1} objects that also carry {0}: those entries now resolve to {0}, so the import returns them as {0} objects rather than as the {1} objects JIM holds. By default each import refuses them, reports each as an Object Type Changed error and keeps it as {1} rather than obsoleting it, so the number of {1} objects described as becoming obsolete overstates what happens to them. {2}</value>
+    <comment>{0} is the Object Type being selected; {1} the one being deselected; {2} is the SchemaMoveInstruction text.</comment>
+  </data>
+  <data name="SchemaMoveInstruction" xml:space="preserve">
+    <value>To move them, run a Full Import with Allow Object Type Changes enabled on its Run Profile: JIM retires the {0} objects and imports them as new {1} objects, so a Synchronisation Rule for {1} needs to be ready to join them to the same Metaverse Objects.</value>
+    <comment>{0} is the Object Type the objects leave; {1} the one they move to.</comment>
+  </data>
+  <data name="SchemaThisAttribute" xml:space="preserve">
+    <value>This attribute</value>
+    <comment>Stands in for an attribute's name, at the start of a sentence, where it cannot be found.</comment>
+  </data>
+  <data name="SchemaAnchorCannotDeselect" xml:space="preserve">
+    <value>{0} is the External ID for {1} and cannot be deselected. It is what every imported object is matched to its Connected System Object by.</value>
+    <comment>{0} is an attribute name; {1} an Object Type name.</comment>
+  </data>
+  <data name="SchemaDeselectingAttribute" xml:space="preserve">
+    <value>Deselecting {0} on {1} stops it being imported. The values already held for it stay on the Connected System Objects and go on flowing, without ever being refreshed again.</value>
+    <comment>{0} is an attribute name; {1} an Object Type name.</comment>
+  </data>
+  <data name="SchemaFlowMappingsReadOne" xml:space="preserve">
+    <value>{0} Attribute Flow mapping read {1} and will go on flowing its frozen values: {2}.</value>
+    <comment>{0} is the count (1); {1} is an attribute name; {2} is a comma-separated list of Synchronisation Rule names.</comment>
+  </data>
+  <data name="SchemaFlowMappingsReadOther" xml:space="preserve">
+    <value>{0} Attribute Flow mappings read {1} and will go on flowing its frozen values: {2}.</value>
+    <comment>{0} is the count; {1} is an attribute name; {2} is a comma-separated list of Synchronisation Rule names.</comment>
+  </data>
+  <data name="SchemaObsoletionWithdraws" xml:space="preserve">
+    <value>Obsoleting a {0} object will now withdraw the Metaverse values it contributed. Where another Connected System still contributes the attribute it is handed over; where none does, it is cleared.</value>
+    <comment>{0} is an Object Type name.</comment>
+  </data>
+  <data name="SchemaObsoletionLeavesInPlace" xml:space="preserve">
+    <value>Obsoleting a {0} object will now leave the Metaverse values it contributed in place. They stop tracking anything from that point, and nothing reports them as stale.</value>
+    <comment>{0} is an Object Type name.</comment>
+  </data>
+  <data name="SyncPreviewMetaverseObjectGone" xml:space="preserve">
+    <value>Metaverse Object {0} does not exist.</value>
+    <comment>{0} is the object's id.</comment>
+  </data>
+  <data name="SyncPreviewConnectedSystemObjectGone" xml:space="preserve">
+    <value>Connected System Object {0} does not exist in Connected System {1}.</value>
+    <comment>{0} is the object's id; {1} is the Connected System's id.</comment>
+  </data>
+  <data name="SyncPreviewNoImportRule" xml:space="preserve">
+    <value>No enabled import Synchronisation Rule applies to this object's type; a synchronisation would not process it inbound.</value>
+  </data>
+  <data name="SyncPreviewOutOfScopeJoinKept" xml:space="preserve">
+    <value>The object is out of scope of every import Synchronisation Rule with Scoping Criteria. An export Synchronisation Rule made its join, so a synchronisation keeps the join and withdraws only the values the import rules brought in.</value>
+  </data>
+  <data name="SyncPreviewOutOfScopeAction" xml:space="preserve">
+    <value>The object is out of scope of every import Synchronisation Rule with Scoping Criteria; a synchronisation would apply the out-of-scope action '{0}'.</value>
+    <comment>{0} is the name of an Inbound Out-of-Scope Action option.</comment>
+  </data>
+  <data name="OutOfScopeActionDisconnect" xml:space="preserve">
+    <value>Disconnect</value>
+    <comment>The name of an Inbound Out-of-Scope Action option, named inside a sentence.</comment>
+  </data>
+  <data name="OutOfScopeActionRemainJoined" xml:space="preserve">
+    <value>RemainJoined</value>
+    <comment>The name of an Inbound Out-of-Scope Action option, named inside a sentence. The English is the option's identifier, as the product has always shown it here.</comment>
+  </data>
+  <data name="SyncPreviewJoinedObjectNotLoaded" xml:space="preserve">
+    <value>The joined Metaverse Object {0} could not be loaded.</value>
+    <comment>{0} is the object's id.</comment>
+  </data>
+  <data name="SyncPreviewNoMatchNoProjection" xml:space="preserve">
+    <value>No Object Matching Rule matched an existing Metaverse Object and no import Synchronisation Rule projects; a synchronisation would leave the object unconnected.</value>
+  </data>
+  <data name="SyncPreviewExpressionFailed" xml:space="preserve">
+    <value>An Expression failed to evaluate: {0}</value>
+    <comment>{0} is the evaluator's own message, English produced by the expression library.</comment>
+  </data>
+  <data name="SyncPreviewExpressionFailedHandingOver" xml:space="preserve">
+    <value>An Expression failed to evaluate while handing a withdrawn value to the next contributor: {0}</value>
+    <comment>{0} is the evaluator's own message, English produced by the expression library.</comment>
+  </data>
+  <data name="SyncPreviewDerivedFlowHost" xml:space="preserve">
+    <value>{0} The Attribute Flow is derived by Synchronisation Rule '{1}'.</value>
+    <comment>Added after a message about a derived Attribute Flow. {0} is that message; {1} is the rule hosting the flow.</comment>
+  </data>
+  <data name="SyncPreviewDriftNotChecked" xml:space="preserve">
+    <value>Drift Detection could not check this object, so no correction would be staged. {0}</value>
+    <comment>{0} is the reason, a sentence.</comment>
+  </data>
+  <data name="SyncPreviewDerivedFlowCycle" xml:space="preserve">
+    <value>A synchronisation would not start, so no object would be processed. {0}</value>
+    <comment>{0} describes the cycle, built from attribute names.</comment>
+  </data>
+  <data name="SyncPreviewGeneratedValueWaiting" xml:space="preserve">
+    <value>{0} would not be generated yet: a value built from it needs an input the object has no value for: {1}. It is generated by a later synchronisation once the input arrives.</value>
+    <comment>{0} is an attribute name; {1} lists the inputs the object has no value for.</comment>
+  </data>
+  <data name="SyncPreviewGeneratedValueUnresolved" xml:space="preserve">
+    <value>The generated value could not be resolved.</value>
+  </data>
+  <data name="SyncPreviewDownstreamDisconnectOnly" xml:space="preserve">
+    <value>The Metaverse Object's deletion would disconnect its Connected System Object in '{0}' without deprovisioning it (no matching export Synchronisation Rule stages a delete).</value>
+    <comment>{0} is a Connected System's name, or its id where the name is not known.</comment>
+  </data>
+  <data name="SyncPreviewFlowMultiValuedToSingle" xml:space="preserve">
+    <value>The multi-valued source attribute '{0}' holds {1} values but flows to the single-valued attribute '{2}'; the attribute would not flow.</value>
+  </data>
+  <data name="SyncPreviewFlowBaseNotSingleValue" xml:space="preserve">
+    <value>The base Expression for the generated value targeting '{0}' returned more than one value, so the attribute would not flow; a generated value's base Expression must produce a single text value, not an array: '{1}'.</value>
+    <comment>{0} is the target attribute; {1} is the expression's text.</comment>
+  </data>
+  <data name="SyncPreviewFlowNotConvertible" xml:space="preserve">
+    <value>The Expression targeting '{0}' returned '{1}', which a {2} attribute cannot hold, so the attribute would not flow and would keep its current value: '{3}'.</value>
+    <comment>{0} is the target attribute; {1} the value returned; {2} the attribute's data type; {3} the expression's text.</comment>
+  </data>
+  <data name="SyncPreviewFlowResultMultiValuedFromSource" xml:space="preserve">
+    <value>'{0}' has {1} values but '{2}' is single-valued, so the attribute would not flow and would keep its current value. Use {4} or {5} in the Expression to say which value it should have: '{3}'.</value>
+    <comment>{0} is the source attribute; {1} how many values; {2} the target attribute; {3} the expression's text. {4} is the function names "Where, Join, Count, Min" and {5} is "Max": function names, never translated.</comment>
+  </data>
+  <data name="SyncPreviewFlowDatesCollapse" xml:space="preserve">
+    <value>{0} dates for '{1}' become {2} distinct values at the Connected System's {3} resolution, so {2} would be sent; the attribute would still export.</value>
+    <comment>{0} how many dates; {1} the target attribute; {2} how many distinct values; {3} the resolution's name.</comment>
+  </data>
+  <data name="SyncPreviewFlowCredentialTarget" xml:space="preserve">
+    <value>'{0}' holds credentials, so nothing would be exported for it; remove the Attribute Flow. JIM delivers passwords only through Password Synchronisation, on Connected Systems whose Connector supports it.</value>
+  </data>
+  <data name="SyncPreviewFlowResultMultiValued" xml:space="preserve">
+    <value>The Expression targeting '{0}' returned {1} values but the attribute is single-valued, so the attribute would not flow and would keep its current value: '{2}'.</value>
+  </data>
+  <data name="SyncPreviewFlowNotEvaluated" xml:space="preserve">
+    <value>The Expression targeting '{0}' was not evaluated: a required input has no value.</value>
+  </data>
+</root>

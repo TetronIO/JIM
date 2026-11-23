@@ -25,13 +25,13 @@
                          ExpectedItemCount="@ValueCount"
                          DefaultSortBy="@SourceOrderSort"
                          LoadWindow="LoadValueWindowAsync"
-                         SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
-                         SingularName="Value"
-                         PluralName="Values">
+                         SearchPlaceholder="@string.Format(CultureInfo.CurrentCulture, MetaverseText.MvaSearchPlaceholder, AttributeName.ToLower())"
+                         SingularName="@MetaverseText.MvaValue"
+                         PluralName="@MetaverseText.MvaValues">
         <Columns>
-            <TemplateColumn Title="Display Name" Sortable="false">
+            <TemplateColumn Title="@MetaverseText.MvaDisplayName" Sortable="false">
                 <HeaderTemplate>
-                    <MudText Typo="Typo.button">Display Name</MudText>
+                    <MudText Typo="Typo.button">@MetaverseText.MvaDisplayName</MudText>
                 </HeaderTemplate>
                 <CellTemplate>
                     @if (context.Item.ReferenceValue != null)
@@ -47,9 +47,9 @@
                     }
                 </CellTemplate>
             </TemplateColumn>
-            <TemplateColumn Title="Type" Sortable="false">
+            <TemplateColumn Title="@CommonText.ColumnType" Sortable="false">
                 <HeaderTemplate>
-                    <MudText Typo="Typo.button">Type</MudText>
+                    <MudText Typo="Typo.button">@CommonText.ColumnType</MudText>
                 </HeaderTemplate>
                 <CellTemplate>
                     @if (context.Item.ReferenceValue != null)
@@ -75,13 +75,13 @@ else
                          ExpectedItemCount="@ValueCount"
                          DefaultSortBy="@SourceOrderSort"
                          LoadWindow="LoadValueWindowAsync"
-                         SearchPlaceholder="@($"Search {AttributeName.ToLower()}...")"
-                         SingularName="Value"
-                         PluralName="Values">
+                         SearchPlaceholder="@string.Format(CultureInfo.CurrentCulture, MetaverseText.MvaSearchPlaceholder, AttributeName.ToLower())"
+                         SingularName="@MetaverseText.MvaValue"
+                         PluralName="@MetaverseText.MvaValues">
         <Columns>
-            <TemplateColumn Title="Value" Sortable="false">
+            <TemplateColumn Title="@MetaverseText.MvaValue" Sortable="false">
                 <HeaderTemplate>
-                    <MudText Typo="Typo.button">Value</MudText>
+                    <MudText Typo="Typo.button">@MetaverseText.MvaValue</MudText>
                 </HeaderTemplate>
                 <CellTemplate>
                     <TextValueDisplay Value="@GetDisplayValue(context.Item)" Class="jim-text-code" />
@@ -105,16 +105,16 @@ else
         if (!string.IsNullOrWhiteSpace(grid.SearchText))
         {
             <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                             PrimaryText="@($"No values match \"{grid.SearchText}\"")"
-                             SecondaryText="Try a different search term, or clear the search."
-                             ActionText="Clear Search"
+                             PrimaryText="@string.Format(CultureInfo.CurrentCulture, MetaverseText.MvaNoValuesMatch, grid.SearchText)"
+                             SecondaryText="@CommonText.TrySearchAgain"
+                             ActionText="@CommonText.ClearSearch"
                              OnAction="@(() => grid.ClearSearchAsync())" />
         }
         else
         {
             <TableEmptyState Icon="@Icons.Material.Filled.List"
-                             PrimaryText="This attribute has no values"
-                             SecondaryText="Values arrive here from a Connected System through an Inbound Synchronisation Rule." />
+                             PrimaryText="@MetaverseText.MvaNoValues"
+                             SecondaryText="@MetaverseText.MvaNoValuesHint" />
         }
     };
 }
@@ -204,9 +204,9 @@ else
         if (value.GuidValue.HasValue)
             return value.GuidValue.Value.ToString();
         if (value.BoolValue.HasValue)
-            return value.BoolValue.Value ? "True" : "False";
+            return value.BoolValue.Value ? CommonText.True : CommonText.False;
         if (value.ByteValue != null)
-            return $"{value.ByteValue.Length} bytes";
+            return string.Format(CultureInfo.CurrentCulture, MetaverseText.MvaBytes, value.ByteValue.Length);
         return string.Empty;
     }
 }

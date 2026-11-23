@@ -27,7 +27,7 @@ namespace JIM.PostgresData.Repositories;
 internal sealed class ActivityProgressWriter(string connectionString) : IActivityProgressWriter
 {
     internal const string UpdateActivitySql =
-        """UPDATE "Activities" SET "Message" = $1, "ObjectsProcessed" = $2, "ObjectsToProcess" = $3 WHERE "Id" = $4""";
+        """UPDATE "Activities" SET "Message" = $1, "MessageDetailJson" = NULL, "ObjectsProcessed" = $2, "ObjectsToProcess" = $3 WHERE "Id" = $4""";
 
     public async Task WriteAsync(ActivityProgressWrite progress)
     {

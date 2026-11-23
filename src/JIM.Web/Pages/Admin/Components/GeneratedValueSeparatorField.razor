@@ -8,18 +8,19 @@
    the three uniqueness tokens (see GeneratedValueOptionsEditor.razor), and a RenderFragment cannot be built from
    a C# lambda in a @code block; a small component is the correct way to share Razor markup across call sites. *@
 
-<MudSelect T="string" Value="_option" ValueChanged="OnOptionChangedAsync" Label="Separator" Variant="Variant.Outlined">
-    <MudSelectItem Value="@("None")">None</MudSelectItem>
-    <MudSelectItem Value="@("Dot")">Dot .</MudSelectItem>
-    <MudSelectItem Value="@("Hyphen")">Hyphen -</MudSelectItem>
-    <MudSelectItem Value="@("Underscore")">Underscore _</MudSelectItem>
-    <MudSelectItem Value="@("Custom")">Custom…</MudSelectItem>
+<MudSelect T="string" Value="_option" ValueChanged="OnOptionChangedAsync" Label="@GeneratedValueText.SeparatorLabel" Variant="Variant.Outlined">
+    @* i18n: exempt - the option's value, which is code; its text is the CommonText.None on the next line *@
+    <MudSelectItem Value="@("None")">@CommonText.None</MudSelectItem>
+    <MudSelectItem Value="@("Dot")">@GeneratedValueText.SeparatorDot</MudSelectItem>
+    <MudSelectItem Value="@("Hyphen")">@GeneratedValueText.SeparatorHyphen</MudSelectItem>
+    <MudSelectItem Value="@("Underscore")">@GeneratedValueText.SeparatorUnderscore</MudSelectItem>
+    <MudSelectItem Value="@("Custom")">@GeneratedValueText.SeparatorCustom</MudSelectItem>
 </MudSelect>
 @if (_option == "Custom")
 {
     <MudTextField T="string" Value="_customValue" ValueChanged="OnCustomValueChangedAsync"
-        Label="Custom separator" Variant="Variant.Outlined" Immediate="true" Class="mt-2"
-        HelperText="One to three characters; no spaces, no @@" />
+        Label="@GeneratedValueText.SeparatorCustomLabel" Variant="Variant.Outlined" Immediate="true" Class="mt-2"
+        HelperText="@GeneratedValueText.SeparatorCustomHint" />
 }
 
 @code {

@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Search;
 
 /// <summary>
@@ -54,13 +56,15 @@ public static class RelativeDateResolver
     /// Renders a relative offset in plain language, for example "7 days from now" or "30 days ago".
     /// Used by criterion <c>ToString()</c> (the UI chips) and the editor's live preview so the wording is consistent.
     /// </summary>
-    public static string Describe(int count, RelativeDateUnit unit, RelativeDateDirection direction)
-    {
-        var unitText = unit.ToString().ToLowerInvariant();
-        if (count == 1 && unitText.EndsWith('s'))
-            unitText = unitText[..^1];
+    public static string Describe(int count, RelativeDateUnit unit, RelativeDateDirection direction) =>
+        DescribeMessage(count, unit, direction).ToEnglish();
 
-        var directionText = direction == RelativeDateDirection.FromNow ? "from now" : "ago";
-        return $"{count} {unitText} {directionText}";
+    /// <summary>
+    /// <see cref="Describe"/> as a message the portal shows in the viewer's language (#3030), with the same British English.
+    /// </summary>
+    public static JimMessage DescribeMessage(int count, RelativeDateUnit unit, RelativeDateDirection direction)
+    {
+        var directionName = direction == RelativeDateDirection.FromNow ? "FromNow" : "Ago";
+        return JimMessage.Counted(MessageCatalogues.ScopingCriteria, $"Relative{unit}{directionName}One", count, count);
     }
 }

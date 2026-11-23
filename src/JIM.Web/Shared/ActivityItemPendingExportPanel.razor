@@ -17,30 +17,27 @@
     @if (PendingExport.ChangeType == PendingExportChangeType.Delete
          && ItemErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
     {
-        <text>This object is staged for deletion in the Connected System. Any attribute values below are carried on the
-            Pending Export so the delete can still be performed once the Connected System Object is gone.</text>
+        <text>@ActivityText.ActivityPendingDelete</text>
     }
     else if (ItemObjectChangeType == ObjectChangeType.PendingExport
              && ItemErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
     {
-        <text>The following attribute changes are staged and awaiting export to the Connected System.</text>
+        <text>@ActivityText.ActivityPendingAwaiting</text>
     }
     else if (ItemErrorType == ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed)
     {
-        <text>The following attribute changes were exported but have not yet been confirmed. They will be retried on the
-            next export run.</text>
+        <text>@ActivityText.ActivityPendingExportNotConfirmed</text>
     }
     else
     {
-        <text>The following attribute changes failed to export after multiple attempts and may require manual
-            intervention.</text>
+        <text>@ActivityText.ActivityPendingFailed</text>
     }
 </MudText>
 
 <MudPaper Class="pa-4 mb-4" Outlined="true">
     <MudGrid Spacing="3">
         <MudItem xs="12" sm="6" md="3">
-            <MudText Typo="Typo.button" Class="mud-text-secondary">Connected System</MudText>
+            <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityFieldConnectedSystem</MudText>
             <MudText>
                 @if (PendingExport.ConnectedSystem != null)
                 {
@@ -53,32 +50,32 @@
             </MudText>
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
-            <MudText Typo="Typo.button" Class="mud-text-secondary">Change Type</MudText><br />
+            <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityPendingChangeType</MudText><br />
             <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(PendingExport.ChangeType)"
                      Class="ml-0">
                 @PendingExport.ChangeType
             </MudChip>
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
-            <MudText Typo="Typo.button" Class="mud-text-secondary">Status</MudText><br />
+            <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityColumnStatus</MudText><br />
             <MudChip T="string" Variant="Variant.Text" Color="GetStatusColor(PendingExport.Status)" Class="ml-0">
-                @PendingExport.Status.ToString().SplitOnCapitalLetters()
+                @PendingExport.Status.ForDisplay()
             </MudChip>
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
-            <MudText Typo="Typo.button" Class="mud-text-secondary">Failed Attempts</MudText>
+            <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityChipFailedAttempts</MudText>
             <MudText>
                 @PendingExport.ErrorCount
                 @if (PendingExport.FailingSince is { } failingSince)
                 {
-                    <MudTooltip Text="@($"Failing since {failingSince.ToLocalTime().ToFriendlyDate()}. JIM attempts it again at every export run.")" Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Color="Color.Error" Class="ml-2">Failing</MudChip>
+                    <MudTooltip Text="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPendingFailingSince, failingSince.ToLocalTime().ToFriendlyDate())" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Color="Color.Error" Class="ml-2">@ActivityText.ActivityPendingFailing</MudChip>
                     </MudTooltip>
                 }
             </MudText>
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
-            <MudText Typo="Typo.button" Class="mud-text-secondary">Last Attempted</MudText>
+            <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityPendingLastAttempted</MudText>
             <MudText>
                 @if (PendingExport.LastAttemptedAt is { } lastAttemptedAt)
                 {
@@ -91,7 +88,7 @@
             </MudText>
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
-            <MudText Typo="Typo.button" Class="mud-text-secondary">Created</MudText>
+            <MudText Typo="Typo.button" Class="mud-text-secondary">@ActivityText.ActivityColumnCreated</MudText>
             <MudText>@PendingExport.CreatedAt.ToLocalTime().ToRelativeTime()</MudText>
         </MudItem>
     </MudGrid>
@@ -100,44 +97,44 @@
 @if (PendingExport.AttributeValueChanges.Count > 0)
 {
     <MudText Typo="Typo.subtitle1" Class="mb-2">
-        Pending Attribute Changes (@PendingExport.AttributeValueChanges.Count.ToString("N0"))
+        @string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPendingAttributeChangesHeading, PendingExport.AttributeValueChanges.Count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture))
     </MudText>
     <MudTable Items="@PendingExport.AttributeValueChanges" Hover="true" Dense="true" Outlined="true" Elevation="0"
               Class="mb-5">
         <HeaderContent>
             <MudTh Style="width: 1%; white-space: nowrap;">
-                <MudText Typo="Typo.button">Attribute</MudText>
+                <MudText Typo="Typo.button">@ActivityText.ActivityColumnAttribute</MudText>
             </MudTh>
             <MudTh Style="width: 1%; white-space: nowrap;">
-                <MudText Typo="Typo.button">Change Type</MudText>
+                <MudText Typo="Typo.button">@ActivityText.ActivityPendingChangeType</MudText>
             </MudTh>
             <MudTh Style="width: 1%; white-space: nowrap;">
-                <MudText Typo="Typo.button">Status</MudText>
+                <MudText Typo="Typo.button">@ActivityText.ActivityColumnStatus</MudText>
             </MudTh>
             <MudTh>
-                <MudText Typo="Typo.button">Value</MudText>
+                <MudText Typo="Typo.button">@ActivityText.ActivityColumnValue</MudText>
             </MudTh>
         </HeaderContent>
         <RowTemplate>
-            <MudTd DataLabel="Attribute">
-                <MudText Class="mud-text-secondary">@(context.Attribute?.Name ?? $"Attribute {context.AttributeId}")</MudText>
+            <MudTd DataLabel="@ActivityText.ActivityColumnAttribute">
+                <MudText Class="mud-text-secondary">@(context.Attribute?.Name ?? string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityPendingAttributeFallback, context.AttributeId))</MudText>
             </MudTd>
-            <MudTd DataLabel="Change Type">
+            <MudTd DataLabel="@ActivityText.ActivityPendingChangeType">
                 <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeTypeColor(context.ChangeType)"
                          Class="ml-0">
                     @context.ChangeType
                 </MudChip>
             </MudTd>
-            <MudTd DataLabel="Status">
+            <MudTd DataLabel="@ActivityText.ActivityColumnStatus">
                 <MudChip T="string" Variant="Variant.Text" Color="GetAttributeStatusColor(context.Status)"
                          Class="ml-0">
-                    @context.Status.ToString().SplitOnCapitalLetters()
+                    @context.Status.ForDisplay()
                 </MudChip>
             </MudTd>
-            <MudTd DataLabel="Value"><TextValueDisplay Value="@GetAttributeValue(context)" /></MudTd>
+            <MudTd DataLabel="@ActivityText.ActivityColumnValue"><TextValueDisplay Value="@GetAttributeValue(context)" /></MudTd>
         </RowTemplate>
         <NoRecordsContent>
-            <MudText Class="pa-4">No attribute changes recorded.</MudText>
+            <MudText Class="pa-4">@ActivityText.ActivityPendingNoAttributeChanges</MudText>
         </NoRecordsContent>
     </MudTable>
 }
@@ -147,7 +144,7 @@
 {
     <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.OpenInNew"
                Href="@($"/admin/connected-systems/{connectedSystemId}/pending-exports/{PendingExport.Id}")">
-        View Full Pending Export Details
+        @ActivityText.ActivityPendingViewDetails
     </MudButton>
 }
 

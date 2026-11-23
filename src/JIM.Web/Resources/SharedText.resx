@@ -1,0 +1,365 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DriftThisConnectedSystem" xml:space="preserve">
+    <value>This Connected System</value>
+    <comment>Stands in for the Connected System's name at the start of a sentence.</comment>
+  </data>
+  <data name="DriftThisConnectedSystemMidSentence" xml:space="preserve">
+    <value>this Connected System</value>
+    <comment>Stands in for the Connected System's name inside a sentence.</comment>
+  </data>
+  <data name="DriftNeverFullySynchronised" xml:space="preserve">
+    <value>{0} has never completed a Full Synchronisation, so its configuration has never been applied in full.</value>
+    <comment>{0} is the Connected System's name, or 'This Connected System'.</comment>
+  </data>
+  <data name="DriftChangesOne" xml:space="preserve">
+    <value>{0} configuration change</value>
+    <comment>{0} is a count, formatted with a thousands separator.</comment>
+  </data>
+  <data name="DriftChangesOther" xml:space="preserve">
+    <value>{0} configuration changes</value>
+    <comment>{0} is a count, formatted with a thousands separator.</comment>
+  </data>
+  <data name="DriftDestructiveSince" xml:space="preserve">
+    <value>{0} since the last Full Synchronisation ({1}), including a destructive change. Review before running a Full Synchronisation.</value>
+    <comment>{0} is the count of changes (for example '3 configuration changes'), {1} a date and time.</comment>
+  </data>
+  <data name="DriftDestructiveSinceNoDate" xml:space="preserve">
+    <value>{0} since the last Full Synchronisation, including a destructive change. Review before running a Full Synchronisation.</value>
+    <comment>{0} is the count of changes, for example '3 configuration changes'.</comment>
+  </data>
+  <data name="DriftApplySinceOne" xml:space="preserve">
+    <value>{0} since the last Full Synchronisation ({1}). Run a Full Synchronisation to apply it.</value>
+    <comment>{0} is the count of changes (one change), {1} a date and time.</comment>
+  </data>
+  <data name="DriftApplySinceOther" xml:space="preserve">
+    <value>{0} since the last Full Synchronisation ({1}). Run a Full Synchronisation to apply them.</value>
+    <comment>{0} is the count of changes (several changes), {1} a date and time.</comment>
+  </data>
+  <data name="DriftApplySinceNoDateOne" xml:space="preserve">
+    <value>{0} since the last Full Synchronisation. Run a Full Synchronisation to apply it.</value>
+    <comment>{0} is the count of changes (one change).</comment>
+  </data>
+  <data name="DriftApplySinceNoDateOther" xml:space="preserve">
+    <value>{0} since the last Full Synchronisation. Run a Full Synchronisation to apply them.</value>
+    <comment>{0} is the count of changes (several changes).</comment>
+  </data>
+  <data name="DriftAwaitingOneChangeOneType" xml:space="preserve">
+    <value>1 saved change awaits the next synchronisation of {0}, which processes every {1} object.</value>
+    <comment>{0} is the Connected System, {1} an object type's name.</comment>
+  </data>
+  <data name="DriftAwaitingOneChangeSeveralTypes" xml:space="preserve">
+    <value>1 saved change awaits the next synchronisation of {0}, which processes every object of {1} and {2}.</value>
+    <comment>{0} is the Connected System, {1} a comma-separated list of object type names, {2} the last one.</comment>
+  </data>
+  <data name="DriftAwaitingManyChangesOneType" xml:space="preserve">
+    <value>{0} saved changes await the next synchronisation of {1}, which processes every {2} object.</value>
+    <comment>{0} is a count, {1} the Connected System, {2} an object type's name.</comment>
+  </data>
+  <data name="DriftAwaitingManyChangesSeveralTypes" xml:space="preserve">
+    <value>{0} saved changes await the next synchronisation of {1}, which processes every object of {2} and {3}.</value>
+    <comment>{0} is a count, {1} the Connected System, {2} a comma-separated list of object type names, {3} the last one.</comment>
+  </data>
+  <data name="TrustDialogIntro" xml:space="preserve">
+    <value>Your identity provider, {0}, presented this chain. JIM will trust the certificate you choose for sign-in, until you remove it from {1}. Check its thumbprint against the one your certificate authority publishes before you continue.</value>
+    <comment>{0} is the identity provider's host name; {1} is a link to the Trusted Certificates page (TrustDialogTrustedCertificatesLink).</comment>
+  </data>
+  <data name="TrustDialogTrustedCertificatesLink" xml:space="preserve">
+    <value>Trusted Certificates</value>
+    <comment>Link text; the name of a portal page.</comment>
+  </data>
+  <data name="TrustDialogRecommended" xml:space="preserve">
+    <value>Recommended</value>
+    <comment>Chip beside the suggested certificate.</comment>
+  </data>
+  <data name="TrustDialogUnsentIssuer" xml:space="preserve">
+    <value>{0} did not send {1}, which issued the top of this chain. Uploading it from your certificate authority, trusted for sign-in, lasts longer than anything here.</value>
+    <comment>{0} is the identity provider's host name, {1} the distinguished name of the missing issuer.</comment>
+  </data>
+  <data name="TrustDialogThumbprintToCheck" xml:space="preserve">
+    <value>Thumbprint to check</value>
+  </data>
+  <data name="TrustDialogChangeReason" xml:space="preserve">
+    <value>Change reason</value>
+  </data>
+  <data name="TrustDialogChangeReasonHelper" xml:space="preserve">
+    <value>Recorded on the Activity alongside your name.</value>
+  </data>
+  <data name="TrustDialogChangeReasonDefault" xml:space="preserve">
+    <value>Restoring sign-in through {0}.</value>
+    <comment>Prefilled reason; {0} is the identity provider's host name.</comment>
+  </data>
+  <data name="TrustDialogTrusting" xml:space="preserve">
+    <value>Trusting</value>
+    <comment>Shown on the button while it works.</comment>
+  </data>
+  <data name="TrustDialogTrustForSignIn" xml:space="preserve">
+    <value>Trust for sign-in</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="TrustDialogTitleFailed" xml:space="preserve">
+    <value>JIM could not trust this certificate</value>
+    <comment>Dialog title when it failed.</comment>
+  </data>
+  <data name="TrustDialogTitleConfirm" xml:space="preserve">
+    <value>Trust {0} for sign-in?</value>
+    <comment>{0} is a certificate's common name, or 'this certificate'.</comment>
+  </data>
+  <data name="TrustDialogThisCertificate" xml:space="preserve">
+    <value>this certificate</value>
+    <comment>Stands in for a certificate's name in the dialog title.</comment>
+  </data>
+  <data name="TrustDialogFailureMessage" xml:space="preserve">
+    <value>JIM could not trust this certificate.</value>
+  </data>
+  <data name="TrustDialogOpenTitle" xml:space="preserve">
+    <value>Trust a certificate for sign-in?</value>
+    <comment>Title of the dialog.</comment>
+  </data>
+  <data name="TrustDialogDurabilityServer" xml:space="preserve">
+    <value>This identity provider's own certificate. Needs trusting again when it is renewed, on {0}.</value>
+    <comment>{0} is a date.</comment>
+  </data>
+  <data name="TrustDialogDurabilityAuthority" xml:space="preserve">
+    <value>Covers every certificate this certificate authority issues, until its own certificate expires on {0}.</value>
+    <comment>{0} is a date.</comment>
+  </data>
+  <data name="OutOfDateCause" xml:space="preserve">
+    <value>{0} since this preview started: {1}{2}.</value>
+    <comment>{0} is what changed (a phrase such as 'Data has changed'), {1} names what overtook the preview (a chip), {2} is OutOfDateWhen or empty.</comment>
+  </data>
+  <data name="OutOfDateWhen" xml:space="preserve">
+    <value> ({0})</value>
+    <comment>Relative time of the latest change, for example 'about 2 hours ago'; keep the leading space.</comment>
+  </data>
+  <data name="OutOfDateExplanation" xml:space="preserve">
+    <value>The preview may no longer describe what the run would do. Preview again for a current answer, or run anyway; the run's Activity records that the preview informing it was out of date.</value>
+  </data>
+  <data name="OutOfDateRunAnyway" xml:space="preserve">
+    <value>Run anyway</value>
+  </data>
+  <data name="OutOfDatePreviewAgain" xml:space="preserve">
+    <value>Preview again</value>
+  </data>
+  <data name="CsvErrorTitle" xml:space="preserve">
+    <value>CSV Parsing Error</value>
+  </data>
+  <data name="CsvErrorRow" xml:space="preserve">
+    <value>Row:</value>
+    <comment>Label.</comment>
+  </data>
+  <data name="CsvErrorColumn" xml:space="preserve">
+    <value>Column:</value>
+    <comment>Label.</comment>
+  </data>
+  <data name="CsvErrorRawData" xml:space="preserve">
+    <value>Raw data:</value>
+    <comment>Label.</comment>
+  </data>
+  <data name="CsvErrorSuggestion" xml:space="preserve">
+    <value>Suggestion:</value>
+    <comment>Label.</comment>
+  </data>
+  <data name="CsvErrorOk" xml:space="preserve">
+    <value>OK</value>
+    <comment>Button that dismisses the dialog.</comment>
+  </data>
+  <data name="ChangeReasonDescription" xml:space="preserve">
+    <value>Optionally describe why you are making this change. The reason is recorded against the change in the configuration change history.</value>
+  </data>
+  <data name="ChangeReasonLabel" xml:space="preserve">
+    <value>Reason (optional)</value>
+  </data>
+  <data name="ChangeReasonDialogTitle" xml:space="preserve">
+    <value>Reason for change</value>
+  </data>
+  <data name="AuditCreated" xml:space="preserve">
+    <value>Created</value>
+    <comment>Chip label: when an object was created.</comment>
+  </data>
+  <data name="AuditUpdated" xml:space="preserve">
+    <value>Updated</value>
+    <comment>Chip label: when an object was last updated.</comment>
+  </data>
+  <data name="AuditBy" xml:space="preserve">
+    <value>by</value>
+    <comment>Between a relative time and the name of who made the change, for example '2 hours ago by Sam'.</comment>
+  </data>
+  <data name="ObjectCountOf" xml:space="preserve">
+    <value>{0} of {1}</value>
+    <comment>{0} is the filtered count, {1} the unfiltered total.</comment>
+  </data>
+  <data name="ObjectCountOfNoun" xml:space="preserve">
+    <value>{0} of {1} {2}</value>
+    <comment>{0} is the filtered count, {1} the unfiltered total, {2} the plural noun for the objects.</comment>
+  </data>
+  <data name="RunAsOfDateLabel" xml:space="preserve">
+    <value>Run as of (UTC)</value>
+    <comment>Date picker label: the instant a configuration test runs as of.</comment>
+  </data>
+  <data name="RunAsOfNow" xml:space="preserve">
+    <value>Now</value>
+    <comment>Placeholder of the date picker when empty.</comment>
+  </data>
+  <data name="RunAsOfTimeLabel" xml:space="preserve">
+    <value>Time (UTC)</value>
+  </data>
+  <data name="InfoAbout" xml:space="preserve">
+    <value>About {0}</value>
+    <comment>Accessible name of an info button; {0} is the topic's title.</comment>
+  </data>
+  <data name="InfoDocumentation" xml:space="preserve">
+    <value>Documentation</value>
+    <comment>Link in an info popover.</comment>
+  </data>
+  <data name="InfoGlossary" xml:space="preserve">
+    <value>Glossary</value>
+    <comment>Link in an info popover.</comment>
+  </data>
+  <data name="CopyTextExplanation" xml:space="preserve">
+    <value>Your browser did not let JIM copy this to the clipboard. It is selected below; press Ctrl+C (Cmd+C on a Mac) to copy it.</value>
+  </data>
+  <data name="CopyTextAriaLabel" xml:space="preserve">
+    <value>Text to copy</value>
+    <comment>Accessible name of the text area.</comment>
+  </data>
+  <data name="CopyTextDone" xml:space="preserve">
+    <value>Done</value>
+    <comment>Button that closes the dialog.</comment>
+  </data>
+  <data name="ConsequenceTypeToConfirm" xml:space="preserve">
+    <value>Type {0} to confirm</value>
+    <comment>{0} is the phrase to type, shown in bold.</comment>
+  </data>
+  <data name="ConsequenceEvaluating" xml:space="preserve">
+    <value>Evaluating impact...</value>
+    <comment>Default text beside the progress indicator.</comment>
+  </data>
+  <data name="ConsequenceWorking" xml:space="preserve">
+    <value>Working...</value>
+    <comment>Default text on the confirm button while it works.</comment>
+  </data>
+  <data name="DensityNormal" xml:space="preserve">
+    <value>Normal row spacing</value>
+    <comment>Tooltip of the button that switches a table to normal rows.</comment>
+  </data>
+  <data name="DensityCompact" xml:space="preserve">
+    <value>Compact row spacing</value>
+    <comment>Tooltip of the button that switches a table to compact rows.</comment>
+  </data>
+  <data name="StackTraceShow" xml:space="preserve">
+    <value>Show stack trace</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="StackTraceHide" xml:space="preserve">
+    <value>Hide stack trace</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="OverflowMore" xml:space="preserve">
+    <value>+{0} more</value>
+    <comment>Link opening the rest of a list; {0} is how many more there are.</comment>
+  </data>
+  <data name="GridLoading" xml:space="preserve">
+    <value>Loading…</value>
+    <comment>Shown in the toolbar while the first rows load.</comment>
+  </data>
+  <data name="GridSearching" xml:space="preserve">
+    <value>Searching…</value>
+    <comment>Shown in the toolbar while a search runs.</comment>
+  </data>
+  <data name="GridSearchPlaceholder" xml:space="preserve">
+    <value>Search...</value>
+    <comment>Placeholder of a grid's search box.</comment>
+  </data>
+  <data name="TechnicalDetails" xml:space="preserve">
+    <value>Technical Details</value>
+    <comment>Heading of an expandable panel.</comment>
+  </data>
+  <data name="UnhandledErrorTitle" xml:space="preserve">
+    <value>Something Went Wrong</value>
+  </data>
+  <data name="UnhandledErrorSubtitle" xml:space="preserve">
+    <value>Well, that wasn't supposed to happen. A cog has slipped!</value>
+  </data>
+  <data name="UnhandledErrorLabel" xml:space="preserve">
+    <value>Error</value>
+    <comment>Table row label.</comment>
+  </data>
+  <data name="UnhandledErrorMessage" xml:space="preserve">
+    <value>Message</value>
+    <comment>Table row label.</comment>
+  </data>
+  <data name="UnhandledErrorTryAgain" xml:space="preserve">
+    <value>Try Again</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="UnhandledErrorGoToDashboard" xml:space="preserve">
+    <value>Go to Dashboard</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="NotAuthorisedTitle" xml:space="preserve">
+    <value>Access Denied</value>
+  </data>
+  <data name="NotAuthorisedSubtitle" xml:space="preserve">
+    <value>Oops! It looks like you don't have the key to this door.</value>
+  </data>
+  <data name="NotAuthorisedNoPermission" xml:space="preserve">
+    <value>You're signed in, but you don't have permission to access this page.</value>
+  </data>
+  <data name="NotAuthorisedUserLabel" xml:space="preserve">
+    <value>User</value>
+    <comment>Table row label.</comment>
+  </data>
+  <data name="NotAuthorisedRolesLabel" xml:space="preserve">
+    <value>Your Roles</value>
+    <comment>Table row label.</comment>
+  </data>
+  <data name="NotAuthorisedRolesNone" xml:space="preserve">
+    <value>(none)</value>
+    <comment>Shown when the user holds no roles.</comment>
+  </data>
+  <data name="NotAuthorisedAdminNote" xml:space="preserve">
+    <value>Administrator Note:</value>
+    <comment>Bold lead-in of a note.</comment>
+  </data>
+  <data name="NotAuthorisedMissingRoleNote" xml:space="preserve">
+    <value>This user is authenticated and exists in JIM, but lacks the required role for this page. Check the user's role assignments.</value>
+  </data>
+  <data name="NotAuthorisedNotFound" xml:space="preserve">
+    <value>You've been authenticated, but your account couldn't be found in JIM.</value>
+  </data>
+  <data name="NotAuthorisedTokenNameLabel" xml:space="preserve">
+    <value>Token Name</value>
+    <comment>Table row label.</comment>
+  </data>
+  <data name="NotAuthorisedClaimTypeLabel" xml:space="preserve">
+    <value>Claim Type</value>
+    <comment>Table row label.</comment>
+  </data>
+  <data name="NotAuthorisedClaimValueLabel" xml:space="preserve">
+    <value>Claim Value</value>
+    <comment>Table row label.</comment>
+  </data>
+  <data name="NotAuthorisedUnmappedClaimNote" xml:space="preserve">
+    <value>Could not map this claim to a Metaverse user. Please verify the user exists in JIM and has a value for the SSO attribute {0}.</value>
+    <comment>{0} is the name of a Metaverse Attribute, shown as code.</comment>
+  </data>
+  <data name="NotAuthorisedGoToHome" xml:space="preserve">
+    <value>Go to Home</value>
+    <comment>Button.</comment>
+  </data>
+</root>

@@ -46,6 +46,7 @@ public class ConfigurationChangePreviewBackgroundRunner : BackgroundService, ICo
         if (!_queue.Writer.TryWrite(new QueuedPreview(activityId, request)))
         {
             // An unbounded channel only refuses writes once it is completed, which happens at shutdown.
+            // i18n: exempt - exception message that only reaches logs
             throw new InvalidOperationException(
                 "Configuration change previews are no longer being accepted in this process because it is shutting down.");
         }

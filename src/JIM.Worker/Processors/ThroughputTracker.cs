@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Models.Localisation;
+
 namespace JIM.Worker.Processors;
 
 /// <summary>
@@ -40,29 +43,18 @@ internal class ThroughputTracker
     /// Deliberately a whole-run average: it summarises the completed operation.
     /// </summary>
     /// <param name="processed">Total objects processed.</param>
-    public string FormatCompletion(int processed)
-    {
-        var elapsed = _clock() - _startedAt;
-        if (elapsed.TotalSeconds < 1 || processed <= 0)
-            return string.Empty;
+    public string FormatCompletion(int processed) => CompletionMessage(processed)?.ToEnglish() ?? string.Empty;
 
-        var rate = processed / elapsed.TotalSeconds;
-        return $" in {FormatDuration(elapsed.TotalSeconds)} (avg {rate:N0} obj/s)";
-    }
+    /// <summary>
+    /// The same suffix as a message the portal shows in the viewer's language (#3039); null where there was too little work
+    /// to average.
+    /// </summary>
+    /// <param name="processed">Total objects processed.</param>
+    public JimMessage? CompletionMessage(int processed) =>
+        ActivityMessage.ThroughputCompletion((_clock() - _startedAt).TotalSeconds, processed);
 
-    private static string FormatDuration(double totalSeconds)
-    {
-        if (totalSeconds < 60)
-            return $"{totalSeconds:N0} sec";
-        if (totalSeconds < 3600)
-        {
-            var minutes = (int)(totalSeconds / 60);
-            var seconds = (int)(totalSeconds % 60);
-            return seconds > 0 ? $"{minutes} min {seconds} sec" : $"{minutes} min";
-        }
-
-        var hours = (int)(totalSeconds / 3600);
-        var mins = (int)((totalSeconds % 3600) / 60);
-        return mins > 0 ? $"{hours} hr {mins} min" : $"{hours} hr";
-    }
+    /// <summary>The suffix as an argument of a longer message: the message, or nothing.</summary>
+    /// <param name="processed">Total objects processed.</param>
+    public MessageArgument CompletionArgument(int processed) =>
+        CompletionMessage(processed) is { } message ? message : string.Empty;
 }

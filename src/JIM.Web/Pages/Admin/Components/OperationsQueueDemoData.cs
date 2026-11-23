@@ -33,22 +33,30 @@ internal static class OperationsQueueDemoData
         return
         [
             // "Nightly Full Sync": step 2 of 5 is a parallel pair, running now.
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             ScheduleTask(nightly, "Nightly Full Sync", 5, 1, 1, "HR System", "Full Import", HrFullImport, WorkerTaskStatus.Processing, now.AddMinutes(-5),
                 WorkerTaskExecutionMode.Parallel, started: now.AddMinutes(-4), toProcess: 12500, processed: 8320, steps: DemoImportSteps(RunPhaseKeys.ImportSave)),
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             ScheduleTask(nightly, "Nightly Full Sync", 5, 1, 1, "AD", "Full Import", AdFullImport, WorkerTaskStatus.Processing, now.AddMinutes(-5),
                 WorkerTaskExecutionMode.Parallel, started: now.AddMinutes(-4), toProcess: 45000, processed: 31200, steps: DemoImportSteps(RunPhaseKeys.ImportFetch)),
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             ScheduleTask(nightly, "Nightly Full Sync", 5, 1, 2, "HR System", "Delta Sync", HrDeltaSync, WorkerTaskStatus.WaitingForPreviousStep, now.AddMinutes(-5), WorkerTaskExecutionMode.Parallel),
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             ScheduleTask(nightly, "Nightly Full Sync", 5, 1, 2, "AD", "Delta Sync", AdDeltaSync, WorkerTaskStatus.WaitingForPreviousStep, now.AddMinutes(-5), WorkerTaskExecutionMode.Parallel),
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             ScheduleTask(nightly, "Nightly Full Sync", 5, 1, 3, "AD", "Export", AdExport, WorkerTaskStatus.WaitingForPreviousStep, now.AddMinutes(-5)),
 
             // "Cloud Provisioning": its first step queued behind the running Schedule.
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             ScheduleTask(cloud, "Cloud Provisioning", 3, 0, 0, "Azure AD", "Export", AzureExport, WorkerTaskStatus.Queued, now.AddMinutes(-1)),
 
             // A run queued by hand.
             new()
             {
+                // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
                 Id = Guid.NewGuid(), Name = "LDAP Directory - Full Import", Type = "Synchronisation",
                 Status = WorkerTaskStatus.Queued, Timestamp = now.AddSeconds(-30),
+                // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
                 ConnectedSystemRunProfileId = LdapFullImport, ConnectedSystemName = "LDAP Directory", RunProfileName = "Full Import",
                 InitiatedByType = ActivityInitiatorType.User, InitiatedById = currentUserId, InitiatedByName = currentUserName
             },
@@ -56,6 +64,7 @@ internal static class OperationsQueueDemoData
             // Not a Run Profile execution, so it has no steps and no typical duration: the estimates after it go blank.
             new()
             {
+                // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
                 Id = Guid.NewGuid(), Name = "HR System", Type = "Clear Connected System Objects",
                 Status = WorkerTaskStatus.Queued, Timestamp = now.AddSeconds(-20),
                 InitiatedByType = ActivityInitiatorType.User, InitiatedById = currentUserId, InitiatedByName = currentUserName
@@ -84,9 +93,11 @@ internal static class OperationsQueueDemoData
     {
         var demoOutcomes = new Dictionary<string, List<ScheduleStepObservation>>
         {
+            // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
             ["Nightly Full Sync"] =
             [
                 ScheduleStepReading.FromActivity(0, Guid.NewGuid(), ActivityTargetType.ConnectedSystemRunProfile,
+                    // i18n: exempt - Development-only demo fixture: sample names and worker-written messages, stored in English until #3039, not portal text
                     "Legacy CRM", "Full Import", ActivityStatus.Complete)
             ]
         };

@@ -121,7 +121,7 @@ internal static class GraphHttpClientFactory
             ownedCredential = null;
         }
 
-        return new OAuthClientCredentialsAuthentication(tokenClient, tokenEndpoint, clientId, credential, cloud.Scope, describeFailure: EntraTokenFailure.Describe,
+        return new OAuthClientCredentialsAuthentication(tokenClient, tokenEndpoint, clientId, credential, cloud.Scope, describeFailure: EntraTokenFailure.Describe, describeFailureMessage: EntraTokenFailure.DescribeMessage,
             stillBeingApplied: EntraTokenFailure.StillBeingAppliedRetryFor(purpose), delay: delay, logger: logger);
     }
 

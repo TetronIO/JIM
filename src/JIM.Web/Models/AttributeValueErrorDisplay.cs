@@ -4,6 +4,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Staging;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -30,20 +31,20 @@ public static class AttributeValueErrorDisplay
     /// <summary>What an attribute of the type expects, in words; null where the type is unknown.</summary>
     public static string? Expected(AttributeDataType? type) => type switch
     {
-        AttributeDataType.Text => "Text",
-        AttributeDataType.Number or AttributeDataType.LongNumber => "A whole number",
-        AttributeDataType.Decimal => "A decimal number",
-        AttributeDataType.DateTime => "A date and time",
-        AttributeDataType.Boolean => "True or false",
-        AttributeDataType.Guid => "A GUID",
-        AttributeDataType.Binary => "Binary data",
-        AttributeDataType.Reference => "A reference to another object",
+        AttributeDataType.Text => MetaverseText.AvdText,
+        AttributeDataType.Number or AttributeDataType.LongNumber => MetaverseText.AvdWholeNumber,
+        AttributeDataType.Decimal => MetaverseText.AvdDecimal,
+        AttributeDataType.DateTime => MetaverseText.AvdDateTime,
+        AttributeDataType.Boolean => MetaverseText.AvdBoolean,
+        AttributeDataType.Guid => MetaverseText.AvdGuid,
+        AttributeDataType.Binary => MetaverseText.AvdBinary,
+        AttributeDataType.Reference => MetaverseText.AvdReference,
         _ => null
     };
 
     /// <summary>Who found a value could not be imported (#2153): the Connector, or JIM.</summary>
     public static string FoundBy(ImportAttributeValueErrorSource source) =>
-        source == ImportAttributeValueErrorSource.Jim ? "JIM" : "Connector";
+        source == ImportAttributeValueErrorSource.Jim ? "JIM" : MetaverseText.AvdConnector;
 
     /// <summary>The Connected System's Schema tab, open on the Object Type where one is given.</summary>
     public static string SchemaHref(int connectedSystemId, string? objectTypeName) => string.IsNullOrEmpty(objectTypeName)

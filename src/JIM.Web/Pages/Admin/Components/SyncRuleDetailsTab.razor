@@ -12,10 +12,10 @@
 <MudPaper Class="pa-4" Outlined="true">
     @* No @bind-IsValid: the save gate is the parent's model predicate (SyncRule.IsValid()), not form validity. *@
     <MudForm>
-        <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="SyncRule.Name"
+        <MudTextField Label="@CommonText.ColumnName" Required="true" RequiredError="@SyncRuleText.NameRequired" @bind-Value="SyncRule.Name"
                       @bind-Value:after="NotifyChangedAsync" Immediate="true" Variant="Variant.Outlined" />
 
-        <MudTextField T="string" Label="Description" @bind-Value="SyncRule.Description" @bind-Value:after="NotifyChangedAsync"
+        <MudTextField T="string" Label="@CommonText.ColumnDescription" @bind-Value="SyncRule.Description" @bind-Value:after="NotifyChangedAsync"
                       Sizing="InputSizing.Auto" Lines="2" MaxLines="12" MaxLength="1000" Variant="Variant.Outlined" Class="mt-5" />
 
         @* An existing rule's Connected System, direction and object types are stated by the page's identity
@@ -24,7 +24,7 @@
         {
             @if (ConnectedSystemNames != null)
             {
-                <MudSelect T="string" Label="Connected System" Placeholder="Please select a Connected System..." Required="true"
+                <MudSelect T="string" Label="@SyncRuleText.ConnectedSystemTerm" Placeholder="@SyncRuleText.SelectConnectedSystem" Required="true"
                            ValueChanged="HandleConnectedSystemSelectedAsync" AdornmentIcon="@Icons.Material.Filled.Power"
                            Adornment="Adornment.Start" Variant="Variant.Outlined" Class="mt-5">
                     @foreach (var (id, name) in ConnectedSystemNames.OrderBy(n => n.Value))
@@ -36,7 +36,7 @@
 
             @if (SyncRule.ConnectedSystem != null)
             {
-                <MudSelect T="string" Label="Direction" Placeholder="Please select an Attribute Flow direction..."
+                <MudSelect T="string" Label="@SyncRuleText.DirectionLabel" Placeholder="@SyncRuleText.SelectDirection"
                            Required="true" ValueChanged="HandleSyncRuleDirectionSelection" Variant="Variant.Outlined" Class="mt-5">
                     @foreach (SyncRuleDirection direction in Enum.GetValues(typeof(SyncRuleDirection)))
                     {
@@ -54,8 +54,8 @@
                                 SyncRule.ConnectedSystem.ConnectorDefinition.SupportsFullImport;
                             }
 
-                            <MudSelectItem Disabled="!directionSupported" Value="@direction.ToString()">@direction@(directionSupported ?
-                                                "" : " (not supported by Connector)")</MudSelectItem>
+                            <MudSelectItem Disabled="!directionSupported" Value="@direction.ToString()">@DirectionName(direction)@(directionSupported ?
+                                                "" : SyncRuleText.NotSupportedByConnector)</MudSelectItem>
                         }
                     }
                 </MudSelect>
@@ -69,7 +69,7 @@
                 <MudGrid>
                     @(SyncRule.Direction == SyncRuleDirection.Export ? MetaverseObjectTypePicker : ConnectedSystemObjectTypePicker)
                     <MudItem xs="2" Class="d-flex align-center justify-center mt-5">
-                        <MudTooltip Text="@(SyncRule.Direction == SyncRuleDirection.Export ? "Exports to the Connected System" : "Imports to the Metaverse")" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@(SyncRule.Direction == SyncRuleDirection.Export ? SyncRuleText.ExportsToConnectedSystem : SyncRuleText.ImportsToMetaverse)" Arrow="true" Placement="Placement.Top">
                             <MudIcon Size="Size.Large" Class="mud-text-secondary" Icon="@Icons.Material.Filled.KeyboardDoubleArrowRight" />
                         </MudTooltip>
                     </MudItem>
@@ -82,36 +82,28 @@
     {
         <div class="d-flex align-center mt-5">
             <MudSwitch @bind-Value="@SyncRule.ProjectToMetaverse" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary"
-                       Label="@($"Project {SyncRule.MetaverseObjectType?.PluralName ?? "objects"} to the Metaverse?")" />
+                       Label="@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.ProjectToMetaverseLabel, SyncRule.MetaverseObjectType?.PluralName ?? SyncRuleText.ObjectsFallback)" />
             <TermHint Term="Term.Projection" />
         </div>
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">By default, objects imported from this
-            Connected System will not result in a Metaverse Object being projected if no match is found.
-            Enabling this option causes the object to be projected to the Metaverse, allowing it to be managed within
-            JIM and synchronised to other Connected Systems. You would typically enable this for a source system, i.e. a
-            HR system.</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">@SyncRuleText.ProjectHelp</MudText>
     }
 
     @if (SyncRule.Direction == SyncRuleDirection.Export)
     {
         @* Headed like the Deprovisioning group beneath it, so the two halves of an export rule's lifecycle read as
            a pair rather than as a stray switch above a titled group. *@
-        <MudText Typo="Typo.h6" Class="mt-5">Provisioning</MudText>
+        <MudText Typo="Typo.h6" Class="mt-5">@SyncRuleText.ProvisioningHeading</MudText>
         @* The label pluralises the Object Type's name, never the stand-in used before one is chosen: that is
            already plural, and pluralising it again read "Provision objectses to the Connected System?". *@
         <MudSwitch Class="mt-1" @bind-Value="@SyncRule.ProvisionToConnectedSystem" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary"
-                   Label="@($"Provision {SyncRule.ConnectedSystemObjectType?.Name.Pluralise() ?? "objects"} to the Connected System?")" />
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">By default, Metaverse Objects scoped to
-            this Synchronisation Rule will not be created (provisioned) in the Connected Systems. Enabling this
-            option will cause the Metaverse Object to be created in the Connected System. You would typically enable
-            this option for a destination system.</MudText>
+                   Label="@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.ProvisionToConnectedSystemLabel, SyncRule.ConnectedSystemObjectType?.Name.Pluralise() ?? SyncRuleText.ObjectsFallback)" />
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">@SyncRuleText.ProvisionHelp</MudText>
 
-        <MudText Typo="Typo.h6" Class="mt-5">Deprovisioning</MudText>
+        <MudText Typo="Typo.h6" Class="mt-5">@SyncRuleText.DeprovisioningHeading</MudText>
         <MudRadioGroup T="OutboundDeprovisionAction" @bind-Value="@SyncRule.OutboundDeprovisionAction" @bind-Value:after="NotifyChangedAsync">
             <div class="mt-1">
-                <MudRadio T="OutboundDeprovisionAction" Value="OutboundDeprovisionAction.Disconnect" Color="Color.Primary">Disconnect</MudRadio>
-                <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">When a Metaverse Object leaves this Synchronisation
-                    Rule's scope or is deleted, JIM breaks the join and leaves the object in place in the Connected System.</MudText>
+                <MudRadio T="OutboundDeprovisionAction" Value="OutboundDeprovisionAction.Disconnect" Color="Color.Primary">@SyncRuleText.DeprovisionDisconnect</MudRadio>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">@SyncRuleText.DeprovisionDisconnectHelp</MudText>
             </div>
             @* Disable is offered only where the Connector can disable an account (#2085); the server refuses it otherwise too. *@
             @{
@@ -120,23 +112,17 @@
             }
             <div class="mt-2">
                 <MudRadio T="OutboundDeprovisionAction" Value="OutboundDeprovisionAction.Disable" Color="Color.Primary"
-                          Disabled="@(!canDisable)">Disable</MudRadio>
-                <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">When a Metaverse Object leaves this Synchronisation
-                    Rule's scope or is deleted, JIM disables the corresponding object in the Connected System, then breaks the
-                    join and leaves it in place.@(canDisable || connector == null ? "" : $" The {connector.Name} cannot disable an account.")</MudText>
+                          Disabled="@(!canDisable)">@SyncRuleText.DeprovisionDisable</MudRadio>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">@SyncRuleText.DeprovisionDisableHelp@(canDisable || connector == null ? "" : string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.DeprovisionDisableUnsupported, connector.Name))</MudText>
             </div>
             <div class="mt-2">
-                <MudRadio T="OutboundDeprovisionAction" Value="OutboundDeprovisionAction.Delete" Color="Color.Primary">Delete</MudRadio>
-                <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">When a Metaverse Object leaves this Synchronisation
-                    Rule's scope or is deleted, JIM deletes the corresponding object from the Connected System.</MudText>
+                <MudRadio T="OutboundDeprovisionAction" Value="OutboundDeprovisionAction.Delete" Color="Color.Primary">@SyncRuleText.DeprovisionDelete</MudRadio>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">@SyncRuleText.DeprovisionDeleteHelp</MudText>
             </div>
         </MudRadioGroup>
     }
-    <MudSwitch Class="mt-5" @bind-Value="@SyncRule.Enabled" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary" Label="Enabled?" />
-    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">Synchronisation Rules are not evaluated when disabled. Use
-        this to prepare a rule in advance of it being needed, or to temporarily stop a rule from being evaluated.
-        Where another Attribute Flow also contributes an attribute, its value takes over at the next synchronisation;
-        values only this rule contributed stay in place until it is re-enabled or deleted.</MudText>
+    <MudSwitch Class="mt-5" @bind-Value="@SyncRule.Enabled" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary" Label="@SyncRuleText.EnabledQuestion" />
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">@SyncRuleText.RuleEnabledHelp</MudText>
     @* A rule disabled on the administrator's behalf records why (#1485); saving the rule enabled clears it. *@
     @if (!SyncRule.Enabled && !string.IsNullOrWhiteSpace(SyncRule.DisabledReason))
     {
@@ -151,21 +137,18 @@
 @if (SyncRule.Direction == SyncRuleDirection.Export)
 {
     <MudExpansionPanels Elevation="0" Class="mt-5 jim-expansion-panel">
-        <MudExpansionPanel Text="Advanced Options">
+        <MudExpansionPanel Text="@SyncRuleText.AdvancedOptions">
             <TitleContent>
                 <div class="d-flex align-center">
                     <MudIcon Icon="@Icons.Material.Filled.Settings" Class="me-2" />
-                    <MudText Typo="Typo.subtitle1">Advanced Options</MudText>
+                    <MudText Typo="Typo.subtitle1">@SyncRuleText.AdvancedOptions</MudText>
                 </div>
             </TitleContent>
             <ChildContent>
                 <div class="pa-2">
                     <MudSwitch @bind-Value="@SyncRule.EnforceState" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary"
-                               Label="Enforce State (Auto-correct drift)" />
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">Enables drift detection and automatic
-                        correction. When a target system attribute differs from what this export rule dictates, JIM creates a
-                        corrective Pending Export to restore the authoritative value. Disable only where you need to allow
-                        temporary manual overrides in the target system (e.g. emergency access scenarios).</MudText>
+                               Label="@SyncRuleText.EnforceStateLabel" />
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">@SyncRuleText.EnforceStateHelp</MudText>
                 </div>
             </ChildContent>
         </MudExpansionPanel>
@@ -214,11 +197,19 @@
         await OnChanged.InvokeAsync();
     }
 
+    /// <summary>A direction as the picker names it. The enum's own name is never shown.</summary>
+    private static string DirectionName(SyncRuleDirection direction) => direction switch
+    {
+        SyncRuleDirection.Import => SyncRuleText.DirectionImportName,
+        SyncRuleDirection.Export => SyncRuleText.DirectionExportName,
+        _ => direction.ForDisplay()
+    };
+
     // The Object Type pickers, ordered by the form in the direction the data flows. Both render only inside the form's
     // check that the Connected System, its Object Types and the Metaverse Object Types are loaded.
     private RenderFragment MetaverseObjectTypePicker =>
         @<MudItem xs="5">
-            <MudSelect T="MetaverseObjectType" Label="Metaverse Object Type"
+            <MudSelect T="MetaverseObjectType" Label="@SyncRuleText.MetaverseObjectTypeLabel"
                        @bind-Value="@SyncRule.MetaverseObjectType" @bind-Value:after="NotifyChangedAsync" Required="true" Class="mt-5"
                        Variant="Variant.Outlined">
                 @foreach (var mvObjectType in MetaverseObjectTypes!)
@@ -230,7 +221,7 @@
 
     private RenderFragment ConnectedSystemObjectTypePicker =>
         @<MudItem xs="5">
-            <MudSelect T="ConnectedSystemObjectType" Label="Connected System Object Type"
+            <MudSelect T="ConnectedSystemObjectType" Label="@SyncRuleText.ConnectedSystemObjectTypeLabel"
                        @bind-Value="@SyncRule.ConnectedSystemObjectType" @bind-Value:after="NotifyChangedAsync" Required="true" Class="mt-5"
                        Variant="Variant.Outlined">
                 @foreach (var csObjectType in SyncRule.ConnectedSystem!.ObjectTypes!.Where(ot => ot.Selected))

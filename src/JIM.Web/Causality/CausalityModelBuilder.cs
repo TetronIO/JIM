@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Application.Utilities;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
@@ -10,6 +11,7 @@ using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
+using JIM.Web.Resources;
 using MudBlazor;
 using JimUtilities = JIM.Utilities.Utilities;
 
@@ -38,7 +40,7 @@ public static class CausalityModelBuilder
     /// </param>
     /// <param name="deletionPolicySnapshot">
     /// The decision-time Metaverse Object deletion policy recorded on the item, where one was captured. Supplies
-    /// the synthetic "Metaverse Object not deleted" event; see <see cref="BuildDeclinedDeletionEvent"/>.
+    /// the synthetic CausalityText.EventMetaverseObjectNotDeleted event; see <see cref="BuildDeclinedDeletionEvent"/>.
     /// </param>
     /// <param name="isSynchronisationRun">
     /// Whether the Run Profile that produced this item was a Full or Delta Synchronisation. Only a
@@ -251,7 +253,7 @@ public static class CausalityModelBuilder
             if (node.TargetEntityId is { } mvoId && mvoId != Guid.Empty)
             {
                 links.Add(new CausalityEntityLink(
-                    node.TargetEntityDescription ?? "Identity", GetMetaverseObjectHref(mvoId, context), CausalityEntityKind.Identity,
+                    node.TargetEntityDescription ?? CausalityText.EventIdentityFallback, GetMetaverseObjectHref(mvoId, context), CausalityEntityKind.Identity,
                     context.MvoTypeName));
             }
             else if (!string.IsNullOrEmpty(node.TargetEntityDescription))
@@ -264,7 +266,7 @@ public static class CausalityModelBuilder
             if (systemId.HasValue)
             {
                 links.Add(new CausalityEntityLink(
-                    systemName ?? "Connected System", JimUtilities.GetConnectedSystemHref(systemId.Value), CausalityEntityKind.ConnectedSystem));
+                    systemName ?? CausalityText.EventConnectedSystemFallback, JimUtilities.GetConnectedSystemHref(systemId.Value), CausalityEntityKind.ConnectedSystem));
             }
             else if (!string.IsNullOrEmpty(node.TargetEntityDescription))
             {
@@ -403,7 +405,7 @@ public static class CausalityModelBuilder
             // entirely on the deployment's intent, and the panel does not know it.
             Tone = CausalityTone.Secondary,
             Icon = Icons.Material.Filled.ShieldMoon,
-            Label = "Metaverse Object not deleted",
+            Label = CausalityText.EventMetaverseObjectNotDeleted,
             DetailMessage = DeclinedDeletionDetail(snapshot)
         };
     }
@@ -414,17 +416,17 @@ public static class CausalityModelBuilder
     private static string DeclinedDeletionDetail(MvoDeletionPolicySnapshot snapshot)
     {
         if (snapshot.DeletionRule == MetaverseObjectDeletionRule.Manual)
-            return "This object type's Deletion Rule is Manual, so a disconnection never deletes the Metaverse Object.";
+            return CausalityText.EventDeletionRuleManual;
 
         if (snapshot.DeletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected
             && snapshot.TriggerMode == AuthoritativeSourceTriggerMode.AllSourcesDisconnect
             && snapshot.RemainingConnectedSourceSystemNames.Count > 0)
         {
             var remaining = string.Join(", ", snapshot.RemainingConnectedSourceSystemNames);
-            return $"An authoritative source is still connected ({remaining}), and this object type deletes only when all of them disconnect.";
+            return string.Format(CultureInfo.CurrentCulture, CausalityText.EventAuthoritativeSourceStillConnected, remaining);
         }
 
-        return "The Deletion Rule in force at the time was evaluated and did not delete the Metaverse Object.";
+        return CausalityText.EventDeletionRuleDeclined;
     }
 
     private static CausalityEvent BuildEvent(
@@ -527,8 +529,11 @@ public static class CausalityModelBuilder
         if (matchedValue == null)
             return null;
 
-        var matched = isSpeculative ? $"Would match on \"{matchedValue}\"" : $"Matched on \"{matchedValue}\"";
-        return string.IsNullOrWhiteSpace(ruleDescription) ? matched : $"{matched}, where {ruleDescription}";
+        var matched = string.Format(CultureInfo.CurrentCulture,
+            isSpeculative ? CausalityText.EventWouldMatchOn : CausalityText.EventMatchedOn, matchedValue);
+        return string.IsNullOrWhiteSpace(ruleDescription)
+            ? matched
+            : string.Format(CultureInfo.CurrentCulture, CausalityText.EventMatchedWhere, matched, ruleDescription);
     }
 
     /// <summary>
@@ -666,8 +671,8 @@ public static class CausalityModelBuilder
     {
         return outcomeType switch
         {
-            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => "Destructive",
-            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => "Needs attention",
+            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted => CausalityText.EventBadgeDestructive,
+            ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed => CausalityText.LineageNeedsAttention,
             _ => null
         };
     }
@@ -719,7 +724,7 @@ public static class CausalityModelBuilder
                 {
                     var provisioningSystemId = parsedDetail.ConnectedSystemId.Value;
                     links.Add(new CausalityEntityLink(
-                        outcome.TargetEntityDescription ?? "Connected System",
+                        outcome.TargetEntityDescription ?? CausalityText.EventConnectedSystemFallback,
                         JimUtilities.GetConnectedSystemHref(provisioningSystemId),
                         CausalityEntityKind.ConnectedSystem));
 
@@ -738,7 +743,7 @@ public static class CausalityModelBuilder
                             : null;
                         var recordLabel = currentName
                             ?? (parsedDetail.CsoTypeName != null
-                                ? $"{parsedDetail.CsoTypeName}: {provisionedCsoId}"
+                                ? string.Format(CultureInfo.CurrentCulture, CausalityText.EventTypeAndId, parsedDetail.CsoTypeName, provisionedCsoId)
                                 : provisionedCsoId.ToString());
                         links.Add(new CausalityEntityLink(
                             recordLabel,
@@ -763,7 +768,7 @@ public static class CausalityModelBuilder
                 {
                     var targetSystemId = parsedDetail.ConnectedSystemId.Value;
                     links.Add(new CausalityEntityLink(
-                        outcome.TargetEntityDescription ?? "Connected System",
+                        outcome.TargetEntityDescription ?? CausalityText.EventConnectedSystemFallback,
                         JimUtilities.GetConnectedSystemHref(targetSystemId),
                         CausalityEntityKind.ConnectedSystem));
 
@@ -775,7 +780,7 @@ public static class CausalityModelBuilder
                     var isLinkable = outcome.TargetEntityId is { } id && id != Guid.Empty
                                      && livePendingExportIds?.Contains(id) != false;
                     links.Add(new CausalityEntityLink(
-                        isLinkable ? "Pending Export" : "Pending Exports",
+                        isLinkable ? CausalityText.EventPendingExportLink : CausalityText.EventPendingExportsLink,
                         isLinkable ? $"{queueHref}/{outcome.TargetEntityId}" : queueHref,
                         CausalityEntityKind.PendingExport));
 
@@ -815,7 +820,7 @@ public static class CausalityModelBuilder
                 {
                     var disconnectedSystemId = parsedDetail.ConnectedSystemId.Value;
                     links.Add(new CausalityEntityLink(
-                        outcome.TargetEntityDescription ?? "Connected System",
+                        outcome.TargetEntityDescription ?? CausalityText.EventConnectedSystemFallback,
                         JimUtilities.GetConnectedSystemHref(disconnectedSystemId),
                         CausalityEntityKind.ConnectedSystem));
 
@@ -826,7 +831,7 @@ public static class CausalityModelBuilder
                             : null;
                         links.Add(new CausalityEntityLink(
                             currentName ?? (parsedDetail.CsoTypeName != null
-                                ? $"{parsedDetail.CsoTypeName}: {disconnectedCsoId}"
+                                ? string.Format(CultureInfo.CurrentCulture, CausalityText.EventTypeAndId, parsedDetail.CsoTypeName, disconnectedCsoId)
                                 : disconnectedCsoId.ToString()),
                             context.Links.ConnectedSystemObjectHref(disconnectedSystemId, disconnectedCsoId),
                             CausalityEntityKind.Record,
@@ -845,7 +850,7 @@ public static class CausalityModelBuilder
                 if (parsedDetail.ConnectedSystemId.HasValue)
                 {
                     links.Add(new CausalityEntityLink(
-                        outcome.TargetEntityDescription ?? "Connected System",
+                        outcome.TargetEntityDescription ?? CausalityText.EventConnectedSystemFallback,
                         JimUtilities.GetConnectedSystemHref(parsedDetail.ConnectedSystemId.Value),
                         CausalityEntityKind.ConnectedSystem));
                 }
@@ -861,7 +866,7 @@ public static class CausalityModelBuilder
                 if (!string.IsNullOrEmpty(outcome.TargetEntityDescription))
                     links.Add(new CausalityEntityLink(outcome.TargetEntityDescription, null, CausalityEntityKind.Record));
                 links.Add(new CausalityEntityLink(
-                    "View deletion record",
+                    CausalityText.EventViewDeletionRecord,
                     GetDeletedCsoHref(outcome.TargetEntityId),
                     CausalityEntityKind.DeletionRecord));
                 break;
@@ -872,7 +877,7 @@ public static class CausalityModelBuilder
                 if (!string.IsNullOrEmpty(outcome.TargetEntityDescription))
                     links.Add(new CausalityEntityLink(outcome.TargetEntityDescription, null, CausalityEntityKind.Identity, context.MvoTypeName));
                 links.Add(new CausalityEntityLink(
-                    "View deletion record",
+                    CausalityText.EventViewDeletionRecord,
                     GetDeletedMvoHref(outcome.TargetEntityId),
                     CausalityEntityKind.DeletionRecord));
                 break;
@@ -883,7 +888,7 @@ public static class CausalityModelBuilder
                 if (context.CsoConnectedSystemId.HasValue)
                 {
                     links.Add(new CausalityEntityLink(
-                        "Pending Exports",
+                        CausalityText.EventPendingExportsLink,
                         $"/admin/connected-systems/{context.CsoConnectedSystemId.Value}/pending-exports",
                         CausalityEntityKind.PendingExport));
                 }
@@ -896,7 +901,7 @@ public static class CausalityModelBuilder
                     && childOutcomes.All(c => c.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted))
                 {
                     links.Add(new CausalityEntityLink(
-                        outcome.TargetEntityDescription ?? "Metaverse Object",
+                        outcome.TargetEntityDescription ?? CausalityText.LineageMetaverseObjectFallback,
                         GetMetaverseObjectHref(mvoId, context),
                         CausalityEntityKind.Identity,
                         context.MvoTypeName));
@@ -925,7 +930,7 @@ public static class CausalityModelBuilder
         if (syncRuleId.HasValue)
         {
             links.Add(new CausalityEntityLink(
-                syncRuleName ?? "Synchronisation Rule",
+                syncRuleName ?? CausalityText.EventSynchronisationRuleFallback,
                 $"/admin/sync-rules/{syncRuleId.Value}",
                 CausalityEntityKind.SynchronisationRule));
         }

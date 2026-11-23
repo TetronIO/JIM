@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NoAttributeFlowsYetHint" xml:space="preserve">
+    <value>Use the Add Attribute Flow button to say which attribute values this Synchronization Rule moves.</value>
+  </data>
+  <data name="MissingInputBehaviourTitle" xml:space="preserve">
+    <value>Missing Input Behavior</value>
+  </data>
+  <data name="MissingInputIntro" xml:space="preserve">
+    <value>What to do when an attribute this Expression reads has no value on the object being synchronized.</value>
+  </data>
+  <data name="MissingInputFailObjectHint" xml:space="preserve">
+    <value>Run no Attribute Flow on this Synchronization Rule for the object. For identity-critical output.</value>
+  </data>
+  <data name="MissingInputFailObjectWarning" xml:space="preserve">
+    <value>While this is set, an object missing any attribute this Expression reads will not synchronize at all: none of its attributes flow, and it is reported as an error on every run until the missing value is supplied.</value>
+  </data>
+  <data name="StandardMappingsGuidance" xml:space="preserve">
+    <value>Standard Mappings are guidance only; any attribute can be chosen, and they never affect what synchronization flows.</value>
+  </data>
+  <data name="MoreThanOneRuleContributes" xml:space="preserve">
+    <value>More than one Synchronization Rule contributes {0}. Its priority order decides which value wins.</value>
+  </data>
+  <data name="NullIsValueHelp" xml:space="preserve">
+    <value>When this Synchronization Rule applies to a Connected System Object that is joined to a Metaverse Object, but contributes no value, treat that as an authoritative "no value": clear the Metaverse Object attribute value rather than falling back to a lower-priority contributor. A rule that results in no opinion (rule disabled, Connected System Object not joined, or out of scope) is skipped regardless.</value>
+  </data>
+  <data name="NullIsValueWarning" xml:space="preserve">
+    <value>Wherever this Synchronization Rule wins priority, a blank in the Connected System now clears the Metaverse Object attribute value rather than leaving it alone. A truncated or empty import therefore clears the attribute across every object this rule covers.</value>
+  </data>
+  <data name="CaseNormalisationLabel" xml:space="preserve">
+    <value>Case normalization</value>
+  </data>
+  <data name="EnabledHelp" xml:space="preserve">
+    <value>A disabled Attribute Flow is skipped by synchronization until it is re-enabled. Where another Attribute Flow also contributes the attribute, its value takes over at the next synchronization; values only this flow contributed stay in place.</value>
+  </data>
+  <data name="EnabledHelpShort" xml:space="preserve">
+    <value>A disabled Attribute Flow is skipped by synchronization until it is re-enabled.</value>
+  </data>
+  <data name="PasswordDeliveryNote" xml:space="preserve">
+    <value>Password delivery leaves Enabled and Password never expires to this Attribute Flow. Initial Passwords and synchronized passwords do not change them.</value>
+  </data>
+  <data name="DisabledMappingDescription" xml:space="preserve">
+    <value>This Attribute Flow is disabled and skipped by synchronization until it is re-enabled.</value>
+  </data>
+  <data name="UnavailableAlsoAlreadyTargeted" xml:space="preserve">
+    <value>It also corresponds to {0}, which another Attribute Flow on this Synchronization Rule already targets.</value>
+  </data>
+  <data name="UnavailableFirstAlreadyTargeted" xml:space="preserve">
+    <value>In {0}, {1} corresponds to {2}, which another Attribute Flow on this Synchronization Rule already targets.</value>
+  </data>
+  <data name="MvaToSvaWarningImport" xml:space="preserve">
+    <value>{0} is Multi-Valued but {1} is Single-Valued. If a synchronized object has more than one value, no value will flow for this attribute and an error will be recorded against that object (a single value flows normally). To always flow a value, target a Multi-Valued attribute or use an Expression to select one.</value>
+  </data>
+  <data name="InitialPasswordConnectorCannotSet" xml:space="preserve">
+    <value>The {0} cannot set passwords, so JIM cannot give the Connected System Objects this Synchronization Rule provisions an initial password.</value>
+  </data>
+  <data name="SetInitialPasswordQuestion" xml:space="preserve">
+    <value>Set an initial password on the Connected System Objects this Synchronization Rule provisions?</value>
+  </data>
+  <data name="InitialPasswordSourceStaticHelp" xml:space="preserve">
+    <value>One password you choose, set on every Connected System Object this Synchronization Rule provisions, so you can tell a new starter what it is.</value>
+  </data>
+  <data name="StaticWarningBody" xml:space="preserve">
+    <value>Every Connected System Object this Synchronization Rule provisions shares this password until its owner changes it, so anybody who learns of this can sign in as any new starter who has not. Note: the password is stored encrypted and cannot be shown to you again.</value>
+  </data>
+  <data name="StaticPasswordNotSet" xml:space="preserve">
+    <value>No password has been set. Until one is, the accounts this Synchronization Rule provisions are held for an administrator rather than given a password nobody knows.</value>
+  </data>
+  <data name="ExpiryOnlyWhatConnectorApplies" xml:space="preserve">
+    <value>Only what the {0} can apply is offered. Where a particular target cannot honor the choice, JIM records what it applied instead rather than assuming the request was met.</value>
+  </data>
+  <data name="SyncRulesTitle" xml:space="preserve">
+    <value>Synchronization Rules</value>
+  </data>
+  <data name="SyncRulesIntro" xml:space="preserve">
+    <value>Synchronization Rules are used to define the flow of information between JIM and Connected Systems.</value>
+  </data>
+  <data name="SingularSyncRule" xml:space="preserve">
+    <value>Synchronization Rule</value>
+  </data>
+  <data name="PluralSyncRules" xml:space="preserve">
+    <value>Synchronization Rules</value>
+  </data>
+  <data name="CreateSyncRuleButton" xml:space="preserve">
+    <value>Create Synchronization Rule</value>
+  </data>
+  <data name="NoRulesMatchSearch" xml:space="preserve">
+    <value>No Synchronization Rules match "{0}"</value>
+  </data>
+  <data name="NoRulesMatchFilters" xml:space="preserve">
+    <value>No Synchronization Rules match the current filters</value>
+  </data>
+  <data name="NoRulesYet" xml:space="preserve">
+    <value>No Synchronization Rules yet</value>
+  </data>
+  <data name="NoRulesYetHint" xml:space="preserve">
+    <value>Use the Create Synchronization Rule button to define your first flow.</value>
+  </data>
+  <data name="SyncRuleTitle" xml:space="preserve">
+    <value>Synchronization Rule: {0}</value>
+  </data>
+  <data name="SyncRuleLabel" xml:space="preserve">
+    <value>Synchronization Rule:</value>
+  </data>
+  <data name="SyncRuleInfo" xml:space="preserve">
+    <value>A Synchronization Rule says how objects of one type flow between a Connected System and the Metaverse: which objects are in scope, how they match, and which attributes flow.</value>
+  </data>
+  <data name="LoadingSyncRule" xml:space="preserve">
+    <value>Loading Synchronization Rule...</value>
+  </data>
+  <data name="DangerDeleteText" xml:space="preserve">
+    <value>Deleting this Synchronization Rule is permanent and cannot be undone. All configuration and Attribute Flow mappings will be lost. If this rule contributed Metaverse attribute values, you will choose whether they are recalled or kept.</value>
+  </data>
+  <data name="DeleteSyncRuleButton" xml:space="preserve">
+    <value>Delete Synchronization Rule</value>
+  </data>
+  <data name="UpdateSyncRuleButton" xml:space="preserve">
+    <value>Update Synchronization Rule</value>
+  </data>
+  <data name="PreviewBehaviourButton" xml:space="preserve">
+    <value>Preview Behavior Impact</value>
+  </data>
+  <data name="StaleBehaviour" xml:space="preserve">
+    <value>The behavior toggles have been edited since this preview ran, so it no longer describes what saving would do. Preview again for an answer about the current settings.</value>
+  </data>
+  <data name="PreviewTitleBehaviour" xml:space="preserve">
+    <value>Preview: Behavior Impact</value>
+  </data>
+  <data name="DisableSyncRuleQuestion" xml:space="preserve">
+    <value>Disable Synchronization Rule?</value>
+  </data>
+  <data name="DisableSyncRuleChange" xml:space="preserve">
+    <value>disable this Synchronization Rule</value>
+  </data>
+  <data name="SyncRuleCreated" xml:space="preserve">
+    <value>Synchronization Rule created.</value>
+  </data>
+  <data name="DeleteSyncRuleQuestion" xml:space="preserve">
+    <value>Are you sure you want to delete this Synchronization Rule?</value>
+  </data>
+  <data name="DeleteSyncRuleTitle" xml:space="preserve">
+    <value>Delete Synchronization Rule?</value>
+  </data>
+  <data name="DeleteSyncRuleChange" xml:space="preserve">
+    <value>delete this Synchronization Rule</value>
+  </data>
+  <data name="SyncRuleDeletionQueued" xml:space="preserve">
+    <value>Synchronization Rule deletion queued: recalling values from {0:N0} Metaverse Object(s).</value>
+  </data>
+  <data name="TryItIntro" xml:space="preserve">
+    <value>Give each attribute the rule reads a value, or load them from an object, and see what it would match on and which Metaverse Object a synchronization would join, worked out exactly as a synchronization would. Tick No value to see what happens to an object that holds none.</value>
+  </data>
+  <data name="LookupCheckbox" xml:space="preserve">
+    <value>Also find the Metaverse Object a synchronization would join</value>
+  </data>
+  <data name="NextChangeUndetermined" xml:space="preserve">
+    <value>A criterion cannot be evaluated, so a Synchronization would fail this object until the criterion is corrected.</value>
+  </data>
+  <data name="ProjectHelp" xml:space="preserve">
+    <value>By default, objects imported from this Connected System will not result in a Metaverse Object being projected if no match is found. Enabling this option causes the object to be projected to the Metaverse, allowing it to be managed within JIM and synchronized to other Connected Systems. You would typically enable this for a source system, i.e. a HR system.</value>
+  </data>
+  <data name="ProvisionHelp" xml:space="preserve">
+    <value>By default, Metaverse Objects scoped to this Synchronization Rule will not be created (provisioned) in the Connected Systems. Enabling this option will cause the Metaverse Object to be created in the Connected System. You would typically enable this option for a destination system.</value>
+  </data>
+  <data name="DeprovisionDisconnectHelp" xml:space="preserve">
+    <value>When a Metaverse Object leaves this Synchronization Rule's scope or is deleted, JIM breaks the join and leaves the object in place in the Connected System.</value>
+  </data>
+  <data name="DeprovisionDisableHelp" xml:space="preserve">
+    <value>When a Metaverse Object leaves this Synchronization Rule's scope or is deleted, JIM disables the corresponding object in the Connected System, then breaks the join and leaves it in place.</value>
+  </data>
+  <data name="DeprovisionDeleteHelp" xml:space="preserve">
+    <value>When a Metaverse Object leaves this Synchronization Rule's scope or is deleted, JIM deletes the corresponding object from the Connected System.</value>
+  </data>
+  <data name="RuleEnabledHelp" xml:space="preserve">
+    <value>Synchronization Rules are not evaluated when disabled. Use this to prepare a rule in advance of it being needed, or to temporarily stop a rule from being evaluated. Where another Attribute Flow also contributes an attribute, its value takes over at the next synchronization; values only this rule contributed stay in place until it is re-enabled or deleted.</value>
+  </data>
+  <data name="TestCasesIntroRule" xml:space="preserve">
+    <value>Each case gives this Synchronization Rule's Scope, an Attribute Flow or an Object Matching Rule inputs, and says what it should give. Runs test the rule as saved: save edits on the other tabs first.</value>
+  </data>
+  <data name="MatchingRulesSpecific" xml:space="preserve">
+    <value>Matching rules are specific to this Synchronization Rule.</value>
+  </data>
+  <data name="SimpleModeExplanation" xml:space="preserve">
+    <value>This Connected System uses &lt;strong&gt;Simple Mode&lt;/strong&gt; for object matching. In Simple Mode, matching rules are defined once on the Connected System (per object type) and shared by every Synchronization Rule that targets this system, so you do not have to repeat the same matching logic on each rule. As a result, this rule cannot define its own matching rules here.</value>
+  </data>
+  <data name="SwitchToAdvancedMode" xml:space="preserve">
+    <value>Switch the Connected System to &lt;strong&gt;Advanced Mode&lt;/strong&gt; if you need matching logic that is specific to an individual Synchronization Rule.</value>
+  </data>
+  <data name="MatchingRuleNowCaseSensitive" xml:space="preserve">
+    <value>Matching rule is now case-sensitive. Remember to save the Synchronization Rule.</value>
+  </data>
+  <data name="MatchingRuleNowCaseInsensitive" xml:space="preserve">
+    <value>Matching rule is now case-insensitive. Remember to save the Synchronization Rule.</value>
+  </data>
+  <data name="ScopeDefaultExport" xml:space="preserve">
+    <value>By default, all Metaverse Objects of type {0} will be in scope of this Synchronization Rule, though to have it apply to a subset of those objects, use a filter. i.e. you might only want this rule to apply to Staff, not Contractors.</value>
+  </data>
+  <data name="ScopeDefaultImport" xml:space="preserve">
+    <value>By default, all Connected System Objects of type {0} will be in scope of this Synchronization Rule. Use a filter to import only specific objects, e.g. only Active users, not Disabled.</value>
+  </data>
+  <data name="PriorityNullTooltip" xml:space="preserve">
+    <value>When set, if this Synchronization Rule is connected and in scope but supplies no value, it asserts no value (no fall-through to a lower-priority contributor).</value>
+  </data>
+  <data name="SyncRuleDisabledTooltip" xml:space="preserve">
+    <value>This Synchronization Rule is disabled. It holds its position but never contributes during synchronization.</value>
+  </data>
+  <data name="ContributedFlowRecallHelp" xml:space="preserve">
+    <value>The values are recalled at the next synchronization of the contributing Connected System, Delta or Full, with any other contributing Attribute Flow taking over.</value>
+  </data>
+  <data name="ContributedFlowInfo" xml:space="preserve">
+    <value>Your choice takes effect when you save the Synchronization Rule.</value>
+  </data>
+  <data name="DerivedRunsAfterOwnSyncNamed" xml:space="preserve">
+    <value>from the Metaverse. JIM runs it after {0}, in {1}'s own synchronization.</value>
+  </data>
+  <data name="DerivedRunsAfterOwnSyncFallback" xml:space="preserve">
+    <value>from the Metaverse. JIM runs it after {0}, in this Connected System's own synchronization.</value>
+  </data>
+  <data name="DerivedSequencingNamed" xml:space="preserve">
+    <value>When another Connected System changes {0}, JIM marks this object so {1}'s next synchronization picks it up. Synchronize the source first for the value to be right in the same cycle.</value>
+  </data>
+  <data name="DerivedSequencingFallback" xml:space="preserve">
+    <value>When another Connected System changes {0}, JIM marks this object so this Connected System's next synchronization picks it up. Synchronize the source first for the value to be right in the same cycle.</value>
+  </data>
+  <data name="IdentityAwaitingChip" xml:space="preserve">
+    <value>Awaiting synchronization</value>
+  </data>
+  <data name="IdentityAwaitingOne" xml:space="preserve">
+    <value>1 saved change reaches existing objects at the next synchronization of {0}, which processes every {1}.</value>
+  </data>
+  <data name="IdentityAwaitingOther" xml:space="preserve">
+    <value>{0:N0} saved changes reach existing objects at the next synchronization of {1}, which processes every {2}.</value>
+  </data>
+  <data name="PreviewSizeCappedHelp" xml:space="preserve">
+    <value>Up to {0:N0} rows per summary group. Groups showing a sample are labeled as such.</value>
+  </data>
+  <data name="DependentFlowsColumnRule" xml:space="preserve">
+    <value>Synchronization Rule</value>
+  </data>
+  <data name="DependentFlowsAfterwards" xml:space="preserve">
+    <value>Each one then follows its Missing Input Behavior at the next synchronization. Values already on Metaverse Objects stay until then.</value>
+  </data>
+  <data name="FlowTestIntro" xml:space="preserve">
+    <value>Give each input a value, or load them from an object, and see what a Synchronization would do with this Attribute Flow as it stands. Each value is read as its attribute's type.</value>
+  </data>
+  <data name="FlowTestHeading" xml:space="preserve">
+    <value>What a Synchronization would do</value>
+  </data>
+</root>

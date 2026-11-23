@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Logic.Scoping;
 
 /// <summary>
@@ -20,4 +22,10 @@ public sealed class ExplanationBullet
     /// message. This is the form the copyable summary and PowerShell use.
     /// </summary>
     public string PlainText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// <see cref="PlainText"/> as a <see cref="JimMessage"/> (#3030), for the copyable summary in the viewer's language;
+    /// null for a line written as English only.
+    /// </summary>
+    public JimMessage? PlainTextDetail { get; set; }
 }

@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
@@ -65,19 +68,17 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapter : IConfigurationC
             // Blocking rather than a warning because the engine's fallback for this state is to behave as
             // WhenLastConnectorDisconnected. An administrator who chose the authoritative-source rule and got the
             // other one has a configuration that does something they did not ask for, silently.
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Blocking,
-                "Deleting when an authoritative source disconnects needs at least one Connected System named as an " +
-                "authoritative source. Without one, synchronisation falls back to deleting when the last connector " +
-                "disconnects, which is a different rule from the one selected.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DeletionSettingsNeedsAuthoritativeSource)),
                 nameof(MetaverseObjectType.DeletionTriggerConnectedSystemIds)));
         }
 
         if (proposal.DeletionGracePeriod is { } grace && grace < TimeSpan.Zero)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Blocking,
-                "A Deletion Grace Period cannot be negative.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DeletionSettingsNegativeGracePeriod)),
                 nameof(MetaverseObjectType.DeletionGracePeriod)));
         }
 
@@ -87,10 +88,9 @@ public class MetaverseObjectTypeDeletionSettingsPreviewAdapter : IConfigurationC
 
         if (sourcesChanged || modeChanged)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                "The authoritative sources have changed. This decides what happens the next time a Connected System " +
-                "Object disconnects, so it moves no Metaverse Object's deletion date today and is not counted below.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.DeletionSettingsSourcesChanged)),
                 sourcesChanged
                     ? nameof(MetaverseObjectType.DeletionTriggerConnectedSystemIds)
                     : nameof(MetaverseObjectType.DeletionTriggerMode)));

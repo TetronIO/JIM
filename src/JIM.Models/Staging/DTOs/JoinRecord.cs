@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Staging.DTOs;
 
 /// <summary>
@@ -21,6 +23,9 @@ public sealed class JoinRecord
     /// Synchronisation Rule "HR Users Import"". The date and Activity are separate, for each surface to present.
     /// </summary>
     public string Description { get; set; } = string.Empty;
+
+    /// <summary><see cref="Description"/> as a <see cref="JimMessage"/> (#3030).</summary>
+    public JimMessage? DescriptionDetail { get; set; }
 
     /// <summary>
     /// The Synchronisation Rule that projected, provisioned or joined the object; null when it is not known or has

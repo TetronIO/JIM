@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Utilities
@@ -15,13 +16,13 @@
 @* rules. See engineering/plans/done/CONFIGURATION_CHANGE_PREVIEW.md (Phase 2). *@
 
 <ConsequenceConfirmationDialog Loading="@(_impact == null)"
-                               LoadingText="Evaluating deletion impact..."
+                               LoadingText="@AdminText.DeleteEvaluatingImpact"
                                Blockers="@BuildBlockers()"
-                               SafeMessage="No Metaverse Objects of this type exist and no Synchronisation Rule targets it. Safe to delete."
+                               SafeMessage="@AdminText.DeleteObjectTypeSafe"
                                Consequences="@BuildConsequences()"
                                ConfirmationPhrase="@BuildConfirmationPhrase()"
                                ConfirmButtonText="@BuildConfirmButtonText()"
-                               BusyText="Deleting..."
+                               BusyText="@AdminText.DeleteBusy"
                                OnConfirmAsync="DeleteAsync" />
 
 @code {
@@ -53,8 +54,8 @@
         {
             blockers.Add(new ConsequenceBlocker
             {
-                Headline = "This is a built-in Metaverse Object Type",
-                Body = "Built-in Object Types are part of JIM's own schema and cannot be deleted."
+                Headline = AdminText.DeleteObjectTypeBuiltInHeadline,
+                Body = AdminText.DeleteObjectTypeBuiltInBody
             });
         }
 
@@ -62,10 +63,10 @@
         {
             blockers.Add(new ConsequenceBlocker
             {
-                Headline = $"{_impact.MetaverseObjectCount:N0} Metaverse Object(s) of this type exist",
-                Body = "A type cannot be deleted while Metaverse Objects of it exist. Delete those objects first (stop the source flows and let them deprovision, or delete them manually), then delete the type.",
+                Headline = string.Format(CultureInfo.CurrentCulture, AdminText.DeleteObjectTypeObjectsHeadline, _impact.MetaverseObjectCount.ToString("N0", CultureInfo.CurrentCulture)),
+                Body = AdminText.DeleteObjectTypeObjectsBody,
                 LinkHref = Utilities.GetMetaverseObjectListHref(ObjectType.PluralName),
-                LinkText = "View these Metaverse Objects"
+                LinkText = AdminText.DeleteViewObjects
             });
         }
 
@@ -73,13 +74,13 @@
         {
             blockers.Add(new ConsequenceBlocker
             {
-                Headline = $"{_impact.SynchronisationRules.Count} Synchronisation Rule(s) target this type",
+                Headline = string.Format(CultureInfo.CurrentCulture, AdminText.DeleteObjectTypeRulesHeadline, _impact.SynchronisationRules.Count),
                 Items = _impact.SynchronisationRules.Select(rule => new ConsequenceItem
                 {
                     Text = rule.Description,
                     Icon = Icons.Material.Filled.SyncAlt
                 }).ToList(),
-                Body = "Remove these Synchronisation Rules first; deleting the type would otherwise remove the whole rule."
+                Body = AdminText.DeleteObjectTypeRulesBody
             });
         }
 
@@ -93,8 +94,8 @@
 
         return new ConsequenceGroup
         {
-            Headline = $"These {_impact.CascadeReferences.Count} reference(s) will also be removed",
-            Note = "Bound attributes themselves are kept; only their bindings to this type are removed.",
+            Headline = string.Format(CultureInfo.CurrentCulture, AdminText.DeleteReferencesHeadline, _impact.CascadeReferences.Count),
+            Note = AdminText.DeleteObjectTypeReferencesNote,
             Items = _impact.CascadeReferences.Select(reference => new ConsequenceItem
             {
                 Text = DescribeReference(reference),
@@ -110,11 +111,11 @@
     private string BuildConfirmButtonText()
     {
         if (_impact == null)
-            return "Delete";
+            return CommonText.Delete;
 
         return _impact.CascadeReferences.Count > 0
-            ? $"Delete + {_impact.CascadeReferences.Count} reference(s)"
-            : "Delete";
+            ? string.Format(CultureInfo.CurrentCulture, AdminText.DeleteWithReferences, _impact.CascadeReferences.Count)
+            : CommonText.Delete;
     }
 
     private static string ReferenceIcon(ObjectTypeReferenceKind kind) => kind switch
@@ -127,15 +128,15 @@
 
     private static string DescribeReference(ObjectTypeReference reference) => reference.Kind switch
     {
-        ObjectTypeReferenceKind.PredefinedSearch => $"Predefined Search: {reference.Description}",
-        ObjectTypeReferenceKind.ExampleDataTemplate => $"Example Data Template: {reference.Description}",
-        ObjectTypeReferenceKind.AttributeBinding => $"Attribute binding: {reference.Description}",
+        ObjectTypeReferenceKind.PredefinedSearch => string.Format(CultureInfo.CurrentCulture, AdminText.DeleteReferencePredefinedSearch, reference.Description),
+        ObjectTypeReferenceKind.ExampleDataTemplate => string.Format(CultureInfo.CurrentCulture, AdminText.DeleteReferenceExampleData, reference.Description),
+        ObjectTypeReferenceKind.AttributeBinding => string.Format(CultureInfo.CurrentCulture, AdminText.DeleteReferenceAttributeBinding, reference.Description),
         _ => reference.Description
     };
 
     private async Task<bool> DeleteAsync()
     {
-        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, CommonText.Delete);
         if (cancelled)
             return false;
 
@@ -146,15 +147,15 @@
             var impact = await jim.Metaverse.DeleteMetaverseObjectTypeAsync(ObjectType, user, changeReason);
             if (!impact.Deleted)
             {
-                Snackbar.Add("The Object Type could not be deleted; its state may have changed. Refresh and try again.", Severity.Warning);
+                Snackbar.Add(AdminText.DeleteObjectTypeFailedRefresh, Severity.Warning);
                 return false;
             }
 
-            Snackbar.Add($"Deleted Object Type \"{impact.ObjectTypeName}\".", Severity.Success);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.DeleteObjectTypeSuccess, impact.ObjectTypeName), Severity.Success);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Snackbar.Add($"Failed to delete Object Type: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, AdminText.DeleteObjectTypeFailed, ex.ToDisplayText()), Severity.Error);
             return false;
         }
 
@@ -171,7 +172,7 @@
             { x => x.ObjectType, objectType }
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
-        var dialog = await dialogService.ShowAsync<DeleteMetaverseObjectTypeDialog>($"Delete \"{objectType.Name}\" Object Type", parameters, options);
+        var dialog = await dialogService.ShowAsync<DeleteMetaverseObjectTypeDialog>(string.Format(CultureInfo.CurrentCulture, AdminText.DeleteObjectTypeTitle, objectType.Name), parameters, options);
         var result = await dialog.Result;
         return result is { Canceled: false, Data: true };
     }

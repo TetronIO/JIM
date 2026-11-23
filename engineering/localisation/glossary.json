@@ -1,5 +1,5 @@
 {
-  "$comment": "JIM's domain vocabulary in every portal language (#3030). Each term's patterns are regular expressions: wherever a neutral (en-GB) resource value matches 'en-GB', the same key's value in each other language must match that language's pattern. LocalisationResourceTests enforces it. Patterns for de and fr are matched case-insensitively, since German and French write these terms as ordinary nouns. Read engineering/LOCALISATION.md before adding a term.",
+  "$comment": "JIM's domain vocabulary in every portal language (#3030). Each term's patterns are regular expressions: wherever a neutral (en-GB) resource value matches 'en-GB', the same key's value in each other language must match that language's pattern. LocalisationResourceTests enforces it. Patterns for de and fr are matched case-insensitively (French writes these terms as ordinary nouns, lower case mid-sentence; an apostrophe may be typographic or straight), since German and French write these terms as ordinary nouns. Read engineering/LOCALISATION.md before adding a term.",
   "terms": [
     {
       "term": "Synchronisation Rule",
@@ -7,6 +7,12 @@
       "en-US": "Synchronization Rules?",
       "de": "Synchronisierungsregel",
       "fr": "règles? de synchronisation"
+    },
+    {
+      "term": "Connected System Object Type",
+      "en-GB": "Connected System Object Types?",
+      "en-US": "Connected System Object Types?",
+      "fr": "types? d[’']objets? de systèmes? connectés?"
     },
     {
       "term": "Connected System Object",
@@ -23,6 +29,12 @@
       "fr": "systèmes? connectés?"
     },
     {
+      "term": "Metaverse Object Type",
+      "en-GB": "Metaverse Object Types?",
+      "en-US": "Metaverse Object Types?",
+      "fr": "types? d[’']objets? Metaverse"
+    },
+    {
       "term": "Metaverse Object",
       "en-GB": "Metaverse Objects?",
       "en-US": "Metaverse Objects?",
@@ -30,11 +42,29 @@
       "fr": "objets? Metaverse"
     },
     {
+      "term": "Metaverse Attribute",
+      "en-GB": "Metaverse Attributes?",
+      "en-US": "Metaverse Attributes?",
+      "fr": "attributs? Metaverse"
+    },
+    {
+      "term": "Metaverse",
+      "en-GB": "\\bMetaverse\\b",
+      "en-US": "\\bMetaverse\\b",
+      "fr": "Metaverse"
+    },
+    {
       "term": "Run Profile",
       "en-GB": "Run Profiles?",
       "en-US": "Run Profiles?",
       "de": "Ausführungsprofil",
-      "fr": "profils? d’exécution"
+      "fr": "profils? d[’']exécution"
+    },
+    {
+      "term": "Schedule Execution",
+      "en-GB": "Schedule Executions?",
+      "en-US": "Schedule Executions?",
+      "fr": "exécutions? de planification"
     },
     {
       "term": "Schedule",
@@ -55,7 +85,13 @@
       "en-GB": "Attribute Flows?",
       "en-US": "Attribute Flows?",
       "de": "Attributfl[uü]ss",
-      "fr": "flux d’attributs"
+      "fr": "flux d[’']attributs"
+    },
+    {
+      "term": "Attribute Priority",
+      "en-GB": "Attribute Priority",
+      "en-US": "Attribute Priority",
+      "fr": "priorité des attributs"
     },
     {
       "term": "Pending Export",
@@ -69,7 +105,7 @@
       "en-GB": "Object Matching Rules?",
       "en-US": "Object Matching Rules?",
       "de": "Objektabgleichsregel",
-      "fr": "règles? de correspondance d’objets"
+      "fr": "règles? de correspondance d[’']objets"
     },
     {
       "term": "Connector Space",
@@ -77,6 +113,198 @@
       "en-US": "Connector Space",
       "de": "Connectorbereich",
       "fr": "espace connecteur"
+    },
+    {
+      "term": "Connector",
+      "en-GB": "\\bConnectors?\\b(?! Space)",
+      "en-US": "\\bConnectors?\\b(?! Space)",
+      "fr": "connecteurs?"
+    },
+    {
+      "term": "Full Synchronisation",
+      "en-GB": "Full Synchronisation",
+      "en-US": "Full Synchronization",
+      "fr": "synchronisation complète"
+    },
+    {
+      "term": "Delta Synchronisation",
+      "en-GB": "Delta Synchronisation",
+      "en-US": "Delta Synchronization",
+      "fr": "synchronisation delta"
+    },
+    {
+      "term": "Full Import",
+      "en-GB": "Full Import",
+      "en-US": "Full Import",
+      "fr": "importation complète"
+    },
+    {
+      "term": "Delta Import",
+      "en-GB": "Delta Import",
+      "en-US": "Delta Import",
+      "fr": "importation delta"
+    },
+    {
+      "term": "Password Synchronisation",
+      "en-GB": "Password Synchronisation",
+      "en-US": "Password Synchronization",
+      "fr": "synchronisation des mots de passe"
+    },
+    {
+      "term": "Deprovisioning",
+      "en-GB": "\\bDeprovisioning\\b",
+      "en-US": "\\bDeprovisioning\\b",
+      "fr": "déprovisionnement"
+    },
+    {
+      "term": "Provisioning",
+      "en-GB": "\\bProvisioning\\b",
+      "en-US": "\\bProvisioning\\b",
+      "fr": "provisionnement"
+    },
+    {
+      "term": "Drift Correction",
+      "en-GB": "Drift Correction",
+      "en-US": "Drift Correction",
+      "fr": "correction de dérive"
+    },
+    {
+      "term": "Generated Value",
+      "en-GB": "Generated Values?",
+      "en-US": "Generated Values?",
+      "fr": "valeurs? générées?"
+    },
+    {
+      "term": "Grace Period",
+      "en-GB": "Grace Period",
+      "en-US": "Grace Period",
+      "fr": "délai de grâce"
+    },
+    {
+      "term": "Initial Export Only",
+      "en-GB": "Initial Export Only",
+      "en-US": "Initial Export Only",
+      "fr": "exportation initiale uniquement"
+    },
+    {
+      "term": "Initial Password",
+      "en-GB": "Initial Passwords?",
+      "en-US": "Initial Passwords?",
+      "fr": "mots? de passe initia(l|ux)"
+    },
+    {
+      "term": "Projection",
+      "en-GB": "\\bProjection\\b",
+      "en-US": "\\bProjection\\b",
+      "fr": "projection"
+    },
+    {
+      "term": "Join",
+      "en-GB": "\\bJoins?\\b",
+      "en-US": "\\bJoins?\\b",
+      "fr": "jointures?"
+    },
+    {
+      "term": "Scoping Criteria",
+      "en-GB": "Scoping Criteri(a|on)",
+      "en-US": "Scoping Criteri(a|on)",
+      "fr": "critères? de périmètre"
+    },
+    {
+      "term": "Container Scope",
+      "en-GB": "Container Scope",
+      "en-US": "Container Scope",
+      "fr": "portée du conteneur"
+    },
+    {
+      "term": "Container",
+      "en-GB": "\\bContainers?\\b(?! Scope)",
+      "en-US": "\\bContainers?\\b(?! Scope)",
+      "fr": "conteneurs?"
+    },
+    {
+      "term": "Partition",
+      "en-GB": "\\bPartitions?\\b",
+      "en-US": "\\bPartitions?\\b",
+      "fr": "partitions?"
+    },
+    {
+      "term": "Deletion Rule",
+      "en-GB": "Deletion Rules?",
+      "en-US": "Deletion Rules?",
+      "fr": "règles? de suppression"
+    },
+    {
+      "term": "Out-of-Scope Action",
+      "en-GB": "Out-of-Scope Action",
+      "en-US": "Out-of-Scope Action",
+      "fr": "action hors périmètre"
+    },
+    {
+      "term": "Source of Authority",
+      "en-GB": "Source of Authority",
+      "en-US": "Source of Authority",
+      "fr": "source faisant autorité"
+    },
+    {
+      "term": "Standard Mappings",
+      "en-GB": "Standard Mappings?",
+      "en-US": "Standard Mappings?",
+      "fr": "mappages? standard"
+    },
+    {
+      "term": "Configuration Change History",
+      "en-GB": "Configuration Change History",
+      "en-US": "Configuration Change History",
+      "fr": "historique des modifications de configuration"
+    },
+    {
+      "term": "Configuration Change Preview",
+      "en-GB": "Configuration Change Previews?",
+      "en-US": "Configuration Change Previews?",
+      "fr": "aperçus? des modifications de configuration"
+    },
+    {
+      "term": "Causality Explorer",
+      "en-GB": "Causality Explorer",
+      "en-US": "Causality Explorer",
+      "fr": "explorateur de causalité"
+    },
+    {
+      "term": "Service Health",
+      "en-GB": "Service Health",
+      "en-US": "Service Health",
+      "fr": "état des services"
+    },
+    {
+      "term": "Temporal Scope Reconciliation",
+      "en-GB": "Temporal Scope Reconciliation",
+      "en-US": "Temporal Scope Reconciliation",
+      "fr": "réconciliation du périmètre temporel"
+    },
+    {
+      "term": "Predefined Search",
+      "en-GB": "Predefined Searches?",
+      "en-US": "Predefined Searches?",
+      "fr": "recherches? prédéfinies?"
+    },
+    {
+      "term": "API Key",
+      "en-GB": "API Keys?",
+      "en-US": "API Keys?",
+      "fr": "clés? d[’']API"
+    },
+    {
+      "term": "Example Data",
+      "en-GB": "Example Data",
+      "en-US": "Example Data",
+      "fr": "données d[’']exemple"
+    },
+    {
+      "term": "Safeguards",
+      "en-GB": "\\bSafeguards?\\b",
+      "en-US": "\\bSafeguards?\\b",
+      "fr": "garde-fous?"
     }
   ]
 }

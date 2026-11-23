@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text.Json.Serialization;
+using JIM.Models.Localisation;
+
 namespace JIM.Models.Preview;
 
 /// <summary>
@@ -28,4 +31,21 @@ public record PreviewValidationFinding(
     PreviewValidationSeverity Severity,
     string Message,
     string? PropertyName = null,
-    string? MetaverseAttributeName = null);
+    string? MetaverseAttributeName = null)
+{
+    /// <summary>
+    /// The finding as a <see cref="JimMessage"/>, for the portal to show in the viewer's language (#3030); null for a
+    /// finding recorded as English only. Never serialised with the finding: the REST API keeps <see cref="Message"/>
+    /// only, and the portal's stored copy carries the detail beside it (<see cref="StoredPreviewValidationFinding"/>).
+    /// </summary>
+    [JsonIgnore]
+    public JimMessage? Detail { get; init; }
+
+    /// <summary>
+    /// A finding worded as a message. <see cref="Message"/> is the message's British English, so everything that
+    /// reads the English (the REST API, PowerShell, logs) sees what it always did.
+    /// </summary>
+    public static PreviewValidationFinding Of(PreviewValidationSeverity severity, JimMessage detail,
+        string? propertyName = null, string? metaverseAttributeName = null) =>
+        new(severity, detail.ToEnglish(), propertyName, metaverseAttributeName) { Detail = detail };
+}

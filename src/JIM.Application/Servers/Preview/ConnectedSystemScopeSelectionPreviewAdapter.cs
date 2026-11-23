@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using JIM.Application.Interfaces;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -76,10 +79,9 @@ public class ConnectedSystemScopeSelectionPreviewAdapter : IConfigurationChangeP
 
         if (connectedSystem.ConnectorDefinition?.SupportsPartitions != true)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Blocking,
-                $"'{connectedSystem.Name}' uses a Connector that does not have partitions, so there is no partition " +
-                "or container selection to preview.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopeSelectionNoPartitions), connectedSystem.Name),
                 nameof(ConnectedSystem.Partitions)));
 
             // Nothing below this can say anything useful about a system with no partitions.
@@ -90,43 +92,35 @@ public class ConnectedSystemScopeSelectionPreviewAdapter : IConfigurationChangeP
         // the question is whether the *proposal* leaves a workable configuration.
         if (!WithSelection(connectedSystem, proposal).HasPartitionsOrContainersSelected())
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                "This selection leaves nothing for JIM to manage on this Connected System: " +
-                $"{WithSelection(connectedSystem, proposal).BuildPartitionSelectionDiagnostic()}. Run Profiles cannot " +
-                "be executed against it, and every object already imported would be taken out of scope.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopeSelectionNothingSelected), WithSelection(connectedSystem, proposal).BuildPartitionSelectionDiagnostic()),
                 nameof(ConnectedSystemPartition.Selected)));
         }
 
         var inoperableRunProfiles = InoperableRunProfileNames(connectedSystem, proposal);
         if (inoperableRunProfiles.Count > 0)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                $"{inoperableRunProfiles.Count} Run Profile(s) target a partition this selection deselects and would " +
-                $"be refused when run: {string.Join(", ", inoperableRunProfiles)}. Point them at a selected partition, " +
-                "or keep the partition selected.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopeSelectionInoperableRunProfiles), inoperableRunProfiles.Count.ToString(), string.Join(", ", inoperableRunProfiles)),
                 nameof(ConnectedSystemRunProfile.Partition)));
         }
 
         if (connectedSystem.ConnectorDefinition.SupportsPartitionContainers &&
             _application.ConnectedSystems.GetConnectorContainment(connectedSystem) is null)
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Warning,
-                $"The '{connectedSystem.ConnectorDefinition.Name}' Connector has containers but cannot say whether an " +
-                "object sits inside one, so this preview counts only what changing the partition selection would do. " +
-                "Container changes are not measured, and the counts below are not a complete answer.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopeSelectionContainersNotMeasured), connectedSystem.ConnectorDefinition.Name),
                 nameof(ConnectedSystemContainer.Selected)));
         }
 
         if (SelectsSomethingNew(connectedSystem, proposal))
         {
-            findings.Add(new PreviewValidationFinding(
+            findings.Add(PreviewValidationFinding.Of(
                 PreviewValidationSeverity.Information,
-                "This selection brings scope into JIM that it does not currently import. Objects JIM already holds " +
-                "there are counted below; objects it has never imported cannot be, because there is nothing to count " +
-                "until a Full Import runs and discovers them.",
+                JimMessage.Create(ApplicationMessageCatalogues.Preview, nameof(PreviewMessages.ScopeSelectionBringsNewScope)),
                 nameof(ConnectedSystemContainer.Selected)));
         }
 

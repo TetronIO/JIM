@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
@@ -2892,6 +2893,15 @@ public partial class SyncRepository : ISyncRepository
             throw new InvalidOperationException($"Simulated failure updating the Activity message to '{message}'.");
 
         activity.Message = message;
+        activity.MessageDetailJson = null;
+        _activities[activity.Id] = activity;
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateActivityMessageAsync(Activity activity, JimMessage message)
+    {
+        Interlocked.Increment(ref _activityWriteCount);
+        activity.MessageDetail = message;
         _activities[activity.Id] = activity;
         return Task.CompletedTask;
     }

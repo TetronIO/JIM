@@ -18,14 +18,13 @@
 else if (!string.IsNullOrWhiteSpace(Expression))
 {
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
-        Supply a sample value for each attribute the Expression reads and see what it produces as you type. Leave an
-        input empty to see what the Expression does when the object has no value for it.
+        @SyncRuleText.ExprTestIntro
     </MudText>
 
     @if (_inputs.Count == 0)
     {
         <MudText Typo="Typo.body2" Class="mud-text-secondary">
-            This Expression reads no attributes, so it produces the same value for every object.
+            @SyncRuleText.ExprTestNoAttributes
         </MudText>
     }
     else
@@ -49,13 +48,12 @@ else if (!string.IsNullOrWhiteSpace(Expression))
         @if (_result.IsValid)
         {
             <MudPaper Outlined="true" Class="pa-3 mt-3">
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">Output</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@SyncRuleText.ExprTestOutput</MudText>
                 @if (_outputLines.Count == 0)
                 {
                     <MudText Typo="Typo.body1"><EmptyValue /></MudText>
                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                        The Expression returned no value. JIM treats that as an authoritative "no value" from this
-                        contribution, resolved by Attribute Priority and "Null is a value".
+                        @SyncRuleText.ExprTestNoValue
                     </MudText>
                 }
                 else
@@ -65,18 +63,18 @@ else if (!string.IsNullOrWhiteSpace(Expression))
                     {
                         <MudText Typo="Typo.body1" Class="jim-expression-output">@line</MudText>
                     }
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Type: @_result.ResultType</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.ExprTestResultType, _result.ResultType)</MudText>
                 }
             </MudPaper>
         }
         else
         {
             <MudAlert Severity="Severity.Error" Class="mt-3">
-                @_result.ErrorMessage
+                @MessageDisplay.Show(_result.ErrorDetail, _result.ErrorMessage)
                 @if (_errorPosition.HasValue)
                 {
                     var position = _errorPosition.Value;
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Position @position</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@string.Format(System.Globalization.CultureInfo.CurrentCulture, SyncRuleText.ExprTestPosition, position)</MudText>
                 }
             </MudAlert>
         }
@@ -187,7 +185,9 @@ else if (!string.IsNullOrWhiteSpace(Expression))
         var validation = ExpressionEvaluator.Validate(Expression);
         if (!validation.IsValid)
         {
-            _result = ExpressionTestResult.Failure(validation.ErrorMessage ?? "The Expression could not be parsed.");
+            _result = validation.ErrorDetail is { } parseDetail
+                ? ExpressionTestResult.Failure(parseDetail)
+                : ExpressionTestResult.Failure(validation.ErrorMessage ?? SyncRuleText.ExprTestCouldNotParse);
             _errorPosition = validation.ErrorPosition;
             return;
         }
@@ -214,6 +214,6 @@ else if (!string.IsNullOrWhiteSpace(Expression))
 
         // Several values show one per line rather than as their list's type name (#2179), and every value shows in
         // JIM's one text form, so a date reads as it would be written to a Text attribute (#2153, N1).
-        _outputLines = _result.IsValid ? ExpressionText.ToDisplayLines(_result.Result) : Array.Empty<string>();
+        _outputLines = _result.IsValid ? ExpressionDisplay.Lines(_result.Result) : Array.Empty<string>();
     }
 }

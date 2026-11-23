@@ -1,10 +1,13 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using JIM.Connectors.Http;
+using JIM.Connectors.Resources;
+using JIM.Models.Localisation;
 
 namespace JIM.Connectors.Graph;
 
@@ -19,25 +22,27 @@ namespace JIM.Connectors.Graph;
 /// </remarks>
 internal static partial class EntraTokenFailure
 {
-    private const string FederatedMismatch =
-        $"The workload identity's token matches no federated credential on the app registration. Under Certificates & secrets > Federated credentials, " +
-        $"add one for the managed identity named in {GraphConnectorConstants.SettingManagedIdentityClientId}, for this cloud.";
+    private static JimMessage Message(string key, params MessageArgument[] arguments) =>
+        JimMessage.Create(ConnectorMessageCatalogues.Connectors, key, arguments);
 
-    private static readonly Dictionary<int, string> KnownCodes = new()
+    private static readonly JimMessage FederatedMismatch =
+        Message(nameof(ConnectorMessages.EntraFederatedMismatch), GraphConnectorConstants.SettingManagedIdentityClientId);
+
+    private static readonly Dictionary<int, JimMessage> KnownCodes = new()
     {
-        [7000215] = $"The {GraphConnectorConstants.SettingClientSecret} is not valid. Supply the secret's Value from Certificates & secrets on the app registration, not its Secret ID.",
-        [7000222] = $"The {GraphConnectorConstants.SettingClientSecret} has expired. Create a new client secret on the app registration and supply it here.",
-        [700016] = $"No application with this {GraphConnectorConstants.SettingClientId} was found in the tenant. Check the {GraphConnectorConstants.SettingClientId}, and that the app registration belongs to the tenant named in {GraphConnectorConstants.SettingTenantId}.",
-        [90002] = $"The tenant named in {GraphConnectorConstants.SettingTenantId} was not found. Check it, and check the {GraphConnectorConstants.SettingCloud} setting: a tenant in a national cloud is not found on the global endpoints, nor the other way round.",
-        [900023] = $"The {GraphConnectorConstants.SettingTenantId} is not a valid tenant identifier. Supply the tenant's ID (a GUID) or one of its verified domain names.",
-        [700027] = $"Microsoft Entra ID could not verify the assertion signed with the {GraphConnectorConstants.SettingCertificate}. Check that the same certificate is uploaded under Certificates & secrets on the app registration. One uploaded in the last few minutes can still be refused while Entra ID applies it; if so, try again shortly.",
-        [700024] = "The client assertion was outside its valid time range. Check that the clock on the JIM server is correct.",
-        [7000112] = "The application is disabled in the tenant. Enable its enterprise application (service principal) and try again.",
+        [7000215] = Message(nameof(ConnectorMessages.EntraSecretInvalid), GraphConnectorConstants.SettingClientSecret),
+        [7000222] = Message(nameof(ConnectorMessages.EntraSecretExpired), GraphConnectorConstants.SettingClientSecret),
+        [700016] = Message(nameof(ConnectorMessages.EntraApplicationNotFound), GraphConnectorConstants.SettingClientId, GraphConnectorConstants.SettingTenantId),
+        [90002] = Message(nameof(ConnectorMessages.EntraTenantNotFound), GraphConnectorConstants.SettingTenantId, GraphConnectorConstants.SettingCloud),
+        [900023] = Message(nameof(ConnectorMessages.EntraTenantIdInvalid), GraphConnectorConstants.SettingTenantId),
+        [700027] = Message(nameof(ConnectorMessages.EntraAssertionNotVerified), GraphConnectorConstants.SettingCertificate),
+        [700024] = Message(nameof(ConnectorMessages.EntraAssertionOutOfTime)),
+        [7000112] = Message(nameof(ConnectorMessages.EntraApplicationDisabled)),
         [70021] = FederatedMismatch,
         [700211] = FederatedMismatch,
         [700212] = FederatedMismatch,
         [700213] = FederatedMismatch,
-        [500011] = $"Microsoft Graph was not found in the tenant. Check that the {GraphConnectorConstants.SettingCloud} setting matches the cloud the tenant is in."
+        [500011] = Message(nameof(ConnectorMessages.EntraGraphNotFound), GraphConnectorConstants.SettingCloud)
     };
 
     /// <summary>
@@ -64,17 +69,22 @@ internal static partial class EntraTokenFailure
     /// </summary>
     public static bool IsStillBeingApplied(HttpStatusCode statusCode, string? body) => Read(body).Codes.Contains(700027);
 
-    public static string Describe(HttpStatusCode statusCode, string? body)
+    public static string Describe(HttpStatusCode statusCode, string? body) => DescribeMessage(statusCode, body).ToEnglish();
+
+    /// <summary>The same words as <see cref="Describe"/>, held as a message the portal shows in the viewer's language.</summary>
+    public static JimMessage DescribeMessage(HttpStatusCode statusCode, string? body)
     {
         var (error, codes) = Read(body);
         var known = codes.FirstOrDefault(KnownCodes.ContainsKey);
         if (known != 0)
-            return $"Microsoft Entra ID refused the token request (AADSTS{known}). {KnownCodes[known]}";
+            return Message(nameof(ConnectorMessages.EntraRefusedKnown), known.ToString(CultureInfo.InvariantCulture), KnownCodes[known]);
 
         var detail = string.Join(", ", new[] { error }.Concat(codes.Select(c => $"AADSTS{c}")).Where(d => d != null));
         return detail.Length > 0
-            ? $"Microsoft Entra ID refused the token request with HTTP {(int)statusCode} ({detail}). Check the {GraphConnectorConstants.SettingTenantId}, {GraphConnectorConstants.SettingClientId} and credential settings."
-            : $"Microsoft Entra ID refused the token request with HTTP {(int)statusCode}. Check the {GraphConnectorConstants.SettingTenantId}, {GraphConnectorConstants.SettingClientId} and credential settings.";
+            ? Message(nameof(ConnectorMessages.EntraRefusedWithDetail), ((int)statusCode).ToString(CultureInfo.InvariantCulture), detail,
+                GraphConnectorConstants.SettingTenantId, GraphConnectorConstants.SettingClientId)
+            : Message(nameof(ConnectorMessages.EntraRefusedWithStatus), ((int)statusCode).ToString(CultureInfo.InvariantCulture),
+                GraphConnectorConstants.SettingTenantId, GraphConnectorConstants.SettingClientId);
     }
 
     private static (string? Error, List<int> Codes) Read(string? body)

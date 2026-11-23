@@ -7,6 +7,7 @@
 - [The rule](#the-rule)
 - [How it works](#how-it-works)
 - [Writing portal text](#writing-portal-text)
+- [Text from other layers](#text-from-other-layers)
 - [Translating](#translating)
 - [Guards](#guards)
 - [Adding a language](#adding-a-language)
@@ -16,7 +17,9 @@
 
 ## The rule
 
-**Every string a person reads in the portal comes from a resource file, with a translation in every language, in the same change that adds or edits it.** Translation is part of writing the text, not a follow-up: a new page, a reworded tooltip and a new snackbar message each ship with their German and French (and an en-US entry where the spelling differs) or the build fails. Nobody on the team needs to read German or French for this to work; whoever writes the English writes the translations, following the glossary, and the tests below check what a machine can.
+**Every string a person reads in the portal comes from a resource file, with a translation in every language in progress or released, in the same change that adds or edits it.** Translation is part of writing the text, not a follow-up: a new page, a reworded tooltip and a new snackbar message each ship with their French (and an en-US entry where the spelling differs) or the build fails. Nobody on the team needs to read French for this to work; whoever writes the English writes the translations, following the glossary, and the tests below check what a machine can.
+
+**Languages are delivered one at a time.** Each language in `UiLanguages` has a stage: *Planned* (translations optional), *In progress* (every string required in the change that adds it; offered in development builds) and *Released* (offered to everyone). Today en-GB is released, French and en-US are in progress, and German is planned: it gets a pass of its own, over the finished resource files, when its turn comes.
 
 ## How it works
 
@@ -25,7 +28,8 @@
 | Resource files | `src/JIM.Web/Resources/<Area>Text.resx` | The English (en-GB) text, one file per area of the portal. These are the *neutral* resources. |
 | Translations | `<Area>Text.en-US.resx`, `<Area>Text.de.resx`, `<Area>Text.fr.resx` | The same keys in each language. en-US holds only the strings whose spelling differs. |
 | Typed accessors | Generated into `obj/` at build time (`JIM.Web.Resources.<Area>Text`) | `@LayoutText.SignOut` instead of a string key, so a mistyped or deleted key is a compile error. A target in `JIM.Web.csproj` generates them; nothing is checked in and no IDE generator is involved. |
-| Languages | `src/JIM.Web/Localisation/UiLanguages.cs` | The languages the portal has, which are released, and the default (en-GB). Only en-GB is released: en-US, German and French wait for the conversion below. Production therefore shows no picker (it hides with one language) and serves en-GB whatever the browser asks for. |
+| Languages | `src/JIM.Web/Localisation/UiLanguages.cs` | The languages the portal has, each with its stage (`LanguageStage`), and the default (en-GB). Only en-GB is released, so production shows no picker (it hides with one language) and serves en-GB whatever the browser asks for. |
+| Import | `scripts/Import-PortalText.ps1` | Writes rows from a tab-separated file into a resource file and its translations, creating them as needed, and refuses a row whose placeholders disagree. The only way text is added: nobody hand-edits resource XML. |
 | Request culture | `PortalLocalisation.CreateOptions` | Each portal request runs in the culture cookie's language, else the browser's `Accept-Language`, else the default: British English text in the host's own formats. Those formats come from `LANG`, a documented setting, so a deployment that has chosen no language formats dates and numbers exactly as it did before languages existed. Choosing a language sets both. Applied to the portal only, never to `/api` or `/scim`. |
 | Language picker | User menu (`DrawerUserMenu.razor`) | Sets the culture cookie through `/culture/set` and reloads the page; a Blazor Server circuit keeps the culture it started with. |
 | MudBlazor's text | `MudBlazorText*.resx`, served by `JimMudLocalizer` | The data grid's filter operators, pagers, close buttons and so on. |
@@ -47,9 +51,21 @@ Resource lookup falls back through parent cultures: de-AT is served `de`, en-AU 
 - **Layout:** leave room for German, which runs about 30% longer than English, and write new CSS with logical properties (`margin-inline-start`, `padding-inline-end`, `inset-inline-start`) rather than left and right, so a right-to-left language does not need a stylesheet rewrite.
 - **Not text:** CSS classes, routes, query keys, log messages, exception messages that only reach logs, and identifiers stay in code. A product name, a protocol or a font name that the scanner misreads takes an `i18n: exempt - <why>` comment on its line or one of the two above.
 
+## Text from other layers
+
+The application layer, the Worker, the Scheduler and the Connectors produce text the portal shows: refusals, validation findings, previews, Activity messages. They never render it in the reader's language themselves. They build a `JimMessage` (a catalogue, a key and typed arguments), keep the British English beside it for everything that is not the portal, and the portal renders the message.
+
+- **Catalogues** are resource files in the producing project, `src/<Project>/Resources/<Area>Messages.resx` (plus `.fr` and, where the spelling differs, `.en-US`), imported with `Import-PortalText.ps1 -ResourceFolder`. Each is declared once as a constant: `MessageCatalogues` in JIM.Models, the partial class `ApplicationMessageCatalogues` in JIM.Application (one file per area, `ApplicationMessageCatalogues.<Area>.cs`), `ConnectorMessageCatalogues` in JIM.Connectors. Text the Worker or the Scheduler writes has its catalogue in JIM.Application: the portal references neither project, so it could not load a catalogue there.
+- **Build** with `JimMessage.Create(catalogue, nameof(XMessages.Key), arguments)`, counts with `JimMessage.Counted(catalogue, nameof(XMessages.ThingOne), count, ...)`. An argument that is data (a name, an identifier, another system's own words) is a string and is never translated; a number or a UTC moment is typed, so it formats in the reader's language.
+- **Results and DTOs** gain a `Detail` (a `JimMessage`) beside their English string, which becomes `Detail.ToEnglish()`. The REST API, PowerShell, logs and stored rows keep reading the same English, byte for byte. A type the REST API serialises as it is takes `[JsonIgnore]` on the message property; a message never changes an API response's shape. Generate the OpenAPI document to check (`scripts/Generate-OpenApiDoc.ps1`): no `JimMessage` schema may appear.
+- **Exceptions:** throw `JimMessageException`, or keep the framework type the callers catch and attach the message with `LocalisedExceptions.InvalidOperation(...)`, `.Argument(...)`, `.NotSupported(...)`, `.FileNotFound(...)` or `.Attach(exception, message)`. Its `.Message` is the English. An exception type of JIM's own that carries a message implements `IJimMessageCarrier`. The portal shows any exception with `ex.ToDisplayText()`, which reads `ex.DetailOf()`.
+- **Stored text** (Activity and Run Profile Execution Item messages, and an Activity's target name where JIM words it itself, such as "Factory reset") is written as the English plus the message's JSON in the matching `*DetailJson` column (#3039); setting `MessageDetail` or `TargetNameDetail` sets both. The portal shows a target name with `activity.TargetNameForDisplay()`; logic that matches on the name keeps reading `TargetName`. A row written before that, or by a writer not yet converted, shows its English.
+- **The portal** renders with `message.Show()`, or `MessageDisplay.Show(detail, english)` where the detail may be missing.
+- **Display-time maps** suit text keyed by a stable identifier that is stored or declared in English: Connector settings, Run Profile phases, Service Settings, built-in Schedules and Roles, enum values (`EnumDisplay`). The portal looks the identifier up in a resource file and falls back to the stored English for an identifier it does not know (a third-party Connector, a customer-created Schedule).
+
 ## Translating
 
-Write German and French as a fluent technical writer would for an administrator: formal address in German (*Sie*), standard French typography (a space before `:`, `;`, `?` and `!`, *guillemets* « » around quoted text, the typographic apostrophe ’). German quotes use „…“. Keep every placeholder exactly as the English has it.
+Write German and French as a fluent technical writer would for an administrator: formal address in German (*Sie*), standard French typography (a space before `:`, `;`, `?` and `!`, *guillemets* « » around quoted text, the typographic apostrophe ’, which `French_ElidesWithTheTypographicApostrophe` enforces). German quotes use „…“. Keep every placeholder exactly as the English has it.
 
 **Use the glossary's word for every JIM term.** The proper-noun vocabulary (Connected System, Synchronisation Rule, Metaverse Object and the rest) is a product contract in English, and each language needs one fixed word for each term or the portal reads as several products. `glossary.json` holds a pattern per language, and `EveryLanguage_UsesTheGlossaryTermForEachJimTerm` fails a translation that uses anything else. Adding a JIM term to the portal means adding it to the glossary in the same change. German and French write these terms as ordinary nouns, lower case mid-sentence in French, rather than in English Title Case.
 
@@ -91,12 +107,12 @@ JIM_UPDATE_LOCALISATION_BASELINE=1 dotnet test test/JIM.Web.Tests --filter HardC
 
 ## Adding a language
 
-1. Add it to `UiLanguages.All` with `IsReleased: false`. Use the neutral culture (`it`, `es`) unless spelling differs by region, as English does.
-2. Add `<Area>Text.<culture>.resx` for every neutral file, starting with `MudBlazorText`, `LayoutText` and `CommonText`.
+1. Add it to `UiLanguages.All` as `LanguageStage.Planned`. Use the neutral culture (`it`, `es`) unless spelling differs by region, as English does.
+2. When its turn comes, translate every neutral resource file into `<Area>Text.<culture>.resx` (a column in the import file), then move it to `LanguageStage.InProgress`: from then on every change must carry it, and `LanguagesInProgressOrReleased_TranslateEveryString` fails one that does not.
 3. Add the language's word for every term to `glossary.json`.
 4. If the language has more than two plural forms (Polish, Russian, Arabic), extend `PluralRules` and add the extra keys before translating any counted string.
 5. Development builds offer it in the picker marked "(preview)"; check pages in it as it fills in.
-6. When `ReleasedLanguages_TranslateEveryString` would pass for it, set `IsReleased: true`, add it to the Languages table in `docs/administration/portal-language.md`, and add a changelog entry. The first language released publishes that page from its draft, `engineering/localisation/portal-language-page-draft.md`.
+6. When the hard-coded text baseline is empty and a review pass is done, set `LanguageStage.Released`, add it to the Languages table in `docs/administration/portal-language.md`, and add a changelog entry. The page lists every released language.
 
 en-US is released the same way, once the baseline reaches zero: before then an American user would read "Synchronization Rules" in the menu and "Synchronisation" in every page body, which looks broken.
 
@@ -104,7 +120,27 @@ A right-to-left language also needs `dir="rtl"` on the page (from the culture's 
 
 ## Converting existing pages
 
-The baseline started at 7,635 hard-coded strings in 333 files. No language beyond en-GB can be released until it reaches zero, so converting areas ([#3040](https://github.com/TetronIO/JIM/issues/3040)) is the release path for all three. Work an area at a time (one resource file, one pull request): take the area's lines from the report, move them into its resource file with German, French and en-US entries, run the tests, lower the baseline. The largest files are the Activity pages, the Connected System tabs, the Synchronisation Rule Attribute Flow tab and the causality display maps (`OutcomeDisplayMap.cs`, `CausalitySummaryBuilder.cs`); shared components (`VirtualisedDataGrid`, `TableObjectCount`, `TableEmptyState`, `SearchField`) reach every page and pay off first.
+The baseline started at 7,635 hard-coded strings in 333 files (7,121 once the developer specimen pages were exempted). No language beyond en-GB can be released until it reaches zero, so converting ([#3040](https://github.com/TetronIO/JIM/issues/3040)) is the release path. This is the procedure, for a person or an agent converting a set of files.
+
+1. **List the work.** `JIM_LOCALISATION_REPORT=/tmp/i18n.txt dotnet test test/JIM.Web.Tests --filter Name=WriteHardCodedTextReport` writes every finding, file by file.
+2. **Choose the resource file.** One file per area, named `<Area>Text` (`ActivityText`, `ConnectedSystemText`, `SyncRuleText`, `OperationsText`, `CausalityText`). Never add to another area's file, and never add to `CommonText`, `LayoutText` or `MudBlazorText`; reuse what `CommonText` already has (Save, Cancel, Delete, Name, Status, Yes, No and the rest) where the meaning is the same.
+3. **Write the rows** in a tab-separated file with the header `Key, en-GB, en-US, fr, Comment` and import it with `pwsh ./scripts/Import-PortalText.ps1 -Path <file> -Name <Area>Text`. Fill en-US only where the spelling differs (synchronise, organise, colour, licence, cancelled, behaviour, catalogue, centre, analyse and their kin, and the glossary's terms). Give a Comment wherever a translator could misread the string.
+4. **Replace the text in the source** with the accessor: `@ActivityText.Title` in markup, `Title="@ActivityText.Title"` in an attribute, `ActivityText.Title` in C#. `JIM.Web.Resources` and `JIM.Web.Localisation` are imported in every Razor file; a `.cs` file needs `using JIM.Web.Resources;`.
+5. **Keep the English exactly as it was.** The conversion changes where the text lives, never what it says: tests assert on it, and the wording is reviewed separately. The one exception is an American spelling in the existing English ("Authorization"), which becomes British.
+6. **Rebuild sentences, never fragments.** A sentence built from pieces (`$"{count} object{(count == 1 ? "" : "s")} deleted"`, `"Run " + name`, "has" or "have" chosen in code) becomes one resource string with placeholders, `string.Format(CultureInfo.CurrentCulture, ...)`, and for a count two keys (`...One`, `...Other`) chosen with `PluralRules.Choose`. French word order differs, and a fragment cannot be translated. Lists use the language's own "and" (`HealthText.ListAnd` shows the pattern; give the area its own key).
+7. **Enum values shown to people** go through `value.ForDisplay()` (`EnumDisplay`), whose text is `EnumText.resx` under `{EnumType}_{Value}`, every value of the enum at once (`EnumTextTests` fails a partly translated enum). Never `ToString()`, `SplitOnCapitalLetters()` or `Humanize()` an enum for display: they are English whatever the reader's language, and the scanner counts the last two. Where one enum needs different words on different pages, give the page its own keys. Never translate an enum's name for an API or log.
+8. **Never hold translated text in a `static readonly` field or a static initialiser** (an array of select options, a const tooltip). Static state is built once, in whichever language the first viewer used, and every later viewer sees it. Make it a property or method that reads the resource each time (`static IReadOnlyList<Option> Options => [...]`).
+9. **Leave alone:** data (object names, attribute values, anything an administrator typed), log and exception messages that only reach logs, CSS classes, routes, query keys, identifiers, and the REST API (`Controllers/Api`, `Models/Api`). Product names (JIM, Microsoft Entra ID, Active Directory, OpenLDAP) and service names (Worker, Scheduler) stay as they are. Text the scanner flags wrongly takes `@* i18n: exempt - <why> *@` or `// i18n: exempt - <why>` on its line or directly above.
+10. **Run the checks:** `dotnet build test/JIM.Web.Tests` and `dotnet test test/JIM.Web.Tests`. Fix any test that fails because it compared against text you moved (it should not, since the English is unchanged and the tests run in en-GB). Then lower the baseline with `JIM_UPDATE_LOCALISATION_BASELINE=1 dotnet test test/JIM.Web.Tests --filter HardCodedTextConventionTests`; a file you converted should reach zero.
+
+### Writing French
+
+- **Formal and plain:** *vous*, never *tu*; short, factual, as a careful French technical writer would write for an administrator.
+- **Typography:** a narrow non-breaking space is not needed; a plain space before `:`, `;`, `?` and `!`; *guillemets* « » with spaces inside around quoted text; the typographic apostrophe ’ (l’objet, d’exécution); "…" for an ellipsis.
+- **Capitals:** sentence case. JIM's terms are ordinary nouns in French: "la règle de synchronisation", "le système connecté", lower case mid-sentence, capitalised only at the start of a sentence or a heading.
+- **Glossary:** every JIM term uses its French form in `glossary.json`; the test fails anything else. Worker, Scheduler, Metaverse and product names are not translated.
+- **Buttons and headings** use the infinitive ("Enregistrer", "Créer une planification"); column headings are nouns ("Dernière exécution").
+- **Agreement:** a placeholder that holds a count takes `...One`/`...Other` keys; French treats 0 and 1 as singular (`PluralRules` knows).
 
 ## Scope
 
@@ -112,8 +148,8 @@ The baseline started at 7,635 hard-coded strings in 333 files. No language beyon
 |---------|-----------|-----|
 | Portal pages, components, dialogs, snackbars | Yes | The product's user interface. |
 | MudBlazor's own component text | Yes | Part of every page. |
-| Error and sign-in problem pages | Yes (being converted) | Shown to users. |
-| Activity and Run Profile Execution Item messages | Not yet | Stored in the database as rendered English. They are to be stored as message keys plus arguments so history renders in each viewer's language; that changes the synchronisation write path and the API response shape, so it is its own issue ([#3039](https://github.com/TetronIO/JIM/issues/3039)). |
+| Error and sign-in problem pages | Yes | Shown to users. |
+| Activity and Run Profile Execution Item messages | Yes (being converted) | Stored as the English plus the message, so history renders in each viewer's language while the REST API keeps returning the English ([#3039](https://github.com/TetronIO/JIM/issues/3039)). |
 | REST API and SCIM | No | A machine-readable contract under semantic versioning. Request localisation is not applied to `/api` or `/scim`, so a client's `Accept-Language` cannot change a response. |
 | PowerShell module | No | Cmdlet names, parameters and output are a scripting contract. Help text may follow later. |
 | Logs | No | Read by support and engineering. |

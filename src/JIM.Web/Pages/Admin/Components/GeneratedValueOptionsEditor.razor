@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Application.Expressions
 @using JIM.Models.Core
 @using JIM.Models.Expressions
@@ -20,7 +21,7 @@
     @SettingsHeader
 
     <ExpressionEditor @ref="_baseExpressionEditor" Value="@BaseSource.Expression" ValueChanged="OnBaseExpressionChangedAsync" Id="generated-value-base-expression"
-        Label="Base expression" Disabled="IsNumberTarget"
+        Label="@GeneratedValueText.BaseExpressionLabel" Disabled="IsNumberTarget"
         Placeholder="@(IsNumberTarget ? null : "e.g. Lower(cs[\"firstName\"]) + \".\" + Lower(cs[\"lastName\"])")"
         Class="mt-5" HelperText="@BaseExpressionHelperText"
         MetaverseAttributeNames="MetaverseAttributeNames" ConnectedSystemAttributeNames="ConnectedSystemAttributeNames"
@@ -33,21 +34,21 @@
         @BaseExpressionTools(InsertIntoBaseExpressionAsync)
     }
 
-    <SettingsSection Title="Uniqueness token" Summary="@AttributeFlowSectionSummaries.UniquenessToken(generation.TokenKind)" Expanded="true" Class="mt-5">
+    <SettingsSection Title="@GeneratedValueText.UniquenessTokenTitle" Summary="@AttributeFlowSectionSummaries.UniquenessToken(generation.TokenKind)" Expanded="true" Class="mt-5">
     <MudRadioGroup T="GeneratedValueTokenKind" Value="generation.TokenKind" ValueChanged="OnTokenKindChangedAsync">
         <MudStack Spacing="1">
             <MudRadio Value="GeneratedValueTokenKind.OnlyIfTaken" Color="Color.Primary" Disabled="OnlyIfTakenDisabled">
-                <MudText Typo="Typo.body1">Add a number only if the value is already taken</MudText>
+                <MudText Typo="Typo.body1">@GeneratedValueText.TokenOnlyIfTaken</MudText>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">@OnlyIfTakenSubtext</MudText>
             </MudRadio>
             <MudRadio Value="GeneratedValueTokenKind.Sequence" Color="Color.Primary">
-                <MudText Typo="Typo.body1">Always add a sequence number</MudText>
+                <MudText Typo="Typo.body1">@GeneratedValueText.TokenSequence</MudText>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                    The next number from a counter kept for the target attribute. Optionally fixed width.
+                    @GeneratedValueText.TokenSequenceHint
                 </MudText>
             </MudRadio>
             <MudRadio Value="GeneratedValueTokenKind.Random" Color="Color.Primary">
-                <MudText Typo="Typo.body1">Always add a random token</MudText>
+                <MudText Typo="Typo.body1">@GeneratedValueText.TokenRandom</MudText>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">@RandomSubtext</MudText>
             </MudRadio>
         </MudStack>
@@ -59,14 +60,14 @@
             <MudGrid Spacing="3" Class="mt-1">
                 <MudItem xs="12" sm="4">
                     <MudSelect T="GeneratedValueSuffixStyle" Value="generation.SuffixStyle" ValueChanged="OnSuffixStyleChangedAsync"
-                        Label="Style" Variant="Variant.Outlined">
-                        <MudSelectItem Value="GeneratedValueSuffixStyle.Number">Number</MudSelectItem>
-                        <MudSelectItem Value="GeneratedValueSuffixStyle.Letter">Letter</MudSelectItem>
+                        Label="@GeneratedValueText.StyleLabel" Variant="Variant.Outlined">
+                        <MudSelectItem Value="GeneratedValueSuffixStyle.Number">@GeneratedValueText.SuffixNumber</MudSelectItem>
+                        <MudSelectItem Value="GeneratedValueSuffixStyle.Letter">@GeneratedValueText.SuffixLetter</MudSelectItem>
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" sm="4">
                     <MudNumericField T="int" Value="generation.SuffixStart" ValueChanged="OnSuffixStartChangedAsync"
-                        Label="Start at" Min="1" Variant="Variant.Outlined" Immediate="true" />
+                        Label="@GeneratedValueText.StartAt" Min="1" Variant="Variant.Outlined" Immediate="true" />
                 </MudItem>
                 @if (ShowSeparator)
                 {
@@ -76,7 +77,7 @@
                 }
             </MudGrid>
             <MudSwitch T="bool" Value="generation.NeverReuse" ValueChanged="OnNeverReuseChangedAsync"
-                Color="Color.Primary" Class="mt-4" Label="Never reuse a value" />
+                Color="Color.Primary" Class="mt-4" Label="@GeneratedValueText.NeverReuseLabel" />
             <MudText Typo="Typo.body2" Class="mud-text-secondary">@NeverReuseHelperText</MudText>
             break;
 
@@ -84,11 +85,11 @@
             <MudGrid Spacing="3" Class="mt-1">
                 <MudItem xs="12" sm="4">
                     <MudNumericField T="long" Value="generation.SequenceStart" ValueChanged="OnSequenceStartChangedAsync"
-                        Label="Start at" Min="0" Variant="Variant.Outlined" Immediate="true" />
+                        Label="@GeneratedValueText.StartAt" Min="0" Variant="Variant.Outlined" Immediate="true" />
                 </MudItem>
                 <MudItem xs="12" sm="4">
                     <MudNumericField T="int" Value="generation.SequenceIncrement" ValueChanged="OnSequenceIncrementChangedAsync"
-                        Label="Increment" Min="1" Variant="Variant.Outlined" Immediate="true" />
+                        Label="@GeneratedValueText.Increment" Min="1" Variant="Variant.Outlined" Immediate="true" />
                 </MudItem>
                 @if (ShowSeparator)
                 {
@@ -99,11 +100,11 @@
             </MudGrid>
 
             <MudSwitch T="bool" Value="generation.FixedWidth.HasValue" ValueChanged="OnPaddingToggledAsync"
-                Color="Color.Primary" Disabled="IsNumberTarget" Class="mt-3" Label="Pad to a fixed width" />
+                Color="Color.Primary" Disabled="IsNumberTarget" Class="mt-3" Label="@GeneratedValueText.PadToFixedWidth" />
             <MudText Typo="Typo.body2" Class="mud-text-secondary">
                 @(IsNumberTarget
-                    ? "Not available: a Number attribute cannot hold leading zeros. Choose a Text attribute for fixed-width values."
-                    : "Off: plain numbers. On: zero-padded to the width below.")
+                    ? GeneratedValueText.PadNotAvailableNumber
+                    : GeneratedValueText.PadOffOrOn)
             </MudText>
 
             @if (generation.FixedWidth.HasValue && !IsNumberTarget)
@@ -112,24 +113,24 @@
                 <MudGrid Spacing="3" Class="mt-1">
                     <MudItem xs="12" sm="4">
                         <MudNumericField T="int" Value="fixedWidth" ValueChanged="OnFixedWidthChangedAsync"
-                            Label="Width" Min="1" Max="18" Variant="Variant.Outlined" Immediate="true"
+                            Label="@GeneratedValueText.WidthLabel" Min="1" Max="18" Variant="Variant.Outlined" Immediate="true"
                             HelperText="@RoomRemainingText" />
                     </MudItem>
                 </MudGrid>
 
-                <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">When the number outgrows the width</MudText>
+                <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">@GeneratedValueText.WidthExceededTitle</MudText>
                 <MudRadioGroup T="GeneratedValueWidthOverflowBehaviour" Value="generation.OnWidthExceeded" ValueChanged="OnWidthExceededChangedAsync">
                     <MudStack Spacing="1">
                         <MudRadio Value="GeneratedValueWidthOverflowBehaviour.StopAndReport" Color="Color.Primary">
-                            <MudText Typo="Typo.body1">Stop and report an error</MudText>
+                            <MudText Typo="Typo.body1">@GeneratedValueText.StopAndReport</MudText>
                             <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                For fixed-length validation downstream. The object fails with a clear reason; nothing is written.
+                                @GeneratedValueText.StopAndReportHint
                             </MudText>
                         </MudRadio>
                         <MudRadio Value="GeneratedValueWidthOverflowBehaviour.AllowLonger" Color="Color.Primary">
-                            <MudText Typo="Typo.body1">Allow longer numbers</MudText>
+                            <MudText Typo="Typo.body1">@GeneratedValueText.AllowLonger</MudText>
                             <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                The width becomes a minimum: a number that would no longer fit grows past it instead of failing.
+                                @GeneratedValueText.AllowLongerHint
                             </MudText>
                         </MudRadio>
                     </MudStack>
@@ -140,10 +141,10 @@
                on for a sequence token, never a choice to make here. *@
             <div class="d-flex align-center mt-4">
                 <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Class="mud-text-secondary mr-2" />
-                <MudText Typo="Typo.body1">Never reuse a value</MudText>
+                <MudText Typo="Typo.body1">@GeneratedValueText.NeverReuseLabel</MudText>
             </div>
             <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                Always on for sequence numbers: the counter only moves forward.
+                @GeneratedValueText.SequenceAlwaysOn
             </MudText>
             break;
 
@@ -154,15 +155,15 @@
             <MudGrid Spacing="3" Class="mt-1">
                 <MudItem xs="12" sm="4">
                     <MudSelect T="GeneratedValueRandomFormat" Value="generation.RandomFormat" ValueChanged="OnRandomFormatChangedAsync"
-                        Label="Format" Variant="Variant.Outlined">
+                        Label="@GeneratedValueText.FormatLabel" Variant="Variant.Outlined">
                         <MudSelectItem Value="GeneratedValueRandomFormat.Guid" Disabled="IsNumberTarget">
-                            GUID
+                            @GeneratedValueText.FormatGuid
                         </MudSelectItem>
                         <MudSelectItem Value="GeneratedValueRandomFormat.Hex" Disabled="IsNumberTarget">
-                            Hex
+                            @GeneratedValueText.FormatHex
                         </MudSelectItem>
                         <MudSelectItem Value="GeneratedValueRandomFormat.Digits">
-                            Digits
+                            @GeneratedValueText.FormatDigits
                         </MudSelectItem>
                     </MudSelect>
                 </MudItem>
@@ -170,7 +171,7 @@
                     @if (generation.RandomFormat != GeneratedValueRandomFormat.Guid)
                     {
                         <MudNumericField T="int" Value="generation.RandomLength ?? DefaultRandomLength"
-                            ValueChanged="OnRandomLengthChangedAsync" Label="Length" Min="1" Max="64"
+                            ValueChanged="OnRandomLengthChangedAsync" Label="@GeneratedValueText.LengthLabel" Min="1" Max="64"
                             Variant="Variant.Outlined" Immediate="true" />
                     }
                 </MudItem>
@@ -183,7 +184,7 @@
             </MudGrid>
             <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">@RandomFormatHint</MudText>
             <MudSwitch T="bool" Value="generation.NeverReuse" ValueChanged="OnNeverReuseChangedAsync"
-                Color="Color.Primary" Class="mt-4" Label="Never reuse a value" />
+                Color="Color.Primary" Class="mt-4" Label="@GeneratedValueText.NeverReuseLabel" />
             <MudText Typo="Typo.body2" Class="mud-text-secondary">@NeverReuseHelperText</MudText>
             break;
     }
@@ -193,20 +194,20 @@
     @* ─── If an input has no value (Missing Input Behaviour), only meaningful with a base expression ─── *@
     @if (!string.IsNullOrWhiteSpace(BaseSource.Expression))
     {
-        <SettingsSection @ref="_missingInputSection" Title="If an input has no value"
+        <SettingsSection @ref="_missingInputSection" Title="@GeneratedValueText.MissingInputTitle"
                          Summary="@AttributeFlowSectionSummaries.MissingInput(BaseSource.MissingInputBehaviour, generated: true)">
             <MudRadioGroup T="MissingInputBehaviour" Value="BaseSource.MissingInputBehaviour" ValueChanged="OnMissingInputBehaviourChangedAsync">
                 <MudStack Spacing="1">
                     <MudRadio Value="MissingInputBehaviour.ContributeNoValue" Color="Color.Primary">
-                        <MudText Typo="Typo.body1">Wait until every input has a value</MudText>
+                        <MudText Typo="Typo.body1">@GeneratedValueText.WaitForInputs</MudText>
                         <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                            Recommended for generated values: a value built from a missing input would be kept for ever.
+                            @GeneratedValueText.WaitForInputsHint
                         </MudText>
                     </MudRadio>
                     <MudRadio Value="MissingInputBehaviour.EvaluateAnyway" Color="Color.Primary">
-                        <MudText Typo="Typo.body1">Evaluate anyway</MudText>
+                        <MudText Typo="Typo.body1">@GeneratedValueText.EvaluateAnyway</MudText>
                         <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                            Only if the expression handles missing values itself, for example with IIF and IsNullOrEmpty.
+                            @GeneratedValueText.EvaluateAnywayHint
                         </MudText>
                     </MudRadio>
                 </MudStack>
@@ -215,26 +216,26 @@
     }
 
     @* ─── Checked for availability in (#242, release 3): where the value is exported and how each target is checked ─── *@
-    <SettingsSection Title="Checked for availability" Summary="@AttributeFlowSectionSummaries.Availability(_participants)">
-        <GeneratedValueAvailabilityPanel Participants="_participants" Generation="generation" OnChanged="OnExclusionsChangedAsync" ShowHeading="false" />
+    <SettingsSection Title="@GeneratedValueText.CheckedForAvailabilityTitle" Summary="@AttributeFlowSectionSummaries.Availability(_participants)">
+        <GeneratedValueAvailabilityPanel Participants="_participants" Generation="generation" OnChanged="OnExclusionsChangedAsync" ShowHeading="@false" />
     </SettingsSection>
 
     @* ─── Collision Remediation (#242, release 4): what JIM does when a target rejects the value as already in use ─── *@
-    <SettingsSection Title="Collision Remediation" Summary="@AttributeFlowSectionSummaries.CollisionRemediation(generation, _participants)">
-        <CollisionRemediationSwitch Generation="generation" Participants="_participants" OnChanged="NotifyChangedAsync" ShowHeading="false" />
+    <SettingsSection Title="@GeneratedValueText.CollisionRemediationTitle" Summary="@AttributeFlowSectionSummaries.CollisionRemediation(generation, _participants)">
+        <CollisionRemediationSwitch Generation="generation" Participants="_participants" OnChanged="NotifyChangedAsync" ShowHeading="@false" />
     </SettingsSection>
 
     @* ─── Advanced: attempt limit ─── *@
-    <SettingsSection Title="Advanced" Summary="@($"Attempt limit {generation.AttemptLimit}")">
+    <SettingsSection Title="@GeneratedValueText.AdvancedTitle" Summary="@string.Format(CultureInfo.CurrentCulture, GeneratedValueText.AttemptLimitSummary, generation.AttemptLimit)">
         <MudNumericField T="int" Value="generation.AttemptLimit" ValueChanged="OnAttemptLimitChangedAsync"
-            Label="Attempt limit" Min="1" Max="100000" Variant="Variant.Outlined" Immediate="true"
-            HelperText="Candidates tried per object per run before the object fails." />
+            Label="@GeneratedValueText.AttemptLimitLabel" Min="1" Max="100000" Variant="Variant.Outlined" Immediate="true"
+            HelperText="@GeneratedValueText.AttemptLimitHelper" />
     </SettingsSection>
 
     @if (ValidationErrors.Count > 0)
     {
         <MudAlert Severity="Severity.Error" Class="mt-5">
-            <MudText Typo="Typo.body2" Class="mb-1">This configuration cannot be saved:</MudText>
+            <MudText Typo="Typo.body2" Class="mb-1">@GeneratedValueText.CannotBeSaved</MudText>
             <ul class="mb-0">
                 @foreach (var error in ValidationErrors)
                 {
@@ -269,36 +270,32 @@
             <MudText Typo="Typo.body2" Class="mud-text-secondary">
                 @GenerationSummary
                 <MudLink Typo="Typo.body2" Class="ml-1" OnClick="@(() => _howItWorksOpen = !_howItWorksOpen)"
-                         aria-expanded="@(_howItWorksOpen ? "true" : "false")">@(_howItWorksOpen ? "Hide how it works" : "How it works")</MudLink>
+                         aria-expanded="@(_howItWorksOpen ? "true" : "false")">@(_howItWorksOpen ? GeneratedValueText.HideHowItWorks : GeneratedValueText.HowItWorks)</MudLink>
             </MudText>
             <MudCollapse Expanded="_howItWorksOpen">
                 <MudPaper Outlined="true" Class="pa-3 mt-2">
-                    <MudText Typo="Typo.subtitle2" Class="mb-2">When JIM generates this value</MudText>
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">@GeneratedValueText.WhenGeneratedHeading</MudText>
                     @if (Direction == SyncRuleDirection.Import)
                     {
                         <MudText Typo="Typo.body2">
-                            1. No higher-priority source supplies @(TargetName ?? "this attribute") for the Metaverse Object. JIM
-                            generates a value the first time and keeps it from then on. Like any Attribute Flow taking the
-                            attribute over, it replaces a value a higher-priority source left behind when it stopped supplying one.
+                            @string.Format(CultureInfo.CurrentCulture, GeneratedValueText.ImportStatement, TargetName ?? GeneratedValueText.ImportTargetFallback)
                         </MudText>
                     }
                     else
                     {
                         <MudText Typo="Typo.body2">
-                            1. JIM generates @(TargetName ?? "the value") the first time it exports it to a Connected System
-                            Object and keeps that value from then on. A value the Connected System already holds is replaced;
-                            to set it only on accounts JIM creates, turn on Initial Export Only.
+                            @string.Format(CultureInfo.CurrentCulture, GeneratedValueText.ExportStatement, TargetName ?? GeneratedValueText.ExportTargetFallback)
                         </MudText>
                     }
                     @if (BaseExpressionInputs.Count == 0)
                     {
-                        <MudText Typo="Typo.body2" Class="mt-2">2. No inputs to wait for: the base expression is empty.</MudText>
-                        <MudText Typo="Typo.body2" Class="mt-2">3. Then once only.</MudText>
+                        <MudText Typo="Typo.body2" Class="mt-2">@GeneratedValueText.NoInputsToWait</MudText>
+                        <MudText Typo="Typo.body2" Class="mt-2">@GeneratedValueText.ThenOnce</MudText>
                     }
                     else
                     {
                         <div class="mt-2 d-flex align-center flex-wrap gap-1">
-                            <MudText Typo="Typo.body2">2. Every attribute the base expression reads has a value:</MudText>
+                            <MudText Typo="Typo.body2">@GeneratedValueText.EveryInputHasValue</MudText>
                             @foreach (var input in BaseExpressionInputs)
                             {
                                 @* The attribute name alone, per the approved mockup; the full accessor (which side of the
@@ -309,7 +306,7 @@
                             }
                         </div>
                         <MudText Typo="Typo.body2" Class="mt-2">
-                            3. Then once only. The value is kept even if these inputs later change.
+                            @GeneratedValueText.ThenOnceKept
                         </MudText>
                     }
                 </MudPaper>
@@ -317,7 +314,7 @@
                 @* ─── Values built from it (Generated Value Forms, #2014, mock screen 2): only a value held in the Metaverse has any ─── *@
                 @if (Mapping.ResolveTargetMetaverseAttributeId().HasValue && StagedSyncRule != null)
                 {
-                    <GeneratedValueBuiltValuesPanel BuiltValues="_builtValues" GeneratedAttributeName="@(TargetName ?? "this value")"
+                    <GeneratedValueBuiltValuesPanel BuiltValues="_builtValues" GeneratedAttributeName="@(TargetName ?? GeneratedValueText.ThisValueFallback)"
                                                     CollisionRemediation="generation.CollisionRemediation" />
                 }
             </MudCollapse>
@@ -434,8 +431,8 @@
 
     /// <summary>When JIM generates the value, in one sentence; "How it works" gives the whole statement.</summary>
     private string GenerationSummary => BaseExpressionInputs.Count == 0
-        ? "Generated once, then kept."
-        : "Generated once, when every input has a value, then kept even if they change.";
+        ? GeneratedValueText.GeneratedOnceKept
+        : GeneratedValueText.GeneratedOnceWhenInputs;
 
     /// <summary>The "Checked for availability in" rows, for the target as it now stands; null while loading.</summary>
     private IReadOnlyList<GeneratedValueParticipant>? _participants;
@@ -562,9 +559,9 @@
     private bool OnlyIfTakenDisabled => IsNumberTarget || string.IsNullOrWhiteSpace(BaseSource.Expression);
 
     private string OnlyIfTakenSubtext => IsNumberTarget
-        ? "Needs a base expression; not available for a Number attribute."
+        ? GeneratedValueText.OnlyIfTakenNumberHint
         : string.IsNullOrWhiteSpace(BaseSource.Expression)
-            ? "Needs a base expression; add one above, or choose a Sequence or Random token instead."
+            ? GeneratedValueText.OnlyIfTakenAddBaseHint
             : "joe.bloggs, then joe.bloggs1, joe.bloggs2 …";
 
     /// <summary>
@@ -572,16 +569,16 @@
     /// means rather than describing both.
     /// </summary>
     private string NeverReuseHelperText => Mapping.Generation is { NeverReuse: false }
-        ? "Off: once JIM stops holding a value, it can be issued again, possibly to a different person."
-        : "On: once JIM stops holding a value, it is never issued again. Turn this off only if a value may safely pass to a different person.";
+        ? GeneratedValueText.NeverReuseOff
+        : GeneratedValueText.NeverReuseOn;
 
     private string RandomSubtext => IsNumberTarget
-        ? "Digits only for a Number attribute; GUID and hex are text."
-        : "A GUID, or a short hex or digit string. A clash draws again.";
+        ? GeneratedValueText.RandomSubtextNumber
+        : GeneratedValueText.RandomSubtext;
 
     private string BaseExpressionHelperText => IsNumberTarget
-        ? "Not available for a Number attribute: a prefix or letters would make the value text."
-        : "Reads the source object's attributes. Optional for a Sequence or Random token.";
+        ? GeneratedValueText.BaseExpressionNumberHint
+        : GeneratedValueText.BaseExpressionHint;
 
     /// <summary>
     /// The separator control is only meaningful, and only offered, alongside a base expression on a Text target

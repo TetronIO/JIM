@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="OutcomeMvoDeletionCancelledLabel" xml:space="preserve">
+    <value>Metaverse Object deletion canceled</value>
+  </data>
+  <data name="OutcomeProvisioningCancelledLabel" xml:space="preserve">
+    <value>Provisioning canceled</value>
+  </data>
+  <data name="OutcomeProvisioningCancelledClause" xml:space="preserve">
+    <value>have their provisioning to a target Connected System canceled</value>
+  </data>
+  <data name="OutcomeProvisioningCancelledSpeculative" xml:space="preserve">
+    <value>Provisioning to its target Connected System would be canceled</value>
+  </data>
+  <data name="CauseMetaverseChangedSeveralRuns" xml:space="preserve">
+    <value>{0}'s Metaverse Object changed in {1} synchronizations, so this run applied the changes to the Connected System Object</value>
+  </data>
+  <data name="CauseStagedBySeveralRuns" xml:space="preserve">
+    <value>{0} synchronizations of {1} staged this change, and this run exported it</value>
+  </data>
+  <data name="CauseStagedByOneRun" xml:space="preserve">
+    <value>A synchronization of {0} staged this change, and this run exported it</value>
+  </data>
+  <data name="MembersNounSynchronisations" xml:space="preserve">
+    <value>synchronizations</value>
+  </data>
+  <data name="SummaryGeneratedValueCorrected" xml:space="preserve">
+    <value>a generated value it carried was rejected as already in use, so JIM corrected it, and the next synchronization will export the new value</value>
+  </data>
+  <data name="SummaryWouldLeaveScopeOfRule" xml:space="preserve">
+    <value>it would leave the scope of Synchronization Rule {0}</value>
+  </data>
+  <data name="SummaryLeftScopeOfRule" xml:space="preserve">
+    <value>it left the scope of Synchronization Rule {0}</value>
+  </data>
+  <data name="SummaryWouldLeaveScopeOfItsRule" xml:space="preserve">
+    <value>it would leave the scope of its Synchronization Rule</value>
+  </data>
+  <data name="SummaryLeftScopeOfItsRule" xml:space="preserve">
+    <value>it left the scope of its Synchronization Rule</value>
+  </data>
+  <data name="SummaryWouldCancelProvisioningOne" xml:space="preserve">
+    <value>provisioning would be canceled for {0} system, since nothing had been exported yet</value>
+  </data>
+  <data name="SummaryWouldCancelProvisioningOther" xml:space="preserve">
+    <value>provisioning would be canceled for {0} systems, since nothing had been exported yet</value>
+  </data>
+  <data name="SummaryDeletionCancelled" xml:space="preserve">
+    <value>its scheduled deletion was canceled</value>
+  </data>
+  <data name="SummaryProvisioningCancelledOne" xml:space="preserve">
+    <value>provisioning was canceled for {0} system, since nothing had been exported yet</value>
+  </data>
+  <data name="SummaryProvisioningCancelledOther" xml:space="preserve">
+    <value>provisioning was canceled for {0} systems, since nothing had been exported yet</value>
+  </data>
+  <data name="PillProvisioningCancelledSystemsOne" xml:space="preserve">
+    <value>Provisioning canceled · {0} system</value>
+  </data>
+  <data name="PillProvisioningCancelledSystemsOther" xml:space="preserve">
+    <value>Provisioning canceled · {0} systems</value>
+  </data>
+  <data name="LineageWaitingForSynchronisationTitle" xml:space="preserve">
+    <value>Waiting for the next Synchronization of {0}</value>
+  </data>
+  <data name="LineageWaitingForSynchronisationText" xml:space="preserve">
+    <value>No Synchronization of {0} has run since this import, so nothing has acted on the change yet.</value>
+  </data>
+  <data name="LineageWaitingForSynchronisationPill" xml:space="preserve">
+    <value>Waiting for a Synchronization</value>
+  </data>
+  <data name="LineageNothingFollowedText" xml:space="preserve">
+    <value>A Synchronization of {0} has run since this import and changed nothing as a result.</value>
+  </data>
+  <data name="LineageWaitingOnSynchronisation" xml:space="preserve">
+    <value>a Synchronization of {0}</value>
+  </data>
+  <data name="LineageRunTypeFullSynchronisation" xml:space="preserve">
+    <value>Full Synchronization</value>
+  </data>
+  <data name="LineageRunTypeDeltaSynchronisation" xml:space="preserve">
+    <value>Delta Synchronization</value>
+  </data>
+  <data name="LineageRunKindSynchronisation" xml:space="preserve">
+    <value>Synchronization run</value>
+  </data>
+  <data name="EventSynchronisationRuleFallback" xml:space="preserve">
+    <value>Synchronization Rule</value>
+  </data>
+  <data name="TableViewObjectBeingSynchronised" xml:space="preserve">
+    <value>Object being synchronized</value>
+  </data>
+  <data name="TableChangeKindProvisioningCancelled" xml:space="preserve">
+    <value>Provisioning canceled</value>
+  </data>
+  <data name="PanelPreviewFullSynchronisation" xml:space="preserve">
+    <value>What a Full Synchronization of {0} would do to this object now.</value>
+  </data>
+  <data name="PanelPreviewExportRules" xml:space="preserve">
+    <value>What every enabled export Synchronization Rule would do with this Metaverse Object as it stands now.</value>
+  </data>
+  <data name="TableViewGroupSource" xml:space="preserve">
+    <value>Object being synchronized</value>
+  </data>
+  <data name="TableViewColumnSynchronisationRule" xml:space="preserve">
+    <value>Synchronization Rule</value>
+  </data>
+  <data name="SyncPreviewGeneratedValueNotice" xml:space="preserve">
+    <value>Generated values shown are the next free value now. The synchronization checks again when it runs, so it can issue a different one if another object takes this one first.</value>
+  </data>
+</root>

@@ -3,6 +3,7 @@
 
 using JIM.Models.Connectors;
 using JIM.Web.Models;
+using JIM.Web.Resources;
 
 namespace JIM.Web;
 
@@ -19,7 +20,7 @@ public static class CertificateDisplay
     public static string FormatThumbprint(string? thumbprint)
     {
         if (string.IsNullOrWhiteSpace(thumbprint))
-            return "unknown";
+            return AdminText.CertificateUnknown;
 
         return string.Join(' ', Enumerable
             .Range(0, thumbprint.Length / 2)
@@ -40,17 +41,17 @@ public static class CertificateDisplay
     /// </summary>
     public static string FormatSource(ServerCertificateChainElementSource source) => source switch
     {
-        ServerCertificateChainElementSource.SentByServer => "Sent by server",
-        ServerCertificateChainElementSource.Downloaded => "Downloaded",
-        ServerCertificateChainElementSource.JimCertificateStore => "In Trusted Certificates",
-        ServerCertificateChainElementSource.OperatingSystem => "Operating system",
-        _ => "Unknown"
+        ServerCertificateChainElementSource.SentByServer => AdminText.CertificateSourceSentByServer,
+        ServerCertificateChainElementSource.Downloaded => AdminText.CertificateSourceDownloaded,
+        ServerCertificateChainElementSource.JimCertificateStore => AdminText.CertificateSourceInStore,
+        ServerCertificateChainElementSource.OperatingSystem => AdminText.CertificateSourceOperatingSystem,
+        _ => CommonText.Unknown
     };
 
     public static string FormatRole(ServerCertificateChainRole role) => role switch
     {
-        ServerCertificateChainRole.Root => "Root",
-        ServerCertificateChainRole.Intermediate => "Intermediate",
-        _ => "Server"
+        ServerCertificateChainRole.Root => AdminText.CertificateRoleRoot,
+        ServerCertificateChainRole.Intermediate => AdminText.CertificateRoleIntermediate,
+        _ => AdminText.CertificateRoleServer
     };
 }

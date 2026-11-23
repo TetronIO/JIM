@@ -34,6 +34,9 @@ public class HardCodedTextConventionTests
     private const string BaselineFileName = "hard-coded-text-baseline.json";
     private const string UpdateBaselineVariable = "JIM_UPDATE_LOCALISATION_BASELINE";
 
+    /// <summary>Marks a whole file as not for translation, within its first twenty lines, with a reason.</summary>
+    internal const string FileExemptionMarker = "i18n: exempt-file";
+
     /// <summary>
     /// Folders whose text is not the portal's: the REST API and SCIM (machine-readable contracts, out of scope for
     /// translation), middleware, hosting and logging (diagnostics), and the resources themselves.
@@ -157,6 +160,11 @@ public class HardCodedTextConventionTests
             var relativeToWeb = Path.GetRelativePath(webRoot, path);
             if (ExcludedFolders.Any(folder => relativeToWeb.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.Ordinal))
                 || ExcludedFiles.Contains(relativeToWeb))
+                continue;
+
+            // A developer specimen page (the theme, loading and error page previews) shows English on purpose and is
+            // never seen by a customer; it opts out whole with this marker near its top, giving its reason.
+            if (File.ReadLines(path).Take(20).Any(line => line.Contains(FileExemptionMarker, StringComparison.Ordinal)))
                 continue;
 
             var extension = Path.GetExtension(path);

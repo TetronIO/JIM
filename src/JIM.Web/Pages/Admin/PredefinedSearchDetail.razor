@@ -1,5 +1,6 @@
 ﻿@page "/admin/predefined-searches/{Uri}"
 @attribute [Authorize(Roles = "Administrator")]
+@using System.Globalization
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Search
@@ -14,10 +15,10 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Predefined Search: @_predefinedSearch?.Name</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.SavedSearch" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Predefined Search:</span> <span class="mud-primary-text">@_predefinedSearch?.Name</span>
-    <PageInfo Title="Predefined Search" DocsPage="configuration/predefined-searches.md">
-        A Predefined Search is a saved search over one Metaverse Object Type: the criteria that choose its objects, and the attributes it shows for each.
+<PageTitle>@string.Format(CultureInfo.CurrentCulture, SearchText.DetailPageTitle, _predefinedSearch?.Name)</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.SavedSearch" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@SearchText.DetailHeading</span> <span class="mud-primary-text">@_predefinedSearch?.Name</span>
+    <PageInfo Title="@SearchText.PredefinedSearch" DocsPage="configuration/predefined-searches.md">
+        @SearchText.DetailPageInfo
     </PageInfo>
 </MudText>
 <div class="d-flex justify-space-between align-center">
@@ -36,36 +37,36 @@
 
     <NavigableMudTabs Class="mt-2" TabPanelsClass="pt-6">
 
-        <MudTabPanel Text="Details">
+        <MudTabPanel Text="@SearchText.Details">
     <MudPaper Class="pa-4" Outlined="true">
-        <MudText Typo="Typo.h5" Class="mb-3">Details</MudText>
+        <MudText Typo="Typo.h5" Class="mb-3">@SearchText.Details</MudText>
         <MudGrid Spacing="4">
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Name" Variant="Variant.Outlined">@_predefinedSearch.Name</MudField>
+                <MudField Label="@CommonText.ColumnName" Variant="Variant.Outlined">@_predefinedSearch.Name</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Uri" Variant="Variant.Outlined">@_predefinedSearch.Uri</MudField>
+                <MudField Label="@SearchText.FieldUri" Variant="Variant.Outlined">@_predefinedSearch.Uri</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Object Type" Variant="Variant.Outlined">@_predefinedSearch.MetaverseObjectType.Name</MudField>
+                <MudField Label="@SearchText.ColumnObjectType" Variant="Variant.Outlined">@_predefinedSearch.MetaverseObjectType.Name</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Is default for Object Type?" Variant="Variant.Outlined">@(_predefinedSearch.IsDefaultForMetaverseObjectType ? "Yes" : "No")</MudField>
+                <MudField Label="@SearchText.IsDefaultForObjectType" Variant="Variant.Outlined">@(_predefinedSearch.IsDefaultForMetaverseObjectType ? SearchText.Yes : SearchText.No)</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Built-in?" Variant="Variant.Outlined">@(_predefinedSearch.BuiltIn ? "Yes" : "No")</MudField>
+                <MudField Label="@SearchText.ColumnBuiltIn" Variant="Variant.Outlined">@(_predefinedSearch.BuiltIn ? SearchText.Yes : SearchText.No)</MudField>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudSwitch T="bool" Value="_predefinedSearch.IsEnabled" Color="Color.Success"
-                           Label="Enabled" ValueChanged="async (bool val) => await ToggleEnabledAsync(val)" />
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">Disabled searches don't appear on the portal.</MudText>
+                           Label="@CommonText.Enabled" ValueChanged="async (bool val) => await ToggleEnabledAsync(val)" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@SearchText.DisabledSearchesHint</MudText>
             </MudItem>
         </MudGrid>
     </MudPaper>
 
     <MudPaper Class="pa-4 mt-6" Outlined="true">
-        <MudText Typo="Typo.h5">Metaverse Attributes</MudText>
-        <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-3">These will be the attributes shown in the search results:</MudText>
+        <MudText Typo="Typo.h5">@SearchText.MetaverseAttributes</MudText>
+        <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-3">@SearchText.MetaverseAttributesIntro</MudText>
         <div>
             @foreach (var psa in _predefinedSearch.Attributes)
             {
@@ -77,18 +78,18 @@
     <MudPaper Class="pa-4 mt-6" Outlined="true">
         <div class="d-flex justify-space-between align-center mb-3">
             <div>
-                <MudText Typo="Typo.h5">Criteria</MudText>
-                <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Criteria filter the objects this search returns. All criteria are combined with AND.</MudText>
+                <MudText Typo="Typo.h5">@SearchText.Criteria</MudText>
+                <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">@SearchText.CriteriaIntro</MudText>
             </div>
             <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!predefinedSearchBuiltIn">
                 <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary"
-                           OnClick="HandleOpenAddGroupDialog" DropShadow="false" Disabled="predefinedSearchBuiltIn">Add Criteria Group</MudButton>
+                           OnClick="HandleOpenAddGroupDialog" DropShadow="false" Disabled="predefinedSearchBuiltIn">@SearchText.AddCriteriaGroup</MudButton>
             </MudTooltip>
         </div>
 
         @if (_predefinedSearch.CriteriaGroups.Count == 0)
         {
-            <MudAlert Severity="Severity.Info">This search has no criteria; it returns all @_predefinedSearch.MetaverseObjectType.Name objects. Add a Criteria Group to start filtering.</MudAlert>
+            <MudAlert Severity="Severity.Info">@string.Format(CultureInfo.CurrentCulture, SearchText.NoCriteriaAlert, _predefinedSearch.MetaverseObjectType.Name)</MudAlert>
         }
         else
         {
@@ -102,8 +103,8 @@
     </MudPaper>
         </MudTabPanel>
 
-        <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
-            <ConfigurationChangesTab TargetType="ActivityTargetType.PredefinedSearch" ObjectId="@_predefinedSearch.Id" ObjectTypeLabel="Predefined Search" />
+        <MudTabPanel Text="@SearchText.Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
+            <ConfigurationChangesTab TargetType="ActivityTargetType.PredefinedSearch" ObjectId="@_predefinedSearch.Id" ObjectTypeLabel="@SearchText.PredefinedSearch" />
         </MudTabPanel>
 
     </NavigableMudTabs>
@@ -111,26 +112,27 @@
     @* ─── Add Criteria Group dialog ─── *@
     <MudDialog @bind-Visible="_addGroupDialogVisible" Options="_dialogOptions">
         <TitleContent>
-            <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-3" /> Add Criteria Group</MudText>
+            <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-3" /> @SearchText.AddCriteriaGroup</MudText>
         </TitleContent>
         <DialogContent>
-            <MudSelect T="string" Label="Logic type" Required="true" Variant="Variant.Outlined" @bind-Value="_newGroupType">
-                @foreach (var type in Enum.GetValues(typeof(SearchGroupType)))
+            <MudSelect T="string" Label="@SearchText.LogicType" Required="true" Variant="Variant.Outlined" @bind-Value="_newGroupType"
+                       ToStringFunc="@(name => EnumDisplay.NameForDisplay<SearchGroupType>(name))">
+                @foreach (var type in Enum.GetValues<SearchGroupType>())
                 {
-                    <MudSelectItem Value="@type.ToString()" />
+                    <MudSelectItem Value="@type.ToString()">@type.ForDisplay()</MudSelectItem>
                 }
             </MudSelect>
         </DialogContent>
         <DialogActions>
-            <MudButton DropShadow="false" OnClick="@(() => _addGroupDialogVisible = false)" Class="me-2">Cancel</MudButton>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="string.IsNullOrEmpty(_newGroupType)" OnClick="HandleAddGroupAsync" DropShadow="false">Add Group</MudButton>
+            <MudButton DropShadow="false" OnClick="@(() => _addGroupDialogVisible = false)" Class="me-2">@CommonText.Cancel</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="string.IsNullOrEmpty(_newGroupType)" OnClick="HandleAddGroupAsync" DropShadow="false">@SearchText.AddGroup</MudButton>
         </DialogActions>
     </MudDialog>
 
     @* ─── Add/Edit Criteria dialog ─── *@
     <MudDialog @bind-Visible="_addCriteriaDialogVisible" Options="_dialogOptions">
         <TitleContent>
-            <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.Compare" Class="mr-3" /> @(_editingCriterionId.HasValue ? "Edit Criteria" : "Add Criteria")</MudText>
+            <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.Compare" Class="mr-3" /> @(_editingCriterionId.HasValue ? SearchText.EditCriteria : SearchText.AddCriteria)</MudText>
         </TitleContent>
         <DialogContent>
             @if (_newCriterion != null)
@@ -138,8 +140,8 @@
                 <MudSelect T="MetaverseAttribute"
                            Value="_newCriterionAttribute"
                            ValueChanged="HandleAttributeSelection"
-                           Label="Metaverse Attribute"
-                           Placeholder="Please select a Metaverse attribute"
+                           Label="@SearchText.MetaverseAttribute"
+                           Placeholder="@SearchText.SelectMetaverseAttribute"
                            Required="true"
                            Class="mt-5"
                            Variant="Variant.Outlined"
@@ -154,8 +156,8 @@
                 {
                     <MudSelect T="SearchComparisonType?"
                                @bind-Value="NewCriterionComparisonType"
-                               Label="Comparison Type"
-                               Placeholder="Please select the type of comparison to make"
+                               Label="@SearchText.ComparisonType"
+                               Placeholder="@SearchText.SelectComparisonType"
                                Required="true"
                                Class="mt-5"
                                Variant="Variant.Outlined">
@@ -170,14 +172,14 @@
             }
         </DialogContent>
         <DialogActions>
-            <MudButton DropShadow="false" OnClick="@(() => _addCriteriaDialogVisible = false)" Class="me-2">Cancel</MudButton>
-            <MudButton Disabled="DisableAddCriteriaButton()" Variant="Variant.Filled" DropShadow="false" Color="Color.Primary" OnClick="HandleSaveCriterionAsync">@(_editingCriterionId.HasValue ? "Save" : "Add Criteria")</MudButton>
+            <MudButton DropShadow="false" OnClick="@(() => _addCriteriaDialogVisible = false)" Class="me-2">@CommonText.Cancel</MudButton>
+            <MudButton Disabled="DisableAddCriteriaButton()" Variant="Variant.Filled" DropShadow="false" Color="Color.Primary" OnClick="HandleSaveCriterionAsync">@(_editingCriterionId.HasValue ? SearchText.Save : SearchText.AddCriteria)</MudButton>
         </DialogActions>
     </MudDialog>
 }
 
 @code {
-    private const string BuiltInCriteriaTooltipText = "Built-in Predefined Searches cannot be modified";
+    private static string BuiltInCriteriaTooltipText => SearchText.BuiltInCriteriaTooltip;
 
     [Parameter]
     public string? Uri { get; set; }
@@ -225,11 +227,11 @@
         <div class="mt-4">
             <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!builtIn">
                 <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Class="me-3"
-                           OnClick="@(() => HandleOpenAddCriteriaDialog(group.Id))" DropShadow="false" Disabled="builtIn">Add Criteria</MudButton>
+                           OnClick="@(() => HandleOpenAddCriteriaDialog(group.Id))" DropShadow="false" Disabled="builtIn">@SearchText.AddCriteria</MudButton>
             </MudTooltip>
             <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!builtIn">
                 <MudButton StartIcon="@Icons.Material.Filled.AccountTree" Variant="Variant.Filled"
-                           OnClick="@(() => HandleOpenAddChildGroupDialog(group.Id))" DropShadow="false" Disabled="builtIn">Add Criteria Group</MudButton>
+                           OnClick="@(() => HandleOpenAddChildGroupDialog(group.Id))" DropShadow="false" Disabled="builtIn">@SearchText.AddCriteriaGroup</MudButton>
             </MudTooltip>
         </div>
 
@@ -240,17 +242,17 @@
     </MudPaper>;
 
     private RenderFragment RenderGroupHeader(PredefinedSearchCriteriaGroup group, bool builtIn) =>@<div class="d-flex justify-space-between align-center">
-        <MudText Typo="Typo.overline"><span class="mud-text-secondary">CRITERIA GROUP. LOGIC TYPE:</span> @group.Type.ToString().SplitOnCapitalLetters().ToUpper()</MudText>
-        <MudTooltip Text="@(builtIn ? BuiltInCriteriaTooltipText : "Delete group")" Arrow="true" Placement="Placement.Top">
+        <MudText Typo="Typo.overline"><span class="mud-text-secondary">@SearchText.CriteriaGroupHeading</span> @group.Type.ForDisplay().ToUpper()</MudText>
+        <MudTooltip Text="@(builtIn ? BuiltInCriteriaTooltipText : SearchText.DeleteGroupTooltip)" Arrow="true" Placement="Placement.Top">
             <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" DropShadow="false"
-                           aria-label="delete group" OnClick="@(() => HandleDeleteGroupAsync(group.Id))" Disabled="builtIn" />
+                           aria-label="@SearchText.DeleteGroupAriaLabel" OnClick="@(() => HandleDeleteGroupAsync(group.Id))" Disabled="builtIn" />
         </MudTooltip>
     </div>;
 
     private RenderFragment RenderCriteria(PredefinedSearchCriteriaGroup group, bool builtIn) =>@<text>
         @if (group.Criteria.Count == 0)
         {
-            <MudAlert Severity="Severity.Info" Class="mt-3">No criteria in this group yet.</MudAlert>
+            <MudAlert Severity="Severity.Info" Class="mt-3">@SearchText.NoCriteriaInGroup</MudAlert>
         }
         @foreach (var criteria in group.Criteria)
         {
@@ -258,7 +260,7 @@
                 <MudChip T="string">
                     <AvatarContent>
                         @* object-chip: exempt - names an Attribute, not an object; AttributeChip migration debt *@
-                        <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@SearchText.MetaverseAttribute" Arrow="true" Placement="Placement.Top">
                             <MudAvatar Color="Color.Primary">MV</MudAvatar>
                         </MudTooltip>
                     </AvatarContent>
@@ -269,13 +271,13 @@
                 {
                     <MudChip T="string">@criteria.ToString()</MudChip>
                 }
-                <MudTooltip Text="@(builtIn ? BuiltInCriteriaTooltipText : "Edit criteria")" Arrow="true" Placement="Placement.Top">
+                <MudTooltip Text="@(builtIn ? BuiltInCriteriaTooltipText : SearchText.EditCriteriaTooltip)" Arrow="true" Placement="Placement.Top">
                     <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" DropShadow="false"
-                                   aria-label="edit criteria" OnClick="@(() => HandleOpenEditCriteriaDialog(criteria))" Disabled="builtIn" />
+                                   aria-label="@SearchText.EditCriteriaAriaLabel" OnClick="@(() => HandleOpenEditCriteriaDialog(criteria))" Disabled="builtIn" />
                 </MudTooltip>
-                <MudTooltip Text="@(builtIn ? BuiltInCriteriaTooltipText : "Delete criteria")" Arrow="true" Placement="Placement.Top">
+                <MudTooltip Text="@(builtIn ? BuiltInCriteriaTooltipText : SearchText.DeleteCriteriaTooltip)" Arrow="true" Placement="Placement.Top">
                     <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" DropShadow="false" Disabled="builtIn"
-                                   aria-label="delete criteria" OnClick="@(() => HandleDeleteCriterionAsync(criteria.Id))" />
+                                   aria-label="@SearchText.DeleteCriteriaAriaLabel" OnClick="@(() => HandleDeleteCriterionAsync(criteria.Id))" />
                 </MudTooltip>
             </div>
         }
@@ -305,9 +307,9 @@
 
         _breadcrumbs = new List<BreadcrumbItem>
         {
-            new("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new("Administration", href: "/admin"),
-            new("Predefined Searches", href: "/admin/predefined-searches/"),
+            new(LayoutText.NavHome, href: "/", icon: Icons.Material.Filled.Home),
+            new(LayoutText.NavAdministration, href: "/admin"),
+            new(SearchText.PredefinedSearches, href: "/admin/predefined-searches/"),
             new(_predefinedSearch.Name, href: null, disabled: true)
         };
 
@@ -370,11 +372,11 @@
             await jim.Search.CreatePredefinedSearchCriteriaGroupAsync(_predefinedSearch.Id, _addGroupParentId, type, position);
             _addGroupDialogVisible = false;
             await ReloadAsync();
-            Snackbar.Add("Criteria group added.", Severity.Success);
+            Snackbar.Add(SearchText.CriteriaGroupAdded, Severity.Success);
         }
         catch (ArgumentException ex)
         {
-            Snackbar.Add($"Failed to add criteria group: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SearchText.AddGroupFailed, ex.Message), Severity.Error);
         }
     }
 
@@ -398,11 +400,11 @@
             using var jim = JimFactory.Create();
             await jim.Search.DeletePredefinedSearchCriteriaGroupAsync(groupId);
             await ReloadAsync();
-            Snackbar.Add("Criteria group deleted.", Severity.Success);
+            Snackbar.Add(SearchText.CriteriaGroupDeleted, Severity.Success);
         }
         catch (ArgumentException ex)
         {
-            Snackbar.Add($"Failed to delete criteria group: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SearchText.DeleteGroupFailed, ex.Message), Severity.Error);
         }
     }
 
@@ -482,11 +484,11 @@
             _newCriterionAttribute = null;
             _editingCriterionId = null;
             await ReloadAsync();
-            Snackbar.Add(editing ? "Criteria updated." : "Criteria added.", Severity.Success);
+            Snackbar.Add(editing ? SearchText.CriteriaUpdated : SearchText.CriteriaAdded, Severity.Success);
         }
         catch (ArgumentException ex)
         {
-            Snackbar.Add($"Failed to save criteria: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SearchText.SaveCriteriaFailed, ex.Message), Severity.Error);
         }
     }
 
@@ -497,11 +499,11 @@
             using var jim = JimFactory.Create();
             await jim.Search.DeletePredefinedSearchCriterionAsync(criterionId);
             await ReloadAsync();
-            Snackbar.Add("Criteria deleted.", Severity.Success);
+            Snackbar.Add(SearchText.CriteriaDeleted, Severity.Success);
         }
         catch (ArgumentException ex)
         {
-            Snackbar.Add($"Failed to delete criteria: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SearchText.DeleteCriteriaFailed, ex.Message), Severity.Error);
         }
     }
 
@@ -535,7 +537,7 @@
             var core = await jim.Search.GetPredefinedSearchCoreAsync(_predefinedSearch.Id);
             if (core == null)
             {
-                Snackbar.Add("Predefined search no longer exists.", Severity.Error);
+                Snackbar.Add(SearchText.SearchNoLongerExists, Severity.Error);
                 return;
             }
 
@@ -544,11 +546,11 @@
             await jim.Search.UpdatePredefinedSearchAsync(core, user, changeReason);
             _predefinedSearch.IsEnabled = isEnabled;
             _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.PredefinedSearch, _predefinedSearch.Id, 1, 1)).TotalResults;
-            Snackbar.Add($"Predefined search '{_predefinedSearch.Name}' {(isEnabled ? "enabled" : "disabled")}.", Severity.Success);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, isEnabled ? SearchText.SearchEnabledSnackbar : SearchText.SearchDisabledSnackbar, _predefinedSearch.Name), Severity.Success);
         }
         catch (InvalidOperationException ex)
         {
-            Snackbar.Add($"Failed to update predefined search: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, SearchText.UpdateFailed, ex.Message), Severity.Error);
         }
     }
 }

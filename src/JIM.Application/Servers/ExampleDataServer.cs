@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Expressions;
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
 using JIM.Application.Servers.Scoping;
 using JIM.Application.Utilities;
 using JIM.Models.Activities;
@@ -12,6 +14,7 @@ using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
+using JIM.Models.Localisation;
 using JIM.Models.Search;
 using JIM.Models.Logic;
 using JIM.Models.Security;
@@ -185,7 +188,7 @@ public class ExampleDataServer
             TargetType = ActivityTargetType.ExampleDataSet,
             TargetOperationType = ActivityTargetOperationType.Create,
             ParentActivityId = parentActivityId,
-            Message = $"Created built-in Example Data Set '{name}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CreatedBuiltInExampleDataSet), name)
         };
         await Application.Activities.CreateSystemActivityAsync(activity);
 
@@ -231,11 +234,11 @@ public class ExampleDataServer
     // Built-in templates are JIM's own and are kept converged by seeding, which maintains them through the repository
     // directly; every administrator-facing change goes through the mutators below, so this is where the rule lives.
     // Copying is still allowed: it is how an administrator customises a built-in template.
-    private const string BuiltInTemplateCannotBeChangedMessage =
-        "Built-in Data Generation Templates cannot be changed. Duplicate it to make a version you can change.";
+    private static JimMessage BuiltInTemplateCannotBeChangedMessage =>
+        ServerMessage.Create(nameof(ServerMessages.ExampleBuiltInTemplateCannotBeChanged));
 
-    private const string BuiltInTemplateCannotBeDeletedMessage =
-        "Built-in Data Generation Templates cannot be deleted.";
+    private static JimMessage BuiltInTemplateCannotBeDeletedMessage =>
+        ServerMessage.Create(nameof(ServerMessages.ExampleBuiltInTemplateCannotBeDeleted));
 
     // Example Data Templates are administered through the REST API and PowerShell (#894) as well as created by seeding
     // (System), so these mutators are attributed via the initiator triad and each records a versioned configuration
@@ -362,7 +365,7 @@ public class ExampleDataServer
     {
         var existingTemplate = await Application.Repository.ExampleData.GetTemplateAsync(template.Name);
         if (existingTemplate != null && existingTemplate.Id != template.Id)
-            throw new InvalidOperationException($"A Data Generation Template named '{template.Name}' already exists.");
+            throw LocalisedExceptions.InvalidOperation(ServerMessage.Create(nameof(ServerMessages.ExampleTemplateNameExists), template.Name));
     }
 
     private async Task CaptureExampleDataTemplateConfigurationChangeAsync(Activity activity, int templateId, string? changeReason)
@@ -401,7 +404,7 @@ public class ExampleDataServer
             TargetType = ActivityTargetType.ExampleDataTemplate,
             TargetOperationType = ActivityTargetOperationType.Create,
             ParentActivityId = parentActivityId,
-            Message = $"Created built-in Example Data Template '{name}'"
+            MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CreatedBuiltInExampleDataTemplate), name)
         };
         await Application.Activities.CreateSystemActivityAsync(activity);
 
@@ -1130,6 +1133,7 @@ public class ExampleDataServer
     private async Task EnsureTemplateExpressionsAreValidAsync(ExampleDataTemplate template)
     {
         template.SaveWarnings.Clear();
+        template.SaveWarningDetails.Clear();
         var withExpressions = template.ObjectTypes
             .SelectMany(objectType => objectType.TemplateAttributes.Where(a => !string.IsNullOrWhiteSpace(a.Expression)).Select(a => (objectType, attribute: a)))
             .ToList();
@@ -1144,47 +1148,51 @@ public class ExampleDataServer
             .GroupBy(entry => entry.Key)
             .ToDictionary(group => group.Key, group => group.First().Expression);
 
-        var refusals = new List<string>();
+        var refusals = new List<JimMessage>();
         foreach (var (objectType, attribute) in withExpressions)
         {
             var expression = attribute.Expression!;
             var unchanged = storedExpressions.TryGetValue(ExpressionKey(objectType, attribute), out var storedExpression) &&
                             string.Equals(storedExpression, expression, StringComparison.Ordinal);
-            var name = $"'{AttributeName(attribute)}' on '{objectType.MetaverseObjectType?.Name}'";
+            var name = ServerMessage.Create(nameof(ServerMessages.ExampleAttributeOnType),
+                AttributeName(attribute) ?? string.Empty, objectType.MetaverseObjectType?.Name ?? string.Empty);
 
             foreach (var (message, blocking) in ExpressionProblems(objectType, attribute, expression, name))
             {
                 if (blocking && !unchanged)
                     refusals.Add(message);
                 else
-                    template.SaveWarnings.Add(message);
+                {
+                    template.SaveWarnings.Add(message.ToEnglish());
+                    template.SaveWarningDetails.Add(message);
+                }
             }
         }
 
         if (refusals.Count > 0)
-            throw new ExampleDataTemplateAttributeException(string.Join(" ", refusals));
+            throw new ExampleDataTemplateAttributeException(refusals.Skip(1).Aggregate(refusals[0],
+                (joined, next) => ServerMessage.Create(nameof(ServerMessages.ExampleRefusalsJoined), joined, next)));
     }
 
-    private IEnumerable<(string Message, bool Blocking)> ExpressionProblems(
-        ExampleDataObjectType objectType, ExampleDataTemplateAttribute attribute, string expression, string name)
+    private IEnumerable<(JimMessage Message, bool Blocking)> ExpressionProblems(
+        ExampleDataObjectType objectType, ExampleDataTemplateAttribute attribute, string expression, JimMessage name)
     {
         var parsed = _expressionEvaluator.Validate(expression);
         if (!parsed.IsValid)
         {
-            yield return ($"The expression for {name} does not parse: {parsed.ErrorMessage}", true);
+            yield return (ServerMessage.Create(nameof(ServerMessages.ExampleExpressionDoesNotParse), name, parsed.ErrorMessage ?? string.Empty), true);
             yield break;
         }
 
         foreach (var input in ExpressionInputResolver.Resolve(expression).Where(i => i.Source == ExpressionInputSource.ConnectedSystem))
         {
-            yield return ($"The expression for {name} reads {input.Accessor}, but Example Data creates Metaverse Objects and has no " +
-                          "Connected System Object to read, so it never has a value. Read mv[\"...\"] instead.", true);
+            yield return (ServerMessage.Create(nameof(ServerMessages.ExampleExpressionReadsConnectedSystem), name, input.Accessor), true);
         }
 
         foreach (var missing in InputsNotGenerated(objectType, attribute, expression))
         {
-            yield return ($"The expression for {name} reads mv[\"{missing}\"], which this template does not generate on " +
-                          $"'{objectType.MetaverseObjectType?.Name}', so it never has a value.", false);
+            yield return (ServerMessage.Create(nameof(ServerMessages.ExampleExpressionReadsUngenerated), name, missing,
+                objectType.MetaverseObjectType?.Name ?? string.Empty), false);
         }
     }
 

@@ -16,7 +16,7 @@
         </div>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Close">Close</MudButton>
+        <MudButton OnClick="Close">@CommonText.Close</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -42,7 +42,7 @@
 
     /// <summary>A human-readable label for the object kind, used in the empty-state message.</summary>
     [Parameter]
-    public string ObjectTypeLabel { get; set; } = "object";
+    public string ObjectTypeLabel { get; set; } = ActivityText.ActivityHistoryDefaultObjectLabel;
 
     /// <summary>
     /// Opens the history dialog for a string-keyed configuration object (e.g. a Service Setting), titled with the
@@ -93,7 +93,8 @@
     private static async Task ShowCoreAsync(IDialogService dialogService, DialogParameters<ConfigurationChangeHistoryDialog> parameters, string displayName)
     {
         var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true, CloseButton = true };
-        var dialog = await dialogService.ShowAsync<ConfigurationChangeHistoryDialog>($"Change history: {displayName}", parameters, options);
+        var title = string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityHistoryDialogTitle, displayName);
+        var dialog = await dialogService.ShowAsync<ConfigurationChangeHistoryDialog>(title, parameters, options);
         await dialog.Result;
     }
 

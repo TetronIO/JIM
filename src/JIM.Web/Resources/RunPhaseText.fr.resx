@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Import_Connect" xml:space="preserve">
+    <value>Connexion au système connecté</value>
+  </data>
+  <data name="Import_Fetch" xml:space="preserve">
+    <value>Importation des objets</value>
+  </data>
+  <data name="Import_Process" xml:space="preserve">
+    <value>Traitement des objets importés</value>
+  </data>
+  <data name="Import_Deletions" xml:space="preserve">
+    <value>Traitement des suppressions</value>
+  </data>
+  <data name="Import_References" xml:space="preserve">
+    <value>Résolution des références</value>
+  </data>
+  <data name="Import_Save" xml:space="preserve">
+    <value>Enregistrement des modifications</value>
+  </data>
+  <data name="Import_Reconcile" xml:space="preserve">
+    <value>Réconciliation des exportations en attente</value>
+  </data>
+  <data name="Import_Record" xml:space="preserve">
+    <value>Enregistrement des résultats</value>
+  </data>
+  <data name="Sync_Prepare" xml:space="preserve">
+    <value>Préparation</value>
+  </data>
+  <data name="Sync_Process" xml:space="preserve">
+    <value>Traitement des objets de systèmes connectés</value>
+  </data>
+  <data name="Sync_Crosspagereferences" xml:space="preserve">
+    <value>Résolution des références entre pages</value>
+  </data>
+  <data name="Sync_Scopereview" xml:space="preserve">
+    <value>Examen des exportations</value>
+  </data>
+  <data name="Export_Prepare" xml:space="preserve">
+    <value>Préparation de l’exportation</value>
+  </data>
+  <data name="Export_Execute" xml:space="preserve">
+    <value>Exportation</value>
+  </data>
+  <data name="Export_Deferred" xml:space="preserve">
+    <value>Exportation des modifications différées</value>
+  </data>
+  <data name="Export_References" xml:space="preserve">
+    <value>Résolution des références de l’historique des modifications</value>
+  </data>
+  <data name="Export_Containers" xml:space="preserve">
+    <value>Sélection des nouveaux conteneurs</value>
+  </data>
+</root>

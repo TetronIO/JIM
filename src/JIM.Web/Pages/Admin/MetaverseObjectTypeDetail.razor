@@ -9,6 +9,7 @@
 @using JIM.Utilities
 @using JIM.Web.Models
 @using JIM.Web.Pages.Admin.Components
+@using System.Globalization
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
@@ -18,10 +19,10 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Metaverse Object Type: @_metaverseObjectType?.Name</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(_metaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Metaverse Object Type:</span> <span class="mud-primary-text">@_metaverseObjectType?.Name</span>
-    <PageInfo Title="Metaverse Object Type" DocsPage="configuration/metaverse.md#object-types">
-        A Metaverse Object Type is one kind of object the Metaverse holds, such as a User or a Group: its attributes, and what happens to its objects when they lose their connections.
+<PageTitle>@string.Format(CultureInfo.CurrentCulture, MetaverseText.MvotPageTitle, _metaverseObjectType?.Name)</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(_metaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>@MetaverseText.MvotHeading</span> <span class="mud-primary-text">@_metaverseObjectType?.Name</span>
+    <PageInfo Title="@MetaverseText.MetaverseObjectTypeNoun" DocsPage="configuration/metaverse.md#object-types">
+        @MetaverseText.MvotPageInfo
     </PageInfo>
 </MudText>
 <div class="d-flex justify-space-between align-center">
@@ -40,39 +41,39 @@
 {
     <NavigableMudTabs TabPanelsClass="pt-6" Class="mt-2">
 
-        <MudTabPanel Text="Details">
+        <MudTabPanel Text="@MetaverseText.DetailsTab">
             <MudPaper Class="pa-4" Outlined="true">
                 <div class="d-flex justify-space-between align-center mb-4">
-                    <MudText Typo="Typo.h5">Details</MudText>
+                    <MudText Typo="Typo.h5">@MetaverseText.DetailsTab</MudText>
                     @if (!_metaverseObjectType.BuiltIn)
                     {
-                        <MudTooltip Text="Edit Object Type" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Class="my-n3" aria-label="edit object type" OnClick="OpenEditObjectTypeDialogAsync" />
+                        <MudTooltip Text="@MetaverseText.MvotEditObjectType" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" Class="my-n3" aria-label="@MetaverseText.MvotEditObjectTypeAria" OnClick="OpenEditObjectTypeDialogAsync" />
                         </MudTooltip>
                     }
                     else
                     {
-                        <MudTooltip Text="Built-in Object Types cannot be renamed or re-iconed." Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@MetaverseText.MvotBuiltInCannotRename" Arrow="true" Placement="Placement.Top">
                             <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary" />
                         </MudTooltip>
                     }
                 </div>
                 <MudGrid Spacing="4">
                     <MudItem xs="12" sm="6" md="4">
-                        <MudField Label="Name" Variant="Variant.Outlined">@_metaverseObjectType.Name</MudField>
+                        <MudField Label="@CommonText.ColumnName" Variant="Variant.Outlined">@_metaverseObjectType.Name</MudField>
                     </MudItem>
                     <MudItem xs="12" sm="6" md="4">
-                        <MudField Label="Plural Name" Variant="Variant.Outlined">@_metaverseObjectType.PluralName</MudField>
+                        <MudField Label="@MetaverseText.MvotPluralName" Variant="Variant.Outlined">@_metaverseObjectType.PluralName</MudField>
                     </MudItem>
                     <MudItem xs="12" sm="6" md="4">
-                        <MudField Label="Built-in?" Variant="Variant.Outlined">@(_metaverseObjectType.BuiltIn ? "Yes" : "No")</MudField>
+                        <MudField Label="@MetaverseText.MvotBuiltInQuestion" Variant="Variant.Outlined">@(_metaverseObjectType.BuiltIn ? CommonText.Yes : CommonText.No)</MudField>
                     </MudItem>
                     <MudItem xs="12" sm="6" md="4">
-                        <MudField Label="Icon" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Helpers.ResolveObjectTypeIcon(_metaverseObjectType.Icon)">
-                            @(_metaverseObjectType.Icon ?? "None")
+                        <MudField Label="@MetaverseText.MvotIcon" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Helpers.ResolveObjectTypeIcon(_metaverseObjectType.Icon)">
+                            @(_metaverseObjectType.Icon ?? CommonText.None)
                         </MudField>
                         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
-                            Browse available icons at the <MudLink Href="https://mudblazor.com/features/icons" Target="_blank">MudBlazor Icon Gallery</MudLink>. Use the <strong>Filled</strong> icon name (e.g., "Person", "Groups", "Devices").
+                            @((MarkupString)MetaverseText.MvotIconHelp)
                         </MudText>
                     </MudItem>
                 </MudGrid>
@@ -82,34 +83,34 @@
                 @* The link sits in the header, apart from Save, Preview and Reset below: it navigates rather than edits. *@
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Wrap="Wrap.Wrap" Spacing="2">
                     <div>
-                        <MudText Typo="Typo.h5" Class="mb-2">Deletion Rules</MudText>
-                        <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">Configure when Metaverse Objects of this type should be automatically deleted.</MudText>
+                        <MudText Typo="Typo.h5" Class="mb-2">@MetaverseText.MvotDeletionRules</MudText>
+                        <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">@MetaverseText.MvotDeletionRulesIntro</MudText>
                     </div>
                     <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.AutoDelete"
                                Href="@Utilities.GetPendingDeletionsHref(_metaverseObjectType.PluralName)">
-                        View Pending Deletions
+                        @MetaverseText.MvotViewPendingDeletions
                     </MudButton>
                 </MudStack>
                 <MudGrid>
                     <MudItem xs="12" sm="6" md="4">
-                        <MudSelect T="MetaverseObjectDeletionRule" Label="Deletion Rule" @bind-Value="_deletionRule"
+                        <MudSelect T="MetaverseObjectDeletionRule" Label="@MetaverseText.MvotDeletionRule" @bind-Value="_deletionRule"
                             Variant="Variant.Outlined" HelperText="@GetDeletionRuleHelperText()">
-                            <MudSelectItem Value="MetaverseObjectDeletionRule.Manual">Manual</MudSelectItem>
-                            <MudSelectItem Value="MetaverseObjectDeletionRule.WhenLastConnectorDisconnected">When Last Connector Disconnected</MudSelectItem>
-                            <MudSelectItem Value="MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected">When Authoritative Source Disconnected</MudSelectItem>
+                            <MudSelectItem Value="MetaverseObjectDeletionRule.Manual">@MetaverseText.MvotRuleManual</MudSelectItem>
+                            <MudSelectItem Value="MetaverseObjectDeletionRule.WhenLastConnectorDisconnected">@MetaverseText.MvotRuleWhenLastConnectorDisconnected</MudSelectItem>
+                            <MudSelectItem Value="MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected">@MetaverseText.MvotRuleWhenAuthoritativeSourceDisconnected</MudSelectItem>
                         </MudSelect>
                     </MudItem>
                     <MudItem xs="4" sm="2" md="2">
-                        <MudNumericField T="int" Label="Days" @bind-Value="_gracePeriodDays"
+                        <MudNumericField T="int" Label="@MetaverseText.MvotDays" @bind-Value="_gracePeriodDays"
                             Variant="Variant.Outlined" Min="0" Max="3650" Immediate="true"
-                            HelperText="Grace period" />
+                            HelperText="@MetaverseText.MvotGracePeriod" />
                     </MudItem>
                     <MudItem xs="4" sm="2" md="2">
-                        <MudNumericField T="int" Label="Hours" @bind-Value="_gracePeriodHours"
+                        <MudNumericField T="int" Label="@MetaverseText.MvotHours" @bind-Value="_gracePeriodHours"
                             Variant="Variant.Outlined" Min="0" Max="23" Immediate="true" />
                     </MudItem>
                     <MudItem xs="4" sm="2" md="2">
-                        <MudNumericField T="int" Label="Minutes" @bind-Value="_gracePeriodMinutes"
+                        <MudNumericField T="int" Label="@MetaverseText.MvotMinutes" @bind-Value="_gracePeriodMinutes"
                             Variant="Variant.Outlined" Min="0" Max="59" Immediate="true" />
                     </MudItem>
                 </MudGrid>
@@ -126,20 +127,19 @@
                 {
                     @* Deletion Trigger mode (#119): whether every selected source must disconnect, or any one *@
                     <div class="mt-4">
-                        <MudText Typo="Typo.subtitle2" Class="mb-2">Deletion Trigger</MudText>
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">@MetaverseText.MvotDeletionTrigger</MudText>
                         <MudRadioGroup T="AuthoritativeSourceTriggerMode" @bind-Value="_deletionTriggerMode">
                             <MudStack Spacing="1">
                                 <MudRadio Value="AuthoritativeSourceTriggerMode.AllSourcesDisconnect" Color="Color.Primary">
-                                    <MudText Typo="Typo.body1">All sources disconnect</MudText>
+                                    <MudText Typo="Typo.body1">@MetaverseText.MvotAllSourcesDisconnect</MudText>
                                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                        Delete only once every selected source has disconnected. Resilient to a single
-                                        system failing or being rebuilt. This is the default.
+                                        @MetaverseText.MvotAllSourcesDisconnectHint
                                     </MudText>
                                 </MudRadio>
                                 <MudRadio Value="AuthoritativeSourceTriggerMode.SpecificSourcesDisconnect" Color="Color.Primary">
-                                    <MudText Typo="Typo.body1">Specific source(s) disconnect</MudText>
+                                    <MudText Typo="Typo.body1">@MetaverseText.MvotSpecificSourcesDisconnect</MudText>
                                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                        Delete when any one of the selected sources disconnects, even if others remain connected.
+                                        @MetaverseText.MvotSpecificSourcesDisconnectHint
                                     </MudText>
                                 </MudRadio>
                             </MudStack>
@@ -147,12 +147,11 @@
                     </div>
 
                     <div class="mt-4">
-                        <MudText Typo="Typo.subtitle2" Class="mb-2">Authoritative Sources</MudText>
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">@MetaverseText.MvotAuthoritativeSources</MudText>
                         @if (_contributingSystems.Any())
                         {
                             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-                                Select the Connected Systems that are authoritative sources for this object type.
-                                At least one contributing system must be selected; nothing is selected by default.
+                                @MetaverseText.MvotSelectAuthoritativeSources
                             </MudText>
                             @foreach (var system in _contributingSystems)
                             {
@@ -163,11 +162,11 @@
                                         ValueChanged="@((bool val) => ToggleAuthoritativeSource(system.Id, val))"
                                         Label="@system.Name" Color="Color.Primary" />
                                     <MudChip T="string" Variant="Variant.Text" Color="Color.Default">
-                                        @(system.Projects ? "Projects" : "Joins only")
+                                        @(system.Projects ? MetaverseText.MvotProjects : MetaverseText.MvotJoinsOnly)
                                     </MudChip>
                                     @if (system.Projects && !_selectedAuthoritativeSources.Contains(system.Id))
                                     {
-                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Projects, not authoritative</MudChip>
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">@MetaverseText.MvotProjectsNotAuthoritative</MudChip>
                                     }
                                 </MudStack>
                             }
@@ -175,7 +174,7 @@
                         else
                         {
                             <MudAlert Severity="Severity.Warning" Dense="true">
-                                No contributing systems found. Create inbound Synchronisation Rules for this object type to enable authoritative source selection.
+                                @MetaverseText.MvotNoContributingSystems
                             </MudAlert>
                         }
                     </div>
@@ -200,16 +199,16 @@
                 <MudStack Row="true" Class="mt-5" Spacing="2">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveDeletionRulesAsync"
                         Disabled="@(!CanSave())">
-                        Save Changes
+                        @CommonText.SaveChanges
                     </MudButton>
                     @* Preview (#1114): the one change in JIM that can make existing Metaverse Objects eligible for *@
                     @* deletion the moment it is saved, so it is the one that most needs answering beforehand.      *@
                     <MudButton data-testid="jim-preview-deletion-settings" Variant="Variant.Filled"
                         StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewDeletionRulesAsync"
                         Disabled="@(!CanSave() || _startingPreview)">
-                        Preview Changes
+                        @MetaverseText.MvotPreviewChanges
                     </MudButton>
-                    <MudButton Variant="Variant.Text" OnClick="ResetDeletionRules">Reset</MudButton>
+                    <MudButton Variant="Variant.Text" OnClick="ResetDeletionRules">@MetaverseText.Reset</MudButton>
                 </MudStack>
 
                 @if (_previewActivityId.HasValue)
@@ -220,13 +219,12 @@
                     {
                         <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-6"
                                   data-testid="jim-preview-stale">
-                            The deletion settings have been edited since this preview ran, so it no longer describes
-                            what saving would do. Preview again for an answer about the current settings.
+                            @MetaverseText.MvotPreviewStale
                         </MudAlert>
                     }
 
                     <ConfigurationChangePreviewPanel ActivityId="@previewActivityId"
-                                                     Title="Preview: Deletion Rules"
+                                                     Title="@MetaverseText.MvotPreviewDeletionRules"
                                                      OnPreviewChanged="OnDeletionSettingsPreviewChanged"
                                                      OnClose="DiscardDeletionSettingsPreview"
                                                      Class="mt-6" />
@@ -234,11 +232,8 @@
             </MudPaper>
 
             <MudPaper Class="pa-4 mt-6" Outlined="true">
-                <MudText Typo="Typo.h5" Class="mb-2">Downstream Deprovisioning</MudText>
-                <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">When a Metaverse Object of this type is deleted
-                    (or leaves an export Synchronisation Rule's scope), each export Synchronisation Rule's Deprovisioning Action
-                    determines what happens to the corresponding object in its Connected System: Disconnect leaves it in place;
-                    Delete removes it. Disabled Synchronisation Rules do not apply during synchronisation.</MudText>
+                <MudText Typo="Typo.h5" Class="mb-2">@MetaverseText.MvotDownstreamDeprovisioning</MudText>
+                <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">@MetaverseText.MvotDeprovisioningIntro</MudText>
 
                 @* The export Synchronisation Rules targeting this type are a handful even on a large deployment, and
                    are already loaded, so the grid slices its windows from memory rather than reading a range. *@
@@ -247,44 +242,44 @@
                                      UrlParameterPrefix="dp-"
                                      DefaultSortBy="connectedsystem"
                                      LoadWindow="LoadExportRuleWindowAsync"
-                                     SingularName="Synchronisation Rule"
-                                     PluralName="Synchronisation Rules"
-                                     SearchPlaceholder="Search rules">
+                                     SingularName="@MetaverseText.SynchronisationRuleNoun"
+                                     PluralName="@MetaverseText.SynchronisationRulesNoun"
+                                     SearchPlaceholder="@MetaverseText.MvotSearchRules">
                     <Columns>
-                        <TemplateColumn Title="Connected System" Sortable="false">
+                        <TemplateColumn Title="@MetaverseText.ConnectedSystemNoun" Sortable="false">
                             <HeaderTemplate>
-                                <VirtualisedSortHeader Title="Connected System" Name="connectedsystem" />
+                                <VirtualisedSortHeader Title="@MetaverseText.ConnectedSystemNoun" Name="connectedsystem" />
                             </HeaderTemplate>
                             <CellTemplate>
                                 <MudLink Href="@($"/admin/connected-systems/{context.Item.ConnectedSystemId}")">@context.Item.ConnectedSystemName</MudLink>
                             </CellTemplate>
                         </TemplateColumn>
-                        <TemplateColumn Title="Synchronisation Rule" Sortable="false">
+                        <TemplateColumn Title="@MetaverseText.SynchronisationRuleNoun" Sortable="false">
                             <HeaderTemplate>
-                                <VirtualisedSortHeader Title="Synchronisation Rule" Name="name" />
+                                <VirtualisedSortHeader Title="@MetaverseText.SynchronisationRuleNoun" Name="name" />
                             </HeaderTemplate>
                             <CellTemplate>
                                 <MudLink Href="@($"/admin/sync-rules/{context.Item.Id}")">@context.Item.Name</MudLink>
                             </CellTemplate>
                         </TemplateColumn>
-                        <TemplateColumn Title="Status" Sortable="false">
+                        <TemplateColumn Title="@CommonText.ColumnStatus" Sortable="false">
                             <HeaderTemplate>
-                                <VirtualisedSortHeader Title="Status" Name="status" />
+                                <VirtualisedSortHeader Title="@CommonText.ColumnStatus" Name="status" />
                             </HeaderTemplate>
                             <CellTemplate>
                                 @if (context.Item.Enabled)
                                 {
-                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Success">Enabled</MudChip>
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Success">@CommonText.Enabled</MudChip>
                                 }
                                 else
                                 {
-                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default">Disabled</MudChip>
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default">@CommonText.Disabled</MudChip>
                                 }
                             </CellTemplate>
                         </TemplateColumn>
-                        <TemplateColumn Title="Deprovisioning Action" Sortable="false">
+                        <TemplateColumn Title="@MetaverseText.MvotDeprovisioningAction" Sortable="false">
                             <HeaderTemplate>
-                                <VirtualisedSortHeader Title="Deprovisioning Action" Name="deprovisioningaction" />
+                                <VirtualisedSortHeader Title="@MetaverseText.MvotDeprovisioningAction" Name="deprovisioningaction" />
                             </HeaderTemplate>
                             <CellTemplate>
                                 @{
@@ -293,10 +288,10 @@
                                 <MudSelect T="OutboundDeprovisionAction" Value="@header.OutboundDeprovisionAction"
                                            ValueChanged="@((OutboundDeprovisionAction newAction) => OnDeprovisionActionChangedAsync(header, newAction))"
                                            Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-0" Style="max-width: 200px;">
-                                    <MudSelectItem Value="OutboundDeprovisionAction.Disconnect">Disconnect</MudSelectItem>
+                                    <MudSelectItem Value="OutboundDeprovisionAction.Disconnect">@MetaverseText.MvotDeprovisionDisconnect</MudSelectItem>
                                     @* Only where the Connector can disable an account (#2085). *@
-                                    <MudSelectItem Value="OutboundDeprovisionAction.Disable" Disabled="@(!header.ConnectorSupportsDisable)">@(header.ConnectorSupportsDisable ? "Disable" : "Disable (not supported by Connector)")</MudSelectItem>
-                                    <MudSelectItem Value="OutboundDeprovisionAction.Delete">Delete</MudSelectItem>
+                                    <MudSelectItem Value="OutboundDeprovisionAction.Disable" Disabled="@(!header.ConnectorSupportsDisable)">@(header.ConnectorSupportsDisable ? MetaverseText.MvotDeprovisionDisable : MetaverseText.MvotDeprovisionDisableUnsupported)</MudSelectItem>
+                                    <MudSelectItem Value="OutboundDeprovisionAction.Delete">@MetaverseText.MvotDeprovisionDelete</MudSelectItem>
                                 </MudSelect>
                             </CellTemplate>
                         </TemplateColumn>
@@ -305,32 +300,32 @@
                         @if (!string.IsNullOrWhiteSpace(grid.SearchText))
                         {
                             <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                             PrimaryText="@($"No export Synchronisation Rules match \"{grid.SearchText}\"")"
-                                             SecondaryText="Try a different search term, or clear the search."
-                                             ActionText="Clear Search"
+                                             PrimaryText="@string.Format(CultureInfo.CurrentCulture, MetaverseText.MvotNoExportRulesMatch, grid.SearchText)"
+                                             SecondaryText="@CommonText.TrySearchAgain"
+                                             ActionText="@CommonText.ClearSearch"
                                              OnAction="@(() => grid.ClearSearchAsync())" />
                         }
                         else
                         {
                             <TableEmptyState Icon="@Icons.Material.Filled.Output"
-                                             PrimaryText="No export Synchronisation Rules target this Metaverse Object Type"
-                                             SecondaryText="When Metaverse Objects of this type are deleted, no objects in Connected Systems are affected. Create an export Synchronisation Rule for this type to change that." />
+                                             PrimaryText="@MetaverseText.MvotNoExportRulesForType"
+                                             SecondaryText="@MetaverseText.MvotNoExportRulesForTypeHint" />
                         }
                     </EmptyContent>
                 </VirtualisedDataGrid>
             </MudPaper>
         </MudTabPanel>
 
-        <MudTabPanel Text="Attributes">
+        <MudTabPanel Text="@MetaverseText.AttributesNoun">
             <MudPaper Class="pa-4" Outlined="true">
-                <MudText Typo="Typo.h5" Class="mb-2">Attributes</MudText>
-                <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">These are the attributes bound to the Metaverse Object Type:</MudText>
+                <MudText Typo="Typo.h5" Class="mb-2">@MetaverseText.AttributesNoun</MudText>
+                <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">@MetaverseText.MvotAttributesIntro</MudText>
 
             @* Filter Chips Section *@
             <MudStack Row="true" Spacing="6" Class="mb-3 flex-wrap" AlignItems="AlignItems.Start">
                 @* Type Filter *@
                 <div>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Type:</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@MetaverseText.MvotFilterByType</MudText>
                     <MudChipSet T="AttributeDataType"
                                 SelectionMode="SelectionMode.MultiSelection"
                                 SelectedValues="_selectedTypes"
@@ -341,7 +336,7 @@
                                      Color="@(_selectedTypes.Contains(type.Key) ? Color.Default : Color.Primary)"
                                      Variant="@(_selectedTypes.Contains(type.Key) ? Variant.Filled : Variant.Outlined)"
                                      SelectedColor="Color.Primary">
-                                @type.Key.ToString().SplitOnCapitalLetters()
+                                @type.Key.ForDisplay()
                                 <MudText Typo="Typo.caption" Class="ml-1">(@type.Value)</MudText>
                             </MudChip>
                         }
@@ -350,7 +345,7 @@
 
                 @* Plurality Filter *@
                 <div>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Plurality:</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@MetaverseText.MvotFilterByPlurality</MudText>
                     <MudChipSet T="AttributePlurality"
                                 SelectionMode="SelectionMode.MultiSelection"
                                 SelectedValues="_selectedPluralities"
@@ -361,7 +356,7 @@
                                      Color="@(_selectedPluralities.Contains(plurality.Key) ? Color.Default : Color.Info)"
                                      Variant="@(_selectedPluralities.Contains(plurality.Key) ? Variant.Filled : Variant.Outlined)"
                                      SelectedColor="Color.Info">
-                                @(plurality.Key == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                                @(plurality.Key == AttributePlurality.SingleValued ? MetaverseText.MvotSingleValued : MetaverseText.MvotMultiValued)
                                 <MudText Typo="Typo.caption" Class="ml-1">(@plurality.Value)</MudText>
                             </MudChip>
                         }
@@ -370,7 +365,7 @@
 
                 @* Built-in Filter *@
                 <div>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Built-in:</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@MetaverseText.MvotFilterByBuiltIn</MudText>
                     <MudChipSet T="bool"
                                 SelectionMode="SelectionMode.MultiSelection"
                                 SelectedValues="_selectedBuiltIn"
@@ -381,7 +376,7 @@
                                      Color="Color.Default"
                                      Variant="@(_selectedBuiltIn.Contains(builtIn.Key) ? Variant.Filled : Variant.Outlined)"
                                      SelectedColor="Color.Default">
-                                @(builtIn.Key ? "Yes" : "No")
+                                @(builtIn.Key ? CommonText.Yes : CommonText.No)
                                 <MudText Typo="Typo.caption" Class="ml-1">(@builtIn.Value)</MudText>
                             </MudChip>
                         }
@@ -398,62 +393,62 @@
                                  UrlParameterPrefix="at-"
                                  DefaultSortBy="name"
                                  LoadWindow="LoadAttributeWindowAsync"
-                                 SingularName="Attribute"
-                                 PluralName="Attributes"
-                                 SearchPlaceholder="Search attributes">
+                                 SingularName="@MetaverseText.AttributeNoun"
+                                 PluralName="@MetaverseText.AttributesNoun"
+                                 SearchPlaceholder="@MetaverseText.MvotSearchAttributes">
                 <ToolBarExtras>
                     <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
-                               DropShadow="false" OnClick="OpenAddAttributeBindingDialogAsync">Add Attribute</MudButton>
+                               DropShadow="false" OnClick="OpenAddAttributeBindingDialogAsync">@MetaverseText.MvotAddAttribute</MudButton>
                 </ToolBarExtras>
                 <Columns>
-                    <TemplateColumn Title="Name" Sortable="false">
+                    <TemplateColumn Title="@CommonText.ColumnName" Sortable="false">
                         <HeaderTemplate>
-                            <VirtualisedSortHeader Title="Name" Name="name" />
+                            <VirtualisedSortHeader Title="@CommonText.ColumnName" Name="name" />
                         </HeaderTemplate>
                         <CellTemplate>
                             @context.Item.Name
                         </CellTemplate>
                     </TemplateColumn>
-                    <TemplateColumn Title="Type" Sortable="false">
+                    <TemplateColumn Title="@CommonText.ColumnType" Sortable="false">
                         <HeaderTemplate>
-                            <VirtualisedSortHeader Title="Type" Name="type" />
+                            <VirtualisedSortHeader Title="@CommonText.ColumnType" Name="type" />
                         </HeaderTemplate>
                         <CellTemplate>
                             <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Outlined">
-                                @context.Item.Type.ToString().SplitOnCapitalLetters()
+                                @context.Item.Type.ForDisplay()
                             </MudChip>
                         </CellTemplate>
                     </TemplateColumn>
-                    <TemplateColumn Title="Plurality" Sortable="false">
+                    <TemplateColumn Title="@MetaverseText.MvotPlurality" Sortable="false">
                         <HeaderTemplate>
-                            <VirtualisedSortHeader Title="Plurality" Name="plurality" />
+                            <VirtualisedSortHeader Title="@MetaverseText.MvotPlurality" Name="plurality" />
                         </HeaderTemplate>
                         <CellTemplate>
                             <MudChip T="string" Color="@Helpers.GetAttributePluralityChipColour(context.Item.AttributePlurality)" Variant="Variant.Text">
-                                @(context.Item.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                                @(context.Item.AttributePlurality == AttributePlurality.SingleValued ? MetaverseText.MvotSingleValued : MetaverseText.MvotMultiValued)
                             </MudChip>
                         </CellTemplate>
                     </TemplateColumn>
-                    <TemplateColumn Title="Built-in?" Sortable="false">
+                    <TemplateColumn Title="@MetaverseText.MvotBuiltInQuestion" Sortable="false">
                         <HeaderTemplate>
-                            <VirtualisedSortHeader Title="Built-in?" Name="builtin" />
+                            <VirtualisedSortHeader Title="@MetaverseText.MvotBuiltInQuestion" Name="builtin" />
                         </HeaderTemplate>
                         <CellTemplate>
                             @if (context.Item.BuiltIn)
                             {
-                                <MudTooltip Text="Built-in attribute" Arrow="true" Placement="Placement.Top">
+                                <MudTooltip Text="@MetaverseText.MvotBuiltInAttribute" Arrow="true" Placement="Placement.Top">
                                     <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary" />
                                 </MudTooltip>
                             }
                             else
                             {
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">Custom</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@MetaverseText.MvotCustom</MudText>
                             }
                         </CellTemplate>
                     </TemplateColumn>
-                    <TemplateColumn Title="Created" Sortable="false">
+                    <TemplateColumn Title="@CommonText.ColumnCreated" Sortable="false">
                         <HeaderTemplate>
-                            <VirtualisedSortHeader Title="Created" Name="created" />
+                            <VirtualisedSortHeader Title="@CommonText.ColumnCreated" Name="created" />
                         </HeaderTemplate>
                         <CellTemplate>
                             @{
@@ -464,10 +459,10 @@
                             </MudTooltip>
                         </CellTemplate>
                     </TemplateColumn>
-                    <TemplateColumn Title="Contributors" Sortable="false">
+                    <TemplateColumn Title="@MetaverseText.MvotContributors" Sortable="false">
                         <HeaderTemplate>
-                            <MudTooltip Text="The number of Synchronisation Rules that contribute this attribute inbound. More than one means an Attribute Priority order determines which wins." Arrow="true" Placement="Placement.Top">
-                                <VirtualisedSortHeader Title="Contributors" Name="contributors" />
+                            <MudTooltip Text="@MetaverseText.MvotContributorsTooltip" Arrow="true" Placement="Placement.Top">
+                                <VirtualisedSortHeader Title="@MetaverseText.MvotContributors" Name="contributors" />
                             </MudTooltip>
                         </HeaderTemplate>
                         <CellTemplate>
@@ -477,11 +472,11 @@
                             }
                             @if (contributorCount > 1)
                             {
-                                <MudTooltip Text="Multiple contributors. Click to manage the Attribute Priority order." Arrow="true" Placement="Placement.Top">
+                                <MudTooltip Text="@MetaverseText.MvotMultipleContributors" Arrow="true" Placement="Placement.Top">
                                     <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary"
                                                EndIcon="@Icons.Material.Filled.OpenInNew"
                                                OnClick="@(() => OpenAttributePriorityDialog(attribute))">
-                                        @contributorCount contributors
+                                        @string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(contributorCount, MetaverseText.MvotContributorCountOne, MetaverseText.MvotContributorCountOther), contributorCount)
                                     </MudButton>
                                 </MudTooltip>
                             }
@@ -502,18 +497,18 @@
                                 var rowAttribute = context.Item;
                             }
                             <div class="d-flex justify-end">
-                                <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
+                                <MudTooltip Text="@MetaverseText.MvotChangeHistory" Arrow="true" Placement="Placement.Top">
                                     <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowAttributeHistoryDialogAsync(rowAttribute))" />
                                 </MudTooltip>
                                 @if (rowAttribute.BuiltIn)
                                 {
-                                    <MudTooltip Text="Built-in attributes cannot be unbound." Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="@MetaverseText.MvotBuiltInAttributesCannotUnbind" Arrow="true" Placement="Placement.Top">
                                         <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary ml-2" />
                                     </MudTooltip>
                                 }
                                 else
                                 {
-                                    <MudTooltip Text="Remove this attribute from the Object Type" Arrow="true" Placement="Placement.Top">
+                                    <MudTooltip Text="@MetaverseText.MvotRemoveAttributeBinding" Arrow="true" Placement="Placement.Top">
                                         <MudIconButton Icon="@Icons.Material.Outlined.Close" Color="Color.Error" OnClick="@(() => OpenRemoveAttributeBindingDialogAsync(rowAttribute))" />
                                     </MudTooltip>
                                 }
@@ -525,32 +520,32 @@
                     @if (!string.IsNullOrWhiteSpace(grid.SearchText))
                     {
                         <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                         PrimaryText="@($"No attributes match \"{grid.SearchText}\"")"
-                                         SecondaryText="Try a different search term, or clear the search."
-                                         ActionText="Clear Search"
+                                         PrimaryText="@string.Format(CultureInfo.CurrentCulture, MetaverseText.MvotNoAttributesMatch, grid.SearchText)"
+                                         SecondaryText="@CommonText.TrySearchAgain"
+                                         ActionText="@CommonText.ClearSearch"
                                          OnAction="@(() => grid.ClearSearchAsync())" />
                     }
                     else if (HasAttributeChipFilters)
                     {
                         <TableEmptyState Icon="@Icons.Material.Filled.FilterAltOff"
-                                         PrimaryText="No attributes match the selected filters"
-                                         SecondaryText="Clear the Type, Plurality and Built-in filters above to see every attribute bound to this Metaverse Object Type."
-                                         ActionText="Clear Filters"
+                                         PrimaryText="@MetaverseText.MvotNoAttributesMatchFilters"
+                                         SecondaryText="@MetaverseText.MvotNoAttributesMatchFiltersHint"
+                                         ActionText="@MetaverseText.MvotClearFilters"
                                          OnAction="ClearAttributeFiltersAsync" />
                     }
                     else
                     {
                         <TableEmptyState Icon="@Icons.Material.Filled.ListAlt"
-                                         PrimaryText="No attributes are bound to this Metaverse Object Type"
-                                         SecondaryText="Use the Add Attribute button to bind one; until then, Metaverse Objects of this type can hold no values." />
+                                         PrimaryText="@MetaverseText.MvotNoAttributesBound"
+                                         SecondaryText="@MetaverseText.MvotNoAttributesBoundHint" />
                     }
                 </EmptyContent>
             </VirtualisedDataGrid>
             </MudPaper>
         </MudTabPanel>
 
-        <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
-            <ConfigurationChangesTab TargetType="ActivityTargetType.MetaverseObjectType" ObjectId="Id" ObjectTypeLabel="Metaverse Object Type" />
+        <MudTabPanel Text="@MetaverseText.MvotChanges" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
+            <ConfigurationChangesTab TargetType="ActivityTargetType.MetaverseObjectType" ObjectId="Id" ObjectTypeLabel="@MetaverseText.MetaverseObjectTypeNoun" />
         </MudTabPanel>
 
     </NavigableMudTabs>
@@ -562,7 +557,7 @@
     <MudDialog @bind-Visible="_priorityDialogVisible" Options="_priorityDialogOptions">
         <TitleContent>
             <MudText Typo="Typo.h6">
-                <MudIcon Icon="@Icons.Material.Filled.LowPriority" Class="mr-3" />Attribute Priority: @_priorityAttribute?.Name
+                <MudIcon Icon="@Icons.Material.Filled.LowPriority" Class="mr-3" />@string.Format(CultureInfo.CurrentCulture, MetaverseText.MvotAttributePriorityTitle, _priorityAttribute?.Name)
                 <TermHint Term="Term.AttributePriority" />
             </MudText>
         </TitleContent>
@@ -571,13 +566,13 @@
             {
                 var priorityAttribute = _priorityAttribute;
                 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-                    Multiple Synchronisation Rules can contribute this attribute. Drag to set which wins when more than one supplies a value; the highest priority is at the top. The first to supply a value wins (unless <code class="jim-code-inline jim-code-inline-strong">Null is a value</code> is selected). Disabled rules hold their position but never contribute.
+                    @((MarkupString)string.Format(CultureInfo.CurrentCulture, MetaverseText.MvotAttributePriorityIntro, MetaverseText.MvotNullIsAValue))
                 </MudText>
                 <AttributePriorityList MetaverseObjectTypeId="Id" MetaverseAttributeId="priorityAttribute.Id" MetaverseAttributeName="@priorityAttribute.Name" />
             }
         </DialogContent>
         <DialogActions>
-            <MudButton OnClick="CloseAttributePriorityDialog" DropShadow="false">Close</MudButton>
+            <MudButton OnClick="CloseAttributePriorityDialog" DropShadow="false">@CommonText.Close</MudButton>
         </DialogActions>
     </MudDialog>
 }
@@ -690,7 +685,7 @@
             var rule = await jim.ConnectedSystems.GetSyncRuleAsync(header.Id);
             if (rule == null)
             {
-                Snackbar.Add("The Synchronisation Rule could not be found. It may have been deleted.", Severity.Error);
+                Snackbar.Add(MetaverseText.MvotRuleNotFound, Severity.Error);
                 await RevertDeprovisionSelectAsync();
                 return;
             }
@@ -701,7 +696,7 @@
             rule.OutboundDeprovisionAction = newAction;
             var preflight = await jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(rule);
             if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
-                    "Synchronisation Rule", rule.Name))
+                    MetaverseText.SynchronisationRuleNoun, rule.Name))
             {
                 await RevertDeprovisionSelectAsync();
                 return;
@@ -719,17 +714,17 @@
             var success = await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, user, changeReason: changeReason);
             if (!success)
             {
-                Snackbar.Add($"Failed to update Synchronisation Rule '{rule.Name}'.", Severity.Error);
+                Snackbar.Add(string.Format(CultureInfo.CurrentCulture, MetaverseText.MvotRuleUpdateFailed, rule.Name), Severity.Error);
                 await RevertDeprovisionSelectAsync();
                 return;
             }
 
             header.OutboundDeprovisionAction = newAction;
-            Snackbar.Add($"Deprovisioning Action for '{rule.Name}' set to {newAction}.", Severity.Success);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, MetaverseText.MvotDeprovisionActionSet, rule.Name, GetDeprovisionActionLabel(newAction)), Severity.Success);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Snackbar.Add($"Failed to update the Synchronisation Rule: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, MetaverseText.MvotRuleUpdateFailedDetail, ex.Message), Severity.Error);
             await RevertDeprovisionSelectAsync();
         }
     }
@@ -746,6 +741,14 @@
         else
             StateHasChanged();
     }
+
+    private static string GetDeprovisionActionLabel(OutboundDeprovisionAction action) => action switch
+    {
+        OutboundDeprovisionAction.Disconnect => MetaverseText.MvotDeprovisionDisconnect,
+        OutboundDeprovisionAction.Disable => MetaverseText.MvotDeprovisionDisable,
+        OutboundDeprovisionAction.Delete => MetaverseText.MvotDeprovisionDelete,
+        _ => action.ForDisplay()
+    };
 
     private async Task LoadContributingSystemsAsync()
     {
@@ -833,9 +836,9 @@
     {
         return _deletionRule switch
         {
-            MetaverseObjectDeletionRule.Manual => "Objects must be manually deleted by an administrator.",
-            MetaverseObjectDeletionRule.WhenLastConnectorDisconnected => "Delete when all Connected System Objects are disconnected.",
-            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected => "Delete according to the authoritative source trigger below.",
+            MetaverseObjectDeletionRule.Manual => MetaverseText.MvotHelpManual,
+            MetaverseObjectDeletionRule.WhenLastConnectorDisconnected => MetaverseText.MvotHelpWhenLastConnectorDisconnected,
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected => MetaverseText.MvotHelpWhenAuthoritativeSourceDisconnected,
             _ => string.Empty
         };
     }
@@ -944,7 +947,7 @@
         catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException)
         {
             DiscardDeletionSettingsPreview();
-            Snackbar.Add($"Failed to start the preview: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, MetaverseText.MvotPreviewStartFailed, ex.Message), Severity.Error);
         }
         finally
         {
@@ -1015,7 +1018,7 @@
             // a preview was run it says how many objects that is (#1114).
             var preflight = await jim.ConfigurationChangePreflight.EvaluateMetaverseObjectTypeAsync(_metaverseObjectType);
             if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
-                    "Metaverse Object Type", _metaverseObjectType.Name,
+                    MetaverseText.MetaverseObjectTypeNoun, _metaverseObjectType.Name,
                     ConfigurationChangePreviewCounts.ForConfirmation(_preview, DeletionSettingsPreviewIsStale),
                     ConfigurationChangePreviewCounts.ForConfirmationVerdict(_preview, DeletionSettingsPreviewIsStale)))
             {
@@ -1048,14 +1051,14 @@
 
             _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.MetaverseObjectType, Id, 1, 1)).TotalResults;
 
-            Snackbar.Add("Deletion rules saved successfully.", Severity.Success);
+            Snackbar.Add(MetaverseText.MvotDeletionRulesSaved, Severity.Success);
         }
         catch (Exception ex)
         {
             // The entity was mutated before the save was attempted; leaving it mutated would make a failed save look
             // like a successful one everywhere else on the page.
             RollBack();
-            Snackbar.Add($"Failed to save deletion rules: {ex.Message}", Severity.Error);
+            Snackbar.Add(string.Format(CultureInfo.CurrentCulture, MetaverseText.MvotDeletionRulesSaveFailed, ex.Message), Severity.Error);
         }
     }
 
@@ -1074,7 +1077,7 @@
     private async Task ShowAttributeHistoryDialogAsync(MetaverseAttribute attribute)
     {
         await ConfigurationChangeHistoryDialog.ShowAsync(DialogService, ActivityTargetType.MetaverseAttribute,
-            attribute.Id, "Metaverse Attribute", attribute.Name);
+            attribute.Id, MetaverseText.MetaverseAttributeNoun, attribute.Name);
     }
 
     private async Task OpenAddAttributeBindingDialogAsync()

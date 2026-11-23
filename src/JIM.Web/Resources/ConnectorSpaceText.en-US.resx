@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="CsoPreviewBlocking" xml:space="preserve">
+    <value>The Sync Preview found something that would stop the synchronization; see the details below.</value>
+  </data>
+  <data name="CsoFullSynchronisation" xml:space="preserve">
+    <value>Full Synchronization</value>
+  </data>
+  <data name="CsoListPageInfo" xml:space="preserve">
+    <value>The Connector Space holds this Connected System's Connected System Objects. Inbound changes from the system are held here before being committed to the Metaverse. Outbound changes are held here ahead of synchronization to the Connected System.</value>
+  </data>
+  <data name="CsoListClearExplain2" xml:space="preserve">
+    <value>Run a Full Import to rebuild the Connector Space. At the first Full Synchronization after that import completes successfully, Metaverse values contributed by objects that did not return are recalled automatically. Each Metaverse object's type Deletion Rule is then applied for objects that did not return, with its configured grace period.</value>
+  </data>
+  <data name="CsoListClearExplain3" xml:space="preserve">
+    <value>Note: A Full Synchronization run before then does nothing beyond ordinary synchronization. The reconciliation refuses, leaving everything as it was, if far fewer objects return than were cleared; re-import the rest, or raise the allowed share in Service Settings, then run a Full Synchronization again.</value>
+  </data>
+  <data name="PexExplainNotInSystem" xml:space="preserve">
+    <value>The referenced object has no Connected System Object in this Connected System. It is out of scope for every Synchronization Rule into this system, or has not been provisioned. The reference cannot be written until it is.</value>
+  </data>
+  <data name="PexListPageInfo" xml:space="preserve">
+    <value>Pending Exports are changes that need to be applied to the Connected System. These are created when Metaverse Objects change and need to be synchronized to this target system.</value>
+  </data>
+  <data name="AwsTitle" xml:space="preserve">
+    <value>Changes awaiting synchronization: {0}</value>
+  </data>
+  <data name="AwsBodyCounted" xml:space="preserve">
+    <value>The next synchronization of this Connected System, Delta or Full, applies them by processing every {0} object ({1}).</value>
+  </data>
+  <data name="AwsBodyPlain" xml:space="preserve">
+    <value>The next synchronization of this Connected System, Delta or Full, applies them by processing every {0} object.</value>
+  </data>
+  <data name="AwsNoRunProfile" xml:space="preserve">
+    <value>This Connected System has no Delta Synchronization or Full Synchronization Run Profile to queue.</value>
+  </data>
+  <data name="AwsRunDelta" xml:space="preserve">
+    <value>Delta Synchronization</value>
+  </data>
+</root>

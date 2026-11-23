@@ -139,7 +139,15 @@ public class ConfigurationChangePreview
     /// <summary>
     /// Stage 1's findings, read from the stored document.
     /// </summary>
-    public List<PreviewValidationFinding> ReadValidationFindings() => ReadDocument<PreviewValidationFinding>(ValidationFindings);
+    public List<PreviewValidationFinding> ReadValidationFindings() =>
+        [.. ReadDocument<StoredPreviewValidationFinding>(ValidationFindings).Select(finding => finding.ToFinding())];
+
+    /// <summary>
+    /// Stage 1's findings as the document stored in <see cref="ValidationFindings"/>: each finding's fields and its message,
+    /// so the portal can show it in the viewer's language (#3030) while the REST API reads the English.
+    /// </summary>
+    public static string SerialiseValidationFindings(IEnumerable<PreviewValidationFinding> findings) =>
+        JsonSerializer.Serialize(findings.Select(StoredPreviewValidationFinding.From).ToList());
 
     /// <summary>
     /// Stage 2's counts, read from the stored document.

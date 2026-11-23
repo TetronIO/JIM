@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Connectors.Resources;
+using JIM.Models.Localisation;
 using JIM.Connectors.Sql.Providers;
 using JIM.Models.Connectors;
 using JIM.Models.Core;
@@ -447,6 +449,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
                 {
                     IsValid = false,
                     ErrorMessage = ex.Message,
+                    ErrorDetail = ex.Detail,
                     SettingValue = settingValue,
                     Exception = ex
                 }
@@ -1319,13 +1322,8 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
         }
         catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
         {
-            return new ConnectorSettingValueValidationResult
-            {
-                IsValid = false,
-                ErrorMessage = $"{SqlConnectorConstants.SettingDatabaseTimeZone} '{timeZone}' is not a time zone this deployment recognises. Enter UTC, or an IANA time zone name such as Europe/London or America/New_York.",
-                SettingValue = settingValue,
-                Exception = ex
-            };
+            return ConnectorSettingValueValidationResult.Failure(settingValue,
+                JimMessage.Create(ConnectorMessageCatalogues.Connectors, nameof(ConnectorMessages.SqlTimeZoneUnknown), SqlConnectorConstants.SettingDatabaseTimeZone, timeZone), ex);
         }
     }
 
@@ -1369,6 +1367,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
             {
                 IsValid = false,
                 ErrorMessage = ex.Message,
+                ErrorDetail = ex.Detail,
                 SettingValue = settingValue,
                 Exception = ex
             };
@@ -1400,7 +1399,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
             var provider = TryResolveProvider(settingValues);
             if (provider == null)
                 return Failure(settingValues, SqlConnectorConstants.SettingDatabaseType,
-                    $"Choose a {SqlConnectorConstants.SettingDatabaseType} before testing connectivity.");
+                    JimMessage.Create(ConnectorMessageCatalogues.Connectors, nameof(ConnectorMessages.SqlChooseDatabaseType), SqlConnectorConstants.SettingDatabaseType));
 
             var connectionSettings = BuildConnectionSettings(settingValues);
 
@@ -1413,12 +1412,15 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
         catch (InvalidSettingValuesException)
         {
             return Failure(settingValues, SqlConnectorConstants.SettingHost,
-                $"Unable to test connectivity until {SqlConnectorConstants.SettingHost}, {SqlConnectorConstants.SettingUsername} and {SqlConnectorConstants.SettingPassword} have been supplied.");
+                JimMessage.Create(ConnectorMessageCatalogues.Connectors, nameof(ConnectorMessages.SqlMissingConnectionValues),
+                    SqlConnectorConstants.SettingHost, SqlConnectorConstants.SettingUsername, SqlConnectorConstants.SettingPassword));
         }
         catch (ServerCertificateRejectedException ex)
         {
             // Already carries the certificate and what to do about it, which is what the portal renders.
-            return Failure(settingValues, SqlConnectorConstants.SettingHost, ex.Message, ex);
+            return ex.Detail is { } detail
+                ? Failure(settingValues, SqlConnectorConstants.SettingHost, detail, ex)
+                : Failure(settingValues, SqlConnectorConstants.SettingHost, ex.Message, ex);
         }
         catch (Exception ex) when (ex is DbException or InvalidOperationException or ArgumentException or NotSupportedException or SocketException or IOException or TimeoutException)
         {
@@ -1433,13 +1435,17 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
             // provokes this path to prove validation rejects bad settings. The exception is still logged,
             // so nothing is lost for diagnosis.
             logger.Warning(ex, "TestDatabaseConnectivity failed");
-            return Failure(settingValues, SqlConnectorConstants.SettingHost, $"Unable to connect. Message: {ex.Message}", ex);
+            return Failure(settingValues, SqlConnectorConstants.SettingHost,
+                JimMessage.Create(ConnectorMessageCatalogues.Connectors, nameof(ConnectorMessages.SqlConnectFailed), ex.Message), ex);
         }
     }
 
     /// <summary>
     /// Builds a failed validation result, attached to the setting the problem belongs to where there is one.
     /// </summary>
+    private static ConnectorSettingValueValidationResult Failure(List<ConnectedSystemSettingValue> settingValues, string settingName, JimMessage message, Exception? exception = null) =>
+        ConnectorSettingValueValidationResult.Failure(settingValues.SingleOrDefault(sv => sv.Setting.Name == settingName), message, exception);
+
     private static ConnectorSettingValueValidationResult Failure(List<ConnectedSystemSettingValue> settingValues, string settingName, string errorMessage, Exception? exception = null)
     {
         return new ConnectorSettingValueValidationResult

@@ -4,6 +4,7 @@
 using JIM.Models.Preview;
 using System.Diagnostics.CodeAnalysis;
 using JIM.Web.Models;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Services;
 
@@ -36,7 +37,7 @@ public static class ConfigurationChangePreviewCounts
         {
             // The preview ran and found nothing, which is worth stating: an absent section reads as "no preview was
             // run", and those are different statements about very different situations.
-            return [new ImpactCount { Label = "Objects affected by this change", Count = 0, Note = "from the preview" }];
+            return [new ImpactCount { Label = ActivityText.ActivityPreviewObjectsAffected, Count = 0, Note = ActivityText.ActivityPreviewFromPreview }];
         }
 
         return
@@ -50,7 +51,7 @@ public static class ConfigurationChangePreviewCounts
                     // save, not by an operator reading a completed run.
                     Label = Helpers.GetOutcomeTypePlainName(c.TransitionType),
                     Count = c.ObjectCount,
-                    Note = "from the preview"
+                    Note = ActivityText.ActivityPreviewFromPreview
                 })
         ];
     }

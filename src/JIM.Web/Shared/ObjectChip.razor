@@ -96,7 +96,7 @@
     /// The same "type: name" text the chip itself renders, when it has a name to show; the kind's full name
     /// otherwise (a type-alone chip, or no name and no type). Overridden by <see cref="Tooltip"/>.
     /// </summary>
-    private string EffectiveTooltip => Tooltip ?? (HasName ? (HasType ? $"{TypeName}: {Name}" : Name!) : GlyphFullName);
+    private string EffectiveTooltip => Tooltip ?? (HasName ? (HasType ? string.Format(System.Globalization.CultureInfo.CurrentCulture, MetaverseText.ObjChipTypeAndName, TypeName, Name) : Name!) : GlyphFullName);
 
     private bool HasName => !string.IsNullOrEmpty(Name);
 
@@ -127,17 +127,17 @@
     /// </summary>
     private string GlyphFullName => Kind switch
     {
-        ObjectChipKind.ConnectedSystemObject => "Connected System Object",
-        ObjectChipKind.MetaverseObject => "Metaverse Object",
-        ObjectChipKind.ConnectedSystem => "Connected System",
-        ObjectChipKind.SynchronisationRule => "Synchronisation Rule",
-        ObjectChipKind.PendingExport => "Pending Export",
-        ObjectChipKind.DeletionRecord => "Deletion Record",
-        ObjectChipKind.ApiKey => "API Key",
-        ObjectChipKind.Schedule => "Schedule",
-        ObjectChipKind.System => "System",
-        ObjectChipKind.Activity => "Activity",
-        _ => "Run Profile"
+        ObjectChipKind.ConnectedSystemObject => MetaverseText.ObjChipCso,
+        ObjectChipKind.MetaverseObject => MetaverseText.ObjChipMvo,
+        ObjectChipKind.ConnectedSystem => MetaverseText.MvcConnectedSystem,
+        ObjectChipKind.SynchronisationRule => MetaverseText.MncSyncRuleHeader,
+        ObjectChipKind.PendingExport => MetaverseText.ObjChipPendingExport,
+        ObjectChipKind.DeletionRecord => MetaverseText.ObjChipDeletionRecord,
+        ObjectChipKind.ApiKey => MetaverseText.ObjChipApiKey,
+        ObjectChipKind.Schedule => MetaverseText.ObjChipSchedule,
+        ObjectChipKind.System => MetaverseText.ObjChipSystem,
+        ObjectChipKind.Activity => MetaverseText.ObjChipActivity,
+        _ => MetaverseText.ObjChipRunProfile
     };
 
     private string GlyphClass => Kind switch
@@ -177,7 +177,7 @@
         }
         @if (Deleted)
         {
-            <MudIcon Icon="@Icons.Material.Outlined.Delete" Class="jim-object-chip-deleted-icon" aria-label="Deleted" />
+            <MudIcon Icon="@Icons.Material.Outlined.Delete" Class="jim-object-chip-deleted-icon" aria-label="@MetaverseText.ObjChipDeleted" />
         }
     </span>;
 }

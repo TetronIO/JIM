@@ -21,7 +21,7 @@ internal static class RpeiBulkColumns
     [
         "Id", "ActivityId", "ObjectChangeType", "NoChangeReason",
         "ConnectedSystemObjectId", "ExternalIdSnapshot", "DisplayNameSnapshot",
-        "ObjectTypeSnapshot", "ErrorType", "ErrorMessage", "ErrorStackTrace",
+        "ObjectTypeSnapshot", "ErrorType", "ErrorMessage", "ErrorStackTrace", "ErrorMessageDetailJson",
         "AttributeFlowCount", "OutcomeSummary", "PendingExportId",
         "DeletionPolicySnapshotJson", "MetaverseObjectId", "UnresolvedReferenceCount",
         "AttributeValueErrorsJson", "SourceLocation", "ImportedObjectSnapshotJson"
@@ -29,15 +29,16 @@ internal static class RpeiBulkColumns
 
     /// <summary>
     /// Update columns for the bulk field update (BulkUpdateRpeiFieldsRawAsync): the outcome and
-    /// error fields mutated on an already-persisted RPEI. The three error columns are co-mutated
-    /// at every worker error site and must always travel together. DeletionPolicySnapshotJson is
+    /// error fields mutated on an already-persisted RPEI. The error columns (ErrorType, ErrorMessage,
+    /// ErrorStackTrace and ErrorMessageDetailJson, the message behind the English, #3039) are co-mutated at
+    /// every worker error site and must always travel together. DeletionPolicySnapshotJson is
     /// outcome data recorded when a deletion rule evaluation resolves (#119), which can happen after
     /// the RPEI is first persisted, so it travels with OutcomeSummary rather than the exclusions.
     /// </summary>
     internal static readonly string[] ActivityRunProfileExecutionItemsUpdate =
     [
-        "OutcomeSummary", "ErrorType", "ErrorMessage", "ErrorStackTrace", "AttributeFlowCount",
-        "DeletionPolicySnapshotJson"
+        "OutcomeSummary", "ErrorType", "ErrorMessage", "ErrorStackTrace", "ErrorMessageDetailJson",
+        "AttributeFlowCount", "DeletionPolicySnapshotJson"
     ];
 
     /// <summary>

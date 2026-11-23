@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Core
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -6,18 +7,18 @@
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3">
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Setting?.Description</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@(Setting == null ? null : ServiceSettingDisplay.Description(Setting.Key, Setting.Description))</MudText>
 
             @if (Setting != null)
             {
                 @switch (Setting.ValueType)
                 {
                     case ServiceSettingValueType.Boolean:
-                        <MudSwitch T="bool" @bind-Value="_boolValue" Color="Color.Primary" Label="@(_boolValue ? "Enabled" : "Disabled")" />
+                        <MudSwitch T="bool" @bind-Value="_boolValue" Color="Color.Primary" Label="@(_boolValue ? CommonText.Enabled : CommonText.Disabled)" />
                         break;
 
                     case ServiceSettingValueType.Enum:
-                        <MudSelect T="string" @bind-Value="_value" Label="Value" Variant="Variant.Outlined">
+                        <MudSelect T="string" @bind-Value="_value" Label="@AdminText.SettingsColumnValue" Variant="Variant.Outlined">
                             @foreach (var enumValue in GetEnumValues())
                             {
                                 <MudSelectItem Value="@enumValue">@enumValue</MudSelectItem>
@@ -26,40 +27,40 @@
                         break;
 
                     case ServiceSettingValueType.Integer:
-                        <MudNumericField T="int?" @bind-Value="_intValue" Label="Value" Variant="Variant.Outlined" />
+                        <MudNumericField T="int?" @bind-Value="_intValue" Label="@AdminText.SettingsColumnValue" Variant="Variant.Outlined" />
                         break;
 
                     case ServiceSettingValueType.TimeSpan:
-                        <MudTextField @bind-Value="_value" Label="Value (format: d.hh:mm:ss)" Variant="Variant.Outlined"
+                        <MudTextField @bind-Value="_value" Label="@AdminText.EditSettingValueWithFormat" Variant="Variant.Outlined"
                             Immediate="true" Error="@(!IsTimeSpanValueValid())"
-                            ErrorText="Enter a valid duration in the format d.hh:mm:ss"
-                            HelperText="Example: 30.00:00:00 for 30 days" />
+                            ErrorText="@AdminText.EditSettingDurationError"
+                            HelperText="@AdminText.EditSettingDurationExample" />
                         break;
 
                     case ServiceSettingValueType.StringEncrypted:
-                        <MudTextField @bind-Value="_value" Label="Value" Variant="Variant.Outlined"
+                        <MudTextField @bind-Value="_value" Label="@AdminText.SettingsColumnValue" Variant="Variant.Outlined"
                             InputType="@(_showPassword ? InputType.Text : InputType.Password)"
                             Adornment="Adornment.End"
                             AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
-                            AdornmentAriaLabel="Toggle password visibility"
+                            AdornmentAriaLabel="@AdminText.EditSettingTogglePassword"
                             OnAdornmentClick="@(() => _showPassword = !_showPassword)" />
                         break;
 
                     default:
-                        <MudTextField @bind-Value="_value" Label="Value" Variant="Variant.Outlined" />
+                        <MudTextField @bind-Value="_value" Label="@AdminText.SettingsColumnValue" Variant="Variant.Outlined" />
                         break;
                 }
 
                 @if (!string.IsNullOrEmpty(Setting.DefaultValue))
                 {
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Default: @GetDefaultDisplayValue()</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@string.Format(CultureInfo.CurrentCulture, AdminText.EditSettingDefault, GetDefaultDisplayValue())</MudText>
                 }
             }
         </MudStack>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="@(!CanSave())">Save</MudButton>
+        <MudButton OnClick="Cancel">@CommonText.Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="@(!CanSave())">@CommonText.Save</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -108,7 +109,7 @@
     private string GetDefaultDisplayValue()
     {
         if (Setting?.ValueType == ServiceSettingValueType.Boolean)
-            return string.Equals(Setting.DefaultValue, "true", StringComparison.OrdinalIgnoreCase) ? "Enabled" : "Disabled";
+            return string.Equals(Setting.DefaultValue, "true", StringComparison.OrdinalIgnoreCase) ? CommonText.Enabled : CommonText.Disabled;
         return Setting?.DefaultValue ?? string.Empty;
     }
 

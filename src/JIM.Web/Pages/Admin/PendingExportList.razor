@@ -13,10 +13,10 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Pending Exports: @_connectedSystemHeader?.Name</PageTitle>
-<MudText Typo="Typo.h3"><span>Pending Exports:</span> <span class="mud-primary-text">@_connectedSystemHeader?.Name</span>
-    <PageInfo Title="Pending Exports" DocsPage="configuration/connected-systems.md#pending-exports" Term="Term.PendingExport">
-        Pending Exports are changes that need to be applied to the Connected System. These are created when Metaverse Objects change and need to be synchronised to this target system.
+<PageTitle>@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.PexListPageTitle, _connectedSystemHeader?.Name)</PageTitle>
+<MudText Typo="Typo.h3"><span>@ConnectorSpaceText.PexListHeadingLabel</span> <span class="mud-primary-text">@_connectedSystemHeader?.Name</span>
+    <PageInfo Title="@ConnectorSpaceText.CsoPendingExportsTitle" DocsPage="configuration/connected-systems.md#pending-exports" Term="Term.PendingExport">
+        @ConnectorSpaceText.PexListPageInfo
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
@@ -25,28 +25,28 @@
 {
     <MudPaper Elevation="0" Class="pa-4 mt-2" Outlined="true">
         <MudStack Row AlignItems="AlignItems.Center" Spacing="4" Wrap="Wrap.Wrap" Class="jim-filter-row">
-            <MudSelect T="PendingExportStatus" Label="Filter by Status" MultiSelection="true"
+            <MudSelect T="PendingExportStatus" Label="@ConnectorSpaceText.PexFilterStatus" MultiSelection="true"
                        SelectedValues="_statusFilters" SelectedValuesChanged="OnStatusFiltersChanged"
                        MultiSelectionTextFunc="@GetFilterText"
                        Variant="Variant.Outlined" Clearable="true" Dense="true">
-                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Pending">Pending</MudSelectItem>
-                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Executing">Executing</MudSelectItem>
-                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.ExportNotConfirmed">Export Not Confirmed</MudSelectItem>
-                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Exported">Exported</MudSelectItem>
-                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Parked">Parked</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Pending">@ConnectorSpaceText.PexStatusPending</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Executing">@ConnectorSpaceText.PexStatusExecuting</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.ExportNotConfirmed">@ConnectorSpaceText.PexStatusExportNotConfirmed</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Exported">@ConnectorSpaceText.PexStatusExported</MudSelectItem>
+                <MudSelectItem T="PendingExportStatus" Value="@PendingExportStatus.Parked">@ConnectorSpaceText.PexStatusParked</MudSelectItem>
             </MudSelect>
-            <MudSelect T="PendingExportChangeType" Label="Filter by Change Type" MultiSelection="true"
+            <MudSelect T="PendingExportChangeType" Label="@ConnectorSpaceText.PexFilterChangeType" MultiSelection="true"
                        SelectedValues="_changeTypeFilters" SelectedValuesChanged="OnChangeTypeFiltersChanged"
                        MultiSelectionTextFunc="@GetFilterText"
                        Variant="Variant.Outlined" Clearable="true" Dense="true">
-                <MudSelectItem T="PendingExportChangeType" Value="@PendingExportChangeType.Create">Create</MudSelectItem>
-                <MudSelectItem T="PendingExportChangeType" Value="@PendingExportChangeType.Update">Update</MudSelectItem>
-                <MudSelectItem T="PendingExportChangeType" Value="@PendingExportChangeType.Delete">Delete</MudSelectItem>
+                <MudSelectItem T="PendingExportChangeType" Value="@PendingExportChangeType.Create">@CommonText.Create</MudSelectItem>
+                <MudSelectItem T="PendingExportChangeType" Value="@PendingExportChangeType.Update">@ConnectorSpaceText.PexChangeTypeUpdate</MudSelectItem>
+                <MudSelectItem T="PendingExportChangeType" Value="@PendingExportChangeType.Delete">@CommonText.Delete</MudSelectItem>
             </MudSelect>
             @* A failing Pending Export is one whose last attempt failed (#2119). JIM attempts it again at every export
                run, so it stays Pending; this is how an administrator finds the ones to investigate. *@
             <MudSwitch T="bool" Value="_failingOnly" ValueChanged="OnFailingOnlyChanged" Color="Color.Error"
-                       Label="Failing only" />
+                       Label="@ConnectorSpaceText.PexFailingOnly" />
         </MudStack>
     </MudPaper>
 
@@ -59,13 +59,13 @@
                          DefaultSortDescending="true"
                          LoadWindow="LoadWindowAsync"
                          RowClicked="HandleRowClicked"
-                         SingularName="Pending Export"
-                         PluralName="Pending Exports"
-                         SearchPlaceholder="Search target, source Metaverse Object, or errors">
+                         SingularName="@ConnectorSpaceText.PexTerm"
+                         PluralName="@ConnectorSpaceText.CsoPendingExportsTitle"
+                         SearchPlaceholder="@ConnectorSpaceText.PexListSearch">
         <Columns>
             <TemplateColumn Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Change Type" Name="changetype" />
+                    <VirtualisedSortHeader Title="@ConnectorSpaceText.CsoColumnChangeType" Name="changetype" />
                 </HeaderTemplate>
                 <CellTemplate>
                     <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(context.Item.ChangeType)">
@@ -75,17 +75,17 @@
             </TemplateColumn>
             <TemplateColumn Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Status" Name="status" />
+                    <VirtualisedSortHeader Title="@CommonText.ColumnStatus" Name="status" />
                 </HeaderTemplate>
                 <CellTemplate>
                     <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(context.Item.Status)">
-                        @context.Item.Status.ToString().SplitOnCapitalLetters()
+                        @context.Item.Status.ForDisplay()
                     </MudChip>
                 </CellTemplate>
             </TemplateColumn>
             <TemplateColumn Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Source Metaverse Object" Name="sourcemvo" />
+                    <VirtualisedSortHeader Title="@ConnectorSpaceText.PexColumnSourceMvo" Name="sourcemvo" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @if (context.Item.SourceMetaverseObjectId.HasValue)
@@ -113,7 +113,7 @@
             </TemplateColumn>
             <TemplateColumn Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Target Connected System Object" Name="targetobject" />
+                    <VirtualisedSortHeader Title="@ConnectorSpaceText.PexColumnTargetCso" Name="targetobject" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @if (context.Item.ConnectedSystemObjectId.HasValue)
@@ -127,13 +127,13 @@
                     }
                     else
                     {
-                        <span class="mud-text-secondary">New object</span>
+                        <span class="mud-text-secondary">@ConnectorSpaceText.PexNewObjectShort</span>
                     }
                 </CellTemplate>
             </TemplateColumn>
             <TemplateColumn Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Changes" Name="changes" />
+                    <VirtualisedSortHeader Title="@ConnectorSpaceText.PexColumnChanges" Name="changes" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @context.Item.AttributeChangeCount
@@ -141,7 +141,7 @@
             </TemplateColumn>
             <TemplateColumn Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Created" Name="created" />
+                    <VirtualisedSortHeader Title="@CommonText.ColumnCreated" Name="created" />
                 </HeaderTemplate>
                 <CellTemplate>
                     <MudTooltip Text="@context.Item.CreatedAt.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -151,7 +151,7 @@
             </TemplateColumn>
             <TemplateColumn Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Failed Attempts" Name="errors" />
+                    <VirtualisedSortHeader Title="@ConnectorSpaceText.PexLabelFailedAttempts" Name="errors" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @if (context.Item.ErrorCount > 0)
@@ -168,7 +168,7 @@
             </TemplateColumn>
             <TemplateColumn Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Unresolved References" Name="references" />
+                    <VirtualisedSortHeader Title="@ConnectorSpaceText.PexUnresolvedTitle" Name="references" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @* How many reference changes this export could not write yet because their targets
@@ -176,7 +176,7 @@
                        each owed reference and its reason. *@
                     @if (context.Item.UnresolvedReferenceCount > 0)
                     {
-                        <MudTooltip Text="This export was written without these references; they retry automatically once their targets exist. The detail page explains each one." Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@ConnectorSpaceText.PexUnresolvedTooltip" Arrow="true" Placement="Placement.Top">
                             <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">
                                 @context.Item.UnresolvedReferenceCount
                             </MudChip>
@@ -190,13 +190,13 @@
             </TemplateColumn>
             <TemplateColumn Sortable="false">
                 <HeaderTemplate>
-                    <VirtualisedSortHeader Title="Failing Since" Name="failingsince" />
+                    <VirtualisedSortHeader Title="@ConnectorSpaceText.PexLabelFailingSince" Name="failingsince" />
                 </HeaderTemplate>
                 <CellTemplate>
                     @if (context.Item.FailingSince.HasValue)
                     {
                         var failingSince = context.Item.FailingSince.Value;
-                        <MudTooltip Text="@($"{failingSince.ToLocalTime().ToFriendlyDate()}. JIM attempts it again at every export run.")" Arrow="true" Placement="Placement.Top">
+                        <MudTooltip Text="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.PexFailingSinceTooltip, failingSince.ToLocalTime().ToFriendlyDate())" Arrow="true" Placement="Placement.Top">
                             <span class="mud-error-text">@failingSince.ToLocalTime().ToRelativeTime()</span>
                         </MudTooltip>
                     }
@@ -214,32 +214,32 @@
             @if (!string.IsNullOrWhiteSpace(grid.SearchText))
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                 PrimaryText="@($"No Pending Exports match \"{grid.SearchText}\"")"
-                                 SecondaryText="Try a different search term, or clear the search."
-                                 ActionText="Clear Search"
+                                 PrimaryText="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.PexNoSearchMatch, grid.SearchText)"
+                                 SecondaryText="@CommonText.TrySearchAgain"
+                                 ActionText="@CommonText.ClearSearch"
                                  OnAction="@(() => grid.ClearSearchAsync())" />
             }
             else if (_failingOnly && !_statusFilters.Any() && !_changeTypeFilters.Any())
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.TaskAlt"
-                                 PrimaryText="No Pending Exports are failing"
-                                 SecondaryText="Every Pending Export's last attempt succeeded, or it has not been attempted yet."
-                                 ActionText="Show All"
+                                 PrimaryText="@ConnectorSpaceText.PexNoneFailing"
+                                 SecondaryText="@ConnectorSpaceText.PexNoneFailingHint"
+                                 ActionText="@ConnectorSpaceText.PexShowAll"
                                  OnAction="@(() => OnFailingOnlyChanged(false))" />
             }
             else if (_statusFilters.Any() || _changeTypeFilters.Any() || _failingOnly)
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
-                                 PrimaryText="No Pending Exports match the filters"
-                                 SecondaryText="Try different filters, or clear them."
-                                 ActionText="Clear Filters"
+                                 PrimaryText="@ConnectorSpaceText.PexNoFilterMatch"
+                                 SecondaryText="@ConnectorSpaceText.PexNoFilterMatchHint"
+                                 ActionText="@ConnectorSpaceText.PexClearFilters"
                                  OnAction="ClearFiltersAsync" />
             }
             else
             {
                 <TableEmptyState Icon="@Icons.Material.Filled.TaskAlt"
-                                 PrimaryText="No Pending Exports"
-                                 SecondaryText="Changes waiting to be written to this Connected System appear here." />
+                                 PrimaryText="@ConnectorSpaceText.PexNoneYet"
+                                 SecondaryText="@ConnectorSpaceText.PexNoneYetHint" />
             }
         </EmptyContent>
     </VirtualisedDataGrid>
@@ -280,11 +280,11 @@ else
 
         _breadcrumbs = new List<BreadcrumbItem>
         {
-            new("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new("Administration", href: "/admin"),
-            new("Connected Systems", href: "/admin/connected-systems/"),
+            new(ConnectorSpaceText.DeletedHomeBreadcrumb, href: "/", icon: Icons.Material.Filled.Home),
+            new(ConnectorSpaceText.DeletedAdministrationBreadcrumb, href: "/admin"),
+            new(ConnectorSpaceText.CsoBreadcrumbConnectedSystems, href: "/admin/connected-systems/"),
             new(_connectedSystemHeader.Name, href: Utilities.GetConnectedSystemHref(_connectedSystemHeader)),
-            new("Pending Exports", href: null, disabled: true)
+            new(ConnectorSpaceText.CsoPendingExportsTitle, href: null, disabled: true)
         };
     }
 
@@ -309,12 +309,14 @@ else
     private string GetFilterText(IReadOnlyList<string> selectedValues)
     {
         if (selectedValues == null || selectedValues.Count == 0)
-            return "All";
+            return ConnectorSpaceText.PexAll;
 
         if (selectedValues.Count == 1)
-            return selectedValues[0].SplitOnCapitalLetters();
+            return Enum.TryParse<PendingExportStatus>(selectedValues[0], out var status) ? status.ForDisplay()
+                : Enum.TryParse<PendingExportChangeType>(selectedValues[0], out var changeType) ? changeType.ForDisplay()
+                : selectedValues[0];
 
-        return $"{selectedValues.Count} selected";
+        return string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.PexSelectedCount, selectedValues.Count);
     }
 
     /// <summary>

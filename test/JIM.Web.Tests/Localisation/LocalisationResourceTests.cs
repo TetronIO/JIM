@@ -36,6 +36,9 @@ public partial class LocalisationResourceTests
     [GeneratedRegex(@"\{(\d+)(?:[,:][^}]*)?\}")]
     private static partial Regex Placeholder();
 
+    [GeneratedRegex(@"(?<=\p{L})'(?=\p{L})")]
+    private static partial Regex StraightElision();
+
     [Test]
     public void ResourceFolder_HasNeutralFilesToCheck()
     {
@@ -100,12 +103,13 @@ public partial class LocalisationResourceTests
     }
 
     [Test]
-    public void ReleasedLanguages_TranslateEveryString()
+    public void LanguagesInProgressOrReleased_TranslateEveryString()
     {
-        // English variants hold only the strings whose spelling differs, so completeness is a different question
-        // for them; AmericanEnglish_OverridesEveryBritishSpelling asks it.
+        // A language being delivered gets its translation in the change that adds each string, so it is complete the
+        // day the last hard-coded text is converted. English variants hold only the strings whose spelling differs, so
+        // completeness is a different question for them; AmericanEnglish_OverridesEveryBritishSpelling asks it.
         var released = UiLanguages.All
-            .Where(language => language.IsReleased && !language.CultureName.StartsWith("en", StringComparison.OrdinalIgnoreCase));
+            .Where(language => language.IsRequiredInEveryChange && !language.CultureName.StartsWith("en", StringComparison.OrdinalIgnoreCase));
 
         var problems = new List<string>();
         foreach (var language in released)
@@ -122,8 +126,8 @@ public partial class LocalisationResourceTests
         }
 
         Assert.That(problems, Is.Empty,
-            "A released language must have every string translated, or users see a page in two languages. Translate " +
-            "these, or mark the language IsReleased: false in UiLanguages until it is complete." + Environment.NewLine +
+            "A language in progress or released must have every string translated, in the change that adds the string " +
+            "(engineering/LOCALISATION.md). Translate these." + Environment.NewLine +
             string.Join(Environment.NewLine, problems));
     }
 
@@ -199,6 +203,35 @@ public partial class LocalisationResourceTests
     }
 
     [Test]
+    public void French_ElidesWithTheTypographicApostrophe()
+    {
+        // "l’objet", never "l'objet": areas are translated in parallel, and a straight apostrophe in one reads as a slip
+        // beside the typographic one everywhere else. A straight quote around a name ('Port') is not an elision.
+        var problems = ForEachTranslation((file, key, value, _) =>
+            file.Culture == "fr" && StraightElision().IsMatch(value)
+                ? $"{file.FileName}: '{key}' elides with a straight apostrophe; use ’ (U+2019): {value}"
+                : null);
+
+        Assert.That(problems, Is.Empty, string.Join(Environment.NewLine, problems));
+    }
+
+    [Test]
+    public void EveryCountedText_HasItsSingularAndPlural()
+    {
+        // A counted text is two keys, XOne and XOther, chosen by the reader's language's plural rule (PluralRules,
+        // JimMessage.Counted). One without the other renders a key name on screen for half the counts. Only the
+        // singular is checked from: a key ending "Other" is as often a plain word ("ActivityOperationOther").
+        var problems = ResourceFiles.Value
+            .Where(file => file.Culture == null)
+            .SelectMany(file => file.Values.Keys
+                .Where(key => key.EndsWith("One", StringComparison.Ordinal) && !file.Values.ContainsKey(key[..^3] + "Other"))
+                .Select(key => $"{file.FileName}: '{key}' has no '{key[..^3]}Other'"))
+            .ToList();
+
+        Assert.That(problems, Is.Empty, string.Join(Environment.NewLine, problems));
+    }
+
+    [Test]
     public void MudBlazorText_CarriesEveryKeyMudBlazorAsksFor()
     {
         var mudBlazor = typeof(MudBlazor.MudButton).Assembly;
@@ -239,17 +272,27 @@ public partial class LocalisationResourceTests
     private static HashSet<string> Placeholders(string value) =>
         Placeholder().Matches(value).Select(match => match.Groups[1].Value).ToHashSet();
 
+    /// <summary>
+    /// Every project's localised text: the portal's own (src/JIM.Web/Resources) and the message catalogues the application
+    /// layer, the Worker and the Connectors render through <c>JimMessage</c> (src/*/Resources). A file is identified by its
+    /// project and name, so two projects may each have a file of the same name.
+    /// </summary>
     private static IReadOnlyList<ResourceFile> LoadResourceFiles()
     {
-        var folder = Path.Join(RepositoryRoot.Value, "src", "JIM.Web", "Resources");
-        return Directory.EnumerateFiles(folder, "*.resx")
+        var source = Path.Join(RepositoryRoot.Value, "src");
+        return Directory.EnumerateDirectories(source)
+            .Select(project => Path.Join(project, "Resources"))
+            .Where(Directory.Exists)
+            .SelectMany(folder => Directory.EnumerateFiles(folder, "*.resx"))
             .Select(path =>
             {
-                var fileName = Path.GetFileName(path);
+                var project = Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(path)))!;
+                var prefix = project == "JIM.Web" ? string.Empty : project + "/";
+                var fileName = prefix + Path.GetFileName(path);
                 var parts = Path.GetFileNameWithoutExtension(path).Split('.', 2);
                 var values = XDocument.Load(path).Root!.Elements("data")
                     .ToDictionary(data => (string)data.Attribute("name")!, data => (string?)data.Element("value") ?? string.Empty);
-                return new ResourceFile(fileName, parts[0], parts.Length > 1 ? parts[1] : null, values);
+                return new ResourceFile(fileName, prefix + parts[0], parts.Length > 1 ? parts[1] : null, values);
             })
             .ToList();
     }

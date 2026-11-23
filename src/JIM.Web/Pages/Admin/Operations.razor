@@ -12,10 +12,10 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Operations</PageTitle>
-<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.PendingActions" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Operations
-    <PageInfo Title="Operations" DocsPage="configuration/operations.md">
-        What JIM is doing now, what it did, and what is scheduled. Synchronisation and password delivery both report here.
+<PageTitle>@LayoutText.NavOperations</PageTitle>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.PendingActions" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@LayoutText.NavOperations
+    <PageInfo Title="@LayoutText.NavOperations" DocsPage="configuration/operations.md">
+        @OperationsText.OpsPageInfo
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
@@ -23,7 +23,7 @@
 @if (_demoMode)
 {
     <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2 mb-2" data-testid="operations-demo-mode">
-        Demo mode: every section below shows sample data, and actions that would change anything are switched off.
+        @OperationsText.OpsDemoMode
     </MudAlert>
 }
 
@@ -43,29 +43,29 @@
 <CascadingValue Value="_demoMode" Name="OperationsDemoMode" IsFixed="true">
 <NavigableMudTabs TabPanelsClass="pa-0" Class="mt-6">
     @* Queued, running and finished work on one tab, in time order (#2549); it replaced the Queue and History tabs. *@
-    <MudTabPanel Text="Activity" Icon="@Icons.Material.Filled.DynamicFeed">
+    <MudTabPanel Text="@LayoutText.NavActivity" Icon="@Icons.Material.Filled.DynamicFeed">
         <OperationsActivityTab />
     </MudTabPanel>
-    <MudTabPanel Text="Schedules" Icon="@Icons.Material.Filled.Schedule">
+    <MudTabPanel Text="@OperationsText.SchedulesPluralName" Icon="@Icons.Material.Filled.Schedule">
         <OperationsSchedulesTab />
     </MudTabPanel>
     @* Badged with the password changes waiting on a person (parked plus expired), the way a Synchronisation Rule's
        Passwords tab is badged with its parked accounts. Work JIM has stopped doing must be visible without
        opening the tab to find out; waiting and cancelled changes are not counted, because neither needs anyone. *@
-    <MudTabPanel Text="Passwords" Icon="@Icons.Material.Filled.Key" BadgeColor="Color.Warning"
+    <MudTabPanel Text="@OperationsText.OpsTabPasswords" Icon="@Icons.Material.Filled.Key" BadgeColor="Color.Warning"
                  BadgeData="@(_passwordAttentionCount > 0 ? _passwordAttentionCount.ToString("N0") : null)">
         <OperationsPasswordsTab />
     </MudTabPanel>
     @* The Exchange queue (#2021, Phase 6b). Badged with the changes waiting on
        a person (parked, refused and not made), as Passwords is: queued and retrying changes need nobody. *@
-    <MudTabPanel Text="Exchange" Icon="@Icons.Material.Filled.Email" BadgeColor="Color.Warning"
+    <MudTabPanel Text="@OperationsText.OpsTabExchange" Icon="@Icons.Material.Filled.Email" BadgeColor="Color.Warning"
                  BadgeData="@(_exchangeAttentionCount > 0 ? _exchangeAttentionCount.ToString("N0") : null)">
         <OperationsExchangeTab OnChanged="RefreshAndRenderAsync" />
     </MudTabPanel>
     @* Badged with the generated values waiting on an administrator (Unique Value Generation, #242, release 4): an export
        held for a decision is work JIM has stopped doing, which must be visible without opening the tab. An allowed
        rename is not counted: it waits on the next export, not on anyone. *@
-    <MudTabPanel Text="Generated Values" Icon="@Icons.Material.Filled.Fingerprint" BadgeColor="Color.Warning"
+    <MudTabPanel Text="@OperationsText.OpsTabGenerated" Icon="@Icons.Material.Filled.Fingerprint" BadgeColor="Color.Warning"
                  BadgeData="@(_generatedValueAttentionCount > 0 ? _generatedValueAttentionCount.ToString("N0") : null)">
         <OperationsGeneratedValuesTab OnChanged="RefreshAndRenderAsync" />
     </MudTabPanel>
@@ -75,9 +75,9 @@
 @code {
     private readonly List<BreadcrumbItem> _breadcrumbs =
     [
-        new("Home", href: "/", icon: Icons.Material.Filled.Home),
-        new("Administration", href: "/admin"),
-        new("Operations", href: null, disabled: true)
+        new(LayoutText.NavHome, href: "/", icon: Icons.Material.Filled.Home),
+        new(LayoutText.NavAdministration, href: "/admin"),
+        new(LayoutText.NavOperations, href: null, disabled: true)
     ];
 
     /// <summary>

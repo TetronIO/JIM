@@ -1,8 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Models.Localisation;
 using JIM.Models.Staging;
-using JIM.Models.Utility;
 
 namespace JIM.Worker.Processors;
 
@@ -46,21 +47,8 @@ internal static class ImportOutcomeMessage
     internal static string ForImport(int objects, int created, int updated, int unchanged, int connectorReportedDeletions, int detectedDeletions, int errors, string throughput,
         int withheldDeletions = 0)
     {
-        var parts = new List<string> { $"{created:N0} created", $"{updated:N0} updated" };
-        if (unchanged > 0)
-            parts.Add($"{unchanged:N0} unchanged");
-        if (connectorReportedDeletions > 0)
-            parts.Add($"{connectorReportedDeletions:N0} deleted");
-        if (withheldDeletions > 0)
-            parts.Add($"{withheldDeletions:N0} deletion{(withheldDeletions == 1 ? "" : "s")} withheld");
-        if (errors > 0)
-            parts.Add($"{errors:N0} error{(errors == 1 ? "" : "s")}");
-
-        var detected = detectedDeletions > 0 ? $"; {detectedDeletions:N0} no longer found and marked as deleted" : string.Empty;
-
-        // The throughput is the objects read over the run's time, so it stays with them: after the detected deletions it
-        // would read as the time those took.
-        return $"Import complete: {objects:N0} object{(objects == 1 ? "" : "s")} ({string.Join(", ", parts)}){throughput}{detected}";
+        return ActivityMessage.ImportComplete(objects, created, updated, unchanged, connectorReportedDeletions, detectedDeletions, errors, throughput,
+            withheldDeletions).ToEnglish();
     }
 
     /// <summary>
@@ -79,15 +67,7 @@ internal static class ImportOutcomeMessage
     /// <param name="runType">The Run Profile's type: a Full Import, or a Delta Import that read every object.</param>
     internal static string ForRefusedDeletionDetection(int count, int baseCount, int? maxCount, int? maxPercent, ConnectedSystemRunType runType = ConnectedSystemRunType.FullImport)
     {
-        var (percent, limitDescription) = DescribeDeletionLimits(count, baseCount, maxCount, maxPercent);
-        var objectWord = count == 1 ? "object" : "objects";
-        var whatNext = runType == ConnectedSystemRunType.DeltaImport
-            ? "or raise the limit. Each Delta Import will read every object and check again until this is resolved."
-            : "or raise the limit, then run the Full Import again.";
-
-        return $"Deletion detection found {count:N0} {objectWord} ({percent}% of {baseCount:N0}) no longer in the Connected System, " +
-               $"above this Run Profile's {limitDescription}; none were marked as deleted. Check the Connected System's scope and " +
-               $"the connector's filters, {whatNext}";
+        return ActivityMessage.RefusedDeletionDetection(count, baseCount, maxCount, maxPercent, runType).ToEnglish();
     }
 
     /// <summary>
@@ -102,39 +82,7 @@ internal static class ImportOutcomeMessage
     /// <param name="maxPercent">The Run Profile's <c>MaxDetectedDeletionsPercent</c> limit, or null when unset.</param>
     internal static string ForWithheldConnectorReportedDeletes(int count, int baseCount, int? maxCount, int? maxPercent)
     {
-        var (percent, limitDescription) = DescribeDeletionLimits(count, baseCount, maxCount, maxPercent);
-        var objectWord = count == 1 ? "object" : "objects";
-
-        return $"The Connected System reported {count:N0} {objectWord} ({percent}% of {baseCount:N0}) as deleted, above this Run Profile's " +
-               $"{limitDescription}; none were marked as deleted. Each Delta Import will report them again until this is resolved. " +
-               "Check what deleted them in the Connected System. If the deletions are intended, raise the limit, or run a Delta Import " +
-               "Run Profile without these limits to let them through.";
-    }
-
-    /// <summary>
-    /// The share of <paramref name="baseCount"/> that <paramref name="count"/> is, rounded to a whole percentage, and the
-    /// words naming whichever of the Run Profile's deletion limits it exceeds.
-    /// </summary>
-    private static (int Percent, string LimitDescription) DescribeDeletionLimits(int count, int baseCount, int? maxCount, int? maxPercent)
-    {
-        var percent = baseCount <= 0 ? 0 : (int)Math.Round(count * 100.0 / baseCount, MidpointRounding.AwayFromZero);
-
-        var countTripped = maxCount.HasValue && count > maxCount.Value;
-        var percentTripped = maxPercent.HasValue && ShareThreshold.Exceeds(count, baseCount, maxPercent.Value);
-
-        string limitDescription;
-        if (countTripped && percentTripped)
-            limitDescription = $"limits of {maxCount!.Value:N0} and {maxPercent!.Value}%";
-        else if (countTripped)
-            limitDescription = $"limit of {maxCount!.Value:N0}";
-        else if (percentTripped)
-            limitDescription = $"limit of {maxPercent!.Value}%";
-        else
-            // Defensive: this is only called once at least one limit has actually tripped, so this arm exists to say
-            // something sensible rather than throw if that invariant is ever violated by a future caller.
-            limitDescription = "configured limit";
-
-        return (percent, limitDescription);
+        return ActivityMessage.WithheldConnectorReportedDeletes(count, baseCount, maxCount, maxPercent).ToEnglish();
     }
 
     /// <summary>
@@ -145,18 +93,7 @@ internal static class ImportOutcomeMessage
     /// <param name="heldBack">Each held-back Object Type's name and the names of the enabled rules bound to it.</param>
     internal static string ForDeselectedObjectTypesHeldBack(IReadOnlyList<(string ObjectTypeName, IReadOnlyList<string> SyncRuleNames)> heldBack)
     {
-        return string.Join(" ", heldBack.Select(item =>
-        {
-            var rules = string.Join(", ", item.SyncRuleNames);
-            var because = item.SyncRuleNames.Count == 1
-                ? $"an enabled Synchronisation Rule still manages it: {rules}."
-                : $"{item.SyncRuleNames.Count} enabled Synchronisation Rules still manage it: {rules}.";
-            var disable = item.SyncRuleNames.Count == 1 ? "that Synchronisation Rule" : "those Synchronisation Rules";
-
-            return $"Object Type '{item.ObjectTypeName}' is deselected, but its objects were not checked for deletion because {because} " +
-                   $"They stay joined and are no longer refreshed. Disable {disable} to take the Object Type out of management, " +
-                   "or select the Object Type again.";
-        }));
+        return ActivityMessage.DeselectedObjectTypesHeldBack(heldBack)?.ToEnglish() ?? string.Empty;
     }
 
     /// <summary>
@@ -172,51 +109,7 @@ internal static class ImportOutcomeMessage
     /// </param>
     internal static string ForUnresolvedReferences(IReadOnlyList<(string AttributeName, string Value, IReadOnlyList<string>? AmbiguousWith)> references)
     {
-        // Resolution runs in parallel, so the order values arrive in is not stable; sorting here keeps the message,
-        // and the value it gives as an example, the same from one run to the next.
-        var ordered = references
-            .OrderBy(r => r.AttributeName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(r => r.Value, StringComparer.Ordinal)
-            .ToList();
-        var missing = ordered.Where(r => r.AmbiguousWith == null).ToList();
-        var ambiguous = ordered.Where(r => r.AmbiguousWith != null).ToList();
-        var candidateTypeNames = string.Join(", ", ambiguous
-            .SelectMany(r => r.AmbiguousWith!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase));
-
-        if (ordered.Count == 1)
-        {
-            var (attributeName, value, _) = ordered[0];
-            return missing.Count == 1
-                ? $"Couldn't resolve a reference on {attributeName} to a Connected System Object: {value}. {ScopeRemedy(1)}"
-                : $"A reference value ({value}) matches objects of more than one Object Type ({candidateTypeNames}), and attribute " +
-                  $"'{attributeName}' does not declare which Object Type it references, so the reference cannot be resolved. {SchemaRemedy}";
-        }
-
-        var breakdown = string.Join(", ", ordered
-            .GroupBy(r => r.AttributeName, StringComparer.OrdinalIgnoreCase)
-            .Select(group => $"{group.Count():N0} on {group.Key}"));
-
-        var sentences = new List<string> { $"Couldn't resolve {ordered.Count:N0} references to Connected System Objects ({breakdown})." };
-        if (missing.Count > 0)
-        {
-            sentences.Add(ambiguous.Count == 0
-                ? $"For example: {missing[0].Value}."
-                : $"{missing.Count:N0} {Matches(missing.Count)} no Connected System Object, for example {missing[0].Value}.");
-            sentences.Add(ScopeRemedy(missing.Count));
-        }
-
-        if (ambiguous.Count > 0)
-        {
-            var whichMatch = missing.Count == 0 ? "Each matches" : $"{ambiguous.Count:N0} {Matches(ambiguous.Count)}";
-            sentences.Add($"{whichMatch} objects of more than one Object Type ({candidateTypeNames}) on an attribute that does not declare " +
-                          "which Object Type it references.");
-            sentences.Add(SchemaRemedy);
-        }
-
-        sentences.Add("The Connected System Object lists every unresolved value.");
-        return string.Join(" ", sentences);
+        return ActivityMessage.UnresolvedReferences(references).ToEnglish();
     }
 
     /// <summary>
@@ -231,30 +124,7 @@ internal static class ImportOutcomeMessage
     /// </remarks>
     internal static string ForUnreadableAttributeValues(IReadOnlyList<ConnectedSystemImportObjectAttributeValueError> values)
     {
-        var verb = values.Any(v => v.Source == ImportAttributeValueErrorSource.Jim) ? "import" : "read";
-        if (values.Count == 1)
-        {
-            var only = values[0];
-            return $"Couldn't {verb} a value of {only.AttributeName}{QuotedValue(only.Value)}: {AsSentence(only.Reason)} " +
-                   $"JIM left {only.AttributeName} as it already held it. Correct the value in the Connected System, then run the import again.";
-        }
-
-        var breakdown = string.Join(", ", values
-            .GroupBy(v => v.AttributeName, StringComparer.OrdinalIgnoreCase)
-            .Select(group => $"{group.Count():N0} on {group.Key}"));
-
-        var sentences = new List<string>
-        {
-            $"Couldn't {verb} {values.Count:N0} values ({breakdown}), so JIM left those attributes as it already held them."
-        };
-        sentences.AddRange(values
-            .Take(ListedUnreadableValues)
-            .Select(v => $"{v.AttributeName}{QuotedValue(v.Value)}: {AsSentence(v.Reason)}"));
-        if (values.Count > ListedUnreadableValues)
-            sentences.Add($"And {values.Count - ListedUnreadableValues:N0} more.");
-        sentences.Add("Correct the values in the Connected System, then run the import again.");
-
-        return string.Join(" ", sentences);
+        return ActivityMessage.UnreadableAttributeValues(values).ToEnglish();
     }
 
     /// <summary>
@@ -267,16 +137,7 @@ internal static class ImportOutcomeMessage
     /// <param name="runType">The Run Profile's type: a Full Import, or a Delta Import that read every object.</param>
     internal static string ForUnreadableExternalIds(IReadOnlyList<(string ObjectTypeName, int Count)> heldBack, ConnectedSystemRunType runType = ConnectedSystemRunType.FullImport)
     {
-        var whatNext = runType == ConnectedSystemRunType.DeltaImport
-            ? "Correct the External IDs in the Connected System. Each Delta Import will read every object and check again until they can be read."
-            : "Correct the External IDs in the Connected System, then run the Full Import again.";
-
-        return string.Join(" ", heldBack.Select(item =>
-        {
-            var objects = item.Count == 1 ? "1 object" : $"{item.Count:N0} objects";
-            return $"Object Type '{item.ObjectTypeName}' was not checked for deleted objects, because the External ID of {objects} " +
-                   $"could not be read and JIM could not tell which objects they were. None of its objects were marked as deleted. {whatNext}";
-        }));
+        return ActivityMessage.UnreadableExternalIds(heldBack, runType)?.ToEnglish() ?? string.Empty;
     }
 
     /// <summary>
@@ -284,56 +145,10 @@ internal static class ImportOutcomeMessage
     /// </summary>
     internal static string ForMissingExternalIds(IReadOnlyList<(string ObjectTypeName, int Count)> heldBack, ConnectedSystemRunType runType = ConnectedSystemRunType.FullImport)
     {
-        return string.Join(" ", heldBack.Select(item =>
-        {
-            var one = item.Count == 1;
-            var objects = one ? "1 object" : $"{item.Count:N0} objects";
-            var which = one ? "which object it was" : "which objects they were";
-            var give = one ? "Give it an External ID" : "Give them External IDs";
-            var whatNext = runType == ConnectedSystemRunType.DeltaImport
-                ? $"{give} in the Connected System. Each Delta Import will read every object and check again until every object has one."
-                : $"{give} in the Connected System, then run the Full Import again.";
-            return $"Object Type '{item.ObjectTypeName}' was not checked for deleted objects, because {objects} arrived with no External ID " +
-                   $"and JIM could not tell {which}. None of its objects were marked as deleted. {whatNext}";
-        }));
+        return ActivityMessage.MissingExternalIds(heldBack, runType)?.ToEnglish() ?? string.Empty;
     }
 
     /// <summary>#3013: the item's error for an imported object with no External ID value.</summary>
     internal static string ForMissingExternalId(string externalIdAttributeName) =>
-        $"The object has no value for its External ID attribute '{externalIdAttributeName}', so JIM cannot tell which object it is, " +
-        "and it was not imported. Give it a value in the Connected System, then run the import again.";
-
-    /// <summary>How many unreadable values the message lists one by one before it counts the rest.</summary>
-    private const int ListedUnreadableValues = 5;
-
-    /// <summary>Longest a value is quoted at in full; anything longer is shortened, since the item exists to say what is wrong, not to hold a payload.</summary>
-    private const int LongestQuotedValue = 100;
-
-    private static string QuotedValue(string? value)
-    {
-        if (value == null)
-            return string.Empty;
-
-        var shown = value.Length > LongestQuotedValue ? $"{value[..LongestQuotedValue]}..." : value;
-        return $" ('{shown}')";
-    }
-
-    private static string AsSentence(string reason)
-    {
-        var trimmed = reason.Trim();
-        return trimmed.EndsWith('.') ? trimmed : $"{trimmed}.";
-    }
-
-    /// <summary>
-    /// Both ways an object can be out of scope (#1255): its Container was never selected, or a Container excludes it.
-    /// The second is the harder to spot, because the branch above the referenced object is selected and looks right.
-    /// </summary>
-    private static string ScopeRemedy(int count) => count == 1
-        ? "Make sure that Container Scope for the Connected System includes the location of the referenced object, and that no Container excludes it."
-        : "Make sure that Container Scope for the Connected System includes the locations of the referenced objects, and that no Container excludes them.";
-
-    private const string SchemaRemedy =
-        "Declare the reference's target Object Type in the Connected System's schema configuration if the Connector supports doing so.";
-
-    private static string Matches(int count) => count == 1 ? "matches" : "match";
+        ActivityMessage.MissingExternalId(externalIdAttributeName).ToEnglish();
 }
