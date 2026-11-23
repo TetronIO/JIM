@@ -17,24 +17,24 @@
         <div class="jim-unresolved-references-head">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                 <MudIcon Icon="@Icons.Material.Filled.LinkOff" Color="@ToneColour" />
-                <MudText Typo="Typo.h6">Where They Point</MudText>
+                <MudText Typo="Typo.h6">@ConnectorSpaceText.UrefWherePointsTitle</MudText>
                 <MudChip T="string" Variant="Variant.Text" Color="@ToneColour" Class="ma-0">@summary.TotalCount.ToString("N0")</MudChip>
             </MudStack>
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                    Unresolved Reference Handling: <strong>@summary.UnresolvedReferenceHandling</strong>
+                    @ConnectorSpaceText.UrefHandlingLabel <strong>@summary.UnresolvedReferenceHandling</strong>
                 </MudText>
-                <MudLink Typo="Typo.body2" Href="@($"/admin/connected-systems/{ConnectedSystemId}?t=settings")">Change</MudLink>
+                <MudLink Typo="Typo.body2" Href="@($"/admin/connected-systems/{ConnectedSystemId}?t=settings")">@ConnectorSpaceText.UrefChange</MudLink>
             </MudStack>
         </div>
 
         <div class="pa-4">
             <MudText Typo="Typo.body1">
-                @UnresolvedReferenceDisplay.ReferencesOnObjectsText(summary.TotalCount, summary.ObjectCount) could not be resolved.
-                Below are the changes that would resolve them, each likely cause judged against the current Container Scope.
+                @string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(summary.TotalCount, ConnectorSpaceText.UrefNotResolvedOne, ConnectorSpaceText.UrefNotResolvedOther), UnresolvedReferenceDisplay.ReferencesOnObjectsText(summary.TotalCount, summary.ObjectCount))
+                @ConnectorSpaceText.UrefBelowChanges
             </MudText>
 
-            <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">Next steps</MudText>
+            <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">@ConnectorSpaceText.UrefNextSteps</MudText>
             <UnresolvedReferenceNextSteps Fixes="@summary.Fixes"
                                           ConnectedSystemId="@ConnectedSystemId"
                                           ConnectedSystemName="@ConnectedSystemName"

@@ -20,16 +20,16 @@
         <div class="jim-unresolved-references-head">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                 <MudIcon Icon="@Icons.Material.Filled.LinkOff" Color="@ToneColour" />
-                <MudText Typo="Typo.h6">Unresolved References</MudText>
+                <MudText Typo="Typo.h6">@ConnectorSpaceText.PexUnresolvedTitle</MudText>
                 <MudChip T="string" Variant="Variant.Text" Color="@ToneColour" Class="ma-0">@HeaderCount.ToString("N0")</MudChip>
             </MudStack>
             @if (_context != null)
             {
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        Unresolved Reference Handling: <strong>@_context.UnresolvedReferenceHandling</strong>
+                        @ConnectorSpaceText.UrefHandlingLabel <strong>@_context.UnresolvedReferenceHandling</strong>
                     </MudText>
-                    <MudLink Typo="Typo.body2" Href="@($"/admin/connected-systems/{ConnectedSystemId}?t=settings")">Change</MudLink>
+                    <MudLink Typo="Typo.body2" Href="@($"/admin/connected-systems/{ConnectedSystemId}?t=settings")">@ConnectorSpaceText.UrefChange</MudLink>
                 </MudStack>
             }
         </div>
@@ -43,7 +43,7 @@
             @if (IsRunContext && RunCount == null && !string.IsNullOrEmpty(RecordedMessage))
             {
                 @* An item recorded before the count existed: its own message is the only record of what the run said. *@
-                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Recorded by the run: @RecordedMessage</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.UrefRecordedByRun, RecordedMessage)</MudText>
             }
 
             @if (_summary is { TotalCount: > 0 } summary && _context != null)
@@ -51,7 +51,7 @@
                 @* Captured here: the table's cell templates are lambdas, which null-state does not flow into. *@
                 var objectTypeName = _context.ObjectTypeName;
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap mt-3">
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Likely cause:</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@ConnectorSpaceText.UrefLikelyCause</MudText>
                     @foreach (var cause in summary.Causes)
                     {
                         <MudChip T="string" Variant="Variant.Text" Color="@UnresolvedReferenceDisplay.CauseColour(cause.FixLocation)" Class="ma-0">
@@ -61,7 +61,7 @@
                 </MudStack>
 
                 @* Every distinct next step in full, so the table below can keep each row to one line. *@
-                <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">Next steps</MudText>
+                <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">@ConnectorSpaceText.UrefNextSteps</MudText>
                 <UnresolvedReferenceNextSteps Fixes="@summary.Fixes"
                                               ConnectedSystemId="@ConnectedSystemId"
                                               ConnectedSystemName="@_context.ConnectedSystemName"
@@ -76,37 +76,37 @@
                                      ExpectedItemCount="@summary.TotalCount"
                                      MaxHeight="@GridMaxHeight"
                                      GridClass="mt-4"
-                                     SingularName="Unresolved Reference"
-                                     PluralName="Unresolved References"
-                                     SearchPlaceholder="Search attribute or value">
+                                     SingularName="@ConnectorSpaceText.UrefSingular"
+                                     PluralName="@ConnectorSpaceText.PexUnresolvedTitle"
+                                     SearchPlaceholder="@ConnectorSpaceText.UrefSearchPlaceholder">
                     <Columns>
-                        <TemplateColumn T="ConnectedSystemObjectUnresolvedReference" Title="Attribute" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                        <TemplateColumn T="ConnectedSystemObjectUnresolvedReference" Title="@ConnectorSpaceText.CsoColumnAttribute" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                             <HeaderTemplate>
-                                <MudText Typo="Typo.button">Attribute</MudText>
+                                <MudText Typo="Typo.button">@ConnectorSpaceText.CsoColumnAttribute</MudText>
                             </HeaderTemplate>
                             <CellTemplate>
                                 @context.Item.AttributeName
                             </CellTemplate>
                         </TemplateColumn>
-                        <TemplateColumn T="ConnectedSystemObjectUnresolvedReference" Title="Value" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+                        <TemplateColumn T="ConnectedSystemObjectUnresolvedReference" Title="@ConnectorSpaceText.CsoColumnValue" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                             <HeaderTemplate>
-                                <MudText Typo="Typo.button">Value</MudText>
+                                <MudText Typo="Typo.button">@ConnectorSpaceText.CsoColumnValue</MudText>
                             </HeaderTemplate>
                             <CellTemplate>
                                 <span class="jim-one-line jim-text-code" title="@context.Item.Value">@context.Item.Value</span>
                             </CellTemplate>
                         </TemplateColumn>
-                        <TemplateColumn T="ConnectedSystemObjectUnresolvedReference" Title="Likely Cause" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                        <TemplateColumn T="ConnectedSystemObjectUnresolvedReference" Title="@ConnectorSpaceText.UrefColumnLikelyCause" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                             <HeaderTemplate>
-                                <MudText Typo="Typo.button">Likely Cause</MudText>
+                                <MudText Typo="Typo.button">@ConnectorSpaceText.UrefColumnLikelyCause</MudText>
                             </HeaderTemplate>
                             <CellTemplate>
                                 <UnresolvedReferenceCauseChip Diagnosis="@context.Item" />
                             </CellTemplate>
                         </TemplateColumn>
-                        <TemplateColumn T="ConnectedSystemObjectUnresolvedReference" Title="Where to Fix" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                        <TemplateColumn T="ConnectedSystemObjectUnresolvedReference" Title="@ConnectorSpaceText.UrefColumnWhereToFix" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                             <HeaderTemplate>
-                                <MudText Typo="Typo.button">Where to Fix</MudText>
+                                <MudText Typo="Typo.button">@ConnectorSpaceText.UrefColumnWhereToFix</MudText>
                             </HeaderTemplate>
                             <CellTemplate>
                                 <MudChip T="string" Variant="Variant.Text" Color="@UnresolvedReferenceDisplay.FixLocationColour(context.Item.FixLocation)" Class="ma-0">
@@ -114,9 +114,9 @@
                                 </MudChip>
                             </CellTemplate>
                         </TemplateColumn>
-                        <TemplateColumn T="ConnectedSystemObjectUnresolvedReference" Title="Next Step" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                        <TemplateColumn T="ConnectedSystemObjectUnresolvedReference" Title="@ConnectorSpaceText.UrefColumnNextStep" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                             <HeaderTemplate>
-                                <MudText Typo="Typo.button">Next Step</MudText>
+                                <MudText Typo="Typo.button">@ConnectorSpaceText.UrefColumnNextStep</MudText>
                             </HeaderTemplate>
                             <CellTemplate>
                                 @{
@@ -130,16 +130,16 @@
                         @if (!string.IsNullOrWhiteSpace(grid.SearchText))
                         {
                             <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                                             PrimaryText="@($"No Unresolved References match \"{grid.SearchText}\"")"
-                                             SecondaryText="Try a different search term, or clear the search."
-                                             ActionText="Clear Search"
+                                             PrimaryText="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.UrefNoSearchMatch, grid.SearchText)"
+                                             SecondaryText="@CommonText.TrySearchAgain"
+                                             ActionText="@CommonText.ClearSearch"
                                              OnAction="@(() => grid.ClearSearchAsync())" />
                         }
                         else
                         {
                             <TableEmptyState Icon="@Icons.Material.Filled.Link"
-                                             PrimaryText="Every reference on this object has resolved"
-                                             SecondaryText="They resolved after this page was opened." />
+                                             PrimaryText="@ConnectorSpaceText.UrefAllResolved"
+                                             SecondaryText="@ConnectorSpaceText.UrefResolvedAfterOpen" />
                         }
                     </EmptyContent>
                 </VirtualisedDataGrid>
@@ -149,7 +149,7 @@
             {
                 <MudButton Variant="Variant.Text" Class="mt-3"
                            Href="@($"/admin/connected-systems/{ConnectedSystemId}/connector-space/{objectId}")">
-                    View the Connected System Object
+                    @ConnectorSpaceText.UrefViewObject
                 </MudButton>
             }
         </div>
@@ -289,8 +289,7 @@
     {
         if (!IsRunContext)
         {
-            yield return $"These reference values could not be linked to Connected System Objects in {_context?.ConnectedSystemName ?? "this Connected System"}, " +
-                         "so they cannot flow to the Metaverse until they resolve. Each likely cause is judged against the current Container Scope.";
+            yield return string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.UrefIntroObject, _context?.ConnectedSystemName ?? ConnectorSpaceText.UrefThisConnectedSystem);
             yield break;
         }
 
@@ -298,7 +297,7 @@
 
         if (_context == null)
         {
-            yield return "The Connected System Object has since been deleted, so its references can no longer be shown, and none of them is still pending.";
+            yield return ConnectorSpaceText.UrefDeletedSince;
             yield break;
         }
 
@@ -306,36 +305,34 @@
         yield return UnresolvedReferenceDisplay.SinceRun(RunCount, now) switch
         {
             UnresolvedReferenceSinceRun.NoneNow =>
-                "All of them have since resolved, or been removed from the source. Nothing about them is still pending.",
+                ConnectorSpaceText.UrefNoneNow,
             UnresolvedReferenceSinceRun.Fewer =>
-                $"{now:N0} {(now == 1 ? "is" : "are")} still unresolved; the others have since resolved, or been removed from the source. " +
-                "Those that remain are listed below with the likely cause of each, judged against the current Container Scope.",
+                string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(now, ConnectorSpaceText.UrefFewerOne, ConnectorSpaceText.UrefFewerOther), now.ToString("N0")),
             UnresolvedReferenceSinceRun.More =>
-                $"Later imports have left more unresolved since: the Connected System Object holds {now:N0} now. All of them are listed below " +
-                "with the likely cause of each, judged against the current Container Scope.",
+                string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.UrefMore, now.ToString("N0")),
             _ =>
-                "They are listed below as they stand now on the Connected System Object, with the likely cause of each, judged against the current Container Scope."
+                ConnectorSpaceText.UrefAsTheyStand
         };
     }
 
     private string RunSentence()
     {
-        var typeName = _context?.ObjectTypeName ?? ObjectTypeName ?? "object";
+        var typeName = _context?.ObjectTypeName ?? ObjectTypeName ?? ConnectorSpaceText.UrefObjectFallback;
         // "On this groupOfNames" rather than "the groupOfNames's": Object Type names are often a directory's class names,
         // which take a possessive badly.
         var references = RunCount is { } count
-            ? $"{count:N0} reference {(count == 1 ? "value" : "values")} on this {typeName}"
-            : $"some reference values on this {typeName}";
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(count, ConnectorSpaceText.UrefValuesOne, ConnectorSpaceText.UrefValuesOther), count.ToString("N0"), typeName)
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.UrefSomeValues, typeName);
 
         if (Tone == UnresolvedReferenceTone.Error)
-            return $"This run could not link {references} to Connected System Objects, so they cannot flow to the Metaverse until they resolve.";
+            return string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.UrefRunErrorSentence, references);
 
         var unresolved = RunCount is { } runCount
-            ? $"{runCount:N0} reference {(runCount == 1 ? "value" : "values")}"
-            : "reference values";
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(runCount, ConnectorSpaceText.UrefUnresolvedOne, ConnectorSpaceText.UrefUnresolvedOther), runCount.ToString("N0"))
+            : ConnectorSpaceText.UrefUnresolvedUnknown;
 
         return ItemErrorType is null or ActivityRunProfileExecutionItemErrorType.NotSet
-            ? $"This run left {unresolved} unresolved. They were not counted as an error, because Unresolved Reference Handling was not set to Error at the time."
-            : $"This run also left {unresolved} unresolved. They are not counted as this item's error, because the error above already is.";
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.UrefRunLeft, unresolved)
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.UrefRunLeftAlso, unresolved);
     }
 }

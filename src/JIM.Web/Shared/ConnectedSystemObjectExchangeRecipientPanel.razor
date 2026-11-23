@@ -10,7 +10,7 @@
 <MudPaper Class="@($"pa-4 {Class}")" Outlined="true" data-testid="jim-exchange-recipient">
     <div class="d-flex align-center flex-wrap mb-3" style="gap: 0.5rem 0.75rem;">
         <MudIcon Icon="@Icons.Material.Filled.Email" Color="Color.Info" aria-hidden="true" />
-        <MudText Typo="Typo.h6">Exchange Recipient</MudText>
+        <MudText Typo="Typo.h6">@ConnectorSpaceText.ExrTitle</MudText>
         <span class="@($"jim-status-pill jim-status-pill--{_headline.Modifier}")">
             <span class="jim-status-dot"></span>@_headline.Label
         </span>
@@ -19,8 +19,8 @@
         <thead>
             <tr>
                 <th></th>
-                <th>Declared</th>
-                <th>In Exchange <span class="mud-text-secondary" style="text-transform: none; letter-spacing: 0;">as of the last import</span></th>
+                <th>@ConnectorSpaceText.ExrColDeclared</th>
+                <th>@ConnectorSpaceText.ExrColInExchange <span class="mud-text-secondary" style="text-transform: none; letter-spacing: 0;">@ConnectorSpaceText.ExrAsOf</span></th>
             </tr>
         </thead>
         <tbody>
@@ -67,13 +67,13 @@
         {
             // The recipient type always; each other value where either side has one, so a mailbox's panel does not
             // list a mail contact's external address.
-            yield return ("Recipient type", Declared(State.Declared.RecipientType, "Not a recipient"), Imported(State.Imported.RecipientType));
+            yield return (ConnectorSpaceText.ExrRecipientType, Declared(State.Declared.RecipientType, ConnectorSpaceText.ExrNotRecipient), Imported(State.Imported.RecipientType));
             foreach (var (name, declared, imported, unset) in new[]
                      {
-                         ("Alias", State.Declared.Alias, State.Imported.Alias, "Exchange chooses"),
-                         ("Database", State.Declared.Database, State.Imported.Database, "Exchange chooses"),
-                         ("Primary SMTP address", State.Declared.PrimarySmtpAddress, State.Imported.PrimarySmtpAddress, "Email Address Policies apply"),
-                         ("External address", State.Declared.ExternalAddress, State.Imported.ExternalAddress, (string?)null)
+                         (ConnectorSpaceText.ExrAlias, State.Declared.Alias, State.Imported.Alias, ConnectorSpaceText.ExrExchangeChooses),
+                         (ConnectorSpaceText.ExrDatabase, State.Declared.Database, State.Imported.Database, ConnectorSpaceText.ExrExchangeChooses),
+                         (ConnectorSpaceText.ExrPrimarySmtp, State.Declared.PrimarySmtpAddress, State.Imported.PrimarySmtpAddress, ConnectorSpaceText.ExrPoliciesApply),
+                         (ConnectorSpaceText.ExrExternalAddress, State.Declared.ExternalAddress, State.Imported.ExternalAddress, (string?)null)
                      }.Where(r => !string.IsNullOrEmpty(r.Item2) || !string.IsNullOrEmpty(r.Item3)))
             {
                 yield return (name, Declared(declared, unset), imported);
@@ -84,5 +84,5 @@
     private static string? Declared(string? value, string? unset) => string.IsNullOrEmpty(value) ? unset : value;
 
     private static string Imported(string? recipientType) =>
-        string.IsNullOrEmpty(recipientType) || recipientType == ExchangeRecipientTypes.None ? "Not a recipient" : recipientType;
+        string.IsNullOrEmpty(recipientType) || recipientType == ExchangeRecipientTypes.None ? ConnectorSpaceText.ExrNotRecipient : recipientType;
 }

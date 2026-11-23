@@ -1,0 +1,1657 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="DeletedObjectsPageTitle" xml:space="preserve">
+    <value>Deleted Objects</value>
+    <comment>Page title, heading, breadcrumb and info title</comment>
+  </data>
+  <data name="DeletedInfoLead" xml:space="preserve">
+    <value>When objects are deleted, their change history is preserved here for audit and compliance purposes. Click</value>
+    <comment>Info popover; followed by the View action (DeletedView) in bold and DeletedInfoTrail</comment>
+  </data>
+  <data name="DeletedInfoTrail" xml:space="preserve">
+    <value>to see the full history of changes made to an object before it was deleted.</value>
+    <comment>Info popover, after the View action</comment>
+  </data>
+  <data name="DeletedView" xml:space="preserve">
+    <value>View</value>
+    <comment>Row action and the bold word in the info popover</comment>
+  </data>
+  <data name="DeletedHomeBreadcrumb" xml:space="preserve">
+    <value>Home</value>
+    <comment>Breadcrumb</comment>
+  </data>
+  <data name="DeletedAdministrationBreadcrumb" xml:space="preserve">
+    <value>Administration</value>
+    <comment>Breadcrumb</comment>
+  </data>
+  <data name="DeletedCsoTab" xml:space="preserve">
+    <value>Deleted Connected System Objects</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="DeletedMvoTab" xml:space="preserve">
+    <value>Deleted Metaverse Objects</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="DeletedFromDate" xml:space="preserve">
+    <value>From Date</value>
+    <comment>Query form date filter</comment>
+  </data>
+  <data name="DeletedToDate" xml:space="preserve">
+    <value>To Date</value>
+    <comment>Query form date filter</comment>
+  </data>
+  <data name="DeletedConnectedSystem" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Column header and query form filter label</comment>
+  </data>
+  <data name="DeletedObjectType" xml:space="preserve">
+    <value>Object Type</value>
+    <comment>Query form filter label for Metaverse Object Type</comment>
+  </data>
+  <data name="DeletedCsoSingular" xml:space="preserve">
+    <value>Deleted Connected System Object</value>
+    <comment>Grid item name; also the history dialog title fallback</comment>
+  </data>
+  <data name="DeletedCsoPlural" xml:space="preserve">
+    <value>Deleted Connected System Objects</value>
+    <comment>Grid item name plural</comment>
+  </data>
+  <data name="DeletedMvoSingular" xml:space="preserve">
+    <value>Deleted Metaverse Object</value>
+    <comment>Grid item name; also the history dialog title fallback</comment>
+  </data>
+  <data name="DeletedMvoPlural" xml:space="preserve">
+    <value>Deleted Metaverse Objects</value>
+    <comment>Grid item name plural</comment>
+  </data>
+  <data name="DeletedSearchExternalId" xml:space="preserve">
+    <value>Search External ID</value>
+    <comment>Grid search placeholder</comment>
+  </data>
+  <data name="DeletedSearchDisplayName" xml:space="preserve">
+    <value>Search Display Name</value>
+    <comment>Grid search placeholder</comment>
+  </data>
+  <data name="DeletedColumnExternalId" xml:space="preserve">
+    <value>External ID</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="DeletedColumnDisplayName" xml:space="preserve">
+    <value>Display Name</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="DeletedColumnDeleted" xml:space="preserve">
+    <value>Deleted</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="DeletedColumnDeletedBy" xml:space="preserve">
+    <value>Deleted By</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="DeletedNotAvailable" xml:space="preserve">
+    <value>N/A</value>
+    <comment>Shown when a deleted object has no external ID</comment>
+  </data>
+  <data name="DeletedConnectedSystemIdFallback" xml:space="preserve">
+    <value>ID: {0}</value>
+    <comment>{0} is the Connected System id, shown when its name is unknown</comment>
+  </data>
+  <data name="DeletedCsoNoSearchMatch" xml:space="preserve">
+    <value>No deleted Connected System Objects match "{0}"</value>
+    <comment>{0} is the search text typed in the grid</comment>
+  </data>
+  <data name="DeletedCsoNoQueryMatch" xml:space="preserve">
+    <value>No deleted Connected System Objects match your query</value>
+    <comment>Empty state when the query form matched nothing</comment>
+  </data>
+  <data name="DeletedCsoNoneRecorded" xml:space="preserve">
+    <value>No Connected System Object deletions recorded yet</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="DeletedCsoNoneRecordedHint" xml:space="preserve">
+    <value>When Connected System Objects are deleted, their change history is preserved here.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="DeletedMvoNoSearchMatch" xml:space="preserve">
+    <value>No deleted Metaverse Objects match "{0}"</value>
+    <comment>{0} is the search text typed in the grid</comment>
+  </data>
+  <data name="DeletedMvoNoQueryMatch" xml:space="preserve">
+    <value>No deleted Metaverse Objects match your query</value>
+    <comment>Empty state when the query form matched nothing</comment>
+  </data>
+  <data name="DeletedMvoNoneRecorded" xml:space="preserve">
+    <value>No Metaverse Object deletions recorded yet</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="DeletedMvoNoneRecordedHint" xml:space="preserve">
+    <value>When Metaverse Objects are deleted, their change history is preserved here.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="DeletedAdjustCriteria" xml:space="preserve">
+    <value>Adjust the criteria above and search again, or clear them to see all deletions.</value>
+    <comment>Empty state hint when criteria are applied</comment>
+  </data>
+  <data name="DeletedClearCriteria" xml:space="preserve">
+    <value>Clear Criteria</value>
+    <comment>Empty state action</comment>
+  </data>
+  <data name="DeletedHistoryTitle" xml:space="preserve">
+    <value>Change History: {0}</value>
+    <comment>{0} is the object's external ID or display name</comment>
+  </data>
+  <data name="DeletedNoHistory" xml:space="preserve">
+    <value>No change history available</value>
+    <comment>History dialog empty state</comment>
+  </data>
+  <data name="DeletedCsoNoHistoryHint" xml:space="preserve">
+    <value>No changes were recorded for this Connected System Object before it was deleted.</value>
+    <comment>History dialog empty state hint</comment>
+  </data>
+  <data name="DeletedMvoNoHistoryHint" xml:space="preserve">
+    <value>No changes were recorded for this Metaverse Object before it was deleted.</value>
+    <comment>History dialog empty state hint</comment>
+  </data>
+  <data name="DeletedCsoNotFound" xml:space="preserve">
+    <value>No deletion record was found for that Connected System Object.</value>
+    <comment>Snackbar for a deep link</comment>
+  </data>
+  <data name="DeletedMvoNotFound" xml:space="preserve">
+    <value>No deletion record was found for that Metaverse Object.</value>
+    <comment>Snackbar for a deep link</comment>
+  </data>
+  <data name="CsoLoadingTitle" xml:space="preserve">
+    <value>Loading…</value>
+    <comment>Page title while the object loads</comment>
+  </data>
+  <data name="CsoPageTitle" xml:space="preserve">
+    <value>Connected System Object: {0}</value>
+    <comment>{0} is the object's external ID or identifier</comment>
+  </data>
+  <data name="CsoStillLoading" xml:space="preserve">
+    <value>Still loading. Large objects can take a few seconds to retrieve.</value>
+    <comment>Shown after a long load</comment>
+  </data>
+  <data name="CsoHeadingLabel" xml:space="preserve">
+    <value>Connected System Object:</value>
+    <comment>Page heading label, followed by the object's identifier</comment>
+  </data>
+  <data name="CsoTerm" xml:space="preserve">
+    <value>Connected System Object</value>
+    <comment>Page info title</comment>
+  </data>
+  <data name="CsoPageInfo" xml:space="preserve">
+    <value>A view of this object as staged within JIM. This includes any attribute values imported from the Connected System, as well as any Pending Export changes awaiting export.</value>
+    <comment>Page info body</comment>
+  </data>
+  <data name="CsoLabelType" xml:space="preserve">
+    <value>Type:</value>
+    <comment>Info row label</comment>
+  </data>
+  <data name="CsoLabelStatus" xml:space="preserve">
+    <value>Status:</value>
+    <comment>Info row label</comment>
+  </data>
+  <data name="CsoLabelCreated" xml:space="preserve">
+    <value>Created:</value>
+    <comment>Info row label</comment>
+  </data>
+  <data name="CsoLabelUpdated" xml:space="preserve">
+    <value>Updated:</value>
+    <comment>Info row label</comment>
+  </data>
+  <data name="CsoLabelMetaverseObject" xml:space="preserve">
+    <value>Metaverse Object:</value>
+    <comment>Info row label</comment>
+  </data>
+  <data name="CsoLabelJoinType" xml:space="preserve">
+    <value>Join Type:</value>
+    <comment>Info row label</comment>
+  </data>
+  <data name="CsoPreviewing" xml:space="preserve">
+    <value>Previewing…</value>
+    <comment>Button while a Sync Preview runs</comment>
+  </data>
+  <data name="CsoPreviewSync" xml:space="preserve">
+    <value>Preview Sync</value>
+    <comment>Button</comment>
+  </data>
+  <data name="CsoExploreCausality" xml:space="preserve">
+    <value>Explore causality</value>
+    <comment>Button</comment>
+  </data>
+  <data name="CsoSetPassword" xml:space="preserve">
+    <value>Set Password</value>
+    <comment>Button and dialog title</comment>
+  </data>
+  <data name="CsoPendingExportsTitle" xml:space="preserve">
+    <value>Pending Exports</value>
+    <comment>Panel heading</comment>
+  </data>
+  <data name="CsoPendingExportsIntro" xml:space="preserve">
+    <value>The following attribute changes are pending for this Connected System. These may be awaiting export, or have already been exported and are awaiting confirmation via a subsequent import. Once confirmed, these changes will be reflected in the Connected System Object attribute values below.</value>
+    <comment>Panel intro</comment>
+  </data>
+  <data name="CsoSearchPendingExports" xml:space="preserve">
+    <value>Search Pending Exports...</value>
+    <comment>Grid search placeholder</comment>
+  </data>
+  <data name="CsoChangeSingular" xml:space="preserve">
+    <value>Change</value>
+    <comment>Grid item name, singular</comment>
+  </data>
+  <data name="CsoChangePlural" xml:space="preserve">
+    <value>Changes</value>
+    <comment>Grid item name, plural</comment>
+  </data>
+  <data name="CsoColumnAttribute" xml:space="preserve">
+    <value>Attribute</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="CsoColumnChangeType" xml:space="preserve">
+    <value>Change Type</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="CsoColumnValue" xml:space="preserve">
+    <value>Value</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="CsoColumnExportAttempts" xml:space="preserve">
+    <value>Export Attempts</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="CsoColumnLastExported" xml:space="preserve">
+    <value>Last Exported</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="CsoPendingNoSearchMatch" xml:space="preserve">
+    <value>No queued changes match "{0}"</value>
+    <comment>{0} is the search text</comment>
+  </data>
+  <data name="CsoPendingNoneQueued" xml:space="preserve">
+    <value>No changes are queued for this object</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="CsoPendingNoneQueuedHint" xml:space="preserve">
+    <value>Changes appear here while a Pending Export waits to be exported, and are cleared once the Connected System confirms them.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="CsoTabAttributes" xml:space="preserve">
+    <value>Attributes</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="CsoTabChangeHistory" xml:space="preserve">
+    <value>Change History</value>
+    <comment>Tab name</comment>
+  </data>
+  <data name="CsoColumnPlurality" xml:space="preserve">
+    <value>Plurality</value>
+    <comment>Attribute table column header</comment>
+  </data>
+  <data name="CsoColumnExternalIdQuestion" xml:space="preserve">
+    <value>External ID?</value>
+    <comment>Attribute table column header</comment>
+  </data>
+  <data name="CsoChipSecondaryId" xml:space="preserve">
+    <value>Secondary ID</value>
+    <comment>Attribute table chip</comment>
+  </data>
+  <data name="CsoPluralityMulti" xml:space="preserve">
+    <value>Multi</value>
+    <comment>Attribute plurality, shown in the table</comment>
+  </data>
+  <data name="CsoPluralitySingle" xml:space="preserve">
+    <value>Single</value>
+    <comment>Attribute plurality, shown in the table</comment>
+  </data>
+  <data name="CsoChipUnmanaged" xml:space="preserve">
+    <value>Unmanaged</value>
+    <comment>Chip on an attribute the Connected System owns</comment>
+  </data>
+  <data name="CsoUnmanagedTooltip" xml:space="preserve">
+    <value>Initial Export Only: JIM set this attribute at initial provisioning (if it provisioned the object) and no longer exports changes to it; the Connected System owns the value</value>
+    <comment>Tooltip on the Unmanaged chip</comment>
+  </data>
+  <data name="CsoChipCreateOnly" xml:space="preserve">
+    <value>Set on creation only</value>
+    <comment>Chip on an attribute only settable on creation</comment>
+  </data>
+  <data name="CsoNoAttributeValues" xml:space="preserve">
+    <value>This object has no attribute values</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="CsoNoAttributeValuesHint" xml:space="preserve">
+    <value>Values appear here once an Import brings them in from the Connected System.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="CsoNoChangeHistory" xml:space="preserve">
+    <value>No change history recorded for this object.</value>
+    <comment>Change History tab empty state</comment>
+  </data>
+  <data name="CsoLoadMore" xml:space="preserve">
+    <value>Load more ({0} remaining)</value>
+    <comment>{0} is the number of changes not yet loaded, already formatted</comment>
+  </data>
+  <data name="CsoPreviewBlocking" xml:space="preserve">
+    <value>The Sync Preview found something that would stop the synchronisation; see the details below.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="CsoPreviewFailed" xml:space="preserve">
+    <value>The Sync Preview failed: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="CsoAttributeFallback" xml:space="preserve">
+    <value>Attribute {0}</value>
+    <comment>Shown when an attribute's name is not loaded; {0} is its id</comment>
+  </data>
+  <data name="CsoFullSynchronisation" xml:space="preserve">
+    <value>Full Synchronisation</value>
+    <comment>Run Profile name shown on the causality preview chip</comment>
+  </data>
+  <data name="CsoBreadcrumbConnectedSystems" xml:space="preserve">
+    <value>Connected Systems</value>
+    <comment>Breadcrumb</comment>
+  </data>
+  <data name="CsoBreadcrumbConnectorSpace" xml:space="preserve">
+    <value>Connector Space</value>
+    <comment>Breadcrumb</comment>
+  </data>
+  <data name="CsoListPageTitle" xml:space="preserve">
+    <value>Connector Space: {0}</value>
+    <comment>Page title; {0} is the Connected System's name</comment>
+  </data>
+  <data name="CsoListHeadingLabel" xml:space="preserve">
+    <value>Connector Space:</value>
+    <comment>Page heading label, followed by the Connected System's name</comment>
+  </data>
+  <data name="CsoListPageInfo" xml:space="preserve">
+    <value>The Connector Space holds this Connected System's Connected System Objects. Inbound changes from the system are held here before being committed to the Metaverse. Outbound changes are held here ahead of synchronisation to the Connected System.</value>
+    <comment>Page info body</comment>
+  </data>
+  <data name="CsoListFilterStatus" xml:space="preserve">
+    <value>Filter by Status:</value>
+    <comment>Filter chip group label</comment>
+  </data>
+  <data name="CsoListFilterObjectType" xml:space="preserve">
+    <value>Filter by Object Type:</value>
+    <comment>Filter chip group label</comment>
+  </data>
+  <data name="CsoListFilterJoinType" xml:space="preserve">
+    <value>Filter by Join Type:</value>
+    <comment>Filter chip group label</comment>
+  </data>
+  <data name="CsoListFilterReferences" xml:space="preserve">
+    <value>Filter by References:</value>
+    <comment>Filter chip group label</comment>
+  </data>
+  <data name="CsoListUnresolved" xml:space="preserve">
+    <value>Unresolved</value>
+    <comment>Filter chip and column header: objects holding a reference that could not be linked</comment>
+  </data>
+  <data name="CsoListDeleteAll" xml:space="preserve">
+    <value>Delete All Objects</value>
+    <comment>Button</comment>
+  </data>
+  <data name="CsoListColumnsMenu" xml:space="preserve">
+    <value>Columns</value>
+    <comment>Menu button</comment>
+  </data>
+  <data name="CsoListShowColumns" xml:space="preserve">
+    <value>Show columns</value>
+    <comment>Menu heading</comment>
+  </data>
+  <data name="CsoListColumnsHint" xml:space="preserve">
+    <value>Remembered for {0} in this browser.</value>
+    <comment>{0} is the Connected System's name</comment>
+  </data>
+  <data name="CsoListExternalIdHeader" xml:space="preserve">
+    <value>External Id</value>
+    <comment>Column header before the attribute name is known</comment>
+  </data>
+  <data name="CsoListExternalIdHeaderNamed" xml:space="preserve">
+    <value>External Id ({0})</value>
+    <comment>Column header; {0} is the Connected System's anchor attribute</comment>
+  </data>
+  <data name="CsoListSecondaryExternalIdHeader" xml:space="preserve">
+    <value>Secondary External Id</value>
+    <comment>Column header before the attribute name is known</comment>
+  </data>
+  <data name="CsoListSecondaryExternalIdHeaderNamed" xml:space="preserve">
+    <value>Secondary External Id ({0})</value>
+    <comment>Column header; {0} is the secondary attribute</comment>
+  </data>
+  <data name="CsoListColumnDateJoined" xml:space="preserve">
+    <value>Date Joined</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="CsoListColumnState" xml:space="preserve">
+    <value>State</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="CsoListColumnJoinType" xml:space="preserve">
+    <value>Join Type</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="CsoListNoSearchMatch" xml:space="preserve">
+    <value>No Connected System Objects match "{0}"</value>
+    <comment>{0} is the search text</comment>
+  </data>
+  <data name="CsoListEveryReferenceResolved" xml:space="preserve">
+    <value>Every reference has resolved</value>
+    <comment>Empty state for the unresolved references filter</comment>
+  </data>
+  <data name="CsoListNoUnresolvedInSystem" xml:space="preserve">
+    <value>No Connected System Object in {0} holds a reference value that could not be linked.</value>
+    <comment>{0} is the Connected System's name</comment>
+  </data>
+  <data name="CsoListNoFilterMatch" xml:space="preserve">
+    <value>No Connected System Objects match the selected filters</value>
+    <comment>Empty state when filter chips match nothing</comment>
+  </data>
+  <data name="CsoListClearFilterHint" xml:space="preserve">
+    <value>Clear the filter chips above to browse the whole Connector Space.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="CsoListNoneYet" xml:space="preserve">
+    <value>No Connected System Objects yet</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="CsoListNoneYetHint" xml:space="preserve">
+    <value>Objects appear here once an import brings them in from the Connected System.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="CsoListClearTitle" xml:space="preserve">
+    <value>Clear Connector Space</value>
+    <comment>Dialog title and its confirming button</comment>
+  </data>
+  <data name="CsoListClearWarning" xml:space="preserve">
+    <value>This action will delete all Connected System Objects from JIM.</value>
+    <comment>Dialog warning</comment>
+  </data>
+  <data name="CsoListClearExplain1" xml:space="preserve">
+    <value>Clearing does not touch the external system. It discards the Connector Space objects, their Metaverse joins, and any Pending Exports to this Connected System; the Metaverse itself is not changed by the clear.</value>
+    <comment>Dialog paragraph</comment>
+  </data>
+  <data name="CsoListClearExplain2" xml:space="preserve">
+    <value>Run a Full Import to rebuild the Connector Space. At the first Full Synchronisation after that import completes successfully, Metaverse values contributed by objects that did not return are recalled automatically. Each Metaverse object's type Deletion Rule is then applied for objects that did not return, with its configured grace period.</value>
+    <comment>Dialog paragraph</comment>
+  </data>
+  <data name="CsoListClearExplain3" xml:space="preserve">
+    <value>Note: A Full Synchronisation run before then does nothing beyond ordinary synchronisation. The reconciliation refuses, leaving everything as it was, if far fewer objects return than were cleared; re-import the rest, or raise the allowed share in Service Settings, then run a Full Synchronisation again.</value>
+    <comment>Dialog paragraph</comment>
+  </data>
+  <data name="CsoListClearExplain4Lead" xml:space="preserve">
+    <value>Any Metaverse Object deletes will be executed via a task and may take some time to process. Check the</value>
+    <comment>Dialog paragraph, before the Operations link</comment>
+  </data>
+  <data name="CsoListOperationsLink" xml:space="preserve">
+    <value>Operations</value>
+    <comment>Link text in the dialog</comment>
+  </data>
+  <data name="CsoListClearExplain4Trail" xml:space="preserve">
+    <value>page or refresh this one to see progress.</value>
+    <comment>Dialog paragraph, after the Operations link</comment>
+  </data>
+  <data name="CsoListDeleteHistory" xml:space="preserve">
+    <value>Delete change history for cleared objects</value>
+    <comment>Checkbox label</comment>
+  </data>
+  <data name="CsoListDeleteHistoryHint" xml:space="preserve">
+    <value>When enabled, all change history records for the cleared Connected System Objects will also be deleted. This is recommended when clearing for re-import as the old history becomes irrelevant.</value>
+    <comment>Checkbox caption</comment>
+  </data>
+  <data name="CsoListTaskFailed" xml:space="preserve">
+    <value>Failed to create task.</value>
+    <comment>Snackbar, when no reason is given</comment>
+  </data>
+  <data name="CsoPluralName" xml:space="preserve">
+    <value>Connected System Objects</value>
+    <comment>Grid item name, plural</comment>
+  </data>
+  <data name="CsoListSearchPlaceholder" xml:space="preserve">
+    <value>Search external ID, secondary ID, or display name</value>
+    <comment>Grid search placeholder</comment>
+  </data>
+  <data name="CsoListQueuedForDeletion" xml:space="preserve">
+    <value>Connected System Objects queued for deletion.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="PexPageTitle" xml:space="preserve">
+    <value>Pending Export Detail</value>
+    <comment>Page title</comment>
+  </data>
+  <data name="PexHeadingLabel" xml:space="preserve">
+    <value>Pending Export:</value>
+    <comment>Page heading label</comment>
+  </data>
+  <data name="PexTerm" xml:space="preserve">
+    <value>Pending Export</value>
+    <comment>Page info title</comment>
+  </data>
+  <data name="PexPageInfo" xml:space="preserve">
+    <value>A Pending Export is a change JIM has queued for a Connected System and not yet confirmed: the object it applies to, the attribute changes it carries, and how its attempts have gone.</value>
+    <comment>Page info body</comment>
+  </data>
+  <data name="PexCardDetails" xml:space="preserve">
+    <value>Details</value>
+    <comment>Card heading</comment>
+  </data>
+  <data name="PexCardRelated" xml:space="preserve">
+    <value>Related Objects</value>
+    <comment>Card heading</comment>
+  </data>
+  <data name="PexLabelId" xml:space="preserve">
+    <value>ID</value>
+    <comment>Detail row label</comment>
+  </data>
+  <data name="PexLabelHasUnresolved" xml:space="preserve">
+    <value>Has Unresolved References</value>
+    <comment>Detail row label</comment>
+  </data>
+  <data name="PexLabelTarget" xml:space="preserve">
+    <value>Target</value>
+    <comment>Detail row label</comment>
+  </data>
+  <data name="PexLabelSource" xml:space="preserve">
+    <value>Source</value>
+    <comment>Detail row label</comment>
+  </data>
+  <data name="PexNewObject" xml:space="preserve">
+    <value>New object (will be created)</value>
+    <comment>Shown when the target object does not exist yet</comment>
+  </data>
+  <data name="PexErrorInformation" xml:space="preserve">
+    <value>Error Information</value>
+    <comment>Alert heading</comment>
+  </data>
+  <data name="PexLabelFailedAttempts" xml:space="preserve">
+    <value>Failed Attempts</value>
+    <comment>Error table row label</comment>
+  </data>
+  <data name="PexAttemptsAgain" xml:space="preserve">
+    <value>JIM attempts it again at every export run.</value>
+    <comment>Error table note</comment>
+  </data>
+  <data name="PexLabelFailingSince" xml:space="preserve">
+    <value>Failing Since</value>
+    <comment>Error table row label</comment>
+  </data>
+  <data name="PexLabelLastAttempted" xml:space="preserve">
+    <value>Last Attempted</value>
+    <comment>Error table row label</comment>
+  </data>
+  <data name="PexLabelErrorMessage" xml:space="preserve">
+    <value>Error Message</value>
+    <comment>Error table row label</comment>
+  </data>
+  <data name="PexLabelStackTrace" xml:space="preserve">
+    <value>Stack Trace</value>
+    <comment>Error table row label</comment>
+  </data>
+  <data name="PexUnresolvedTitle" xml:space="preserve">
+    <value>Unresolved References</value>
+    <comment>Card heading</comment>
+  </data>
+  <data name="PexUnresolvedIntro" xml:space="preserve">
+    <value>These reference values have not been written to the Connected System yet. Everything else on this Pending Export is written as soon as it can be; each reference is written when the object it refers to can be addressed in this Connected System.</value>
+    <comment>Card intro</comment>
+  </data>
+  <data name="PexColumnReferencedObject" xml:space="preserve">
+    <value>Referenced Object</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="PexColumnReason" xml:space="preserve">
+    <value>Reason</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="PexReasonResolvable" xml:space="preserve">
+    <value>Resolvable on next export</value>
+    <comment>Reason label</comment>
+  </data>
+  <data name="PexReasonAwaitingAnchor" xml:space="preserve">
+    <value>Awaiting anchor</value>
+    <comment>Reason label</comment>
+  </data>
+  <data name="PexReasonNotInSystem" xml:space="preserve">
+    <value>Not in this Connected System</value>
+    <comment>Reason label</comment>
+  </data>
+  <data name="PexExplainResolvable" xml:space="preserve">
+    <value>The referenced object now has an anchor in this Connected System. The reference is written on the next export run.</value>
+    <comment>Tooltip explaining the reason</comment>
+  </data>
+  <data name="PexExplainAwaitingAnchor" xml:space="preserve">
+    <value>The referenced object exists in this Connected System but does not carry an anchor yet. Its own export has not been executed or confirmed. The reference is written once it has.</value>
+    <comment>Tooltip explaining the reason</comment>
+  </data>
+  <data name="PexExplainNotInSystem" xml:space="preserve">
+    <value>The referenced object has no Connected System Object in this Connected System. It is out of scope for every Synchronisation Rule into this system, or has not been provisioned. The reference cannot be written until it is.</value>
+    <comment>Tooltip explaining the reason</comment>
+  </data>
+  <data name="PexAttributeChanges" xml:space="preserve">
+    <value>Attribute Changes</value>
+    <comment>Attribute table title</comment>
+  </data>
+  <data name="PexColumnAttributeFlow" xml:space="preserve">
+    <value>Attribute Flow</value>
+    <comment>Attribute table column header</comment>
+  </data>
+  <data name="PexColumnValueFrom" xml:space="preserve">
+    <value>Value from</value>
+    <comment>Attribute table column header</comment>
+  </data>
+  <data name="PexSeveral" xml:space="preserve">
+    <value>Several</value>
+    <comment>Attribute Flow cell when values have several Synchronisation Rules</comment>
+  </data>
+  <data name="PexChangesOne" xml:space="preserve">
+    <value>{0} change</value>
+    <comment>Attribute table cell; {0} is the count, formatted</comment>
+  </data>
+  <data name="PexChangesOther" xml:space="preserve">
+    <value>{0} changes</value>
+    <comment>Attribute table cell; {0} is the count, formatted</comment>
+  </data>
+  <data name="PexAttributeChangesZero" xml:space="preserve">
+    <value>Attribute Changes (0)</value>
+    <comment>Empty card heading</comment>
+  </data>
+  <data name="PexNoChangesDelete" xml:space="preserve">
+    <value>No attribute changes (object will be deleted).</value>
+    <comment>Empty card text</comment>
+  </data>
+  <data name="PexNoChanges" xml:space="preserve">
+    <value>No attribute changes recorded.</value>
+    <comment>Empty card text</comment>
+  </data>
+  <data name="PexNotFound" xml:space="preserve">
+    <value>This Pending Export is no longer queued. It has either been exported to the Connected System, or been superseded by a later change to the same Connected System Object. Pending Exports are removed once they are no longer waiting to be applied, so links to an individual one stop resolving after its export runs.</value>
+    <comment>Info alert when the export is gone</comment>
+  </data>
+  <data name="PexBackToList" xml:space="preserve">
+    <value>Back to List</value>
+    <comment>Button</comment>
+  </data>
+  <data name="PexBreadcrumbNotFound" xml:space="preserve">
+    <value>Not Found</value>
+    <comment>Breadcrumb</comment>
+  </data>
+  <data name="PexUnknown" xml:space="preserve">
+    <value>Unknown</value>
+    <comment>Shown when an object's name cannot be found</comment>
+  </data>
+  <data name="PexListPageTitle" xml:space="preserve">
+    <value>Pending Exports: {0}</value>
+    <comment>Page title; {0} is the Connected System's name</comment>
+  </data>
+  <data name="PexListHeadingLabel" xml:space="preserve">
+    <value>Pending Exports:</value>
+    <comment>Page heading label</comment>
+  </data>
+  <data name="PexListPageInfo" xml:space="preserve">
+    <value>Pending Exports are changes that need to be applied to the Connected System. These are created when Metaverse Objects change and need to be synchronised to this target system.</value>
+    <comment>Page info body</comment>
+  </data>
+  <data name="PexFilterStatus" xml:space="preserve">
+    <value>Filter by Status</value>
+    <comment>Filter label</comment>
+  </data>
+  <data name="PexStatusPending" xml:space="preserve">
+    <value>Pending</value>
+    <comment>Status filter option</comment>
+  </data>
+  <data name="PexStatusExecuting" xml:space="preserve">
+    <value>Executing</value>
+    <comment>Status filter option</comment>
+  </data>
+  <data name="PexStatusExportNotConfirmed" xml:space="preserve">
+    <value>Export Not Confirmed</value>
+    <comment>Status filter option</comment>
+  </data>
+  <data name="PexStatusExported" xml:space="preserve">
+    <value>Exported</value>
+    <comment>Status filter option</comment>
+  </data>
+  <data name="PexStatusParked" xml:space="preserve">
+    <value>Parked</value>
+    <comment>Status filter option</comment>
+  </data>
+  <data name="PexFilterChangeType" xml:space="preserve">
+    <value>Filter by Change Type</value>
+    <comment>Filter label</comment>
+  </data>
+  <data name="PexChangeTypeUpdate" xml:space="preserve">
+    <value>Update</value>
+    <comment>Change type filter option</comment>
+  </data>
+  <data name="PexFailingOnly" xml:space="preserve">
+    <value>Failing only</value>
+    <comment>Switch label</comment>
+  </data>
+  <data name="PexColumnSourceMvo" xml:space="preserve">
+    <value>Source Metaverse Object</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="PexColumnTargetCso" xml:space="preserve">
+    <value>Target Connected System Object</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="PexColumnChanges" xml:space="preserve">
+    <value>Changes</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="PexListSearch" xml:space="preserve">
+    <value>Search target, source Metaverse Object, or errors</value>
+    <comment>Grid search placeholder</comment>
+  </data>
+  <data name="PexNewObjectShort" xml:space="preserve">
+    <value>New object</value>
+    <comment>Target cell when the object does not exist yet</comment>
+  </data>
+  <data name="PexUnresolvedTooltip" xml:space="preserve">
+    <value>This export was written without these references; they retry automatically once their targets exist. The detail page explains each one.</value>
+    <comment>Tooltip on the Unresolved References count</comment>
+  </data>
+  <data name="PexFailingSinceTooltip" xml:space="preserve">
+    <value>{0}. JIM attempts it again at every export run.</value>
+    <comment>Tooltip; {0} is the date and time, formatted</comment>
+  </data>
+  <data name="PexNoSearchMatch" xml:space="preserve">
+    <value>No Pending Exports match "{0}"</value>
+    <comment>{0} is the search text</comment>
+  </data>
+  <data name="PexNoneFailing" xml:space="preserve">
+    <value>No Pending Exports are failing</value>
+    <comment>Empty state for the failing filter</comment>
+  </data>
+  <data name="PexNoneFailingHint" xml:space="preserve">
+    <value>Every Pending Export's last attempt succeeded, or it has not been attempted yet.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="PexShowAll" xml:space="preserve">
+    <value>Show All</value>
+    <comment>Empty state action</comment>
+  </data>
+  <data name="PexNoFilterMatch" xml:space="preserve">
+    <value>No Pending Exports match the filters</value>
+    <comment>Empty state when filters match nothing</comment>
+  </data>
+  <data name="PexNoFilterMatchHint" xml:space="preserve">
+    <value>Try different filters, or clear them.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="PexClearFilters" xml:space="preserve">
+    <value>Clear Filters</value>
+    <comment>Empty state action</comment>
+  </data>
+  <data name="PexNoneYet" xml:space="preserve">
+    <value>No Pending Exports</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="PexNoneYetHint" xml:space="preserve">
+    <value>Changes waiting to be written to this Connected System appear here.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="PexAll" xml:space="preserve">
+    <value>All</value>
+    <comment>Filter text when nothing is selected</comment>
+  </data>
+  <data name="PexSelectedCount" xml:space="preserve">
+    <value>{0} selected</value>
+    <comment>Filter text; {0} is the count of selected filters, always two or more</comment>
+  </data>
+  <data name="UrefHandlingLabel" xml:space="preserve">
+    <value>Unresolved Reference Handling:</value>
+    <comment>Label before the handling setting</comment>
+  </data>
+  <data name="UrefChange" xml:space="preserve">
+    <value>Change</value>
+    <comment>Link to the settings</comment>
+  </data>
+  <data name="UrefRecordedByRun" xml:space="preserve">
+    <value>Recorded by the run: {0}</value>
+    <comment>{0} is the item's recorded message</comment>
+  </data>
+  <data name="UrefLikelyCause" xml:space="preserve">
+    <value>Likely cause:</value>
+    <comment>Label before the cause chips</comment>
+  </data>
+  <data name="UrefNextSteps" xml:space="preserve">
+    <value>Next steps</value>
+    <comment>Heading</comment>
+  </data>
+  <data name="UrefIntroObject" xml:space="preserve">
+    <value>These reference values could not be linked to Connected System Objects in {0}, so they cannot flow to the Metaverse until they resolve. Each likely cause is judged against the current Container Scope.</value>
+    <comment>Intro on an object's own page; {0} is the Connected System's name</comment>
+  </data>
+  <data name="UrefThisConnectedSystem" xml:space="preserve">
+    <value>this Connected System</value>
+    <comment>Used in the intro when the name is unknown</comment>
+  </data>
+  <data name="UrefObjectFallback" xml:space="preserve">
+    <value>object</value>
+    <comment>Used when the Object Type is not known</comment>
+  </data>
+  <data name="UrefValuesOne" xml:space="preserve">
+    <value>{0} reference value on this {1}</value>
+    <comment>{0} is the count; {1} is the Object Type</comment>
+  </data>
+  <data name="UrefValuesOther" xml:space="preserve">
+    <value>{0} reference values on this {1}</value>
+    <comment>{0} is the count; {1} is the Object Type</comment>
+  </data>
+  <data name="UrefSomeValues" xml:space="preserve">
+    <value>some reference values on this {0}</value>
+    <comment>{0} is the Object Type</comment>
+  </data>
+  <data name="UrefRunErrorSentence" xml:space="preserve">
+    <value>This run could not link {0} to Connected System Objects, so they cannot flow to the Metaverse until they resolve.</value>
+    <comment>{0} is the reference phrase</comment>
+  </data>
+  <data name="UrefUnresolvedOne" xml:space="preserve">
+    <value>{0} reference value</value>
+    <comment>Count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefUnresolvedOther" xml:space="preserve">
+    <value>{0} reference values</value>
+    <comment>Count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefUnresolvedUnknown" xml:space="preserve">
+    <value>reference values</value>
+    <comment>Used where the run's count was not recorded</comment>
+  </data>
+  <data name="UrefRunLeft" xml:space="preserve">
+    <value>This run left {0} unresolved. They were not counted as an error, because Unresolved Reference Handling was not set to Error at the time.</value>
+    <comment>{0} is the count phrase</comment>
+  </data>
+  <data name="UrefRunLeftAlso" xml:space="preserve">
+    <value>This run also left {0} unresolved. They are not counted as this item's error, because the error above already is.</value>
+    <comment>{0} is the count phrase</comment>
+  </data>
+  <data name="UrefDeletedSince" xml:space="preserve">
+    <value>The Connected System Object has since been deleted, so its references can no longer be shown, and none of them is still pending.</value>
+    <comment>Run item whose object was deleted</comment>
+  </data>
+  <data name="UrefNoneNow" xml:space="preserve">
+    <value>All of them have since resolved, or been removed from the source. Nothing about them is still pending.</value>
+    <comment>Run item: none remain</comment>
+  </data>
+  <data name="UrefFewerOne" xml:space="preserve">
+    <value>{0} is still unresolved; the others have since resolved, or been removed from the source. Those that remain are listed below with the likely cause of each, judged against the current Container Scope.</value>
+    <comment>Run item: fewer remain; {0} is the count, one</comment>
+  </data>
+  <data name="UrefFewerOther" xml:space="preserve">
+    <value>{0} are still unresolved; the others have since resolved, or been removed from the source. Those that remain are listed below with the likely cause of each, judged against the current Container Scope.</value>
+    <comment>Run item: fewer remain; {0} is the count, other</comment>
+  </data>
+  <data name="UrefMore" xml:space="preserve">
+    <value>Later imports have left more unresolved since: the Connected System Object holds {0} now. All of them are listed below with the likely cause of each, judged against the current Container Scope.</value>
+    <comment>Run item: more now; {0} is the count</comment>
+  </data>
+  <data name="UrefAsTheyStand" xml:space="preserve">
+    <value>They are listed below as they stand now on the Connected System Object, with the likely cause of each, judged against the current Container Scope.</value>
+    <comment>Run item: as they stand, or the count is not known</comment>
+  </data>
+  <data name="UrefSingular" xml:space="preserve">
+    <value>Unresolved Reference</value>
+    <comment>Grid item name, singular</comment>
+  </data>
+  <data name="UrefSearchPlaceholder" xml:space="preserve">
+    <value>Search attribute or value</value>
+    <comment>Grid search placeholder</comment>
+  </data>
+  <data name="UrefColumnLikelyCause" xml:space="preserve">
+    <value>Likely Cause</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="UrefColumnWhereToFix" xml:space="preserve">
+    <value>Where to Fix</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="UrefColumnNextStep" xml:space="preserve">
+    <value>Next Step</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="UrefNoSearchMatch" xml:space="preserve">
+    <value>No Unresolved References match "{0}"</value>
+    <comment>{0} is the search text</comment>
+  </data>
+  <data name="UrefAllResolved" xml:space="preserve">
+    <value>Every reference on this object has resolved</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="UrefResolvedAfterOpen" xml:space="preserve">
+    <value>They resolved after this page was opened.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="UrefViewObject" xml:space="preserve">
+    <value>View the Connected System Object</value>
+    <comment>Button</comment>
+  </data>
+  <data name="UrefCauseNotFound" xml:space="preserve">
+    <value>Not found</value>
+    <comment>Likely cause</comment>
+  </data>
+  <data name="UrefCauseNotFoundInScope" xml:space="preserve">
+    <value>Not found in scope</value>
+    <comment>Likely cause</comment>
+  </data>
+  <data name="UrefCauseContainerNotInScope" xml:space="preserve">
+    <value>Container not in scope</value>
+    <comment>Likely cause</comment>
+  </data>
+  <data name="UrefCauseContainerExcluded" xml:space="preserve">
+    <value>Container excluded</value>
+    <comment>Likely cause</comment>
+  </data>
+  <data name="UrefCausePartitionNotSelected" xml:space="preserve">
+    <value>Partition not selected</value>
+    <comment>Likely cause</comment>
+  </data>
+  <data name="UrefCauseOutsideSystem" xml:space="preserve">
+    <value>Outside this Connected System</value>
+    <comment>Likely cause</comment>
+  </data>
+  <data name="UrefCauseAmbiguousObjectType" xml:space="preserve">
+    <value>Ambiguous Object Type</value>
+    <comment>Likely cause</comment>
+  </data>
+  <data name="UrefFixSource" xml:space="preserve">
+    <value>Source system</value>
+    <comment>Where the fix lies, when it is the Connected System</comment>
+  </data>
+  <data name="UrefActionReviewScope" xml:space="preserve">
+    <value>Review Container Scope</value>
+    <comment>Link to the Connected System's scope</comment>
+  </data>
+  <data name="UrefActionViewSchema" xml:space="preserve">
+    <value>View Schema</value>
+    <comment>Link to the schema</comment>
+  </data>
+  <data name="UrefActionViewSettings" xml:space="preserve">
+    <value>View Settings</value>
+    <comment>Link to the settings</comment>
+  </data>
+  <data name="UrefActionViewRunProfiles" xml:space="preserve">
+    <value>View Run Profiles</value>
+    <comment>Link to the Run Profiles</comment>
+  </data>
+  <data name="UrefHandlingIgnore" xml:space="preserve">
+    <value>Unresolved Reference Handling is set to Ignore, so runs do not report them.</value>
+    <comment>Tooltip on the signpost</comment>
+  </data>
+  <data name="UrefHandlingSetTo" xml:space="preserve">
+    <value>Unresolved Reference Handling is set to {0}.</value>
+    <comment>Tooltip on the signpost; {0} is the setting</comment>
+  </data>
+  <data name="UrefReferenceOne" xml:space="preserve">
+    <value>{0} reference</value>
+    <comment>Count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefReferenceOther" xml:space="preserve">
+    <value>{0} references</value>
+    <comment>Count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefObjectOne" xml:space="preserve">
+    <value>{0} Connected System Object</value>
+    <comment>Count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefObjectOther" xml:space="preserve">
+    <value>{0} Connected System Objects</value>
+    <comment>Count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefOnObjects" xml:space="preserve">
+    <value>{0} on {1}</value>
+    <comment>Joins a reference count and an object count</comment>
+  </data>
+  <data name="UrefNotResolvedOne" xml:space="preserve">
+    <value>{0} could not be resolved.</value>
+    <comment>{0} is the references-on-objects phrase, one reference</comment>
+  </data>
+  <data name="UrefNotResolvedOther" xml:space="preserve">
+    <value>{0} could not be resolved.</value>
+    <comment>{0} is the references-on-objects phrase, several references</comment>
+  </data>
+  <data name="UrefSignpostTooltip" xml:space="preserve">
+    <value>{0} {1}</value>
+    <comment>Signpost tooltip: the sentence, then the handling sentence</comment>
+  </data>
+  <data name="UrefOnObjectOne" xml:space="preserve">
+    <value>on {0} object</value>
+    <comment>Object count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefOnObjectOther" xml:space="preserve">
+    <value>on {0} objects</value>
+    <comment>Object count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefBelowChanges" xml:space="preserve">
+    <value>Below are the changes that would resolve them, each likely cause judged against the current Container Scope.</value>
+    <comment>Where They Point, after the sentence</comment>
+  </data>
+  <data name="UrefWherePointsTitle" xml:space="preserve">
+    <value>Where They Point</value>
+    <comment>Panel heading</comment>
+  </data>
+  <data name="UrefFixInJim" xml:space="preserve">
+    <value>Fix in JIM</value>
+    <comment>Group heading</comment>
+  </data>
+  <data name="UrefFixInSystem" xml:space="preserve">
+    <value>Fix in {0}</value>
+    <comment>Group heading; {0} is the Connected System's name</comment>
+  </data>
+  <data name="UrefGroupCounts" xml:space="preserve">
+    <value>{0}, {1}</value>
+    <comment>Joins the reference count and the step count of a group</comment>
+  </data>
+  <data name="UrefStepOne" xml:space="preserve">
+    <value>{0} step</value>
+    <comment>Count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefStepOther" xml:space="preserve">
+    <value>{0} steps</value>
+    <comment>Count phrase; {0} is the count</comment>
+  </data>
+  <data name="UrefShowFewer" xml:space="preserve">
+    <value>Show fewer steps</value>
+    <comment>Link</comment>
+  </data>
+  <data name="UrefShowAll" xml:space="preserve">
+    <value>Show all {0} steps</value>
+    <comment>Link; {0} is the count</comment>
+  </data>
+  <data name="UrefTooltipLikely" xml:space="preserve">
+    <value>Likely cause: {0}. {1} {2}</value>
+    <comment>Tooltip; {0} is the cause, {1} the finding, {2} the remedy</comment>
+  </data>
+  <data name="PdlPageTitle" xml:space="preserve">
+    <value>Pending Deletions</value>
+    <comment>Page title, heading, breadcrumb and grid name, plural</comment>
+  </data>
+  <data name="PdlPageInfo" xml:space="preserve">
+    <value>Metaverse Objects in the deletion pipeline. Includes Metaverse Objects being deprovisioned from Connected Systems and those awaiting automatic deletion after their grace period expires.</value>
+    <comment>Page info body</comment>
+  </data>
+  <data name="PdlTotalPending" xml:space="preserve">
+    <value>Total Pending</value>
+    <comment>Summary card</comment>
+  </data>
+  <data name="PdlDeprovisioning" xml:space="preserve">
+    <value>Deprovisioning</value>
+    <comment>Summary card and status chip</comment>
+  </data>
+  <data name="PdlTipDeprovisioning" xml:space="preserve">
+    <value>Metaverse Objects still connected to other systems, awaiting cascade deletion</value>
+    <comment>Tooltip on the Deprovisioning card</comment>
+  </data>
+  <data name="PdlAwaitingGrace" xml:space="preserve">
+    <value>Awaiting Grace Period</value>
+    <comment>Summary card</comment>
+  </data>
+  <data name="PdlTipAwaitingGrace" xml:space="preserve">
+    <value>Metaverse Objects fully disconnected, waiting for grace period to expire</value>
+    <comment>Tooltip on the Awaiting Grace Period card</comment>
+  </data>
+  <data name="PdlReady" xml:space="preserve">
+    <value>Ready for Deletion</value>
+    <comment>Summary card</comment>
+  </data>
+  <data name="PdlTipReady" xml:space="preserve">
+    <value>Metaverse Objects eligible for deletion (grace period expired, no connectors)</value>
+    <comment>Tooltip on the Ready for Deletion card</comment>
+  </data>
+  <data name="PdlFilterObjectType" xml:space="preserve">
+    <value>Filter by Object Type</value>
+    <comment>Filter label</comment>
+  </data>
+  <data name="PdlSingular" xml:space="preserve">
+    <value>Pending Deletion</value>
+    <comment>Grid item name, singular</comment>
+  </data>
+  <data name="PdlColumnTriggeredBy" xml:space="preserve">
+    <value>Triggered By</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="PdlTipTriggeredBy" xml:space="preserve">
+    <value>The Connected System whose disconnection triggered the scheduled deletion</value>
+    <comment>Tooltip on the column header</comment>
+  </data>
+  <data name="PdlColumnDisconnected" xml:space="preserve">
+    <value>Disconnected</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="PdlColumnEligible" xml:space="preserve">
+    <value>Deletion Eligible</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="PdlColumnConnectors" xml:space="preserve">
+    <value>Connectors</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="PdlStatusGrace" xml:space="preserve">
+    <value>Grace Period</value>
+    <comment>Status chip</comment>
+  </data>
+  <data name="PdlStatusReady" xml:space="preserve">
+    <value>Ready</value>
+    <comment>Status chip</comment>
+  </data>
+  <data name="PdlNoConnectorRemains" xml:space="preserve">
+    <value>No connector remains</value>
+    <comment>Shown in Triggered By when no connector is left</comment>
+  </data>
+  <data name="PdlOverdueBy" xml:space="preserve">
+    <value>Overdue by {0}</value>
+    <comment>{0} is a day count</comment>
+  </data>
+  <data name="PdlImmediate" xml:space="preserve">
+    <value>Immediate</value>
+    <comment>Shown when no deletion date applies</comment>
+  </data>
+  <data name="PdlDayOne" xml:space="preserve">
+    <value>{0} day</value>
+    <comment>{0} is the count, formatted</comment>
+  </data>
+  <data name="PdlDayOther" xml:space="preserve">
+    <value>{0} days</value>
+    <comment>{0} is the count, formatted</comment>
+  </data>
+  <data name="PdlConnectorsRemaining" xml:space="preserve">
+    <value>{0} connector(s) remaining - awaiting cascade deletion</value>
+    <comment>Tooltip on the connector count badge; {0} is the count</comment>
+  </data>
+  <data name="PdlNoSearchMatch" xml:space="preserve">
+    <value>No Pending Deletions match "{0}"</value>
+    <comment>{0} is the search text</comment>
+  </data>
+  <data name="PdlNoneOfType" xml:space="preserve">
+    <value>No Metaverse Objects of the selected type are pending deletion</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="PdlNoneOfTypeHint" xml:space="preserve">
+    <value>Clear the Object Type filter to see every pending deletion.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="PdlClearFilter" xml:space="preserve">
+    <value>Clear Filter</value>
+    <comment>Empty state action</comment>
+  </data>
+  <data name="PdlNone" xml:space="preserve">
+    <value>There are no Metaverse Objects pending deletion</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="PdlNoneHint" xml:space="preserve">
+    <value>Metaverse Objects appear here when a disconnection schedules their automatic deletion.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="ImpTitle" xml:space="preserve">
+    <value>Imported Object</value>
+    <comment>Panel heading</comment>
+  </data>
+  <data name="ImpJson" xml:space="preserve">
+    <value>JSON</value>
+    <comment>Segmented toggle option</comment>
+  </data>
+  <data name="ImpViewAria" xml:space="preserve">
+    <value>Imported Object view</value>
+    <comment>Accessible name of the view toggle</comment>
+  </data>
+  <data name="ImpRunLimit" xml:space="preserve">
+    <value>Not recorded: this run had already recorded the first {0} rejected objects, which is where it stops. Open one of the run's earlier rejected items to see what the Connector returned.</value>
+    <comment>{0} is the number of objects recorded per run, formatted</comment>
+  </data>
+  <data name="ImpIntro" xml:space="preserve">
+    <value>What the Connector returned for this object, as recorded when it was rejected.</value>
+    <comment>Panel intro</comment>
+  </data>
+  <data name="ImpAttributesMarked" xml:space="preserve">
+    <value>The attributes the error is about are marked.</value>
+    <comment>Appended to the intro when an attribute is named in the error</comment>
+  </data>
+  <data name="ImpTipNamedInError" xml:space="preserve">
+    <value>The item's error is about this attribute.</value>
+    <comment>Tooltip</comment>
+  </data>
+  <data name="ImpNamedInError" xml:space="preserve">
+    <value>Named in error</value>
+    <comment>Chip on an attribute the error names</comment>
+  </data>
+  <data name="ImpTipWithheld" xml:space="preserve">
+    <value>This attribute holds, or may hold, a credential, so JIM did not record its values.</value>
+    <comment>Tooltip on a withheld attribute</comment>
+  </data>
+  <data name="ImpWithheld" xml:space="preserve">
+    <value>Not recorded (credential)</value>
+    <comment>Shown in place of withheld values</comment>
+  </data>
+  <data name="ImpOmittedValueOne" xml:space="preserve">
+    <value>+ {0} more value not recorded</value>
+    <comment>{0} is the count, formatted</comment>
+  </data>
+  <data name="ImpOmittedValueOther" xml:space="preserve">
+    <value>+ {0} more values not recorded</value>
+    <comment>{0} is the count, formatted</comment>
+  </data>
+  <data name="ImpNoAttributes" xml:space="preserve">
+    <value>The Connector returned no attributes for this object</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="ImpCopyJson" xml:space="preserve">
+    <value>Copy JSON</value>
+    <comment>Button</comment>
+  </data>
+  <data name="ImpOmittedAttrOne" xml:space="preserve">
+    <value>{0} attribute was left out to keep the record within its size limit{1}</value>
+    <comment>{0} is the count, formatted; {1} is the names suffix or a full stop</comment>
+  </data>
+  <data name="ImpOmittedAttrOther" xml:space="preserve">
+    <value>{0} attributes were left out to keep the record within its size limit{1}</value>
+    <comment>{0} is the count, formatted; {1} is the names suffix or a full stop</comment>
+  </data>
+  <data name="ImpOmittedNames" xml:space="preserve">
+    <value>: {0}</value>
+    <comment>Names of the left-out attributes; {0} is the list</comment>
+  </data>
+  <data name="ImpAndOthers" xml:space="preserve">
+    <value>, and others</value>
+    <comment>Appended to a list of left-out attribute names when there are more</comment>
+  </data>
+  <data name="ImpCredentialsNote" xml:space="preserve">
+    <value>Values of attributes that hold, or may hold, credentials are never recorded. The record is kept for as long as this Activity.</value>
+    <comment>Panel footer</comment>
+  </data>
+  <data name="ImpCopied" xml:space="preserve">
+    <value>Copied to clipboard</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="ImpCopyFailed" xml:space="preserve">
+    <value>The browser would not let JIM copy the JSON. Select it and copy it instead.</value>
+    <comment>Snackbar when the clipboard is refused</comment>
+  </data>
+  <data name="ImvSearch" xml:space="preserve">
+    <value>Search {0}...</value>
+    <comment>Grid search placeholder; {0} is the attribute name, lower case</comment>
+  </data>
+  <data name="ImvValuesPlural" xml:space="preserve">
+    <value>Values</value>
+    <comment>Grid item name, plural</comment>
+  </data>
+  <data name="ImvNoMatch" xml:space="preserve">
+    <value>No values match "{0}"</value>
+    <comment>{0} is the search text</comment>
+  </data>
+  <data name="DelManualTyped" xml:space="preserve">
+    <value>The deletion rule for {0} objects was set to {1}; automatic deletion was disabled.</value>
+    <comment>{0} is the Object Type, {1} is the setting; both are shown in bold</comment>
+  </data>
+  <data name="DelManualUntyped" xml:space="preserve">
+    <value>The deletion rule was set to {0}; automatic deletion was disabled.</value>
+    <comment>{0} is the setting, shown in bold</comment>
+  </data>
+  <data name="DelManualLabel" xml:space="preserve">
+    <value>manual deletion only</value>
+    <comment>The setting, inside a sentence</comment>
+  </data>
+  <data name="DelLastConnectorTyped" xml:space="preserve">
+    <value>The deletion rule for {0} objects required {1} to be disconnected; other Connected System Objects remained connected.</value>
+    <comment>{0} is the Object Type, {1} is the connector setting; both in bold</comment>
+  </data>
+  <data name="DelLastConnectorUntyped" xml:space="preserve">
+    <value>The deletion rule required {0} to be disconnected; other Connected System Objects remained connected.</value>
+    <comment>{0} is the connector setting, in bold</comment>
+  </data>
+  <data name="DelAllConnectors" xml:space="preserve">
+    <value>all connectors</value>
+    <comment>The setting, inside a sentence</comment>
+  </data>
+  <data name="DelNotSourceSystem" xml:space="preserve">
+    <value>{0} was not configured as an authoritative source, so its disconnection did not trigger deletion.</value>
+    <comment>{0} is the Connected System's name, in bold</comment>
+  </data>
+  <data name="DelAllSourcesMode" xml:space="preserve">
+    <value>The trigger mode was {0}: {1} disconnected, but {2} of {3} selected sources remained connected ({4}).</value>
+    <comment>{0} the trigger mode, {1} the system, {2} and {3} counts, {4} the remaining names; {0}, {1} and {4} in bold</comment>
+  </data>
+  <data name="DelAllSourcesLabel" xml:space="preserve">
+    <value>All sources disconnect</value>
+    <comment>The trigger mode, inside a sentence</comment>
+  </data>
+  <data name="DelAuthoritativeTyped" xml:space="preserve">
+    <value>The deletion rule for {0} objects required an authoritative source to disconnect; the recorded conditions did not trigger deletion.</value>
+    <comment>{0} is the Object Type, in bold</comment>
+  </data>
+  <data name="DelAuthoritativeUntyped" xml:space="preserve">
+    <value>The deletion rule required an authoritative source to disconnect; the recorded conditions did not trigger deletion.</value>
+    <comment>No Object Type known</comment>
+  </data>
+  <data name="DelExplainFooter" xml:space="preserve">
+    <value>This explanation reflects the deletion policy recorded when this Activity ran.</value>
+    <comment>Footer of the explanation</comment>
+  </data>
+  <data name="DpvLeadTyped" xml:space="preserve">
+    <value>{0} objects were configured with the following deletion rule when this Activity ran:</value>
+    <comment>{0} is the Object Type, in bold</comment>
+  </data>
+  <data name="DpvLeadUntyped" xml:space="preserve">
+    <value>The following deletion rule was configured when this Activity ran:</value>
+    <comment>No Object Type known</comment>
+  </data>
+  <data name="DpvManualLabel" xml:space="preserve">
+    <value>Manual deletion only.</value>
+    <comment>Bold lead of the manual rule</comment>
+  </data>
+  <data name="DpvManualBody" xml:space="preserve">
+    <value>The Metaverse Object would not be automatically deleted even when all connectors were removed; an administrator must delete it manually.</value>
+    <comment>Text after the manual rule's lead</comment>
+  </data>
+  <data name="DpvLastLabel" xml:space="preserve">
+    <value>Delete when last connector disconnects.</value>
+    <comment>Bold lead of the last-connector rule</comment>
+  </data>
+  <data name="DpvFateGraceLast" xml:space="preserve">
+    <value>The Metaverse Object would be marked for deletion with a {0} grace period when all Connected System Objects are removed.</value>
+    <comment>{0} is the grace period, in bold</comment>
+  </data>
+  <data name="DpvFateImmediateLast" xml:space="preserve">
+    <value>The Metaverse Object would be deleted immediately when all Connected System Objects are removed.</value>
+    <comment>Last-connector rule with no grace period</comment>
+  </data>
+  <data name="DpvAuthLabel" xml:space="preserve">
+    <value>Delete when authoritative source disconnects.</value>
+    <comment>Bold lead of the authoritative source rule</comment>
+  </data>
+  <data name="DpvFateGrace" xml:space="preserve">
+    <value>The Metaverse Object would be marked for deletion with a {0} grace period.</value>
+    <comment>{0} is the grace period, in bold</comment>
+  </data>
+  <data name="DpvFateImmediate" xml:space="preserve">
+    <value>The Metaverse Object would be deleted immediately.</value>
+    <comment>Authoritative source rule with no grace period</comment>
+  </data>
+  <data name="DpvTriggerMode" xml:space="preserve">
+    <value>Trigger mode: {0}; {1}</value>
+    <comment>{0} is the trigger mode, in bold; {1} is the description that follows</comment>
+  </data>
+  <data name="DpvModeAll" xml:space="preserve">
+    <value>deletion occurs only once every selected source has disconnected.</value>
+    <comment>Description of the all-sources trigger mode</comment>
+  </data>
+  <data name="DpvModeAny" xml:space="preserve">
+    <value>deletion occurs when any one of the selected sources disconnects.</value>
+    <comment>Description of the specific-sources trigger mode</comment>
+  </data>
+  <data name="DpvModeSpecific" xml:space="preserve">
+    <value>Specific source(s) disconnect</value>
+    <comment>Trigger mode label</comment>
+  </data>
+  <data name="DpvTriggeredBy" xml:space="preserve">
+    <value>Evaluation triggered by the disconnection of {0}.</value>
+    <comment>{0} is the system's name, in bold</comment>
+  </data>
+  <data name="DpvStillConnected" xml:space="preserve">
+    <value>Selected sources still connected at decision time: {0}.</value>
+    <comment>{0} is the list of names, in bold</comment>
+  </data>
+  <data name="DpvNoneConnected" xml:space="preserve">
+    <value>No selected sources remained connected at decision time.</value>
+    <comment>Nothing remained connected</comment>
+  </data>
+  <data name="DpvRecorded" xml:space="preserve">
+    <value>Recorded when this Activity ran.</value>
+    <comment>Caption</comment>
+  </data>
+  <data name="DpvHourOne" xml:space="preserve">
+    <value>{0} hour</value>
+    <comment>Grace period part; {0} is the count</comment>
+  </data>
+  <data name="DpvHourOther" xml:space="preserve">
+    <value>{0} hours</value>
+    <comment>Grace period part; {0} is the count</comment>
+  </data>
+  <data name="DpvMinuteOne" xml:space="preserve">
+    <value>{0} minute</value>
+    <comment>Grace period part; {0} is the count</comment>
+  </data>
+  <data name="DpvMinuteOther" xml:space="preserve">
+    <value>{0} minutes</value>
+    <comment>Grace period part; {0} is the count</comment>
+  </data>
+  <data name="CsoMvaNoValues" xml:space="preserve">
+    <value>This attribute has no values</value>
+    <comment>Empty state on a nested value table</comment>
+  </data>
+  <data name="PmvNoMatch" xml:space="preserve">
+    <value>No changes match "{0}"</value>
+    <comment>Empty state; {0} is the search text</comment>
+  </data>
+  <data name="PmvNone" xml:space="preserve">
+    <value>No changes are queued for this attribute</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="PmvNoneHint" xml:space="preserve">
+    <value>Changes appear here while the Pending Export is waiting to be exported, and are cleared once the Connected System confirms them.</value>
+    <comment>Empty state hint</comment>
+  </data>
+  <data name="DtsNoSource" xml:space="preserve">
+    <value>Select at least one authoritative source. No source is selected, so this configuration cannot be saved.</value>
+    <comment>Alert when no source is selected</comment>
+  </data>
+  <data name="DtsAllOne" xml:space="preserve">
+    <value>A {0} will be {1} when {2} disconnects.</value>
+    <comment>{0} is the Object Type, in bold; {1} is the fate; {2} is the source</comment>
+  </data>
+  <data name="DtsAllMany" xml:space="preserve">
+    <value>A {0} will be {1} only when {2} have {3} disconnected. While any of them remains connected the object is retained.</value>
+    <comment>{0} Object Type, {1} fate, {2} the sources, {3} the word all in bold</comment>
+  </data>
+  <data name="DtsAllWord" xml:space="preserve">
+    <value>all</value>
+    <comment>Used inside the sentence above</comment>
+  </data>
+  <data name="DtsAnyOne" xml:space="preserve">
+    <value>A {0} will be {1} when {2} disconnects, regardless of other connectors.</value>
+    <comment>{0} is the Object Type, {1} the fate, {2} the source</comment>
+  </data>
+  <data name="DtsAnyMany" xml:space="preserve">
+    <value>A {0} will be {1} when {2} of {3} disconnects, even if the others remain connected.</value>
+    <comment>{0} Object Type, {1} fate, {2} the word any in bold, {3} the sources</comment>
+  </data>
+  <data name="DtsAnyWord" xml:space="preserve">
+    <value>any</value>
+    <comment>Used inside the sentence above</comment>
+  </data>
+  <data name="DtsListAnd" xml:space="preserve">
+    <value>and</value>
+    <comment>Joins the last two source names</comment>
+  </data>
+  <data name="DtsListOr" xml:space="preserve">
+    <value>or</value>
+    <comment>Joins the last two source names</comment>
+  </data>
+  <data name="DtsFateGrace" xml:space="preserve">
+    <value>scheduled for deletion, with a {0} grace period,</value>
+    <comment>{0} is the grace period in bold</comment>
+  </data>
+  <data name="DtsFateImmediate" xml:space="preserve">
+    <value>deleted immediately, with no grace period,</value>
+    <comment>Fate with no grace period</comment>
+  </data>
+  <data name="DtsAdjDay" xml:space="preserve">
+    <value>{0} day</value>
+    <comment>Grace period part, as a compound adjective; {0} is the count</comment>
+  </data>
+  <data name="DtsAdjHour" xml:space="preserve">
+    <value>{0} hour</value>
+    <comment>Grace period part, as a compound adjective; {0} is the count</comment>
+  </data>
+  <data name="DtsAdjMinute" xml:space="preserve">
+    <value>{0} minute</value>
+    <comment>Grace period part, as a compound adjective; {0} is the count</comment>
+  </data>
+  <data name="DtsAdjZero" xml:space="preserve">
+    <value>0 minute</value>
+    <comment>Grace period shown when every part is zero</comment>
+  </data>
+  <data name="ExrTitle" xml:space="preserve">
+    <value>Exchange Recipient</value>
+    <comment>Panel heading</comment>
+  </data>
+  <data name="ExrColDeclared" xml:space="preserve">
+    <value>Declared</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="ExrColInExchange" xml:space="preserve">
+    <value>In Exchange</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="ExrAsOf" xml:space="preserve">
+    <value>as of the last import</value>
+    <comment>Column header note</comment>
+  </data>
+  <data name="ExrRecipientType" xml:space="preserve">
+    <value>Recipient type</value>
+    <comment>Row label</comment>
+  </data>
+  <data name="ExrAlias" xml:space="preserve">
+    <value>Alias</value>
+    <comment>Row label</comment>
+  </data>
+  <data name="ExrDatabase" xml:space="preserve">
+    <value>Database</value>
+    <comment>Row label</comment>
+  </data>
+  <data name="ExrPrimarySmtp" xml:space="preserve">
+    <value>Primary SMTP address</value>
+    <comment>Row label</comment>
+  </data>
+  <data name="ExrExternalAddress" xml:space="preserve">
+    <value>External address</value>
+    <comment>Row label</comment>
+  </data>
+  <data name="ExrNotRecipient" xml:space="preserve">
+    <value>Not a recipient</value>
+    <comment>Value when the account is not a recipient</comment>
+  </data>
+  <data name="ExrExchangeChooses" xml:space="preserve">
+    <value>Exchange chooses</value>
+    <comment>Value when Exchange picks the value</comment>
+  </data>
+  <data name="ExrPoliciesApply" xml:space="preserve">
+    <value>Email Address Policies apply</value>
+    <comment>Value when Exchange policies assign the address</comment>
+  </data>
+  <data name="MchMetaverse" xml:space="preserve">
+    <value>Matching Metaverse Objects</value>
+    <comment>Toolbar title</comment>
+  </data>
+  <data name="MchConnected" xml:space="preserve">
+    <value>Matching Connected System Objects</value>
+    <comment>Toolbar title</comment>
+  </data>
+  <data name="MchColMv" xml:space="preserve">
+    <value>Metaverse Object</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="MchColMatched" xml:space="preserve">
+    <value>Matched On</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="MchColJoined" xml:space="preserve">
+    <value>Joined To</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="MchColObject" xml:space="preserve">
+    <value>Object</value>
+    <comment>Column label on narrow screens</comment>
+  </data>
+  <data name="MchNoLongerExists" xml:space="preserve">
+    <value>(no longer exists)</value>
+    <comment>Shown beside a candidate that has been deleted</comment>
+  </data>
+  <data name="AwsTitle" xml:space="preserve">
+    <value>Changes awaiting synchronisation: {0}</value>
+    <comment>Notice heading; {0} is the Object Type</comment>
+  </data>
+  <data name="AwsBodyCounted" xml:space="preserve">
+    <value>The next synchronisation of this Connected System, Delta or Full, applies them by processing every {0} object ({1}).</value>
+    <comment>{0} is the Object Type; {1} is the number of objects</comment>
+  </data>
+  <data name="AwsBodyPlain" xml:space="preserve">
+    <value>The next synchronisation of this Connected System, Delta or Full, applies them by processing every {0} object.</value>
+    <comment>{0} is the Object Type; used when the count was not read</comment>
+  </data>
+  <data name="AwsOtherTypes" xml:space="preserve">
+    <value>Other Object Types are processed as usual.</value>
+    <comment>Notice body</comment>
+  </data>
+  <data name="AwsTruncated" xml:space="preserve">
+    <value>Showing the newest {0} of {1} changes.</value>
+    <comment>{0} shown, {1} in all, both formatted</comment>
+  </data>
+  <data name="AwsRunNow" xml:space="preserve">
+    <value>Run now</value>
+    <comment>Button</comment>
+  </data>
+  <data name="AwsQueues" xml:space="preserve">
+    <value>Queues the {0} Run Profile; you can pick another.</value>
+    <comment>{0} is the run type</comment>
+  </data>
+  <data name="AwsNoRunProfile" xml:space="preserve">
+    <value>This Connected System has no Delta Synchronisation or Full Synchronisation Run Profile to queue.</value>
+    <comment>Caption when there is no Run Profile to queue</comment>
+  </data>
+  <data name="AwsRunDelta" xml:space="preserve">
+    <value>Delta Synchronisation</value>
+    <comment>Run type name</comment>
+  </data>
+  <data name="AwsColChanged" xml:space="preserve">
+    <value>Changed</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="AwsColWhatDone" xml:space="preserve">
+    <value>What was done</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="AwsColLastMade" xml:space="preserve">
+    <value>Last made</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="AwsColBy" xml:space="preserve">
+    <value>By</value>
+    <comment>Column header</comment>
+  </data>
+  <data name="AwsHideChanges" xml:space="preserve">
+    <value>Hide the changes</value>
+    <comment>Button accessible name</comment>
+  </data>
+  <data name="AwsShowChanges" xml:space="preserve">
+    <value>Show the {0} changes</value>
+    <comment>Button accessible name; {0} is the count, formatted</comment>
+  </data>
+  <data name="CavBinary" xml:space="preserve">
+    <value>[Binary: {0} bytes]</value>
+    <comment>A binary value; {0} is its length</comment>
+  </data>
+  <data name="PevUnresolved" xml:space="preserve">
+    <value>[Unresolved Reference: {0}]</value>
+    <comment>A reference JIM could not link; {0} is the raw identifier</comment>
+  </data>
+  <data name="PevBinary" xml:space="preserve">
+    <value>[Binary data: {0} bytes]</value>
+    <comment>A binary value; {0} is its length</comment>
+  </data>
+</root>

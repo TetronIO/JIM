@@ -4,6 +4,7 @@
 using System.Globalization;
 using JIM.Models.Transactional;
 using JIM.Utilities;
+using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
 
@@ -24,7 +25,7 @@ public static class PendingExportValueDisplay
     public static string? Text(PendingExportAttributeValueChange change, bool localTime = false)
     {
         if (!string.IsNullOrEmpty(change.UnresolvedReferenceValue))
-            return $"[Unresolved Reference: {change.UnresolvedReferenceValue}]";
+            return string.Format(CultureInfo.CurrentCulture, ConnectorSpaceText.PevUnresolved, change.UnresolvedReferenceValue);
         if (change.StringValue != null)
             return change.StringValue;
         if (change.DateTimeValue.HasValue)
@@ -40,11 +41,11 @@ public static class PendingExportValueDisplay
         if (change.DecimalValue.HasValue)
             return DecimalAttributeValue.ToCanonicalString(change.DecimalValue.Value);
         if (change.BoolValue.HasValue)
-            return change.BoolValue.Value ? "True" : "False";
+            return change.BoolValue.Value ? CommonText.True : CommonText.False;
         if (change.GuidValue.HasValue)
             return change.GuidValue.Value.ToString();
         if (change.ByteValue != null)
-            return $"[Binary data: {change.ByteValue.Length} bytes]";
+            return string.Format(CultureInfo.CurrentCulture, ConnectorSpaceText.PevBinary, change.ByteValue.Length);
 
         return null;
     }

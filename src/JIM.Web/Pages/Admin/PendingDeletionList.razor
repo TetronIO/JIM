@@ -11,10 +11,10 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Pending Deletions</PageTitle>
-<MudText Typo="Typo.h3">Pending Deletions
-    <PageInfo Title="Pending Deletions" DocsPage="configuration/metaverse.md#pending-deletions">
-        Metaverse Objects in the deletion pipeline. Includes Metaverse Objects being deprovisioned from Connected Systems and those awaiting automatic deletion after their grace period expires.
+<PageTitle>@ConnectorSpaceText.PdlPageTitle</PageTitle>
+<MudText Typo="Typo.h3">@ConnectorSpaceText.PdlPageTitle
+    <PageInfo Title="@ConnectorSpaceText.PdlPageTitle" DocsPage="configuration/metaverse.md#pending-deletions">
+        @ConnectorSpaceText.PdlPageInfo
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
@@ -23,30 +23,30 @@
 <MudGrid Class="mt-3">
     <MudItem xs="12" sm="6" md="3">
         <MudPaper Class="pa-4" Outlined="true">
-            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Total Pending</MudText>
+            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">@ConnectorSpaceText.PdlTotalPending</MudText>
             <MudText Typo="Typo.h4">@_totalCount.ToString("N0")</MudText>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
         <MudPaper Class="pa-4" Outlined="true" Style="border-left: 3px solid var(--mud-palette-warning);">
-            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Deprovisioning</MudText>
-            <MudTooltip Text="Metaverse Objects still connected to other systems, awaiting cascade deletion" Arrow="true" Placement="Placement.Top">
+            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">@ConnectorSpaceText.PdlDeprovisioning</MudText>
+            <MudTooltip Text="@ConnectorSpaceText.PdlTipDeprovisioning" Arrow="true" Placement="Placement.Top">
                 <MudText Typo="Typo.h4" Color="@(_deprovisioningCount > 0 ? Color.Warning : Color.Default)">@_deprovisioningCount.ToString("N0")</MudText>
             </MudTooltip>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
         <MudPaper Class="pa-4" Outlined="true" Style="border-left: 3px solid var(--mud-palette-info);">
-            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Awaiting Grace Period</MudText>
-            <MudTooltip Text="Metaverse Objects fully disconnected, waiting for grace period to expire" Arrow="true" Placement="Placement.Top">
+            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">@ConnectorSpaceText.PdlAwaitingGrace</MudText>
+            <MudTooltip Text="@ConnectorSpaceText.PdlTipAwaitingGrace" Arrow="true" Placement="Placement.Top">
                 <MudText Typo="Typo.h4">@_awaitingGracePeriodCount.ToString("N0")</MudText>
             </MudTooltip>
         </MudPaper>
     </MudItem>
     <MudItem xs="12" sm="6" md="3">
         <MudPaper Class="pa-4" Outlined="true" Style="border-left: 3px solid var(--mud-palette-error);">
-            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Ready for Deletion</MudText>
-            <MudTooltip Text="Metaverse Objects eligible for deletion (grace period expired, no connectors)" Arrow="true" Placement="Placement.Top">
+            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">@ConnectorSpaceText.PdlReady</MudText>
+            <MudTooltip Text="@ConnectorSpaceText.PdlTipReady" Arrow="true" Placement="Placement.Top">
                 <MudText Typo="Typo.h4" Color="@(_readyForDeletionCount > 0 ? Color.Error : Color.Default)">@_readyForDeletionCount.ToString("N0")</MudText>
             </MudTooltip>
         </MudPaper>
@@ -56,7 +56,7 @@
 @* Object type filter *@
 <MudGrid Class="mt-5">
     <MudItem xs="6">
-        <MudSelect T="int?" Label="Filter by Object Type" Value="_selectedObjectTypeId"
+        <MudSelect T="int?" Label="@ConnectorSpaceText.PdlFilterObjectType" Value="_selectedObjectTypeId"
                    ValueChanged="OnObjectTypeFilterChanged"
                    Variant="Variant.Outlined" Clearable="true" Dense="true" Style="max-width: 350px;">
             @foreach (var objectType in _objectTypes)
@@ -75,12 +75,12 @@
                      DefaultSortBy="disconnected"
                      LoadWindow="LoadWindowAsync"
                      RowClicked="HandleRowClicked"
-                     SingularName="Pending Deletion"
-                     PluralName="Pending Deletions">
+                     SingularName="@ConnectorSpaceText.PdlSingular"
+                     PluralName="@ConnectorSpaceText.PdlPageTitle">
     <Columns>
         <TemplateColumn Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Display Name" Name="displayname" />
+                <VirtualisedSortHeader Title="@ConnectorSpaceText.DeletedColumnDisplayName" Name="displayname" />
             </HeaderTemplate>
             <CellTemplate>
                 @* The row navigates on click and so does this link; stopping the click here keeps a link click
@@ -94,7 +94,7 @@
         </TemplateColumn>
         <TemplateColumn Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Type" Name="type" />
+                <VirtualisedSortHeader Title="@CommonText.ColumnType" Name="type" />
             </HeaderTemplate>
             <CellTemplate>
                 @context.Item.TypeName
@@ -102,39 +102,39 @@
         </TemplateColumn>
         <TemplateColumn Sortable="false">
             <HeaderTemplate>
-                <MudText Typo="Typo.button">Status</MudText>
+                <MudText Typo="Typo.button">@CommonText.ColumnStatus</MudText>
             </HeaderTemplate>
             <CellTemplate>
                 @if (context.Item.ConnectorCount > 0)
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">
-                        Deprovisioning
+                        @ConnectorSpaceText.PdlDeprovisioning
                     </MudChip>
                 }
                 else if (context.Item.DaysUntilDeletion.HasValue && context.Item.DaysUntilDeletion.Value > 0)
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Info">
-                        Grace Period
+                        @ConnectorSpaceText.PdlStatusGrace
                     </MudChip>
                 }
                 else
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Error">
-                        Ready
+                        @ConnectorSpaceText.PdlStatusReady
                     </MudChip>
                 }
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn Sortable="false">
             <HeaderTemplate>
-                <MudTooltip Text="The Connected System whose disconnection triggered the scheduled deletion" Arrow="true" Placement="Placement.Top">
-                    <MudText Typo="Typo.button">Triggered By</MudText>
+                <MudTooltip Text="@ConnectorSpaceText.PdlTipTriggeredBy" Arrow="true" Placement="Placement.Top">
+                    <MudText Typo="Typo.button">@ConnectorSpaceText.PdlColumnTriggeredBy</MudText>
                 </MudTooltip>
             </HeaderTemplate>
             <CellTemplate>
                 @if (context.Item.NoConnectorRemains)
                 {
-                    <MudText Class="mud-text-secondary">No connector remains</MudText>
+                    <MudText Class="mud-text-secondary">@ConnectorSpaceText.PdlNoConnectorRemains</MudText>
                 }
                 else if (string.IsNullOrEmpty(context.Item.TriggeredBySystemName))
                 {
@@ -148,7 +148,7 @@
         </TemplateColumn>
         <TemplateColumn Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Disconnected" Name="disconnected" />
+                <VirtualisedSortHeader Title="@ConnectorSpaceText.PdlColumnDisconnected" Name="disconnected" />
             </HeaderTemplate>
             <CellTemplate>
                 @context.Item.LastConnectorDisconnectedDate.ToFriendlyDate()
@@ -156,7 +156,7 @@
         </TemplateColumn>
         <TemplateColumn Sortable="false">
             <HeaderTemplate>
-                <VirtualisedSortHeader Title="Deletion Eligible" Name="eligible" />
+                <VirtualisedSortHeader Title="@ConnectorSpaceText.PdlColumnEligible" Name="eligible" />
             </HeaderTemplate>
             <CellTemplate>
                 @if (context.Item.DeletionEligibleDate.HasValue)
@@ -168,7 +168,7 @@
                         if (daysUntilDeletion <= 0)
                         {
                             <MudTooltip Text="@deletionEligibleDate.ToString("g")" Arrow="true" Placement="Placement.Top">
-                                <MudText Color="Color.Error">Overdue by @FormatDayCount(Math.Abs(daysUntilDeletion))</MudText>
+                                <MudText Color="Color.Error">@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.PdlOverdueBy, FormatDayCount(Math.Abs(daysUntilDeletion)))</MudText>
                             </MudTooltip>
                         }
                         else
@@ -181,18 +181,18 @@
                 }
                 else
                 {
-                    <span class="mud-text-secondary">Immediate</span>
+                    <span class="mud-text-secondary">@ConnectorSpaceText.PdlImmediate</span>
                 }
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn Sortable="false">
             <HeaderTemplate>
-                <MudText Typo="Typo.button">Connectors</MudText>
+                <MudText Typo="Typo.button">@ConnectorSpaceText.PdlColumnConnectors</MudText>
             </HeaderTemplate>
             <CellTemplate>
                 @if (context.Item.ConnectorCount > 0)
                 {
-                    <MudTooltip Text="@($"{context.Item.ConnectorCount} connector(s) remaining - awaiting cascade deletion")" Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.PdlConnectorsRemaining, context.Item.ConnectorCount)" Arrow="true" Placement="Placement.Top">
                         <MudBadge Content="@context.Item.ConnectorCount.ToString()" Color="Color.Warning" Overlap="false">
                             <MudIcon Icon="@Icons.Material.Filled.Link" />
                         </MudBadge>
@@ -212,24 +212,24 @@
         @if (!string.IsNullOrWhiteSpace(grid.SearchText))
         {
             <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
-                             PrimaryText="@($"No Pending Deletions match \"{grid.SearchText}\"")"
-                             SecondaryText="Try a different search term, or clear the search."
-                             ActionText="Clear Search"
+                             PrimaryText="@string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.PdlNoSearchMatch, grid.SearchText)"
+                             SecondaryText="@CommonText.TrySearchAgain"
+                             ActionText="@CommonText.ClearSearch"
                              OnAction="@(() => grid.ClearSearchAsync())" />
         }
         else if (_selectedObjectTypeId.HasValue)
         {
             <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
-                             PrimaryText="No Metaverse Objects of the selected type are pending deletion"
-                             SecondaryText="Clear the Object Type filter to see every pending deletion."
-                             ActionText="Clear Filter"
+                             PrimaryText="@ConnectorSpaceText.PdlNoneOfType"
+                             SecondaryText="@ConnectorSpaceText.PdlNoneOfTypeHint"
+                             ActionText="@ConnectorSpaceText.PdlClearFilter"
                              OnAction="ClearObjectTypeFilterAsync" />
         }
         else
         {
             <TableEmptyState Icon="@Icons.Material.Filled.AutoDelete"
-                             PrimaryText="There are no Metaverse Objects pending deletion"
-                             SecondaryText="Metaverse Objects appear here when a disconnection schedules their automatic deletion." />
+                             PrimaryText="@ConnectorSpaceText.PdlNone"
+                             SecondaryText="@ConnectorSpaceText.PdlNoneHint" />
         }
     </EmptyContent>
 </VirtualisedDataGrid>
@@ -262,9 +262,9 @@
     {
         _breadcrumbs = new List<BreadcrumbItem>
         {
-            new("Home", href: "/", icon: Icons.Material.Filled.Home),
-            new("Administration", href: "/admin"),
-            new("Pending Deletions", href: null, disabled: true)
+            new(ConnectorSpaceText.DeletedHomeBreadcrumb, href: "/", icon: Icons.Material.Filled.Home),
+            new(ConnectorSpaceText.DeletedAdministrationBreadcrumb, href: "/admin"),
+            new(ConnectorSpaceText.PdlPageTitle, href: null, disabled: true)
         };
 
         // Load object types for the filter, and apply the one the URL names, if any
@@ -318,7 +318,7 @@
         {
             Id = mvo.Id,
             DisplayName = mvo.NameOrId,
-            TypeName = mvo.Type?.Name ?? "Unknown",
+            TypeName = mvo.Type?.Name ?? ConnectorSpaceText.PexUnknown,
             TypeId = mvo.Type?.Id ?? 0,
             TypePluralName = mvo.Type?.PluralName ?? "objects",
             LastConnectorDisconnectedDate = mvo.LastConnectorDisconnectedDate!.Value,
@@ -376,7 +376,7 @@
     /// </summary>
     private static string FormatDayCount(int days)
     {
-        return days == 1 ? "1 day" : $"{days:N0} days";
+        return string.Format(System.Globalization.CultureInfo.CurrentCulture, PluralRules.Choose(days, ConnectorSpaceText.PdlDayOne, ConnectorSpaceText.PdlDayOther), days.ToString("N0"));
     }
 
     // Local display model

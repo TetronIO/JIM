@@ -15,10 +15,10 @@
     <thead>
         <tr>
             <th style="width: 40px;"></th>
-            <th>Changed</th>
-            <th>What was done</th>
-            <th>Last made</th>
-            <th>By</th>
+            <th>@ConnectorSpaceText.AwsColChanged</th>
+            <th>@ConnectorSpaceText.AwsColWhatDone</th>
+            <th>@ConnectorSpaceText.AwsColLastMade</th>
+            <th>@ConnectorSpaceText.AwsColBy</th>
         </tr>
     </thead>
     <tbody>
@@ -32,7 +32,7 @@
                     {
                         <MudIconButton Icon="@(expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
                                        Size="Size.Small" OnClick="@(() => Toggle(key))"
-                                       aria-label="@(expanded ? "Hide the changes" : $"Show the {group.Changes.Count:N0} changes")"
+                                       aria-label="@(expanded ? ConnectorSpaceText.AwsHideChanges : string.Format(System.Globalization.CultureInfo.CurrentCulture, ConnectorSpaceText.AwsShowChanges, group.Changes.Count.ToString("N0")))"
                                        aria-expanded="@(expanded ? "true" : "false")"
                                        data-testid="jim-change-group-expand" />
                     }
