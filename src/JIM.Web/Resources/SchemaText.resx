@@ -1622,4 +1622,172 @@
     <value>Options</value>
     <comment>Column heading when no direction is chosen.</comment>
   </data>
+  <data name="AuxDialogTitle" xml:space="preserve">
+    <value>Auxiliary classes for {0}</value>
+    <comment>Dialog title. {0} is the Object Type's name.</comment>
+  </data>
+  <data name="AuxNoneDefined" xml:space="preserve">
+    <value>{0} defines no auxiliary classes, so there is nothing to merge into {1}.</value>
+    <comment>Shown when the schema has no auxiliary classes. {0} is the Connected System, {1} the Object Type.</comment>
+  </data>
+  <data name="AuxIntro" xml:space="preserve">
+    <value>Only the classes you enable here shape the schema; suggestions never apply themselves. A merged class's attributes join the Object Type at the next schema refresh.</value>
+    <comment>Intro in the auxiliary classes dialog.</comment>
+  </data>
+  <data name="AuxSearchLabel" xml:space="preserve">
+    <value>Search auxiliary classes</value>
+    <comment>Search box label.</comment>
+  </data>
+  <data name="AuxChipSuggested" xml:space="preserve">
+    <value>Suggested ({0})</value>
+    <comment>Filter chip. {0} is the count.</comment>
+  </data>
+  <data name="AuxChipInUse" xml:space="preserve">
+    <value>In use ({0})</value>
+    <comment>Filter chip. {0} is the count.</comment>
+  </data>
+  <data name="AuxNothingSuggested" xml:space="preserve">
+    <value>Nothing is suggested. Run discovery below, or show every class in the schema.</value>
+    <comment>Empty list when nothing is suggested.</comment>
+  </data>
+  <data name="AuxNoMatch" xml:space="preserve">
+    <value>No auxiliary class matches that name.</value>
+    <comment>Empty list after a search.</comment>
+  </data>
+  <data name="AuxDitContentRuleTooltip" xml:space="preserve">
+    <value>{0} publishes a DIT Content Rule saying this class may attach to {1} entries. It is a statement of what is permitted, not of what is in use.</value>
+    <comment>Tooltip on the suggested-by-DIT chip. {0} is the Connected System, {1} the Object Type. DIT is an LDAP term.</comment>
+  </data>
+  <data name="AuxSuggestedDit" xml:space="preserve">
+    <value>suggested: DIT Content Rule</value>
+    <comment>Chip for a class the DIT Content Rule permits.</comment>
+  </data>
+  <data name="AuxSuggestedInUse" xml:space="preserve">
+    <value>suggested: in use on {0} entries</value>
+    <comment>Chip for a class observed by discovery. {0} is the count.</comment>
+  </data>
+  <data name="AuxAttributeCountOne" xml:space="preserve">
+    <value>+{0} attribute</value>
+    <comment>Button: the attributes a class adds. Plural rule: one form.</comment>
+  </data>
+  <data name="AuxAttributeCountOther" xml:space="preserve">
+    <value>+{0} attributes</value>
+    <comment>Button: the attributes a class adds. {0} is the count.</comment>
+  </data>
+  <data name="AuxNoOwnAttributes" xml:space="preserve">
+    <value>This class defines no attributes of its own.</value>
+    <comment>Shown when a class adds no attributes.</comment>
+  </data>
+  <data name="AuxRequired" xml:space="preserve">
+    <value>required</value>
+    <comment>Marks a required attribute.</comment>
+  </data>
+  <data name="AuxCredentialNotSelectable" xml:space="preserve">
+    <value>credential, never selectable</value>
+    <comment>Marks a credential attribute.</comment>
+  </data>
+  <data name="AuxNotYetRead" xml:space="preserve">
+    <value>These classes come from the schema. JIM has not yet read {0}'s entries to find which of them are in use.</value>
+    <comment>Discovery status before any run. {0} is the Connected System.</comment>
+  </data>
+  <data name="AuxDiscoverInUse" xml:space="preserve">
+    <value>Discover classes in use</value>
+    <comment>Button that opens discovery.</comment>
+  </data>
+  <data name="AuxDiscoverAgain" xml:space="preserve">
+    <value>Discover again</value>
+    <comment>Button that opens discovery after a run.</comment>
+  </data>
+  <data name="AuxDiscoveryIntro" xml:space="preserve">
+    <value>Discovery reads {0}'s entries to find which auxiliary classes they actually carry. It only adds suggestions to the list above; every auxiliary class in the schema is listed for enabling either way.</value>
+    <comment>Explains discovery. {0} is the Connected System.</comment>
+  </data>
+  <data name="AuxQuickSample" xml:space="preserve">
+    <value>Quick sample</value>
+    <comment>Radio option.</comment>
+  </data>
+  <data name="AuxQuickSampleHelp" xml:space="preserve">
+    <value>Reads the first entries of each Object Type. Fast. A directory returns entries in its own order, so a rarely used class can be missed; the results are ranked suggestions, never limits.</value>
+    <comment>Explains the quick sample.</comment>
+  </data>
+  <data name="AuxFullScan" xml:space="preserve">
+    <value>Full scan</value>
+    <comment>Radio option.</comment>
+  </data>
+  <data name="AuxFullScanHelp" xml:space="preserve">
+    <value>Reads every entry in scope, asking for its class membership and nothing else. Complete, and the only scope whose answer of "this class is not in use" means anything. It can take a long time on a large directory, and runs as an Activity you can watch and cancel.</value>
+    <comment>Explains the full scan.</comment>
+  </data>
+  <data name="AuxEntriesPerType" xml:space="preserve">
+    <value>Entries to read per Object Type</value>
+    <comment>Field label.</comment>
+  </data>
+  <data name="AuxApplying" xml:space="preserve">
+    <value>Applying</value>
+    <comment>Button while the classes are applied.</comment>
+  </data>
+  <data name="AuxChangeFailed" xml:space="preserve">
+    <value>The auxiliary classes of '{0}' could not be changed.</value>
+    <comment>Error snackbar. {0} is the Object Type.</comment>
+  </data>
+  <data name="AuxCarriesOne" xml:space="preserve">
+    <value>'{0}' now carries {1} auxiliary class. Refresh the schema to bring in the attributes.</value>
+    <comment>Success snackbar. Plural rule: one form.</comment>
+  </data>
+  <data name="AuxCarriesOther" xml:space="preserve">
+    <value>'{0}' now carries {1} auxiliary classes. Refresh the schema to bring in the attributes.</value>
+    <comment>Success snackbar. {1} is the count.</comment>
+  </data>
+  <data name="AuxRemovedOne" xml:space="preserve">
+    <value>{0} auxiliary class is no longer merged into '{1}'.</value>
+    <comment>Success snackbar. Plural rule: one form.</comment>
+  </data>
+  <data name="AuxRemovedOther" xml:space="preserve">
+    <value>{0} auxiliary classes are no longer merged into '{1}'.</value>
+    <comment>Success snackbar. {0} is the count.</comment>
+  </data>
+  <data name="AuxDiscoveryQueued" xml:space="preserve">
+    <value>Discovery queued. Its progress and results are on its Activity.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="AuxDiscoveryNotStarted" xml:space="preserve">
+    <value>Discovery could not be started.</value>
+    <comment>Error snackbar fallback.</comment>
+  </data>
+  <data name="AuxObservationTooltip" xml:space="preserve">
+    <value>The last discovery run saw this class on {0} of the entries it read. A quick sample counts within the sample, not within the whole population.</value>
+    <comment>Tooltip on the in-use chip. {0} is the count.</comment>
+  </data>
+  <data name="AuxStatusRunning" xml:space="preserve">
+    <value>Running</value>
+    <comment>Discovery run status.</comment>
+  </data>
+  <data name="AuxStatusComplete" xml:space="preserve">
+    <value>Last completed</value>
+    <comment>Discovery run status.</comment>
+  </data>
+  <data name="AuxStatusCancelled" xml:space="preserve">
+    <value>Cancelled, partial</value>
+    <comment>Discovery run status.</comment>
+  </data>
+  <data name="AuxStatusFailed" xml:space="preserve">
+    <value>Failed</value>
+    <comment>Discovery run status.</comment>
+  </data>
+  <data name="AuxStatusNotRun" xml:space="preserve">
+    <value>Not run</value>
+    <comment>Discovery run status.</comment>
+  </data>
+  <data name="AuxRunQuickSample" xml:space="preserve">
+    <value>Quick sample ({0} per Object Type)</value>
+    <comment>Describes a discovery run. {0} is the count.</comment>
+  </data>
+  <data name="AuxRunStarted" xml:space="preserve">
+    <value>started {0}</value>
+    <comment>Describes a run in progress. {0} is a relative time.</comment>
+  </data>
+  <data name="AuxRunSummary" xml:space="preserve">
+    <value>{0}, {1}, {2} entries read</value>
+    <comment>Describes a discovery run: scope, when, entries read.</comment>
+  </data>
 </root>

@@ -119,4 +119,7 @@
   <data name="DataFlowNoneHint" xml:space="preserve">
     <value>Add Attribute Flows to a Synchronization Rule and they will appear here.</value>
   </data>
+  <data name="AuxStatusCancelled" xml:space="preserve">
+    <value>Canceled, partial</value>
+  </data>
 </root>

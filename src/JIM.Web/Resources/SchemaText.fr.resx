@@ -1220,4 +1220,130 @@
   <data name="DataFlowOptions" xml:space="preserve">
     <value>Options</value>
   </data>
+  <data name="AuxDialogTitle" xml:space="preserve">
+    <value>Classes auxiliaires pour {0}</value>
+  </data>
+  <data name="AuxNoneDefined" xml:space="preserve">
+    <value>{0} ne définit aucune classe auxiliaire : il n’y a donc rien à fusionner dans {1}.</value>
+  </data>
+  <data name="AuxIntro" xml:space="preserve">
+    <value>Seules les classes que vous activez ici façonnent le schéma ; les suggestions ne s’appliquent jamais d’elles-mêmes. Les attributs d’une classe fusionnée rejoignent le type d’objet à la prochaine actualisation du schéma.</value>
+  </data>
+  <data name="AuxSearchLabel" xml:space="preserve">
+    <value>Rechercher des classes auxiliaires</value>
+  </data>
+  <data name="AuxChipSuggested" xml:space="preserve">
+    <value>Suggérées ({0})</value>
+  </data>
+  <data name="AuxChipInUse" xml:space="preserve">
+    <value>En usage ({0})</value>
+  </data>
+  <data name="AuxNothingSuggested" xml:space="preserve">
+    <value>Rien n’est suggéré. Lancez la découverte ci-dessous, ou affichez toutes les classes du schéma.</value>
+  </data>
+  <data name="AuxNoMatch" xml:space="preserve">
+    <value>Aucune classe auxiliaire ne correspond à ce nom.</value>
+  </data>
+  <data name="AuxDitContentRuleTooltip" xml:space="preserve">
+    <value>{0} publie une règle de contenu DIT indiquant que cette classe peut s’attacher aux entrées {1}. C’est une déclaration de ce qui est permis, et non de ce qui est utilisé.</value>
+  </data>
+  <data name="AuxSuggestedDit" xml:space="preserve">
+    <value>suggérée : règle de contenu DIT</value>
+  </data>
+  <data name="AuxSuggestedInUse" xml:space="preserve">
+    <value>suggérée : en usage sur {0} entrées</value>
+  </data>
+  <data name="AuxAttributeCountOne" xml:space="preserve">
+    <value>+{0} attribut</value>
+  </data>
+  <data name="AuxAttributeCountOther" xml:space="preserve">
+    <value>+{0} attributs</value>
+  </data>
+  <data name="AuxNoOwnAttributes" xml:space="preserve">
+    <value>Cette classe ne définit aucun attribut qui lui soit propre.</value>
+  </data>
+  <data name="AuxRequired" xml:space="preserve">
+    <value>obligatoire</value>
+  </data>
+  <data name="AuxCredentialNotSelectable" xml:space="preserve">
+    <value>identifiants, jamais sélectionnable</value>
+  </data>
+  <data name="AuxNotYetRead" xml:space="preserve">
+    <value>Ces classes proviennent du schéma. JIM n’a pas encore lu les entrées de {0} pour savoir lesquelles sont en usage.</value>
+  </data>
+  <data name="AuxDiscoverInUse" xml:space="preserve">
+    <value>Rechercher les classes en usage</value>
+  </data>
+  <data name="AuxDiscoverAgain" xml:space="preserve">
+    <value>Rechercher à nouveau</value>
+  </data>
+  <data name="AuxDiscoveryIntro" xml:space="preserve">
+    <value>La découverte lit les entrées de {0} pour savoir quelles classes auxiliaires elles portent réellement. Elle ne fait qu’ajouter des suggestions à la liste ci-dessus ; chaque classe auxiliaire du schéma reste listée pour être activée dans les deux cas.</value>
+  </data>
+  <data name="AuxQuickSample" xml:space="preserve">
+    <value>Échantillon rapide</value>
+  </data>
+  <data name="AuxQuickSampleHelp" xml:space="preserve">
+    <value>Lit les premières entrées de chaque type d’objet. Rapide. Un annuaire renvoie les entrées dans son propre ordre, de sorte qu’une classe rarement utilisée peut passer inaperçue ; les résultats sont des suggestions classées, jamais des limites.</value>
+  </data>
+  <data name="AuxFullScan" xml:space="preserve">
+    <value>Analyse complète</value>
+  </data>
+  <data name="AuxFullScanHelp" xml:space="preserve">
+    <value>Lit chaque entrée du périmètre, en demandant uniquement son appartenance à des classes. Analyse complète, et seul périmètre dont la réponse « cette classe n’est pas en usage » a un sens. Elle peut prendre beaucoup de temps sur un grand annuaire, et s’exécute comme une activité que vous pouvez suivre et annuler.</value>
+  </data>
+  <data name="AuxEntriesPerType" xml:space="preserve">
+    <value>Entrées à lire par type d’objet</value>
+  </data>
+  <data name="AuxApplying" xml:space="preserve">
+    <value>Application…</value>
+  </data>
+  <data name="AuxChangeFailed" xml:space="preserve">
+    <value>Les classes auxiliaires de « {0} » n’ont pas pu être modifiées.</value>
+  </data>
+  <data name="AuxCarriesOne" xml:space="preserve">
+    <value>« {0} » porte désormais {1} classe auxiliaire. Actualisez le schéma pour importer les attributs.</value>
+  </data>
+  <data name="AuxCarriesOther" xml:space="preserve">
+    <value>« {0} » porte désormais {1} classes auxiliaires. Actualisez le schéma pour importer les attributs.</value>
+  </data>
+  <data name="AuxRemovedOne" xml:space="preserve">
+    <value>{0} classe auxiliaire n’est plus fusionnée dans « {1} ».</value>
+  </data>
+  <data name="AuxRemovedOther" xml:space="preserve">
+    <value>{0} classes auxiliaires ne sont plus fusionnées dans « {1} ».</value>
+  </data>
+  <data name="AuxDiscoveryQueued" xml:space="preserve">
+    <value>Découverte mise en file d’attente. Sa progression et ses résultats figurent dans son activité.</value>
+  </data>
+  <data name="AuxDiscoveryNotStarted" xml:space="preserve">
+    <value>La découverte n’a pas pu être démarrée.</value>
+  </data>
+  <data name="AuxObservationTooltip" xml:space="preserve">
+    <value>La dernière découverte a trouvé cette classe sur {0} des entrées lues. Un échantillon rapide ne compte que dans l’échantillon, et non dans la population entière.</value>
+  </data>
+  <data name="AuxStatusRunning" xml:space="preserve">
+    <value>En cours</value>
+  </data>
+  <data name="AuxStatusComplete" xml:space="preserve">
+    <value>Dernière exécution terminée</value>
+  </data>
+  <data name="AuxStatusCancelled" xml:space="preserve">
+    <value>Annulée, partielle</value>
+  </data>
+  <data name="AuxStatusFailed" xml:space="preserve">
+    <value>Échec</value>
+  </data>
+  <data name="AuxStatusNotRun" xml:space="preserve">
+    <value>Jamais exécutée</value>
+  </data>
+  <data name="AuxRunQuickSample" xml:space="preserve">
+    <value>Échantillon rapide ({0} par type d’objet)</value>
+  </data>
+  <data name="AuxRunStarted" xml:space="preserve">
+    <value>démarrée {0}</value>
+  </data>
+  <data name="AuxRunSummary" xml:space="preserve">
+    <value>{0}, {1}, {2} entrées lues</value>
+  </data>
 </root>
