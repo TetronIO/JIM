@@ -185,6 +185,29 @@ it, and checks the copy. `Install-LabScripts.ps1` lets `jim-lab` run the task (b
 of main, so a run of any other commit still finds no copy, and says so. A merge during a run does no harm: the run
 keeps using its own commit's copy.
 
+**Start the nightly on time.** GitHub fires `ad-lab.yml`'s 01:23 UTC cron six to eight hours late (between 07:16 and
+09:17 UTC through November 2026), so the host starts the nightly itself. It needs a fine-grained personal access token
+for `TetronIO/JIM` with **Actions: read and write** and no other permission; its owner needs write access to the
+repository. Store it, then register the task, once, from an elevated PowerShell 7 session:
+
+```powershell
+C:\jim-ad-lab\Start-LabNightly.ps1 -SetToken      # asks for the token; run again to replace it
+C:\jim-ad-lab\Register-LabNightlyTask.ps1
+C:\jim-ad-lab\Start-LabNightly.ps1 -WhatIf        # checks the token and today's runs; starts nothing
+```
+
+`-SetToken` reads the token at a prompt, never from the command line, and stores it in
+`C:\ProgramData\JIM\ad-lab\nightly-dispatch-token.bin`, encrypted with DPAPI for the machine, in a folder only SYSTEM
+and Administrators can read (not under `C:\jim-ad-lab`, which `jim-lab` may modify). The task,
+`\JIM\Start AD lab nightly`, runs `Start-LabNightly.ps1` as SYSTEM daily at 01:23 UTC (a UTC trigger, so summer time
+does not move it). It dispatches `ad-lab.yml` on main with every scenario, the Medium template, the probes and
+`trigger=host-nightly`, which names the run `jim-ad-lab nightly (lab host)`, and logs to
+`C:\jim-ad-lab\logs\start-lab-nightly.log`. The cron stays, as the fallback for a host that is off or a token that has
+expired: one nightly a day runs, whichever is created first. The script dispatches nothing if a nightly was created
+since 00:00 UTC, and a scheduled run skips the lab when the host's was, and warns when it was not. Renew the token
+before it expires (`-SetToken` again); a scheduled run warning "The lab host did not start today's nightly" is the sign
+it has.
+
 **Host access.** The rebuild runs as `jim-lab`, which is a Hyper-V administrator and nothing more, and three things it
 needs are refused to such an account. So `Install-LabScripts.ps1` does them, once `settings.json` exists and only when
 elevated (the hourly task, as SYSTEM, always is), and reports each as `Granted`, `AlreadyGranted`, `Recorded` or
