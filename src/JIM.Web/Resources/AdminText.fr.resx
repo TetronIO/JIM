@@ -1247,4 +1247,145 @@
   <data name="AdminTileFactoryResetDesc" xml:space="preserve">
     <value>Effacez toutes les données et la configuration pour repartir de zéro.</value>
   </data>
+  <data name="EditSettingValueWithFormat" xml:space="preserve">
+    <value>Valeur (format : d.hh:mm:ss)</value>
+  </data>
+  <data name="EditSettingDurationError" xml:space="preserve">
+    <value>Saisissez une durée valide au format d.hh:mm:ss</value>
+  </data>
+  <data name="EditSettingDurationExample" xml:space="preserve">
+    <value>Exemple : 30.00:00:00 pour 30 jours</value>
+  </data>
+  <data name="EditSettingTogglePassword" xml:space="preserve">
+    <value>Afficher ou masquer le mot de passe</value>
+  </data>
+  <data name="EditSettingDefault" xml:space="preserve">
+    <value>Par défaut : {0}</value>
+  </data>
+  <data name="DeleteEvaluatingImpact" xml:space="preserve">
+    <value>Évaluation de l’impact de la suppression…</value>
+  </data>
+  <data name="DeleteBusy" xml:space="preserve">
+    <value>Suppression en cours…</value>
+  </data>
+  <data name="DeleteObjectTypeSafe" xml:space="preserve">
+    <value>Aucun objet Metaverse de ce type n’existe et aucune règle de synchronisation ne le cible. Suppression sans risque.</value>
+  </data>
+  <data name="DeleteObjectTypeBuiltInHeadline" xml:space="preserve">
+    <value>Il s’agit d’un type d’objets Metaverse intégré</value>
+  </data>
+  <data name="DeleteObjectTypeBuiltInBody" xml:space="preserve">
+    <value>Les types d’objets intégrés font partie du schéma de JIM et ne peuvent pas être supprimés.</value>
+  </data>
+  <data name="DeleteObjectTypeObjectsHeadline" xml:space="preserve">
+    <value>Objets Metaverse de ce type : {0}</value>
+  </data>
+  <data name="DeleteObjectTypeObjectsBody" xml:space="preserve">
+    <value>Un type ne peut pas être supprimé tant que des objets Metaverse de ce type existent. Supprimez d’abord ces objets (arrêtez les flux sources et laissez-les se déprovisionner, ou supprimez-les manuellement), puis supprimez le type.</value>
+  </data>
+  <data name="DeleteViewObjects" xml:space="preserve">
+    <value>Afficher ces objets Metaverse</value>
+  </data>
+  <data name="DeleteObjectTypeRulesHeadline" xml:space="preserve">
+    <value>Règles de synchronisation ciblant ce type : {0}</value>
+  </data>
+  <data name="DeleteObjectTypeRulesBody" xml:space="preserve">
+    <value>Supprimez d’abord ces règles de synchronisation ; sinon, la suppression du type supprimerait la règle entière.</value>
+  </data>
+  <data name="DeleteReferencesHeadline" xml:space="preserve">
+    <value>Ces {0} référence(s) seront également supprimées</value>
+  </data>
+  <data name="DeleteObjectTypeReferencesNote" xml:space="preserve">
+    <value>Les attributs liés sont conservés ; seuls leurs liens avec ce type sont supprimés.</value>
+  </data>
+  <data name="DeleteWithReferences" xml:space="preserve">
+    <value>Supprimer + {0} référence(s)</value>
+  </data>
+  <data name="DeleteReferencePredefinedSearch" xml:space="preserve">
+    <value>Recherche prédéfinie : {0}</value>
+  </data>
+  <data name="DeleteReferenceExampleData" xml:space="preserve">
+    <value>Modèle de données d’exemple : {0}</value>
+  </data>
+  <data name="DeleteReferenceAttributeBinding" xml:space="preserve">
+    <value>Liaison d’attribut : {0}</value>
+  </data>
+  <data name="DeleteObjectTypeFailedRefresh" xml:space="preserve">
+    <value>Le type d’objets n’a pas pu être supprimé ; son état a peut-être changé. Actualisez la page et réessayez.</value>
+  </data>
+  <data name="DeleteObjectTypeSuccess" xml:space="preserve">
+    <value>Type d’objets « {0} » supprimé.</value>
+  </data>
+  <data name="DeleteObjectTypeFailed" xml:space="preserve">
+    <value>Échec de la suppression du type d’objets : {0}</value>
+  </data>
+  <data name="DeleteObjectTypeTitle" xml:space="preserve">
+    <value>Supprimer le type d’objets « {0} »</value>
+  </data>
+  <data name="DeleteAttributeSafe" xml:space="preserve">
+    <value>Aucun objet ne détient de valeur pour cet attribut. Suppression sans risque : aucune donnée d’objet ne sera perdue.</value>
+  </data>
+  <data name="DeleteAttributeBuiltInHeadline" xml:space="preserve">
+    <value>Il s’agit d’un attribut intégré</value>
+  </data>
+  <data name="DeleteAttributeBuiltInBody" xml:space="preserve">
+    <value>Les attributs intégrés font partie du schéma de JIM et ne peuvent pas être supprimés.</value>
+  </data>
+  <data name="DeleteAttributeValuesHeadline" xml:space="preserve">
+    <value>{0} objet(s) ont une valeur</value>
+  </data>
+  <data name="DeleteAttributeValueCount" xml:space="preserve">
+    <value>{0} : {1} avec une valeur</value>
+  </data>
+  <data name="DeleteAttributeValuesBody" xml:space="preserve">
+    <value>Effacez d’abord ces valeurs (arrêtez le flux source et laissez-le se déprovisionner, ou effacez-les en masse), puis supprimez l’attribut.</value>
+  </data>
+  <data name="DeleteAttributeReadersHeadline" xml:space="preserve">
+    <value>{0} élément(s) de configuration lisent cet attribut</value>
+  </data>
+  <data name="DeleteAttributeReadersBody" xml:space="preserve">
+    <value>Modifiez ou supprimez d’abord chacun d’eux, puis supprimez l’attribut. JIM ne les supprime pas à votre place : un critère de périmètre retiré d’une règle de synchronisation modifie les objets que la règle gère.</value>
+  </data>
+  <data name="DeleteAttributeTitle" xml:space="preserve">
+    <value>Supprimer l’attribut « {0} »</value>
+  </data>
+  <data name="DeleteAttributeFailedRefresh" xml:space="preserve">
+    <value>L’attribut n’a pas pu être supprimé ; il détient peut-être désormais des valeurs, ou une configuration peut désormais le lire. Actualisez la page et réessayez.</value>
+  </data>
+  <data name="DeleteAttributeSuccess" xml:space="preserve">
+    <value>Attribut « {0} » supprimé.</value>
+  </data>
+  <data name="DeleteAttributeFailed" xml:space="preserve">
+    <value>Échec de la suppression de l’attribut : {0}</value>
+  </data>
+  <data name="IdpBannerReviewTrust" xml:space="preserve">
+    <value>Examiner et approuver</value>
+  </data>
+  <data name="IdpBannerHowToFix" xml:space="preserve">
+    <value>Comment résoudre le problème</value>
+  </data>
+  <data name="CertificateUnknown" xml:space="preserve">
+    <value>inconnue</value>
+  </data>
+  <data name="CertificateSourceSentByServer" xml:space="preserve">
+    <value>Envoyé par le serveur</value>
+  </data>
+  <data name="CertificateSourceDownloaded" xml:space="preserve">
+    <value>Téléchargé</value>
+  </data>
+  <data name="CertificateSourceInStore" xml:space="preserve">
+    <value>Dans les certificats approuvés</value>
+  </data>
+  <data name="CertificateSourceOperatingSystem" xml:space="preserve">
+    <value>Système d’exploitation</value>
+  </data>
+  <data name="CertificateRoleRoot" xml:space="preserve">
+    <value>Racine</value>
+  </data>
+  <data name="CertificateRoleIntermediate" xml:space="preserve">
+    <value>Intermédiaire</value>
+  </data>
+  <data name="CertificateRoleServer" xml:space="preserve">
+    <value>Serveur</value>
+  </data>
 </root>

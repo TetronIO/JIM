@@ -1658,4 +1658,192 @@
     <value>Wipe all data and configuration to start fresh</value>
     <comment>Tile description</comment>
   </data>
+  <data name="EditSettingValueWithFormat" xml:space="preserve">
+    <value>Value (format: d.hh:mm:ss)</value>
+    <comment>Field label for a duration setting</comment>
+  </data>
+  <data name="EditSettingDurationError" xml:space="preserve">
+    <value>Enter a valid duration in the format d.hh:mm:ss</value>
+    <comment>Validation message on a duration setting</comment>
+  </data>
+  <data name="EditSettingDurationExample" xml:space="preserve">
+    <value>Example: 30.00:00:00 for 30 days</value>
+    <comment>Helper text on a duration setting</comment>
+  </data>
+  <data name="EditSettingTogglePassword" xml:space="preserve">
+    <value>Toggle password visibility</value>
+    <comment>Accessible name of the reveal button on a secret setting</comment>
+  </data>
+  <data name="EditSettingDefault" xml:space="preserve">
+    <value>Default: {0}</value>
+    <comment>Caption under a setting; {0} is the default value</comment>
+  </data>
+  <data name="DeleteEvaluatingImpact" xml:space="preserve">
+    <value>Evaluating deletion impact...</value>
+    <comment>Shown while the deletion impact is worked out</comment>
+  </data>
+  <data name="DeleteBusy" xml:space="preserve">
+    <value>Deleting...</value>
+    <comment>Button text while the deletion runs</comment>
+  </data>
+  <data name="DeleteObjectTypeSafe" xml:space="preserve">
+    <value>No Metaverse Objects of this type exist and no Synchronisation Rule targets it. Safe to delete.</value>
+    <comment>Shown when a Metaverse Object Type can be deleted without consequence</comment>
+  </data>
+  <data name="DeleteObjectTypeBuiltInHeadline" xml:space="preserve">
+    <value>This is a built-in Metaverse Object Type</value>
+    <comment>Blocker headline</comment>
+  </data>
+  <data name="DeleteObjectTypeBuiltInBody" xml:space="preserve">
+    <value>Built-in Object Types are part of JIM's own schema and cannot be deleted.</value>
+    <comment>Blocker explanation</comment>
+  </data>
+  <data name="DeleteObjectTypeObjectsHeadline" xml:space="preserve">
+    <value>{0} Metaverse Object(s) of this type exist</value>
+    <comment>Blocker headline; {0} is the count</comment>
+  </data>
+  <data name="DeleteObjectTypeObjectsBody" xml:space="preserve">
+    <value>A type cannot be deleted while Metaverse Objects of it exist. Delete those objects first (stop the source flows and let them deprovision, or delete them manually), then delete the type.</value>
+    <comment>Blocker explanation</comment>
+  </data>
+  <data name="DeleteViewObjects" xml:space="preserve">
+    <value>View these Metaverse Objects</value>
+    <comment>Link in a blocker</comment>
+  </data>
+  <data name="DeleteObjectTypeRulesHeadline" xml:space="preserve">
+    <value>{0} Synchronisation Rule(s) target this type</value>
+    <comment>Blocker headline; {0} is the count</comment>
+  </data>
+  <data name="DeleteObjectTypeRulesBody" xml:space="preserve">
+    <value>Remove these Synchronisation Rules first; deleting the type would otherwise remove the whole rule.</value>
+    <comment>Blocker explanation</comment>
+  </data>
+  <data name="DeleteReferencesHeadline" xml:space="preserve">
+    <value>These {0} reference(s) will also be removed</value>
+    <comment>Consequence headline; {0} is the count</comment>
+  </data>
+  <data name="DeleteObjectTypeReferencesNote" xml:space="preserve">
+    <value>Bound attributes themselves are kept; only their bindings to this type are removed.</value>
+    <comment>Note under the consequences</comment>
+  </data>
+  <data name="DeleteWithReferences" xml:space="preserve">
+    <value>Delete + {0} reference(s)</value>
+    <comment>Confirm button when references will also be removed; {0} is the count</comment>
+  </data>
+  <data name="DeleteReferencePredefinedSearch" xml:space="preserve">
+    <value>Predefined Search: {0}</value>
+    <comment>Consequence item; {0} is the search description</comment>
+  </data>
+  <data name="DeleteReferenceExampleData" xml:space="preserve">
+    <value>Example Data Template: {0}</value>
+    <comment>Consequence item; {0} is the template description</comment>
+  </data>
+  <data name="DeleteReferenceAttributeBinding" xml:space="preserve">
+    <value>Attribute binding: {0}</value>
+    <comment>Consequence item; {0} is the binding description</comment>
+  </data>
+  <data name="DeleteObjectTypeFailedRefresh" xml:space="preserve">
+    <value>The Object Type could not be deleted; its state may have changed. Refresh and try again.</value>
+    <comment>Snackbar warning</comment>
+  </data>
+  <data name="DeleteObjectTypeSuccess" xml:space="preserve">
+    <value>Deleted Object Type "{0}".</value>
+    <comment>Snackbar; {0} is the name</comment>
+  </data>
+  <data name="DeleteObjectTypeFailed" xml:space="preserve">
+    <value>Failed to delete Object Type: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="DeleteObjectTypeTitle" xml:space="preserve">
+    <value>Delete "{0}" Object Type</value>
+    <comment>Dialog title; {0} is the name</comment>
+  </data>
+  <data name="DeleteAttributeSafe" xml:space="preserve">
+    <value>No object holds a value for this attribute. Safe to delete; no object data will be lost.</value>
+    <comment>Shown when a Metaverse Attribute can be deleted without consequence</comment>
+  </data>
+  <data name="DeleteAttributeBuiltInHeadline" xml:space="preserve">
+    <value>This is a built-in attribute</value>
+    <comment>Blocker headline</comment>
+  </data>
+  <data name="DeleteAttributeBuiltInBody" xml:space="preserve">
+    <value>Built-in attributes are part of JIM's own schema and cannot be deleted.</value>
+    <comment>Blocker explanation</comment>
+  </data>
+  <data name="DeleteAttributeValuesHeadline" xml:space="preserve">
+    <value>{0} object(s) have a value</value>
+    <comment>Blocker headline; {0} is the count</comment>
+  </data>
+  <data name="DeleteAttributeValueCount" xml:space="preserve">
+    <value>{0}: {1} with a value</value>
+    <comment>Item under the values blocker; {0} is the object type, {1} the count</comment>
+  </data>
+  <data name="DeleteAttributeValuesBody" xml:space="preserve">
+    <value>Clear these values first (stop the source flow and let it deprovision, or bulk-clear), then delete.</value>
+    <comment>Blocker explanation</comment>
+  </data>
+  <data name="DeleteAttributeReadersHeadline" xml:space="preserve">
+    <value>{0} configuration item(s) read this attribute</value>
+    <comment>Blocker headline; {0} is the count</comment>
+  </data>
+  <data name="DeleteAttributeReadersBody" xml:space="preserve">
+    <value>Change or remove each one first, then delete. JIM does not remove them for you: a Scoping Criterion removed from a Synchronisation Rule changes which objects the rule manages.</value>
+    <comment>Blocker explanation</comment>
+  </data>
+  <data name="DeleteAttributeTitle" xml:space="preserve">
+    <value>Delete "{0}" Attribute</value>
+    <comment>Dialog title; {0} is the name</comment>
+  </data>
+  <data name="DeleteAttributeFailedRefresh" xml:space="preserve">
+    <value>The attribute could not be deleted; it may now hold stored values, or configuration may now read it. Refresh and try again.</value>
+    <comment>Snackbar warning</comment>
+  </data>
+  <data name="DeleteAttributeSuccess" xml:space="preserve">
+    <value>Deleted attribute "{0}".</value>
+    <comment>Snackbar; {0} is the name</comment>
+  </data>
+  <data name="DeleteAttributeFailed" xml:space="preserve">
+    <value>Failed to delete attribute: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="IdpBannerReviewTrust" xml:space="preserve">
+    <value>Review and trust</value>
+    <comment>Button on the identity provider certificate banner</comment>
+  </data>
+  <data name="IdpBannerHowToFix" xml:space="preserve">
+    <value>How to fix it</value>
+    <comment>Link on the identity provider certificate banner</comment>
+  </data>
+  <data name="CertificateUnknown" xml:space="preserve">
+    <value>unknown</value>
+    <comment>Shown in place of a thumbprint that is missing</comment>
+  </data>
+  <data name="CertificateSourceSentByServer" xml:space="preserve">
+    <value>Sent by server</value>
+    <comment>Where a certificate in a chain was found</comment>
+  </data>
+  <data name="CertificateSourceDownloaded" xml:space="preserve">
+    <value>Downloaded</value>
+    <comment>Where a certificate in a chain was found</comment>
+  </data>
+  <data name="CertificateSourceInStore" xml:space="preserve">
+    <value>In Trusted Certificates</value>
+    <comment>Where a certificate in a chain was found</comment>
+  </data>
+  <data name="CertificateSourceOperatingSystem" xml:space="preserve">
+    <value>Operating system</value>
+    <comment>Where a certificate in a chain was found</comment>
+  </data>
+  <data name="CertificateRoleRoot" xml:space="preserve">
+    <value>Root</value>
+    <comment>Role of a certificate in a chain</comment>
+  </data>
+  <data name="CertificateRoleIntermediate" xml:space="preserve">
+    <value>Intermediate</value>
+    <comment>Role of a certificate in a chain</comment>
+  </data>
+  <data name="CertificateRoleServer" xml:space="preserve">
+    <value>Server</value>
+    <comment>Role of a certificate in a chain</comment>
+  </data>
 </root>
