@@ -1,0 +1,2466 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="OvertakenAndJoin" xml:space="preserve">
+    <value>, und </value>
+  </data>
+  <data name="PreviewValueFromContributor" xml:space="preserve">
+    <value>aus {0}</value>
+  </data>
+  <data name="PreviewValueTooltip" xml:space="preserve">
+    <value>{0} (aus {1})</value>
+  </data>
+  <data name="PreviewChip" xml:space="preserve">
+    <value>Vorschau</value>
+  </data>
+  <data name="PreviewDataSetSizeTitle" xml:space="preserve">
+    <value>Wie viele Details soll diese Vorschau behalten?</value>
+  </data>
+  <data name="ExpressionDoesNotParse" xml:space="preserve">
+    <value>Der Ausdruck kann nicht analysiert werden.</value>
+  </data>
+  <data name="ExpressionFunctionNamesCaseSensitive" xml:space="preserve">
+    <value> Funktionsnamen unterscheiden zwischen Groß- und Kleinschreibung: Meinten Sie {0}?</value>
+  </data>
+  <data name="TryItHeading" xml:space="preserve">
+    <value>Ausprobieren</value>
+  </data>
+  <data name="AttributeFlowTitle" xml:space="preserve">
+    <value>Attributfluss</value>
+  </data>
+  <data name="AddAttributeFlowButton" xml:space="preserve">
+    <value>Attributfluss hinzufügen</value>
+  </data>
+  <data name="EditAttributeFlowTitle" xml:space="preserve">
+    <value>Attributfluss bearbeiten</value>
+  </data>
+  <data name="MappingTypeLabel" xml:space="preserve">
+    <value>Zuordnungstyp:</value>
+  </data>
+  <data name="DataTypeLabel" xml:space="preserve">
+    <value>Datentyp:</value>
+  </data>
+  <data name="PluralityLabel" xml:space="preserve">
+    <value>Wertigkeit:</value>
+  </data>
+  <data name="PluralitySingleValued" xml:space="preserve">
+    <value>Einwertig</value>
+  </data>
+  <data name="PluralityMultiValued" xml:space="preserve">
+    <value>Mehrwertig</value>
+  </data>
+  <data name="MappingTypeAttributeMapping" xml:space="preserve">
+    <value>Attributzuordnung</value>
+  </data>
+  <data name="MappingTypeExpressionMapping" xml:space="preserve">
+    <value>Ausdruckszuordnung</value>
+  </data>
+  <data name="MappingTypeDerived" xml:space="preserve">
+    <value>Abgeleitet</value>
+  </data>
+  <data name="MappingTypeGeneratedMapping" xml:space="preserve">
+    <value>Generierte Zuordnung</value>
+  </data>
+  <data name="MappingTypeAdvancedMapping" xml:space="preserve">
+    <value>Erweiterte Zuordnung</value>
+  </data>
+  <data name="NotSet" xml:space="preserve">
+    <value>Nicht festgelegt</value>
+  </data>
+  <data name="DataTypeText" xml:space="preserve">
+    <value>Text</value>
+  </data>
+  <data name="DataTypeNumber" xml:space="preserve">
+    <value>Zahl</value>
+  </data>
+  <data name="DataTypeDateTime" xml:space="preserve">
+    <value>Datum/Uhrzeit</value>
+  </data>
+  <data name="DataTypeBinary" xml:space="preserve">
+    <value>Binär</value>
+  </data>
+  <data name="DataTypeReference" xml:space="preserve">
+    <value>Referenz</value>
+  </data>
+  <data name="DataTypeGuid" xml:space="preserve">
+    <value>Guid</value>
+  </data>
+  <data name="DataTypeBoolean" xml:space="preserve">
+    <value>Boolean</value>
+  </data>
+  <data name="DataTypeLongNumber" xml:space="preserve">
+    <value>Lange Zahl</value>
+  </data>
+  <data name="TypeGenerated" xml:space="preserve">
+    <value>Generiert</value>
+  </data>
+  <data name="SourcesTitle" xml:space="preserve">
+    <value>Quellen</value>
+  </data>
+  <data name="ColumnSource" xml:space="preserve">
+    <value>Quelle</value>
+  </data>
+  <data name="ColumnTarget" xml:space="preserve">
+    <value>Ziel</value>
+  </data>
+  <data name="ColumnUpdated" xml:space="preserve">
+    <value>Aktualisiert</value>
+  </data>
+  <data name="SingularAttributeFlow" xml:space="preserve">
+    <value>Attributfluss</value>
+  </data>
+  <data name="PluralAttributeFlows" xml:space="preserve">
+    <value>Attributflüsse</value>
+  </data>
+  <data name="SearchAttributeFlowsPlaceholder" xml:space="preserve">
+    <value>Nach Attribut oder Ausdruck suchen</value>
+  </data>
+  <data name="ChipDisabled" xml:space="preserve">
+    <value>Deaktiviert</value>
+  </data>
+  <data name="InitialExportOnlyChip" xml:space="preserve">
+    <value>Nur Erstexport</value>
+  </data>
+  <data name="InitialExportOnlyTooltip" xml:space="preserve">
+    <value>Nur Erstexport: Fließt, wenn JIM das Objekt erstellt, danach wird das Attribut nicht mehr verwaltet</value>
+  </data>
+  <data name="SetOnCreationOnlyChip" xml:space="preserve">
+    <value>Nur bei Erstellung gesetzt</value>
+  </data>
+  <data name="NoAttributeFlowsMatchSearch" xml:space="preserve">
+    <value>Keine Attributflüsse entsprechen „{0}“</value>
+  </data>
+  <data name="NoAttributeFlowsMatchSearchHint" xml:space="preserve">
+    <value>Versuchen Sie einen anderen Suchbegriff oder setzen Sie die Suche zurück.</value>
+  </data>
+  <data name="NoAttributeFlowsMatchFilters" xml:space="preserve">
+    <value>Keine Attributflüsse entsprechen diesen Filtern</value>
+  </data>
+  <data name="NoAttributeFlowsMatchFiltersHint" xml:space="preserve">
+    <value>Entfernen Sie oben einen Filter für Zuordnungstyp, Datentyp oder Wertigkeit, um die Liste zu erweitern.</value>
+  </data>
+  <data name="NoAttributeFlowsYet" xml:space="preserve">
+    <value>Noch keine Attributflüsse definiert</value>
+  </data>
+  <data name="NoAttributeFlowsYetHint" xml:space="preserve">
+    <value>Legen Sie mit der Schaltfläche „Attributfluss hinzufügen“ fest, welche Attributwerte diese Synchronisierungsregel überträgt.</value>
+  </data>
+  <data name="RetiredCount" xml:space="preserve">
+    <value>{0:N0} stillgelegt</value>
+  </data>
+  <data name="ViewRetiredValuesAria" xml:space="preserve">
+    <value>stillgelegte Werte anzeigen</value>
+  </data>
+  <data name="StartAgain" xml:space="preserve">
+    <value>Neu starten …</value>
+  </data>
+  <data name="StartAgainAria" xml:space="preserve">
+    <value>neu starten</value>
+  </data>
+  <data name="EditAria" xml:space="preserve">
+    <value>bearbeiten</value>
+  </data>
+  <data name="DeleteAria" xml:space="preserve">
+    <value>löschen</value>
+  </data>
+  <data name="SourceTypeLabel" xml:space="preserve">
+    <value>Quelltyp</value>
+  </data>
+  <data name="SelectSourceType" xml:space="preserve">
+    <value>Bitte wählen Sie den Quelltyp für diesen Attributfluss aus</value>
+  </data>
+  <data name="SourceTypeAttribute" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="SourceTypeAttributeHelp" xml:space="preserve">
+    <value>Kopiert einen Wert aus einem Quellattribut</value>
+  </data>
+  <data name="SourceTypeExpression" xml:space="preserve">
+    <value>Ausdruck</value>
+  </data>
+  <data name="SourceTypeExpressionHelp" xml:space="preserve">
+    <value>Berechnet einen Wert mithilfe eines Ausdrucks</value>
+  </data>
+  <data name="SourceTypeGenerated" xml:space="preserve">
+    <value>Generierter Wert</value>
+  </data>
+  <data name="SourceTypeGeneratedHelp" xml:space="preserve">
+    <value>Generiert einen eindeutigen, dauerhaften Wert</value>
+  </data>
+  <data name="AssignValueTo" xml:space="preserve">
+    <value>Wert zuweisen an</value>
+  </data>
+  <data name="SelectTargetMetaverseAttribute" xml:space="preserve">
+    <value>Bitte wählen Sie das Metaverse-Zielattribut aus</value>
+  </data>
+  <data name="SelectTargetConnectedSystemAttribute" xml:space="preserve">
+    <value>Bitte wählen Sie das Zielattribut des verbundenen Systems aus</value>
+  </data>
+  <data name="ReadOnlyTargetReason" xml:space="preserve">
+    <value>Dieses verbundene System meldet dieses Attribut als schreibgeschützt.</value>
+  </data>
+  <data name="Suggested" xml:space="preserve">
+    <value>Vorgeschlagen</value>
+  </data>
+  <data name="ChosenByExchangeRecipients" xml:space="preserve">
+    <value>Von den Exchange-Empfängern gewählt</value>
+  </data>
+  <data name="ConnectedSystemAttributeLabel" xml:space="preserve">
+    <value>Attribut des verbundenen Systems</value>
+  </data>
+  <data name="SelectSourceConnectedSystemAttribute" xml:space="preserve">
+    <value>Bitte wählen Sie das Quellattribut des verbundenen Systems aus</value>
+  </data>
+  <data name="MetaverseAttributeLabel" xml:space="preserve">
+    <value>Metaverse-Attribut</value>
+  </data>
+  <data name="SelectSourceMetaverseAttribute" xml:space="preserve">
+    <value>Bitte wählen Sie das Metaverse-Quellattribut aus</value>
+  </data>
+  <data name="AttributeTypeAndPlurality" xml:space="preserve">
+    <value>({0} : {1})</value>
+  </data>
+  <data name="ExpressionPlaceholderExport" xml:space="preserve">
+    <value>z. B. IIF(mv["Active"] == true, Upper(mv["Display Name"]), null)</value>
+  </data>
+  <data name="ExpressionPlaceholderImport" xml:space="preserve">
+    <value>z. B. IIF(mv["Active"] == true, Upper(cs["Name"]), null)</value>
+  </data>
+  <data name="MissingInputBehaviourTitle" xml:space="preserve">
+    <value>Verhalten bei fehlender Eingabe</value>
+  </data>
+  <data name="AttentionFailsWholeObject" xml:space="preserve">
+    <value>Lässt das ganze Objekt fehlschlagen</value>
+  </data>
+  <data name="MissingInputIntro" xml:space="preserve">
+    <value>Was zu tun ist, wenn ein Attribut, das dieser Ausdruck liest, am zu synchronisierenden Objekt keinen Wert hat.</value>
+  </data>
+  <data name="MissingInputEvaluateAnyway" xml:space="preserve">
+    <value>Trotzdem auswerten</value>
+  </data>
+  <data name="MissingInputEvaluateAnywayHint" xml:space="preserve">
+    <value>Den Ausdruck ohne die Eingabe ausführen. Für einen Ausdruck, der fehlende Werte selbst behandelt. Die Standardeinstellung.</value>
+  </data>
+  <data name="MissingInputContributeNoValue" xml:space="preserve">
+    <value>Keinen Wert beisteuern</value>
+  </data>
+  <data name="MissingInputContributeNoValueHint" xml:space="preserve">
+    <value>Nichts beisteuern, sodass ein Beitragender mit niedrigerer Priorität das Attribut weiterhin gewinnen kann. Kein Fehler.</value>
+  </data>
+  <data name="MissingInputWait" xml:space="preserve">
+    <value>Warten, bis jede Eingabe einen Wert hat</value>
+  </data>
+  <data name="MissingInputFailMapping" xml:space="preserve">
+    <value>Diese Zuordnung fehlschlagen lassen</value>
+  </data>
+  <data name="MissingInputFailMappingHint" xml:space="preserve">
+    <value>Einen Fehler für das Objekt aufzeichnen; andere Attributflüsse werden weiter ausgeführt, und das Ziel behält seinen Wert.</value>
+  </data>
+  <data name="MissingInputFailObject" xml:space="preserve">
+    <value>Das Objekt fehlschlagen lassen</value>
+  </data>
+  <data name="MissingInputFailObjectHint" xml:space="preserve">
+    <value>Für das Objekt keinen Attributfluss dieser Synchronisierungsregel ausführen. Für identitätskritische Ausgaben.</value>
+  </data>
+  <data name="MissingInputFailObjectWarning" xml:space="preserve">
+    <value>Solange dies eingestellt ist, wird ein Objekt, dem ein von diesem Ausdruck gelesenes Attribut fehlt, überhaupt nicht synchronisiert: Keines seiner Attribute fließt, und es wird bei jeder Ausführung als Fehler gemeldet, bis der fehlende Wert bereitgestellt wird.</value>
+  </data>
+  <data name="StandardMappingsGuidance" xml:space="preserve">
+    <value>Standardzuordnungen dienen nur als Orientierung; es kann jedes Attribut gewählt werden, und sie beeinflussen nie, was die Synchronisierung überträgt.</value>
+  </data>
+  <data name="UseSuggestion" xml:space="preserve">
+    <value>{0} verwenden</value>
+  </data>
+  <data name="MoreThanOneRuleContributes" xml:space="preserve">
+    <value>Mehr als eine Synchronisierungsregel steuert {0} bei. Ihre Prioritätsreihenfolge entscheidet, welcher Wert gewinnt.</value>
+  </data>
+  <data name="AttributeHasContributors" xml:space="preserve">
+    <value>{0} hat bereits Beitragende. Diese Zuordnung wird mit der niedrigsten Priorität hinzugefügt und gewinnt die Auflösung nicht, bis sie höher eingestuft wird.</value>
+  </data>
+  <data name="ManagePriorityOnObjectType" xml:space="preserve">
+    <value>Priorität auf der Seite des Objekttyps {0} verwalten</value>
+  </data>
+  <data name="MetaverseFallbackName" xml:space="preserve">
+    <value>Metaverse</value>
+  </data>
+  <data name="ValueHandlingTitle" xml:space="preserve">
+    <value>Wertbehandlung</value>
+  </data>
+  <data name="AttentionBlankClears" xml:space="preserve">
+    <value>Ein leerer Wert löscht den Wert</value>
+  </data>
+  <data name="NullIsValueLabel" xml:space="preserve">
+    <value>Null ist ein Wert</value>
+  </data>
+  <data name="NullIsValueHelp" xml:space="preserve">
+    <value>Wenn diese Synchronisierungsregel auf ein Objekt im verbundenen System zutrifft, das mit einem Metaverse-Objekt verknüpft ist, aber keinen Wert beisteuert, wird dies als maßgebliches „kein Wert“ behandelt: Der Attributwert des Metaverse-Objekts wird gelöscht, statt auf einen Beitragenden mit niedrigerer Priorität zurückzugreifen. Eine Regel, die zu keiner Aussage führt (Regel deaktiviert, Objekt im verbundenen System nicht verknüpft oder außerhalb des Geltungsbereichs), wird in jedem Fall übersprungen.</value>
+  </data>
+  <data name="NullIsValueWarning" xml:space="preserve">
+    <value>Überall dort, wo diese Synchronisierungsregel die Priorität gewinnt, löscht ein leerer Wert im verbundenen System jetzt den Attributwert des Metaverse-Objekts, statt ihn unverändert zu lassen. Ein abgeschnittener oder leerer Import löscht daher das Attribut an jedem Objekt, das diese Regel abdeckt.</value>
+  </data>
+  <data name="ValueProcessingTitle" xml:space="preserve">
+    <value>Wertverarbeitung</value>
+  </data>
+  <data name="ValueProcessingHelp" xml:space="preserve">
+    <value>Wendet Transformationen auf den importierten Textwert an, bevor er in das Metaverse fließt. Standardmäßig gelten Werte aus nur Leerraum und leere Werte als kein Wert (sie fließen nicht und löschen einen vorhandenen Wert).</value>
+  </data>
+  <data name="TreatWhitespaceAsNoValue" xml:space="preserve">
+    <value>Leerraum als keinen Wert behandeln</value>
+  </data>
+  <data name="TrimWhitespace" xml:space="preserve">
+    <value>Führenden und nachgestellten Leerraum entfernen</value>
+  </data>
+  <data name="TrimWhitespaceShort" xml:space="preserve">
+    <value>Leerraum entfernen</value>
+  </data>
+  <data name="CollapseWhitespaceTooltip" xml:space="preserve">
+    <value>Reduziert aufeinanderfolgende Leerzeichen innerhalb des Werts auf ein einzelnes Leerzeichen; zum Beispiel wird 'John···Smith' zu 'John Smith' (jedes · ist ein Leerzeichen).</value>
+  </data>
+  <data name="CollapseInternalWhitespace" xml:space="preserve">
+    <value>Internen Leerraum zusammenfassen</value>
+  </data>
+  <data name="CaseNormalisationLabel" xml:space="preserve">
+    <value>Normalisierung der Groß-/Kleinschreibung</value>
+  </data>
+  <data name="CaseUpper" xml:space="preserve">
+    <value>Großbuchstaben</value>
+  </data>
+  <data name="CaseLower" xml:space="preserve">
+    <value>Kleinbuchstaben</value>
+  </data>
+  <data name="CaseTitle" xml:space="preserve">
+    <value>Initialgroßschreibung</value>
+  </data>
+  <data name="InitialExportOnlyLabel" xml:space="preserve">
+    <value>Nur Erstexport</value>
+  </data>
+  <data name="InitialExportOnlyHelp" xml:space="preserve">
+    <value>Dieses Attribut nur übertragen, wenn JIM das Objekt im verbundenen System erstellt. Nach der Provisionierung wird das Attribut nicht mehr verwaltet: Änderungen im Metaverse werden nicht exportiert, und die Driftkorrektur lässt es unberührt, sodass das verbundene System den Wert besitzt. Objekte, die mit bereits vorhandenen Objekten im verbundenen System verknüpft werden, erhalten den Wert nie.</value>
+  </data>
+  <data name="EnabledHelp" xml:space="preserve">
+    <value>Ein deaktivierter Attributfluss wird bei der Synchronisierung übersprungen, bis er wieder aktiviert wird. Trägt ein anderer Attributfluss ebenfalls das Attribut bei, übernimmt dessen Wert bei der nächsten Synchronisierung; Werte, die nur dieser Fluss beigesteuert hat, bleiben bestehen.</value>
+  </data>
+  <data name="EnabledHelpShort" xml:space="preserve">
+    <value>Ein deaktivierter Attributfluss wird bei der Synchronisierung übersprungen, bis er wieder aktiviert wird.</value>
+  </data>
+  <data name="UniqueSequence" xml:space="preserve">
+    <value>Immer eine laufende Nummer anhängen</value>
+  </data>
+  <data name="UniqueRandom" xml:space="preserve">
+    <value>Immer ein Zufallstoken anhängen</value>
+  </data>
+  <data name="UniqueIfTaken" xml:space="preserve">
+    <value>Nur eine Zahl anhängen, wenn vergeben</value>
+  </data>
+  <data name="AvailabilityLoading" xml:space="preserve">
+    <value>Wird geladen</value>
+  </data>
+  <data name="AvailabilityNotExported" xml:space="preserve">
+    <value>In kein verbundenes System exportiert</value>
+  </data>
+  <data name="CheckedInOne" xml:space="preserve">
+    <value>In {0} verbundenem System geprüft</value>
+  </data>
+  <data name="CheckedInOther" xml:space="preserve">
+    <value>In {0} verbundenen Systemen geprüft</value>
+  </data>
+  <data name="AvailabilityExcluded" xml:space="preserve">
+    <value>{0}, {1} ausgeschlossen</value>
+  </data>
+  <data name="NotAvailable" xml:space="preserve">
+    <value>Nicht verfügbar</value>
+  </data>
+  <data name="SwitchOn" xml:space="preserve">
+    <value>Ein</value>
+  </data>
+  <data name="SwitchOff" xml:space="preserve">
+    <value>Aus</value>
+  </data>
+  <data name="NullIsNotAValue" xml:space="preserve">
+    <value>Null ist kein Wert</value>
+  </data>
+  <data name="ListSeparator" xml:space="preserve">
+    <value>, </value>
+  </data>
+  <data name="PluralitySingleValuedWords" xml:space="preserve">
+    <value>Einwertig</value>
+  </data>
+  <data name="PluralityMultiValuedWords" xml:space="preserve">
+    <value>Mehrwertig</value>
+  </data>
+  <data name="ExpressionLabel" xml:space="preserve">
+    <value>Ausdruck</value>
+  </data>
+  <data name="UpdateAttributeFlowButton" xml:space="preserve">
+    <value>Attributfluss aktualisieren</value>
+  </data>
+  <data name="ViewRetiredValuesWithCount" xml:space="preserve">
+    <value>Stillgelegte Werte anzeigen ({0:N0})</value>
+  </data>
+  <data name="ViewRetiredValues" xml:space="preserve">
+    <value>Stillgelegte Werte anzeigen</value>
+  </data>
+  <data name="RetiredChipTooltipOne" xml:space="preserve">
+    <value>{0:N0} Wert von {1} wird nie wieder vergeben.</value>
+  </data>
+  <data name="RetiredChipTooltipOther" xml:space="preserve">
+    <value>{0:N0} Werte von {1} werden nie wieder vergeben.</value>
+  </data>
+  <data name="PasswordDeliveryNote" xml:space="preserve">
+    <value>Die Kennwortbereitstellung überlässt „Aktiviert“ und „Kennwort läuft nie ab“ diesem Attributfluss. Initialkennwörter und synchronisierte Kennwörter ändern sie nicht.</value>
+  </data>
+  <data name="MvaToSvaIndicatorTooltip" xml:space="preserve">
+    <value>Diese Zuordnung überträgt eine mehrwertige Quelle auf ein einwertiges Ziel. Jedes Objekt mit mehr als einem Wert überträgt dieses Attribut nicht und wird als Fehler aufgezeichnet; ein einzelner Wert fließt normal.</value>
+  </data>
+  <data name="DisabledMappingDescription" xml:space="preserve">
+    <value>Dieser Attributfluss ist deaktiviert und wird bei der Synchronisierung übersprungen, bis er wieder aktiviert wird.</value>
+  </data>
+  <data name="SentenceAndSentence" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="StandardMappingImportOne" xml:space="preserve">
+    <value>In {0} entspricht {1} dem Metaverse-Attribut {2}.</value>
+  </data>
+  <data name="StandardMappingImportOther" xml:space="preserve">
+    <value>In {0} entspricht {1} den Metaverse-Attributen {2}.</value>
+  </data>
+  <data name="StandardMappingExport" xml:space="preserve">
+    <value>In {0} entspricht {1} {2} in diesem verbundenen System.</value>
+  </data>
+  <data name="ListAnd" xml:space="preserve">
+    <value> und </value>
+  </data>
+  <data name="UnavailableAlsoTypeMismatch" xml:space="preserve">
+    <value>Es entspricht auch {0}, das einen anderen Datentyp hat, sodass der Wert nicht direkt dorthin fließen kann. Eine Ausdrucksquelle kann ihn umwandeln.</value>
+  </data>
+  <data name="UnavailableAlsoAlreadyTargeted" xml:space="preserve">
+    <value>Es entspricht auch {0}, das bereits von einem anderen Attributfluss dieser Synchronisierungsregel als Ziel verwendet wird.</value>
+  </data>
+  <data name="UnavailableAlsoReadOnly" xml:space="preserve">
+    <value>Es entspricht auch {0}, das dieses verbundene System als schreibgeschützt meldet, sodass kein Attributfluss darauf schreiben kann.</value>
+  </data>
+  <data name="UnavailableAlsoOther" xml:space="preserve">
+    <value>Es entspricht auch {0}, das als Ziel nicht verfügbar ist.</value>
+  </data>
+  <data name="UnavailableFirstTypeMismatch" xml:space="preserve">
+    <value>In {0} entspricht {1} {2}, das einen anderen Datentyp hat, sodass der Wert nicht direkt dorthin fließen kann. Eine Ausdrucksquelle kann ihn umwandeln.</value>
+  </data>
+  <data name="UnavailableFirstAlreadyTargeted" xml:space="preserve">
+    <value>In {0} entspricht {1} {2}, das bereits von einem anderen Attributfluss dieser Synchronisierungsregel als Ziel verwendet wird.</value>
+  </data>
+  <data name="UnavailableFirstReadOnly" xml:space="preserve">
+    <value>In {0} entspricht {1} {2}, das dieses verbundene System als schreibgeschützt meldet, sodass kein Attributfluss darauf schreiben kann.</value>
+  </data>
+  <data name="UnavailableFirstOther" xml:space="preserve">
+    <value>In {0} entspricht {1} {2}, das als Ziel nicht verfügbar ist.</value>
+  </data>
+  <data name="AttributeLabelWithType" xml:space="preserve">
+    <value>{0} ({1} : {2})</value>
+  </data>
+  <data name="MvaToSvaWarningImport" xml:space="preserve">
+    <value>{0} ist mehrwertig, {1} aber einwertig. Hat ein synchronisiertes Objekt mehr als einen Wert, fließt für dieses Attribut kein Wert, und für das Objekt wird ein Fehler aufgezeichnet (ein einzelner Wert fließt normal). Um immer einen Wert zu übertragen, wählen Sie ein mehrwertiges Attribut als Ziel oder verwenden Sie einen Ausdruck, der einen Wert auswählt.</value>
+  </data>
+  <data name="MvaToSvaWarningExport" xml:space="preserve">
+    <value>{0} ist mehrwertig, {1} aber einwertig. Hat ein Objekt mehr als einen Wert, wird für dieses Attribut kein Wert exportiert, und für das Objekt wird ein Fehler aufgezeichnet (ein einzelner Wert wird normal exportiert). Um immer einen Wert zu exportieren, wählen Sie ein mehrwertiges Attribut als Ziel oder verwenden Sie einen Ausdruck, der einen Wert auswählt.</value>
+  </data>
+  <data name="DisableAttributeFlowQuestion" xml:space="preserve">
+    <value>Attributfluss deaktivieren?</value>
+  </data>
+  <data name="SaveAttributeFlowQuestion" xml:space="preserve">
+    <value>Attributfluss speichern?</value>
+  </data>
+  <data name="RemoveAttributeFlowQuestion" xml:space="preserve">
+    <value>Attributfluss entfernen?</value>
+  </data>
+  <data name="DisableFlowTo" xml:space="preserve">
+    <value>den Attributfluss zu {0} deaktivieren</value>
+  </data>
+  <data name="ChangeFlowTo" xml:space="preserve">
+    <value>den Attributfluss zu {0} ändern</value>
+  </data>
+  <data name="RemoveFlowTo" xml:space="preserve">
+    <value>den Attributfluss zu {0} entfernen</value>
+  </data>
+  <data name="DisableButton" xml:space="preserve">
+    <value>Deaktivieren</value>
+  </data>
+  <data name="RemoveButton" xml:space="preserve">
+    <value>Entfernen</value>
+  </data>
+  <data name="RemoveConfirmButton" xml:space="preserve">
+    <value>Entfernen!</value>
+  </data>
+  <data name="ThisAttribute" xml:space="preserve">
+    <value>dieses Attribut</value>
+  </data>
+  <data name="TheAttribute" xml:space="preserve">
+    <value>das Attribut</value>
+  </data>
+  <data name="ConfirmRemoveMapping" xml:space="preserve">
+    <value>Möchten Sie diese Attributzuordnung wirklich entfernen?</value>
+  </data>
+  <data name="WarningTitle" xml:space="preserve">
+    <value>Warnung</value>
+  </data>
+  <data name="ChooseAttributeToTry" xml:space="preserve">
+    <value>Wählen Sie das Attribut, dem der Wert zugewiesen werden soll, und probieren Sie es dann hier aus.</value>
+  </data>
+  <data name="InitialPasswordHeading" xml:space="preserve">
+    <value>Initialkennwort</value>
+  </data>
+  <data name="InitialPasswordConnectorCannotSet" xml:space="preserve">
+    <value>Der {0} kann keine Kennwörter festlegen, daher kann JIM den Objekten im verbundenen System, die diese Synchronisierungsregel provisioniert, kein Initialkennwort geben.</value>
+  </data>
+  <data name="UnknownConnectorLabel" xml:space="preserve">
+    <value>Connector des verbundenen Systems</value>
+  </data>
+  <data name="ParkedWaitingOne" xml:space="preserve">
+    <value>{0:N0} Objekt im verbundenen System wartet auf eine Änderung dieser Einstellungen</value>
+  </data>
+  <data name="ParkedWaitingOther" xml:space="preserve">
+    <value>{0:N0} Objekte im verbundenen System warten auf eine Änderung dieser Einstellungen</value>
+  </data>
+  <data name="ParkedExplanation" xml:space="preserve">
+    <value>Das verbundene System hat das mit diesen Einstellungen erzeugte Kennwort abgelehnt, daher versucht JIM es nicht mehr: Dieselben Einstellungen erzeugen ein weiteres Kennwort, das aus demselben Grund abgelehnt wird. Korrigieren Sie sie unten und speichern Sie; die Objekte im verbundenen System werden dann innerhalb von Sekunden vom Kennwortbereitstellungsdienst erneut versucht.</value>
+  </data>
+  <data name="ParkedNoReason" xml:space="preserve">
+    <value>Das Ziel hat das Kennwort abgelehnt, ohne einen Grund zu nennen.</value>
+  </data>
+  <data name="ParkedFirstSeen" xml:space="preserve">
+    <value>Erstmals gesehen {0}</value>
+  </data>
+  <data name="ReleaseOnSaveOne" xml:space="preserve">
+    <value>Das Speichern gibt {0:N0} zurückgestelltes Objekt im verbundenen System frei</value>
+  </data>
+  <data name="ReleaseOnSaveOther" xml:space="preserve">
+    <value>Das Speichern gibt {0:N0} zurückgestellte Objekte im verbundenen System frei</value>
+  </data>
+  <data name="ReleaseOnSaveDetail" xml:space="preserve">
+    <value>Sie werden innerhalb von Sekunden vom Kennwortbereitstellungsdienst mit diesen Einstellungen erneut versucht. Jetzt wird nichts generiert: Jedes Kennwort wird in dem Moment generiert, in dem es festgelegt wird.</value>
+  </data>
+  <data name="SetInitialPasswordQuestion" xml:space="preserve">
+    <value>Ein Initialkennwort für die Objekte im verbundenen System festlegen, die diese Synchronisierungsregel provisioniert?</value>
+  </data>
+  <data name="SetInitialPasswordHelp" xml:space="preserve">
+    <value>Ein neu provisioniertes Objekt im verbundenen System hat kein Kennwort, und eine Anmeldung ist nicht möglich. Wenn Sie dies aktivieren, legt JIM über den Kennwortkanal des verbundenen Systems unmittelbar nach dem Erstellen des Objekts eines fest. Standardmäßig generiert JIM für jedes Objekt ein anderes Kennwort und speichert keines davon.</value>
+  </data>
+  <data name="PasswordSettingsHeading" xml:space="preserve">
+    <value>Kennworteinstellungen</value>
+  </data>
+  <data name="InitialPasswordSourceFollow" xml:space="preserve">
+    <value>Dem verbundenen System folgen</value>
+  </data>
+  <data name="InitialPasswordSourceFollowHelp" xml:space="preserve">
+    <value>Die Einstellungen werden aus der im verbundenen System erkannten Kennwortrichtlinie abgeleitet und jedes Mal neu abgeleitet, wenn diese Richtlinie erneut gelesen wird. Nichts zu konfigurieren und nichts von Hand abzugleichen.</value>
+  </data>
+  <data name="InitialPasswordSourceCustom" xml:space="preserve">
+    <value>Benutzerdefiniert</value>
+  </data>
+  <data name="InitialPasswordSourceCustomHelp" xml:space="preserve">
+    <value>Genau die hier gespeicherten Einstellungen. JIM ändert sie nicht, weil das verbundene System etwas anderes veröffentlicht hat, weist aber weiterhin darauf hin, wenn sie es nicht erfüllen können.</value>
+  </data>
+  <data name="InitialPasswordSourceStatic" xml:space="preserve">
+    <value>Ein Kennwort für jedes Objekt im verbundenen System</value>
+  </data>
+  <data name="NotRecommended" xml:space="preserve">
+    <value>Nicht empfohlen</value>
+  </data>
+  <data name="InitialPasswordSourceStaticHelp" xml:space="preserve">
+    <value>Ein von Ihnen gewähltes Kennwort, das für jedes Objekt im verbundenen System festgelegt wird, das diese Synchronisierungsregel provisioniert, sodass Sie neuen Mitarbeitenden mitteilen können, wie es lautet.</value>
+  </data>
+  <data name="NoDiscoveredPolicy" xml:space="preserve">
+    <value>JIM hat in diesem verbundenen System keine Kennwortrichtlinie erkannt, entweder weil der Connector keine lesen kann oder weil das Schema seit dem Hinzufügen dieser Fähigkeit nicht importiert wurde. Bis dahin gelten die eigenen Standardwerte von JIM.</value>
+  </data>
+  <data name="PasswordStyleLabel" xml:space="preserve">
+    <value>Stil</value>
+  </data>
+  <data name="PasswordStyleRandom" xml:space="preserve">
+    <value>Zufällige Zeichen (t7Rm#qK4vHx2Ndbf)</value>
+  </data>
+  <data name="PasswordStyleWords" xml:space="preserve">
+    <value>Wörter (Brown-Chicken-Ladder-47)</value>
+  </data>
+  <data name="PasswordStylePronounceable" xml:space="preserve">
+    <value>Aussprechbar (tovanic-hupelo-92)</value>
+  </data>
+  <data name="PasswordLengthLabel" xml:space="preserve">
+    <value>Länge</value>
+  </data>
+  <data name="MinimumUppercaseLabel" xml:space="preserve">
+    <value>Mindestanzahl Großbuchstaben</value>
+  </data>
+  <data name="MinimumLowercaseLabel" xml:space="preserve">
+    <value>Mindestanzahl Kleinbuchstaben</value>
+  </data>
+  <data name="MinimumDigitsLabel" xml:space="preserve">
+    <value>Mindestanzahl Ziffern</value>
+  </data>
+  <data name="MinimumSymbolsLabel" xml:space="preserve">
+    <value>Mindestanzahl Sonderzeichen</value>
+  </data>
+  <data name="NumberOfWordsLabel" xml:space="preserve">
+    <value>Anzahl der Wörter</value>
+  </data>
+  <data name="SeparatorLabel" xml:space="preserve">
+    <value>Trennzeichen</value>
+  </data>
+  <data name="SeparatorHyphen" xml:space="preserve">
+    <value>Bindestrich</value>
+  </data>
+  <data name="SeparatorFullStop" xml:space="preserve">
+    <value>Punkt</value>
+  </data>
+  <data name="SeparatorUnderscore" xml:space="preserve">
+    <value>Unterstrich</value>
+  </data>
+  <data name="SeparatorDigit" xml:space="preserve">
+    <value>Ziffer</value>
+  </data>
+  <data name="SeparatorRandomSymbol" xml:space="preserve">
+    <value>Zufälliges Sonderzeichen</value>
+  </data>
+  <data name="CapitalisationLabel" xml:space="preserve">
+    <value>Groß-/Kleinschreibung</value>
+  </data>
+  <data name="CapitalisationLowercase" xml:space="preserve">
+    <value>Kleinbuchstaben</value>
+  </data>
+  <data name="CapitalisationEachWord" xml:space="preserve">
+    <value>Jedes Wort</value>
+  </data>
+  <data name="CapitalisationUppercase" xml:space="preserve">
+    <value>Großbuchstaben</value>
+  </data>
+  <data name="CapitalisationFirstWordOnly" xml:space="preserve">
+    <value>Nur erstes Wort</value>
+  </data>
+  <data name="CapitalisationRandomWord" xml:space="preserve">
+    <value>Ein zufälliges Wort</value>
+  </data>
+  <data name="AppendedDigitsLabel" xml:space="preserve">
+    <value>Angehängte Ziffern</value>
+  </data>
+  <data name="AppendSymbolLabel" xml:space="preserve">
+    <value>Sonderzeichen anhängen</value>
+  </data>
+  <data name="PermittedSymbolsLabel" xml:space="preserve">
+    <value>Zulässige Sonderzeichen</value>
+  </data>
+  <data name="PermittedSymbolsHelp" xml:space="preserve">
+    <value>Die Sonderzeichen, die JIM verwenden darf. Schränken Sie sie ein, wenn etwas dem verbundenen System Nachgelagertes mit einem bestimmten Zeichen nicht zurechtkommt.</value>
+  </data>
+  <data name="LeaveOutConfusedLabel" xml:space="preserve">
+    <value>Leicht verwechselbare Zeichen auslassen</value>
+  </data>
+  <data name="LeaveOutConfusedHelp" xml:space="preserve">
+    <value>Schließt {0} aus, die sich schwer unterscheiden lassen, wenn ein Kennwort vorgelesen oder von Hand abgeschrieben wird. Ein Initialkennwort wird weitaus häufiger abgeschrieben als ein dauerhaftes.</value>
+  </data>
+  <data name="StaticNotRecommended" xml:space="preserve">
+    <value>Diese Option wird nicht empfohlen</value>
+  </data>
+  <data name="StaticWarningBody" xml:space="preserve">
+    <value>Jedes Objekt im verbundenen System, das diese Synchronisierungsregel provisioniert, teilt sich dieses Kennwort, bis sein Besitzer es ändert; wer davon erfährt, kann sich daher als jeder neue Mitarbeitende anmelden, der es noch nicht geändert hat. Hinweis: Das Kennwort wird verschlüsselt gespeichert und kann Ihnen nicht erneut angezeigt werden.</value>
+  </data>
+  <data name="PasswordLabel" xml:space="preserve">
+    <value>Kennwort</value>
+  </data>
+  <data name="ConfirmPasswordLabel" xml:space="preserve">
+    <value>Kennwort bestätigen</value>
+  </data>
+  <data name="ShowOrHidePassword" xml:space="preserve">
+    <value>Kennwort anzeigen oder ausblenden</value>
+  </data>
+  <data name="PasswordsDoNotMatch" xml:space="preserve">
+    <value>Die beiden Kennwörter stimmen nicht überein.</value>
+  </data>
+  <data name="StaticPasswordSetAt" xml:space="preserve">
+    <value>Ein Kennwort ist festgelegt, zuletzt geändert {0}. Lassen Sie diese Felder leer, um es beizubehalten.</value>
+  </data>
+  <data name="StaticPasswordSet" xml:space="preserve">
+    <value>Ein Kennwort ist festgelegt. Lassen Sie diese Felder leer, um es beizubehalten.</value>
+  </data>
+  <data name="StaticPasswordNotSet" xml:space="preserve">
+    <value>Es wurde kein Kennwort festgelegt. Bis dahin werden die Konten, die diese Synchronisierungsregel provisioniert, für einen Administrator zurückgehalten, statt ein Kennwort zu erhalten, das niemand kennt.</value>
+  </data>
+  <data name="StaticPasswordUsable" xml:space="preserve">
+    <value>Dieses Kennwort hat {0} Zeichen und deckt {1} der Zeichenkategorien ab, die dieses verbundene System zählt.</value>
+  </data>
+  <data name="StaticPasswordUnusable" xml:space="preserve">
+    <value>Dieses Kennwort kann nicht verwendet werden:</value>
+  </data>
+  <data name="GeneratedPasswordGuarantee" xml:space="preserve">
+    <value>Jedes generierte Kennwort hat mindestens {0} Zeichen, deckt {1} der vier Zeichenkategorien ab und weist mindestens {2:F1} Bit Entropie auf.</value>
+  </data>
+  <data name="SettingsCannotBeUsed" xml:space="preserve">
+    <value>Diese Einstellungen können nicht verwendet werden:</value>
+  </data>
+  <data name="AfterPasswordSetLabel" xml:space="preserve">
+    <value>Nachdem das Kennwort festgelegt wurde</value>
+  </data>
+  <data name="ExpiryRequireChange" xml:space="preserve">
+    <value>Änderung bei der nächsten Anmeldung erforderlich</value>
+  </data>
+  <data name="ExpiryAccordingToTarget" xml:space="preserve">
+    <value>Alterung gemäß der eigenen Richtlinie des verbundenen Systems</value>
+  </data>
+  <data name="ExpiryNeverExpires" xml:space="preserve">
+    <value>Läuft nie ab</value>
+  </data>
+  <data name="ExpiryOnlyWhatConnectorApplies" xml:space="preserve">
+    <value>Es wird nur angeboten, was der {0} anwenden kann. Kann ein bestimmtes Ziel die Auswahl nicht umsetzen, zeichnet JIM auf, was es angewendet hat, statt anzunehmen, dass die Anforderung erfüllt wurde.</value>
+  </data>
+  <data name="ExpiryUacNote" xml:space="preserve">
+    <value>Gilt nur, wenn kein Export &lt;code&gt;userAccountControl&lt;/code&gt; geschrieben hat. Hat einer es geschrieben, entscheidet der Attributfluss über „Kennwort läuft nie ab“. „Änderung bei der nächsten Anmeldung erforderlich“ gilt immer.</value>
+  </data>
+  <data name="StaticExpiryNote" xml:space="preserve">
+    <value>Die Pflicht zur Änderung bei der nächsten Anmeldung beendet den Anteil eines Objekts im verbundenen System an dem oben genannten einen Kennwort. Jede andere Auswahl lässt jedes Objekt im verbundenen System, das diese Regel provisioniert, dabei, bis jemand es von Hand ändert.</value>
+  </data>
+  <data name="RequireChangeMayBeIgnored" xml:space="preserve">
+    <value>Legt der Attributfluss &lt;code&gt;userAccountControl&lt;/code&gt; dieser Regel „Kennwort läuft nie ab“ fest, ignoriert Active Directory „Änderung bei der nächsten Anmeldung erforderlich“.</value>
+  </data>
+  <data name="RequireChangeMayBeIgnoredStatic" xml:space="preserve">
+    <value> Jedes Objekt im verbundenen System, das diese Regel provisioniert, behielte dann das oben genannte gemeinsame Kennwort.</value>
+  </data>
+  <data name="EnableAccountLabel" xml:space="preserve">
+    <value>Objekt im verbundenen System aktivieren, sobald das Kennwort festgelegt ist</value>
+  </data>
+  <data name="EnableAccountNote" xml:space="preserve">
+    <value>Gilt nur, wenn bis zur Bereitstellung des Kennworts kein Export den Aktivierungsstatus des Objekts im verbundenen System geschrieben hat, etwa &lt;code&gt;userAccountControl&lt;/code&gt;; hat einer ihn geschrieben, entscheidet der Attributfluss. „Aus“ lässt das Objekt im verbundenen System so, wie es erstellt wurde. Gilt zusammen mit „Läuft nie ab“ auch, wenn eine bereits für die Person wartende Kennwortänderung als erstes Kennwort des Objekts im verbundenen System statt des Initialkennworts bereitgestellt wird.</value>
+  </data>
+  <data name="SyncRulesTitle" xml:space="preserve">
+    <value>Synchronisierungsregeln</value>
+  </data>
+  <data name="SyncRulesIntro" xml:space="preserve">
+    <value>Synchronisierungsregeln legen den Informationsfluss zwischen JIM und verbundenen Systemen fest.</value>
+  </data>
+  <data name="CreateConnectedSystemFirst" xml:space="preserve">
+    <value>Bitte erstellen Sie zuerst ein {0}.</value>
+  </data>
+  <data name="ConnectedSystemTerm" xml:space="preserve">
+    <value>Verbundenes System</value>
+  </data>
+  <data name="DirectionLabel" xml:space="preserve">
+    <value>Richtung</value>
+  </data>
+  <data name="DirectionInbound" xml:space="preserve">
+    <value>Eingehend</value>
+  </data>
+  <data name="DirectionOutbound" xml:space="preserve">
+    <value>Ausgehend</value>
+  </data>
+  <data name="ActionLabel" xml:space="preserve">
+    <value>Aktion</value>
+  </data>
+  <data name="ActionProjects" xml:space="preserve">
+    <value>Projiziert</value>
+  </data>
+  <data name="ActionProvisions" xml:space="preserve">
+    <value>Provisioniert</value>
+  </data>
+  <data name="ActionFlowOnly" xml:space="preserve">
+    <value>Nur Fluss</value>
+  </data>
+  <data name="SingularSyncRule" xml:space="preserve">
+    <value>Synchronisierungsregel</value>
+  </data>
+  <data name="PluralSyncRules" xml:space="preserve">
+    <value>Synchronisierungsregeln</value>
+  </data>
+  <data name="CreateSyncRuleButton" xml:space="preserve">
+    <value>Synchronisierungsregel erstellen</value>
+  </data>
+  <data name="ObjectMappingColumn" xml:space="preserve">
+    <value>Objektzuordnung</value>
+  </data>
+  <data name="ConnectedSystemObjectTypeTooltip" xml:space="preserve">
+    <value>Objekttyp des verbundenen Systems</value>
+  </data>
+  <data name="MetaverseObjectTypeTooltip" xml:space="preserve">
+    <value>Metaverse-Objekttyp</value>
+  </data>
+  <data name="ProjectsTooltip" xml:space="preserve">
+    <value>Projiziert neue Objekte in das Metaverse</value>
+  </data>
+  <data name="ProvisionsTooltip" xml:space="preserve">
+    <value>Provisioniert neue Objekte in das verbundene System</value>
+  </data>
+  <data name="ColumnAttention" xml:space="preserve">
+    <value>Aufmerksamkeit</value>
+  </data>
+  <data name="NoRulesMatchSearch" xml:space="preserve">
+    <value>Keine Synchronisierungsregeln entsprechen „{0}“</value>
+  </data>
+  <data name="NoRulesMatchSearchHint" xml:space="preserve">
+    <value>Versuchen Sie einen anderen Suchbegriff oder setzen Sie die Suche zurück.</value>
+  </data>
+  <data name="NoRulesMatchFilters" xml:space="preserve">
+    <value>Keine Synchronisierungsregeln entsprechen den aktuellen Filtern</value>
+  </data>
+  <data name="NoRulesMatchFiltersHint" xml:space="preserve">
+    <value>Passen Sie die Filter oben an oder setzen Sie sie zurück, um mehr Ergebnisse zu sehen.</value>
+  </data>
+  <data name="NoRulesYet" xml:space="preserve">
+    <value>Noch keine Synchronisierungsregeln</value>
+  </data>
+  <data name="NoRulesYetHint" xml:space="preserve">
+    <value>Legen Sie mit der Schaltfläche „Synchronisierungsregel erstellen“ Ihren ersten Fluss fest.</value>
+  </data>
+  <data name="BreadcrumbHome" xml:space="preserve">
+    <value>Startseite</value>
+  </data>
+  <data name="BreadcrumbAdministration" xml:space="preserve">
+    <value>Verwaltung</value>
+  </data>
+  <data name="SelectedCount" xml:space="preserve">
+    <value>{0} ausgewählt</value>
+  </data>
+  <data name="SyncRuleTitle" xml:space="preserve">
+    <value>Synchronisierungsregel: {0}</value>
+  </data>
+  <data name="SyncRuleLabel" xml:space="preserve">
+    <value>Synchronisierungsregel:</value>
+  </data>
+  <data name="SyncRuleInfo" xml:space="preserve">
+    <value>Eine Synchronisierungsregel legt fest, wie Objekte eines Typs zwischen einem verbundenen System und dem Metaverse fließen: welche Objekte im Geltungsbereich liegen, wie sie abgeglichen werden und welche Attribute fließen.</value>
+  </data>
+  <data name="LoadingSyncRule" xml:space="preserve">
+    <value>Synchronisierungsregel wird geladen ...</value>
+  </data>
+  <data name="TabDetails" xml:space="preserve">
+    <value>Details</value>
+  </data>
+  <data name="TabMatching" xml:space="preserve">
+    <value>Abgleich</value>
+  </data>
+  <data name="TabScope" xml:space="preserve">
+    <value>Geltungsbereich</value>
+  </data>
+  <data name="TabPasswords" xml:space="preserve">
+    <value>Kennwörter</value>
+  </data>
+  <data name="TabTests" xml:space="preserve">
+    <value>Tests</value>
+  </data>
+  <data name="TabChanges" xml:space="preserve">
+    <value>Änderungen</value>
+  </data>
+  <data name="TabDangerZone" xml:space="preserve">
+    <value>Gefahrenbereich</value>
+  </data>
+  <data name="DangerDeleteText" xml:space="preserve">
+    <value>Das Löschen dieser Synchronisierungsregel ist endgültig und kann nicht rückgängig gemacht werden. Die gesamte Konfiguration und alle Attributfluss-Zuordnungen gehen verloren. Hat diese Regel Metaverse-Attributwerte beigesteuert, wählen Sie, ob sie zurückgenommen oder beibehalten werden.</value>
+  </data>
+  <data name="DeleteSyncRuleButton" xml:space="preserve">
+    <value>Synchronisierungsregel löschen</value>
+  </data>
+  <data name="IssuesHeading" xml:space="preserve">
+    <value>Es gibt Probleme:</value>
+  </data>
+  <data name="UpdateSyncRuleButton" xml:space="preserve">
+    <value>Synchronisierungsregel aktualisieren</value>
+  </data>
+  <data name="PreviewDeprovisioningButton" xml:space="preserve">
+    <value>Vorschau der Auswirkungen der Deprovisionierung</value>
+  </data>
+  <data name="PreviewScopeButton" xml:space="preserve">
+    <value>Vorschau der Auswirkungen auf den Geltungsbereich</value>
+  </data>
+  <data name="PreviewAttributeFlowButton" xml:space="preserve">
+    <value>Vorschau der Auswirkungen des Attributflusses</value>
+  </data>
+  <data name="PreviewBehaviourButton" xml:space="preserve">
+    <value>Vorschau der Auswirkungen auf das Verhalten</value>
+  </data>
+  <data name="StaleDeprovisioning" xml:space="preserve">
+    <value>Die Deprovisionierungsaktion oder die Aktion außerhalb des Geltungsbereichs wurde seit dieser Vorschau bearbeitet, sodass sie nicht mehr beschreibt, was das Speichern bewirken würde. Starten Sie die Vorschau erneut, um eine Antwort zu den aktuellen Einstellungen zu erhalten.</value>
+  </data>
+  <data name="PreviewTitleDeprovisioning" xml:space="preserve">
+    <value>Vorschau: Auswirkungen der Deprovisionierung</value>
+  </data>
+  <data name="StaleScope" xml:space="preserve">
+    <value>Die Geltungsbereichskriterien wurden seit dieser Vorschau bearbeitet, sodass sie nicht mehr beschreibt, was das Speichern bewirken würde. Starten Sie die Vorschau erneut, um eine Antwort zu den aktuellen Kriterien zu erhalten.</value>
+  </data>
+  <data name="PreviewTitleScope" xml:space="preserve">
+    <value>Vorschau: Auswirkungen auf den Geltungsbereich</value>
+  </data>
+  <data name="StaleBehaviour" xml:space="preserve">
+    <value>Die Verhaltensschalter wurden seit dieser Vorschau bearbeitet, sodass sie nicht mehr beschreibt, was das Speichern bewirken würde. Starten Sie die Vorschau erneut, um eine Antwort zu den aktuellen Einstellungen zu erhalten.</value>
+  </data>
+  <data name="PreviewTitleBehaviour" xml:space="preserve">
+    <value>Vorschau: Auswirkungen auf das Verhalten</value>
+  </data>
+  <data name="StaleAttributeFlow" xml:space="preserve">
+    <value>Der Attributfluss wurde seit dieser Vorschau bearbeitet, sodass sie nicht mehr beschreibt, was das Speichern bewirken würde. Starten Sie die Vorschau erneut, um eine Antwort zu den aktuellen Zuordnungen zu erhalten.</value>
+  </data>
+  <data name="PreviewTitleAttributeFlow" xml:space="preserve">
+    <value>Vorschau: Auswirkungen des Attributflusses</value>
+  </data>
+  <data name="NewLabel" xml:space="preserve">
+    <value>Neu</value>
+  </data>
+  <data name="PreviewStartFailed" xml:space="preserve">
+    <value>Die Vorschau konnte nicht gestartet werden: {0}</value>
+  </data>
+  <data name="DisableSyncRuleQuestion" xml:space="preserve">
+    <value>Synchronisierungsregel deaktivieren?</value>
+  </data>
+  <data name="DisableSyncRuleChange" xml:space="preserve">
+    <value>diese Synchronisierungsregel deaktivieren</value>
+  </data>
+  <data name="SyncRuleCreated" xml:space="preserve">
+    <value>Synchronisierungsregel erstellt.</value>
+  </data>
+  <data name="ChangesSaved" xml:space="preserve">
+    <value>Änderungen gespeichert.</value>
+  </data>
+  <data name="SaveProblem" xml:space="preserve">
+    <value>Beim Speichern Ihrer Änderungen ist ein Problem aufgetreten. Bitte prüfen Sie die Details und versuchen Sie es erneut.</value>
+  </data>
+  <data name="SequenceSkippedAhead" xml:space="preserve">
+    <value>{0}: Der Zähler ist von {1} auf {2} vorgesprungen. Dazwischenliegende Zahlen werden nie vergeben.</value>
+  </data>
+  <data name="DeleteSyncRuleQuestion" xml:space="preserve">
+    <value>Möchten Sie diese Synchronisierungsregel wirklich löschen?</value>
+  </data>
+  <data name="DeleteConfirmButton" xml:space="preserve">
+    <value>Löschen!</value>
+  </data>
+  <data name="DeleteSyncRuleTitle" xml:space="preserve">
+    <value>Synchronisierungsregel löschen?</value>
+  </data>
+  <data name="DeleteSyncRuleChange" xml:space="preserve">
+    <value>diese Synchronisierungsregel löschen</value>
+  </data>
+  <data name="SyncRuleDeletionQueued" xml:space="preserve">
+    <value>Löschen der Synchronisierungsregel eingereiht: Werte werden aus {0:N0} Metaverse-Objekt(en) zurückgenommen.</value>
+  </data>
+  <data name="ViewActivityAction" xml:space="preserve">
+    <value>Aktivität anzeigen</value>
+  </data>
+  <data name="MatchOnLabel" xml:space="preserve">
+    <value>Abgleichen nach</value>
+  </data>
+  <data name="HelperEveryValue" xml:space="preserve">
+    <value>Jeder Wert, den es enthält, wird nachgeschlagen</value>
+  </data>
+  <data name="ExpressionPlaceholderMatching" xml:space="preserve">
+    <value>z. B. "E" + Trim(cs["employeeId"])</value>
+  </data>
+  <data name="ExpressionHelperMatching" xml:space="preserve">
+    <value>Liest nur das Objekt im verbundenen System, als cs["attributeName"]. Das Ergebnis wird in den Typ des Metaverse-Attributs umgewandelt.</value>
+  </data>
+  <data name="EqualsLabel" xml:space="preserve">
+    <value>gleich</value>
+  </data>
+  <data name="HelperMvCompared" xml:space="preserve">
+    <value>Das Metaverse-Attribut, mit dem der Wert verglichen wird</value>
+  </data>
+  <data name="MatchableTypeLabel" xml:space="preserve">
+    <value>({0})</value>
+  </data>
+  <data name="UnmatchableTypeLabel" xml:space="preserve">
+    <value>({0}, kein Abgleich möglich)</value>
+  </data>
+  <data name="MetaverseObjectTypeLabel" xml:space="preserve">
+    <value>Metaverse-Objekttyp</value>
+  </data>
+  <data name="HelperMvType" xml:space="preserve">
+    <value>Der Typ des Metaverse-Objekts, das diese Regel durchsucht</value>
+  </data>
+  <data name="CaseSensitiveLabel" xml:space="preserve">
+    <value>Groß-/Kleinschreibung beachten</value>
+  </data>
+  <data name="CaseSensitiveHelp" xml:space="preserve">
+    <value>Folgt der Quelle: aktiviert, wenn die Werte des Quellattributs genau auf Groß-/Kleinschreibung achten, andernfalls deaktiviert, sodass „John“ mit „JOHN“ übereinstimmt. Aktivieren Sie dies nur, wenn dieses System Bezeichner, die sich nur in der Groß-/Kleinschreibung unterscheiden, als verschiedene Objekte behandelt.</value>
+  </data>
+  <data name="TryItIntro" xml:space="preserve">
+    <value>Geben Sie jedem Attribut, das die Regel liest, einen Wert oder laden Sie die Werte aus einem Objekt, und sehen Sie, wonach abgeglichen würde und welches Metaverse-Objekt eine Synchronisierung verknüpfen würde, genau so berechnet, wie es eine Synchronisierung täte. Aktivieren Sie „Kein Wert“, um zu sehen, was mit einem Objekt geschieht, das keinen hat.</value>
+  </data>
+  <data name="SampleValues" xml:space="preserve">
+    <value>Beispielwerte</value>
+  </data>
+  <data name="FromAnObject" xml:space="preserve">
+    <value>Aus einem Objekt</value>
+  </data>
+  <data name="ValuesFromAria" xml:space="preserve">
+    <value>Woher die Werte stammen</value>
+  </data>
+  <data name="SourceKindAttributeTooltip" xml:space="preserve">
+    <value>Nach den Werten abgleichen, die ein Attribut des verbundenen Systems enthält</value>
+  </data>
+  <data name="SourceKindExpressionTooltip" xml:space="preserve">
+    <value>Nach einem aus dem Objekt im verbundenen System berechneten Wert abgleichen, für Bezeichner, deren Format sich zwischen Systemen unterscheidet</value>
+  </data>
+  <data name="TryItColumnInput" xml:space="preserve">
+    <value>Eingabe</value>
+  </data>
+  <data name="TryItColumnValue" xml:space="preserve">
+    <value>Wert</value>
+  </data>
+  <data name="TryItColumnNoValue" xml:space="preserve">
+    <value>Kein Wert</value>
+  </data>
+  <data name="PluralitySingleValuedLower" xml:space="preserve">
+    <value>einwertig</value>
+  </data>
+  <data name="PluralityMultiValuedLower" xml:space="preserve">
+    <value>mehrwertig</value>
+  </data>
+  <data name="HasNoValueAria" xml:space="preserve">
+    <value>{0} hat keinen Wert</value>
+  </data>
+  <data name="LookupCheckbox" xml:space="preserve">
+    <value>Auch das Metaverse-Objekt suchen, das eine Synchronisierung verknüpfen würde</value>
+  </data>
+  <data name="WouldMatchOn" xml:space="preserve">
+    <value>Würde abgleichen nach</value>
+  </data>
+  <data name="TypeWithValue" xml:space="preserve">
+    <value>Typ: {0}</value>
+  </data>
+  <data name="NoValueToMatch" xml:space="preserve">
+    <value>Kein Wert zum Abgleichen, daher würde diese Regel für ein solches Objekt übersprungen und die nächste Regel versucht.</value>
+  </data>
+  <data name="TestFailureMessage" xml:space="preserve">
+    <value>Ein solches Objekt würde mit dem Fehler „Objektabgleichsregel fehlgeschlagen“ anhalten, weder verknüpft noch projiziert: {0}</value>
+  </data>
+  <data name="InTheMetaverse" xml:space="preserve">
+    <value>Im Metaverse</value>
+  </data>
+  <data name="LookupWouldJoin" xml:space="preserve">
+    <value>Würde verknüpft</value>
+  </data>
+  <data name="LookupAlreadyJoined" xml:space="preserve">
+    <value>Bereits verknüpft</value>
+  </data>
+  <data name="LookupJoinedToAnother" xml:space="preserve">
+    <value>Mit anderem verknüpft</value>
+  </data>
+  <data name="LookupNoMatch" xml:space="preserve">
+    <value>Keine Übereinstimmung</value>
+  </data>
+  <data name="LookupAmbiguous" xml:space="preserve">
+    <value>Mehrdeutig</value>
+  </data>
+  <data name="FindObjectInSystem" xml:space="preserve">
+    <value>{0} in {1} suchen</value>
+  </data>
+  <data name="TheConnectedSystem" xml:space="preserve">
+    <value>dem verbundenen System</value>
+  </data>
+  <data name="TestThisScope" xml:space="preserve">
+    <value>Diesen Geltungsbereich testen</value>
+  </data>
+  <data name="ScopeIntroMetaverse" xml:space="preserve">
+    <value>Geben Sie jedem Attribut, dessen Wert die Kriterien vergleichen, einen Wert oder laden Sie die Werte aus einem Metaverse-Objekt, und sehen Sie Kriterium für Kriterium, ob es im Geltungsbereich läge. Wählen Sie einen Zeitpunkt für die Ausführung, um zu sehen, wie relative Datumsangaben wie „vor 30 Tagen“ dann aufgelöst werden. Die Kriterien werden so getestet, wie sie hier stehen, bevor sie gespeichert werden.</value>
+  </data>
+  <data name="ScopeIntroConnectedSystem" xml:space="preserve">
+    <value>Geben Sie jedem Attribut, dessen Wert die Kriterien vergleichen, einen Wert oder laden Sie die Werte aus einem Objekt im verbundenen System, und sehen Sie Kriterium für Kriterium, ob es im Geltungsbereich läge. Wählen Sie einen Zeitpunkt für die Ausführung, um zu sehen, wie relative Datumsangaben wie „vor 30 Tagen“ dann aufgelöst werden. Die Kriterien werden so getestet, wie sie hier stehen, bevor sie gespeichert werden.</value>
+  </data>
+  <data name="ColumnAttribute" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="ConnectionsLabel" xml:space="preserve">
+    <value>Verbindungen</value>
+  </data>
+  <data name="HasConnection" xml:space="preserve">
+    <value>Hat {0}</value>
+  </data>
+  <data name="RunTestButton" xml:space="preserve">
+    <value>Test ausführen</value>
+  </data>
+  <data name="AsOfUtc" xml:space="preserve">
+    <value>Stand {0} UTC</value>
+  </data>
+  <data name="NextChangeUndetermined" xml:space="preserve">
+    <value>Ein Kriterium kann nicht ausgewertet werden, daher würde eine Synchronisierung dieses Objekt fehlschlagen lassen, bis das Kriterium korrigiert ist.</value>
+  </data>
+  <data name="NextChangeStaysInScope" xml:space="preserve">
+    <value>Bleibt im Lauf der Zeit im Geltungsbereich, solange diese Werte gleich bleiben.</value>
+  </data>
+  <data name="NextChangeStaysOutOfScope" xml:space="preserve">
+    <value>Bleibt im Lauf der Zeit außerhalb des Geltungsbereichs, solange diese Werte gleich bleiben.</value>
+  </data>
+  <data name="NextChangeEnters" xml:space="preserve">
+    <value>Tritt um {0} UTC in den Geltungsbereich ein, solange diese Werte gleich bleiben.</value>
+  </data>
+  <data name="NextChangeLeaves" xml:space="preserve">
+    <value>Verlässt den Geltungsbereich um {0} UTC, solange diese Werte gleich bleiben.</value>
+  </data>
+  <data name="SaveAsTestCase" xml:space="preserve">
+    <value>Als Testfall speichern</value>
+  </data>
+  <data name="TestCaseScopeTitle" xml:space="preserve">
+    <value>Geltungsbereich, ausgeführt gegen die gespeicherten Kriterien</value>
+  </data>
+  <data name="FindAnObjectType" xml:space="preserve">
+    <value>{0} suchen</value>
+  </data>
+  <data name="MetaverseObjectFallback" xml:space="preserve">
+    <value>Metaverse-Objekt</value>
+  </data>
+  <data name="ConnectedSystemObjectFallback" xml:space="preserve">
+    <value>Objekt im verbundenen System</value>
+  </data>
+  <data name="NameRequired" xml:space="preserve">
+    <value>Ein Name ist erforderlich</value>
+  </data>
+  <data name="SelectConnectedSystem" xml:space="preserve">
+    <value>Bitte wählen Sie ein verbundenes System aus ...</value>
+  </data>
+  <data name="SelectDirection" xml:space="preserve">
+    <value>Bitte wählen Sie eine Richtung für den Attributfluss aus ...</value>
+  </data>
+  <data name="DirectionImportName" xml:space="preserve">
+    <value>Import</value>
+  </data>
+  <data name="DirectionExportName" xml:space="preserve">
+    <value>Export</value>
+  </data>
+  <data name="NotSupportedByConnector" xml:space="preserve">
+    <value> (vom Connector nicht unterstützt)</value>
+  </data>
+  <data name="ExportsToConnectedSystem" xml:space="preserve">
+    <value>Exportiert in das verbundene System</value>
+  </data>
+  <data name="ImportsToMetaverse" xml:space="preserve">
+    <value>Importiert in das Metaverse</value>
+  </data>
+  <data name="ProjectToMetaverseLabel" xml:space="preserve">
+    <value>{0} in das Metaverse projizieren?</value>
+  </data>
+  <data name="ObjectsFallback" xml:space="preserve">
+    <value>Objekte</value>
+  </data>
+  <data name="ProjectHelp" xml:space="preserve">
+    <value>Standardmäßig führen aus diesem verbundenen System importierte Objekte nicht dazu, dass ein Metaverse-Objekt projiziert wird, wenn keine Übereinstimmung gefunden wird. Ist diese Option aktiviert, wird das Objekt in das Metaverse projiziert, sodass es in JIM verwaltet und mit anderen verbundenen Systemen synchronisiert werden kann. Sie aktivieren dies üblicherweise für ein Quellsystem, z. B. ein HR-System.</value>
+  </data>
+  <data name="ProvisioningHeading" xml:space="preserve">
+    <value>Provisionierung</value>
+  </data>
+  <data name="ProvisionToConnectedSystemLabel" xml:space="preserve">
+    <value>{0} im verbundenen System provisionieren?</value>
+  </data>
+  <data name="ProvisionHelp" xml:space="preserve">
+    <value>Standardmäßig werden Metaverse-Objekte im Geltungsbereich dieser Synchronisierungsregel nicht in den verbundenen Systemen erstellt (provisioniert). Ist diese Option aktiviert, wird das Metaverse-Objekt im verbundenen System erstellt. Sie aktivieren diese Option üblicherweise für ein Zielsystem.</value>
+  </data>
+  <data name="DeprovisioningHeading" xml:space="preserve">
+    <value>Deprovisionierung</value>
+  </data>
+  <data name="DeprovisionDisconnect" xml:space="preserve">
+    <value>Trennen</value>
+  </data>
+  <data name="DeprovisionDisconnectHelp" xml:space="preserve">
+    <value>Verlässt ein Metaverse-Objekt den Geltungsbereich dieser Synchronisierungsregel oder wird es gelöscht, hebt JIM die Verknüpfung auf und lässt das Objekt im verbundenen System bestehen.</value>
+  </data>
+  <data name="DeprovisionDisable" xml:space="preserve">
+    <value>Deaktivieren</value>
+  </data>
+  <data name="DeprovisionDisableHelp" xml:space="preserve">
+    <value>Verlässt ein Metaverse-Objekt den Geltungsbereich dieser Synchronisierungsregel oder wird es gelöscht, deaktiviert JIM das entsprechende Objekt im verbundenen System, hebt dann die Verknüpfung auf und lässt es bestehen.</value>
+  </data>
+  <data name="DeprovisionDisableUnsupported" xml:space="preserve">
+    <value> {0} kann kein Konto deaktivieren.</value>
+  </data>
+  <data name="DeprovisionDelete" xml:space="preserve">
+    <value>Löschen</value>
+  </data>
+  <data name="DeprovisionDeleteHelp" xml:space="preserve">
+    <value>Verlässt ein Metaverse-Objekt den Geltungsbereich dieser Synchronisierungsregel oder wird es gelöscht, löscht JIM das entsprechende Objekt aus dem verbundenen System.</value>
+  </data>
+  <data name="EnabledQuestion" xml:space="preserve">
+    <value>Aktiviert?</value>
+  </data>
+  <data name="RuleEnabledHelp" xml:space="preserve">
+    <value>Deaktivierte Synchronisierungsregeln werden nicht ausgewertet. Nutzen Sie dies, um eine Regel vorab vorzubereiten, bevor sie benötigt wird, oder um die Auswertung einer Regel vorübergehend zu stoppen. Trägt ein anderer Attributfluss ebenfalls ein Attribut bei, übernimmt dessen Wert bei der nächsten Synchronisierung; Werte, die nur diese Regel beigesteuert hat, bleiben bestehen, bis sie wieder aktiviert oder gelöscht wird.</value>
+  </data>
+  <data name="AdvancedOptions" xml:space="preserve">
+    <value>Erweiterte Optionen</value>
+  </data>
+  <data name="EnforceStateLabel" xml:space="preserve">
+    <value>Status erzwingen (Drift automatisch korrigieren)</value>
+  </data>
+  <data name="EnforceStateHelp" xml:space="preserve">
+    <value>Aktiviert Drifterkennung und automatische Korrektur. Weicht ein Attribut im Zielsystem von dem ab, was diese Exportregel vorgibt, erstellt JIM einen korrigierenden ausstehenden Export, um den maßgeblichen Wert wiederherzustellen. Deaktivieren Sie dies nur, wenn Sie vorübergehende manuelle Änderungen im Zielsystem zulassen müssen (z. B. bei Notfallzugriffen).</value>
+  </data>
+  <data name="ConnectedSystemObjectTypeLabel" xml:space="preserve">
+    <value>Objekttyp des verbundenen Systems</value>
+  </data>
+  <data name="EditTestCaseTitle" xml:space="preserve">
+    <value>Testfall bearbeiten</value>
+  </data>
+  <data name="SaveTestCaseTitle" xml:space="preserve">
+    <value>Testfall speichern</value>
+  </data>
+  <data name="TestCasePersonalData" xml:space="preserve">
+    <value>Testeingaben werden unverschlüsselt als Konfiguration gespeichert. Wenn Sie sie aus einem echten Objekt kopiert haben, ersetzen Sie vor dem Speichern alle personenbezogenen Daten durch erfundene Werte.</value>
+  </data>
+  <data name="TestCaseNameHelp" xml:space="preserve">
+    <value>Was der Fall prüft, in Ihren eigenen Worten. Er wird im Konfigurationsänderungsverlauf aufgezeichnet, geben Sie darin daher keine Werte an.</value>
+  </data>
+  <data name="InputsHeading" xml:space="preserve">
+    <value>Eingaben</value>
+  </data>
+  <data name="NoAttributesReadWithConnections" xml:space="preserve">
+    <value>Was dieser Fall testet, liest keine Attribute, nur die unten stehenden Verbindungen.</value>
+  </data>
+  <data name="NoAttributesReadAtAll" xml:space="preserve">
+    <value>Was dieser Fall testet, liest keine Attribute, daher liefert er für jedes Objekt dasselbe Ergebnis.</value>
+  </data>
+  <data name="NoLongerRead" xml:space="preserve">
+    <value>Nicht mehr gelesen: {0}</value>
+  </data>
+  <data name="RemoveInputTooltip" xml:space="preserve">
+    <value>Diese Eingabe entfernen</value>
+  </data>
+  <data name="RemoveInputAria" xml:space="preserve">
+    <value>{0} entfernen</value>
+  </data>
+  <data name="ResultLabel" xml:space="preserve">
+    <value>Ergebnis</value>
+  </data>
+  <data name="AddValueLabel" xml:space="preserve">
+    <value>Wert hinzufügen</value>
+  </data>
+  <data name="AddValueHelp" xml:space="preserve">
+    <value>Zum Hinzufügen die Eingabetaste drücken. Ein Datum kann als 2026-03-02 geschrieben werden; jeder Wert wird als der Typ verglichen, den die Konfiguration vorgibt.</value>
+  </data>
+  <data name="AddValueAria" xml:space="preserve">
+    <value>Wert hinzufügen</value>
+  </data>
+  <data name="InOrderLabel" xml:space="preserve">
+    <value>In dieser Reihenfolge</value>
+  </data>
+  <data name="TestCaseSaved" xml:space="preserve">
+    <value>Testfall „{0}“ gespeichert.</value>
+  </data>
+  <data name="ExpectsHeading" xml:space="preserve">
+    <value>Erwartet</value>
+  </data>
+  <data name="TestCasesHeading" xml:space="preserve">
+    <value>Testfälle</value>
+  </data>
+  <data name="RunAllButton" xml:space="preserve">
+    <value>Alle ausführen</value>
+  </data>
+  <data name="NewTestCaseMenu" xml:space="preserve">
+    <value>Neuer Testfall</value>
+  </data>
+  <data name="TestCasesIntroConnectedSystem" xml:space="preserve">
+    <value>Jeder Fall gibt einer Objektabgleichsregel Eingaben vor und legt fest, welche Abgleichswerte sie liefern soll. Ausführungen testen die Regeln wie gespeichert.</value>
+  </data>
+  <data name="TestCasesIntroRule" xml:space="preserve">
+    <value>Jeder Fall gibt dem Geltungsbereich dieser Synchronisierungsregel, einem Attributfluss oder einer Objektabgleichsregel Eingaben vor und legt fest, was sie liefern soll. Ausführungen testen die Regel wie gespeichert: Speichern Sie zuerst Änderungen auf den anderen Registerkarten.</value>
+  </data>
+  <data name="NoTestCasesYet" xml:space="preserve">
+    <value>Noch keine Testfälle</value>
+  </data>
+  <data name="NoTestCasesYetConnectedSystem" xml:space="preserve">
+    <value>Speichern Sie einen über „Ausprobieren“ einer Objektabgleichsregel oder erstellen Sie hier einen.</value>
+  </data>
+  <data name="NoTestCasesYetRule" xml:space="preserve">
+    <value>Speichern Sie einen über ein Testwerkzeug auf der Registerkarte „Geltungsbereich“, „Abgleich“ oder „Attributfluss“ oder erstellen Sie hier einen.</value>
+  </data>
+  <data name="TestsColumn" xml:space="preserve">
+    <value>Tests</value>
+  </data>
+  <data name="TestStatusPassed" xml:space="preserve">
+    <value>Bestanden</value>
+  </data>
+  <data name="TestStatusFailed" xml:space="preserve">
+    <value>Fehlgeschlagen</value>
+  </data>
+  <data name="TestStatusNeedsReview" xml:space="preserve">
+    <value>Prüfung erforderlich</value>
+  </data>
+  <data name="TestStatusError" xml:space="preserve">
+    <value>Fehler</value>
+  </data>
+  <data name="RanAsOfNowTooltip" xml:space="preserve">
+    <value>Diese Konfiguration liest die Uhrzeit, und der Fall hat keinen Ausführungszeitpunkt, daher lief er zum aktuellen Zeitpunkt und kann morgen ein anderes Ergebnis liefern.</value>
+  </data>
+  <data name="NotRun" xml:space="preserve">
+    <value>Nicht ausgeführt</value>
+  </data>
+  <data name="RunTooltip" xml:space="preserve">
+    <value>Ausführen</value>
+  </data>
+  <data name="RunNamedAria" xml:space="preserve">
+    <value>{0} ausführen</value>
+  </data>
+  <data name="EditNamedAria" xml:space="preserve">
+    <value>{0} bearbeiten</value>
+  </data>
+  <data name="DeleteNamedAria" xml:space="preserve">
+    <value>{0} löschen</value>
+  </data>
+  <data name="CoverageScope" xml:space="preserve">
+    <value>Geltungsbereich</value>
+  </data>
+  <data name="DeleteTestCaseTitle" xml:space="preserve">
+    <value>Testfall löschen?</value>
+  </data>
+  <data name="DeleteTestCaseQuestion" xml:space="preserve">
+    <value>Testfall „{0}“ löschen? Nichts von dem, was er testet, ändert sich.</value>
+  </data>
+  <data name="TestCaseDeleted" xml:space="preserve">
+    <value>Testfall „{0}“ gelöscht.</value>
+  </data>
+  <data name="ObjectMatchingRulesHeading" xml:space="preserve">
+    <value>Objektabgleichsregeln</value>
+  </data>
+  <data name="MatchingRulesSpecific" xml:space="preserve">
+    <value>Abgleichsregeln gelten speziell für diese Synchronisierungsregel.</value>
+  </data>
+  <data name="AdvancedMode" xml:space="preserve">
+    <value>Erweiterter Modus</value>
+  </data>
+  <data name="SimpleModeExplanation" xml:space="preserve">
+    <value>Dieses verbundene System verwendet für den Objektabgleich den &lt;strong&gt;einfachen Modus&lt;/strong&gt;. Im einfachen Modus werden Abgleichsregeln einmal am verbundenen System (pro Objekttyp) definiert und von jeder Synchronisierungsregel gemeinsam genutzt, die dieses System als Ziel hat, sodass Sie dieselbe Abgleichslogik nicht bei jeder Regel wiederholen müssen. Daher kann diese Regel hier keine eigenen Abgleichsregeln definieren.</value>
+  </data>
+  <data name="SwitchToAdvancedMode" xml:space="preserve">
+    <value>Stellen Sie das verbundene System auf den &lt;strong&gt;erweiterten Modus&lt;/strong&gt; um, wenn Sie eine Abgleichslogik benötigen, die für eine einzelne Synchronisierungsregel spezifisch ist.</value>
+  </data>
+  <data name="ConfigureMatchingRules" xml:space="preserve">
+    <value>Abgleichsregeln konfigurieren</value>
+  </data>
+  <data name="MatchingImportHelp" xml:space="preserve">
+    <value>Definieren Sie Regeln, um Objekte im verbundenen System mit Metaverse-Objekten abzugleichen. Verwenden Sie unveränderliche Attribute (z. B. employeeID, objectGUID). Mehrere Regeln können geordnet werden; die erste Übereinstimmung gewinnt. Objekte werden bei einer Übereinstimmung verknüpft, andernfalls getrennt.</value>
+  </data>
+  <data name="MatchingExportHelp" xml:space="preserve">
+    <value>Definieren Sie Regeln, um Metaverse-Objekte mit Objekten im verbundenen System abzugleichen. Verwenden Sie unveränderliche Attribute (z. B. employeeID, objectGUID). Mehrere Regeln können geordnet werden; die erste Übereinstimmung gewinnt.</value>
+  </data>
+  <data name="AddMatchingRule" xml:space="preserve">
+    <value>Abgleichsregel hinzufügen</value>
+  </data>
+  <data name="MatchOnOverline" xml:space="preserve">
+    <value>ABGLEICHEN NACH:</value>
+  </data>
+  <data name="MatchOnAttribute" xml:space="preserve">
+    <value>ATTRIBUT</value>
+  </data>
+  <data name="MatchOnExpression" xml:space="preserve">
+    <value>AUSDRUCK</value>
+  </data>
+  <data name="PositionOverline" xml:space="preserve">
+    <value>POSITION: {0}</value>
+  </data>
+  <data name="MatchingCaseSensitive" xml:space="preserve">
+    <value>Groß-/Kleinschreibung beachten</value>
+  </data>
+  <data name="RemoveMatchingRuleQuestion" xml:space="preserve">
+    <value>Möchten Sie diese Abgleichsregel wirklich entfernen?</value>
+  </data>
+  <data name="MatchingRuleNowCaseSensitive" xml:space="preserve">
+    <value>Die Abgleichsregel beachtet jetzt die Groß-/Kleinschreibung. Denken Sie daran, die Synchronisierungsregel zu speichern.</value>
+  </data>
+  <data name="MatchingRuleNowCaseInsensitive" xml:space="preserve">
+    <value>Die Abgleichsregel beachtet jetzt nicht mehr die Groß-/Kleinschreibung. Denken Sie daran, die Synchronisierungsregel zu speichern.</value>
+  </data>
+  <data name="PickerCount" xml:space="preserve">
+    <value>{0} von {1} ausgewählt</value>
+  </data>
+  <data name="PickerClear" xml:space="preserve">
+    <value>Leeren</value>
+  </data>
+  <data name="PickerEmptyPartition" xml:space="preserve">
+    <value>Diese Partition enthält keine Container.</value>
+  </data>
+  <data name="PickerNoMatch" xml:space="preserve">
+    <value>Kein Container entspricht „{0}“.</value>
+  </data>
+  <data name="PickerExpandAria" xml:space="preserve">
+    <value>{0} erweitern</value>
+  </data>
+  <data name="PickerCollapseAria" xml:space="preserve">
+    <value>{0} reduzieren</value>
+  </data>
+  <data name="PickerManageAria" xml:space="preserve">
+    <value>{0} verwalten</value>
+  </data>
+  <data name="PickerInclude" xml:space="preserve">
+    <value>Einbeziehen</value>
+  </data>
+  <data name="PickerIncludeTooltip" xml:space="preserve">
+    <value>Das Ausschließen dieses Containers aus {0} beenden. Seine Objekte werden wieder importiert, ebenso die in jedem Container darunter.</value>
+  </data>
+  <data name="PickerExclude" xml:space="preserve">
+    <value>Ausschließen</value>
+  </data>
+  <data name="PickerExcludeTooltip" xml:space="preserve">
+    <value>Diesen Container aus {0} ausschließen. Seine Objekte werden nicht importiert, ebenso die in jedem Container darunter.</value>
+  </data>
+  <data name="PickerOneLevelTooltip" xml:space="preserve">
+    <value>Es werden nur die Objekte importiert, die direkt in diesem Container liegen. Wählen Sie „Gesamte Teilstruktur“, um auch alles darunter zu importieren.</value>
+  </data>
+  <data name="PickerSubtreeTooltip" xml:space="preserve">
+    <value>Dieser Container und jeder Container darunter werden importiert. Wählen Sie „Diese Ebene“, um nur die Objekte zu importieren, die direkt in ihm liegen.</value>
+  </data>
+  <data name="PickerScopeAria" xml:space="preserve">
+    <value>Geltungsbereich von {0}</value>
+  </data>
+  <data name="PickerWholeSubtree" xml:space="preserve">
+    <value>Gesamte Teilstruktur</value>
+  </data>
+  <data name="PickerThisLevel" xml:space="preserve">
+    <value>Diese Ebene</value>
+  </data>
+  <data name="PickerCountSameOne" xml:space="preserve">
+    <value>Dieser Container enthält {0:N0} Objekt, gezählt im verbundenen System, als die Hierarchie zuletzt abgerufen wurde.</value>
+  </data>
+  <data name="PickerCountSameOther" xml:space="preserve">
+    <value>Dieser Container enthält {0:N0} Objekte, gezählt im verbundenen System, als die Hierarchie zuletzt abgerufen wurde.</value>
+  </data>
+  <data name="PickerOneLevelOne" xml:space="preserve">
+    <value>Dieser Container enthält direkt {0:N0} Objekt, und das importiert „Diese Ebene“. Sein gesamter Zweig enthält {1:N0}.</value>
+  </data>
+  <data name="PickerOneLevelOther" xml:space="preserve">
+    <value>Dieser Container enthält direkt {0:N0} Objekte, und das importiert „Diese Ebene“. Sein gesamter Zweig enthält {1:N0}.</value>
+  </data>
+  <data name="PickerSubtreeLead" xml:space="preserve">
+    <value>Dieser Container und alles darunter enthalten {0:N0} Objekte, und das importiert „Gesamte Teilstruktur“.</value>
+  </data>
+  <data name="PickerSubtreeDirectOne" xml:space="preserve">
+    <value>{0:N0} Objekt liegt direkt darin.</value>
+  </data>
+  <data name="PickerSubtreeDirectOther" xml:space="preserve">
+    <value>{0:N0} Objekte liegen direkt darin.</value>
+  </data>
+  <data name="PickerExcludedFrom" xml:space="preserve">
+    <value>Ausgeschlossen aus {0}</value>
+  </data>
+  <data name="PickerCoveredBy" xml:space="preserve">
+    <value>Abgedeckt durch {0}</value>
+  </data>
+  <data name="PickerExcludedBy" xml:space="preserve">
+    <value>Ausgeschlossen durch {0}</value>
+  </data>
+  <data name="PickerChildContainersOne" xml:space="preserve">
+    <value>{0} Container</value>
+  </data>
+  <data name="PickerChildContainersOther" xml:space="preserve">
+    <value>{0} Container</value>
+  </data>
+  <data name="PickerContainerAbove" xml:space="preserve">
+    <value>ein übergeordneter Container</value>
+  </data>
+  <data name="ScopeChooseFirst" xml:space="preserve">
+    <value>Wählen Sie zuerst auf der Registerkarte &lt;strong&gt;Details&lt;/strong&gt; das verbundene System, die Richtung und die Objekttypen; die Eingrenzung gilt dann für Objekte dieser Typen.</value>
+  </data>
+  <data name="ScopingHeading" xml:space="preserve">
+    <value>Eingrenzung</value>
+  </data>
+  <data name="ScopeDefaultExport" xml:space="preserve">
+    <value>Standardmäßig liegen alle Metaverse-Objekte des Typs {0} im Geltungsbereich dieser Synchronisierungsregel; um sie nur auf eine Teilmenge dieser Objekte anzuwenden, verwenden Sie einen Filter. Beispielsweise soll diese Regel vielleicht nur für Festangestellte gelten, nicht für Auftragnehmende.</value>
+  </data>
+  <data name="ScopeDefaultImport" xml:space="preserve">
+    <value>Standardmäßig liegen alle Objekte im verbundenen System des Typs {0} im Geltungsbereich dieser Synchronisierungsregel. Verwenden Sie einen Filter, um nur bestimmte Objekte zu importieren, z. B. nur aktive Benutzer, nicht deaktivierte.</value>
+  </data>
+  <data name="ScopeAllObjects" xml:space="preserve">
+    <value>Alle Objekte</value>
+  </data>
+  <data name="ScopeFiltered" xml:space="preserve">
+    <value>Gefiltert</value>
+  </data>
+  <data name="ScopeFallOutLabel" xml:space="preserve">
+    <value>Wenn Objekte den Geltungsbereich verlassen</value>
+  </data>
+  <data name="ScopeDisconnectOption" xml:space="preserve">
+    <value>Vom Metaverse trennen</value>
+  </data>
+  <data name="ScopeRemainJoined" xml:space="preserve">
+    <value>Verknüpft bleiben (Attributfluss beenden)</value>
+  </data>
+  <data name="ScopeDisconnectExplanation" xml:space="preserve">
+    <value>Objekte, die den Geltungsbereich verlassen, werden von ihrem Metaverse-Objekt getrennt. Ob die von diesem verbundenen System beigesteuerten Attribute ebenfalls zurückgenommen werden, hängt von der Einstellung „Beigesteuerte Attribute bei Veralterung entfernen“ des Objekttyps des verbundenen Systems, von der Karenzzeit für das Löschen des Metaverse-Objekttyps und davon ab, ob das Metaverse-Objekt zum sofortigen Löschen vorgesehen ist. War dies der letzte Connector, kann zusätzlich die Löschregel des Metaverse-Objekttyps greifen.</value>
+  </data>
+  <data name="ScopeRemainJoinedExplanation" xml:space="preserve">
+    <value>Objekte, die den Geltungsbereich verlassen, bleiben verknüpft, doch der Attributfluss endet. Verwenden Sie dies für Szenarien nach dem Prinzip „einmal verwaltet, immer verwaltet“.</value>
+  </data>
+  <data name="ScopeAddCriteriaGroup" xml:space="preserve">
+    <value>Kriteriengruppe hinzufügen</value>
+  </data>
+  <data name="ScopeChooseGroupType" xml:space="preserve">
+    <value>Bitte wählen Sie einen Gruppentyp</value>
+  </data>
+  <data name="ScopeAddGroup" xml:space="preserve">
+    <value>Gruppe hinzufügen</value>
+  </data>
+  <data name="CriterionPattern" xml:space="preserve">
+    <value>Muster</value>
+  </data>
+  <data name="CriterionPatternHelp" xml:space="preserve">
+    <value>Ein regulärer .NET-Ausdruck, der an beliebiger Stelle im Wert abgeglichen wird, sofern er nicht mit ^ und $ verankert ist.</value>
+  </data>
+  <data name="CriterionCaseSensitive" xml:space="preserve">
+    <value>Groß-/Kleinschreibung beachten</value>
+  </data>
+  <data name="CriterionTextValue" xml:space="preserve">
+    <value>Textwert</value>
+  </data>
+  <data name="CriterionGuidValue" xml:space="preserve">
+    <value>Guid-Wert</value>
+  </data>
+  <data name="CriterionNumberValue" xml:space="preserve">
+    <value>Zahlenwert</value>
+  </data>
+  <data name="CriterionLongNumberValue" xml:space="preserve">
+    <value>Wert (lange Zahl)</value>
+  </data>
+  <data name="CriterionDecimalValue" xml:space="preserve">
+    <value>Dezimalwert</value>
+  </data>
+  <data name="CriterionAbsoluteDate" xml:space="preserve">
+    <value>Absolutes Datum</value>
+  </data>
+  <data name="CriterionRelativeToNow" xml:space="preserve">
+    <value>Relativ zu jetzt</value>
+  </data>
+  <data name="CriterionDateValue" xml:space="preserve">
+    <value>Datumswert</value>
+  </data>
+  <data name="CriterionCount" xml:space="preserve">
+    <value>Anzahl</value>
+  </data>
+  <data name="CriterionUnit" xml:space="preserve">
+    <value>Einheit</value>
+  </data>
+  <data name="UnitHours" xml:space="preserve">
+    <value>Stunden</value>
+  </data>
+  <data name="UnitDays" xml:space="preserve">
+    <value>Tage</value>
+  </data>
+  <data name="UnitWeeks" xml:space="preserve">
+    <value>Wochen</value>
+  </data>
+  <data name="UnitMonths" xml:space="preserve">
+    <value>Monate</value>
+  </data>
+  <data name="UnitYears" xml:space="preserve">
+    <value>Jahre</value>
+  </data>
+  <data name="CriterionDirection" xml:space="preserve">
+    <value>Richtung</value>
+  </data>
+  <data name="CriterionAgo" xml:space="preserve">
+    <value>In der Vergangenheit</value>
+  </data>
+  <data name="CriterionFromNow" xml:space="preserve">
+    <value>Ab jetzt</value>
+  </data>
+  <data name="CriterionRelativePreview" xml:space="preserve">
+    <value>Wird mit {0} verglichen und bei jeder Ausführung neu ausgewertet. Tage und gröbere Einheiten werden auf Mitternacht UTC gerundet; Stunden sind exakt.</value>
+  </data>
+  <data name="CriterionBooleanValue" xml:space="preserve">
+    <value>Boolescher Wert</value>
+  </data>
+  <data name="CriterionBooleanState" xml:space="preserve">
+    <value>: {0}</value>
+  </data>
+  <data name="CriterionNull" xml:space="preserve">
+    <value>Null</value>
+  </data>
+  <data name="CriterionUnsupported" xml:space="preserve">
+    <value>Dieser Attributtyp wird in Suchkriterien nicht unterstützt.</value>
+  </data>
+  <data name="PriorityNoContributors" xml:space="preserve">
+    <value>Dieses Attribut hat keine importierenden Beitragenden, daher gibt es keine Priorität zu verwalten.</value>
+  </data>
+  <data name="PriorityColumn" xml:space="preserve">
+    <value>Priorität</value>
+  </data>
+  <data name="PriorityNullTooltip" xml:space="preserve">
+    <value>Wenn aktiviert und diese Synchronisierungsregel verbunden ist und im Geltungsbereich liegt, aber keinen Wert liefert, behauptet sie keinen Wert (kein Durchgriff auf einen Beitragenden mit niedrigerer Priorität).</value>
+  </data>
+  <data name="ThisMapping" xml:space="preserve">
+    <value>(diese Zuordnung)</value>
+  </data>
+  <data name="PendingMappingOnceSaved" xml:space="preserve">
+    <value>diese Zuordnung, sobald gespeichert</value>
+  </data>
+  <data name="DragToReorder" xml:space="preserve">
+    <value>Zum Umsortieren ziehen</value>
+  </data>
+  <data name="SyncRuleDisabledTooltip" xml:space="preserve">
+    <value>Diese Synchronisierungsregel ist deaktiviert. Sie behält ihre Position, trägt aber bei der Synchronisierung nie bei.</value>
+  </data>
+  <data name="UnsavedChanges" xml:space="preserve">
+    <value>Nicht gespeicherte Änderungen</value>
+  </data>
+  <data name="SaveOrder" xml:space="preserve">
+    <value>Reihenfolge speichern</value>
+  </data>
+  <data name="ResetLabel" xml:space="preserve">
+    <value>Zurücksetzen</value>
+  </data>
+  <data name="AttributePriorityTitle" xml:space="preserve">
+    <value>Attributpriorität</value>
+  </data>
+  <data name="PriorityOrderSaved" xml:space="preserve">
+    <value>Reihenfolge der Attributpriorität gespeichert.</value>
+  </data>
+  <data name="PriorityOrderFailed" xml:space="preserve">
+    <value>Die Reihenfolge der Attributpriorität konnte nicht gespeichert werden: {0}</value>
+  </data>
+  <data name="GateTitleOne" xml:space="preserve">
+    <value>Diese Änderung führt dazu, dass ein Konfigurationstestfall nicht mehr besteht</value>
+  </data>
+  <data name="GateTitleOther" xml:space="preserve">
+    <value>Diese Änderung führt dazu, dass {0} Konfigurationstestfälle nicht mehr bestehen</value>
+  </data>
+  <data name="GateNothingSavedOne" xml:space="preserve">
+    <value>Es wurde nichts gespeichert. Dieser Fall bestand vor der Änderung und besteht mit ihr nicht mehr.</value>
+  </data>
+  <data name="GateNothingSavedOther" xml:space="preserve">
+    <value>Es wurde nichts gespeichert. Diese Fälle bestanden vor der Änderung und bestehen mit ihr nicht mehr.</value>
+  </data>
+  <data name="GateTestCase" xml:space="preserve">
+    <value>Testfall</value>
+  </data>
+  <data name="GateWithChange" xml:space="preserve">
+    <value>Mit dieser Änderung</value>
+  </data>
+  <data name="GateNowFails" xml:space="preserve">
+    <value>Schlägt jetzt fehl</value>
+  </data>
+  <data name="GateNeedsReview" xml:space="preserve">
+    <value>Erfordert jetzt Prüfung</value>
+  </data>
+  <data name="GateCouldNotRun" xml:space="preserve">
+    <value>Konnte nicht ausgeführt werden</value>
+  </data>
+  <data name="GatePasses" xml:space="preserve">
+    <value>Besteht</value>
+  </data>
+  <data name="GateRecordedNote" xml:space="preserve">
+    <value>Das Akzeptieren oder trotzdem Speichern wird mit der Änderung im Konfigurationsänderungsverlauf aufgezeichnet, wobei jeder Fall genannt wird.</value>
+  </data>
+  <data name="GateKeepEditing" xml:space="preserve">
+    <value>Weiter bearbeiten</value>
+  </data>
+  <data name="GateAcceptOne" xml:space="preserve">
+    <value>Neues Ergebnis akzeptieren</value>
+  </data>
+  <data name="GateAcceptOther" xml:space="preserve">
+    <value>Neue Ergebnisse akzeptieren</value>
+  </data>
+  <data name="GateSaveAnyway" xml:space="preserve">
+    <value>Trotzdem speichern</value>
+  </data>
+  <data name="CoverageObjectMatchingRuleOn" xml:space="preserve">
+    <value>Objektabgleichsregel für {0}</value>
+  </data>
+  <data name="CoverageObjectMatchingRuleId" xml:space="preserve">
+    <value>Objektabgleichsregel {0}</value>
+  </data>
+  <data name="CoverageGeneratedValueId" xml:space="preserve">
+    <value>Generierter Wert {0}</value>
+  </data>
+  <data name="CoverageAttributeFlowId" xml:space="preserve">
+    <value>Attributfluss {0}</value>
+  </data>
+  <data name="CoverageGeneratedValueFor" xml:space="preserve">
+    <value>Generierter Wert für {0}</value>
+  </data>
+  <data name="CoverageAttributeFlowTo" xml:space="preserve">
+    <value>Attributfluss zu {0}</value>
+  </data>
+  <data name="QuotedText" xml:space="preserve">
+    <value>„{0}“</value>
+  </data>
+  <data name="ExpectationValuesInOrder" xml:space="preserve">
+    <value>{0}, in dieser Reihenfolge</value>
+  </data>
+  <data name="ExpectationTheseValues" xml:space="preserve">
+    <value>Diese Werte</value>
+  </data>
+  <data name="ExpectNoValue" xml:space="preserve">
+    <value>Kein Wert</value>
+  </data>
+  <data name="ExpectError" xml:space="preserve">
+    <value>Ein Fehler</value>
+  </data>
+  <data name="ExpectAnyValue" xml:space="preserve">
+    <value>Beliebiger Wert</value>
+  </data>
+  <data name="ExpectInScope" xml:space="preserve">
+    <value>Im Geltungsbereich</value>
+  </data>
+  <data name="ExpectOutOfScope" xml:space="preserve">
+    <value>Außerhalb des Geltungsbereichs</value>
+  </data>
+  <data name="AcceptBlockedOne" xml:space="preserve">
+    <value>{0} kann sein neues Ergebnis nicht wie erwartet übernehmen: Bearbeiten Sie den Fall oder speichern Sie trotzdem.</value>
+  </data>
+  <data name="AcceptBlockedOther" xml:space="preserve">
+    <value>{0} können ihre neuen Ergebnisse nicht wie erwartet übernehmen: Bearbeiten Sie die Fälle oder speichern Sie trotzdem.</value>
+  </data>
+  <data name="RemoveBindingHasValue" xml:space="preserve">
+    <value>{0:N0} {1}-Objekt(e) haben einen Wert</value>
+  </data>
+  <data name="RemoveBindingViewObjects" xml:space="preserve">
+    <value>Objekt(e) mit einem Wert anzeigen</value>
+  </data>
+  <data name="RemoveBindingClearFirst" xml:space="preserve">
+    <value>Löschen Sie zuerst diese Werte und entfernen Sie dann die Bindung.</value>
+  </data>
+  <data name="RemoveBindingReadBy" xml:space="preserve">
+    <value>{0:N0} Konfigurationselement(e) lesen dieses Attribut für {1}</value>
+  </data>
+  <data name="RemoveBindingChangeFirst" xml:space="preserve">
+    <value>Ändern oder entfernen Sie zuerst jedes einzelne und entfernen Sie dann die Bindung.</value>
+  </data>
+  <data name="RemoveBindingSafe" xml:space="preserve">
+    <value>Kein {0} hat einen Wert für dieses Attribut. Das Entfernen ist sicher; es gehen keine Objektdaten verloren.</value>
+  </data>
+  <data name="RemoveBindingCascadeTitle" xml:space="preserve">
+    <value>Diese {0} Referenz(en) werden ebenfalls entfernt</value>
+  </data>
+  <data name="RemoveBindingTypeToConfirm" xml:space="preserve">
+    <value>Geben Sie zur Bestätigung {0} ein</value>
+  </data>
+  <data name="RemoveBindingWithReferences" xml:space="preserve">
+    <value>Bindung + {0} Referenz(en) entfernen</value>
+  </data>
+  <data name="RemoveBindingButton" xml:space="preserve">
+    <value>Bindung entfernen</value>
+  </data>
+  <data name="RemoveBindingFailed" xml:space="preserve">
+    <value>Die Bindung konnte nicht entfernt werden; sie enthält möglicherweise jetzt gespeicherte Werte, oder eine Konfiguration liest sie jetzt. Aktualisieren Sie die Seite und versuchen Sie es erneut.</value>
+  </data>
+  <data name="RemoveBindingRemoved" xml:space="preserve">
+    <value>„{0}“ wurde aus {1} entfernt.</value>
+  </data>
+  <data name="RemoveBindingError" xml:space="preserve">
+    <value>Die Bindung konnte nicht entfernt werden: {0}</value>
+  </data>
+  <data name="RemoveBindingTitle" xml:space="preserve">
+    <value>„{0}“ aus {1} entfernen</value>
+  </data>
+  <data name="ContributedBreakdown" xml:space="preserve">
+    <value>{0}: {1:N0} Wert(e) in {2:N0} Metaverse-Objekt(en)</value>
+  </data>
+  <data name="ContributedRecall" xml:space="preserve">
+    <value>Die Attributwerte zurücknehmen (empfohlen)</value>
+  </data>
+  <data name="ContributedKeep" xml:space="preserve">
+    <value>Die Attributwerte beibehalten</value>
+  </data>
+  <data name="ContributedRuleImpact" xml:space="preserve">
+    <value>Diese Regel hat die aktuellen Werte von {0:N0} Attributwert(en) in {1:N0} Metaverse-Objekten beigesteuert.</value>
+  </data>
+  <data name="ContributedRuleRecallHelp" xml:space="preserve">
+    <value>JIM reiht einen Rücknahmevorgang ein. Trägt ein anderer Attributfluss ebenfalls ein Attribut bei, übernimmt dessen Wert; andernfalls wird der Wert entfernt, und die daraus entstehenden Änderungen werden für den Export bereitgestellt. Den Fortschritt können Sie auf der Seite „Betrieb“ verfolgen.</value>
+  </data>
+  <data name="ContributedKeepHelp" xml:space="preserve">
+    <value>Die Werte bleiben ohne Herkunftsnachweis bestehen. JIM nimmt sie nie zurück; um sie später zu ändern, wäre ein neuer eingehender Attributfluss oder ein manuelles oder automatisiertes Entfernen nötig.</value>
+  </data>
+  <data name="ContributedRuleKeepWarning" xml:space="preserve">
+    <value>Beibehaltene Werte werden dauerhaft nicht mehr verwaltet. Dies kann nach dem Löschen der Regel nicht rückgängig gemacht werden.</value>
+  </data>
+  <data name="ContributedFlowImpact" xml:space="preserve">
+    <value>Dieser Attributfluss hat die aktuellen Werte von {0} in {1:N0} Metaverse-Objekten beigesteuert.</value>
+  </data>
+  <data name="ContributedFlowRecallHelp" xml:space="preserve">
+    <value>Die Werte werden bei der nächsten Synchronisierung des beitragenden verbundenen Systems zurückgenommen, als Delta- oder vollständige Synchronisierung, wobei ein anderer beitragender Attributfluss übernimmt.</value>
+  </data>
+  <data name="ContributedFlowKeepWarning" xml:space="preserve">
+    <value>Beibehaltene Werte werden dauerhaft nicht mehr verwaltet. Dies kann nach dem Entfernen der Zuordnung nicht rückgängig gemacht werden.</value>
+  </data>
+  <data name="ContributedFlowInfo" xml:space="preserve">
+    <value>Ihre Auswahl wird wirksam, wenn Sie die Synchronisierungsregel speichern.</value>
+  </data>
+  <data name="ContributedRemoveMapping" xml:space="preserve">
+    <value>Attributzuordnung entfernen</value>
+  </data>
+  <data name="ListOr" xml:space="preserve">
+    <value> oder </value>
+  </data>
+  <data name="DerivedChipStep" xml:space="preserve">
+    <value>Abgeleitet · Schritt {0}</value>
+  </data>
+  <data name="DerivedChipPlain" xml:space="preserve">
+    <value>Abgeleitet</value>
+  </data>
+  <data name="DerivedReads" xml:space="preserve">
+    <value>Liest {0} aus dem Metaverse.</value>
+  </data>
+  <data name="DerivedRunsInStep" xml:space="preserve">
+    <value>Läuft in Schritt {0} von {1}, nach {2}.</value>
+  </data>
+  <data name="DerivedNoStep" xml:space="preserve">
+    <value>{0} Er hat keinen Schritt, weil er Teil einer Schleife von Attributflüssen ist, die einander lesen.</value>
+  </data>
+  <data name="DerivedResolvedOne" xml:space="preserve">
+    <value>{0} ist aufgelöst</value>
+  </data>
+  <data name="DerivedResolvedOther" xml:space="preserve">
+    <value>{0} sind aufgelöst</value>
+  </data>
+  <data name="DerivedCycleLink" xml:space="preserve">
+    <value>{0}, aus {1} ({2})</value>
+  </data>
+  <data name="DerivedCycleThisFlow" xml:space="preserve">
+    <value>dieser Fluss, {0}</value>
+  </data>
+  <data name="DerivedReadsVia" xml:space="preserve">
+    <value>{0} (über {1})</value>
+  </data>
+  <data name="DependantsSingleFlowSingleInput" xml:space="preserve">
+    <value>Wenn Sie {0}, steuert nichts anderes {1} bei. Dieser abgeleitete Attributfluss liest es und hätte dann keine Eingabe:</value>
+  </data>
+  <data name="DependantsSingleFlowManyInputs" xml:space="preserve">
+    <value>Wenn Sie {0}, steuert nichts anderes {1} bei. Dieser abgeleitete Attributfluss liest sie und hätte dann keine Eingabe:</value>
+  </data>
+  <data name="DependantsManyFlowsSingleInput" xml:space="preserve">
+    <value>Wenn Sie {0}, steuert nichts anderes {1} bei. Diese abgeleiteten Attributflüsse lesen es und hätten dann keine Eingabe:</value>
+  </data>
+  <data name="DependantsManyFlowsManyInputs" xml:space="preserve">
+    <value>Wenn Sie {0}, steuert nichts anderes {1} bei. Diese abgeleiteten Attributflüsse lesen sie und hätten dann keine Eingabe:</value>
+  </data>
+  <data name="DerivedPanelHeading" xml:space="preserve">
+    <value>Abgeleiteter Attributfluss</value>
+  </data>
+  <data name="DerivedStepOf" xml:space="preserve">
+    <value>Schritt {0} von {1}</value>
+  </data>
+  <data name="DerivedReadsLabel" xml:space="preserve">
+    <value>Liest</value>
+  </data>
+  <data name="DerivedFromMetaverse" xml:space="preserve">
+    <value>aus dem Metaverse.</value>
+  </data>
+  <data name="DerivedRunsAfterOwnSyncNamed" xml:space="preserve">
+    <value>aus dem Metaverse. JIM führt ihn nach {0} in der eigenen Synchronisierung von {1} aus.</value>
+  </data>
+  <data name="DerivedRunsAfterOwnSyncFallback" xml:space="preserve">
+    <value>aus dem Metaverse. JIM führt ihn nach {0} in der eigenen Synchronisierung dieses verbundenen Systems aus.</value>
+  </data>
+  <data name="DerivedSequencingNamed" xml:space="preserve">
+    <value>Wenn ein anderes verbundenes System {0} ändert, markiert JIM dieses Objekt, damit die nächste Synchronisierung von {1} es aufgreift. Synchronisieren Sie zuerst die Quelle, damit der Wert im selben Zyklus stimmt.</value>
+  </data>
+  <data name="DerivedSequencingFallback" xml:space="preserve">
+    <value>Wenn ein anderes verbundenes System {0} ändert, markiert JIM dieses Objekt, damit die nächste Synchronisierung dieses verbundenen Systems es aufgreift. Synchronisieren Sie zuerst die Quelle, damit der Wert im selben Zyklus stimmt.</value>
+  </data>
+  <data name="DerivedCanStillSave" xml:space="preserve">
+    <value>Sie können ihn trotzdem speichern.</value>
+  </data>
+  <data name="DerivedLoopHeading" xml:space="preserve">
+    <value>&lt;strong&gt;Dieser Attributfluss kann nicht gespeichert werden, weil er eine Schleife bildet.&lt;/strong&gt;</value>
+  </data>
+  <data name="DerivedLoopExplain" xml:space="preserve">
+    <value>Jedes unten stehende Attribut wird aus dem vorherigen berechnet, daher kann keines zuerst berechnet werden:</value>
+  </data>
+  <data name="DerivedLoopChange" xml:space="preserve">
+    <value>Ändern Sie einen dieser Ausdrücke so, dass er das nächste Attribut der Schleife nicht mehr liest.</value>
+  </data>
+  <data name="ScopingNoCriteria" xml:space="preserve">
+    <value>Im Geltungsbereich: keine Geltungsbereichskriterien.</value>
+  </data>
+  <data name="ScopingAnyOfGroups" xml:space="preserve">
+    <value>Eine beliebige dieser Gruppen</value>
+  </data>
+  <data name="ScopingExpressionReadAria" xml:space="preserve">
+    <value>Vom Ausdruck gelesene Attribute</value>
+  </data>
+  <data name="ScopingHeldHidden" xml:space="preserve">
+    <value>hatte einen ausgeblendeten Wert</value>
+  </data>
+  <data name="ScopingHeldNone" xml:space="preserve">
+    <value>hatte keinen Wert</value>
+  </data>
+  <data name="ScopingHeld" xml:space="preserve">
+    <value>hatte {0}</value>
+  </data>
+  <data name="ScopingHeldMore" xml:space="preserve">
+    <value>hatte {0} und {1} weitere</value>
+  </data>
+  <data name="ScopingNotInScope" xml:space="preserve">
+    <value>Nicht im Geltungsbereich</value>
+  </data>
+  <data name="ScopingCannotEvaluate" xml:space="preserve">
+    <value>Kann nicht ausgewertet werden</value>
+  </data>
+  <data name="ScopingMet" xml:space="preserve">
+    <value>Erfüllt</value>
+  </data>
+  <data name="ScopingNotMet" xml:space="preserve">
+    <value>Nicht erfüllt</value>
+  </data>
+  <data name="ScopingNoValueNotMet" xml:space="preserve">
+    <value>Kein Wert, daher nicht erfüllt</value>
+  </data>
+  <data name="ScopingReferencesNone" xml:space="preserve">
+    <value>Verweist auf kein Attribut</value>
+  </data>
+  <data name="ScopingInvalid" xml:space="preserve">
+    <value>Ungültig; kann nicht ausgewertet werden</value>
+  </data>
+  <data name="AddBindingAllBound" xml:space="preserve">
+    <value>Jedes benutzerdefinierte Attribut ist bereits an {0} gebunden. Erstellen Sie ein neues Attribut, um eines hinzuzufügen.</value>
+  </data>
+  <data name="AddBindingSearchPlaceholder" xml:space="preserve">
+    <value>Attribute suchen</value>
+  </data>
+  <data name="AddBindingNotYetOnType" xml:space="preserve">
+    <value>Noch nicht in diesem Objekttyp</value>
+  </data>
+  <data name="AddBindingNotAssigned" xml:space="preserve">
+    <value>Nicht zugewiesen</value>
+  </data>
+  <data name="AddBindingOn" xml:space="preserve">
+    <value>in {0}</value>
+  </data>
+  <data name="AddBindingCreateHint" xml:space="preserve">
+    <value>Benötigen Sie eines, das noch nicht existiert? Erstellen Sie in der Liste „Schemaattribute“ ein neues Attribut und binden Sie es in einem Schritt.</value>
+  </data>
+  <data name="AddBindingButtonNone" xml:space="preserve">
+    <value>Attribute hinzufügen</value>
+  </data>
+  <data name="AddBindingButtonOne" xml:space="preserve">
+    <value>1 Attribut hinzufügen</value>
+  </data>
+  <data name="AddBindingButtonOther" xml:space="preserve">
+    <value>{0} Attribute hinzufügen</value>
+  </data>
+  <data name="AddBindingAdded" xml:space="preserve">
+    <value>{0} Attribut(e) zu {1} hinzugefügt.</value>
+  </data>
+  <data name="AddBindingFailed" xml:space="preserve">
+    <value>Attribute konnten nicht hinzugefügt werden: {0}</value>
+  </data>
+  <data name="AddBindingTitle" xml:space="preserve">
+    <value>Attribute zu „{0}“ hinzufügen</value>
+  </data>
+  <data name="ExRecipHeading" xml:space="preserve">
+    <value>Exchange-Empfänger</value>
+  </data>
+  <data name="ExRecipNotSetUp" xml:space="preserve">
+    <value>Objekte, die diese Regel provisioniert, sind keine Exchange-Empfänger.</value>
+  </data>
+  <data name="ExRecipNotSetUpHelp" xml:space="preserve">
+    <value>Legen Sie fest, was jedes Objekt in Exchange sein soll: ein Postfach, ein freigegebenes Postfach, ein Raum- oder Gerätepostfach, ein E-Mail-Benutzer, ein E-Mail-Kontakt oder eine E-Mail-aktivierte Gruppe. Sein verbundenes System verwaltet Exchange-Empfänger.</value>
+  </data>
+  <data name="ExRecipSetUp" xml:space="preserve">
+    <value>Empfänger einrichten</value>
+  </data>
+  <data name="ExRecipAttributeColumn" xml:space="preserve">
+    <value>Exchange-Attribut</value>
+  </data>
+  <data name="ExRecipSetByColumn" xml:space="preserve">
+    <value>Festgelegt von</value>
+  </data>
+  <data name="ExRecipSet" xml:space="preserve">
+    <value>Festlegen</value>
+  </data>
+  <data name="ExRecipOwnFlows" xml:space="preserve">
+    <value>Dies sind die eigenen Attributflüsse dieser Regel, die auch unten aufgeführt sind.</value>
+  </data>
+  <data name="ExRecipStop" xml:space="preserve">
+    <value>Provisionierung von Empfängern beenden</value>
+  </data>
+  <data name="IdentityAwaitingChip" xml:space="preserve">
+    <value>Wartet auf Synchronisierung</value>
+  </data>
+  <data name="IdentityAwaitingOne" xml:space="preserve">
+    <value>1 gespeicherte Änderung erreicht vorhandene Objekte bei der nächsten Synchronisierung von {0}, die jedes {1} verarbeitet.</value>
+  </data>
+  <data name="IdentityAwaitingOther" xml:space="preserve">
+    <value>{0:N0} gespeicherte Änderungen erreichen vorhandene Objekte bei der nächsten Synchronisierung von {1}, die jedes {2} verarbeitet.</value>
+  </data>
+  <data name="IdentityObjectOfType" xml:space="preserve">
+    <value>{0}-Objekt</value>
+  </data>
+  <data name="IdentityObjectGeneric" xml:space="preserve">
+    <value>Objekt</value>
+  </data>
+  <data name="IdentityIn" xml:space="preserve">
+    <value>in</value>
+  </data>
+  <data name="InsertAttributeButton" xml:space="preserve">
+    <value>Attribut einfügen</value>
+  </data>
+  <data name="InsertAttributeFilter" xml:space="preserve">
+    <value>Attribute filtern</value>
+  </data>
+  <data name="InsertAttributeFromMetaverse" xml:space="preserve">
+    <value>Aus dem Metaverse · mv[...]</value>
+  </data>
+  <data name="InsertAttributeFromSystem" xml:space="preserve">
+    <value>Aus {0} · cs[...]</value>
+  </data>
+  <data name="InsertAttributeNoMatch" xml:space="preserve">
+    <value>Keine Attribute entsprechen „{0}“.</value>
+  </data>
+  <data name="InsertAttributeReferenceReason" xml:space="preserve">
+    <value>Referenz, noch nicht unterstützt</value>
+  </data>
+  <data name="InsertAttributeReferenceExplain" xml:space="preserve">
+    <value>Referenzattribute können von einem abgeleiteten Attributfluss noch nicht gelesen werden.</value>
+  </data>
+  <data name="InsertAttributeTargetReason" xml:space="preserve">
+    <value>Ziel dieses Flusses</value>
+  </data>
+  <data name="InsertAttributeSelfExplain" xml:space="preserve">
+    <value>Würde {0} hier gelesen, hinge {0} von sich selbst ab.</value>
+  </data>
+  <data name="InsertAttributeFromSystemFallback" xml:space="preserve">
+    <value>dem verbundenen System</value>
+  </data>
+  <data name="PreviewSizeRowsOne" xml:space="preserve">
+    <value>etwa {0:N0} Zeile auf Objektebene</value>
+  </data>
+  <data name="PreviewSizeRowsOther" xml:space="preserve">
+    <value>etwa {0:N0} Zeilen auf Objektebene</value>
+  </data>
+  <data name="PreviewSizeSentence" xml:space="preserve">
+    <value>Diese Vorschau würde {0} erzeugen (etwa {1} Vorschaudaten).</value>
+  </data>
+  <data name="PreviewSizeStorageGigabytes" xml:space="preserve">
+    <value>{0:N1} GB</value>
+  </data>
+  <data name="PreviewSizeStorageMegabytes" xml:space="preserve">
+    <value>{0:N0} MB</value>
+  </data>
+  <data name="PreviewSizeRunsIn" xml:space="preserve">
+    <value>Sie läuft im Hintergrund und ändert nichts; rechnen Sie mit etwa {0}.</value>
+  </data>
+  <data name="PreviewSizeExactCounts" xml:space="preserve">
+    <value>Die Summenzahlen sind in beiden Fällen exakt. Die Wahl bestimmt, wie viel davon Sie im Detail einsehen können und wie viel Speicher die Vorschau belegt, bis sie nach der Aufbewahrungsdauer abläuft.</value>
+  </data>
+  <data name="PreviewSizeCappedTitle" xml:space="preserve">
+    <value>Eine Stichprobe jeder Gruppe behalten (empfohlen)</value>
+  </data>
+  <data name="PreviewSizeCappedHelp" xml:space="preserve">
+    <value>Bis zu {0:N0} Zeilen pro Zusammenfassungsgruppe. Gruppen, die eine Stichprobe zeigen, sind entsprechend gekennzeichnet.</value>
+  </data>
+  <data name="PreviewSizeFullTitle" xml:space="preserve">
+    <value>Jede Zeile behalten</value>
+  </data>
+  <data name="PreviewSizeFullHelp" xml:space="preserve">
+    <value>Jedes betroffene Objekt kann im Detail eingesehen werden. Dauert länger und belegt den oben genannten Speicher.</value>
+  </data>
+  <data name="PreviewSizeRunButton" xml:space="preserve">
+    <value>Vorschau ausführen</value>
+  </data>
+  <data name="ExprTestIntro" xml:space="preserve">
+    <value>Geben Sie für jedes Attribut, das der Ausdruck liest, einen Beispielwert an und sehen Sie beim Tippen, was er ergibt. Lassen Sie eine Eingabe leer, um zu sehen, was der Ausdruck tut, wenn das Objekt dafür keinen Wert hat.</value>
+  </data>
+  <data name="ExprTestNoAttributes" xml:space="preserve">
+    <value>Dieser Ausdruck liest keine Attribute und ergibt daher für jedes Objekt denselben Wert.</value>
+  </data>
+  <data name="ExprTestOutput" xml:space="preserve">
+    <value>Ausgabe</value>
+  </data>
+  <data name="ExprTestNoValue" xml:space="preserve">
+    <value>Der Ausdruck hat keinen Wert zurückgegeben. JIM behandelt dies als maßgebliches „kein Wert“ dieses Beitrags, aufgelöst durch die Attributpriorität und „Null ist ein Wert“.</value>
+  </data>
+  <data name="ExprTestResultType" xml:space="preserve">
+    <value>Typ: {0}</value>
+  </data>
+  <data name="ExprTestPosition" xml:space="preserve">
+    <value>Position {0}</value>
+  </data>
+  <data name="ExprTestCouldNotParse" xml:space="preserve">
+    <value>Der Ausdruck konnte nicht analysiert werden.</value>
+  </data>
+  <data name="TestInputAddValue" xml:space="preserve">
+    <value>Wert hinzufügen</value>
+  </data>
+  <data name="TestInputPlaceholderDateTime" xml:space="preserve">
+    <value>2026-03-15 oder 2026-03-15T10:30:00Z</value>
+  </data>
+  <data name="TestInputPlaceholderWholeNumber" xml:space="preserve">
+    <value>Eine ganze Zahl</value>
+  </data>
+  <data name="TestInputPlaceholderDecimal" xml:space="preserve">
+    <value>Eine Zahl, etwa 12.5</value>
+  </data>
+  <data name="TestInputPlaceholderGuid" xml:space="preserve">
+    <value>Eine GUID</value>
+  </data>
+  <data name="TestInputPlaceholderReference" xml:space="preserve">
+    <value>Die ID des Objekts, auf das verwiesen wird</value>
+  </data>
+  <data name="TestInputPlaceholderBinary" xml:space="preserve">
+    <value>Base64</value>
+  </data>
+  <data name="TestObjectSearchPlaceholder" xml:space="preserve">
+    <value>Nach Namen suchen</value>
+  </data>
+  <data name="TestObjectLoadAria" xml:space="preserve">
+    <value>Werte aus {0} laden</value>
+  </data>
+  <data name="TestObjectNoMatch" xml:space="preserve">
+    <value>Keine Objekte gefunden.</value>
+  </data>
+  <data name="TestObjectLoadedFrom" xml:space="preserve">
+    <value>Werte aus {0} geladen. Ändern Sie beliebige davon, um eine Variante auszuprobieren.</value>
+  </data>
+  <data name="DependentFlowsColumnFlow" xml:space="preserve">
+    <value>Abgeleiteter Attributfluss</value>
+  </data>
+  <data name="DependentFlowsColumnRule" xml:space="preserve">
+    <value>Synchronisierungsregel</value>
+  </data>
+  <data name="DependentFlowsColumnReads" xml:space="preserve">
+    <value>Liest</value>
+  </data>
+  <data name="DependentFlowsAfterwards" xml:space="preserve">
+    <value>Jeder folgt dann bei der nächsten Synchronisierung seinem Verhalten bei fehlender Eingabe. Werte, die bereits an Metaverse-Objekten vorhanden sind, bleiben bis dahin bestehen.</value>
+  </data>
+  <data name="TestCaseTargetFallback" xml:space="preserve">
+    <value>sein Ziel</value>
+  </data>
+  <data name="TestCaseGeneratedBaseName" xml:space="preserve">
+    <value>Basis des generierten Werts für {0}</value>
+  </data>
+  <data name="TestCaseAttributeFlowName" xml:space="preserve">
+    <value>Attributfluss zu {0}</value>
+  </data>
+  <data name="TestCaseInScopeName" xml:space="preserve">
+    <value>Im Geltungsbereich</value>
+  </data>
+  <data name="TestCaseOutOfScopeName" xml:space="preserve">
+    <value>Außerhalb des Geltungsbereichs</value>
+  </data>
+  <data name="InitialPasswordIssuePrefix" xml:space="preserve">
+    <value>Initialkennwort: {0}</value>
+  </data>
+  <data name="InsertFunctionButton" xml:space="preserve">
+    <value>Funktion einfügen</value>
+  </data>
+  <data name="InsertFunctionFilter" xml:space="preserve">
+    <value>Funktionen filtern</value>
+  </data>
+  <data name="InsertFunctionNoMatch" xml:space="preserve">
+    <value>Keine Funktionen entsprechen „{0}“.</value>
+  </data>
+  <data name="MissingInputHeading" xml:space="preserve">
+    <value>Wenn eine Eingabe keinen Wert hat</value>
+  </data>
+  <data name="MissingInputChangeLink" xml:space="preserve">
+    <value>Ändern</value>
+  </data>
+  <data name="ExpressionSuggestionsLabel" xml:space="preserve">
+    <value>Vorschläge</value>
+  </data>
+  <data name="ExpressionKeyHint" xml:space="preserve">
+    <value>↑↓ zum Auswählen · Enter oder Tab zum Einfügen · Esc zum Schließen</value>
+  </data>
+  <data name="FlowTestIntro" xml:space="preserve">
+    <value>Geben Sie jeder Eingabe einen Wert oder laden Sie die Werte aus einem Objekt, und sehen Sie, was eine Synchronisierung mit diesem Attributfluss in seinem aktuellen Stand täte. Jeder Wert wird als der Typ seines Attributs gelesen.</value>
+  </data>
+  <data name="FlowTestValueSourceAria" xml:space="preserve">
+    <value>Woher die Werte stammen</value>
+  </data>
+  <data name="FlowTestSampleValues" xml:space="preserve">
+    <value>Beispielwerte</value>
+  </data>
+  <data name="FlowTestFromObject" xml:space="preserve">
+    <value>Aus einem Objekt</value>
+  </data>
+  <data name="FlowTestNoInputs" xml:space="preserve">
+    <value>Dieser Ausdruck liest keine Attribute und ergibt daher für jedes Objekt denselben Wert.</value>
+  </data>
+  <data name="FlowTestColumnInput" xml:space="preserve">
+    <value>Eingabe</value>
+  </data>
+  <data name="FlowTestColumnType" xml:space="preserve">
+    <value>Typ</value>
+  </data>
+  <data name="FlowTestColumnValue" xml:space="preserve">
+    <value>Wert</value>
+  </data>
+  <data name="FlowTestColumnNoValue" xml:space="preserve">
+    <value>Kein Wert</value>
+  </data>
+  <data name="FlowTestNoValueAria" xml:space="preserve">
+    <value>{0} hat keinen Wert</value>
+  </data>
+  <data name="FlowTestNotAvailable" xml:space="preserve">
+    <value>Nicht verfügbar</value>
+  </data>
+  <data name="FlowTestTypeAndPlurality" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
+  <data name="FlowTestSingleValued" xml:space="preserve">
+    <value>einwertig</value>
+  </data>
+  <data name="FlowTestMultiValued" xml:space="preserve">
+    <value>mehrwertig</value>
+  </data>
+  <data name="FlowTestNotHeldExport" xml:space="preserve">
+    <value>Ein Export-Attributfluss liest nur das Metaverse-Objekt, daher hat diese Eingabe nie einen Wert.</value>
+  </data>
+  <data name="FlowTestNotHeldNoAttribute" xml:space="preserve">
+    <value>„{0}“ hat kein Attribut mit diesem Namen, daher hat diese Eingabe nie einen Wert.</value>
+  </data>
+  <data name="FlowTestIncomplete" xml:space="preserve">
+    <value>Kein Ergebnis, bis der Ausdruck vollständig ist: {0}</value>
+  </data>
+  <data name="FlowTestIncompleteAt" xml:space="preserve">
+    <value>Kein Ergebnis, bis der Ausdruck vollständig ist: {0} (Position {1})</value>
+  </data>
+  <data name="FlowTestParseFailed" xml:space="preserve">
+    <value>Der Ausdruck konnte nicht analysiert werden.</value>
+  </data>
+  <data name="FlowTestEnterValues" xml:space="preserve">
+    <value>Geben Sie für jede Eingabe einen Wert ein oder laden Sie die Werte aus einem Objekt, um das Ergebnis zu sehen.</value>
+  </data>
+  <data name="FlowTestHeading" xml:space="preserve">
+    <value>Was eine Synchronisierung täte</value>
+  </data>
+  <data name="FlowTestStepExpressionReturned" xml:space="preserve">
+    <value>1. Ausdruck lieferte</value>
+  </data>
+  <data name="FlowTestStepBaseExpressionReturned" xml:space="preserve">
+    <value>1. Basisausdruck lieferte</value>
+  </data>
+  <data name="FlowTestStepValueProcessing" xml:space="preserve">
+    <value>2. Wertverarbeitung</value>
+  </data>
+  <data name="FlowTestStepConverted" xml:space="preserve">
+    <value>3. Umgewandelt für {0}</value>
+  </data>
+  <data name="FlowTestStepBaseForGeneration" xml:space="preserve">
+    <value>3. Basis für die Generierung</value>
+  </data>
+  <data name="FlowTestStepResult" xml:space="preserve">
+    <value>4. Ergebnis</value>
+  </data>
+  <data name="FlowTestResultType" xml:space="preserve">
+    <value>Typ: {0}</value>
+  </data>
+  <data name="FlowTestNoValue" xml:space="preserve">
+    <value>Kein Wert</value>
+  </data>
+  <data name="FlowTestFailed" xml:space="preserve">
+    <value>Fehlgeschlagen: {0}</value>
+  </data>
+  <data name="FlowTestNotEvaluated" xml:space="preserve">
+    <value>Nicht ausgewertet: kein Wert für {0}</value>
+  </data>
+  <data name="FlowTestNotConvertible" xml:space="preserve">
+    <value>„{0}“ ist kein {1}-Wert</value>
+  </data>
+  <data name="FlowTestMultiValuedResult" xml:space="preserve">
+    <value>{0} Werte, für ein Attribut, das einen enthält</value>
+  </data>
+  <data name="FlowTestNothingToConvert" xml:space="preserve">
+    <value>Nichts umzuwandeln</value>
+  </data>
+  <data name="FlowTestNoBaseExpression" xml:space="preserve">
+    <value>Kein Basisausdruck</value>
+  </data>
+  <data name="FlowTestSaveAsTestCase" xml:space="preserve">
+    <value>Als Testfall speichern</value>
+  </data>
+  <data name="FlowTestFindMetaverseObject" xml:space="preserve">
+    <value>{0} suchen</value>
+  </data>
+  <data name="FlowTestFindConnectedSystemObject" xml:space="preserve">
+    <value>{0} in {1} suchen</value>
+  </data>
+  <data name="FlowTestMetaverseObjectFallback" xml:space="preserve">
+    <value>Metaverse-Objekt</value>
+  </data>
+  <data name="FlowTestConnectedSystemObjectFallback" xml:space="preserve">
+    <value>Objekt im verbundenen System</value>
+  </data>
+  <data name="FlowTestConnectedSystemFallback" xml:space="preserve">
+    <value>dem verbundenen System</value>
+  </data>
+  <data name="FlowTestTargetFallback" xml:space="preserve">
+    <value>das Ziel</value>
+  </data>
+  <data name="FlowTestNothingToProcess" xml:space="preserve">
+    <value>Nichts zu verarbeiten</value>
+  </data>
+  <data name="FlowTestNotAppliedText" xml:space="preserve">
+    <value>Nicht angewendet: Die Wertverarbeitung gilt nur für Textattribute beim Import</value>
+  </data>
+  <data name="FlowTestNotAppliedImport" xml:space="preserve">
+    <value>Nicht angewendet: Die Wertverarbeitung gilt nur beim Import</value>
+  </data>
+  <data name="FlowTestNoneSet" xml:space="preserve">
+    <value>Keine festgelegt</value>
+  </data>
+  <data name="FlowTestStepsThen" xml:space="preserve">
+    <value>{0}, dann {1}</value>
+  </data>
+  <data name="FlowTestProcessingChanged" xml:space="preserve">
+    <value>{0}: Wert geändert</value>
+  </data>
+  <data name="FlowTestProcessingUnchanged" xml:space="preserve">
+    <value>{0}: unverändert</value>
+  </data>
+  <data name="FlowTestBaseOutcomeBase" xml:space="preserve">
+    <value>Basis</value>
+  </data>
+  <data name="FlowTestBaseOutcomeWaits" xml:space="preserve">
+    <value>Wartet</value>
+  </data>
+  <data name="FlowTestBaseOutcomeTokenOnly" xml:space="preserve">
+    <value>Nur Token</value>
+  </data>
+  <data name="FlowTestOutcomeError" xml:space="preserve">
+    <value>Fehler</value>
+  </data>
+  <data name="FlowTestOutcomeValues" xml:space="preserve">
+    <value>Werte</value>
+  </data>
+  <data name="FlowTestOutcomeNoValue" xml:space="preserve">
+    <value>Kein Wert</value>
+  </data>
+  <data name="FlowTestStepTrim" xml:space="preserve">
+    <value>Führenden und nachgestellten Leerraum entfernen</value>
+  </data>
+  <data name="FlowTestStepCollapse" xml:space="preserve">
+    <value>Internen Leerraum zusammenfassen</value>
+  </data>
+  <data name="FlowTestStepUpper" xml:space="preserve">
+    <value>Großbuchstaben</value>
+  </data>
+  <data name="FlowTestStepLower" xml:space="preserve">
+    <value>Kleinbuchstaben</value>
+  </data>
+  <data name="FlowTestStepTitle" xml:space="preserve">
+    <value>Initialgroßschreibung</value>
+  </data>
+  <data name="FlowTestStepWhitespaceNoValue" xml:space="preserve">
+    <value>Leerraum als keinen Wert behandeln</value>
+  </data>
+  <data name="FlowTestSavedCaseGenerated" xml:space="preserve">
+    <value>Generierter Wert für {0}, ausgeführt gegen den Attributfluss wie gespeichert</value>
+  </data>
+  <data name="FlowTestSavedCaseFlow" xml:space="preserve">
+    <value>Attributfluss zu {0}, ausgeführt gegen den Attributfluss wie gespeichert</value>
+  </data>
+  <data name="ScopingGroupLogicType" xml:space="preserve">
+    <value>KRITERIENGRUPPE. LOGIKTYP:</value>
+  </data>
+  <data name="ScopingDeleteGroup" xml:space="preserve">
+    <value>Gruppe löschen</value>
+  </data>
+  <data name="ScopingDeleteAria" xml:space="preserve">
+    <value>löschen</value>
+  </data>
+  <data name="ScopingDeleteCriteria" xml:space="preserve">
+    <value>Kriterien löschen</value>
+  </data>
+  <data name="ScopingAddCriteria" xml:space="preserve">
+    <value>Kriterien hinzufügen</value>
+  </data>
+  <data name="ScopingAddFirstCriteria" xml:space="preserve">
+    <value>Fügen Sie Ihre ersten Kriterien hinzu ...</value>
+  </data>
+  <data name="ScopingObjectTypeFallback" xml:space="preserve">
+    <value>Objekttyp {0}</value>
+  </data>
+  <data name="ScopingConnectionIn" xml:space="preserve">
+    <value>in</value>
+  </data>
+  <data name="ScopingExpressionComparedAs" xml:space="preserve">
+    <value>Ausdruck, verglichen als {0}</value>
+  </data>
+  <data name="ScopingCompare" xml:space="preserve">
+    <value>Vergleichen</value>
+  </data>
+  <data name="ScopingOptionAttribute" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="ScopingOptionAttributeTooltip" xml:space="preserve">
+    <value>Die Werte vergleichen, die ein Attribut enthält</value>
+  </data>
+  <data name="ScopingOptionExpression" xml:space="preserve">
+    <value>Ausdruck</value>
+  </data>
+  <data name="ScopingOptionExpressionTooltip" xml:space="preserve">
+    <value>Einen aus dem Objekt berechneten Wert vergleichen, für Werte, die die Quelle in anderer Form speichert</value>
+  </data>
+  <data name="ScopingOptionConnection" xml:space="preserve">
+    <value>Verbindung</value>
+  </data>
+  <data name="ScopingOptionConnectionTooltip" xml:space="preserve">
+    <value>Prüfen, ob die Identität mit einem Objekt eines Typs in einem verbundenen System verknüpft ist</value>
+  </data>
+  <data name="ScopingConnectedSystem" xml:space="preserve">
+    <value>Verbundenes System</value>
+  </data>
+  <data name="ScopingSelectConnectedSystem" xml:space="preserve">
+    <value>Bitte wählen Sie ein verbundenes System aus</value>
+  </data>
+  <data name="ScopingConnectedSystemHelp" xml:space="preserve">
+    <value>Das System, mit dessen Objekten die Identität verknüpft sein muss oder nicht verknüpft sein darf</value>
+  </data>
+  <data name="ScopingObjectType" xml:space="preserve">
+    <value>Objekttyp</value>
+  </data>
+  <data name="ScopingSelectObjectType" xml:space="preserve">
+    <value>Bitte wählen Sie einen Objekttyp aus</value>
+  </data>
+  <data name="ScopingExpressionLabel" xml:space="preserve">
+    <value>Ausdruck</value>
+  </data>
+  <data name="ScopingCompareAs" xml:space="preserve">
+    <value>Vergleichen als</value>
+  </data>
+  <data name="ScopingCompareAsHelp" xml:space="preserve">
+    <value>Der Typ, in den der berechnete Wert vor dem Vergleich umgewandelt wird</value>
+  </data>
+  <data name="ScopingMetaverseAttribute" xml:space="preserve">
+    <value>Metaverse-Attribut</value>
+  </data>
+  <data name="ScopingSelectMetaverseAttribute" xml:space="preserve">
+    <value>Bitte wählen Sie ein Metaverse-Attribut aus</value>
+  </data>
+  <data name="ScopingConnectedSystemAttribute" xml:space="preserve">
+    <value>Attribut des verbundenen Systems</value>
+  </data>
+  <data name="ScopingSelectConnectedSystemAttribute" xml:space="preserve">
+    <value>Bitte wählen Sie ein Attribut des verbundenen Systems aus</value>
+  </data>
+  <data name="ScopingComparisonType" xml:space="preserve">
+    <value>Vergleichstyp</value>
+  </data>
+  <data name="ScopingSelectComparisonType" xml:space="preserve">
+    <value>Bitte wählen Sie die Art des Vergleichs aus</value>
+  </data>
+  <data name="ScopingConnectionHas" xml:space="preserve">
+    <value>Hat</value>
+  </data>
+  <data name="ScopingConnectionHasNo" xml:space="preserve">
+    <value>Hat kein</value>
+  </data>
+  <data name="ScopingExpressionPlaceholderExport" xml:space="preserve">
+    <value>z. B. Lower(Trim(mv["Department"]))</value>
+  </data>
+  <data name="ScopingExpressionPlaceholderImport" xml:space="preserve">
+    <value>z. B. Lower(Trim(cs["department"]))</value>
+  </data>
+  <data name="ScopingExpressionHelpExport" xml:space="preserve">
+    <value>Liest nur das Metaverse-Objekt, als mv["Attribute Name"].</value>
+  </data>
+  <data name="ScopingExpressionHelpImport" xml:space="preserve">
+    <value>Liest nur das Objekt im verbundenen System, als cs["attributeName"].</value>
+  </data>
+  <data name="ScopingScopedTypeFallback" xml:space="preserve">
+    <value>der Objekttyp im Geltungsbereich</value>
+  </data>
+  <data name="ScopingAttributeFallback" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+</root>

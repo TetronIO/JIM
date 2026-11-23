@@ -1,0 +1,894 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="BaseExpressionLabel" xml:space="preserve">
+    <value>Basisausdruck</value>
+  </data>
+  <data name="UniquenessTokenTitle" xml:space="preserve">
+    <value>Eindeutigkeitstoken</value>
+  </data>
+  <data name="TokenOnlyIfTaken" xml:space="preserve">
+    <value>Nur eine Zahl anhängen, wenn der Wert bereits vergeben ist</value>
+  </data>
+  <data name="TokenSequence" xml:space="preserve">
+    <value>Immer eine laufende Nummer anhängen</value>
+  </data>
+  <data name="TokenSequenceHint" xml:space="preserve">
+    <value>Die nächste Zahl eines Zählers, der für das Zielattribut geführt wird. Optional mit fester Breite.</value>
+  </data>
+  <data name="TokenRandom" xml:space="preserve">
+    <value>Immer ein Zufallstoken anhängen</value>
+  </data>
+  <data name="StyleLabel" xml:space="preserve">
+    <value>Stil</value>
+  </data>
+  <data name="SuffixNumber" xml:space="preserve">
+    <value>Zahl</value>
+  </data>
+  <data name="SuffixLetter" xml:space="preserve">
+    <value>Buchstabe</value>
+  </data>
+  <data name="StartAt" xml:space="preserve">
+    <value>Startwert</value>
+  </data>
+  <data name="Increment" xml:space="preserve">
+    <value>Schrittweite</value>
+  </data>
+  <data name="NeverReuseLabel" xml:space="preserve">
+    <value>Wert nie wiederverwenden</value>
+  </data>
+  <data name="PadToFixedWidth" xml:space="preserve">
+    <value>Auf feste Breite auffüllen</value>
+  </data>
+  <data name="PadNotAvailableNumber" xml:space="preserve">
+    <value>Nicht verfügbar: Ein Zahlenattribut kann keine führenden Nullen enthalten. Wählen Sie ein Textattribut für Werte mit fester Breite.</value>
+  </data>
+  <data name="PadOffOrOn" xml:space="preserve">
+    <value>Aus: einfache Zahlen. Ein: mit Nullen auf die unten angegebene Breite aufgefüllt.</value>
+  </data>
+  <data name="WidthLabel" xml:space="preserve">
+    <value>Breite</value>
+  </data>
+  <data name="WidthExceededTitle" xml:space="preserve">
+    <value>Wenn die Zahl die Breite überschreitet</value>
+  </data>
+  <data name="StopAndReport" xml:space="preserve">
+    <value>Anhalten und einen Fehler melden</value>
+  </data>
+  <data name="StopAndReportHint" xml:space="preserve">
+    <value>Für nachgelagerte Prüfungen auf feste Länge. Das Objekt schlägt mit einer eindeutigen Begründung fehl; es wird nichts geschrieben.</value>
+  </data>
+  <data name="AllowLonger" xml:space="preserve">
+    <value>Längere Zahlen zulassen</value>
+  </data>
+  <data name="AllowLongerHint" xml:space="preserve">
+    <value>Die Breite wird zum Mindestwert: Eine Zahl, die nicht mehr hineinpasst, wird länger, statt zu scheitern.</value>
+  </data>
+  <data name="SequenceAlwaysOn" xml:space="preserve">
+    <value>Bei laufenden Nummern immer aktiv: Der Zähler läuft nur vorwärts.</value>
+  </data>
+  <data name="FormatLabel" xml:space="preserve">
+    <value>Format</value>
+  </data>
+  <data name="FormatGuid" xml:space="preserve">
+    <value>GUID</value>
+  </data>
+  <data name="FormatHex" xml:space="preserve">
+    <value>Hex</value>
+  </data>
+  <data name="FormatDigits" xml:space="preserve">
+    <value>Ziffern</value>
+  </data>
+  <data name="LengthLabel" xml:space="preserve">
+    <value>Länge</value>
+  </data>
+  <data name="MissingInputTitle" xml:space="preserve">
+    <value>Wenn eine Eingabe keinen Wert hat</value>
+  </data>
+  <data name="WaitForInputs" xml:space="preserve">
+    <value>Warten, bis jede Eingabe einen Wert hat</value>
+  </data>
+  <data name="WaitForInputsHint" xml:space="preserve">
+    <value>Empfohlen für generierte Werte: Ein aus einer fehlenden Eingabe gebildeter Wert bliebe für immer bestehen.</value>
+  </data>
+  <data name="EvaluateAnyway" xml:space="preserve">
+    <value>Trotzdem auswerten</value>
+  </data>
+  <data name="EvaluateAnywayHint" xml:space="preserve">
+    <value>Nur, wenn der Ausdruck fehlende Werte selbst behandelt, zum Beispiel mit IIF und IsNullOrEmpty.</value>
+  </data>
+  <data name="CheckedForAvailabilityTitle" xml:space="preserve">
+    <value>Auf Verfügbarkeit geprüft</value>
+  </data>
+  <data name="CollisionRemediationTitle" xml:space="preserve">
+    <value>Kollisionsbehebung</value>
+  </data>
+  <data name="AdvancedTitle" xml:space="preserve">
+    <value>Erweitert</value>
+  </data>
+  <data name="AttemptLimitSummary" xml:space="preserve">
+    <value>Versuchslimit {0}</value>
+  </data>
+  <data name="AttemptLimitLabel" xml:space="preserve">
+    <value>Versuchslimit</value>
+  </data>
+  <data name="AttemptLimitHelper" xml:space="preserve">
+    <value>Pro Objekt und Ausführung probierte Kandidaten, bevor das Objekt fehlschlägt.</value>
+  </data>
+  <data name="CannotBeSaved" xml:space="preserve">
+    <value>Diese Konfiguration kann nicht gespeichert werden:</value>
+  </data>
+  <data name="HideHowItWorks" xml:space="preserve">
+    <value>Funktionsweise ausblenden</value>
+  </data>
+  <data name="HowItWorks" xml:space="preserve">
+    <value>Funktionsweise</value>
+  </data>
+  <data name="WhenGeneratedHeading" xml:space="preserve">
+    <value>Wenn JIM diesen Wert generiert</value>
+  </data>
+  <data name="ImportStatement" xml:space="preserve">
+    <value>1. Keine Quelle mit höherer Priorität liefert {0} für das Metaverse-Objekt. JIM generiert beim ersten Mal einen Wert und behält ihn ab dann bei. Wie jeder Attributfluss, der das Attribut übernimmt, ersetzt er einen Wert, den eine Quelle mit höherer Priorität hinterlassen hat, als sie aufhörte, einen zu liefern.</value>
+  </data>
+  <data name="ImportTargetFallback" xml:space="preserve">
+    <value>dieses Attribut</value>
+  </data>
+  <data name="ExportStatement" xml:space="preserve">
+    <value>1. JIM generiert {0}, wenn es erstmals in ein Objekt im verbundenen System exportiert wird, und behält diesen Wert ab dann bei. Ein Wert, den das verbundene System bereits enthält, wird ersetzt; um ihn nur für Konten festzulegen, die JIM erstellt, aktivieren Sie „Nur Erstexport“.</value>
+  </data>
+  <data name="ExportTargetFallback" xml:space="preserve">
+    <value>der Wert</value>
+  </data>
+  <data name="NoInputsToWait" xml:space="preserve">
+    <value>2. Keine Eingaben, auf die gewartet werden muss: Der Basisausdruck ist leer.</value>
+  </data>
+  <data name="ThenOnce" xml:space="preserve">
+    <value>3. Danach nur einmal.</value>
+  </data>
+  <data name="EveryInputHasValue" xml:space="preserve">
+    <value>2. Jedes Attribut, das der Basisausdruck liest, hat einen Wert:</value>
+  </data>
+  <data name="ThenOnceKept" xml:space="preserve">
+    <value>3. Danach nur einmal. Der Wert bleibt bestehen, auch wenn sich diese Eingaben später ändern.</value>
+  </data>
+  <data name="ThisValueFallback" xml:space="preserve">
+    <value>dieser Wert</value>
+  </data>
+  <data name="GeneratedOnceKept" xml:space="preserve">
+    <value>Einmal generiert, dann beibehalten.</value>
+  </data>
+  <data name="GeneratedOnceWhenInputs" xml:space="preserve">
+    <value>Einmal generiert, sobald jede Eingabe einen Wert hat, dann beibehalten, auch wenn sich die Eingaben ändern.</value>
+  </data>
+  <data name="NeverReuseOff" xml:space="preserve">
+    <value>Aus: Sobald JIM einen Wert nicht mehr hält, kann er erneut vergeben werden, möglicherweise an eine andere Person.</value>
+  </data>
+  <data name="NeverReuseOn" xml:space="preserve">
+    <value>Ein: Sobald JIM einen Wert nicht mehr hält, wird er nie wieder vergeben. Deaktivieren Sie dies nur, wenn ein Wert unbedenklich an eine andere Person übergehen darf.</value>
+  </data>
+  <data name="OnlyIfTakenNumberHint" xml:space="preserve">
+    <value>Erfordert einen Basisausdruck; nicht verfügbar für ein Zahlenattribut.</value>
+  </data>
+  <data name="OnlyIfTakenAddBaseHint" xml:space="preserve">
+    <value>Erfordert einen Basisausdruck; fügen Sie oben einen hinzu oder wählen Sie stattdessen eine laufende Nummer oder ein Zufallstoken.</value>
+  </data>
+  <data name="RandomSubtextNumber" xml:space="preserve">
+    <value>Nur Ziffern für ein Zahlenattribut; GUID und Hex sind Text.</value>
+  </data>
+  <data name="RandomSubtext" xml:space="preserve">
+    <value>Eine GUID oder eine kurze Hex- oder Ziffernfolge. Bei einem Konflikt wird neu gezogen.</value>
+  </data>
+  <data name="BaseExpressionNumberHint" xml:space="preserve">
+    <value>Nicht verfügbar für ein Zahlenattribut: Ein Präfix oder Buchstaben würden den Wert zu Text machen.</value>
+  </data>
+  <data name="BaseExpressionHint" xml:space="preserve">
+    <value>Liest die Attribute des Quellobjekts. Optional bei einer laufenden Nummer oder einem Zufallstoken.</value>
+  </data>
+  <data name="ListAnd" xml:space="preserve">
+    <value>{0} und {1}</value>
+  </data>
+  <data name="RefusalCorrected" xml:space="preserve">
+    <value>{0} wird korrigiert</value>
+  </data>
+  <data name="RefusalKeepUniqueOff" xml:space="preserve">
+    <value>Exportfehler („Eindeutig halten“ ist aus)</value>
+  </data>
+  <data name="RefusalCollisionOff" xml:space="preserve">
+    <value>Exportfehler (Kollisionsbehebung ist aus)</value>
+  </data>
+  <data name="RefusalBuiltFromSeveral" xml:space="preserve">
+    <value>Exportfehler (aus mehr als einem generierten Wert gebildet)</value>
+  </data>
+  <data name="HowBuiltAlsoFrom" xml:space="preserve">
+    <value>außerdem gebildet aus {0}</value>
+  </data>
+  <data name="HowBuiltVia" xml:space="preserve">
+    <value>über {0}</value>
+  </data>
+  <data name="HowBuiltExpression" xml:space="preserve">
+    <value>Ausdruck</value>
+  </data>
+  <data name="HowBuiltFrom" xml:space="preserve">
+    <value>aus {0}</value>
+  </data>
+  <data name="PanelTitle" xml:space="preserve">
+    <value>Aus {0} gebildete Werte</value>
+  </data>
+  <data name="PanelHelperText" xml:space="preserve">
+    <value>JIM vergibt {0} nur, wenn auch jeder vor der Vergabe geprüfte Wert frei ist, damit sie konsistent bleiben. Lehnt ein Ziel dennoch einen ab, korrigiert JIM {1}, es sei denn, der Schalter „Eindeutig halten“ des Werts ist aus. Ändern Sie den Schalter eines Werts in dessen eigenem Attributfluss.</value>
+  </data>
+  <data name="BeforeIssuingChecked" xml:space="preserve">
+    <value>Geprüft</value>
+  </data>
+  <data name="BeforeIssuingNotChecked" xml:space="preserve">
+    <value>Nicht geprüft</value>
+  </data>
+  <data name="BeforeIssuingRecords" xml:space="preserve">
+    <value>Datensätze von JIM</value>
+  </data>
+  <data name="BeforeIssuingRecordsAndProbes" xml:space="preserve">
+    <value>Datensätze von JIM und {0}</value>
+  </data>
+  <data name="BeforeIssuingOtherRule" xml:space="preserve">
+    <value>Gebildet auf Grundlage von {0}, die erst läuft, sobald die Person in diesem System vorhanden ist.</value>
+  </data>
+  <data name="MoveSuggestion" xml:space="preserve">
+    <value> Verschieben Sie ihn in {0}, damit er zuerst geprüft wird.</value>
+  </data>
+  <data name="BeforeIssuingKeepUniqueOff" xml:space="preserve">
+    <value>„Eindeutig halten“ ist aus</value>
+  </data>
+  <data name="BeforeIssuingBuiltFromSeveral" xml:space="preserve">
+    <value>Aus mehr als einem generierten Wert gebildet</value>
+  </data>
+  <data name="BeforeIssuingExcluded" xml:space="preserve">
+    <value>Sein verbundenes System ist von den Prüfungen von {0} ausgeschlossen</value>
+  </data>
+  <data name="NoBuiltValues" xml:space="preserve">
+    <value>Kein Attributfluss bildet einen Wert aus {0}.</value>
+  </data>
+  <data name="SwitchLabel" xml:space="preserve">
+    <value>Mit {0} eindeutig halten</value>
+  </data>
+  <data name="SwitchKeepUniqueOff" xml:space="preserve">
+    <value>Lehnt ein Ziel diesen Wert ab, meldet JIM einen Exportfehler und lässt {0} unverändert.</value>
+  </data>
+  <data name="SwitchCorrected" xml:space="preserve">
+    <value>JIM korrigiert {0} und berechnet diesen Wert aus dem neuen Wert erneut.</value>
+  </data>
+  <data name="SwitchChecked" xml:space="preserve">
+    <value>Geprüft, bevor {0} vergeben wird: JIM wechselt zum nächsten {0}, wenn dieser Wert bereits verwendet wird. Lehnt ein Ziel ihn dennoch ab: {1}</value>
+  </data>
+  <data name="SwitchNotCheckedOtherRule" xml:space="preserve">
+    <value>Nicht geprüft, bevor {0} vergeben wird, da er auf Grundlage von {1} gebildet wird, einer anderen Synchronisierungsregel.{2} Lehnt ein Ziel ihn ab: {3}</value>
+  </data>
+  <data name="SwitchNotCheckedExcluded" xml:space="preserve">
+    <value>Nicht geprüft, bevor {0} vergeben wird, da sein verbundenes System von den Prüfungen von {0} ausgeschlossen ist. Lehnt ein Ziel ihn ab: {1}</value>
+  </data>
+  <data name="NotInEffect" xml:space="preserve">
+    <value>Die Kollisionsbehebung ist im Attributfluss {0} ausgeschaltet, daher wird nichts, was aus {0} gebildet wird, korrigiert, und die Ablehnung dieses Werts ist ein Exportfehler. Sie können den Schalter trotzdem ändern; er wird wirksam, sobald die Kollisionsbehebung wieder eingeschaltet wird.</value>
+  </data>
+  <data name="BuiltFromSeveral" xml:space="preserve">
+    <value>Dieser Wert wird aus {0} gebildet, daher kann JIM nicht erkennen, welcher korrigiert werden soll. Eine Ablehnung wird als Exportfehler gemeldet.</value>
+  </data>
+  <data name="RenameTitle" xml:space="preserve">
+    <value>Umbenennung zulassen</value>
+  </data>
+  <data name="RenameWorking" xml:space="preserve">
+    <value>Ermitteln, was sich ändert ...</value>
+  </data>
+  <data name="RenameRejectedFallback" xml:space="preserve">
+    <value>Ein verbundenes System</value>
+  </data>
+  <data name="RenameIntro" xml:space="preserve">
+    <value>{0} hat {1} als bereits verwendet abgelehnt{2}. Wenn Sie die Umbenennung zulassen, wählt JIM beim nächsten Export den nächsten freien Wert und wendet ihn überall an{3}.</value>
+  </data>
+  <data name="RenameAnchorClause" xml:space="preserve">
+    <value>, und {0} hat ein Konto mit diesem Wert</value>
+  </data>
+  <data name="RenameRenameClause" xml:space="preserve">
+    <value>, wobei das Konto in {0} umbenannt wird</value>
+  </data>
+  <data name="RenameColumnConnectedSystem" xml:space="preserve">
+    <value>Verbundenes System</value>
+  </data>
+  <data name="RenameColumnChange" xml:space="preserve">
+    <value>Änderung</value>
+  </data>
+  <data name="RenameColumnWhen" xml:space="preserve">
+    <value>Zeitpunkt</value>
+  </data>
+  <data name="RenameNextExportRun" xml:space="preserve">
+    <value>Nächste Exportausführung</value>
+  </data>
+  <data name="RenameNewValueHeading" xml:space="preserve">
+    <value>Neuer Wert</value>
+  </data>
+  <data name="RenameLikely" xml:space="preserve">
+    <value>Wahrscheinlich</value>
+  </data>
+  <data name="RenameDecided" xml:space="preserve">
+    <value>Festgelegt</value>
+  </data>
+  <data name="RenameDecidedAtNextExport" xml:space="preserve">
+    <value>Beim nächsten Export, nachdem jedes System erneut geprüft wurde</value>
+  </data>
+  <data name="RenameRecorded" xml:space="preserve">
+    <value>Im Verlauf von {0} und als Aktivität aufgezeichnet, wie von Ihnen zugelassen.</value>
+  </data>
+  <data name="RenameTheObject" xml:space="preserve">
+    <value>das Objekt</value>
+  </data>
+  <data name="RenameNoLongerExists" xml:space="preserve">
+    <value>Dieser generierte Wert existiert nicht mehr.</value>
+  </data>
+  <data name="RenameAllowedDone" xml:space="preserve">
+    <value>Umbenennung zugelassen. Die nächste Exportausführung wählt den neuen Wert.</value>
+  </data>
+  <data name="RenameNothingChanged" xml:space="preserve">
+    <value>Es wurde nichts geändert; der Wert wartet nicht mehr auf eine Entscheidung.</value>
+  </data>
+  <data name="RetiredTitle" xml:space="preserve">
+    <value>Stillgelegte Werte: {0}</value>
+  </data>
+  <data name="RetiredIntro" xml:space="preserve">
+    <value>JIM vergibt diese Werte für {0} nie wieder, unabhängig davon, welcher Attributfluss es generiert. Ein Wert wird stillgelegt, wenn das Objekt, das ihn hielt, gelöscht wird oder wenn der Wert nicht mehr von JIM verwaltet wird.</value>
+  </data>
+  <data name="RetiredColumnValue" xml:space="preserve">
+    <value>Wert</value>
+  </data>
+  <data name="RetiredColumnRetired" xml:space="preserve">
+    <value>Stillgelegt</value>
+  </data>
+  <data name="RetiredColumnWhy" xml:space="preserve">
+    <value>Grund</value>
+  </data>
+  <data name="RetiredColumnHeldBy" xml:space="preserve">
+    <value>Gehalten von</value>
+  </data>
+  <data name="RetiredHeldByDeletedHint" xml:space="preserve">
+    <value>Das Objekt, das diesen Wert hielt, wurde gelöscht.</value>
+  </data>
+  <data name="RetiredHeldByDeleted" xml:space="preserve">
+    <value>{0} (gelöscht)</value>
+  </data>
+  <data name="RetiredSearchPlaceholder" xml:space="preserve">
+    <value>Stillgelegte Werte suchen</value>
+  </data>
+  <data name="RetiredValueSingular" xml:space="preserve">
+    <value>stillgelegter Wert</value>
+  </data>
+  <data name="RetiredValuePlural" xml:space="preserve">
+    <value>stillgelegte Werte</value>
+  </data>
+  <data name="RetiredNoSearchMatch" xml:space="preserve">
+    <value>Keine stillgelegten Werte entsprechen „{0}“.</value>
+  </data>
+  <data name="RetiredNoValuesForAttribute" xml:space="preserve">
+    <value>Für {0} wurden keine Werte stillgelegt.</value>
+  </data>
+  <data name="RetiredEmptyHint" xml:space="preserve">
+    <value>Ein Wert wird stillgelegt, wenn das Objekt, das ihn hielt, gelöscht wird oder JIM ihn nicht mehr verwaltet.</value>
+  </data>
+  <data name="RetiredKeptPermanently" xml:space="preserve">
+    <value>Stillgelegte Werte werden dauerhaft aufbewahrt. Bei einem Sequenzfluss löscht nur „Neu starten“ sie.</value>
+  </data>
+  <data name="StartAgainLabel" xml:space="preserve">
+    <value>Neu starten</value>
+  </data>
+  <data name="AvailabilityPanelHelper" xml:space="preserve">
+    <value>Jedes verbundene System, in das dieser Wert exportiert wird. Wird er unverändert exportiert, prüft JIM vor der Wahl eines Werts seine eigenen Datensätze zu diesem System und fragt, sofern der Connector dies unterstützt, zusätzlich das Ziel ab: Es fragt das Ziel direkt, ob der Wert bereits verwendet wird, wodurch auch Konten erkannt werden, die JIM nicht importiert. Diese Liste aktualisiert sich selbst, wenn sich Export-Synchronisierungsregeln ändern.</value>
+  </data>
+  <data name="AvailabilityNoParticipants" xml:space="preserve">
+    <value>Noch keine Export-Synchronisierungsregel sendet diesen Wert an ein verbundenes System, daher prüft JIM nur die Werte, die es bereits generiert hat.</value>
+  </data>
+  <data name="AvailabilityCheckRecordsAndProbe" xml:space="preserve">
+    <value>Datensätze von JIM + Abfrage</value>
+  </data>
+  <data name="AvailabilityCheckRecordsOnly" xml:space="preserve">
+    <value>Nur Datensätze von JIM</value>
+  </data>
+  <data name="AvailabilityNotChecked" xml:space="preserve">
+    <value>Nicht geprüft</value>
+  </data>
+  <data name="AvailabilityReasonCannotProbe" xml:space="preserve">
+    <value>Dieser Connector kann sein Ziel nicht abfragen.</value>
+  </data>
+  <data name="AvailabilityReasonAttributeNotProbed" xml:space="preserve">
+    <value>JIM fragt dieses Attribut nicht ab: Es identifiziert das Konto in diesem System (seine externe ID oder DN), oder seine Werte müssen nur innerhalb ihres Containers eindeutig sein.</value>
+  </data>
+  <data name="AvailabilityReasonNotText" xml:space="preserve">
+    <value>Nur Textwerte werden abgefragt.</value>
+  </data>
+  <data name="AvailabilityReasonExpression" xml:space="preserve">
+    <value>Über einen Ausdruck exportiert, daher weicht der Wert hier vom generierten ab. JIM prüft ihn nicht; wird er hier bereits verwendet, schlägt der Export fehl.</value>
+  </data>
+  <data name="AvailabilityReasonCombined" xml:space="preserve">
+    <value>Mit anderen Werten kombiniert exportiert, daher weicht der Wert hier vom generierten ab. JIM prüft ihn nicht; wird er hier bereits verwendet, schlägt der Export fehl.</value>
+  </data>
+  <data name="AvailabilityReasonExcluded" xml:space="preserve">
+    <value>Ausgeschlossen: Bereits hier verwendete Werte hindern JIM nicht daran, sie zu wählen.</value>
+  </data>
+  <data name="AvailabilityPronounIt" xml:space="preserve">
+    <value>es</value>
+  </data>
+  <data name="AvailabilityPronounEither" xml:space="preserve">
+    <value>eines von beiden</value>
+  </data>
+  <data name="AvailabilityPronounAny" xml:space="preserve">
+    <value>eines davon</value>
+  </data>
+  <data name="SyncProbeBuiltBefore" xml:space="preserve">
+    <value>Diese Vorschau prüft nur die eigenen Datensätze von JIM. Bei der Synchronisierung fragt JIM zusätzlich {0} für {1} (gebildet aus {2}) ab. Falls {3} bereits ein Konto mit </value>
+  </data>
+  <data name="SyncProbeBuiltAfter" xml:space="preserve">
+    <value> (eines, das JIM nicht importiert) hat, erzeugt die Synchronisierung stattdessen einen anderen Wert für {0}.</value>
+  </data>
+  <data name="SyncProbeBefore" xml:space="preserve">
+    <value>Diese Vorschau prüft nur die eigenen Datensätze von JIM. Bei der Synchronisierung fragt JIM zusätzlich {0} ab. Falls {1} bereits ein Konto mit </value>
+  </data>
+  <data name="SyncProbeAfter" xml:space="preserve">
+    <value> (eines, das JIM nicht importiert) hat, erzeugt die Synchronisierung stattdessen einen anderen Wert.</value>
+  </data>
+  <data name="PreviewSequenceTaken" xml:space="preserve">
+    <value>übersprungen; die nächste wird verwendet, und die übersprungene Zahl wird nicht wiederverwendet</value>
+  </data>
+  <data name="PreviewRandomCryptographic" xml:space="preserve">
+    <value>kryptografisch</value>
+  </data>
+  <data name="PreviewSampleExample" xml:space="preserve">
+    <value>ein Beispiel, bei dem jede Eingabe durch ihren eigenen Namen ersetzt wird; geben Sie Werte ein, um Ihre zu sehen</value>
+  </data>
+  <data name="PreviewSampleEntered" xml:space="preserve">
+    <value>mit den oben eingegebenen Beispielwerten</value>
+  </data>
+  <data name="PreviewTriedValues" xml:space="preserve">
+    <value>aus den probierten Werten</value>
+  </data>
+  <data name="PreviewNothingWaits" xml:space="preserve">
+    <value>Für {0} wird nichts generiert, bis jede Eingabe, die der Basisausdruck liest, einen Wert hat.</value>
+  </data>
+  <data name="PreviewNothingFailed" xml:space="preserve">
+    <value>Die Basis konnte aus diesen Werten nicht berechnet werden, daher würde nichts für {0} generiert.</value>
+  </data>
+  <data name="PreviewExistingAllHaveValue" xml:space="preserve">
+    <value>Jedes vorhandene Metaverse-Objekt hat bereits einen Wert für {0}.</value>
+  </data>
+  <data name="PreviewExistingNoValueOne" xml:space="preserve">
+    <value>{0} vorhandenes Metaverse-Objekt hat kein {1} und würde bei der nächsten Synchronisierung eines erhalten.</value>
+  </data>
+  <data name="PreviewExistingNoValueOther" xml:space="preserve">
+    <value>{0} vorhandene Metaverse-Objekte haben kein {1} und würden bei der nächsten Synchronisierung eines erhalten.</value>
+  </data>
+  <data name="PreviewAssignedSoFar" xml:space="preserve">
+    <value>Bisher vergeben: {0} · gehört zu {1}, nicht zu diesem Attributfluss · nie unter dem Startwert eines Attributflusses</value>
+  </data>
+  <data name="PreviewUnseeded" xml:space="preserve">
+    <value>Dieser Zähler hat noch keine Zahl vergeben. Die erste generierte Zahl wird {0} sein.</value>
+  </data>
+  <data name="PreviewRetiredOne" xml:space="preserve">
+    <value>{0} stillgelegter Wert</value>
+  </data>
+  <data name="PreviewRetiredOther" xml:space="preserve">
+    <value>{0} stillgelegte Werte</value>
+  </data>
+  <data name="PreviewStartAgainNoOp" xml:space="preserve">
+    <value>Der Zähler steht bereits auf dem Startwert ({0}); ein Neustart ändert nichts.</value>
+  </data>
+  <data name="PreviewNoBaseValue" xml:space="preserve">
+    <value>kein Basiswert: Der Wert ist allein {0}</value>
+  </data>
+  <data name="PreviewNounNumber" xml:space="preserve">
+    <value>die Zahl</value>
+  </data>
+  <data name="PreviewNounToken" xml:space="preserve">
+    <value>das Token</value>
+  </data>
+  <data name="PreviewPlacementBeforeAt" xml:space="preserve">
+    <value>vor dem @ (der Wert hat die Form einer E-Mail-Adresse)</value>
+  </data>
+  <data name="PreviewPlacementAtEnd" xml:space="preserve">
+    <value>am Ende</value>
+  </data>
+  <data name="PreviewRestartStarted" xml:space="preserve">
+    <value>{0} neu gestartet: Der Zähler wurde von {1} auf {2} gesetzt.</value>
+  </data>
+  <data name="PreviewRestartNotSeeded" xml:space="preserve">
+    <value>„Neu starten“ wurde für {0} angefordert, aber sein Zähler hatte noch keine Zahlen vergeben, daher hat sich nichts bewegt.</value>
+  </data>
+  <data name="PreviewRestartForgottenOne" xml:space="preserve">
+    <value>{0} stillgelegter Wert wurde vergessen und kann erneut vergeben werden.</value>
+  </data>
+  <data name="PreviewRestartForgottenOther" xml:space="preserve">
+    <value>{0} stillgelegte Werte wurden vergessen und können erneut vergeben werden.</value>
+  </data>
+  <data name="PreviewResult" xml:space="preserve">
+    <value>Ergebnis</value>
+  </data>
+  <data name="PreviewFirstValue" xml:space="preserve">
+    <value>Erster Wert</value>
+  </data>
+  <data name="PreviewIfTaken" xml:space="preserve">
+    <value>Falls vergeben</value>
+  </data>
+  <data name="PreviewNextValues" xml:space="preserve">
+    <value>Nächste Werte</value>
+  </data>
+  <data name="PreviewIfNumberTaken" xml:space="preserve">
+    <value>Falls eine Zahl vergeben ist</value>
+  </data>
+  <data name="PreviewExample" xml:space="preserve">
+    <value>Beispiel</value>
+  </data>
+  <data name="PreviewSourceOfRandomness" xml:space="preserve">
+    <value>Quelle der Zufälligkeit</value>
+  </data>
+  <data name="PreviewCheckedWithEach" xml:space="preserve">
+    <value>Mit jedem Kandidaten geprüft</value>
+  </data>
+  <data name="PreviewValueColumn" xml:space="preserve">
+    <value>Wert</value>
+  </data>
+  <data name="PreviewCouldNotWorkOut" xml:space="preserve">
+    <value>Konnte nicht berechnet werden</value>
+  </data>
+  <data name="PreviewWhereNumberGoes" xml:space="preserve">
+    <value>Position der Zahl</value>
+  </data>
+  <data name="PreviewEvaluationError" xml:space="preserve">
+    <value>Der Beispielbasiswert konnte nicht ausgewertet werden ({0}); das Token wird allein in der Vorschau angezeigt.</value>
+  </data>
+  <data name="PreviewCountingExisting" xml:space="preserve">
+    <value>Vorhandene Metaverse-Objekte werden gezählt</value>
+  </data>
+  <data name="PreviewSequenceState" xml:space="preserve">
+    <value>Sequenzstatus</value>
+  </data>
+  <data name="PreviewNextNumber" xml:space="preserve">
+    <value>Nächste Zahl</value>
+  </data>
+  <data name="PreviewWidthExceeded" xml:space="preserve">
+    <value>Die nächste Zahl passt nicht mehr in die konfigurierte Breite; die Generierung schlägt für dieses Attribut fehl, bis die Breite oder der Zähler korrigiert wird.</value>
+  </data>
+  <data name="WhyRejectedFallback" xml:space="preserve">
+    <value>Ein verbundenes System</value>
+  </data>
+  <data name="WhyRejectedFallbackLower" xml:space="preserve">
+    <value>ein verbundenes System</value>
+  </data>
+  <data name="WhyAnchoredFallback" xml:space="preserve">
+    <value>ein anderes verbundenes System</value>
+  </data>
+  <data name="WhyThatSystem" xml:space="preserve">
+    <value>Dieses verbundene System</value>
+  </data>
+  <data name="WhyRejectedAnchored" xml:space="preserve">
+    <value> hat den Wert als bereits verwendet abgelehnt; </value>
+  </data>
+  <data name="WhyAnchoredHas" xml:space="preserve">
+    <value> hat ein Konto damit provisioniert.</value>
+  </data>
+  <data name="WhyCannotTellJoin" xml:space="preserve">
+    <value> hat den Wert als bereits verwendet abgelehnt; JIM konnte nicht feststellen, ob </value>
+  </data>
+  <data name="WhyCannotTellHolds" xml:space="preserve">
+    <value> ihn enthält.</value>
+  </data>
+  <data name="WhyRemediationLimit" xml:space="preserve">
+    <value>Korrigiert ({0}) und dennoch abgelehnt von </value>
+  </data>
+  <data name="WhyTimesOne" xml:space="preserve">
+    <value>einmal</value>
+  </data>
+  <data name="WhyTimesOther" xml:space="preserve">
+    <value>{0}-mal</value>
+  </data>
+  <data name="WhyNoValueAvailable" xml:space="preserve">
+    <value> hat den Wert als bereits verwendet abgelehnt, und JIM fand keinen anderen vergebbaren Wert.</value>
+  </data>
+  <data name="WhyRejectedOnly" xml:space="preserve">
+    <value> hat den Wert als bereits verwendet abgelehnt.</value>
+  </data>
+  <data name="WhyCorrectingRenames" xml:space="preserve">
+    <value>Eine Korrektur würde dieses Konto umbenennen.</value>
+  </data>
+  <data name="WhyCannotTell" xml:space="preserve">
+    <value>Der Connectorbereich von {0} wurde geleert und seitdem nicht vollständig importiert.</value>
+  </data>
+  <data name="WhyRemediationLimitStop" xml:space="preserve">
+    <value>JIM hört nach {0} Korrekturen auf, damit ein falsch konfiguriertes Ziel keine Werte aufbrauchen kann.</value>
+  </data>
+  <data name="WhyNoValueRaise" xml:space="preserve">
+    <value>Erhöhen Sie das Versuchslimit des Attributflusses oder vergrößern Sie seine feste Breite und versuchen Sie es dann erneut.</value>
+  </data>
+  <data name="TryAgainTitle" xml:space="preserve">
+    <value>Erneut versuchen</value>
+  </data>
+  <data name="TryAgainReleased" xml:space="preserve">
+    <value>Freigegeben. Die nächste Exportausführung versucht denselben Wert erneut.</value>
+  </data>
+  <data name="TryAgainHeldOne" xml:space="preserve">
+    <value>{0} zurückgehaltener Wert</value>
+  </data>
+  <data name="TryAgainHeldOther" xml:space="preserve">
+    <value>{0} zurückgehaltene Werte</value>
+  </data>
+  <data name="TryAgainConfirm" xml:space="preserve">
+    <value>{0} freigeben, damit die nächste Exportausführung denselben Wert erneut versucht? Werte, die das Ziel erneut ablehnt, erscheinen wieder hier.</value>
+  </data>
+  <data name="TryAgainNothingReleased" xml:space="preserve">
+    <value>Es wurde nichts freigegeben; kein Wert, der diesen Filtern entspricht, erfordert eine Entscheidung.</value>
+  </data>
+  <data name="TryAgainReleasedOne" xml:space="preserve">
+    <value>{0} zurückgehaltener Wert freigegeben. Die nächste Exportausführung versucht ihn erneut.</value>
+  </data>
+  <data name="TryAgainReleasedOther" xml:space="preserve">
+    <value>{0} zurückgehaltene Werte freigegeben. Die nächste Exportausführung versucht sie erneut.</value>
+  </data>
+  <data name="RoomForMore" xml:space="preserve">
+    <value>Platz für {0} weitere Zahlen</value>
+  </data>
+  <data name="PillLetterIfTaken" xml:space="preserve">
+    <value>Buchstabe, falls vergeben</value>
+  </data>
+  <data name="PillNumberIfTaken" xml:space="preserve">
+    <value>Zahl, falls vergeben</value>
+  </data>
+  <data name="PillSequenceWidth" xml:space="preserve">
+    <value>Sequenz ab {0} · Breite {1}</value>
+  </data>
+  <data name="PillSequenceFrom" xml:space="preserve">
+    <value>Sequenz ab {0}</value>
+  </data>
+  <data name="PillRandomGuid" xml:space="preserve">
+    <value>Zufällige GUID</value>
+  </data>
+  <data name="PillRandomHex" xml:space="preserve">
+    <value>Zufälliges Hex · {0}</value>
+  </data>
+  <data name="PillRandomDigits" xml:space="preserve">
+    <value>Zufällige Ziffern · {0}</value>
+  </data>
+  <data name="PillRandom" xml:space="preserve">
+    <value>Zufall</value>
+  </data>
+  <data name="ScaleTrillionOne" xml:space="preserve">
+    <value>Billion</value>
+  </data>
+  <data name="ScaleTrillionOther" xml:space="preserve">
+    <value>Billionen</value>
+  </data>
+  <data name="ScaleBillionOne" xml:space="preserve">
+    <value>Milliarde</value>
+  </data>
+  <data name="ScaleBillionOther" xml:space="preserve">
+    <value>Milliarden</value>
+  </data>
+  <data name="ScaleMillionOne" xml:space="preserve">
+    <value>Million</value>
+  </data>
+  <data name="ScaleMillionOther" xml:space="preserve">
+    <value>Millionen</value>
+  </data>
+  <data name="ScaleThousandOne" xml:space="preserve">
+    <value>Tausend</value>
+  </data>
+  <data name="ScaleThousandOther" xml:space="preserve">
+    <value>Tausend</value>
+  </data>
+  <data name="ClashDrawAgain" xml:space="preserve">
+    <value>bei Konflikten wird neu gezogen</value>
+  </data>
+  <data name="ClashBecomeLikely" xml:space="preserve">
+    <value>Konflikte werden ab ca. {0} Objekten wahrscheinlich</value>
+  </data>
+  <data name="HintGuid" xml:space="preserve">
+    <value>36 Zeichen · keine Konfliktprüfung nötig</value>
+  </data>
+  <data name="HintHex" xml:space="preserve">
+    <value>Kleinbuchstaben · {0} Werte · {1}</value>
+  </data>
+  <data name="HintDigits" xml:space="preserve">
+    <value>{0} Werte · {1}</value>
+  </data>
+  <data name="TargetMultiValued" xml:space="preserve">
+    <value>Ein generierter Wert kann nur einem einwertigen Attribut zugewiesen werden.</value>
+  </data>
+  <data name="TargetUnsupported" xml:space="preserve">
+    <value>Ein generierter Wert kann nur ein Text- oder Zahlenattribut als Ziel haben; „{0}“ wird nicht unterstützt.</value>
+  </data>
+  <data name="StartAgainReading" xml:space="preserve">
+    <value>Aktueller Zähler wird gelesen ...</value>
+  </data>
+  <data name="StartAgainBusy" xml:space="preserve">
+    <value>Wird neu gestartet ...</value>
+  </data>
+  <data name="StartAgainLeading" xml:space="preserve">
+    <value>Metaverse-Objekte, die bereits einen Wert für {0} haben, behalten ihn; nur Metaverse-Objekte ohne Wert erhalten einen neuen.</value>
+  </data>
+  <data name="StartAgainCounterLine" xml:space="preserve">
+    <value>Der Zähler wird von {1} auf {0} zurückgesetzt</value>
+  </data>
+  <data name="StartAgainForgottenOne" xml:space="preserve">
+    <value>{0} stillgelegter Wert wird vergessen und kann erneut vergeben werden.</value>
+  </data>
+  <data name="StartAgainForgottenOther" xml:space="preserve">
+    <value>{0} stillgelegte Werte werden vergessen und können erneut vergeben werden.</value>
+  </data>
+  <data name="StartAgainViewRetired" xml:space="preserve">
+    <value>Stillgelegte Werte anzeigen</value>
+  </data>
+  <data name="StartAgainAlert" xml:space="preserve">
+    <value>Zahlen können nach dem Vergessen erneut vergeben werden, doch eine Zahl, die noch von einem Metaverse-Objekt gehalten wird, wird übersprungen, sobald der Zähler sie erreicht. Kein vorhandener Wert ändert sich, und es wird nichts exportiert.</value>
+  </data>
+  <data name="StartAgainTitle" xml:space="preserve">
+    <value>{0} neu starten?</value>
+  </data>
+  <data name="ExportValuesOne" xml:space="preserve">
+    <value>{0} generierter Wert</value>
+  </data>
+  <data name="ExportValuesOther" xml:space="preserve">
+    <value>{0} generierte Werte</value>
+  </data>
+  <data name="ExportRejected" xml:space="preserve">
+    <value>hat {0} als bereits verwendet abgelehnt{1}.</value>
+  </data>
+  <data name="ExportCorrectedOnlyOne" xml:space="preserve">
+    <value>; JIM hat ihn korrigiert, und die nächste Synchronisierung exportiert den neuen Wert</value>
+  </data>
+  <data name="ExportCorrectedOnlyOther" xml:space="preserve">
+    <value>; JIM hat sie korrigiert, und die nächste Synchronisierung exportiert die neuen Werte</value>
+  </data>
+  <data name="ExportCorrectedWithHeldOne" xml:space="preserve">
+    <value>: JIM hat {0} korrigiert, und die nächste Synchronisierung exportiert den neuen Wert</value>
+  </data>
+  <data name="ExportCorrectedWithHeldOther" xml:space="preserve">
+    <value>: JIM hat {0} korrigiert, und die nächste Synchronisierung exportiert die neuen Werte</value>
+  </data>
+  <data name="ExportHeldOnlyOne" xml:space="preserve">
+    <value>, und er erfordert eine Entscheidung, bevor JIM ihn exportiert</value>
+  </data>
+  <data name="ExportHeldOnlyOther" xml:space="preserve">
+    <value>, und sie erfordern eine Entscheidung, bevor JIM sie exportiert</value>
+  </data>
+  <data name="ExportHeldAfterOne" xml:space="preserve">
+    <value>; {0} erfordert eine Entscheidung</value>
+  </data>
+  <data name="ExportHeldAfterOther" xml:space="preserve">
+    <value>; {0} erfordern eine Entscheidung</value>
+  </data>
+  <data name="ExportChipNeedsOne" xml:space="preserve">
+    <value>{0} erfordert eine Entscheidung</value>
+  </data>
+  <data name="ExportChipNeedsOther" xml:space="preserve">
+    <value>{0} erfordern eine Entscheidung</value>
+  </data>
+  <data name="ExportChipCorrectedOne" xml:space="preserve">
+    <value>{0} korrigiert</value>
+  </data>
+  <data name="ExportChipCorrectedOther" xml:space="preserve">
+    <value>{0} korrigiert</value>
+  </data>
+  <data name="SeparatorLabel" xml:space="preserve">
+    <value>Trennzeichen</value>
+  </data>
+  <data name="SeparatorDot" xml:space="preserve">
+    <value>Punkt .</value>
+  </data>
+  <data name="SeparatorHyphen" xml:space="preserve">
+    <value>Bindestrich -</value>
+  </data>
+  <data name="SeparatorUnderscore" xml:space="preserve">
+    <value>Unterstrich _</value>
+  </data>
+  <data name="SeparatorCustom" xml:space="preserve">
+    <value>Benutzerdefiniert …</value>
+  </data>
+  <data name="SeparatorCustomLabel" xml:space="preserve">
+    <value>Benutzerdefiniertes Trennzeichen</value>
+  </data>
+  <data name="SeparatorCustomHint" xml:space="preserve">
+    <value>Ein bis drei Zeichen; keine Leerzeichen, kein @</value>
+  </data>
+  <data name="AvailabilityHeading" xml:space="preserve">
+    <value>Auf Verfügbarkeit geprüft in</value>
+  </data>
+  <data name="AvailabilityColumnExported" xml:space="preserve">
+    <value>Exportiert als</value>
+  </data>
+  <data name="AvailabilityColumnChecked" xml:space="preserve">
+    <value>Geprüft</value>
+  </data>
+  <data name="AvailabilityColumnReports" xml:space="preserve">
+    <value>Meldet Kollisionen</value>
+  </data>
+  <data name="AvailabilityColumnInclude" xml:space="preserve">
+    <value>Einbeziehen</value>
+  </data>
+  <data name="AvailabilityCollisionNote" xml:space="preserve">
+    <value>Eine Kollision ist hier ein gewöhnlicher Exportfehler.</value>
+  </data>
+  <data name="AvailabilityIncludeAria" xml:space="preserve">
+    <value>{0} auf Verfügbarkeit prüfen</value>
+  </data>
+  <data name="AttentionCountOne" xml:space="preserve">
+    <value>{0} generierter Wert erfordert eine Entscheidung.</value>
+  </data>
+  <data name="AttentionCountOther" xml:space="preserve">
+    <value>{0} generierte Werte erfordern eine Entscheidung.</value>
+  </data>
+  <data name="AttentionExplain" xml:space="preserve">
+    <value>Ein Ziel hat jeden davon als bereits verwendet abgelehnt, und JIM konnte ihn nicht sicher korrigieren, daher ist sein Export zurückgehalten. Öffnen Sie „Generierte Werte“, um die Umbenennung zuzulassen oder es erneut zu versuchen.</value>
+  </data>
+  <data name="WhyRenameAllowed" xml:space="preserve">
+    <value>Umbenennung zugelassen</value>
+  </data>
+  <data name="WhyRenameAllowedBy" xml:space="preserve">
+    <value> von {0}</value>
+  </data>
+  <data name="WhyRenameAllowedSecondary" xml:space="preserve">
+    <value>Die nächste Exportausführung wählt den nächsten freien Wert.</value>
+  </data>
+  <data name="BannerNeedsDecision" xml:space="preserve">
+    <value>{0} erfordert eine Entscheidung</value>
+  </data>
+  <data name="BannerWillRename" xml:space="preserve">
+    <value>{0} wird beim nächsten Export umbenannt</value>
+  </data>
+  <data name="BannerAllowRename" xml:space="preserve">
+    <value>Umbenennung zulassen …</value>
+  </data>
+  <data name="SkipAheadConfirm" xml:space="preserve">
+    <value>Speichern und überspringen</value>
+  </data>
+  <data name="SkipAheadTitle" xml:space="preserve">
+    <value>Zu {0} vorspringen?</value>
+  </data>
+  <data name="SkipAheadLeading" xml:space="preserve">
+    <value>„Startwert“ ist jetzt höher als die nächste Zahl ({0}). Beim Speichern wird der Zähler auf {1} gesetzt; die Zahlen {2} bis {3} werden nie vergeben.</value>
+  </data>
+  <data name="SkipAheadReasons" xml:space="preserve">
+    <value>Mögliche Gründe dafür sind etwa, einen Bereich für ein anderes System zu reservieren oder eine Sequenz fortzusetzen, die vor JIM anderswo vergeben wurde. Ein „Startwert“ unter dem Zählerstand hat keine Wirkung.</value>
+  </data>
+  <data name="CollisionSwitchLabel" xml:space="preserve">
+    <value>JIM einen Wert korrigieren lassen, den ein Ziel als bereits verwendet ablehnt</value>
+  </data>
+  <data name="CollisionUnavailable" xml:space="preserve">
+    <value>Nicht verfügbar: Keines der Systeme, in die dieser Wert exportiert wird, kann melden, dass ein Wert bereits verwendet wird, daher wird eine Kollision als Exportfehler aufgezeichnet.</value>
+  </data>
+  <data name="CollisionHelp" xml:space="preserve">
+    <value>Solange kein anderes System den Wert hält, wählt JIM den nächsten freien und exportiert erneut. Sobald ein anderes System ihn hält, hält JIM den Export bis zu Ihrer Entscheidung zurück, statt dieses Konto umzubenennen.</value>
+  </data>
+  <data name="BuiltFromHeading" xml:space="preserve">
+    <value>Gebildet aus generiertem Wert</value>
+  </data>
+  <data name="BuiltFromNotInEffect" xml:space="preserve">
+    <value>Nicht wirksam</value>
+  </data>
+  <data name="BuiltColumnValue" xml:space="preserve">
+    <value>Wert</value>
+  </data>
+  <data name="BuiltColumnExportedTo" xml:space="preserve">
+    <value>Exportiert nach</value>
+  </data>
+  <data name="BuiltColumnBeforeIssuing" xml:space="preserve">
+    <value>Vor der Vergabe</value>
+  </data>
+  <data name="BuiltColumnRefuses" xml:space="preserve">
+    <value>Falls ein Ziel ihn ablehnt</value>
+  </data>
+  <data name="BuiltValueEvaluationFailed" xml:space="preserve">
+    <value>Der Ausdruck konnte nicht ausgewertet werden.</value>
+  </data>
+</root>
