@@ -1,7 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Core.DTOs;
+using JIM.Web.Resources;
 
 namespace JIM.Web;
 
@@ -40,16 +42,16 @@ public static class ValueOriginGrouping
     /// How a Generated Value is named wherever a source is: the Attribute Flow Source Type that produced it, after
     /// the Connected System (and Synchronisation Rule, where shown) it came through.
     /// </summary>
-    public const string GeneratedValueLabel = "Generated Value";
+    public static string GeneratedValueLabel => MetaverseText.VogGeneratedValue;
 
     /// <summary>
     /// How a value read from a sign-in token is named (#2472). The claim it came from follows, where there is room
     /// for it, as a Synchronisation Rule follows its Connected System.
     /// </summary>
-    public const string SignInClaimLabel = "Sign-in claim";
+    public static string SignInClaimLabel => MetaverseText.VogSignInClaim;
 
     /// <summary>How a value JIM set itself (a fixed value rather than one read from anywhere) is named (#2472).</summary>
-    public const string SystemLabel = "Set by JIM";
+    public static string SystemLabel => MetaverseText.VogSystem;
 
     /// <summary>The colour every Generated Value takes, whichever Connected System it came through.</summary>
     public const string GeneratedValueColourToken = "--mud-palette-primary";
@@ -109,14 +111,14 @@ public static class ValueOriginGrouping
     private static Group BuildGroup(string key, MetaverseAttributeOriginSummary sample, HashSet<int?> multiRuleSystems)
     {
         if (sample.HasSeveralOrigins)
-            return new Group(key, null, "Several sources", null, null, null, null, false);
+            return new Group(key, null, MetaverseText.McbSeveralSources, null, null, null, null, false);
 
         var origin = sample.Origins[0];
         var showRule = origin.ConnectedSystemId.HasValue && multiRuleSystems.Contains(origin.ConnectedSystemId);
 
         var label = origin.Kind switch
         {
-            ValueOriginKind.SetByPerson => $"Set by {origin.PersonName}",
+            ValueOriginKind.SetByPerson => string.Format(CultureInfo.CurrentCulture, MetaverseText.VogSetBy, origin.PersonName),
             ValueOriginKind.SignInClaim => SignInClaimLabel,
             ValueOriginKind.System => SystemLabel,
             ValueOriginKind.GeneratedValue => origin.ConnectedSystemName == null
@@ -125,11 +127,11 @@ public static class ValueOriginGrouping
                     ? $"{origin.ConnectedSystemName} · {origin.SyncRuleName} · {GeneratedValueLabel}"
                     : $"{origin.ConnectedSystemName} · {GeneratedValueLabel}",
             ValueOriginKind.SynchronisationRule => origin.SyncRuleDeleted
-                ? $"{origin.ConnectedSystemName} · rule deleted"
+                ? string.Format(CultureInfo.CurrentCulture, MetaverseText.McbRuleDeleted, origin.ConnectedSystemName)
                 : showRule
                     ? $"{origin.ConnectedSystemName} · {origin.SyncRuleName}"
-                    : origin.ConnectedSystemName ?? "Source not recorded",
-            _ => "Source not recorded"
+                    : origin.ConnectedSystemName ?? MetaverseText.MaiSourceNotRecorded,
+            _ => MetaverseText.MaiSourceNotRecorded
         };
 
         return new Group(key, origin.Kind, label, origin.ConnectedSystemId, origin.ConnectedSystemName,

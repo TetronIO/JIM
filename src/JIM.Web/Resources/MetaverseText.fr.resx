@@ -1451,4 +1451,100 @@
   <data name="PfgVerdictNeverHelps" xml:space="preserve">
     <value>Relancer ne servira jamais à rien</value>
   </data>
+  <data name="VogGeneratedValue" xml:space="preserve">
+    <value>Valeur générée</value>
+  </data>
+  <data name="VogSignInClaim" xml:space="preserve">
+    <value>Revendication de connexion</value>
+  </data>
+  <data name="VogSystem" xml:space="preserve">
+    <value>Défini par JIM</value>
+  </data>
+  <data name="VogSetBy" xml:space="preserve">
+    <value>Défini par {0}</value>
+  </data>
+  <data name="VogRuleDeleted" xml:space="preserve">
+    <value>règle supprimée</value>
+  </data>
+  <data name="VocAssertsNoValue" xml:space="preserve">
+    <value>n'affirme aucune valeur</value>
+  </data>
+  <data name="ObjChipCso" xml:space="preserve">
+    <value>objet de systèmes connectés</value>
+  </data>
+  <data name="ObjChipMvo" xml:space="preserve">
+    <value>objet Metaverse</value>
+  </data>
+  <data name="ObjChipPendingExport" xml:space="preserve">
+    <value>exportation en attente</value>
+  </data>
+  <data name="ObjChipDeletionRecord" xml:space="preserve">
+    <value>enregistrement de suppression</value>
+  </data>
+  <data name="ObjChipApiKey" xml:space="preserve">
+    <value>clé d'API</value>
+  </data>
+  <data name="ObjChipSchedule" xml:space="preserve">
+    <value>planification</value>
+  </data>
+  <data name="ObjChipSystem" xml:space="preserve">
+    <value>système</value>
+  </data>
+  <data name="ObjChipActivity" xml:space="preserve">
+    <value>activité</value>
+  </data>
+  <data name="ObjChipRunProfile" xml:space="preserve">
+    <value>profil d'exécution</value>
+  </data>
+  <data name="ObjChipTypeAndName" xml:space="preserve">
+    <value>{0} : {1}</value>
+  </data>
+  <data name="ObjChipDeleted" xml:space="preserve">
+    <value>Supprimé</value>
+  </data>
+  <data name="SrcTitleSystem" xml:space="preserve">
+    <value>Système connecté : {0}</value>
+  </data>
+  <data name="SrcTitleRuleDeleted" xml:space="preserve">
+    <value>{0}. Règle de synchronisation : supprimée</value>
+  </data>
+  <data name="SrcTitleRule" xml:space="preserve">
+    <value>{0}. Règle de synchronisation : {1}</value>
+  </data>
+  <data name="SrcAriaSystem" xml:space="preserve">
+    <value>Système connecté {0}</value>
+  </data>
+  <data name="SrcAriaRule" xml:space="preserve">
+    <value>Règle de synchronisation {0}</value>
+  </data>
+  <data name="PvNotYetSent" xml:space="preserve">
+    <value>Préparée pour l'exportation, pas encore envoyée</value>
+  </data>
+  <data name="PvAwaitingConfirmation" xml:space="preserve">
+    <value>Exportée, en attente de confirmation par l'importation</value>
+  </data>
+  <data name="PvFailed" xml:space="preserve">
+    <value>Échec de l'exportation, valeur non écrite</value>
+  </data>
+  <data name="PvParked" xml:space="preserve">
+    <value>Suspendue : en attente de la décision d'un administrateur sur sa valeur générée</value>
+  </data>
+  <data name="PvUnknown" xml:space="preserve">
+    <value>Valeur issue d'une exportation en attente</value>
+  </data>
+  <data name="WvNoVisible" xml:space="preserve">
+    <value>Présente, mais ne contient aucun caractère visible.</value>
+  </data>
+  <data name="WvLabel" xml:space="preserve">
+    <value>(espaces)</value>
+  </data>
+  <data name="WvOnlyWhitespace" xml:space="preserve">
+    <value>Présente, mais composée uniquement d'espaces ({0} {1}) : {2}</value>
+  </data>
+  <data name="WvCharacterOne" xml:space="preserve">
+    <value>caractère</value>
+  </data>
+  <data name="WvCharacterOther" xml:space="preserve">
+    <value>caractères</value>
+  </data>
 </root>

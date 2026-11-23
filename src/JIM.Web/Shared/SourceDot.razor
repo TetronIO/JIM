@@ -73,7 +73,7 @@
         get
         {
             if (Group.SyncRuleDeleted)
-                return NameText.Contains("rule deleted") ? null : "rule deleted";
+                return NameText.Contains(MetaverseText.VogRuleDeleted) ? null : MetaverseText.VogRuleDeleted;
             if (string.IsNullOrEmpty(Group.SyncRuleName) || NameText.Contains(Group.SyncRuleName))
                 return null;
             return Group.SyncRuleName;
@@ -88,7 +88,7 @@
             if (Group.Kind is ValueOriginKind.SynchronisationRule or ValueOriginKind.GeneratedValue)
             {
                 parts.Add(Group.ConnectedSystemName);
-                parts.Add(Group.SyncRuleDeleted ? "rule deleted" : Group.SyncRuleName);
+                parts.Add(Group.SyncRuleDeleted ? MetaverseText.VogRuleDeleted : Group.SyncRuleName);
                 if (Group.Kind == ValueOriginKind.GeneratedValue)
                     parts.Add(ValueOriginGrouping.GeneratedValueLabel);
             }

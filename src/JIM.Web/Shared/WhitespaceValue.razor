@@ -5,7 +5,7 @@
 @* mistaken for no value (which renders as a hyphen via <EmptyValue />). The tooltip reveals the *@
 @* literal content with whitespace characters visualised. See JIM.Web/CLAUDE.md "Empty values". *@
 <MudTooltip Arrow="true" Placement="Placement.Top" Text="@TooltipText">
-    <span class="mud-text-disabled" style="font-style: italic;">(whitespace)</span>
+    <span class="mud-text-disabled" style="font-style: italic;">@MetaverseText.WvLabel</span>
 </MudTooltip>
 
 @code {
@@ -20,7 +20,7 @@
         get
         {
             if (string.IsNullOrEmpty(Value))
-                return "Present, but contains no visible characters.";
+                return MetaverseText.WvNoVisible;
 
             // Visualise whitespace so an administrator can see what is actually stored.
             var visualised = Value
@@ -29,8 +29,8 @@
                 .Replace("\r", string.Empty)
                 .Replace("\n", "¶"); // pilcrow for newlines
 
-            var characters = Value.Length == 1 ? "character" : "characters";
-            return $"Present, but whitespace only ({Value.Length} {characters}): {visualised}";
+            var characters = PluralRules.Choose(Value.Length, MetaverseText.WvCharacterOne, MetaverseText.WvCharacterOther);
+            return string.Format(System.Globalization.CultureInfo.CurrentCulture, MetaverseText.WvOnlyWhitespace, Value.Length, characters, visualised);
         }
     }
 }

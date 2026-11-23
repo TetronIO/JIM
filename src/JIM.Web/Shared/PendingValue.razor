@@ -13,11 +13,11 @@
 </MudTooltip>
 
 @code {
-    public const string NotYetSentTooltip = "Staged for export, not yet sent";
-    public const string AwaitingConfirmationTooltip = "Exported, awaiting confirmation by import";
-    public const string FailedTooltip = "Export failed, value not written";
-    public const string ParkedTooltip = "Parked: waiting for an administrator's decision on its generated value";
-    public const string UnknownStateTooltip = "Value from a Pending Export";
+    public static string NotYetSentTooltip => MetaverseText.PvNotYetSent;
+    public static string AwaitingConfirmationTooltip => MetaverseText.PvAwaitingConfirmation;
+    public static string FailedTooltip => MetaverseText.PvFailed;
+    public static string ParkedTooltip => MetaverseText.PvParked;
+    public static string UnknownStateTooltip => MetaverseText.PvUnknown;
 
     /// <summary>
     /// The pending value to display.

@@ -1930,4 +1930,132 @@
     <value>Retrying will never help</value>
     <comment>Verdict sentence.</comment>
   </data>
+  <data name="VogGeneratedValue" xml:space="preserve">
+    <value>Generated Value</value>
+    <comment>Label for a value JIM generated. Used mid-sentence and as a chip.</comment>
+  </data>
+  <data name="VogSignInClaim" xml:space="preserve">
+    <value>Sign-in claim</value>
+    <comment>Label for a value taken from a sign-in claim.</comment>
+  </data>
+  <data name="VogSystem" xml:space="preserve">
+    <value>Set by JIM</value>
+    <comment>Label for a value JIM set itself.</comment>
+  </data>
+  <data name="VogSetBy" xml:space="preserve">
+    <value>Set by {0}</value>
+    <comment>Label for a value an administrator set. {0} is the person's name.</comment>
+  </data>
+  <data name="VogRuleDeleted" xml:space="preserve">
+    <value>rule deleted</value>
+    <comment>A word for a deleted synchronisation rule. Also matched against labels, so the two must agree.</comment>
+  </data>
+  <data name="VocAssertsNoValue" xml:space="preserve">
+    <value>asserts no value</value>
+    <comment>Chip caption: the source says the attribute has no value.</comment>
+  </data>
+  <data name="ObjChipCso" xml:space="preserve">
+    <value>Connected System Object</value>
+    <comment>Kind name shown in the chip's tooltip.</comment>
+  </data>
+  <data name="ObjChipMvo" xml:space="preserve">
+    <value>Metaverse Object</value>
+    <comment>Kind name shown in the chip's tooltip.</comment>
+  </data>
+  <data name="ObjChipPendingExport" xml:space="preserve">
+    <value>Pending Export</value>
+    <comment>Kind name shown in the chip's tooltip.</comment>
+  </data>
+  <data name="ObjChipDeletionRecord" xml:space="preserve">
+    <value>Deletion Record</value>
+    <comment>Kind name shown in the chip's tooltip.</comment>
+  </data>
+  <data name="ObjChipApiKey" xml:space="preserve">
+    <value>API Key</value>
+    <comment>Kind name shown in the chip's tooltip.</comment>
+  </data>
+  <data name="ObjChipSchedule" xml:space="preserve">
+    <value>Schedule</value>
+    <comment>Kind name shown in the chip's tooltip.</comment>
+  </data>
+  <data name="ObjChipSystem" xml:space="preserve">
+    <value>System</value>
+    <comment>Kind name shown in the chip's tooltip.</comment>
+  </data>
+  <data name="ObjChipActivity" xml:space="preserve">
+    <value>Activity</value>
+    <comment>Kind name shown in the chip's tooltip.</comment>
+  </data>
+  <data name="ObjChipRunProfile" xml:space="preserve">
+    <value>Run Profile</value>
+    <comment>Kind name shown in the chip's tooltip, and the fallback for an unknown kind.</comment>
+  </data>
+  <data name="ObjChipTypeAndName" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>Tooltip: the object type, then the object's name.</comment>
+  </data>
+  <data name="ObjChipDeleted" xml:space="preserve">
+    <value>Deleted</value>
+    <comment>Accessible name of the deleted icon.</comment>
+  </data>
+  <data name="SrcTitleSystem" xml:space="preserve">
+    <value>Connected System: {0}</value>
+    <comment>Tooltip. {0} is the Connected System's name.</comment>
+  </data>
+  <data name="SrcTitleRuleDeleted" xml:space="preserve">
+    <value>{0}. Synchronisation Rule: deleted</value>
+    <comment>Tooltip when the rule has been deleted. {0} is the system's tooltip.</comment>
+  </data>
+  <data name="SrcTitleRule" xml:space="preserve">
+    <value>{0}. Synchronisation Rule: {1}</value>
+    <comment>Tooltip. {0} is the system's tooltip; {1} the rule's name.</comment>
+  </data>
+  <data name="SrcAriaSystem" xml:space="preserve">
+    <value>Connected System {0}</value>
+    <comment>Accessible name of the system link. {0} is its name.</comment>
+  </data>
+  <data name="SrcAriaRule" xml:space="preserve">
+    <value>Synchronisation Rule {0}</value>
+    <comment>Accessible name of the rule link. {0} is its name.</comment>
+  </data>
+  <data name="PvNotYetSent" xml:space="preserve">
+    <value>Staged for export, not yet sent</value>
+    <comment>Tooltip on a value waiting to be exported.</comment>
+  </data>
+  <data name="PvAwaitingConfirmation" xml:space="preserve">
+    <value>Exported, awaiting confirmation by import</value>
+    <comment>Tooltip on a value exported but not yet confirmed.</comment>
+  </data>
+  <data name="PvFailed" xml:space="preserve">
+    <value>Export failed, value not written</value>
+    <comment>Tooltip on a value whose export failed.</comment>
+  </data>
+  <data name="PvParked" xml:space="preserve">
+    <value>Parked: waiting for an administrator's decision on its generated value</value>
+    <comment>Tooltip on a parked value.</comment>
+  </data>
+  <data name="PvUnknown" xml:space="preserve">
+    <value>Value from a Pending Export</value>
+    <comment>Tooltip on a value from a pending export in an unknown state.</comment>
+  </data>
+  <data name="WvNoVisible" xml:space="preserve">
+    <value>Present, but contains no visible characters.</value>
+    <comment>Tooltip on a value that is empty but present.</comment>
+  </data>
+  <data name="WvLabel" xml:space="preserve">
+    <value>(whitespace)</value>
+    <comment>Shown in place of a value that is only whitespace.</comment>
+  </data>
+  <data name="WvOnlyWhitespace" xml:space="preserve">
+    <value>Present, but whitespace only ({0} {1}): {2}</value>
+    <comment>Tooltip. {0} is the length; {1} is WvCharacterOne or WvCharacterOther; {2} the value with its spaces made visible.</comment>
+  </data>
+  <data name="WvCharacterOne" xml:space="preserve">
+    <value>character</value>
+    <comment>Counted noun, singular.</comment>
+  </data>
+  <data name="WvCharacterOther" xml:space="preserve">
+    <value>characters</value>
+    <comment>Counted noun, plural.</comment>
+  </data>
 </root>
