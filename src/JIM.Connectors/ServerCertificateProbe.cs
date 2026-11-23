@@ -7,10 +7,12 @@ using JIM.Models.Connectors;
 using JIM.Models.Localisation;
 using JIM.Utilities;
 using Serilog;
+using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 namespace JIM.Connectors;
 
 /// <summary>
@@ -30,6 +32,9 @@ public static class ServerCertificateProbe
     /// </summary>
     private static readonly TimeSpan MaximumIssuerDownloadTime = TimeSpan.FromSeconds(5);
 
+    /// <summary>The most a proxy's answer to <c>CONNECT</c> may run to before JIM stops reading it.</summary>
+    private const int MaximumProxyAnswerLength = 16 * 1024;
+
     /// <summary>
     /// Fetches the certificate a server presents and works out why it would be refused.
     /// </summary>
@@ -42,6 +47,7 @@ public static class ServerCertificateProbe
     /// <param name="secureTransportName">The secure transport being attempted, for example "LDAPS" or "HTTPS", named in the remediation text.</param>
     /// <param name="handshakeFraming">How the TLS handshake has to reach the server; see <see cref="SecureEndpoint.HandshakeFraming"/>.</param>
     /// <param name="trustAnchorMustBeRoot">Whether only a root in the JIM certificate store makes the connection work; see <see cref="SecureEndpoint.TrustAnchorMustBeRoot"/>. When it does, the chain is judged as the connection will be: trusted only through a root the store holds.</param>
+    /// <param name="proxy">For <see cref="SecureHandshakeFraming.Https"/> only: the outbound proxy to reach the server through. By default the one JIM's HTTP Connectors use (<see cref="HttpClient.DefaultProxy"/>); replaced in tests.</param>
     /// <returns>What the server presented and why it fails, or null when the server could not be reached at all, which is a different problem.</returns>
     public static ServerCertificateDiagnostic? Probe(
         string host,
@@ -52,9 +58,10 @@ public static class ServerCertificateProbe
         string serverDescription = "directory server",
         string secureTransportName = "LDAPS",
         SecureHandshakeFraming handshakeFraming = SecureHandshakeFraming.DirectTls,
-        bool trustAnchorMustBeRoot = false)
+        bool trustAnchorMustBeRoot = false,
+        IWebProxy? proxy = null)
     {
-        return Read(host, port, trustedCertificates, timeout, logger, serverDescription, secureTransportName, handshakeFraming, trustAnchorMustBeRoot)?.Diagnostic;
+        return Read(host, port, trustedCertificates, timeout, logger, serverDescription, secureTransportName, handshakeFraming, trustAnchorMustBeRoot, proxy)?.Diagnostic;
     }
 
     /// <summary>
@@ -73,7 +80,8 @@ public static class ServerCertificateProbe
         string serverDescription = "directory server",
         string secureTransportName = "LDAPS",
         SecureHandshakeFraming handshakeFraming = SecureHandshakeFraming.DirectTls,
-        bool trustAnchorMustBeRoot = false)
+        bool trustAnchorMustBeRoot = false,
+        IWebProxy? proxy = null)
     {
         X509Certificate2? presented = null;
         var sentByServer = new List<X509Certificate2>();
@@ -81,16 +89,26 @@ public static class ServerCertificateProbe
 
         try
         {
+            // HTTPS is reached the way JIM's HTTP Connectors reach it, through the outbound proxy where one applies, so
+            // that behind a TLS-inspecting proxy the certificate read is the one that refused the connection.
+            var outboundProxy = handshakeFraming == SecureHandshakeFraming.Https
+                ? ResolveOutboundProxy(host, port, proxy ?? HttpClient.DefaultProxy, logger)
+                : null;
+
             using var client = new TcpClient();
-            if (!client.ConnectAsync(host, port).Wait(timeout))
+            var (connectHost, connectPort) = outboundProxy != null ? (outboundProxy.Address.Host, outboundProxy.Address.Port) : (host, port);
+            if (!client.ConnectAsync(connectHost, connectPort).Wait(timeout))
             {
-                logger.Debug("ServerCertificateProbe: no response from {Host}:{Port} within the timeout, so this is a connectivity problem rather than a certificate one", LogSanitiser.Sanitise(host), port);
+                logger.Debug("ServerCertificateProbe: no response from {Host}:{Port} within the timeout, so this is a connectivity problem rather than a certificate one", LogSanitiser.Sanitise(connectHost), connectPort);
                 return null;
             }
 
             // Without a deadline on reads, a server that accepts the connection and then says nothing would hold the
             // caller for ever; the timeout already bounds the connect, and now bounds every exchange after it too.
             client.ReceiveTimeout = client.SendTimeout = (int)Math.Min(timeout.TotalMilliseconds, int.MaxValue);
+
+            if (outboundProxy != null && !OpenProxyTunnel(client.GetStream(), outboundProxy, host, port, logger))
+                return null;
 
             var transport = OpenHandshakeTransport(client.GetStream(), handshakeFraming, host, port, logger);
             if (transport == null)
@@ -168,6 +186,73 @@ public static class ServerCertificateProbe
             foreach (var certificate in sentByServer)
                 certificate.Dispose();
         }
+    }
+
+    /// <summary>The outbound proxy an HTTPS request to the server goes through, and the credentials it is sent with.</summary>
+    private sealed record OutboundProxy(Uri Address, NetworkCredential? Credential);
+
+    /// <summary>
+    /// The proxy an HTTPS request to the server goes through, as <see cref="HttpClient"/> decides it; null to connect
+    /// directly.
+    /// </summary>
+    private static OutboundProxy? ResolveOutboundProxy(string host, int port, IWebProxy proxy, ILogger logger)
+    {
+        var destination = new UriBuilder(Uri.UriSchemeHttps, host, port).Uri;
+        if (proxy.IsBypassed(destination))
+            return null;
+
+        var address = proxy.GetProxy(destination);
+        if (address == null || address == destination)
+            return null;
+
+        // HttpClient tunnels through an http:// proxy, which is what is configured in practice; anything else is read
+        // directly, as it was before proxies were considered at all.
+        if (address.Scheme != Uri.UriSchemeHttp)
+        {
+            logger.Debug("ServerCertificateProbe: the outbound proxy for {Host}:{Port} is not an http:// proxy, so its certificate is read directly", LogSanitiser.Sanitise(host), port);
+            return null;
+        }
+
+        return new OutboundProxy(address, proxy.Credentials?.GetCredential(address, "Basic"));
+    }
+
+    /// <summary>
+    /// Asks the proxy for a tunnel to the server, as <see cref="HttpClient"/> does before an HTTPS request.
+    /// </summary>
+    /// <returns>Whether the proxy opened it. A proxy that refuses (wanting credentials JIM was not given, say) makes this a connectivity problem rather than a certificate one.</returns>
+    private static bool OpenProxyTunnel(NetworkStream network, OutboundProxy proxy, string host, int port, ILogger logger)
+    {
+        var target = $"{new UriBuilder(Uri.UriSchemeHttps, host, port).Uri.Host}:{port}";
+        var request = new StringBuilder($"CONNECT {target} HTTP/1.1\r\nHost: {target}\r\n");
+        if (proxy.Credential != null)
+        {
+            var credential = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{proxy.Credential.UserName}:{proxy.Credential.Password}"));
+            request.Append($"Proxy-Authorization: Basic {credential}\r\n");
+        }
+
+        network.Write(Encoding.ASCII.GetBytes(request.Append("\r\n").ToString()));
+
+        // Read one byte at a time so nothing after the answer is consumed: the TLS handshake follows on the same stream.
+        var answer = new StringBuilder();
+        var buffer = new byte[1];
+        while (!answer.ToString().EndsWith("\r\n\r\n", StringComparison.Ordinal))
+        {
+            if (answer.Length >= MaximumProxyAnswerLength || network.Read(buffer) == 0)
+            {
+                logger.Debug("ServerCertificateProbe: the outbound proxy closed or overran its answer to CONNECT {Target}", LogSanitiser.Sanitise(target));
+                return false;
+            }
+
+            answer.Append((char)buffer[0]);
+        }
+
+        var statusLine = answer.ToString().Split("\r\n")[0];
+        var status = statusLine.Split(' ');
+        if (status.Length >= 2 && status[1] == "200")
+            return true;
+
+        logger.Debug("ServerCertificateProbe: the outbound proxy refused CONNECT {Target}: {Status}", LogSanitiser.Sanitise(target), LogSanitiser.Sanitise(statusLine));
+        return false;
     }
 
     /// <summary>

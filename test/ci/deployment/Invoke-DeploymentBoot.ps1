@@ -357,6 +357,7 @@ try {
         "JIM_INFRASTRUCTURE_API_KEY=$infrastructureKey"
         "JIM_SETUP_TLS_NAMES=$hostName"
         'JIM_TRUSTED_PROXIES='
+        'JIM_SETUP_HTTPS_PROXY='
         "JIM_SETUP_OPEN_FIREWALL=$(if ($OpenFirewall) { 'true' } else { 'false' })"
         # On Ubuntu 24.04, GitHub's runners among them, the installer must add the network and signal rules that
         # rootful Podman's AppArmor profiles need.

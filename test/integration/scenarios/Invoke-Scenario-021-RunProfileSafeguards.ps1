@@ -252,7 +252,9 @@ function Assert-ExportWithheld {
     Assert-Equal -Expected $expectedCounters.updates -Actual ([int]$activity.exportUpdatesWithheld) -Message "Updates withheld is $($expectedCounters.updates) ($Name)"
     Assert-Equal -Expected $expectedCounters.deletes -Actual ([int]$activity.exportDeletesWithheld) -Message "Deletes withheld is $($expectedCounters.deletes) ($Name)"
 
-    Assert-Condition -Condition ($activity.warningMessage -like "*Max $ChangeType is $Limit, but $Pending $ChangeType were pending*") -Message "The warning names the limit and the pending count (got: $($activity.warningMessage))"
+    # The delete limit also covers disables (#2085), so the warning names what it held back as "deletes and disables".
+    $pendingNoun = if ($ChangeType -eq "deletes") { "deletes and disables" } else { $ChangeType }
+    Assert-Condition -Condition ($activity.warningMessage -like "*Max $ChangeType is $Limit, but $Pending $pendingNoun were pending*") -Message "The warning names the limit and the pending count (got: $($activity.warningMessage))"
     Assert-Condition -Condition ($activity.warningMessage -like "*none were attempted and all $Pending remain pending*") -Message "The warning states nothing was attempted (got: $($activity.warningMessage))"
     Assert-Equal -Expected 0 -Actual (Get-ExportSucceededCount -ActivityId $exportResult.activityId) -Message "No export succeeded ($Name)"
     Assert-Equal -Expected $Pending -Actual (Get-LdapPendingExportCount -Config $Config) -Message "Every $ChangeType export is still pending after the withheld run ($Name)"

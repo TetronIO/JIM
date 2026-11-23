@@ -302,6 +302,19 @@ JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Sche
 
 ---
 
+## :material-earth-arrow-right: Outbound Proxy {#outbound-proxy}
+
+Set these when JIM must reach the internet through a proxy, as the [Microsoft Entra ID Connector](../connectors/jim-graph-connector.md) does. The installer asks for them; otherwise add them to `.env` on Docker, or `jim-config.yaml` on Podman, and restart JIM.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `HTTPS_PROXY` | The proxy's URL, for example `http://proxy.example.com:3128`. On Podman, a URL carrying a password goes in `jim-secrets.yaml` instead, since every account on the host can read `jim-config.yaml` | *(none: JIM connects directly)* |
+| `NO_PROXY` | Comma-separated hosts JIM reaches without the proxy. Keep `localhost` and `127.0.0.1`, which JIM otherwise sends through it, and add an internal identity provider and internal Connected Systems. A leading dot, as in `.corp.example.com`, covers a domain and everything in it | *(none)* |
+
+A proxy that intercepts traffic unconfigured needs neither. Behind a TLS-inspecting proxy, JIM [shows the proxy's certificate](../connectors/jim-graph-connector.md#security-considerations) for you to trust.
+
+---
+
 ## :material-key-chain: Infrastructure API Key
 
 | Variable                    | Description                                                                                                                                                                                      | Default  |
@@ -331,6 +344,8 @@ To have the installer set it, give it in the installer's environment: it writes 
 | `JIM_SETUP_TLS_NAMES` | The DNS names and IP addresses users reach JIM at, comma-separated, for a generated certificate | Asks, suggesting this host's name and address |
 | `JIM_SETUP_TLS_CERT_FILE` | Your organisation's PEM certificate, followed by any intermediate CA certificates. Required with `provided` | |
 | `JIM_SETUP_TLS_KEY_FILE` | The certificate's unencrypted PEM private key. Required with `provided` | |
+| `JIM_SETUP_HTTPS_PROXY` | The proxy JIM reaches the internet through, written as `HTTPS_PROXY` (see [Outbound Proxy](#outbound-proxy)). Empty for none | Asks |
+| `JIM_SETUP_NO_PROXY` | Hosts JIM reaches without the proxy, comma-separated, written as `NO_PROXY` with `localhost` and `127.0.0.1` added | Asks, with a proxy |
 | `JIM_SETUP_AUTO_START` | `true` to start JIM without asking | Asks |
 | `JIM_SETUP_PODMAN_ROOTLESS` | `true` to run JIM rootless on Podman; the same as `--rootless` | `false` |
 | `JIM_SETUP_PODMAN_ACCOUNT` | The account that runs JIM rootless, with `--rootless` | `jim` |

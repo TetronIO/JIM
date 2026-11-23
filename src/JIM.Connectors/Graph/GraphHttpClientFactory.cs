@@ -19,13 +19,16 @@ internal static class GraphHttpClientFactory
 {
     /// <param name="trustedCertificates">Enabled certificates from JIM's store, which a TLS-inspecting proxy's CA can be added to; may be empty.</param>
     /// <param name="credentialProtection">Decrypts stored secrets; null falls back to the stored value.</param>
+    /// <param name="purpose">Decides how long to wait for Entra ID to apply a newly uploaded certificate.</param>
+    /// <param name="describeCertificateFailure">Shows the certificate behind a TLS trust failure; see <see cref="GraphHttpClient"/>.</param>
     /// <exception cref="HttpAuthenticationException">The settings cannot authenticate: a value is missing, the Cloud is unknown, or the certificate is unusable.</exception>
     public static GraphHttpClient Create(
         List<ConnectedSystemSettingValue> settingValues,
         IReadOnlyList<X509Certificate2> trustedCertificates,
         ICredentialProtection? credentialProtection,
         ILogger logger,
-        GraphClientPurpose purpose = GraphClientPurpose.Run)
+        GraphClientPurpose purpose = GraphClientPurpose.Run,
+        Func<Exception, Exception?>? describeCertificateFailure = null)
     {
         ArgumentNullException.ThrowIfNull(settingValues);
         ArgumentNullException.ThrowIfNull(trustedCertificates);
@@ -60,7 +63,8 @@ internal static class GraphHttpClientFactory
             throw;
         }
 
-        return new GraphHttpClient(httpClient, cloud, authentication, CreateRetryPolicy(settingValues), CreatePacer(settingValues), logger, ownedCredential);
+        return new GraphHttpClient(httpClient, cloud, authentication, CreateRetryPolicy(settingValues), CreatePacer(settingValues), logger, ownedCredential,
+            describeCertificateFailure: describeCertificateFailure);
     }
 
     /// <param name="ownedCredential">

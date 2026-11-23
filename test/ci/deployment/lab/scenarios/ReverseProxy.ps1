@@ -187,7 +187,7 @@ function Test-ThroughProxyCheck {
 if (-not $local) {
     # 1. JIM, with a certificate for both names, as the guide says, and trusting the proxy's address.
     $settings = New-SetupSettings @{
-        JIM_SETUP_TLS_NAMES = "$hostName,$jimName,$address"; JIM_TRUSTED_PROXIES = $proxyAddress; JIM_INFRASTRUCTURE_API_KEY = $apiKey
+        JIM_SETUP_TLS_NAMES = "$hostName,$jimName,$address"; JIM_TRUSTED_PROXIES = $proxyAddress; JIM_SETUP_HTTPS_PROXY = ''; JIM_INFRASTRUCTURE_API_KEY = $apiKey
     }
     $installed = (Invoke-Setup -Folder $bundleFolder -Settings $settings -Log 'setup-install.log').ExitCode -eq 0
     Add-Check 'installed with setup.sh, with a certificate for the proxy''s name and the proxy trusted' $installed

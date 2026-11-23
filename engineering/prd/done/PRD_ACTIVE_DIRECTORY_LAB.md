@@ -1,6 +1,6 @@
 # Active Directory Lab
 
-- **Status:** Doing (probe tier scaffolded; lab, harness, scenarios and gate to follow)
+- **Status:** Done
 - **Created:** 2026-09-27
 - **Author:** Jay
 - **Issue:** [#1853](https://github.com/TetronIO/JIM/issues/1853) (sub-issue of [#518](https://github.com/TetronIO/JIM/issues/518), the release gate)
@@ -178,17 +178,17 @@ Every password feature (policy discovery, Initial Password, park then release, P
 
 ## Acceptance Criteria
 
-- [ ] `dc-primary`, `dc-source` and `dc-target` exist, built by the script, with `baseline` and `populated-medium-<hash>` checkpoints
-- [ ] `Run-IntegrationTests.ps1 -DirectoryType ActiveDirectory -Scenario All -Template Medium` is green from the runner VM
-- [ ] The `RequiresActiveDirectory` tier runs on the lab and every probe that failed before its fix passes after it
-- [ ] Scenario 024 passes; Scenario 017 and Scenario 023's Collision step pass on Active Directory
-- [ ] The restore-from-backup and Recycle Bin behaviours are proven by scenario steps
-- [ ] `ad-lab.yml` posts the commit status nightly and on dispatch; `/release` refuses a commit without it, proven by a dry run
-- [ ] The rebuild job has completed at least once after a Patch Tuesday and the suite passed on the rebuilt set
-- [ ] Every gap in the Problem Statement is fixed or documented as a limitation
-- [ ] `docs/connectors/jim-ldap-connector.md` states what was verified and against which Windows Server version
-- [ ] `engineering/COMPLIANCE_MAPPING.md` and `engineering/RELEASE_PROCESS.md` describe the gate
-- [ ] `JIM_AD_LAB_GATE_ENFORCED` is set to `true` after the first green run, and the compliance and release docs no longer describe the gate as pending
+- [x] `dc-primary`, `dc-source` and `dc-target` exist, built by the script, with `baseline` and `populated-medium-<hash>` checkpoints
+- [x] `Run-IntegrationTests.ps1 -DirectoryType ActiveDirectory -Scenario All -Template Medium` is green from the runner VM
+- [x] The `RequiresActiveDirectory` tier runs on the lab and every probe that failed before its fix passes after it
+- [x] Scenario 024 passes; Scenario 017 and Scenario 023's Collision step pass on Active Directory
+- [x] The restore-from-backup and Recycle Bin behaviours are proven by scenario steps
+- [x] `ad-lab.yml` posts the commit status nightly and on dispatch; `/release` refuses a commit without it, proven by a dry run
+- [x] The rebuild job has completed at least once after a Patch Tuesday and the suite passed on the rebuilt set
+- [x] Every gap in the Problem Statement is fixed or documented as a limitation
+- [x] `docs/connectors/jim-ldap-connector.md` states what was verified and against which Windows Server version
+- [x] `engineering/COMPLIANCE_MAPPING.md` and `engineering/RELEASE_PROCESS.md` describe the gate
+- [x] `JIM_AD_LAB_GATE_ENFORCED` is set to `true` after the first green run, and the compliance and release docs no longer describe the gate as pending
 - [x] The AD FS sign-in checks pass in a nightly, and a failure in any one turns `jim-ad-lab-adfs` red without touching `jim-ad-lab`
 - [x] `JIM_AD_LAB_ADFS_GATE_ENFORCED` is set to `true` after the checks' first green run
 

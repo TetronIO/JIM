@@ -16,7 +16,12 @@
         pinned in BOTH `.devcontainer/setup.sh` (the install-at-create step) and
         `.mcp.json` (the launch-at-runtime config). The two MUST move together or
         the installed browser and the server drift apart.
-      - `dotnet-ef` (the EF Core CLI) is pinned in `.devcontainer/setup.sh`.
+      - `dotnet-ef` (the EF Core CLI) is pinned in `.devcontainer/setup.sh`. It
+        drives the projects' own EF Core design-time assemblies, so it follows
+        the EF Core version `src/JIM.PostgresData/JIM.PostgresData.csproj`
+        references (which Dependabot keeps current) rather than the newest
+        dotnet-ef on NuGet: a new EF Core major would otherwise be proposed for
+        the CLI long before the projects move to it.
       - `lycheeverse/lychee` (the docs site's link checker) is pinned by tag AND
         digest in `scripts/Test-DocsSite.ps1`, which runs it with `docker run`.
         The two move together: a bump writes the new release's tag and the
@@ -100,7 +105,9 @@ $repoRoot = (Get-Location).Path
 # a straight [regex]::Replace of the match with the new version. Multiple
 # occurrences within a file are all replaced. An image pinned by digest also
 # gives a digestPattern, whose entire match is the `sha256:...` digest, so the
-# tag and its digest are rewritten together.
+# tag and its digest are rewritten together. A tool that must stay on the
+# version another file uses gives `follows`, a location read the same way: that
+# version, once the registry has it, is the target instead of the newest release.
 $tools = @(
     @{
         name      = '@playwright/mcp'
@@ -119,6 +126,7 @@ $tools = @(
             @{ file = '.devcontainer/setup.sh'; pattern = '(?<=dotnet-ef --version )\d[\w.\-]*' }
             @{ file = '.devcontainer/setup.sh'; pattern = '(?<=dotnet-ef )\d[\w.\-]*(?= installed globally)' }
         )
+        follows   = @{ file = 'src/JIM.PostgresData/JIM.PostgresData.csproj'; pattern = '(?<=Include="Microsoft\.EntityFrameworkCore\.Tools" Version=")[^"]+' }
     },
     @{
         name      = 'lycheeverse/lychee'
@@ -262,6 +270,16 @@ foreach ($tool in $tools) {
     }
 
     $latest = $info.latest
+    if ($tool.follows) {
+        $target = Get-PinnedVersion -Location $tool.follows
+        if ($info.versions -contains $target) {
+            $latest = $target
+        } else {
+            # The projects moved before the registry caught up; the next run picks it up.
+            Write-Host "  NOTE: $($tool.name) $target (the version $($tool.follows.file) uses) is not yet published to $($tool.registry); keeping the pin."
+            $latest = $current
+        }
+    }
 
     # Every version actually pinned in a file has to still exist upstream, not
     # just the lowest: a drifted pair could have one live location and one dead.

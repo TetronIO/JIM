@@ -41,7 +41,7 @@ answers:
 
 | Directory | Notes |
 |-----------|-------|
-| **Microsoft Active Directory (AD DS)** | Full support including USN-based delta import, userAccountControl, FILETIME dates, and binary attributes (objectGUID, objectSid) |
+| **Microsoft Active Directory (AD DS)** | Full support, tested every night against Windows Server 2025 domain controllers at the Windows Server 2016 forest functional level: USN-based Delta Import, userAccountControl, FILETIME dates, binary attributes (objectGUID, objectSid), large group membership, the AD Recycle Bin, and password setting and password policy discovery over LDAPS |
 | **Active Directory Lightweight Directory Services (AD LDS)** | Untested. JIM treats an AD LDS instance as Active Directory. Use Full Import and export; do not rely on Delta Import, password setting or domain controller discovery, which are built for a domain and have not been tried against an instance |
 | **OpenLDAP** | Full support including parallel import, accesslog-based delta import, and RFC 4512 schema discovery |
 | **Samba AD** | Full support with Active Directory compatibility |

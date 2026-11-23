@@ -1,8 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Security.Cryptography.X509Certificates;
 using JIM.Connectors.Graph;
 using JIM.Connectors.Http;
+using JIM.Models.Connectors;
 using JIM.Models.Staging;
 using Serilog;
 
@@ -16,11 +18,20 @@ namespace JIM.Worker.Tests.Connectors;
 internal sealed class StubbedTransportGraphConnector : GraphConnector
 {
     private readonly HttpMessageHandler _handler;
+    private readonly int _maxRetries;
 
-    public StubbedTransportGraphConnector(HttpMessageHandler handler)
+    /// <param name="maxRetries">How many times a failed Graph request is retried; none by default.</param>
+    public StubbedTransportGraphConnector(HttpMessageHandler handler, int maxRetries = 0)
     {
         _handler = handler;
+        _maxRetries = maxRetries;
     }
+
+    /// <summary>What a look at the server's certificate finds; null, by default, is a server that could not be reached.</summary>
+    public ServerCertificateDiagnostic? ProbedDiagnostic { get; init; }
+
+    /// <summary>Each host whose certificate was looked at, in order.</summary>
+    public List<string> ProbedHosts { get; } = [];
 
     /// <summary>A transport where the token grants every permission and Graph answers every request with an empty page.</summary>
     public static StubHttpMessageHandler HealthyTransport(params string[] roles) => new(request =>
@@ -43,12 +54,19 @@ internal sealed class StubbedTransportGraphConnector : GraphConnector
             httpClient,
             cloud,
             authentication,
-            new HttpRetryPolicy(0, TimeSpan.Zero, TimeSpan.FromMinutes(5)),
+            new HttpRetryPolicy(_maxRetries, TimeSpan.Zero, TimeSpan.FromMinutes(5)),
             new GraphRequestPacer(GraphRequestPacer.WriteQuotaPerSecond, delay: (_, _) => Task.CompletedTask),
             logger,
             owned,
-            delay: (_, _) => Task.CompletedTask);
+            delay: (_, _) => Task.CompletedTask,
+            describeCertificateFailure: failure => DescribeCertificateRejection(settingValues, failure, logger));
 
         return Task.FromResult(client);
+    }
+
+    internal override ServerCertificateDiagnostic? ProbeCertificate(SecureEndpoint endpoint, IReadOnlyCollection<X509Certificate2> trustedCertificates, ILogger logger)
+    {
+        ProbedHosts.Add(endpoint.Host);
+        return ProbedDiagnostic;
     }
 }

@@ -1,9 +1,12 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Security.Cryptography.X509Certificates;
 using JIM.Connectors.Http;
 using JIM.Connectors.Resources;
 using JIM.Models.Localisation;
+using JIM.Models.Connectors;
+using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -20,7 +23,7 @@ namespace JIM.Connectors.Graph;
 /// <remarks>
 /// Seeded as a built-in Connector. Register-JIMEntraIdConnector sets up the app registration it authenticates as.
 /// </remarks>
-public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSchema, IConnectorImportUsingCalls, IConnectorImportWatermark, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorPhases
+public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorCredentialAware, IConnectorCertificateAware, IConnectorSchema, IConnectorImportUsingCalls, IConnectorImportWatermark, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorPhases, IConnectorSecureEndpoint
 {
     private static readonly string[] MultiTenantAliases = ["common", "organizations", "consumers"];
 
@@ -425,8 +428,52 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
             ? await _certificateProvider.GetTrustedCertificatesAsync()
             : [];
 
-        return GraphHttpClientFactory.Create(settingValues, trustedCertificates, _credentialProtection, logger, purpose);
+        return GraphHttpClientFactory.Create(settingValues, trustedCertificates, _credentialProtection, logger, purpose,
+            failure => DescribeCertificateRejection(settingValues, failure, logger));
     }
+
+    #region IConnectorSecureEndpoint members
+    /// <summary>
+    /// Microsoft Entra ID's token service for the configured cloud, read through the outbound proxy as the Connector
+    /// reaches it. Every connection starts there, and its certificate, like Microsoft Graph's, chains to a public
+    /// certificate authority: a refused one is in practice a TLS-inspecting proxy presenting its own, which is the
+    /// same proxy certificate authority for Microsoft Graph.
+    /// </summary>
+    /// <returns>The endpoint, or null where the Cloud setting names a cloud this Connector does not know.</returns>
+    public SecureEndpoint? ResolveSecureEndpoint(List<ConnectedSystemSettingValue> settingValues)
+    {
+        if (!GraphCloud.TryResolve(Find(settingValues, GraphConnectorConstants.SettingCloud)?.StringValue, out var cloud))
+            return null;
+
+        var timeoutSeconds = Find(settingValues, GraphConnectorConstants.SettingConnectionTimeout)?.IntValue ?? GraphConnectorConstants.DefaultConnectionTimeoutSeconds;
+        return new SecureEndpoint(
+            cloud.AuthorityHost.Host,
+            cloud.AuthorityHost.IsDefaultPort ? 443 : cloud.AuthorityHost.Port,
+            TimeSpan.FromSeconds(Math.Clamp(timeoutSeconds, 1, GraphConnectorConstants.MaximumConnectionTimeoutSeconds)),
+            "Microsoft Entra ID",
+            "HTTPS",
+            SecureHandshakeFraming.Https);
+    }
+    #endregion
+
+    /// <summary>
+    /// Describes the certificate behind a failed connection, when that is what refused it, so the administrator is
+    /// shown it with the option to trust it rather than a transport error indistinguishable from a firewall.
+    /// </summary>
+    /// <returns>The rejection to report, or null when the certificate is not what refused the connection.</returns>
+    internal ServerCertificateRejectedException? DescribeCertificateRejection(List<ConnectedSystemSettingValue> settingValues, Exception failure, ILogger logger)
+    {
+        if (!TlsTrustFailure.IsTlsTrustFailure(failure))
+            return null;
+
+        return ServerCertificateDiagnosis.Describe(this, settingValues, _certificateProvider, failure, logger,
+            (endpoint, trusted) => ProbeCertificate(endpoint, trusted, logger));
+    }
+
+    /// <summary>Looks at the certificate the endpoint presents. Virtual so a test can supply one without a TLS server.</summary>
+    internal virtual ServerCertificateDiagnostic? ProbeCertificate(SecureEndpoint endpoint, IReadOnlyCollection<X509Certificate2> trustedCertificates, ILogger logger) =>
+        ServerCertificateProbe.Probe(endpoint.Host, endpoint.Port, trustedCertificates, endpoint.Timeout, logger,
+            endpoint.ServerDescription, endpoint.SecureTransportName, endpoint.HandshakeFraming);
 
     /// <summary>
     /// Acquires a token, reads which application permissions it grants, and asks Graph for one object, which proves the
@@ -459,6 +506,11 @@ public class GraphConnector : IConnector, IConnectorCapabilities, IConnectorSett
                     ? [ConnectorSettingValueValidationResult.Warning(tenantId, permissions.Warning)]
                     : new List<ConnectorSettingValueValidationResult>();
             }).GetAwaiter().GetResult();
+        }
+        catch (ServerCertificateRejectedException ex)
+        {
+            // Carried on the result, which is what the portal reads to show the certificate and offer to trust it.
+            return [new ConnectorSettingValueValidationResult { IsValid = false, ErrorMessage = ex.Message, SettingValue = tenantId, Exception = ex }];
         }
         catch (HttpAuthenticationException ex)
         {
