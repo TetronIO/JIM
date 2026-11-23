@@ -1,0 +1,29 @@
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<Project>
+
+  <!-- Localised text (#3030). In any project, each neutral Resources/*.resx file is British English and gets a typed
+       accessor class generated at build time ($(RootNamespace).Resources.<FileName>), so code reads
+       LayoutText.SignOut, or nameof(ConnectedSystemMessages.NotFound) for a message key, rather than a string key, and
+       a mistyped or removed key is a compile error. Culture files (Name.en-US.resx, Name.fr.resx, Name.de.resx) become
+       satellite assemblies and need no accessor. Nothing is checked in: the accessors are written to obj/, so no
+       IDE-specific generator has to run. A target rather than a static item Update, because a neutral file is told
+       apart from a culture file by the dot in its name, and an Update glob cannot express that. Files elsewhere (an
+       IDE-managed Properties/Resources.resx) are left alone. See engineering/LOCALISATION.md. -->
+  <Target Name="JimStronglyTypedResources" BeforeTargets="CoreResGen">
+    <PropertyGroup>
+      <_JimResourceNamespace>$(RootNamespace)</_JimResourceNamespace>
+      <_JimResourceNamespace Condition="'$(_JimResourceNamespace)' == ''">$(MSBuildProjectName)</_JimResourceNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+      <EmbeddedResource Condition="'%(Extension)' == '.resx' And $([System.String]::Copy('%(RelativeDir)').Replace('\','/').StartsWith('Resources/')) And !$([System.String]::Copy('%(Filename)').Contains('.'))">
+        <StronglyTypedLanguage>CSharp</StronglyTypedLanguage>
+        <StronglyTypedNamespace>$(_JimResourceNamespace).Resources</StronglyTypedNamespace>
+        <StronglyTypedClassName>%(Filename)</StronglyTypedClassName>
+        <StronglyTypedFileName>$(IntermediateOutputPath)%(Filename).Designer.cs</StronglyTypedFileName>
+        <PublicClass>true</PublicClass>
+      </EmbeddedResource>
+    </ItemGroup>
+  </Target>
+
+</Project>

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="NotFound" xml:space="preserve">
+    <value>The Connected System "{0}" no longer exists.</value>
+    <comment>Test message.</comment>
+  </data>
+  <data name="ObjectsDeletedOne" xml:space="preserve">
+    <value>{0} object deleted.</value>
+    <comment>Test counted message.</comment>
+  </data>
+  <data name="ObjectsDeletedOther" xml:space="preserve">
+    <value>{0} objects deleted.</value>
+    <comment>Test counted message.</comment>
+  </data>
+  <data name="CouldNotSave" xml:space="preserve">
+    <value>Could not save: {0}</value>
+    <comment>Test nested message.</comment>
+  </data>
+  <data name="Synchronised" xml:space="preserve">
+    <value>Synchronised at {0}.</value>
+    <comment>Test moment.</comment>
+  </data>
+  <data name="EnglishOnly" xml:space="preserve">
+    <value>Only in English.</value>
+    <comment>Has no French, to test fallback.</comment>
+  </data>
+</root>

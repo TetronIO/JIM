@@ -200,6 +200,24 @@ public partial class LocalisationResourceTests
     }
 
     [Test]
+    public void EveryCountedText_HasItsSingularAndPlural()
+    {
+        // A counted text is two keys, XOne and XOther, chosen by the reader's language's plural rule (PluralRules,
+        // JimMessage.Counted). One without the other renders a key name on screen for half the counts.
+        var problems = ResourceFiles.Value
+            .Where(file => file.Culture == null)
+            .SelectMany(file => file.Values.Keys
+                .Where(key => key.EndsWith("One", StringComparison.Ordinal) && !file.Values.ContainsKey(key[..^3] + "Other"))
+                .Select(key => $"{file.FileName}: '{key}' has no '{key[..^3]}Other'")
+                .Concat(file.Values.Keys
+                    .Where(key => key.EndsWith("Other", StringComparison.Ordinal) && !file.Values.ContainsKey(key[..^5] + "One"))
+                    .Select(key => $"{file.FileName}: '{key}' has no '{key[..^5]}One'")))
+            .ToList();
+
+        Assert.That(problems, Is.Empty, string.Join(Environment.NewLine, problems));
+    }
+
+    [Test]
     public void MudBlazorText_CarriesEveryKeyMudBlazorAsksFor()
     {
         var mudBlazor = typeof(MudBlazor.MudButton).Assembly;
@@ -240,17 +258,27 @@ public partial class LocalisationResourceTests
     private static HashSet<string> Placeholders(string value) =>
         Placeholder().Matches(value).Select(match => match.Groups[1].Value).ToHashSet();
 
+    /// <summary>
+    /// Every project's localised text: the portal's own (src/JIM.Web/Resources) and the message catalogues the application
+    /// layer, the Worker and the Connectors render through <c>JimMessage</c> (src/*/Resources). A file is identified by its
+    /// project and name, so two projects may each have a file of the same name.
+    /// </summary>
     private static IReadOnlyList<ResourceFile> LoadResourceFiles()
     {
-        var folder = Path.Join(RepositoryRoot.Value, "src", "JIM.Web", "Resources");
-        return Directory.EnumerateFiles(folder, "*.resx")
+        var source = Path.Join(RepositoryRoot.Value, "src");
+        return Directory.EnumerateDirectories(source)
+            .Select(project => Path.Join(project, "Resources"))
+            .Where(Directory.Exists)
+            .SelectMany(folder => Directory.EnumerateFiles(folder, "*.resx"))
             .Select(path =>
             {
-                var fileName = Path.GetFileName(path);
+                var project = Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(path)))!;
+                var prefix = project == "JIM.Web" ? string.Empty : project + "/";
+                var fileName = prefix + Path.GetFileName(path);
                 var parts = Path.GetFileNameWithoutExtension(path).Split('.', 2);
                 var values = XDocument.Load(path).Root!.Elements("data")
                     .ToDictionary(data => (string)data.Attribute("name")!, data => (string?)data.Element("value") ?? string.Empty);
-                return new ResourceFile(fileName, parts[0], parts.Length > 1 ? parts[1] : null, values);
+                return new ResourceFile(fileName, prefix + parts[0], parts.Length > 1 ? parts[1] : null, values);
             })
             .ToList();
     }
