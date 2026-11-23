@@ -20,4 +20,10 @@
   <data name="SynchronisationRulesNoun" xml:space="preserve">
     <value>Synchronization Rules</value>
   </data>
+  <data name="MncSyncRuleHeader" xml:space="preserve">
+    <value>Synchronization Rule</value>
+  </data>
+  <data name="SubjectThisSyncRule" xml:space="preserve">
+    <value>this Synchronization Rule</value>
+  </data>
 </root>

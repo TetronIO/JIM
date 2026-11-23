@@ -1094,4 +1094,524 @@
     <value>Open Schema</value>
     <comment>Link to the Schema tab, followed by an arrow.</comment>
   </data>
+  <data name="MetaverseObjectNoun" xml:space="preserve">
+    <value>Metaverse Object</value>
+    <comment>Names the kind of object as a title or a label.</comment>
+  </data>
+  <data name="TvPageTitle" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>Browser page title. {0} is the object type's name; {1} the object's display name.</comment>
+  </data>
+  <data name="TvLoadingEllipsis" xml:space="preserve">
+    <value>Loading…</value>
+    <comment>Page title while the object loads.</comment>
+  </data>
+  <data name="TvTypeNameHeading" xml:space="preserve">
+    <value>{0}:</value>
+    <comment>Page heading: the object type's name, followed by a colon.</comment>
+  </data>
+  <data name="TvPageInfo" xml:space="preserve">
+    <value>A Metaverse Object is JIM's one view of an identity, built from the Connected Systems it is connected to. Each value can tell you where it came from.</value>
+    <comment>Page info popover.</comment>
+  </data>
+  <data name="TvStillLoading" xml:space="preserve">
+    <value>Still loading. Large objects can take a few seconds to retrieve.</value>
+    <comment>Shown when loading takes a while.</comment>
+  </data>
+  <data name="TvDetailsView" xml:space="preserve">
+    <value>Details view</value>
+    <comment>Accessible label of the view-mode toggle.</comment>
+  </data>
+  <data name="TvViewForm" xml:space="preserve">
+    <value>Form</value>
+    <comment>View-mode option.</comment>
+  </data>
+  <data name="TvViewTabs" xml:space="preserve">
+    <value>Tabs</value>
+    <comment>View-mode option.</comment>
+  </data>
+  <data name="TvViewInspect" xml:space="preserve">
+    <value>Inspect</value>
+    <comment>View-mode option.</comment>
+  </data>
+  <data name="TvInspectTooltip" xml:space="preserve">
+    <value>Attributes with their sources and history</value>
+    <comment>Tooltip on the Inspect view-mode option.</comment>
+  </data>
+  <data name="TvObjectFallback" xml:space="preserve">
+    <value>object</value>
+    <comment>Fallback noun when the object type has no name. Used mid-sentence.</comment>
+  </data>
+  <data name="TvNoHistory" xml:space="preserve">
+    <value>No change history recorded for this object.</value>
+    <comment>Shown when the object has no changes.</comment>
+  </data>
+  <data name="TvLoadMore" xml:space="preserve">
+    <value>Load more ({0} remaining)</value>
+    <comment>Button. {0} is the number of changes not yet loaded.</comment>
+  </data>
+  <data name="TvProperties" xml:space="preserve">
+    <value>Properties</value>
+    <comment>Tab heading.</comment>
+  </data>
+  <data name="TvId" xml:space="preserve">
+    <value>Id</value>
+    <comment>Property label.</comment>
+  </data>
+  <data name="TvClickToCopy" xml:space="preserve">
+    <value>Click to copy</value>
+    <comment>Tooltip on the Id.</comment>
+  </data>
+  <data name="TvCreatedBy" xml:space="preserve">
+    <value>Created By</value>
+    <comment>Property label.</comment>
+  </data>
+  <data name="TvLastUpdatedBy" xml:space="preserve">
+    <value>Last Updated By</value>
+    <comment>Property label.</comment>
+  </data>
+  <data name="TvOrigin" xml:space="preserve">
+    <value>Origin</value>
+    <comment>Property label.</comment>
+  </data>
+  <data name="TvConnections" xml:space="preserve">
+    <value>Connections</value>
+    <comment>Tab heading.</comment>
+  </data>
+  <data name="TvPassword" xml:space="preserve">
+    <value>Password</value>
+    <comment>Tab heading.</comment>
+  </data>
+  <data name="TvPreviewExports" xml:space="preserve">
+    <value>Preview Exports</value>
+    <comment>Card heading.</comment>
+  </data>
+  <data name="TvPreviewExportsIntro" xml:space="preserve">
+    <value>What JIM would export for this Metaverse Object as it stands: where it would be provisioned, updated or deprovisioned under each enabled export Synchronisation Rule. Nothing is imported first.</value>
+    <comment>Card description.</comment>
+  </data>
+  <data name="TvPreviewSyncHint" xml:space="preserve">
+    <value>To preview synchronising one of its connections, use that row's Preview Sync.</value>
+    <comment>Shown when the object has connections.</comment>
+  </data>
+  <data name="TvPreview" xml:space="preserve">
+    <value>Preview</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="TvPreviewing" xml:space="preserve">
+    <value>Previewing…</value>
+    <comment>Button while the preview runs.</comment>
+  </data>
+  <data name="TvSetPasswordTitle" xml:space="preserve">
+    <value>Set Password: {0}</value>
+    <comment>Dialog title. {0} is the object's display name.</comment>
+  </data>
+  <data name="TvNothingRetried" xml:space="preserve">
+    <value>Nothing was retried; the change is no longer on the queue.</value>
+    <comment>Snackbar when a retry found nothing to retry.</comment>
+  </data>
+  <data name="TvWillRetry" xml:space="preserve">
+    <value>The password change will be attempted again.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="TvNothingStopped" xml:space="preserve">
+    <value>Nothing was stopped; the change is no longer on the queue.</value>
+    <comment>Snackbar when a stop found nothing to stop.</comment>
+  </data>
+  <data name="TvWillNotDeliver" xml:space="preserve">
+    <value>The password change will not be delivered.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="TvFullSynchronisation" xml:space="preserve">
+    <value>Full Synchronisation</value>
+    <comment>Run profile name shown in the causality view.</comment>
+  </data>
+  <data name="TvOutboundEvaluation" xml:space="preserve">
+    <value>outbound evaluation</value>
+    <comment>Run profile name shown in the causality view for an export preview.</comment>
+  </data>
+  <data name="TvSyncPreviewFailed" xml:space="preserve">
+    <value>The Sync Preview failed: {0}</value>
+    <comment>Error snackbar. {0} is the exception message.</comment>
+  </data>
+  <data name="MvcNoConnections" xml:space="preserve">
+    <value>This Metaverse Object has no Connected System Objects joined to it.</value>
+    <comment>Empty state.</comment>
+  </data>
+  <data name="MvcConnectionSingular" xml:space="preserve">
+    <value>connection</value>
+    <comment>Object count, singular. Used in a row count.</comment>
+  </data>
+  <data name="MvcConnectionPlural" xml:space="preserve">
+    <value>connections</value>
+    <comment>Object count, plural.</comment>
+  </data>
+  <data name="MvcConnectedSystem" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="MvcObject" xml:space="preserve">
+    <value>Object</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="MvcRole" xml:space="preserve">
+    <value>Role</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="MvcJoin" xml:space="preserve">
+    <value>Join</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="MvcState" xml:space="preserve">
+    <value>State</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="MvcLastSynchronised" xml:space="preserve">
+    <value>Last synchronised</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="MvcWhyConnected" xml:space="preserve">
+    <value>Why this Metaverse Object is connected to {0}</value>
+    <comment>Accessible name of the expand button. {0} is the Connected System's name.</comment>
+  </data>
+  <data name="MvcSource" xml:space="preserve">
+    <value>Source</value>
+    <comment>Role chip: the object's value flows in from this connection.</comment>
+  </data>
+  <data name="MvcTarget" xml:space="preserve">
+    <value>Target</value>
+    <comment>Role chip: the object's value flows out to this connection.</comment>
+  </data>
+  <data name="MvcAttributeCountOne" xml:space="preserve">
+    <value>{0} attribute</value>
+    <comment>Count of attributes waiting to update, singular. {0} is the count.</comment>
+  </data>
+  <data name="MvcAttributeCountOther" xml:space="preserve">
+    <value>{0} attributes</value>
+    <comment>Count of attributes waiting to update, plural. {0} is the count.</comment>
+  </data>
+  <data name="MvcPreviewSync" xml:space="preserve">
+    <value>Preview Sync</value>
+    <comment>Button that previews synchronising one connection.</comment>
+  </data>
+  <data name="MncTitle" xml:space="preserve">
+    <value>Not connected</value>
+    <comment>Section title.</comment>
+  </data>
+  <data name="MncCaption" xml:space="preserve">
+    <value>Connected Systems this Metaverse Object could be exported to, and why it isn't in them</value>
+    <comment>Caption beside the title.</comment>
+  </data>
+  <data name="MncEvaluatedNow" xml:space="preserve">
+    <value>Evaluated now, {0}</value>
+    <comment>{0} is the evaluation date.</comment>
+  </data>
+  <data name="MncEmpty" xml:space="preserve">
+    <value>Connected to every Connected System it could be exported to.</value>
+    <comment>Shown when no entries are not connected.</comment>
+  </data>
+  <data name="MncSyncRuleHeader" xml:space="preserve">
+    <value>Synchronisation Rule</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="MncReason" xml:space="preserve">
+    <value>Reason</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="MncWhyNotIn" xml:space="preserve">
+    <value>Why this Metaverse Object is not in {0}</value>
+    <comment>Accessible name of the expand button. {0} is the Connected System's name.</comment>
+  </data>
+  <data name="MncCopySummaryAria" xml:space="preserve">
+    <value>Copy a summary of why this Metaverse Object is not in {0}</value>
+    <comment>Accessible name of the copy button. {0} is the Connected System's name.</comment>
+  </data>
+  <data name="MncCopySummary" xml:space="preserve">
+    <value>Copy summary</value>
+    <comment>Button, and the title of the dialog that offers the summary to copy by hand.</comment>
+  </data>
+  <data name="MncScoping" xml:space="preserve">
+    <value>Scoping</value>
+    <comment>Section heading in the expanded row.</comment>
+  </data>
+  <data name="MncSummaryCopied" xml:space="preserve">
+    <value>Summary copied to the clipboard.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="MncReasonNotInScope" xml:space="preserve">
+    <value>Not in scope</value>
+    <comment>Reason chip.</comment>
+  </data>
+  <data name="MncReasonProvisioningDisabled" xml:space="preserve">
+    <value>Rule doesn't provision</value>
+    <comment>Reason chip.</comment>
+  </data>
+  <data name="MncReasonRuleMisconfigured" xml:space="preserve">
+    <value>Rule misconfigured</value>
+    <comment>Reason chip.</comment>
+  </data>
+  <data name="MncReasonNotYetProvisioned" xml:space="preserve">
+    <value>Not yet provisioned</value>
+    <comment>Reason chip.</comment>
+  </data>
+  <data name="MvaSearchPlaceholder" xml:space="preserve">
+    <value>Search {0}...</value>
+    <comment>Search box placeholder. {0} is the attribute's name in lower case.</comment>
+  </data>
+  <data name="MvaValue" xml:space="preserve">
+    <value>Value</value>
+    <comment>Grid's singular name, and a column heading.</comment>
+  </data>
+  <data name="MvaValues" xml:space="preserve">
+    <value>Values</value>
+    <comment>Grid's plural name.</comment>
+  </data>
+  <data name="MvaDisplayName" xml:space="preserve">
+    <value>Display Name</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="MvaNoValuesMatch" xml:space="preserve">
+    <value>No values match "{0}"</value>
+    <comment>Empty grid. {0} is the search text the administrator typed.</comment>
+  </data>
+  <data name="MvaNoValues" xml:space="preserve">
+    <value>This attribute has no values</value>
+    <comment>Empty grid heading.</comment>
+  </data>
+  <data name="MvaNoValuesHint" xml:space="preserve">
+    <value>Values arrive here from a Connected System through an Inbound Synchronisation Rule.</value>
+    <comment>Empty grid description.</comment>
+  </data>
+  <data name="MvaBytes" xml:space="preserve">
+    <value>{0} bytes</value>
+    <comment>Display of a binary value. {0} is the length.</comment>
+  </data>
+  <data name="MdtGroupHeading" xml:space="preserve">
+    <value>{0} ({1})</value>
+    <comment>Heading of a multi-valued attribute. {0} is the attribute's name; {1} the number of values.</comment>
+  </data>
+  <data name="MdtChangeViewMode" xml:space="preserve">
+    <value>Change view mode</value>
+    <comment>Accessible name of the view-mode menu.</comment>
+  </data>
+  <data name="MdtViewTable" xml:space="preserve">
+    <value>Table</value>
+    <comment>View-mode menu item.</comment>
+  </data>
+  <data name="MdtViewChips" xml:space="preserve">
+    <value>Chips</value>
+    <comment>View-mode menu item.</comment>
+  </data>
+  <data name="MdtViewList" xml:space="preserve">
+    <value>List</value>
+    <comment>View-mode menu item.</comment>
+  </data>
+  <data name="EchRecipientFallback" xml:space="preserve">
+    <value>Exchange recipient</value>
+    <comment>Title for a change to no recipient type, or to one JIM does not recognise.</comment>
+  </data>
+  <data name="EchPillQueued" xml:space="preserve">
+    <value>Queued</value>
+    <comment>Status pill.</comment>
+  </data>
+  <data name="EchPillDelivering" xml:space="preserve">
+    <value>Delivering</value>
+    <comment>Status pill.</comment>
+  </data>
+  <data name="EchPillRetrying" xml:space="preserve">
+    <value>Retrying</value>
+    <comment>Status pill.</comment>
+  </data>
+  <data name="EchPillHeld" xml:space="preserve">
+    <value>Held</value>
+    <comment>Status pill.</comment>
+  </data>
+  <data name="EchPillDelivered" xml:space="preserve">
+    <value>Delivered</value>
+    <comment>Status pill.</comment>
+  </data>
+  <data name="EchPillWithdrawn" xml:space="preserve">
+    <value>Withdrawn</value>
+    <comment>Status pill.</comment>
+  </data>
+  <data name="EchPillReplaced" xml:space="preserve">
+    <value>Replaced</value>
+    <comment>Status pill.</comment>
+  </data>
+  <data name="EchPillParked" xml:space="preserve">
+    <value>Parked</value>
+    <comment>Status pill.</comment>
+  </data>
+  <data name="EchPillRefused" xml:space="preserve">
+    <value>Refused</value>
+    <comment>Status pill.</comment>
+  </data>
+  <data name="EchPillNotMade" xml:space="preserve">
+    <value>Not made</value>
+    <comment>Status pill.</comment>
+  </data>
+  <data name="EchWordsQueued" xml:space="preserve">
+    <value>Queued; the Exchange delivery lane will pick it up in a moment</value>
+    <comment>Sentence under the pill.</comment>
+  </data>
+  <data name="EchApplyingNow" xml:space="preserve">
+    <value>Exchange is applying it now</value>
+    <comment>Sentence under the pill, and the queue detail.</comment>
+  </data>
+  <data name="EchWordsHeld" xml:space="preserve">
+    <value>Held: its Connected System does not manage Exchange recipients now; delivered once it does again</value>
+    <comment>Sentence under the pill.</comment>
+  </data>
+  <data name="EchLeadWithMessage" xml:space="preserve">
+    <value>{0}: {1}</value>
+    <comment>A reason or status, then the message that explains it.</comment>
+  </data>
+  <data name="EchAttemptSuffix" xml:space="preserve">
+    <value>. Attempt {0}</value>
+    <comment>Appended after the words of a retrying change. {0} is the attempt number.</comment>
+  </data>
+  <data name="EchNextAttemptSuffix" xml:space="preserve">
+    <value>{0}. Next attempt {1}</value>
+    <comment>{0} is the words so far; {1} is the next attempt's date.</comment>
+  </data>
+  <data name="EchParkedWords" xml:space="preserve">
+    <value>Parked: JIM has stopped trying until somebody retries it</value>
+    <comment>Sentence under the pill for a parked change with no message.</comment>
+  </data>
+  <data name="EchParkedWithMessage" xml:space="preserve">
+    <value>Parked: {0}</value>
+    <comment>Sentence under the pill for a parked change. {0} is the message.</comment>
+  </data>
+  <data name="EchDeliveredDefault" xml:space="preserve">
+    <value>Exchange made the account the declared recipient</value>
+    <comment>Sentence for a delivered change with no message.</comment>
+  </data>
+  <data name="EchReplacedDefault" xml:space="preserve">
+    <value>Replaced by a newer declared state before it was delivered</value>
+    <comment>Sentence for a replaced change with no message.</comment>
+  </data>
+  <data name="EchDueNow" xml:space="preserve">
+    <value>Due now</value>
+    <comment>Queue detail.</comment>
+  </data>
+  <data name="EchWaitsUntilManages" xml:space="preserve">
+    <value>Waits until {0} manages Exchange recipients again</value>
+    <comment>Queue detail. {0} is the Connected System's name.</comment>
+  </data>
+  <data name="EchAttemptNext" xml:space="preserve">
+    <value>Attempt {0}; next {1}</value>
+    <comment>Queue detail. {0} is the attempt number; {1} the next attempt's date.</comment>
+  </data>
+  <data name="EchAttemptDueNow" xml:space="preserve">
+    <value>Attempt {0}; due now</value>
+    <comment>Queue detail. {0} is the attempt number.</comment>
+  </data>
+  <data name="EchSince" xml:space="preserve">
+    <value>Since {0}</value>
+    <comment>Queue detail. {0} is the date the change parked.</comment>
+  </data>
+  <data name="EchWaitingRetry" xml:space="preserve">
+    <value>Waiting for somebody to retry it</value>
+    <comment>Queue detail for a parked change with no date.</comment>
+  </data>
+  <data name="EchWaitsNewState" xml:space="preserve">
+    <value>Waits on a new declared state</value>
+    <comment>Queue detail for any other state.</comment>
+  </data>
+  <data name="EchReasonObjectNotFound" xml:space="preserve">
+    <value>Exchange could not find the account yet</value>
+    <comment>Reason an attempt failed.</comment>
+  </data>
+  <data name="EchReasonRefused" xml:space="preserve">
+    <value>Exchange refused the change</value>
+    <comment>Reason an attempt failed.</comment>
+  </data>
+  <data name="EchReasonPermissions" xml:space="preserve">
+    <value>JIM's account lacks the Exchange permissions</value>
+    <comment>Reason an attempt failed.</comment>
+  </data>
+  <data name="EchReasonAuthentication" xml:space="preserve">
+    <value>Signing in to Exchange failed</value>
+    <comment>Reason an attempt failed.</comment>
+  </data>
+  <data name="EchReasonUnreachable" xml:space="preserve">
+    <value>Unreachable or timed out</value>
+    <comment>Reason an attempt failed.</comment>
+  </data>
+  <data name="SubjectThisConnectedSystem" xml:space="preserve">
+    <value>this Connected System</value>
+    <comment>Names the subject of a tooltip when no name is known. Used as the subject of a sentence.</comment>
+  </data>
+  <data name="SubjectThisSyncRule" xml:space="preserve">
+    <value>this Synchronisation Rule</value>
+    <comment>Names the subject of a tooltip when no name is known. Used as the subject of a sentence.</comment>
+  </data>
+  <data name="PsiChipEnabled" xml:space="preserve">
+    <value>Password Sync</value>
+    <comment>Chip when Password Synchronisation is on.</comment>
+  </data>
+  <data name="PsiChipDisabled" xml:space="preserve">
+    <value>Password Sync off</value>
+    <comment>Chip when Password Synchronisation is switched off.</comment>
+  </data>
+  <data name="PsiEnabledTooltip" xml:space="preserve">
+    <value>{0} receives synchronised password changes. Each one is queued and delivered on its own clock, with retries, so the system being unavailable delays a password rather than losing it.</value>
+    <comment>Tooltip on the chip when on. {0} is the subject.</comment>
+  </data>
+  <data name="PsiDisabledTooltip" xml:space="preserve">
+    <value>Password Synchronisation is configured for {0} but switched off. Changes still accumulate for it and are delivered when it is switched back on; they are not discarded in the meantime.</value>
+    <comment>Tooltip on the chip when off. {0} is the subject.</comment>
+  </data>
+  <data name="PsiChangeOne" xml:space="preserve">
+    <value>1 queued password change</value>
+    <comment>Counted phrase, singular.</comment>
+  </data>
+  <data name="PsiChangeOther" xml:space="preserve">
+    <value>{0} queued password changes</value>
+    <comment>Counted phrase, plural. {0} is the count.</comment>
+  </data>
+  <data name="PsiParkedOne" xml:space="preserve">
+    <value>1 queued password change is parked for {0}. The target refused them, or they ran out of attempts, so JIM has stopped trying. Deal with the reason on the Passwords tab of Operations, then retry them from there.</value>
+    <comment>Tooltip on the parked chip, one change. {0} is the subject.</comment>
+  </data>
+  <data name="PsiParkedOther" xml:space="preserve">
+    <value>{0} queued password changes are parked for {1}. The target refused them, or they ran out of attempts, so JIM has stopped trying. Deal with the reason on the Passwords tab of Operations, then retry them from there.</value>
+    <comment>Tooltip on the parked chip, several changes. {0} is the count; {1} the subject.</comment>
+  </data>
+  <data name="PsiExpiredTooltip" xml:space="preserve">
+    <value>{0} for {1} outlived the time to live and can no longer be delivered. Those people's passwords on that system are out of step with the rest, and JIM will not close the gap on its own.</value>
+    <comment>Tooltip on the expired chip. {0} is PsiChangeOne or PsiChangeOther; {1} is the subject.</comment>
+  </data>
+  <data name="IpaParkedOneSystem" xml:space="preserve">
+    <value>1 account is waiting on a change to the initial password settings of the Synchronisation Rules that provisioned them into {0}. The target refused the password these settings produced, so JIM has stopped trying. Correcting the settings and saving releases them, and they are attempted again by the Password Delivery Service within seconds.</value>
+    <comment>Tooltip on the parked chip, one account, for a Connected System. {0} is the Connected System's name.</comment>
+  </data>
+  <data name="IpaParkedOneRule" xml:space="preserve">
+    <value>1 account is waiting on a change to {0}'s initial password settings. The target refused the password these settings produced, so JIM has stopped trying. Correcting the settings and saving releases them, and they are attempted again by the Password Delivery Service within seconds.</value>
+    <comment>Tooltip on the parked chip, one account, for a Synchronisation Rule. {0} is the rule's name.</comment>
+  </data>
+  <data name="IpaParkedOtherSystem" xml:space="preserve">
+    <value>{0} accounts are waiting on a change to the initial password settings of the Synchronisation Rules that provisioned them into {1}. The target refused the password these settings produced, so JIM has stopped trying. Correcting the settings and saving releases them, and they are attempted again by the Password Delivery Service within seconds.</value>
+    <comment>Tooltip on the parked chip, several accounts, for a Connected System. {0} is the count; {1} the Connected System's name.</comment>
+  </data>
+  <data name="IpaParkedOtherRule" xml:space="preserve">
+    <value>{0} accounts are waiting on a change to {1}'s initial password settings. The target refused the password these settings produced, so JIM has stopped trying. Correcting the settings and saving releases them, and they are attempted again by the Password Delivery Service within seconds.</value>
+    <comment>Tooltip on the parked chip, several accounts, for a Synchronisation Rule. {0} is the count; {1} the rule's name.</comment>
+  </data>
+  <data name="IpaExpiredOneSystem" xml:space="preserve">
+    <value>1 account was provisioned in {0} and never given an initial password within its time to live. JIM has stopped trying; they need a password set by other means.</value>
+    <comment>Tooltip on the expired chip, one account, for a Connected System. {0} is the Connected System's name.</comment>
+  </data>
+  <data name="IpaExpiredOneRule" xml:space="preserve">
+    <value>1 account was provisioned by {0} and never given an initial password within its time to live. JIM has stopped trying; they need a password set by other means.</value>
+    <comment>Tooltip on the expired chip, one account, for a Synchronisation Rule. {0} is the rule's name.</comment>
+  </data>
+  <data name="IpaExpiredOtherSystem" xml:space="preserve">
+    <value>{0} accounts were provisioned in {1} and never given an initial password within its time to live. JIM has stopped trying; they need a password set by other means.</value>
+    <comment>Tooltip on the expired chip, several accounts, for a Connected System. {0} is the count; {1} the Connected System's name.</comment>
+  </data>
+  <data name="IpaExpiredOtherRule" xml:space="preserve">
+    <value>{0} accounts were provisioned by {1} and never given an initial password within its time to live. JIM has stopped trying; they need a password set by other means.</value>
+    <comment>Tooltip on the expired chip, several accounts, for a Synchronisation Rule. {0} is the count; {1} the rule's name.</comment>
+  </data>
 </root>

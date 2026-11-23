@@ -824,4 +824,394 @@
   <data name="AvniOpenSchema" xml:space="preserve">
     <value>Ouvrir le schéma</value>
   </data>
+  <data name="MetaverseObjectNoun" xml:space="preserve">
+    <value>Objet Metaverse</value>
+  </data>
+  <data name="TvPageTitle" xml:space="preserve">
+    <value>{0} : {1}</value>
+  </data>
+  <data name="TvLoadingEllipsis" xml:space="preserve">
+    <value>Chargement…</value>
+  </data>
+  <data name="TvTypeNameHeading" xml:space="preserve">
+    <value>{0} :</value>
+  </data>
+  <data name="TvPageInfo" xml:space="preserve">
+    <value>Un objet Metaverse est la vue unique qu'a JIM d'une identité, construite à partir des systèmes connectés auxquels il est relié. Chaque valeur indique d'où elle provient.</value>
+  </data>
+  <data name="TvStillLoading" xml:space="preserve">
+    <value>Chargement en cours. Les grands objets peuvent prendre quelques secondes à être récupérés.</value>
+  </data>
+  <data name="TvDetailsView" xml:space="preserve">
+    <value>Affichage des détails</value>
+  </data>
+  <data name="TvViewForm" xml:space="preserve">
+    <value>Formulaire</value>
+  </data>
+  <data name="TvViewTabs" xml:space="preserve">
+    <value>Onglets</value>
+  </data>
+  <data name="TvViewInspect" xml:space="preserve">
+    <value>Inspecter</value>
+  </data>
+  <data name="TvInspectTooltip" xml:space="preserve">
+    <value>Attributs avec leurs sources et leur historique</value>
+  </data>
+  <data name="TvObjectFallback" xml:space="preserve">
+    <value>objet</value>
+  </data>
+  <data name="TvNoHistory" xml:space="preserve">
+    <value>Aucun historique de modifications enregistré pour cet objet.</value>
+  </data>
+  <data name="TvLoadMore" xml:space="preserve">
+    <value>Charger davantage ({0} restants)</value>
+  </data>
+  <data name="TvProperties" xml:space="preserve">
+    <value>Propriétés</value>
+  </data>
+  <data name="TvId" xml:space="preserve">
+    <value>Id</value>
+  </data>
+  <data name="TvClickToCopy" xml:space="preserve">
+    <value>Cliquer pour copier</value>
+  </data>
+  <data name="TvCreatedBy" xml:space="preserve">
+    <value>Créé par</value>
+  </data>
+  <data name="TvLastUpdatedBy" xml:space="preserve">
+    <value>Mis à jour par</value>
+  </data>
+  <data name="TvOrigin" xml:space="preserve">
+    <value>Origine</value>
+  </data>
+  <data name="TvConnections" xml:space="preserve">
+    <value>Connexions</value>
+  </data>
+  <data name="TvPassword" xml:space="preserve">
+    <value>Mot de passe</value>
+  </data>
+  <data name="TvPreviewExports" xml:space="preserve">
+    <value>Aperçu des exports</value>
+  </data>
+  <data name="TvPreviewExportsIntro" xml:space="preserve">
+    <value>Ce que JIM exporterait pour cet objet Metaverse en l'état : où il serait provisionné, mis à jour ou déprovisionné au titre de chaque règle de synchronisation d'exportation activée. Rien n'est importé au préalable.</value>
+  </data>
+  <data name="TvPreviewSyncHint" xml:space="preserve">
+    <value>Pour simuler la synchronisation de l'une de ses connexions, utilisez l'Aperçu de synchronisation de cette ligne.</value>
+  </data>
+  <data name="TvPreview" xml:space="preserve">
+    <value>Aperçu</value>
+  </data>
+  <data name="TvPreviewing" xml:space="preserve">
+    <value>Aperçu en cours…</value>
+  </data>
+  <data name="TvSetPasswordTitle" xml:space="preserve">
+    <value>Définir le mot de passe : {0}</value>
+  </data>
+  <data name="TvNothingRetried" xml:space="preserve">
+    <value>Rien n'a été relancé ; le changement ne figure plus dans la file d'attente.</value>
+  </data>
+  <data name="TvWillRetry" xml:space="preserve">
+    <value>Le changement de mot de passe sera de nouveau tenté.</value>
+  </data>
+  <data name="TvNothingStopped" xml:space="preserve">
+    <value>Rien n'a été arrêté ; le changement ne figure plus dans la file d'attente.</value>
+  </data>
+  <data name="TvWillNotDeliver" xml:space="preserve">
+    <value>Le changement de mot de passe ne sera pas envoyé.</value>
+  </data>
+  <data name="TvFullSynchronisation" xml:space="preserve">
+    <value>Synchronisation complète</value>
+  </data>
+  <data name="TvOutboundEvaluation" xml:space="preserve">
+    <value>évaluation sortante</value>
+  </data>
+  <data name="TvSyncPreviewFailed" xml:space="preserve">
+    <value>Échec de la simulation de synchronisation : {0}</value>
+  </data>
+  <data name="MvcNoConnections" xml:space="preserve">
+    <value>Cet objet Metaverse n'a aucun objet de systèmes connectés joint.</value>
+  </data>
+  <data name="MvcConnectionSingular" xml:space="preserve">
+    <value>connexion</value>
+  </data>
+  <data name="MvcConnectionPlural" xml:space="preserve">
+    <value>connexions</value>
+  </data>
+  <data name="MvcConnectedSystem" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="MvcObject" xml:space="preserve">
+    <value>Objet</value>
+  </data>
+  <data name="MvcRole" xml:space="preserve">
+    <value>Rôle</value>
+  </data>
+  <data name="MvcJoin" xml:space="preserve">
+    <value>Jointure</value>
+  </data>
+  <data name="MvcState" xml:space="preserve">
+    <value>État</value>
+  </data>
+  <data name="MvcLastSynchronised" xml:space="preserve">
+    <value>Dernière synchronisation</value>
+  </data>
+  <data name="MvcWhyConnected" xml:space="preserve">
+    <value>Pourquoi cet objet Metaverse est connecté à {0}</value>
+  </data>
+  <data name="MvcSource" xml:space="preserve">
+    <value>Source</value>
+  </data>
+  <data name="MvcTarget" xml:space="preserve">
+    <value>Cible</value>
+  </data>
+  <data name="MvcAttributeCountOne" xml:space="preserve">
+    <value>{0} attribut</value>
+  </data>
+  <data name="MvcAttributeCountOther" xml:space="preserve">
+    <value>{0} attributs</value>
+  </data>
+  <data name="MvcPreviewSync" xml:space="preserve">
+    <value>Aperçu de synchronisation</value>
+  </data>
+  <data name="MncTitle" xml:space="preserve">
+    <value>Non connecté</value>
+  </data>
+  <data name="MncCaption" xml:space="preserve">
+    <value>Systèmes connectés vers lesquels cet objet Metaverse pourrait être exporté, et raison pour laquelle il n'en fait pas partie</value>
+  </data>
+  <data name="MncEvaluatedNow" xml:space="preserve">
+    <value>Évalué à l'instant, {0}</value>
+  </data>
+  <data name="MncEmpty" xml:space="preserve">
+    <value>Connecté à tous les systèmes connectés vers lesquels il pourrait être exporté.</value>
+  </data>
+  <data name="MncSyncRuleHeader" xml:space="preserve">
+    <value>Règle de synchronisation</value>
+  </data>
+  <data name="MncReason" xml:space="preserve">
+    <value>Motif</value>
+  </data>
+  <data name="MncWhyNotIn" xml:space="preserve">
+    <value>Pourquoi cet objet Metaverse n'est pas dans {0}</value>
+  </data>
+  <data name="MncCopySummaryAria" xml:space="preserve">
+    <value>Copier un résumé de la raison pour laquelle cet objet Metaverse n'est pas dans {0}</value>
+  </data>
+  <data name="MncCopySummary" xml:space="preserve">
+    <value>Copier le résumé</value>
+  </data>
+  <data name="MncScoping" xml:space="preserve">
+    <value>Périmètre</value>
+  </data>
+  <data name="MncSummaryCopied" xml:space="preserve">
+    <value>Résumé copié dans le presse-papiers.</value>
+  </data>
+  <data name="MncReasonNotInScope" xml:space="preserve">
+    <value>Hors périmètre</value>
+  </data>
+  <data name="MncReasonProvisioningDisabled" xml:space="preserve">
+    <value>La règle ne provisionne pas</value>
+  </data>
+  <data name="MncReasonRuleMisconfigured" xml:space="preserve">
+    <value>Règle mal configurée</value>
+  </data>
+  <data name="MncReasonNotYetProvisioned" xml:space="preserve">
+    <value>Pas encore provisionné</value>
+  </data>
+  <data name="MvaSearchPlaceholder" xml:space="preserve">
+    <value>Rechercher {0}...</value>
+  </data>
+  <data name="MvaValue" xml:space="preserve">
+    <value>Valeur</value>
+  </data>
+  <data name="MvaValues" xml:space="preserve">
+    <value>Valeurs</value>
+  </data>
+  <data name="MvaDisplayName" xml:space="preserve">
+    <value>Nom d'affichage</value>
+  </data>
+  <data name="MvaNoValuesMatch" xml:space="preserve">
+    <value>Aucune valeur ne correspond à « {0} ».</value>
+  </data>
+  <data name="MvaNoValues" xml:space="preserve">
+    <value>Cet attribut n'a aucune valeur</value>
+  </data>
+  <data name="MvaNoValuesHint" xml:space="preserve">
+    <value>Les valeurs arrivent ici depuis un système connecté, par l'intermédiaire d'une règle de synchronisation entrante.</value>
+  </data>
+  <data name="MvaBytes" xml:space="preserve">
+    <value>{0} octets</value>
+  </data>
+  <data name="MdtGroupHeading" xml:space="preserve">
+    <value>{0} ({1})</value>
+  </data>
+  <data name="MdtChangeViewMode" xml:space="preserve">
+    <value>Changer le mode d'affichage</value>
+  </data>
+  <data name="MdtViewTable" xml:space="preserve">
+    <value>Tableau</value>
+  </data>
+  <data name="MdtViewChips" xml:space="preserve">
+    <value>Étiquettes</value>
+  </data>
+  <data name="MdtViewList" xml:space="preserve">
+    <value>Liste</value>
+  </data>
+  <data name="EchRecipientFallback" xml:space="preserve">
+    <value>Destinataire Exchange</value>
+  </data>
+  <data name="EchPillQueued" xml:space="preserve">
+    <value>En file d'attente</value>
+  </data>
+  <data name="EchPillDelivering" xml:space="preserve">
+    <value>Envoi en cours</value>
+  </data>
+  <data name="EchPillRetrying" xml:space="preserve">
+    <value>Nouvelle tentative</value>
+  </data>
+  <data name="EchPillHeld" xml:space="preserve">
+    <value>En attente</value>
+  </data>
+  <data name="EchPillDelivered" xml:space="preserve">
+    <value>Livré</value>
+  </data>
+  <data name="EchPillWithdrawn" xml:space="preserve">
+    <value>Retiré</value>
+  </data>
+  <data name="EchPillReplaced" xml:space="preserve">
+    <value>Remplacé</value>
+  </data>
+  <data name="EchPillParked" xml:space="preserve">
+    <value>Suspendu</value>
+  </data>
+  <data name="EchPillRefused" xml:space="preserve">
+    <value>Refusé</value>
+  </data>
+  <data name="EchPillNotMade" xml:space="preserve">
+    <value>Non effectué</value>
+  </data>
+  <data name="EchWordsQueued" xml:space="preserve">
+    <value>En file d'attente ; la voie d'envoi Exchange la prendra en charge dans un instant</value>
+  </data>
+  <data name="EchApplyingNow" xml:space="preserve">
+    <value>Exchange l'applique maintenant</value>
+  </data>
+  <data name="EchWordsHeld" xml:space="preserve">
+    <value>En attente : son système connecté ne gère pas actuellement les destinataires Exchange ; envoi dès qu'il le fera à nouveau</value>
+  </data>
+  <data name="EchLeadWithMessage" xml:space="preserve">
+    <value>{0} : {1}</value>
+  </data>
+  <data name="EchAttemptSuffix" xml:space="preserve">
+    <value>. Tentative {0}</value>
+  </data>
+  <data name="EchNextAttemptSuffix" xml:space="preserve">
+    <value>{0}. Prochaine tentative {1}</value>
+  </data>
+  <data name="EchParkedWords" xml:space="preserve">
+    <value>Suspendu : JIM a cessé d'essayer jusqu'à ce que quelqu'un le relance</value>
+  </data>
+  <data name="EchParkedWithMessage" xml:space="preserve">
+    <value>Suspendu : {0}</value>
+  </data>
+  <data name="EchDeliveredDefault" xml:space="preserve">
+    <value>Exchange a fait de ce compte le destinataire déclaré</value>
+  </data>
+  <data name="EchReplacedDefault" xml:space="preserve">
+    <value>Remplacé par un état déclaré plus récent avant d'avoir été envoyé</value>
+  </data>
+  <data name="EchDueNow" xml:space="preserve">
+    <value>Échéance immédiate</value>
+  </data>
+  <data name="EchWaitsUntilManages" xml:space="preserve">
+    <value>En attente que {0} gère à nouveau les destinataires Exchange</value>
+  </data>
+  <data name="EchAttemptNext" xml:space="preserve">
+    <value>Tentative {0} ; prochaine {1}</value>
+  </data>
+  <data name="EchAttemptDueNow" xml:space="preserve">
+    <value>Tentative {0} ; échéance immédiate</value>
+  </data>
+  <data name="EchSince" xml:space="preserve">
+    <value>Depuis {0}</value>
+  </data>
+  <data name="EchWaitingRetry" xml:space="preserve">
+    <value>En attente d'une nouvelle tentative manuelle</value>
+  </data>
+  <data name="EchWaitsNewState" xml:space="preserve">
+    <value>En attente d'un nouvel état déclaré</value>
+  </data>
+  <data name="EchReasonObjectNotFound" xml:space="preserve">
+    <value>Exchange ne trouve pas encore le compte</value>
+  </data>
+  <data name="EchReasonRefused" xml:space="preserve">
+    <value>Exchange a refusé la modification</value>
+  </data>
+  <data name="EchReasonPermissions" xml:space="preserve">
+    <value>Le compte de JIM ne dispose pas des autorisations Exchange</value>
+  </data>
+  <data name="EchReasonAuthentication" xml:space="preserve">
+    <value>La connexion à Exchange a échoué</value>
+  </data>
+  <data name="EchReasonUnreachable" xml:space="preserve">
+    <value>Injoignable ou délai dépassé</value>
+  </data>
+  <data name="SubjectThisConnectedSystem" xml:space="preserve">
+    <value>ce système connecté</value>
+  </data>
+  <data name="SubjectThisSyncRule" xml:space="preserve">
+    <value>cette règle de synchronisation</value>
+  </data>
+  <data name="PsiChipEnabled" xml:space="preserve">
+    <value>Synchro mots de passe</value>
+  </data>
+  <data name="PsiChipDisabled" xml:space="preserve">
+    <value>Synchro mots de passe désactivée</value>
+  </data>
+  <data name="PsiEnabledTooltip" xml:space="preserve">
+    <value>{0} reçoit les changements de mot de passe synchronisés. Chacun est mis en file d'attente et envoyé selon sa propre cadence, avec de nouvelles tentatives ; ainsi, l'indisponibilité du système retarde un mot de passe sans le perdre.</value>
+  </data>
+  <data name="PsiDisabledTooltip" xml:space="preserve">
+    <value>La synchronisation des mots de passe est configurée pour {0}, mais désactivée. Les changements continuent de s'accumuler pour ce système et sont envoyés lorsqu'elle est réactivée ; ils ne sont pas supprimés entre-temps.</value>
+  </data>
+  <data name="PsiChangeOne" xml:space="preserve">
+    <value>1 changement de mot de passe mis en file</value>
+  </data>
+  <data name="PsiChangeOther" xml:space="preserve">
+    <value>{0} changements de mot de passe mis en file</value>
+  </data>
+  <data name="PsiParkedOne" xml:space="preserve">
+    <value>1 changement de mot de passe mis en file est suspendu pour {0}. La cible l'a refusé, ou ses tentatives sont épuisées : JIM a donc cessé d'essayer. Traitez la cause dans l'onglet Mots de passe des Opérations, puis relancez-le depuis là.</value>
+  </data>
+  <data name="PsiParkedOther" xml:space="preserve">
+    <value>{0} changements de mot de passe mis en file sont suspendus pour {1}. La cible les a refusés, ou leurs tentatives sont épuisées : JIM a donc cessé d'essayer. Traitez la cause dans l'onglet Mots de passe des Opérations, puis relancez-les depuis là.</value>
+  </data>
+  <data name="PsiExpiredTooltip" xml:space="preserve">
+    <value>{0} pour {1} a dépassé sa durée de vie et ne peut plus être envoyé. Les mots de passe de ces personnes sur ce système ne sont plus alignés sur les autres, et JIM ne comblera pas l'écart de lui-même.</value>
+  </data>
+  <data name="IpaParkedOneSystem" xml:space="preserve">
+    <value>1 compte attend une modification des paramètres de mot de passe initial des règles de synchronisation qui l'ont provisionné dans {0}. La cible a refusé le mot de passe produit par ces paramètres, si bien que JIM a cessé d'essayer. Corriger les paramètres et les enregistrer les libère : le service de livraison des mots de passe les retente dans les secondes qui suivent.</value>
+  </data>
+  <data name="IpaParkedOneRule" xml:space="preserve">
+    <value>1 compte attend une modification des paramètres de mot de passe initial de {0}. La cible a refusé le mot de passe produit par ces paramètres, si bien que JIM a cessé d'essayer. Corriger les paramètres et les enregistrer les libère : le service de livraison des mots de passe les retente dans les secondes qui suivent.</value>
+  </data>
+  <data name="IpaParkedOtherSystem" xml:space="preserve">
+    <value>{0} comptes attendent une modification des paramètres de mot de passe initial des règles de synchronisation qui les ont provisionnés dans {1}. La cible a refusé le mot de passe produit par ces paramètres, si bien que JIM a cessé d'essayer. Corriger les paramètres et les enregistrer les libère : le service de livraison des mots de passe les retente dans les secondes qui suivent.</value>
+  </data>
+  <data name="IpaParkedOtherRule" xml:space="preserve">
+    <value>{0} comptes attendent une modification des paramètres de mot de passe initial de {1}. La cible a refusé le mot de passe produit par ces paramètres, si bien que JIM a cessé d'essayer. Corriger les paramètres et les enregistrer les libère : le service de livraison des mots de passe les retente dans les secondes qui suivent.</value>
+  </data>
+  <data name="IpaExpiredOneSystem" xml:space="preserve">
+    <value>1 compte a été provisionné dans {0} sans jamais recevoir de mot de passe initial dans les limites de sa durée de vie. JIM a cessé d'essayer ; il faut lui définir un mot de passe par d'autres moyens.</value>
+  </data>
+  <data name="IpaExpiredOneRule" xml:space="preserve">
+    <value>1 compte a été provisionné par {0} sans jamais recevoir de mot de passe initial dans les limites de sa durée de vie. JIM a cessé d'essayer ; il faut lui définir un mot de passe par d'autres moyens.</value>
+  </data>
+  <data name="IpaExpiredOtherSystem" xml:space="preserve">
+    <value>{0} comptes ont été provisionnés dans {1} sans jamais recevoir de mot de passe initial dans les limites de leur durée de vie. JIM a cessé d'essayer ; il faut leur définir un mot de passe par d'autres moyens.</value>
+  </data>
+  <data name="IpaExpiredOtherRule" xml:space="preserve">
+    <value>{0} comptes ont été provisionnés par {1} sans jamais recevoir de mot de passe initial dans les limites de leur durée de vie. JIM a cessé d'essayer ; il faut leur définir un mot de passe par d'autres moyens.</value>
+  </data>
 </root>
