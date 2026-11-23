@@ -371,4 +371,127 @@
   <data name="CertificateUploadVerb" xml:space="preserve">
     <value>Importer</value>
   </data>
+  <data name="ApiKeyPageTitle" xml:space="preserve">
+    <value>Clés d’API</value>
+  </data>
+  <data name="ApiKeyPageInfo" xml:space="preserve">
+    <value>Gérez les clés d’API pour l’authentification non interactive. Les clés d’API peuvent servir aux pipelines CI/CD, aux tests d’intégration et aux scripts d’automatisation. Les clés qu’un fournisseur d’identité utilise pour appeler un point de terminaison SCIM figurent aussi ici, marquées SCIM ; elles sont créées et gérées dans l’onglet SCIM du système connecté.</value>
+  </data>
+  <data name="ApiKeyNounSingular" xml:space="preserve">
+    <value>Clé d’API</value>
+  </data>
+  <data name="ApiKeyNounPlural" xml:space="preserve">
+    <value>Clés d’API</value>
+  </data>
+  <data name="ApiKeyCreateButton" xml:space="preserve">
+    <value>Créer une clé d’API</value>
+  </data>
+  <data name="ApiKeyPrefix" xml:space="preserve">
+    <value>Préfixe de clé</value>
+  </data>
+  <data name="ApiKeyRoles" xml:space="preserve">
+    <value>Rôles</value>
+  </data>
+  <data name="ApiKeyInfrastructureTooltip" xml:space="preserve">
+    <value>Clé d’infrastructure créée automatiquement à partir de la variable d’environnement JIM_INFRASTRUCTURE_API_KEY.</value>
+  </data>
+  <data name="ApiKeyInfrastructure" xml:space="preserve">
+    <value>Infrastructure</value>
+  </data>
+  <data name="ApiKeyScopedTooltip" xml:space="preserve">
+    <value>Fonctionne uniquement sur le point de terminaison SCIM d’un seul système connecté. Gérez-la dans l’onglet SCIM de ce système connecté.</value>
+  </data>
+  <data name="ApiKeyNoRoles" xml:space="preserve">
+    <value>Aucun rôle</value>
+  </data>
+  <data name="ApiKeyLastUsed" xml:space="preserve">
+    <value>Dernière utilisation</value>
+  </data>
+  <data name="ApiKeyLastUsedTooltip" xml:space="preserve">
+    <value>{0} depuis l’adresse IP : {1}</value>
+  </data>
+  <data name="ApiKeyExpires" xml:space="preserve">
+    <value>Expiration</value>
+  </data>
+  <data name="ApiKeyEditOnScimTab" xml:space="preserve">
+    <value>Modifiez cette clé dans l’onglet SCIM de son système connecté</value>
+  </data>
+  <data name="ApiKeyEmptySearch" xml:space="preserve">
+    <value>Aucune clé d’API ne correspond à « {0} ».</value>
+  </data>
+  <data name="ApiKeyEmptyNone" xml:space="preserve">
+    <value>Aucune clé d’API n’a encore été créée.</value>
+  </data>
+  <data name="ApiKeyEmptyNoneHint" xml:space="preserve">
+    <value>Utilisez le bouton « Créer une clé d’API » pour en créer une.</value>
+  </data>
+  <data name="ApiKeyNameRequired" xml:space="preserve">
+    <value>Un nom est requis.</value>
+  </data>
+  <data name="ApiKeyNameHelper" xml:space="preserve">
+    <value>Nom convivial de cette clé d’API (par exemple, « CI/CD Pipeline »).</value>
+  </data>
+  <data name="ApiKeyDescriptionHelper" xml:space="preserve">
+    <value>Description facultative de l’usage de cette clé.</value>
+  </data>
+  <data name="ApiKeyRolesHint" xml:space="preserve">
+    <value>Sélectionnez les rôles à attribuer à cette clé d’API. Les rôles déterminent les actions que la clé peut effectuer.</value>
+  </data>
+  <data name="ApiKeyExpiresOptional" xml:space="preserve">
+    <value>Expiration (facultative)</value>
+  </data>
+  <data name="ApiKeyNoExpiryHint" xml:space="preserve">
+    <value>Laissez vide pour qu’elle n’expire pas</value>
+  </data>
+  <data name="ApiKeyCreating" xml:space="preserve">
+    <value>Création en cours</value>
+  </data>
+  <data name="ApiKeyCreatedTitle" xml:space="preserve">
+    <value>Clé d’API créée</value>
+  </data>
+  <data name="ApiKeyCopyNowWarning" xml:space="preserve">
+    <value>Copiez cette clé d’API maintenant. Il ne sera plus possible de l’afficher.</value>
+  </data>
+  <data name="ApiKeyBearerHint" xml:space="preserve">
+    <value>Envoyez cette clé comme jeton porteur dans l’en-tête Authorization de vos requêtes à l’API.</value>
+  </data>
+  <data name="ApiKeyExampleUsage" xml:space="preserve">
+    <value>Exemple d’utilisation :</value>
+  </data>
+  <data name="ApiKeyDone" xml:space="preserve">
+    <value>Terminé</value>
+  </data>
+  <data name="ApiKeyEditTitle" xml:space="preserve">
+    <value>Modifier la clé d’API</value>
+  </data>
+  <data name="ApiKeyCreatedSuccess" xml:space="preserve">
+    <value>Clé d’API créée avec succès.</value>
+  </data>
+  <data name="ApiKeyCopiedSuccess" xml:space="preserve">
+    <value>Clé d’API copiée dans le presse-papiers.</value>
+  </data>
+  <data name="ApiKeyCopyFailed" xml:space="preserve">
+    <value>Échec de la copie dans le presse-papiers. Copiez la clé manuellement.</value>
+  </data>
+  <data name="ApiKeyUpdatedSuccess" xml:space="preserve">
+    <value>Clé d’API mise à jour avec succès.</value>
+  </data>
+  <data name="ApiKeyDeletedSuccess" xml:space="preserve">
+    <value>Clé d’API supprimée avec succès.</value>
+  </data>
+  <data name="ApiKeyCreateFailed" xml:space="preserve">
+    <value>Échec de la création de la clé d’API : {0}</value>
+  </data>
+  <data name="ApiKeyUpdateFailed" xml:space="preserve">
+    <value>Échec de la mise à jour de la clé d’API : {0}</value>
+  </data>
+  <data name="ApiKeyDeleteFailed" xml:space="preserve">
+    <value>Échec de la suppression de la clé d’API : {0}</value>
+  </data>
+  <data name="ApiKeyDeleteTitle" xml:space="preserve">
+    <value>Supprimer la clé d’API</value>
+  </data>
+  <data name="ApiKeyDeleteMessage" xml:space="preserve">
+    <value>Voulez-vous vraiment supprimer la clé d’API « {0} » ? Toute requête utilisant cette clé échouera immédiatement.</value>
+  </data>
 </root>

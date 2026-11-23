@@ -490,4 +490,168 @@
     <value>Upload</value>
     <comment>Upload dialog confirm button, and the change reason dialog confirm button</comment>
   </data>
+  <data name="ApiKeyPageTitle" xml:space="preserve">
+    <value>API Keys</value>
+    <comment>Browser title, page heading and breadcrumb</comment>
+  </data>
+  <data name="ApiKeyPageInfo" xml:space="preserve">
+    <value>Manage API keys for non-interactive authentication. API keys can be used for CI/CD pipelines, integration testing, and automation scripts. Keys for an identity provider to call a SCIM endpoint are listed here too, marked SCIM, but are created and managed on their Connected System's SCIM tab.</value>
+    <comment>Page information popover</comment>
+  </data>
+  <data name="ApiKeyNounSingular" xml:space="preserve">
+    <value>API Key</value>
+    <comment>Noun used in the count, the empty state and the Created dialog label</comment>
+  </data>
+  <data name="ApiKeyNounPlural" xml:space="preserve">
+    <value>API Keys</value>
+    <comment>Noun used in the count</comment>
+  </data>
+  <data name="ApiKeyCreateButton" xml:space="preserve">
+    <value>Create API Key</value>
+    <comment>Toolbar button and create dialog title</comment>
+  </data>
+  <data name="ApiKeyPrefix" xml:space="preserve">
+    <value>Key Prefix</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ApiKeyRoles" xml:space="preserve">
+    <value>Roles</value>
+    <comment>Column heading, dialog section heading and the roles overflow title</comment>
+  </data>
+  <data name="ApiKeyInfrastructureTooltip" xml:space="preserve">
+    <value>Infrastructure key auto-created from the JIM_INFRASTRUCTURE_API_KEY environment variable.</value>
+    <comment>Tooltip on the Infrastructure chip; JIM_INFRASTRUCTURE_API_KEY is an environment variable name</comment>
+  </data>
+  <data name="ApiKeyInfrastructure" xml:space="preserve">
+    <value>Infrastructure</value>
+    <comment>Chip marking the infrastructure key</comment>
+  </data>
+  <data name="ApiKeyScopedTooltip" xml:space="preserve">
+    <value>Works only on one Connected System's SCIM endpoint. Manage it on that Connected System's SCIM tab.</value>
+    <comment>Tooltip on the SCIM chip of a key scoped to one Connected System</comment>
+  </data>
+  <data name="ApiKeyNoRoles" xml:space="preserve">
+    <value>No roles</value>
+    <comment>Shown in the Roles column when a key has none</comment>
+  </data>
+  <data name="ApiKeyLastUsed" xml:space="preserve">
+    <value>Last Used</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ApiKeyLastUsedTooltip" xml:space="preserve">
+    <value>{0} from IP: {1}</value>
+    <comment>Tooltip on the last used time; {0} is the date and time, {1} the IP address or Unknown</comment>
+  </data>
+  <data name="ApiKeyExpires" xml:space="preserve">
+    <value>Expires</value>
+    <comment>Column heading</comment>
+  </data>
+  <data name="ApiKeyEditOnScimTab" xml:space="preserve">
+    <value>Edit this key on its Connected System's SCIM tab</value>
+    <comment>Tooltip on a disabled edit button for a SCIM key</comment>
+  </data>
+  <data name="ApiKeyEmptySearch" xml:space="preserve">
+    <value>No API Keys match "{0}"</value>
+    <comment>Empty state after a search; {0} is the search text</comment>
+  </data>
+  <data name="ApiKeyEmptyNone" xml:space="preserve">
+    <value>No API Keys have been created yet</value>
+    <comment>Empty state when there are no keys</comment>
+  </data>
+  <data name="ApiKeyEmptyNoneHint" xml:space="preserve">
+    <value>Use the Create API Key button to create one.</value>
+    <comment>Empty state secondary text; quotes the toolbar button label</comment>
+  </data>
+  <data name="ApiKeyNameRequired" xml:space="preserve">
+    <value>A name is required</value>
+    <comment>Validation message on the name field</comment>
+  </data>
+  <data name="ApiKeyNameHelper" xml:space="preserve">
+    <value>A friendly name for this API key (e.g., 'CI/CD Pipeline')</value>
+    <comment>Create and edit dialog helper text</comment>
+  </data>
+  <data name="ApiKeyDescriptionHelper" xml:space="preserve">
+    <value>Optional description of what this key is used for</value>
+    <comment>Helper text on the description field</comment>
+  </data>
+  <data name="ApiKeyRolesHint" xml:space="preserve">
+    <value>Select the roles to assign to this API key. Roles determine what actions the key can perform.</value>
+    <comment>Create dialog caption above the role tick boxes</comment>
+  </data>
+  <data name="ApiKeyExpiresOptional" xml:space="preserve">
+    <value>Expires (Optional)</value>
+    <comment>Date field label</comment>
+  </data>
+  <data name="ApiKeyNoExpiryHint" xml:space="preserve">
+    <value>Leave empty for no expiration</value>
+    <comment>Helper text on the expiry date field</comment>
+  </data>
+  <data name="ApiKeyCreating" xml:space="preserve">
+    <value>Creating</value>
+    <comment>Button text while the key is created</comment>
+  </data>
+  <data name="ApiKeyCreatedTitle" xml:space="preserve">
+    <value>API Key Created</value>
+    <comment>Dialog title shown once the key exists</comment>
+  </data>
+  <data name="ApiKeyCopyNowWarning" xml:space="preserve">
+    <value>Copy this API key now. It will not be possible to show it again.</value>
+    <comment>Warning alert in the Created dialog</comment>
+  </data>
+  <data name="ApiKeyBearerHint" xml:space="preserve">
+    <value>Send this key as a bearer token in the Authorization header when making API requests.</value>
+    <comment>Caption in the Created dialog; Authorization is an HTTP header name</comment>
+  </data>
+  <data name="ApiKeyExampleUsage" xml:space="preserve">
+    <value>Example usage:</value>
+    <comment>Label above the example request</comment>
+  </data>
+  <data name="ApiKeyDone" xml:space="preserve">
+    <value>Done</value>
+    <comment>Button closing the Created dialog</comment>
+  </data>
+  <data name="ApiKeyEditTitle" xml:space="preserve">
+    <value>Edit API Key</value>
+    <comment>Edit dialog title</comment>
+  </data>
+  <data name="ApiKeyCreatedSuccess" xml:space="preserve">
+    <value>API key created successfully.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="ApiKeyCopiedSuccess" xml:space="preserve">
+    <value>API key copied to clipboard.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="ApiKeyCopyFailed" xml:space="preserve">
+    <value>Failed to copy to clipboard. Please copy manually.</value>
+    <comment>Snackbar when the clipboard is unavailable</comment>
+  </data>
+  <data name="ApiKeyUpdatedSuccess" xml:space="preserve">
+    <value>API key updated successfully.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="ApiKeyDeletedSuccess" xml:space="preserve">
+    <value>API key deleted successfully.</value>
+    <comment>Snackbar</comment>
+  </data>
+  <data name="ApiKeyCreateFailed" xml:space="preserve">
+    <value>Failed to create API key: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="ApiKeyUpdateFailed" xml:space="preserve">
+    <value>Failed to update API key: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="ApiKeyDeleteFailed" xml:space="preserve">
+    <value>Failed to delete API key: {0}</value>
+    <comment>Snackbar; {0} is the error message</comment>
+  </data>
+  <data name="ApiKeyDeleteTitle" xml:space="preserve">
+    <value>Delete API Key</value>
+    <comment>Confirmation dialog title</comment>
+  </data>
+  <data name="ApiKeyDeleteMessage" xml:space="preserve">
+    <value>Are you sure you want to delete the API key '{0}'? Any requests using this key will immediately fail.</value>
+    <comment>Confirmation dialog message; {0} is the key name</comment>
+  </data>
 </root>
