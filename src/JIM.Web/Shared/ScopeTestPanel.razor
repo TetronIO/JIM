@@ -79,9 +79,9 @@
     @if (_result is { Explanation: null } inputProblem)
     {
         <MudAlert Severity="Severity.Error" Class="mt-3">
-            @for (var i = 0; i < inputProblem.InputErrors.Count; i++)
+            @foreach (var inputError in InputErrorTexts(inputProblem))
             {
-                <MudText Typo="Typo.body2">@(i < inputProblem.InputErrorDetails.Count ? inputProblem.InputErrorDetails[i].Show() : inputProblem.InputErrors[i])</MudText>
+                <MudText Typo="Typo.body2">@inputError</MudText>
             }
         </MudAlert>
     }
@@ -102,6 +102,10 @@
 </MudPaper>
 
 @code {
+    /// <summary>The input errors in the viewer's language, or the English where an error has no message (#3030).</summary>
+    private static IEnumerable<string> InputErrorTexts(ScopeTestResult result) =>
+        result.InputErrors.Select((error, index) => index < result.InputErrorDetails.Count ? result.InputErrorDetails[index].Show() : error);
+
     /// <summary>
     /// The Synchronisation Rule as it stands on the form: its direction, object types and scoping criteria.
     /// </summary>

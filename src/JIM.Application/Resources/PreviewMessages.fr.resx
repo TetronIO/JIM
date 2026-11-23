@@ -335,4 +335,79 @@
   <data name="SchemaObsoletionLeavesInPlace" xml:space="preserve">
     <value>Rendre obsolète un objet {0} laissera désormais en place les valeurs Metaverse qu’il a apportées. Elles ne suivent plus rien à partir de ce moment, et rien ne les signale comme périmées.</value>
   </data>
+  <data name="SyncPreviewMetaverseObjectGone" xml:space="preserve">
+    <value>L’objet Metaverse {0} n’existe pas.</value>
+  </data>
+  <data name="SyncPreviewConnectedSystemObjectGone" xml:space="preserve">
+    <value>L’objet de système connecté {0} n’existe pas dans le système connecté {1}.</value>
+  </data>
+  <data name="SyncPreviewNoImportRule" xml:space="preserve">
+    <value>Aucune règle de synchronisation d’importation activée ne s’applique au type de cet objet ; une synchronisation ne le traiterait pas en entrée.</value>
+  </data>
+  <data name="SyncPreviewOutOfScopeJoinKept" xml:space="preserve">
+    <value>L’objet est hors du périmètre de chaque règle de synchronisation d’importation dotée de critères de périmètre. Une règle de synchronisation d’exportation a fait sa jointure ; une synchronisation conserve donc la jointure et ne retire que les valeurs apportées par les règles d’importation.</value>
+  </data>
+  <data name="SyncPreviewOutOfScopeAction" xml:space="preserve">
+    <value>L’objet est hors du périmètre de chaque règle de synchronisation d’importation dotée de critères de périmètre ; une synchronisation appliquerait l’action hors périmètre '{0}'.</value>
+  </data>
+  <data name="OutOfScopeActionDisconnect" xml:space="preserve">
+    <value>Déconnecter</value>
+  </data>
+  <data name="OutOfScopeActionRemainJoined" xml:space="preserve">
+    <value>Rester joint</value>
+  </data>
+  <data name="SyncPreviewJoinedObjectNotLoaded" xml:space="preserve">
+    <value>L’objet Metaverse joint {0} n’a pas pu être chargé.</value>
+  </data>
+  <data name="SyncPreviewNoMatchNoProjection" xml:space="preserve">
+    <value>Aucune règle de correspondance d’objets n’a fait correspondre un objet Metaverse existant et aucune règle de synchronisation d’importation ne projette ; une synchronisation laisserait l’objet non connecté.</value>
+  </data>
+  <data name="SyncPreviewExpressionFailed" xml:space="preserve">
+    <value>Une expression n’a pas pu être évaluée : {0}</value>
+  </data>
+  <data name="SyncPreviewExpressionFailedHandingOver" xml:space="preserve">
+    <value>Une expression n’a pas pu être évaluée lors de la transmission d’une valeur retirée au contributeur suivant : {0}</value>
+  </data>
+  <data name="SyncPreviewDerivedFlowHost" xml:space="preserve">
+    <value>{0} Le flux d’attributs est dérivé par la règle de synchronisation '{1}'.</value>
+  </data>
+  <data name="SyncPreviewDriftNotChecked" xml:space="preserve">
+    <value>La détection de dérive n’a pas pu vérifier cet objet ; aucune correction ne serait donc mise en attente. {0}</value>
+  </data>
+  <data name="SyncPreviewDerivedFlowCycle" xml:space="preserve">
+    <value>Une synchronisation ne démarrerait pas ; aucun objet ne serait donc traité. {0}</value>
+  </data>
+  <data name="SyncPreviewGeneratedValueWaiting" xml:space="preserve">
+    <value>{0} ne serait pas encore généré : une valeur construite à partir de lui nécessite une entrée pour laquelle l’objet n’a aucune valeur : {1}. Il est généré par une synchronisation ultérieure dès que l’entrée arrive.</value>
+  </data>
+  <data name="SyncPreviewGeneratedValueUnresolved" xml:space="preserve">
+    <value>La valeur générée n’a pas pu être résolue.</value>
+  </data>
+  <data name="SyncPreviewDownstreamDisconnectOnly" xml:space="preserve">
+    <value>La suppression de l’objet Metaverse déconnecterait son objet de système connecté dans '{0}' sans le déprovisionner (aucune règle de synchronisation d’exportation correspondante ne met de suppression en attente).</value>
+  </data>
+  <data name="SyncPreviewFlowMultiValuedToSingle" xml:space="preserve">
+    <value>L’attribut source multivalué '{0}' contient {1} valeurs mais alimente l’attribut monovalué '{2}' ; l’attribut ne circulerait pas.</value>
+  </data>
+  <data name="SyncPreviewFlowBaseNotSingleValue" xml:space="preserve">
+    <value>L’expression de base de la valeur générée ciblant '{0}' a renvoyé plus d’une valeur ; l’attribut ne circulerait donc pas ; l’expression de base d’une valeur générée doit produire une seule valeur texte, et non un tableau : '{1}'.</value>
+  </data>
+  <data name="SyncPreviewFlowNotConvertible" xml:space="preserve">
+    <value>L’expression ciblant '{0}' a renvoyé '{1}', qu’un attribut de type {2} ne peut pas contenir ; l’attribut ne circulerait donc pas et conserverait sa valeur actuelle : '{3}'.</value>
+  </data>
+  <data name="SyncPreviewFlowResultMultiValuedFromSource" xml:space="preserve">
+    <value>'{0}' a {1} valeurs mais '{2}' est monovalué ; l’attribut ne circulerait donc pas et conserverait sa valeur actuelle. Utilisez {4} ou {5} dans l’expression pour indiquer quelle valeur il doit avoir : '{3}'.</value>
+  </data>
+  <data name="SyncPreviewFlowDatesCollapse" xml:space="preserve">
+    <value>{0} dates pour '{1}' deviennent {2} valeurs distinctes à la résolution {3} du système connecté, de sorte que {2} seraient envoyées ; l’attribut serait tout de même exporté.</value>
+  </data>
+  <data name="SyncPreviewFlowCredentialTarget" xml:space="preserve">
+    <value>'{0}' contient des identifiants ; rien ne serait donc exporté pour lui ; supprimez le flux d’attributs. JIM ne transmet les mots de passe que par la synchronisation des mots de passe, sur les systèmes connectés dont le connecteur la prend en charge.</value>
+  </data>
+  <data name="SyncPreviewFlowResultMultiValued" xml:space="preserve">
+    <value>L’expression ciblant '{0}' a renvoyé {1} valeurs mais l’attribut est monovalué ; l’attribut ne circulerait donc pas et conserverait sa valeur actuelle : '{2}'.</value>
+  </data>
+  <data name="SyncPreviewFlowNotEvaluated" xml:space="preserve">
+    <value>L’expression ciblant '{0}' n’a pas été évaluée : une entrée requise n’a aucune valeur.</value>
+  </data>
 </root>

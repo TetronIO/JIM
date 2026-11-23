@@ -515,7 +515,10 @@
 
         _expressionValidator ??= new ScopingCriterionExpressionValidator(ExpressionEvaluator);
         var objectTypeName = (Exporting ? SyncRule.MetaverseObjectType?.Name : SyncRule.ConnectedSystemObjectType?.Name) ?? "the scoped object type";
-        return _expressionValidator.DescribeProblem(criterion, SyncRule.Direction, ScopedAttributeNames, objectTypeName);
+        // In the viewer's language (#3030); the save's refusal and the REST API keep the English.
+        return _expressionValidator.DescribeProblemDetail(criterion, SyncRule.Direction, ScopedAttributeNames, objectTypeName) is { } problem
+            ? problem.Show()
+            : null;
     }
 
     private bool DisableAddCriteriaButton()

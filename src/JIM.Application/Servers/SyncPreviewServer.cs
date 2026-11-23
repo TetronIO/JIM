@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Localisation;
+using JIM.Application.Resources;
+using JIM.Models.Localisation;
 using JIM.Application.Exceptions;
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
@@ -85,7 +88,7 @@ public class SyncPreviewServer
             result.Errors.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.ObjectNotFound,
-                Detail = $"Metaverse Object {metaverseObjectId} does not exist."
+                LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewMetaverseObjectGone), metaverseObjectId.ToString())
             });
             return result;
         }
@@ -268,7 +271,7 @@ public class SyncPreviewServer
             notFound.Errors.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.ObjectNotFound,
-                Detail = $"Connected System Object {connectedSystemObjectId} does not exist in Connected System {connectedSystemId}.",
+                LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewConnectedSystemObjectGone), connectedSystemObjectId.ToString(), connectedSystemId.ToString()),
                 ConnectedSystemId = connectedSystemId
             });
             return notFound;
@@ -877,7 +880,7 @@ public class SyncPreviewServer
             result.Warnings.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.NoApplicableSyncRule,
-                Detail = "No enabled import Synchronisation Rule applies to this object's type; a synchronisation would not process it inbound.",
+                LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewNoImportRule)),
                 ConnectedSystemId = connectedSystemId
             });
 
@@ -927,9 +930,9 @@ public class SyncPreviewServer
             result.Warnings.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.OutOfScope,
-                Detail = joinKeptForExportRule
-                    ? "The object is out of scope of every import Synchronisation Rule with Scoping Criteria. An export Synchronisation Rule made its join, so a synchronisation keeps the join and withdraws only the values the import rules brought in."
-                    : $"The object is out of scope of every import Synchronisation Rule with Scoping Criteria; a synchronisation would apply the out-of-scope action '{outOfScopeAction}'.",
+                LocalisedDetail = joinKeptForExportRule
+                    ? JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewOutOfScopeJoinKept))
+                    : JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewOutOfScopeAction), OutOfScopeActionName(outOfScopeAction)),
                 ConnectedSystemId = connectedSystemId
             });
 
@@ -964,7 +967,7 @@ public class SyncPreviewServer
                 result.Errors.Add(new SyncPreviewMessage
                 {
                     Code = SyncPreviewMessageCode.ObjectNotFound,
-                    Detail = $"The joined Metaverse Object {cso.MetaverseObjectId} could not be loaded.",
+                    LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewJoinedObjectNotLoaded), cso.MetaverseObjectId?.ToString() ?? string.Empty),
                     ConnectedSystemId = connectedSystemId
                 });
                 return result;
@@ -1007,7 +1010,7 @@ public class SyncPreviewServer
                     result.Warnings.Add(new SyncPreviewMessage
                     {
                         Code = SyncPreviewMessageCode.NoApplicableSyncRule,
-                        Detail = "No Object Matching Rule matched an existing Metaverse Object and no import Synchronisation Rule projects; a synchronisation would leave the object unconnected.",
+                        LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewNoMatchNoProjection)),
                         ConnectedSystemId = connectedSystemId
                     });
                     return result;
@@ -1060,7 +1063,7 @@ public class SyncPreviewServer
                     result.Errors.Add(new SyncPreviewMessage
                     {
                         Code = SyncPreviewMessageCode.ExpressionEvaluationError,
-                        Detail = $"An Expression failed to evaluate: {expressionEx.Message}",
+                        LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewExpressionFailed), expressionEx.Message),
                         SyncRuleId = rule.Id,
                         SyncRuleName = rule.Name,
                         ConnectedSystemId = connectedSystemId
@@ -1110,7 +1113,7 @@ public class SyncPreviewServer
                     result.Errors.Add(new SyncPreviewMessage
                     {
                         Code = SyncPreviewMessageCode.ExpressionEvaluationError,
-                        Detail = $"An Expression failed to evaluate while handing a withdrawn value to the next contributor: {expressionEx.Message}",
+                        LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewExpressionFailedHandingOver), expressionEx.Message),
                         SyncRuleName = expressionEx.SyncRuleName,
                         ConnectedSystemId = connectedSystemId,
                         AttributeName = expressionEx.TargetAttributeName
@@ -1169,12 +1172,12 @@ public class SyncPreviewServer
 
             // Only the derived pass stamps the error with its hosting rule (#1750); named as the worker names it.
             if (flowError.SyncRuleName != null)
-                detail += $" The Attribute Flow is derived by Synchronisation Rule '{flowError.SyncRuleName}'.";
+                detail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDerivedFlowHost), detail, flowError.SyncRuleName);
 
             result.Errors.Add(new SyncPreviewMessage
             {
                 Code = code,
-                Detail = detail,
+                LocalisedDetail = detail,
                 SyncRuleId = syncRuleId,
                 SyncRuleName = syncRuleName,
                 ConnectedSystemId = connectedSystemId,
@@ -1408,10 +1411,13 @@ public class SyncPreviewServer
         });
     }
 
-    /// <summary>
-    /// Opens the message of an error that stops Drift Detection checking an object (#2180), as the run's error does.
-    /// </summary>
-    private const string DriftNotCheckedPreviewPrefix = "Drift Detection could not check this object, so no correction would be staged. ";
+    /// <summary>An Inbound Out-of-Scope Action named inside a sentence, as the product has always named it there.</summary>
+    private static MessageArgument OutOfScopeActionName(InboundOutOfScopeAction action) => action switch
+    {
+        InboundOutOfScopeAction.Disconnect => JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.OutOfScopeActionDisconnect)),
+        InboundOutOfScopeAction.RemainJoined => JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.OutOfScopeActionRemainJoined)),
+        _ => action.ToString()
+    };
 
     /// <summary>
     /// How the preview words an Attribute Flow error, matching the worker's own wording (DescribeAttributeFlowError). A
@@ -1419,33 +1425,33 @@ public class SyncPreviewServer
     /// into the same "a required input has no value" message; the latter is a different failure (the base Expression
     /// evaluated fine but returned more than one value), so it has its own accurate message.
     /// </summary>
-    private static (SyncPreviewMessageCode Code, string Detail) DescribeFlowError(AttributeFlowError flowError) =>
+    private static (SyncPreviewMessageCode Code, JimMessage Detail) DescribeFlowError(AttributeFlowError flowError) =>
         flowError.Kind switch
         {
             AttributeFlowErrorKind.MultiValuedToSingleValued => (
                 SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
-                $"The multi-valued source attribute '{flowError.SourceAttributeName}' holds {flowError.ValueCount} values but flows to the single-valued attribute '{flowError.TargetAttributeName}'; the attribute would not flow."),
+                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowMultiValuedToSingle), flowError.SourceAttributeName ?? string.Empty, flowError.ValueCount.ToString(), flowError.TargetAttributeName)),
             AttributeFlowErrorKind.GeneratedBaseNotSingleValue => (
                 SyncPreviewMessageCode.ExpressionEvaluationError,
-                $"The base Expression for the generated value targeting '{flowError.TargetAttributeName}' returned more than one value, so the attribute would not flow; a generated value's base Expression must produce a single text value, not an array: '{flowError.Expression}'."),
+                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowBaseNotSingleValue), flowError.TargetAttributeName, flowError.Expression ?? string.Empty)),
             AttributeFlowErrorKind.ExpressionResultNotConvertible => (
                 SyncPreviewMessageCode.ExpressionEvaluationError,
-                $"The Expression targeting '{flowError.TargetAttributeName}' returned '{flowError.Value}', which a {flowError.TargetAttributeType} attribute cannot hold, so the attribute would not flow and would keep its current value: '{flowError.Expression}'."),
+                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowNotConvertible), flowError.TargetAttributeName, flowError.Value ?? string.Empty, flowError.TargetAttributeType?.ToString() ?? string.Empty, flowError.Expression ?? string.Empty)),
             AttributeFlowErrorKind.ExpressionResultMultiValued when flowError.SourceAttributeName != null => (
                 SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
-                $"'{flowError.SourceAttributeName}' has {flowError.ValueCount} values but '{flowError.TargetAttributeName}' is single-valued, so the attribute would not flow and would keep its current value. Use Where, Join, Count, Min or Max in the Expression to say which value it should have: '{flowError.Expression}'."),
+                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowResultMultiValuedFromSource), flowError.SourceAttributeName ?? string.Empty, flowError.ValueCount.ToString(), flowError.TargetAttributeName, flowError.Expression ?? string.Empty, "Where, Join, Count, Min", "Max")),
             AttributeFlowErrorKind.DatesCollapseAtTargetResolution => (
                 SyncPreviewMessageCode.DatesCollapseAtTargetResolution,
-                $"{flowError.ValueCount} dates for '{flowError.TargetAttributeName}' become {flowError.TargetValueCount} distinct values at the Connected System's {flowError.TargetDateTimeResolution} resolution, so {flowError.TargetValueCount} would be sent; the attribute would still export."),
+                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowDatesCollapse), flowError.ValueCount.ToString(), flowError.TargetAttributeName, flowError.TargetValueCount.ToString(), flowError.TargetDateTimeResolution?.ToString() ?? string.Empty)),
             AttributeFlowErrorKind.CredentialAttributeTarget => (
                 SyncPreviewMessageCode.CredentialAttributeNotExported,
-                $"'{flowError.TargetAttributeName}' holds credentials, so nothing would be exported for it; remove the Attribute Flow. JIM delivers passwords only through Password Synchronisation, on Connected Systems whose Connector supports it."),
+                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowCredentialTarget), flowError.TargetAttributeName)),
             AttributeFlowErrorKind.ExpressionResultMultiValued => (
                 SyncPreviewMessageCode.MultiValuedToSingleValuedFlow,
-                $"The Expression targeting '{flowError.TargetAttributeName}' returned {flowError.ValueCount} values but the attribute is single-valued, so the attribute would not flow and would keep its current value: '{flowError.Expression}'."),
+                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowResultMultiValued), flowError.TargetAttributeName, flowError.ValueCount.ToString(), flowError.Expression ?? string.Empty)),
             _ => (
                 SyncPreviewMessageCode.ExpressionEvaluationError,
-                $"The Expression targeting '{flowError.TargetAttributeName}' was not evaluated: a required input has no value.")
+                JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewFlowNotEvaluated), flowError.TargetAttributeName))
         };
 
     /// <summary>
@@ -1478,7 +1484,7 @@ public class SyncPreviewServer
             result.Errors.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.ScopingCriterionFailed,
-                Detail = DriftNotCheckedPreviewPrefix + scopingEx.Message,
+                LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDriftNotChecked), scopingEx.Message),
                 ConnectedSystemId = context.ConnectedSystemId
             });
             return 0;
@@ -1490,7 +1496,7 @@ public class SyncPreviewServer
             result.Errors.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.ExpressionEvaluationError,
-                Detail = $"{DriftNotCheckedPreviewPrefix}An Expression failed to evaluate: {expressionEx.Message}",
+                LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDriftNotChecked), JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewExpressionFailed), expressionEx.Message)),
                 ConnectedSystemId = context.ConnectedSystemId,
                 AttributeName = expressionEx.TargetAttributeName
             });
@@ -1501,7 +1507,7 @@ public class SyncPreviewServer
             result.Errors.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.ExpressionEvaluationError,
-                Detail = DriftNotCheckedPreviewPrefix + missingInputEx.DescribeForAdministrator(),
+                LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDriftNotChecked), missingInputEx.DescribeForAdministrator()),
                 ConnectedSystemId = context.ConnectedSystemId,
                 AttributeName = missingInputEx.TargetAttributeName
             });
@@ -1515,7 +1521,7 @@ public class SyncPreviewServer
             return new SyncPreviewMessage
             {
                 Code = code,
-                Detail = detail,
+                LocalisedDetail = detail,
                 ConnectedSystemId = context.ConnectedSystemId,
                 AttributeName = flowError.TargetAttributeName
             };
@@ -1602,7 +1608,7 @@ public class SyncPreviewServer
         errors.Add(new SyncPreviewMessage
         {
             Code = SyncPreviewMessageCode.DerivedFlowCycle,
-            Detail = "A synchronisation would not start, so no object would be processed. " + context.DerivedFlowCycleMessage,
+            LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDerivedFlowCycle), context.DerivedFlowCycleMessage),
             ConnectedSystemId = context.ConnectedSystemId
         });
         return true;
@@ -1661,7 +1667,7 @@ public class SyncPreviewServer
                 result.Errors.Add(new SyncPreviewMessage
                 {
                     Code = SyncPreviewMessageCode.ExpressionEvaluationError,
-                    Detail = $"An Expression failed to evaluate: {expressionEx.Message}" + DescribeDerivedHost(expressionEx.SyncRuleName),
+                    LocalisedDetail = DescribeDerivedHost(JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewExpressionFailed), expressionEx.Message), expressionEx.SyncRuleName),
                     SyncRuleId = FindHostingRule(inScopeRules, expressionEx.SyncRuleName)?.Id,
                     SyncRuleName = expressionEx.SyncRuleName,
                     ConnectedSystemId = context.ConnectedSystemId,
@@ -1688,8 +1694,8 @@ public class SyncPreviewServer
 
         return outcomes;
 
-        static string DescribeDerivedHost(string? syncRuleName) =>
-            syncRuleName == null ? string.Empty : $" The Attribute Flow is derived by Synchronisation Rule '{syncRuleName}'.";
+        static JimMessage DescribeDerivedHost(JimMessage message, string? syncRuleName) =>
+            syncRuleName == null ? message : JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDerivedFlowHost), message, syncRuleName);
     }
 
     /// <summary>
@@ -1879,8 +1885,7 @@ public class SyncPreviewServer
                             result.Warnings.Add(new SyncPreviewMessage
                             {
                                 Code = SyncPreviewMessageCode.GeneratedValueWaiting,
-                                Detail = $"{attributeName} would not be generated yet: a value built from it needs an input the object has no value for: {waitingFor}. "
-                                    + "It is generated by a later synchronisation once the input arrives.",
+                                LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewGeneratedValueWaiting), attributeName, waitingFor),
                                 ConnectedSystemId = context.ConnectedSystemId,
                                 AttributeName = attributeName
                             });
@@ -1898,7 +1903,9 @@ public class SyncPreviewServer
                         result.Warnings.Add(new SyncPreviewMessage
                         {
                             Code = SyncPreviewMessageCode.GeneratedValueWouldFail,
-                            Detail = outcome.FailureMessage ?? "The generated value could not be resolved.",
+                            LocalisedDetail = outcome.FailureMessage != null
+                                ? JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.EnglishFromElsewhere), outcome.FailureMessage)
+                                : JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewGeneratedValueUnresolved)),
                             ConnectedSystemId = context.ConnectedSystemId,
                             AttributeName = request.Mapping.TargetMetaverseAttribute!.Name
                         });
@@ -2601,9 +2608,7 @@ public class SyncPreviewServer
                 result.Warnings.Add(new SyncPreviewMessage
                 {
                     Code = SyncPreviewMessageCode.DownstreamDisconnectOnly,
-                    Detail = $"The Metaverse Object's deletion would disconnect its Connected System Object in " +
-                        $"'{targetSystemName ?? downstreamCso.ConnectedSystemId.ToString()}' without deprovisioning it " +
-                        "(no matching export Synchronisation Rule stages a delete).",
+                    LocalisedDetail = JimMessage.Create(MessageCatalogues.Preview, nameof(PreviewMessages.SyncPreviewDownstreamDisconnectOnly), targetSystemName ?? downstreamCso.ConnectedSystemId.ToString()),
                     ConnectedSystemId = downstreamCso.ConnectedSystemId
                 });
                 continue;

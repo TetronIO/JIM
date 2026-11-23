@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Localisation;
 
 namespace JIM.Models.Transactional;
 
@@ -22,6 +23,24 @@ public class SyncPreviewMessage
     /// Human-readable detail of the condition.
     /// </summary>
     public string Detail { get; set; } = string.Empty;
+
+    private JimMessage? _localisedDetail;
+
+    /// <summary>
+    /// <see cref="Detail"/> as a <see cref="JimMessage"/>, for the portal to show in the viewer's language (#3030); null
+    /// for a message written as English only. Setting it sets <see cref="Detail"/> to its British English, which the
+    /// REST API and logs read.
+    /// </summary>
+    public JimMessage? LocalisedDetail
+    {
+        get => _localisedDetail;
+        set
+        {
+            _localisedDetail = value;
+            if (value != null)
+                Detail = value.ToEnglish();
+        }
+    }
 
     /// <summary>
     /// The Synchronisation Rule the condition arose under, when one is attributable.
