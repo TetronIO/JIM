@@ -2,6 +2,7 @@
 @model JIM.Web.Pages.SignInProblemModel
 @using System.Globalization
 @using System.Net
+@using JIM.Web.Localisation
 @using JIM.Web.Resources
 @{
     Layout = "_ErrorPageLayout";
@@ -46,18 +47,18 @@
 
 @if (problem != null)
 {
-    <p class="jim-error-subtitle" id="sign-in-problem-description">@problem.Description</p>
+    <p class="jim-error-subtitle" id="sign-in-problem-description">@MessageDisplay.Show(problem.Text?.Description, problem.Description)</p>
 
     <dl class="jim-sign-in-problem" id="sign-in-problem">
         <dt>@SignInText.ProblemSetting</dt>
         <dd><code id="sign-in-problem-setting">@problem.Setting</code></dd>
         <dt>@SignInText.ProblemExpected</dt>
-        <dd><code id="sign-in-problem-expected">@problem.Expected</code></dd>
+        <dd><code id="sign-in-problem-expected">@MessageDisplay.Show(problem.Text?.Expected, problem.Expected)</code></dd>
         <dt>@SignInText.ProblemReceived</dt>
-        <dd><code id="sign-in-problem-received">@problem.Received</code></dd>
+        <dd><code id="sign-in-problem-received">@MessageDisplay.Show(problem.Text?.Received, problem.Received)</code></dd>
     </dl>
 
-    <p class="jim-error-detail" id="sign-in-problem-fix">@problem.Fix</p>
+    <p class="jim-error-detail" id="sign-in-problem-fix">@MessageDisplay.Show(problem.Text?.Fix, problem.Fix)</p>
     <p class="jim-error-detail">@SignInText.PassOnToAdministrator</p>
 }
 else

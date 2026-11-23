@@ -1,8 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
 using JIM.Web.Resources;
-using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
@@ -29,7 +29,9 @@ public static partial class SignInProblemDiagnosis
     /// <summary>The page that explains a portal sign-in a setting stopped.</summary>
     public const string ProblemPagePath = "/sign-in-problem";
 
-    private static string None => SignInText.ProblemNone;
+    internal const string Catalogue = "JIM.Web:SignInText";
+
+    private static JimMessage None => Message(nameof(SignInText.ProblemNone));
 
     /// <summary>
     /// Diagnoses a failed portal sign-in: an ID token for another audience or from another issuer, or an error the
@@ -44,17 +46,17 @@ public static partial class SignInProblemDiagnosis
         {
             null => null,
             AggregateException aggregate => aggregate.InnerExceptions.Select(e => DiagnosePortalFailure(e, options)).FirstOrDefault(r => r != null),
-            SecurityTokenInvalidAudienceException audience => new SignInProblemReport(
+            SecurityTokenInvalidAudienceException audience => Report(
                 SignInProblemSource.Portal,
                 Constants.Config.SsoClientId,
-                SignInText.ProblemWrongAudienceDescription,
-                options.ClientId ?? None,
+                Message(nameof(SignInText.ProblemWrongAudienceDescription)),
+                ValueOrNone(options.ClientId),
                 ValueOrNone(audience.InvalidAudience),
-                string.Format(CultureInfo.CurrentCulture, SignInText.ProblemWrongAudienceFix, Constants.Config.SsoClientId)),
-            SecurityTokenInvalidIssuerException issuer => new SignInProblemReport(
+                Message(nameof(SignInText.ProblemWrongAudienceFix), Constants.Config.SsoClientId)),
+            SecurityTokenInvalidIssuerException issuer => Report(
                 SignInProblemSource.Portal,
                 Constants.Config.SsoValidIssuers,
-                SignInText.ProblemWrongIssuerDescription,
+                Message(nameof(SignInText.ProblemWrongIssuerDescription)),
                 JoinOrNone(PortalIssuers(options)),
                 ValueOrNone(issuer.InvalidIssuer),
                 IssuerFix),
@@ -164,23 +166,23 @@ public static partial class SignInProblemDiagnosis
         var reports = new List<SignInProblemReport>();
         if (expectedAudiences.Count > 0 && !tokenAudiences.Intersect(expectedAudiences, StringComparer.Ordinal).Any())
         {
-            reports.Add(new SignInProblemReport(
+            reports.Add(Report(
                 SignInProblemSource.Api,
                 Constants.Config.SsoApiScope,
-                SignInText.ProblemApiWrongAudienceDescription,
+                Message(nameof(SignInText.ProblemApiWrongAudienceDescription)),
                 JoinOrNone(expectedAudiences),
                 JoinOrNone(tokenAudiences),
                 entraIdVersion1
                     ? EntraIdVersion1Fix
-                    : string.Format(CultureInfo.CurrentCulture, SignInText.ProblemApiWrongAudienceFix, Constants.Config.SsoApiScope, Constants.Config.SsoClientId)));
+                    : Message(nameof(SignInText.ProblemApiWrongAudienceFix), Constants.Config.SsoApiScope, Constants.Config.SsoClientId)));
         }
 
         if (acceptedIssuers.Count > 0 && !acceptedIssuers.Contains(token.Issuer, StringComparer.Ordinal))
         {
-            reports.Add(new SignInProblemReport(
+            reports.Add(Report(
                 SignInProblemSource.Api,
                 Constants.Config.SsoValidIssuers,
-                SignInText.ProblemApiWrongIssuerDescription,
+                Message(nameof(SignInText.ProblemApiWrongIssuerDescription)),
                 JoinOrNone(acceptedIssuers),
                 ValueOrNone(token.Issuer),
                 entraIdVersion1 ? EntraIdVersion1Fix : IssuerFix));
@@ -197,45 +199,45 @@ public static partial class SignInProblemDiagnosis
     {
         ArgumentNullException.ThrowIfNull(claims);
 
-        return new SignInProblemReport(
+        return Report(
             source,
             Constants.Config.SsoClaimType,
-            string.Format(CultureInfo.CurrentCulture, SignInText.ProblemMissingClaimDescription, claimType),
-            claimType,
+            Message(nameof(SignInText.ProblemMissingClaimDescription), claimType),
+            Value(claimType),
             JoinOrNone(claims.Select(c => c.Type).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList()),
-            string.Format(CultureInfo.CurrentCulture, SignInText.ProblemMissingClaimFix, Constants.Config.SsoClaimType, claimType));
+            Message(nameof(SignInText.ProblemMissingClaimFix), Constants.Config.SsoClaimType, claimType));
     }
 
     private const string EntraIdVersion1IssuerPrefix = "https://sts.windows.net/";
 
-    private static string EntraIdVersion1Fix => SignInText.ProblemEntraVersion1Fix;
+    private static JimMessage EntraIdVersion1Fix => Message(nameof(SignInText.ProblemEntraVersion1Fix));
 
-    private static string IssuerFix =>
-        string.Format(CultureInfo.CurrentCulture, SignInText.ProblemIssuerFix, Constants.Config.SsoValidIssuers, Constants.Config.SsoAuthority);
+    private static JimMessage IssuerFix =>
+        Message(nameof(SignInText.ProblemIssuerFix), Constants.Config.SsoValidIssuers, Constants.Config.SsoAuthority);
 
     private static SignInProblemReport? DiagnoseProtocolError(string? error, OpenIdConnectOptions options) => error switch
     {
-        "invalid_client" => new SignInProblemReport(
+        "invalid_client" => Report(
             SignInProblemSource.Portal,
             Constants.Config.SsoSecret,
-            SignInText.ProblemInvalidClientDescription,
-            string.Format(CultureInfo.CurrentCulture, SignInText.ProblemInvalidClientExpected, options.ClientId),
-            error,
-            string.Format(CultureInfo.CurrentCulture, SignInText.ProblemInvalidClientFix, Constants.Config.SsoClientId, Constants.Config.SsoSecret)),
-        "unauthorized_client" => new SignInProblemReport(
+            Message(nameof(SignInText.ProblemInvalidClientDescription)),
+            Message(nameof(SignInText.ProblemInvalidClientExpected), options.ClientId),
+            Value(error),
+            Message(nameof(SignInText.ProblemInvalidClientFix), Constants.Config.SsoClientId, Constants.Config.SsoSecret)),
+        "unauthorized_client" => Report(
             SignInProblemSource.Portal,
             Constants.Config.SsoClientId,
-            SignInText.ProblemUnauthorizedClientDescription,
-            string.Format(CultureInfo.CurrentCulture, SignInText.ProblemUnauthorizedClientExpected, options.ClientId),
-            error,
-            string.Format(CultureInfo.CurrentCulture, SignInText.ProblemUnauthorizedClientFix, Constants.Config.SsoClientId)),
-        "invalid_scope" or "invalid_resource" => new SignInProblemReport(
+            Message(nameof(SignInText.ProblemUnauthorizedClientDescription)),
+            Message(nameof(SignInText.ProblemUnauthorizedClientExpected), options.ClientId),
+            Value(error),
+            Message(nameof(SignInText.ProblemUnauthorizedClientFix), Constants.Config.SsoClientId)),
+        "invalid_scope" or "invalid_resource" => Report(
             SignInProblemSource.Portal,
             Constants.Config.SsoApiScope,
-            SignInText.ProblemInvalidScopeDescription,
-            string.Join(' ', options.Scope),
-            error,
-            string.Format(CultureInfo.CurrentCulture, SignInText.ProblemInvalidScopeFix, Constants.Config.SsoApiScope)),
+            Message(nameof(SignInText.ProblemInvalidScopeDescription)),
+            Value(string.Join(' ', options.Scope)),
+            Value(error),
+            Message(nameof(SignInText.ProblemInvalidScopeFix), Constants.Config.SsoApiScope)),
         _ => null
     };
 
@@ -262,11 +264,22 @@ public static partial class SignInProblemDiagnosis
     private static List<string> NonEmpty(IEnumerable<string?> values) =>
         values.Where(v => !string.IsNullOrEmpty(v)).Select(v => v!).Distinct(StringComparer.Ordinal).ToList();
 
-    private static string ValueOrNone(string? value) => string.IsNullOrEmpty(value) ? None : value;
+    private static JimMessage ValueOrNone(string? value) => string.IsNullOrEmpty(value) ? None : Value(value);
 
-    private static string JoinOrNone(IEnumerable<string> values)
-    {
-        var joined = string.Join(", ", values);
-        return joined.Length == 0 ? None : joined;
-    }
+    private static JimMessage JoinOrNone(IEnumerable<string> values) => ValueOrNone(string.Join(", ", values));
+
+    private static JimMessage Message(string key, params MessageArgument[] arguments) => JimMessage.Create(Catalogue, key, arguments);
+
+    internal static JimMessage Value(string value) => Message(nameof(SignInText.ProblemValue), value);
+
+    /// <summary>
+    /// A report holding its texts in English, rendered now, for the REST API and the log, and as messages for the portal,
+    /// which renders them in its reader's language. Never in the language of the request that met the failure (#3030).
+    /// </summary>
+    private static SignInProblemReport Report(SignInProblemSource source, string setting, JimMessage description, JimMessage expected,
+        JimMessage received, JimMessage fix) =>
+        new(source, setting, description.ToEnglish(), expected.ToEnglish(), received.ToEnglish(), fix.ToEnglish())
+        {
+            Text = new SignInProblemText(description, expected, received, fix)
+        };
 }

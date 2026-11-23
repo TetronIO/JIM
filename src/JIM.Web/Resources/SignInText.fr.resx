@@ -203,4 +203,7 @@
   <data name="UnavailableTrusted" xml:space="preserve">
     <value>Votre fournisseur d’identité est approuvé.</value>
   </data>
+  <data name="ProblemValue" xml:space="preserve">
+    <value>{0}</value>
+  </data>
 </root>

@@ -246,4 +246,8 @@
     <value>Your identity provider is trusted.</value>
     <comment>Shown by the page's script in place of the polling message.</comment>
   </data>
+  <data name="ProblemValue" xml:space="preserve">
+    <value>{0}</value>
+    <comment>A value as it was given (an identifier, a list of names); never translated.</comment>
+  </data>
 </root>
