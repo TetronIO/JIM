@@ -314,7 +314,7 @@ function New-SetupSettings {
         JIM_SSO_AUTHORITY = $authority; JIM_SSO_CLIENT_ID = 'jim-web'; JIM_SSO_SECRET = 'jim-dev-secret'
         JIM_SSO_API_SCOPE = 'jim-api'; JIM_SSO_CLAIM_TYPE = 'sub'; JIM_SSO_MV_ATTRIBUTE = 'Subject Identifier'
         JIM_SSO_INITIAL_ADMIN = '00000000-0000-0000-0000-000000000001'; JIM_SETUP_DB_MODE = 'bundled'; JIM_WEB_PORT = '443'
-        JIM_SETUP_TLS_MODE = 'generate'; JIM_SETUP_TLS_NAMES = "$hostName,$address"; JIM_TRUSTED_PROXIES = ''
+        JIM_SETUP_TLS_MODE = 'generate'; JIM_SETUP_TLS_NAMES = "$hostName,$address"; JIM_TRUSTED_PROXIES = ''; JIM_SETUP_HTTPS_PROXY = ''
         JIM_SETUP_AUTO_START = 'true'; JIM_SETUP_RUNTIME = $cell.Runtime; JIM_SETUP_PODMAN_ROOTLESS = "$($rootless.ToString().ToLower())"
         JIM_SETUP_FIX_APPARMOR = 'true'; JIM_SETUP_OPEN_FIREWALL = 'true'
     }

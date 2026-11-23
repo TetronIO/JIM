@@ -72,6 +72,10 @@
 #     JIM_SETUP_TLS_CERT_FILE - Your organisation's PEM certificate, followed by any intermediate CA
 #                             certificates (required if tls_mode=provided)
 #     JIM_SETUP_TLS_KEY_FILE  - The certificate's unencrypted PEM private key (required if tls_mode=provided)
+#     JIM_SETUP_HTTPS_PROXY - The proxy JIM reaches the internet through, e.g. http://proxy.example.com:3128 (the
+#                             Microsoft Entra ID Connector needs the internet). Set it empty for none (default: prompt)
+#     JIM_SETUP_NO_PROXY    - Comma-separated hosts JIM reaches without the proxy, such as an internal identity
+#                             provider; localhost and 127.0.0.1 are always added (default: prompt, with a proxy)
 #     JIM_TRUSTED_PROXIES   - Address(es) of a reverse proxy or load balancer in front of JIM. Set it empty
 #                             for none (default: prompt)
 #     JIM_INFRASTRUCTURE_API_KEY - An API key for automation to configure JIM with: JIM creates it, with the
@@ -146,6 +150,7 @@ NEW_CA=""
 REPLACED_CA=""
 JIM_READY=""
 EXISTING_DB_PASSWORD=""  # a reinstall's bundled database password, which the database keeps
+OUTBOUND_PROXY_SECRET=""  # Podman: a proxy URL carrying a password, stored as a secret rather than a setting
 RUNTIME=""          # docker or podman
 CONFIG_FILE=""      # where the settings go: .env (Docker) or jim-config.yaml (Podman)
 PODMAN_ACCOUNT=""   # Podman: the account JIM runs rootless under; empty when rootful
@@ -1063,8 +1068,12 @@ store_podman_secrets() {
         if [ -n "${JIM_INFRASTRUCTURE_API_KEY:-}" ]; then
             printf '  JIM_INFRASTRUCTURE_API_KEY: %s\n' "$(yaml_quote "$JIM_INFRASTRUCTURE_API_KEY")"
         fi
+        # A proxy URL carrying a password: kept out of jim-config.yaml, which every account on the host can read.
+        if [ -n "${OUTBOUND_PROXY_SECRET:-}" ]; then
+            printf '  HTTPS_PROXY: %s\n' "$(yaml_quote "$OUTBOUND_PROXY_SECRET")"
+        fi
     } | as_jim_account podman kube play --replace - >/dev/null || fatal "Failed to store JIM's secrets in Podman"
-    success "Stored the database password, client secret${JIM_INFRASTRUCTURE_API_KEY:+ and infrastructure API key} as the Podman secret jim-secrets"
+    success "Stored the database password, client secret${JIM_INFRASTRUCTURE_API_KEY:+, infrastructure API key}${OUTBOUND_PROXY_SECRET:+, proxy URL} as the Podman secret jim-secrets"
 }
 
 # Stores JIM's certificate and key as the Podman secret jim-tls, which the pod mounts for jim.web.
@@ -2136,6 +2145,55 @@ configure_proxy() {
     fi
 }
 
+# --- Outbound proxy ---
+# HTTPS_PROXY and NO_PROXY, the standard variables .NET's HTTP client reads: the proxy JIM reaches the internet through
+# (the Microsoft Entra ID Connector needs it; so may a SCIM service provider or a certificate's issuer), and the hosts
+# it reaches directly. .NET sends even loopback requests through the proxy unless NO_PROXY names them, so localhost and
+# 127.0.0.1 are always added.
+configure_outbound_proxy() {
+    # Set, even when empty, means already answered: empty is no proxy.
+    if [ -z "${JIM_SETUP_HTTPS_PROXY+set}" ]; then
+        echo
+        info "Outbound proxy"
+        echo "${DIM}  Only needed if JIM must reach the internet, as the Microsoft Entra ID Connector does, through a proxy.${RESET}"
+        echo
+        if prompt_yn "Does JIM reach the internet through a proxy?" "n"; then
+            prompt_value "JIM_SETUP_HTTPS_PROXY" "  Proxy URL (e.g. http://proxy.example.com:3128)" "${HTTPS_PROXY:-${https_proxy:-}}"
+            if [ -z "${JIM_SETUP_NO_PROXY+set}" ]; then
+                printf "%s: " "  Hosts JIM reaches without the proxy, comma-separated, such as an internal identity provider (optional)"
+                read -r JIM_SETUP_NO_PROXY || true
+            fi
+        else
+            JIM_SETUP_HTTPS_PROXY=""
+        fi
+    fi
+
+    [ -n "$JIM_SETUP_HTTPS_PROXY" ] || return 0
+    if ! [[ "$JIM_SETUP_HTTPS_PROXY" =~ ^https?://[^/[:space:]]+/?$ ]]; then
+        fatal "The proxy must be a URL starting http:// or https://, with its port if not the default, e.g. http://proxy.example.com:3128"
+    fi
+
+    local no_proxy="localhost,127.0.0.1" host
+    local -a hosts=()
+    IFS=',' read -ra hosts <<< "${JIM_SETUP_NO_PROXY:-}"
+    for host in "${hosts[@]}"; do
+        host="${host//[[:space:]]/}"
+        case ",${no_proxy}," in
+            *",${host},"*) ;;
+            *) [ -z "$host" ] || no_proxy="${no_proxy},${host}" ;;
+        esac
+    done
+
+    if [ "$RUNTIME" = "podman" ] && [[ "$JIM_SETUP_HTTPS_PROXY" == *@* ]]; then
+        OUTBOUND_PROXY_SECRET="$JIM_SETUP_HTTPS_PROXY"
+    else
+        set_setting "HTTPS_PROXY" "$JIM_SETUP_HTTPS_PROXY"
+    fi
+    set_setting "NO_PROXY" "$no_proxy"
+    # Named without any user name and password the URL carries.
+    success "JIM reaches the internet through the proxy at $(printf '%s' "$JIM_SETUP_HTTPS_PROXY" | sed -E 's#://[^@/]*@#://#'), and reaches ${no_proxy} directly"
+}
+
 # --- Renew the server certificate ---
 renew_certificate() {
     local install_dir
@@ -3078,6 +3136,7 @@ main() {
     configure_port
     configure_certificate "$install_dir"
     configure_proxy
+    configure_outbound_proxy
     # The host's last questions and checks, before anything is stored in Podman, which putting the installation
     # back would not undo.
     if [ "$RUNTIME" = "podman" ]; then

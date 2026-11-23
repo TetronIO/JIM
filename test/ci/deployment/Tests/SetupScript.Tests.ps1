@@ -812,6 +812,97 @@ as_jim_account() { cat > '$secret'; }
     }
 }
 
+Describe 'setup.sh configure_outbound_proxy' -Skip:$script:NoBash {
+    BeforeAll {
+        $script:RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' '..' '..')).Path
+
+        # A settings file made from the release's template for the runtime, with the given environment.
+        function New-ProxyArrangement {
+            param([string]$Runtime = 'docker', [string]$Environment = '')
+            $dir = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path $dir | Out-Null
+            $config = if ($Runtime -eq 'podman') { Join-Path $dir 'jim-config.yaml' } else { Join-Path $dir '.env' }
+            $template = if ($Runtime -eq 'podman') { Join-Path $script:RepositoryRoot 'deploy' 'podman' 'jim-config.yaml' } else { Join-Path $script:RepositoryRoot '.env.example' }
+            Copy-Item $template $config
+            [pscustomobject]@{
+                Config = $config
+                Arrange = "RUNTIME=$Runtime`nCONFIG_FILE='$config'`n$Environment"
+            }
+        }
+    }
+
+    # .NET sends even loopback requests through HTTPS_PROXY unless NO_PROXY names them.
+    It 'on Docker, writes the proxy and the hosts reached directly to .env, with the loopback addresses' {
+        $arrangement = New-ProxyArrangement -Environment "JIM_SETUP_HTTPS_PROXY=http://proxy.example.com:3128`nJIM_SETUP_NO_PROXY=idp.corp.example.com"
+
+        $result = Invoke-SetupFunction 'configure_outbound_proxy' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content $arrangement.Config | Should -Contain 'HTTPS_PROXY=http://proxy.example.com:3128'
+        Get-Content $arrangement.Config | Should -Contain 'NO_PROXY=localhost,127.0.0.1,idp.corp.example.com'
+    }
+
+    It 'on Podman, writes them to jim-config.yaml' {
+        $arrangement = New-ProxyArrangement -Runtime podman -Environment "JIM_SETUP_HTTPS_PROXY=http://proxy.example.com:3128`nJIM_SETUP_NO_PROXY="
+
+        $result = Invoke-SetupFunction 'configure_outbound_proxy' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content $arrangement.Config | Should -Contain '  HTTPS_PROXY: "http://proxy.example.com:3128"'
+        Get-Content $arrangement.Config | Should -Contain '  NO_PROXY: "localhost,127.0.0.1"'
+    }
+
+    # jim-config.yaml is readable by every account on the host; the jim-secrets secret is not.
+    It 'on Podman, keeps a proxy URL carrying a password out of jim-config.yaml, in the jim-secrets secret' {
+        $secret = Join-Path $TestDrive "$([Guid]::NewGuid().ToString('N')).yaml"
+        $arrangement = New-ProxyArrangement -Runtime podman -Environment @"
+JIM_SETUP_HTTPS_PROXY=http://jim:proxy-password@proxy.example.com:3128
+JIM_SETUP_NO_PROXY=
+JIM_DB_PASSWORD=db-password
+JIM_SSO_SECRET=sso-secret
+as_jim_account() { cat > '$secret'; }
+"@
+
+        $result = Invoke-SetupFunction "configure_outbound_proxy`nstore_podman_secrets" $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content $secret | Should -Contain '  HTTPS_PROXY: "http://jim:proxy-password@proxy.example.com:3128"'
+        Get-Content $arrangement.Config | Where-Object { $_ -match '^\s*HTTPS_PROXY:' } | Should -BeNullOrEmpty
+        Get-Content $arrangement.Config | Should -Contain '  NO_PROXY: "localhost,127.0.0.1"'
+        $result.Output | Should -Not -BeLike '*proxy-password*'
+    }
+
+    It 'writes nothing when JIM reaches the internet directly' {
+        $arrangement = New-ProxyArrangement -Environment 'JIM_SETUP_HTTPS_PROXY='
+        $before = Get-Content -Raw $arrangement.Config
+
+        $result = Invoke-SetupFunction 'configure_outbound_proxy' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        Get-Content -Raw $arrangement.Config | Should -BeExactly $before
+    }
+
+    It 'asks when not told, and writes nothing when the answer is no' {
+        $arrangement = New-ProxyArrangement -Environment 'prompt_yn() { return 1; }'
+        $before = Get-Content -Raw $arrangement.Config
+
+        $result = Invoke-SetupFunction 'configure_outbound_proxy' $arrangement.Arrange
+
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $result.Output | Should -BeLike '*proxy*'
+        Get-Content -Raw $arrangement.Config | Should -BeExactly $before
+    }
+
+    It 'stops, saying what it needs, when the proxy is not an http:// or https:// URL' {
+        $arrangement = New-ProxyArrangement -Environment 'JIM_SETUP_HTTPS_PROXY=proxy.example.com:3128'
+
+        $result = Invoke-SetupFunction 'configure_outbound_proxy' $arrangement.Arrange
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -BeLike '*http://*'
+    }
+}
+
 Describe 'setup.sh configure_database' -Skip:$script:NoBash {
     It 'sizes the bundled PostgreSQL to the host' {
         $env = Join-Path $TestDrive "$([Guid]::NewGuid().ToString('N')).env"
@@ -1730,6 +1821,7 @@ JIM_WEB_PORT=443
 JIM_SETUP_TLS_MODE=generate
 JIM_SETUP_TLS_NAMES=jim.example.org
 JIM_TRUSTED_PROXIES=
+JIM_SETUP_HTTPS_PROXY=
 $Environment
 "@
             }

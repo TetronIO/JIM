@@ -58,6 +58,10 @@ spec:
         - name: JIM_INFRASTRUCTURE_API_KEY
           valueFrom:
             secretKeyRef: { name: jim-secrets, key: JIM_INFRASTRUCTURE_API_KEY, optional: true }
+        # A proxy URL carrying a password, kept out of jim-config.yaml; one without stays there.
+        - name: HTTPS_PROXY
+          valueFrom:
+            secretKeyRef: { name: jim-secrets, key: HTTPS_PROXY, optional: true }
       ports:
         # jim.kube's PublishPort= replaces this host port.
         - containerPort: 8443
@@ -110,6 +114,10 @@ spec:
         - name: JIM_INFRASTRUCTURE_API_KEY
           valueFrom:
             secretKeyRef: { name: jim-secrets, key: JIM_INFRASTRUCTURE_API_KEY, optional: true }
+        # A proxy URL carrying a password, kept out of jim-config.yaml; one without stays there.
+        - name: HTTPS_PROXY
+          valueFrom:
+            secretKeyRef: { name: jim-secrets, key: HTTPS_PROXY, optional: true }
       securityContext:
         readOnlyRootFilesystem: true
         allowPrivilegeEscalation: false
