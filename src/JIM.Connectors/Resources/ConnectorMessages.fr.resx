@@ -245,4 +245,127 @@
   <data name="CertRejected" xml:space="preserve">
     <value>Le certificat du {0} a été rejeté : {1}</value>
   </data>
+  <data name="SqlDocObjectTypeNamed" xml:space="preserve">
+    <value>le type d’objet « {0} »</value>
+  </data>
+  <data name="SqlDocObjectTypeNamedCapital" xml:space="preserve">
+    <value>Le type d’objet « {0} »</value>
+  </data>
+  <data name="SqlDocObjectTypeByPosition" xml:space="preserve">
+    <value>le type d’objet en position {0}</value>
+  </data>
+  <data name="SqlDocObjectTypeByPositionCapital" xml:space="preserve">
+    <value>Le type d’objet en position {0}</value>
+  </data>
+  <data name="SqlDocLevelColumn" xml:space="preserve">
+    <value>Une colonne configurée pour {0}</value>
+  </data>
+  <data name="SqlDocLevelRelatedTable" xml:space="preserve">
+    <value>Une table associée pour {0}</value>
+  </data>
+  <data name="SqlDocLevelChangeLog" xml:space="preserve">
+    <value>Le journal des modifications pour {0}</value>
+  </data>
+  <data name="SqlDocLevelDocument" xml:space="preserve">
+    <value>Le document {0}</value>
+  </data>
+  <data name="SqlDocUnrecognisedField" xml:space="preserve">
+    <value>{0} contient un champ non reconnu « {1} ».{2} Les champs non reconnus sont refusés plutôt qu’ignorés, car en ignorer un laisserait le système connecté configuré autrement que ne le dit le document.</value>
+  </data>
+  <data name="SqlDocDidYouMean" xml:space="preserve">
+    <value> Vouliez-vous dire « {0} » ?</value>
+  </data>
+  <data name="SqlDocJsonUnreadable" xml:space="preserve">
+    <value>{0} n’a pas pu être lu comme du JSON : {1}</value>
+  </data>
+  <data name="SqlDocEmpty" xml:space="preserve">
+    <value>{0} est vide. Un système connecté a besoin d’au moins un type d’objet avant que JIM puisse découvrir son schéma ; consultez la description du paramètre pour un exemple de départ.</value>
+  </data>
+  <data name="SqlDocNoObjectTypes" xml:space="preserve">
+    <value>{0} doit déclarer au moins un type d’objet dans sa liste « objectTypes ».</value>
+  </data>
+  <data name="SqlDocDuplicateName" xml:space="preserve">
+    <value>Le type d’objet « {0} » est déclaré plusieurs fois. Les noms de types d’objets les identifient pour JIM : chacun doit donc être unique.</value>
+  </data>
+  <data name="SqlDocPositionEmpty" xml:space="preserve">
+    <value>Le type d’objet en position {0} de « objectTypes » est vide.</value>
+  </data>
+  <data name="SqlDocPositionNoName" xml:space="preserve">
+    <value>Le type d’objet en position {0} de « objectTypes » n’a pas de « name ». Chaque type d’objet doit en avoir un, car c’est ainsi que JIM le désigne.</value>
+  </data>
+  <data name="SqlDocOneSource" xml:space="preserve">
+    <value>Le type d’objet « {0} » doit indiquer exactement une source : soit une « table » (une table ou une vue), soit une instruction « select », mais pas les deux.</value>
+  </data>
+  <data name="SqlDocSchemaWithSelect" xml:space="preserve">
+    <value>Le type d’objet « {0} » fournit à la fois un « schema » et une instruction « select ». Un schéma qualifie le nom d’une table ; une instruction qualifie ses propres tables : supprimez donc le « schema ».</value>
+  </data>
+  <data name="SqlDocChangeLogAnchorCount" xml:space="preserve">
+    <value>Le type d’objet « {0} » identifie les lignes de son journal des modifications par {1} colonne(s), mais l’ancre du type d’objet en compte {2}. Une modification attribuée par une partie d’une ancre appartient à un autre objet : « changeLog.anchorColumns » doit donc nommer une colonne par colonne d’ancre, dans le même ordre.</value>
+  </data>
+  <data name="SqlDocChangeLogAnchorDuplicate" xml:space="preserve">
+    <value>Le type d’objet « {0} » mentionne plusieurs fois la colonne d’ancre « {1} » du journal des modifications.</value>
+  </data>
+  <data name="SqlDocChangeLogNoDelete" xml:space="preserve">
+    <value>Le type d’objet « {0} » a un journal des modifications sans « deleteValues ». Observer les suppressions est la raison d’être d’une table de journal des modifications ; si cette base de données ne peut pas les enregistrer, utilisez plutôt le mode Watermark Column.</value>
+  </data>
+  <data name="SqlDocChangeLogNoCreateOrUpdate" xml:space="preserve">
+    <value>Le type d’objet « {0} » a un journal des modifications sans « createValues » ni « updateValues » : rien d’autre que des suppressions ne pourrait donc en être importé.</value>
+  </data>
+  <data name="SqlDocChangeLogEmptyValue" xml:space="preserve">
+    <value>Le type d’objet « {0} » a une valeur vide dans « changeLog.{1} ». Le type de modification d’une ligne du journal est comparé exactement à ces valeurs : une valeur vide ne pourrait donc jamais correspondre.</value>
+  </data>
+  <data name="SqlDocChangeLogValueAmbiguous" xml:space="preserve">
+    <value>Le type d’objet « {0} » a la valeur de journal « {1} » qui signifie à la fois {2} et {3}. Chaque valeur ne peut désigner qu’un seul type de modification.</value>
+  </data>
+  <data name="SqlDocDeltaNeedsChangeLog" xml:space="preserve">
+    <value>{0} est « {1} », mais le type d’objet « {2} » est sélectionné pour la synchronisation et n’a pas de « changeLog ». Une importation delta qui ignorerait un type d’objet signalerait un succès tout en laissant ses objets dériver : chaque type d’objet sélectionné doit donc en avoir un. Donnez-lui un « changeLog », ou désélectionnez-le si JIM n’en importe jamais.</value>
+  </data>
+  <data name="SqlDocDeltaNeedsWatermark" xml:space="preserve">
+    <value>{0} est « {1} », mais le type d’objet « {2} » est sélectionné pour la synchronisation et n’a pas de « watermarkColumn ». Une importation delta qui ignorerait un type d’objet signalerait un succès tout en laissant ses objets dériver : chaque type d’objet sélectionné doit donc en avoir un. Donnez-lui un « watermarkColumn », ou désélectionnez-le si JIM n’en importe jamais.</value>
+  </data>
+  <data name="SqlDocRelatedNeedsWatermark" xml:space="preserve">
+    <value>{0} est « {1} », mais le type d’objet « {2} » a l’attribut de table associée « {3} » sans « watermarkColumn ». Une ligne ajoutée à « {4} » ou supprimée de cette table modifie l’objet sans toucher à sa propre ligne : sans colonne de filigrane sur la table associée, cette modification ne pourrait jamais être détectée.</value>
+  </data>
+  <data name="SqlDocNoAnchorColumns" xml:space="preserve">
+    <value>Le type d’objet « {0} » n’a pas de « anchorColumns ». JIM identifie un objet par son ancre : au moins une colonne doit donc être nommée.</value>
+  </data>
+  <data name="SqlDocAnchorDuplicate" xml:space="preserve">
+    <value>Le type d’objet « {0} » mentionne plusieurs fois la colonne d’ancre « {1} ».</value>
+  </data>
+  <data name="SqlDocColumnNoReference" xml:space="preserve">
+    <value>Le type d’objet « {0} » configure la colonne « {1} » sans « referencesObjectType ». Une colonne n’est configurée que pour dire ce que son type ne peut pas dire, ce qui signifie aujourd’hui nommer le type d’objet vers lequel elle pointe.</value>
+  </data>
+  <data name="SqlDocColumnDuplicate" xml:space="preserve">
+    <value>Le type d’objet « {0} » configure plusieurs fois la colonne « {1} ».</value>
+  </data>
+  <data name="SqlDocRelatedNoAttributeName" xml:space="preserve">
+    <value>Le type d’objet « {0} » a une table associée sans « attributeName ». Le nom d’attribut est le nom que porte l’attribut multivalué sur le type d’objet.</value>
+  </data>
+  <data name="SqlDocRelatedDuplicate" xml:space="preserve">
+    <value>Le type d’objet « {0} » déclare plusieurs fois l’attribut de table associée « {1} ».</value>
+  </data>
+  <data name="SqlDocJoinColumnCount" xml:space="preserve">
+    <value>Le type d’objet « {0} » joint l’attribut de table associée « {1} » sur {2} colonne(s), mais l’ancre du type d’objet en compte {3}. Joindre sur une partie d’une ancre rassemble les valeurs d’un autre objet sur celui-ci : « joinColumns » doit donc nommer une colonne par colonne d’ancre, dans le même ordre.</value>
+  </data>
+  <data name="SqlDocColumnReferenceUnknown" xml:space="preserve">
+    <value>Le type d’objet « {0} » indique que la colonne « {1} » référence le type d’objet « {2} », que ce document ne déclare pas. Une référence ne peut pointer que vers un type d’objet que JIM synchronise également.</value>
+  </data>
+  <data name="SqlDocRelatedReferenceUnknown" xml:space="preserve">
+    <value>Le type d’objet « {0} » indique que l’attribut de table associée « {1} » référence le type d’objet « {2} », que ce document ne déclare pas.</value>
+  </data>
+  <data name="SqlDocNoValueForField" xml:space="preserve">
+    <value>Le type d’objet « {0} » n’a pas de valeur pour « {1} ».</value>
+  </data>
+  <data name="SqlDocIdentifierWhitespace" xml:space="preserve">
+    <value>Le type d’objet « {0} » a « {1} » défini à « {2} », qui commence ou se termine par un espace. Les identifiants de base de données sont utilisés exactement tels qu’ils sont écrits : les espaces désigneraient donc un autre objet.</value>
+  </data>
+  <data name="SqlDocIdentifierInvalid" xml:space="preserve">
+    <value>Le type d’objet « {0} » a « {1} » défini à une valeur qui ne peut pas nommer un objet de base de données : {2}</value>
+  </data>
+  <data name="SqlDocSelectNotQuery" xml:space="preserve">
+    <value>Le type d’objet « {0} » a un « select » qui ne commence pas par SELECT ou WITH. JIM lit les objets avec lui : il doit donc s’agir d’une requête.</value>
+  </data>
+  <data name="SqlDocSelectSemicolon" xml:space="preserve">
+    <value>Le type d’objet « {0} » a un « select » qui contient un point-virgule. Il doit s’agir d’une seule instruction, sans terminateur.</value>
+  </data>
 </root>

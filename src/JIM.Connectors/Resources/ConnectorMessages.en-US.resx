@@ -20,4 +20,16 @@
   <data name="SqlTimeZoneUnknown" xml:space="preserve">
     <value>{0} '{1}' is not a time zone this deployment recognizes. Enter UTC, or an IANA time zone name such as Europe/London or America/New_York.</value>
   </data>
+  <data name="SqlDocUnrecognisedField" xml:space="preserve">
+    <value>{0} has an unrecognized field '{1}'.{2} Fields that are not recognized are refused rather than ignored, because ignoring one would leave the Connected System configured differently from how the document reads.</value>
+  </data>
+  <data name="SqlDocDeltaNeedsChangeLog" xml:space="preserve">
+    <value>{0} is '{1}', but Object Type '{2}' is selected for synchronization and has no 'changeLog'. A Delta Import that skipped an object type would report success while leaving its objects to drift, so every selected object type needs one. Give it a 'changeLog', or deselect it if JIM never imports from it.</value>
+  </data>
+  <data name="SqlDocDeltaNeedsWatermark" xml:space="preserve">
+    <value>{0} is '{1}', but Object Type '{2}' is selected for synchronization and has no 'watermarkColumn'. A Delta Import that skipped an object type would report success while leaving its objects to drift, so every selected object type needs one. Give it a 'watermarkColumn', or deselect it if JIM never imports from it.</value>
+  </data>
+  <data name="SqlDocColumnReferenceUnknown" xml:space="preserve">
+    <value>Object Type '{0}' says column '{1}' references object type '{2}', which this document does not declare. A reference can only point at an object type JIM also synchronizes.</value>
+  </data>
 </root>

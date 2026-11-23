@@ -4,6 +4,7 @@
 using System.Text;
 using System.Text.Json;
 using JIM.Connectors.Sql;
+using JIM.Web.Localisation;
 
 namespace JIM.Web.Models;
 
@@ -30,7 +31,7 @@ public static class SqlObjectTypesJsonProblems
             : null;
 
         return [.. problems
-            .Select(problem => new SqlObjectTypesJsonProblem(problem.Message, LineOf(problem, layout), problem.LineNumber.HasValue))
+            .Select(problem => new SqlObjectTypesJsonProblem(problem.Text(), LineOf(problem, layout), problem.LineNumber.HasValue))
             .OrderBy(problem => problem.Line ?? 0)];
     }
 

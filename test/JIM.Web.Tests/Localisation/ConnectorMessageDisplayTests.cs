@@ -85,6 +85,30 @@ public class ConnectorMessageDisplayTests
         Assert.That(result.Describe(LdapDefinition), Is.EqualTo("Another system's words"));
     }
 
+    private const string DocumentWithoutAnchor = """{"objectTypes":[{"name":"Person","table":"people"}]}""";
+
+    [Test]
+    [SetUICulture("en-GB")]
+    public void ObjectTypesProblem_InEnglish_IsTheParsersOwnWords()
+    {
+        var problem = JIM.Connectors.Sql.SqlObjectTypesDocument.Validate(DocumentWithoutAnchor).First();
+
+        Assert.That(problem.Text(), Is.EqualTo(problem.Message));
+    }
+
+    [Test]
+    [SetUICulture("fr")]
+    public void ObjectTypesProblem_InFrench_IsTheSameProblemInFrench()
+    {
+        var problem = JIM.Connectors.Sql.SqlObjectTypesDocument.Validate(DocumentWithoutAnchor).First();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(problem.Message, Does.StartWith("Object Type 'Person' has no 'anchorColumns'."));
+            Assert.That(problem.Text(), Does.StartWith("Le type d’objet « Person » n’a pas de « anchorColumns »."));
+        }
+    }
+
     [Test]
     [SetUICulture("fr")]
     public void Describe_AConnectorsFinding_InFrench_NamesTheSettingByItsLabel()

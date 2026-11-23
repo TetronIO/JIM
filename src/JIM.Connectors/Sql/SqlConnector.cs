@@ -449,6 +449,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
                 {
                     IsValid = false,
                     ErrorMessage = ex.Message,
+                    ErrorDetail = ex.Detail,
                     SettingValue = settingValue,
                     Exception = ex
                 }
@@ -1366,6 +1367,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
             {
                 IsValid = false,
                 ErrorMessage = ex.Message,
+                ErrorDetail = ex.Detail,
                 SettingValue = settingValue,
                 Exception = ex
             };

@@ -95,6 +95,19 @@ public static partial class ConnectorSettingDisplay
             : text;
     }
 
+    /// <summary>
+    /// A message the Connector produced, in the viewer's language, with each setting it names shown as its label.
+    /// </summary>
+    public static string Show(JimMessage message, string? definitionName) =>
+        RelabelSettingNames(message, definitionName).ToCurrentLanguage();
+
+    /// <summary>
+    /// What a problem with the SQL Connector's Object Types document says, in the viewer's language; the English the
+    /// parser wrote where the problem carries no message.
+    /// </summary>
+    public static string Text(this JIM.Connectors.Sql.SqlObjectTypesProblem problem) =>
+        problem.Detail is { } detail ? Show(detail, JIM.Connectors.ConnectorConstants.SqlConnectorName) : problem.Message;
+
     /// <summary>The resource key for a setting's text, for tests and tools.</summary>
     public static string KeyFor(string definitionName, string settingName, string part) =>
         $"{Slug(definitionName)}_{Slug(settingName)}_{part}";
