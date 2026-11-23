@@ -24,7 +24,7 @@ public static class UiLanguages
         Default,
         new("en-US", "English (US)", LanguageStage.Released),
         new("fr", "Français", LanguageStage.Released),
-        new("de", "Deutsch", LanguageStage.InProgress)
+        new("de", "Deutsch", LanguageStage.Released)
     ];
 
     /// <summary>

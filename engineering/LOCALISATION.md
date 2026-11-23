@@ -19,7 +19,7 @@
 
 **Every string a person reads in the portal comes from a resource file, with a translation in every language in progress or released, in the same change that adds or edits it.** Translation is part of writing the text, not a follow-up: a new page, a reworded tooltip and a new snackbar message each ship with their French (and an en-US entry where the spelling differs) or the build fails. Nobody on the team needs to read French for this to work; whoever writes the English writes the translations, following the glossary, and the tests below check what a machine can.
 
-**Languages are delivered one at a time.** Each language in `UiLanguages` has a stage: *Planned* (translations optional), *In progress* (every string required in the change that adds it; offered in development builds) and *Released* (offered to everyone). Today en-GB, en-US and French are released, and German is in progress.
+**Languages are delivered one at a time.** Each language in `UiLanguages` has a stage: *Planned* (translations optional), *In progress* (every string required in the change that adds it; offered in development builds) and *Released* (offered to everyone). Today en-GB, en-US, French and German are released.
 
 ## How it works
 
