@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Web.Localisation;
 
 namespace JIM.Web.Models;
 
@@ -133,7 +134,7 @@ public sealed class StandardMappingHints
         AttributeStandard.Scim => "SCIM 2.0",
         AttributeStandard.Ldap => "LDAP/AD",
         AttributeStandard.Jim => "JIM",
-        _ => standard.ToString()
+        _ => standard.ForDisplay()
     };
 
     private static StandardMappingHint BuildHint(string counterpartName, List<MetaverseAttributeStandardMapping> mappings)

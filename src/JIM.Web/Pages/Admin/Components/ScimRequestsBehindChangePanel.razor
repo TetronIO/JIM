@@ -1,5 +1,4 @@
 @using JIM.Models.Scim
-@using Humanizer
 @inject IJimApplicationFactory JimFactory
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -45,7 +44,7 @@
                                     @occurred.ToRelativeTime()
                                 </MudTooltip>
                             </td>
-                            <td>@entry.Operation.ToString().Humanize(LetterCasing.Sentence)</td>
+                            <td>@entry.Operation.ForDisplay()</td>
                             <td>
                                 @if (entry.ChangedAttributes.Count == 0 && entry.IgnoredAttributes.Count == 0)
                                 {

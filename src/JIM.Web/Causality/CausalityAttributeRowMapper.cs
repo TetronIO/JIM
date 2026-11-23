@@ -6,6 +6,7 @@ using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Staging.DTOs;
 using System.Globalization;
+using JIM.Web.Localisation;
 using JIM.Web.Resources;
 
 namespace JIM.Web.Causality;
@@ -50,7 +51,7 @@ public static class CausalityAttributeRowMapper
             AttributeDataType.Guid => CausalityText.AttributeTypeGuid,
             AttributeDataType.Boolean => CausalityText.AttributeTypeBoolean,
             AttributeDataType.LongNumber => CausalityText.AttributeTypeLongNumber,
-            _ => attributeType.ToString()
+            _ => attributeType.ForDisplay()
         };
 
         return string.Format(CultureInfo.CurrentCulture, CausalityText.AttributeTypeAndPlurality, typeName,

@@ -51,7 +51,7 @@
                     <VirtualisedSortHeader Title="@ConnectedSystemText.RunType" Name="runtype" />
                 </HeaderTemplate>
                 <CellTemplate>
-                    @context.Item.RunType.ToString().SplitOnCapitalLetters()
+                    @context.Item.RunType.ForDisplay()
                     @if (context.Item.VerifyImportContentHashes)
                     {
                         <MudTooltip Text="@ConnectedSystemText.RunProfileVerificationModeTooltip" Arrow="true" Placement="Placement.Top">
@@ -248,7 +248,7 @@
                         }
 
                         <MudSelectItem Value="@runType" Disabled="@(!runTypeSupported)">
-                            @runType.ToString().SplitOnCapitalLetters()
+                            @runType.ForDisplay()
                             @if (!runTypeSupported)
                             {
                                 <span> @ConnectedSystemText.RunProfileTypeNotSupported</span>
@@ -387,7 +387,7 @@
                 <MudSwitch T="bool" @bind-Value="_editRunProfile.Enabled" @bind-Value:after="RevalidateEditFormAsync"
                            Label="@CommonText.Enabled" Color="Color.Primary" Class="mt-3" data-testid="jim-run-profile-enabled" />
 
-                <MudTextField T="string" Value="@_editRunProfile.RunType.ToString().SplitOnCapitalLetters()" Label="@ConnectedSystemText.RunType"
+                <MudTextField T="string" Value="@_editRunProfile.RunType.ForDisplay()" Label="@ConnectedSystemText.RunType"
                               Variant="Variant.Outlined" Class="mt-5" Disabled="true"
                               HelperText="@ConnectedSystemText.RunTypeLockedHelp" />
 
@@ -597,7 +597,7 @@
             var search = request.SearchText;
             runProfiles = runProfiles.Where(rp =>
                 rp.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                rp.RunType.ToString().SplitOnCapitalLetters().Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                rp.RunType.ForDisplay().Contains(search, StringComparison.OrdinalIgnoreCase) ||
                 (rp.FilePath != null && rp.FilePath.Contains(search, StringComparison.OrdinalIgnoreCase)));
         }
 

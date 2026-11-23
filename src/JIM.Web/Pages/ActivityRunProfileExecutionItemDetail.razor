@@ -574,7 +574,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     {
         NoChangeReason.MvoNoAttributeChanges => ActivityText.ActivityNoChangeReasonMvoNoAttributeChanges,
         NoChangeReason.CsoAlreadyCurrent => ActivityText.ActivityNoChangeReasonCsoAlreadyCurrent,
-        _ => reason.ToString().SplitOnCapitalLetters()
+        _ => reason.ForDisplay()
     };
 
     /// <summary>
@@ -1036,7 +1036,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             // Other
             ObjectChangeType.NoChange => ActivityText.ActivityOperationTextNoChange,
             ObjectChangeType.ExportScopeReview => ActivityText.ActivityOperationTextExportReview,
-            _ => _activityRunProfileExecutionItem?.ObjectChangeType.ToString()?.SplitOnCapitalLetters() ?? ActivityText.ActivityUnknown
+            _ => _activityRunProfileExecutionItem?.ObjectChangeType.ForDisplay() ?? ActivityText.ActivityUnknown
         };
     }
 

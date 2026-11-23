@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Web.Localisation;
 using JIM.Web.Resources;
 
 namespace JIM.Web.Causality;
@@ -84,6 +85,6 @@ public sealed record CausalityTableRow(
         CausalityTableChangeKind.NoContributor => CausalityText.TableChangeKindNoContributor,
         CausalityTableChangeKind.ValuesPreserved => CausalityText.TableChangeKindValuesPreserved,
         CausalityTableChangeKind.AttributeChange => CausalityText.TableChangeKindAttributeChange,
-        _ => ChangeKind.ToString()
+        _ => ChangeKind.ForDisplay()
     };
 }

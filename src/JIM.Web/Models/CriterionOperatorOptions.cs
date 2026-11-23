@@ -4,6 +4,7 @@
 using JIM.Models.Core;
 using JIM.Models.Search;
 using JIM.Utilities;
+using JIM.Web.Localisation;
 
 namespace JIM.Web.Models;
 
@@ -41,7 +42,7 @@ public static class CriterionOperatorOptions
     /// When the attribute type is unknown, falls back to the split enum name.
     /// </summary>
     public static string FriendlyComparison(SearchComparisonType op, AttributeDataType? type) =>
-        type.HasValue ? LabelFor(op, type.Value) : op.ToString().SplitOnCapitalLetters();
+        type.HasValue ? LabelFor(op, type.Value) : op.ForDisplay();
 
     /// <summary>
     /// A condition as a phrase, for example "Employee Type equals Contractor" or "Leaving Date has no value": the

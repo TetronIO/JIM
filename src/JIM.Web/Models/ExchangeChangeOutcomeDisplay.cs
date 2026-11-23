@@ -7,6 +7,7 @@ using JIM.Models.Transactional.DTOs;
 using System.Globalization;
 
 using JIM.Utilities;
+using JIM.Web.Localisation;
 using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
@@ -47,7 +48,7 @@ public static class ExchangeChangeOutcomeDisplay
         ExchangeChangeState.Parked => (MetaverseText.EchPillParked, "err", false),
         ExchangeChangeState.Refused => (MetaverseText.EchPillRefused, "err", false),
         ExchangeChangeState.NotMade => (MetaverseText.EchPillNotMade, "warn", false),
-        _ => (state.ToString(), "neutral", false)
+        _ => (state.ForDisplay(), "neutral", false)
     };
 
     /// <summary>
@@ -145,6 +146,6 @@ public static class ExchangeChangeOutcomeDisplay
         ExchangeChangeFailureKind.InsufficientPermissions => MetaverseText.EchReasonPermissions,
         ExchangeChangeFailureKind.AuthenticationFailed => MetaverseText.EchReasonAuthentication,
         ExchangeChangeFailureKind.Unreachable => MetaverseText.EchReasonUnreachable,
-        _ => kind.ToString().SplitOnCapitalLetters()
+        _ => kind.ForDisplay()
     };
 }

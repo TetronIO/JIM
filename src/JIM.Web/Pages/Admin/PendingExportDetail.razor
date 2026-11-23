@@ -48,7 +48,7 @@
                                 <td><strong>@CommonText.ColumnStatus</strong></td>
                                 <td>
                                     <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportStatusColor(_pendingExport.Status)">
-                                        @_pendingExport.Status.ToString().SplitOnCapitalLetters()
+                                        @_pendingExport.Status.ForDisplay()
                                     </MudChip>
                                 </td>
                             </tr>
@@ -465,7 +465,7 @@ else
     RenderFragment RenderStatusChip(PendingExportAttributeValueChange change) => __builder =>
     {
         <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeStatusColor(change.Status)">
-            @change.Status.ToString().SplitOnCapitalLetters()
+            @change.Status.ForDisplay()
         </MudChip>
     };
 }
@@ -574,7 +574,7 @@ else
         UnresolvedReferenceReason.Resolvable => ConnectorSpaceText.PexReasonResolvable,
         UnresolvedReferenceReason.AwaitingAnchor => ConnectorSpaceText.PexReasonAwaitingAnchor,
         UnresolvedReferenceReason.NotInTargetSystem => ConnectorSpaceText.PexReasonNotInSystem,
-        _ => reason.ToString()
+        _ => reason.ForDisplay()
     };
 
     private static MudBlazor.Color GetUnresolvedReferenceReasonColour(UnresolvedReferenceReason reason) => reason switch

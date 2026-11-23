@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Application.Expressions
 @using JIM.Application.Interfaces
 @using JIM.Models.Core
@@ -16,12 +17,11 @@
    multi-valued attribute, "No value" distinct from empty text, values loaded from a real object, and a trace of each
    step of the pipeline synchronisation runs. *@
 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
-    Give each input a value, or load them from an object, and see what a Synchronisation would do with this Attribute
-    Flow as it stands. Each value is read as its attribute's type.
+    @SyncRuleText.FlowTestIntro
 </MudText>
 
 <SegmentedToggle TValue="bool" Options="_valueSourceOptions" Value="_fromObject" ValueChanged="SetFromObject"
-                 AriaLabel="Where the values come from" Dense="true" />
+                 AriaLabel="@SyncRuleText.FlowTestValueSourceAria" Dense="true" />
 
 @if (_fromObject)
 {
@@ -32,14 +32,14 @@
 @if (_inputs.Count == 0)
 {
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
-        This Expression reads no attributes, so it produces the same value for every object.
+        @SyncRuleText.FlowTestNoInputs
     </MudText>
 }
 else
 {
     <MudSimpleTable Dense="true" Outlined="true" Class="mt-3" Style="overflow-x: auto">
         <thead>
-            <tr><th>Input</th><th>Type</th><th>Value</th><th>No value</th></tr>
+            <tr><th>@SyncRuleText.FlowTestColumnInput</th><th>@SyncRuleText.FlowTestColumnType</th><th>@SyncRuleText.FlowTestColumnValue</th><th>@SyncRuleText.FlowTestColumnNoValue</th></tr>
         </thead>
         <tbody>
             @foreach (var input in _inputs)
@@ -67,7 +67,7 @@ else
                         @if (descriptor.InSchema)
                         {
                             <MudCheckBox T="bool" Value="state.NoValue" ValueChanged="@(v => SetNoValueAsync(state, v))" Dense="true"
-                                         aria-label="@($"{accessor} has no value")" />
+                                         aria-label="@string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestNoValueAria, accessor)" />
                         }
                     </td>
                 </tr>
@@ -83,13 +83,15 @@ else
 @if (_parseError != null)
 {
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
-        No result until the Expression is complete: @_parseError@(_errorPosition is { } position ? $" (position {position})" : null)
+        @(_errorPosition is { } position
+            ? string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestIncompleteAt, _parseError, position)
+            : string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestIncomplete, _parseError))
     </MudText>
 }
 else if (!Tried)
 {
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
-        Enter a value for each input, or load them from an object, to see the result.
+        @SyncRuleText.FlowTestEnterValues
     </MudText>
 }
 
@@ -107,11 +109,11 @@ else if (!Tried)
 {
     var source = evaluation.Source;
     <MudPaper Outlined="true" Class="pa-3 mt-3">
-        <MudText Typo="Typo.caption" Class="mud-text-secondary">What a Synchronisation would do</MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">@SyncRuleText.FlowTestHeading</MudText>
         <MudSimpleTable Dense="true" Elevation="0" Class="mt-1">
             <tbody>
                 <tr>
-                    <td class="mud-text-secondary" style="width: 13rem; vertical-align: top">1. Expression returned</td>
+                    <td class="mud-text-secondary" style="width: 13rem; vertical-align: top">@SyncRuleText.FlowTestStepExpressionReturned</td>
                     <td>
                         @switch (source.Outcome)
                         {
@@ -120,27 +122,27 @@ else if (!Tried)
                                 {
                                     <MudText Typo="Typo.body1" Class="jim-expression-output">@line</MudText>
                                 }
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Type: @source.Result!.GetType().Name</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestResultType, source.Result!.GetType().Name)</MudText>
                                 break;
                             case ExpressionSourceOutcome.NoValue when source.MissingInputs.Count == 0:
                                 <EmptyValue />
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">No value</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@SyncRuleText.FlowTestNoValue</MudText>
                                 break;
                             case ExpressionSourceOutcome.EvaluationFailed:
-                                <MudText Typo="Typo.body2">Failed: @source.EvaluationException?.Message</MudText>
+                                <MudText Typo="Typo.body2">@string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestFailed, source.EvaluationException?.Message)</MudText>
                                 break;
                             default:
-                                <MudText Typo="Typo.body2">Not evaluated: no value for @string.Join(", ", source.MissingInputs)</MudText>
+                                <MudText Typo="Typo.body2">@string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestNotEvaluated, string.Join(", ", source.MissingInputs))</MudText>
                                 break;
                         }
                     </td>
                 </tr>
                 <tr>
-                    <td class="mud-text-secondary" style="vertical-align: top">2. Value processing</td>
+                    <td class="mud-text-secondary" style="vertical-align: top">@SyncRuleText.FlowTestStepValueProcessing</td>
                     <td><MudText Typo="Typo.body2">@DescribeValueProcessing(tested, evaluation)</MudText></td>
                 </tr>
                 <tr>
-                    <td class="mud-text-secondary" style="vertical-align: top">3. Converted for @_targetName</td>
+                    <td class="mud-text-secondary" style="vertical-align: top">@string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestStepConverted, _targetName)</td>
                     <td>
                         @if (evaluation.Outcome == AttributeFlowOutcome.Values)
                         {
@@ -148,15 +150,15 @@ else if (!Tried)
                             {
                                 <MudText Typo="Typo.body1" Class="jim-expression-output">@line</MudText>
                             }
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@evaluation.TargetType</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@evaluation.TargetType.ForDisplay()</MudText>
                         }
                         else if (evaluation.ErrorReason == AttributeFlowErrorReason.ResultNotConvertible)
                         {
-                            <MudText Typo="Typo.body2">'@evaluation.Resolution?.UnconvertibleValue' is not a @evaluation.TargetType value</MudText>
+                            <MudText Typo="Typo.body2">@string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestNotConvertible, evaluation.Resolution?.UnconvertibleValue, evaluation.TargetType.ForDisplay())</MudText>
                         }
                         else if (evaluation.ErrorReason == AttributeFlowErrorReason.ResultMultiValued)
                         {
-                            <MudText Typo="Typo.body2">@evaluation.Resolution?.ValueCount values, for an attribute that holds one</MudText>
+                            <MudText Typo="Typo.body2">@string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestMultiValuedResult, evaluation.Resolution?.ValueCount)</MudText>
                         }
                         else if (evaluation.Resolution != null && evaluation.Outcome == AttributeFlowOutcome.NoValue)
                         {
@@ -164,12 +166,12 @@ else if (!Tried)
                         }
                         else
                         {
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Nothing to convert</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">@SyncRuleText.FlowTestNothingToConvert</MudText>
                         }
                     </td>
                 </tr>
                 <tr>
-                    <td class="mud-text-secondary" style="vertical-align: top">4. Result</td>
+                    <td class="mud-text-secondary" style="vertical-align: top">@SyncRuleText.FlowTestStepResult</td>
                     <td>
                         @if (evaluation.Outcome == AttributeFlowOutcome.Error)
                         {
@@ -212,11 +214,11 @@ else if (!Tried)
 {
     var baseSource = generated.Source;
     <MudPaper Outlined="true" Class="pa-3 mt-3">
-        <MudText Typo="Typo.caption" Class="mud-text-secondary">What a Synchronisation would do</MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">@SyncRuleText.FlowTestHeading</MudText>
         <MudSimpleTable Dense="true" Elevation="0" Class="mt-1">
             <tbody>
                 <tr>
-                    <td class="mud-text-secondary" style="width: 13rem; vertical-align: top">1. Base expression returned</td>
+                    <td class="mud-text-secondary" style="width: 13rem; vertical-align: top">@SyncRuleText.FlowTestStepBaseExpressionReturned</td>
                     <td>
                         @switch (baseSource?.Outcome)
                         {
@@ -225,30 +227,30 @@ else if (!Tried)
                                 {
                                     <MudText Typo="Typo.body1" Class="jim-expression-output">@line</MudText>
                                 }
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Type: @baseSource.Result!.GetType().Name</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestResultType, baseSource.Result!.GetType().Name)</MudText>
                                 break;
                             case ExpressionSourceOutcome.NoValue when baseSource.MissingInputs.Count == 0:
                                 <EmptyValue />
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">No value</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@SyncRuleText.FlowTestNoValue</MudText>
                                 break;
                             case ExpressionSourceOutcome.EvaluationFailed:
-                                <MudText Typo="Typo.body2">Failed: @baseSource.EvaluationException?.Message</MudText>
+                                <MudText Typo="Typo.body2">@string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestFailed, baseSource.EvaluationException?.Message)</MudText>
                                 break;
                             case null:
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">No base expression</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@SyncRuleText.FlowTestNoBaseExpression</MudText>
                                 break;
                             default:
-                                <MudText Typo="Typo.body2">Not evaluated: no value for @string.Join(", ", baseSource.MissingInputs)</MudText>
+                                <MudText Typo="Typo.body2">@string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestNotEvaluated, string.Join(", ", baseSource.MissingInputs))</MudText>
                                 break;
                         }
                     </td>
                 </tr>
                 <tr>
-                    <td class="mud-text-secondary" style="vertical-align: top">2. Value processing</td>
+                    <td class="mud-text-secondary" style="vertical-align: top">@SyncRuleText.FlowTestStepValueProcessing</td>
                     <td><MudText Typo="Typo.body2">@DescribeBaseValueProcessing(testedBase, generated)</MudText></td>
                 </tr>
                 <tr>
-                    <td class="mud-text-secondary" style="vertical-align: top">3. Base for generation</td>
+                    <td class="mud-text-secondary" style="vertical-align: top">@SyncRuleText.FlowTestStepBaseForGeneration</td>
                     <td>
                         @if (generated.Outcome == GeneratedBaseOutcome.Base)
                         {
@@ -263,7 +265,7 @@ else if (!Tried)
                 @if (GeneratedResult == null)
                 {
                 <tr>
-                    <td class="mud-text-secondary" style="vertical-align: top">4. Result</td>
+                    <td class="mud-text-secondary" style="vertical-align: top">@SyncRuleText.FlowTestStepResult</td>
                     <td>
                         @if (generated.Outcome == GeneratedBaseOutcome.Error)
                         {
@@ -314,7 +316,7 @@ else if (!Tried)
 @if (Draft is { } draft)
 {
     <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Outlined.FactCheck" Class="mt-2"
-               OnClick="@(() => SaveAsTestCaseAsync(draft))" data-testid="jim-attribute-flow-test-save-as-case">Save as test case</MudButton>
+               OnClick="@(() => SaveAsTestCaseAsync(draft))" data-testid="jim-attribute-flow-test-save-as-case">@SyncRuleText.FlowTestSaveAsTestCase</MudButton>
 }
 
 @code {
@@ -387,8 +389,8 @@ else if (!Tried)
 
     private static readonly IReadOnlyList<SegmentedToggleOption<bool>> _valueSourceOptions =
     [
-        new(false, "Sample values"),
-        new(true, "From an object")
+        new(false, SyncRuleText.FlowTestSampleValues),
+        new(true, SyncRuleText.FlowTestFromObject)
     ];
 
     private IReadOnlyList<AttributeFlowTestInputDescriptor> _inputs = [];
@@ -420,12 +422,15 @@ else if (!Tried)
     private ObjectChipKind ObjectKind => Exporting ? ObjectChipKind.MetaverseObject : ObjectChipKind.ConnectedSystemObject;
 
     private string ObjectSearchLabel => Exporting
-        ? $"Find a {SyncRule.MetaverseObjectType?.Name ?? "Metaverse Object"}"
-        : $"Find a {SyncRule.ConnectedSystemObjectType?.Name ?? "Connected System Object"} in {SyncRule.ConnectedSystem?.Name ?? "the Connected System"}";
+        ? string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestFindMetaverseObject,
+            SyncRule.MetaverseObjectType?.Name ?? SyncRuleText.FlowTestMetaverseObjectFallback)
+        : string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestFindConnectedSystemObject,
+            SyncRule.ConnectedSystemObjectType?.Name ?? SyncRuleText.FlowTestConnectedSystemObjectFallback,
+            SyncRule.ConnectedSystem?.Name ?? SyncRuleText.FlowTestConnectedSystemFallback);
 
     protected override async Task OnParametersSetAsync()
     {
-        _targetName = (Exporting ? Mapping.TargetConnectedSystemAttribute?.Name : Mapping.TargetMetaverseAttribute?.Name) ?? "the target";
+        _targetName = (Exporting ? Mapping.TargetConnectedSystemAttribute?.Name : Mapping.TargetMetaverseAttribute?.Name) ?? SyncRuleText.FlowTestTargetFallback;
 
         // Inputs follow the Expression as it is edited; values entered for an input that is still read are kept.
         if (_resolvedFrom != Expression)
@@ -547,7 +552,7 @@ else if (!Tried)
         var validation = ExpressionEvaluator.Validate(Expression);
         if (!validation.IsValid)
         {
-            _parseError = validation.ErrorMessage ?? "The Expression could not be parsed.";
+            _parseError = validation.ErrorMessage ?? SyncRuleText.FlowTestParseFailed;
             _errorPosition = validation.ErrorPosition;
             return;
         }
@@ -568,52 +573,58 @@ else if (!Tried)
 
     private async Task SaveAsTestCaseAsync(ConfigurationTestCase draft) =>
         await ConfigurationTestCaseDialog.ShowAsync(DialogService, draft,
-            $"{(Generating ? "Generated Value for" : "Attribute Flow to")} {_targetName}, run against the Attribute Flow as saved",
+            string.Format(CultureInfo.CurrentCulture,
+                Generating ? SyncRuleText.FlowTestSavedCaseGenerated : SyncRuleText.FlowTestSavedCaseFlow, _targetName),
             _inputs.Where(input => input is { Type: not null, Plurality: not null })
                 .Select(input => new ConfigurationTestCaseDisplay.InputSlot(input.Source, input.AttributeName, input.Type!.Value, input.Plurality!.Value))
                 .ToList());
 
     private static string DescribeType(AttributeFlowTestInputDescriptor input) => input.Type is { } type
-        ? $"{type} · {(input.Plurality == AttributePlurality.MultiValued ? "multi-valued" : "single-valued")}"
-        : "Not available";
+        ? string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestTypeAndPlurality, type.ForDisplay(),
+            input.Plurality == AttributePlurality.MultiValued ? SyncRuleText.FlowTestMultiValued : SyncRuleText.FlowTestSingleValued)
+        : SyncRuleText.FlowTestNotAvailable;
 
     private string NotHeldExplanation(AttributeFlowTestInputDescriptor input) =>
         input.Source == ExpressionInputSource.ConnectedSystem && Exporting
-            ? "An export Attribute Flow reads only the Metaverse Object, so this input never has a value."
-            : $"'{(input.Source == ExpressionInputSource.ConnectedSystem ? SyncRule.ConnectedSystemObjectType?.Name : SyncRule.MetaverseObjectType?.Name)}' has no attribute of this name, so this input never has a value.";
+            ? SyncRuleText.FlowTestNotHeldExport
+            : string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestNotHeldNoAttribute,
+                input.Source == ExpressionInputSource.ConnectedSystem ? SyncRule.ConnectedSystemObjectType?.Name : SyncRule.MetaverseObjectType?.Name);
 
     private static string DescribeValueProcessing(AttributeFlowTestResult tested, AttributeFlowEvaluation evaluation)
     {
         if (tested.ValueProcessing is not { } processing)
             return evaluation.Source.Outcome != ExpressionSourceOutcome.Result
-                ? "Nothing to process"
-                : "Not applied: value processing applies to Text attributes on import only";
+                ? SyncRuleText.FlowTestNothingToProcess
+                : SyncRuleText.FlowTestNotAppliedText;
 
+        return DescribeProcessingSteps(processing);
+    }
+
+    private static string DescribeProcessingSteps(AttributeFlowValueProcessing processing)
+    {
         if (processing.Steps.Count == 0)
-            return "None set";
+            return SyncRuleText.FlowTestNoneSet;
 
-        var steps = string.Join(", then ", processing.Steps.Select(StepLabel));
-        return $"{steps}: {(processing.Changed ? "changed the value" : "unchanged")}";
+        var steps = processing.Steps.Select(StepLabel).Aggregate((joined, next) =>
+            string.Format(CultureInfo.CurrentCulture, SyncRuleText.FlowTestStepsThen, joined, next));
+        return string.Format(CultureInfo.CurrentCulture,
+            processing.Changed ? SyncRuleText.FlowTestProcessingChanged : SyncRuleText.FlowTestProcessingUnchanged, steps);
     }
 
     private static string DescribeBaseValueProcessing(AttributeFlowTestResult tested, GeneratedBaseEvaluation generated)
     {
         if (tested.ValueProcessing is not { } processing)
-            return generated.UnprocessedBaseValue == null ? "Nothing to process" : "Not applied: value processing applies on import only";
+            return generated.UnprocessedBaseValue == null ? SyncRuleText.FlowTestNothingToProcess : SyncRuleText.FlowTestNotAppliedImport;
 
-        if (processing.Steps.Count == 0)
-            return "None set";
-
-        var steps = string.Join(", then ", processing.Steps.Select(StepLabel));
-        return $"{steps}: {(processing.Changed ? "changed the value" : "unchanged")}";
+        return DescribeProcessingSteps(processing);
     }
 
     private static string BaseOutcomeLabel(GeneratedBaseOutcome outcome) => outcome switch
     {
-        GeneratedBaseOutcome.Base => "Base",
-        GeneratedBaseOutcome.Waits => "Waits",
-        GeneratedBaseOutcome.NoBaseExpression => "Token only",
-        _ => "Error"
+        GeneratedBaseOutcome.Base => SyncRuleText.FlowTestBaseOutcomeBase,
+        GeneratedBaseOutcome.Waits => SyncRuleText.FlowTestBaseOutcomeWaits,
+        GeneratedBaseOutcome.NoBaseExpression => SyncRuleText.FlowTestBaseOutcomeTokenOnly,
+        _ => SyncRuleText.FlowTestOutcomeError
     };
 
     private static Color BaseOutcomeColour(GeneratedBaseOutcome outcome) => outcome switch
@@ -625,20 +636,20 @@ else if (!Tried)
 
     private static string StepLabel(AttributeFlowValueProcessingStep step) => step switch
     {
-        AttributeFlowValueProcessingStep.TrimWhitespace => "Trim leading and trailing whitespace",
-        AttributeFlowValueProcessingStep.CollapseInternalWhitespace => "Collapse internal whitespace",
-        AttributeFlowValueProcessingStep.UpperCase => "Upper case",
-        AttributeFlowValueProcessingStep.LowerCase => "Lower case",
-        AttributeFlowValueProcessingStep.TitleCase => "Title case",
-        AttributeFlowValueProcessingStep.TreatWhitespaceAsNoValue => "Treat whitespace as no value",
-        _ => step.ToString()
+        AttributeFlowValueProcessingStep.TrimWhitespace => SyncRuleText.FlowTestStepTrim,
+        AttributeFlowValueProcessingStep.CollapseInternalWhitespace => SyncRuleText.FlowTestStepCollapse,
+        AttributeFlowValueProcessingStep.UpperCase => SyncRuleText.FlowTestStepUpper,
+        AttributeFlowValueProcessingStep.LowerCase => SyncRuleText.FlowTestStepLower,
+        AttributeFlowValueProcessingStep.TitleCase => SyncRuleText.FlowTestStepTitle,
+        AttributeFlowValueProcessingStep.TreatWhitespaceAsNoValue => SyncRuleText.FlowTestStepWhitespaceNoValue,
+        _ => step.ForDisplay()
     };
 
     private static string OutcomeLabel(AttributeFlowOutcome outcome) => outcome switch
     {
-        AttributeFlowOutcome.Values => "Values",
-        AttributeFlowOutcome.NoValue => "No value",
-        _ => "Error"
+        AttributeFlowOutcome.Values => SyncRuleText.FlowTestOutcomeValues,
+        AttributeFlowOutcome.NoValue => SyncRuleText.FlowTestOutcomeNoValue,
+        _ => SyncRuleText.FlowTestOutcomeError
     };
 
     private static Color OutcomeColour(AttributeFlowOutcome outcome) => outcome switch

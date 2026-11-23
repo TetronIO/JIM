@@ -6,6 +6,7 @@ using System.Globalization;
 using JIM.Models.Scheduling;
 using JIM.Models.Scheduling.DTOs;
 using JIM.Utilities;
+using JIM.Web.Localisation;
 using JIM.Web.Resources;
 
 namespace JIM.Web.Models;
@@ -53,7 +54,7 @@ public static class ScheduleExecutionDisplay
         ScheduleExecutionStatus.Cancelled => OperationsText.CompletedStatusCancelled,
         ScheduleExecutionStatus.Paused => OperationsText.ScheduleExecPaused,
         ScheduleExecutionStatus.CompleteWithError => OperationsText.CompletedStatusCompleteWithError,
-        _ => status.ToString().SplitOnCapitalLetters()
+        _ => status.ForDisplay()
     };
 
     /// <summary>

@@ -123,7 +123,7 @@
             SchemaAttributeChangeAspect.DataType => SchemaText.ChangeAspectDataType,
             SchemaAttributeChangeAspect.Plurality => SchemaText.ChangeAspectPlurality,
             SchemaAttributeChangeAspect.Writability => SchemaText.ChangeAspectWritability,
-            _ => change.Aspect.ToString()
+            _ => change.Aspect.ForDisplay()
         };
         return string.Format(CultureInfo.CurrentCulture, SchemaText.ChangeDefinitionLine, change.AttributeName, aspect, change.OldValue, change.NewValue);
     }

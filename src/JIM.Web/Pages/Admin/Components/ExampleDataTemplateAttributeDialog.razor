@@ -18,11 +18,11 @@
             <MudStack Spacing="4">
                 <MudSelect T="MetaverseAttribute" Label="@ExampleDataText.MetaverseAttribute" Variant="Variant.Outlined"
                            Value="@_draft.Attribute" ValueChanged="OnAttributeChanged"
-                           ToStringFunc="@(a => a == null ? string.Empty : $"{a.Name} ({a.Type.ToString().SplitOnCapitalLetters()})")"
+                           ToStringFunc="@(a => a == null ? string.Empty : $"{a.Name} ({a.Type.ForDisplay()})")"
                            HelperText="@AttributeHelperText()" Disabled="@(_attributeChoices.Count == 0)">
                     @foreach (var choice in _attributeChoices)
                     {
-                        <MudSelectItem T="MetaverseAttribute" Value="@choice">@choice.Name (@choice.Type.ToString().SplitOnCapitalLetters())</MudSelectItem>
+                        <MudSelectItem T="MetaverseAttribute" Value="@choice">@choice.Name (@choice.Type.ForDisplay())</MudSelectItem>
                     }
                 </MudSelect>
 

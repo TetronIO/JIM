@@ -200,11 +200,11 @@
                     </MudItem>
                     <MudItem xs="12" sm="6" md="4">
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">@CommonText.ColumnStatus</MudText>
-                        <MudText Typo="Typo.body1">@MetaverseObject.Status</MudText>
+                        <MudText Typo="Typo.body1">@MetaverseObject.Status.ForDisplay()</MudText>
                     </MudItem>
                     <MudItem xs="12" sm="6" md="4">
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">@MetaverseText.TvOrigin</MudText>
-                        <MudText Typo="Typo.body1">@MetaverseObject.Origin</MudText>
+                        <MudText Typo="Typo.body1">@MetaverseObject.Origin.ForDisplay()</MudText>
                     </MudItem>
                 </MudGrid>
             </MudPaper>

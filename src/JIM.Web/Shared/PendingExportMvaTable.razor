@@ -42,7 +42,7 @@
                 </HeaderTemplate>
                 <CellTemplate>
                     <MudChip T="string" Variant="Variant.Text" Color="GetStatusColor(context.Item.Status)">
-                        @context.Item.Status.ToString().SplitOnCapitalLetters()
+                        @context.Item.Status.ForDisplay()
                     </MudChip>
                 </CellTemplate>
             </TemplateColumn>

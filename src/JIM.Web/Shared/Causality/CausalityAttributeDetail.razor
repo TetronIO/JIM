@@ -294,7 +294,7 @@
         CausalityAttributeOperation.Set => CausalityText.AttributeOperationSet,
         CausalityAttributeOperation.Add => CausalityText.AttributeOperationAdd,
         CausalityAttributeOperation.Remove => CausalityText.AttributeOperationRemove,
-        _ => operation.ToString()
+        _ => operation.ForDisplay()
     };
 
     private static string NoAttributesText(CausalityAttributeOperation operation) => operation switch
@@ -302,7 +302,7 @@
         CausalityAttributeOperation.Set => CausalityText.AttributeDetailNoneSet,
         CausalityAttributeOperation.Add => CausalityText.AttributeDetailNoneAdd,
         CausalityAttributeOperation.Remove => CausalityText.AttributeDetailNoneRemove,
-        _ => operation.ToString()
+        _ => operation.ForDisplay()
     };
 
     private static Color GetOperationColor(CausalityAttributeOperation operation)

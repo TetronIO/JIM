@@ -17,4 +17,25 @@
   <data name="ActivityStatus_Cancelled" xml:space="preserve">
     <value>Canceled</value>
   </data>
+  <data name="ActivityTargetCategory_PasswordSynchronisation" xml:space="preserve">
+    <value>Password Synchronization</value>
+  </data>
+  <data name="ActivityTargetType_SynchronisationRule" xml:space="preserve">
+    <value>Synchronization Rule</value>
+  </data>
+  <data name="ActivityTargetType_SystemInitialisation" xml:space="preserve">
+    <value>System Initialization</value>
+  </data>
+  <data name="ActivityTargetType_PasswordSynchronisation" xml:space="preserve">
+    <value>Password Synchronization</value>
+  </data>
+  <data name="ScheduleExecutionStatus_Cancelled" xml:space="preserve">
+    <value>Canceled</value>
+  </data>
+  <data name="ConnectedSystemRunType_FullSynchronisation" xml:space="preserve">
+    <value>Full Synchronization</value>
+  </data>
+  <data name="ConnectedSystemRunType_DeltaSynchronisation" xml:space="preserve">
+    <value>Delta Synchronization</value>
+  </data>
 </root>

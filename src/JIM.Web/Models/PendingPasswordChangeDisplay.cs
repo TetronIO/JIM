@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Web.Localisation;
 using JIM.Web.Resources;
 using System.Globalization;
 using JIM.Models.Staging;
@@ -41,7 +42,7 @@ public static class PendingPasswordChangeDisplay
             PendingPasswordChangeStatus.Parked => DisplayText.PasswordChangeStatusParked,
             PendingPasswordChangeStatus.Expired => DisplayText.PasswordChangeStatusExpired,
             PendingPasswordChangeStatus.Cancelled => DisplayText.PasswordChangeStatusCancelled,
-            _ => change.Status.ToString()
+            _ => change.Status.ForDisplay()
         };
     }
 
@@ -105,7 +106,7 @@ public static class PendingPasswordChangeDisplay
         PasswordSetFailureReason.PolicyRejection => DisplayText.PasswordFailurePolicyRejection,
         PasswordSetFailureReason.TargetObjectNotFound => DisplayText.PasswordFailureTargetObjectNotFound,
         PasswordSetFailureReason.UnsupportedOperation => DisplayText.PasswordFailureUnsupportedOperation,
-        _ => reason.ToString()
+        _ => reason.ForDisplay()
     };
 
     /// <summary>

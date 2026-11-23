@@ -108,7 +108,7 @@
         RelativeDateUnit.Weeks => SyncRuleText.UnitWeeks,
         RelativeDateUnit.Months => SyncRuleText.UnitMonths,
         RelativeDateUnit.Years => SyncRuleText.UnitYears,
-        _ => unit.ToString()
+        _ => unit.ForDisplay()
     };
 
     /// <summary>The state of a tri-state boolean criterion: not set is Null, otherwise True or False.</summary>

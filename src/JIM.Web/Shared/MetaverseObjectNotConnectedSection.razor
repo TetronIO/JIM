@@ -192,7 +192,7 @@
         NotConnectedReason.ProvisioningDisabled => MetaverseText.MncReasonProvisioningDisabled,
         NotConnectedReason.RuleMisconfigured => MetaverseText.MncReasonRuleMisconfigured,
         NotConnectedReason.NotYetProvisioned => MetaverseText.MncReasonNotYetProvisioned,
-        _ => reason.ToString()
+        _ => reason.ForDisplay()
     };
 
     private static Color ReasonColour(NotConnectedReason reason) => reason switch

@@ -295,6 +295,6 @@ else
         ActivityTargetOperationType.Update => ActivityText.ActivityConfigOpUpdated,
         ActivityTargetOperationType.Delete => ActivityText.ActivityConfigOpDeleted,
         ActivityTargetOperationType.Revert => ActivityText.ActivityConfigOpReverted,
-        _ => operation.ToString()
+        _ => operation.ForDisplay()
     };
 }

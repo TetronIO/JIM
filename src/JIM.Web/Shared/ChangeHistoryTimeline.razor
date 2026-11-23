@@ -98,7 +98,7 @@ else
                                     <MudIcon Icon="@GetChangeTypeIcon(changeGroup.ChangeType)"
                                              Color="@GetChangeTypeColor(changeGroup.ChangeType)" />
                                     <MudText Typo="Typo.body1" Style="margin-right: 14px;">
-                                        <strong>@changeGroup.ChangeType.ToString().SplitOnCapitalLetters()</strong>
+                                        <strong>@changeGroup.ChangeType.ForDisplay()</strong>
                                     </MudText>
                                     @if ((changeGroup.ChangeType == ObjectChangeType.Joined ||
                                                                  changeGroup.ChangeType == ObjectChangeType.Projected) &&
@@ -143,7 +143,7 @@ else
                                                     @change.AttributeName
                                                 </MudText>
                                                 <MudChip T="string" Variant="Variant.Text" Color="@GetDisplayChangeTypeColor(change)">
-                                                    @change.DisplayChangeType
+                                                    @DisplayChangeTypeLabel(change.DisplayChangeType)
                                                 </MudChip>
                                                 @* The value is one line, clipped with an ellipsis. A .jim-one-line-list rather than a
                                                    clamp on the cell itself, because the clamp has to sit on the element that directly
@@ -229,7 +229,7 @@ else
                                          Style="margin-top: 4px;" />
                                 <div>
                                     <MudText Typo="Typo.h6">
-                                        @_selectedChange?.ChangeType.ToString().SplitOnCapitalLetters()
+                                        @_selectedChange?.ChangeType.ForDisplay()
                                         @if (_selectedChange?.ChangeType == ObjectChangeType.Joined &&
                                             !string.IsNullOrEmpty(_selectedChange?.CsoExternalId))
                                         {
@@ -406,7 +406,7 @@ else
                                                     </HeaderTemplate>
                                                     <CellTemplate>
                                                         <MudChip T="string" Variant="Variant.Text" Color="@GetDisplayChangeTypeColor(context.Item)">
-                                                            @context.Item.DisplayChangeType
+                                                            @DisplayChangeTypeLabel(context.Item.DisplayChangeType)
                                                         </MudChip>
                                                     </CellTemplate>
                                                 </TemplateColumn>
@@ -1073,6 +1073,17 @@ else
     /// SVA terms: Set (green), Updated (blue), Removed (red)
     /// MVA terms: Add (green), Remove (red)
     /// </summary>
+    /// <summary>A display change type (the key the filters and colours use) as the chip names it.</summary>
+    private static string DisplayChangeTypeLabel(string displayChangeType) => displayChangeType switch
+    {
+        "Set" => ActivityText.ActivityChangeSet,
+        "Updated" => ActivityText.ActivityChangeUpdated,
+        "Removed" => ActivityText.ActivityChangeRemoved,
+        "Add" => ActivityText.ActivityChangeAdd,
+        "Remove" => ActivityText.ActivityChangeRemove,
+        _ => displayChangeType
+    };
+
     private Color GetDisplayChangeTypeColor(AttributeChangeDisplay change)
     {
         return change.DisplayChangeType switch

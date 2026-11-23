@@ -195,7 +195,7 @@
                            Dense="true" Clearable="true" Value="_attributeTypeFilter" ValueChanged="OnAttributeTypeFilterChangedAsync">
                     @foreach (var type in Enum.GetValues<AttributeDataType>().Where(t => t != AttributeDataType.NotSet))
                     {
-                        <MudSelectItem T="AttributeDataType?" Value="@type">@type.ToString().SplitOnCapitalLetters()</MudSelectItem>
+                        <MudSelectItem T="AttributeDataType?" Value="@type">@type.ForDisplay()</MudSelectItem>
                     }
                 </MudSelect>
             </MudItem>
@@ -252,7 +252,7 @@
                     </HeaderTemplate>
                     <CellTemplate>
                         <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Item.Type)" Variant="Variant.Outlined">
-                            @context.Item.Type.ToString().SplitOnCapitalLetters()
+                            @context.Item.Type.ForDisplay()
                         </MudChip>
                     </CellTemplate>
                 </TemplateColumn>

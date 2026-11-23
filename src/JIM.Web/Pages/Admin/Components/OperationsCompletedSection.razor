@@ -699,7 +699,7 @@
         ActivityTargetOperationType.Execute => OperationsText.CompletedOpExecute,
         ActivityTargetOperationType.Clear => OperationsText.CompletedOpClear,
         ActivityTargetOperationType.Delete => CommonText.Delete,
-        _ => operation.ToString().SplitOnCapitalLetters()
+        _ => operation.ForDisplay()
     };
 
     /// <summary>The status vocabulary's verdict for a result: what colours its dot, and its words when it needs reading.</summary>

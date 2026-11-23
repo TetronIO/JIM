@@ -5,6 +5,7 @@ using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Transactional;
+using JIM.Web.Localisation;
 using JIM.Web.Resources;
 using MudBlazor;
 
@@ -324,7 +325,7 @@ public static class OutcomeDisplayMap
     {
         return Map.TryGetValue(outcomeType, out var factory)
             ? factory()
-            : new OutcomeDisplay(outcomeType.ToString(), CausalityTone.Secondary, Icons.Material.Filled.Circle);
+            : new OutcomeDisplay(outcomeType.ForDisplay(), CausalityTone.Secondary, Icons.Material.Filled.Circle);
     }
 
     /// <summary>

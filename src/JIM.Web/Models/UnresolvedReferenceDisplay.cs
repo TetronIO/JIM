@@ -85,7 +85,7 @@ public static class UnresolvedReferenceDisplay
         UnresolvedReferenceCause.PartitionNotSelected => ConnectorSpaceText.UrefCausePartitionNotSelected,
         UnresolvedReferenceCause.OutsideConnectedSystem => ConnectorSpaceText.UrefCauseOutsideSystem,
         UnresolvedReferenceCause.AmbiguousObjectType => ConnectorSpaceText.UrefCauseAmbiguousObjectType,
-        _ => cause.ToString()
+        _ => cause.ForDisplay()
     };
 
     /// <summary>

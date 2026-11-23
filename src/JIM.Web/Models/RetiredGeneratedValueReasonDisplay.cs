@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Transactional;
+using JIM.Web.Localisation;
 using JIM.Web.Resources;
 using MudBlazor;
 
@@ -21,7 +22,7 @@ public static class RetiredGeneratedValueReasonDisplay
         RetiredGeneratedValueReason.Superseded => MetaverseText.RgvSuperseded,
         RetiredGeneratedValueReason.Recalled => MetaverseText.RgvRecalled,
         RetiredGeneratedValueReason.Regenerated => MetaverseText.RgvRegenerated,
-        _ => reason.ToString()
+        _ => reason.ForDisplay()
     };
 
     /// <summary>The one-line explanation behind the chip.</summary>

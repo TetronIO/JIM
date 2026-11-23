@@ -60,7 +60,7 @@
             ConnectedSystemObjectConnectionState.DeletePending => ConnectedSystemText.ConnStateDeletePending,
             ConnectedSystemObjectConnectionState.DisablePending => ConnectedSystemText.ConnStateDisablePending,
             ConnectedSystemObjectConnectionState.Obsolete => ConnectedSystemText.ConnStateObsolete,
-            _ => state.ToString()
+            _ => state.ForDisplay()
         };
     }
 }

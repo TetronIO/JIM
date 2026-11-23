@@ -103,7 +103,7 @@ public static class Helpers
     {
         var side = kind == AttributeChipKind.Metaverse ? DisplayText.AttributeSideMetaverse : DisplayText.AttributeSideConnectedSystem;
         var valued = plurality == AttributePlurality.SingleValued ? DisplayText.AttributeSingleValued : DisplayText.AttributeMultiValued;
-        return string.Format(CultureInfo.CurrentCulture, DisplayText.AttributeDescription, side, type.ToString().SplitOnCapitalLetters(), valued);
+        return string.Format(CultureInfo.CurrentCulture, DisplayText.AttributeDescription, side, type.ForDisplay(), valued);
     }
 
     /// <summary>
@@ -451,7 +451,7 @@ public static class Helpers
     public static string GetErrorTypeChipLabel(ActivityRunProfileExecutionItemErrorType errorType) => errorType switch
     {
         ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved => DisplayText.ErrorChipNeedsADecision,
-        _ => errorType.ToString().SplitOnCapitalLetters()
+        _ => errorType.ForDisplay()
     };
 
     /// <summary>
@@ -548,7 +548,7 @@ public static class Helpers
     public static string GetActivityTargetTypeName(ActivityTargetType targetType) => targetType switch
     {
         ActivityTargetType.ScimRequests => DisplayText.ActivityTargetScimRequests,
-        _ => targetType.ToString().SplitOnCapitalLetters()
+        _ => targetType.ForDisplay()
     };
 
     public static Color GetActivityMudBlazorColorForOperation(ActivityTargetOperationType operation)
@@ -836,7 +836,7 @@ public static class Helpers
             AttributeWritability.Writable => DisplayText.WritabilityWritable,
             AttributeWritability.ReadOnly => DisplayText.WritabilityReadOnly,
             AttributeWritability.WritableOnCreate => DisplayText.WritabilityWritableOnCreate,
-            _ => writability.ToString().SplitOnCapitalLetters()
+            _ => writability.ForDisplay()
         };
     }
 

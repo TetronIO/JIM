@@ -115,10 +115,11 @@
             <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-3" /> @SearchText.AddCriteriaGroup</MudText>
         </TitleContent>
         <DialogContent>
-            <MudSelect T="string" Label="@SearchText.LogicType" Required="true" Variant="Variant.Outlined" @bind-Value="_newGroupType">
-                @foreach (var type in Enum.GetValues(typeof(SearchGroupType)))
+            <MudSelect T="string" Label="@SearchText.LogicType" Required="true" Variant="Variant.Outlined" @bind-Value="_newGroupType"
+                       ToStringFunc="@(name => EnumDisplay.NameForDisplay<SearchGroupType>(name))">
+                @foreach (var type in Enum.GetValues<SearchGroupType>())
                 {
-                    <MudSelectItem Value="@type.ToString()" />
+                    <MudSelectItem Value="@type.ToString()">@type.ForDisplay()</MudSelectItem>
                 }
             </MudSelect>
         </DialogContent>
@@ -241,7 +242,7 @@
     </MudPaper>;
 
     private RenderFragment RenderGroupHeader(PredefinedSearchCriteriaGroup group, bool builtIn) =>@<div class="d-flex justify-space-between align-center">
-        <MudText Typo="Typo.overline"><span class="mud-text-secondary">@SearchText.CriteriaGroupHeading</span> @group.Type.ToString().SplitOnCapitalLetters().ToUpper()</MudText>
+        <MudText Typo="Typo.overline"><span class="mud-text-secondary">@SearchText.CriteriaGroupHeading</span> @group.Type.ForDisplay().ToUpper()</MudText>
         <MudTooltip Text="@(builtIn ? BuiltInCriteriaTooltipText : SearchText.DeleteGroupTooltip)" Arrow="true" Placement="Placement.Top">
             <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" DropShadow="false"
                            aria-label="@SearchText.DeleteGroupAriaLabel" OnClick="@(() => HandleDeleteGroupAsync(group.Id))" Disabled="builtIn" />

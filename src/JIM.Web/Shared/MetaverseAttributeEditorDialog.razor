@@ -41,7 +41,7 @@
                                Disabled="@(ReadOnly || TypeLocked)" HelperText="@TypeHelperText()">
                         @foreach (var type in _selectableTypes)
                         {
-                            <MudSelectItem Value="type">@type.ToString().SplitOnCapitalLetters()</MudSelectItem>
+                            <MudSelectItem Value="type">@type.ForDisplay()</MudSelectItem>
                         }
                     </MudSelect>
                     <MudSelect @bind-Value="_plurality" T="AttributePlurality" Label="@AdminText.SchemaPlurality" Variant="Variant.Outlined"
@@ -344,7 +344,7 @@
         AttributeStandard.Scim => "SCIM 2.0",
         AttributeStandard.Ldap => "LDAP/AD",
         AttributeStandard.Jim => "JIM",
-        _ => standard.ToString()
+        _ => standard.ForDisplay()
     };
 
     private string NameForObjectTypeId(int id) =>

@@ -77,10 +77,11 @@ else
                 </TitleContent>
                 <DialogContent>
                     <MudSelect T="string" Label="@SyncRuleText.ScopeChooseGroupType" Required="true" Variant="Variant.Outlined"
+                        ToStringFunc="@(name => EnumDisplay.NameForDisplay<SearchGroupType>(name))"
                         @bind-Value="_criteriaGroupTypeText">
-                        @foreach (var type in Enum.GetValues(typeof(SearchGroupType)))
+                        @foreach (var type in Enum.GetValues<SearchGroupType>())
                         {
-                            <MudSelectItem Value="@type.ToString()" />
+                            <MudSelectItem Value="@type.ToString()">@type.ForDisplay()</MudSelectItem>
                         }
                     </MudSelect>
                 </DialogContent>

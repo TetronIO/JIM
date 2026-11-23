@@ -175,7 +175,7 @@
             <CellTemplate>
                 <MudChip T="string" Variant="Variant.Text"
                          Color="Helpers.GetActivityMudBlazorColorForOperation(context.Item.TargetOperationType)">
-                    @context.Item.TargetOperationType.ToString().SplitOnCapitalLetters()
+                    @context.Item.TargetOperationType.ForDisplay()
                 </MudChip>
             </CellTemplate>
         </TemplateColumn>
@@ -410,7 +410,7 @@
             <CellTemplate>
                 <MudChip T="string" Variant="Variant.Text"
                          Color="Helpers.GetActivityMudBlazorColorForStatus(context.Item.Status)">
-                    @context.Item.Status.ToString().SplitOnCapitalLetters()
+                    @context.Item.Status.ForDisplay()
                 </MudChip>
             </CellTemplate>
         </TemplateColumn>
@@ -927,7 +927,7 @@
         ActivityTargetCategory.System => ActivityText.ActivityCategorySystem,
         ActivityTargetCategory.Security => ActivityText.ActivityCategorySecurity,
         ActivityTargetCategory.PasswordSynchronisation => ActivityText.ActivityCategoryPasswords,
-        _ => category.ToString()
+        _ => category.ForDisplay()
     };
 
     private async Task OnStatusFilterChangedAsync(IReadOnlyCollection<ActivityStatus> values)

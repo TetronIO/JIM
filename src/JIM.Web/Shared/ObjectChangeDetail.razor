@@ -10,7 +10,7 @@
 @* Activity it was made in, and every attribute it changed. A deletion lists the object's final values instead. *@
 <div class="jim-object-change-detail" tabindex="-1" @ref="_root" @onkeydown="OnKeyDownAsync">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-        <MudText Typo="Typo.h6">@Result.Change.ChangeType.ToString().SplitOnCapitalLetters()</MudText>
+        <MudText Typo="Typo.h6">@Result.Change.ChangeType.ForDisplay()</MudText>
         <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="@CommonText.Close" data-testid="close-detail" OnClick="OnClose" />
     </MudStack>
 

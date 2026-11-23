@@ -588,7 +588,7 @@ public static partial class CausalityLineageModelBuilder
                     ConnectedSystemRunType.FullSynchronisation => CausalityText.LineageRunTypeFullSynchronisation,
                     ConnectedSystemRunType.DeltaSynchronisation => CausalityText.LineageRunTypeDeltaSynchronisation,
                     ConnectedSystemRunType.Export => CausalityText.LineageRunTypeExport,
-                    _ => runType.ToString().SplitOnCapitalLetters()
+                    _ => runType.ForDisplay()
                 }
                 : Helpers.GetActivityTargetTypeName(activity.TargetType);
         }
@@ -647,7 +647,7 @@ public static partial class CausalityLineageModelBuilder
                         MetaverseObjectDeletionRule.Manual => CausalityText.LineageDeletionRuleManual,
                         MetaverseObjectDeletionRule.WhenLastConnectorDisconnected => CausalityText.LineageDeletionRuleWhenLastConnectorDisconnected,
                         MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected => CausalityText.LineageDeletionRuleWhenAuthoritativeSourceDisconnected,
-                        _ => policy.DeletionRule.ToString().SplitOnCapitalLetters()
+                        _ => policy.DeletionRule.ForDisplay()
                     };
                     var gracePeriod = policy.GracePeriod is { } period && period > TimeSpan.Zero ? period : (TimeSpan?)null;
                     var text = causalityEvent.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled

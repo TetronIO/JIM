@@ -1,4 +1,5 @@
-﻿@using JIM.Application.Servers
+﻿@using System.Globalization
+@using JIM.Application.Servers
 @using JIM.Models.Core
 @using JIM.Models.Interfaces
 @using JIM.Models.Logic
@@ -18,11 +19,11 @@
 
     <MudGrid Spacing="0">
         <MudItem xs="6">
-            <MudText Typo="Typo.overline"><span class="mud-text-secondary">CRITERIA GROUP. LOGIC TYPE:</span> @SyncRuleScopingCriteriaGroup.Type.ToString().SplitOnCapitalLetters().ToUpper()</MudText>
+            <MudText Typo="Typo.overline"><span class="mud-text-secondary">@SyncRuleText.ScopingGroupLogicType</span> @SyncRuleScopingCriteriaGroup.Type.ForDisplay().ToUpper()</MudText>
         </MudItem>
         <MudItem xs="6" Class="d-flex align-center justify-end">
-            <MudTooltip Text="Delete group" Arrow="true" Placement="Placement.Top">
-                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" DropShadow="false" aria-label="delete" OnClick="@(() => HandleScopingCriteriaGroupDeleteClick(SyncRuleScopingCriteriaGroup))"></MudIconButton>
+            <MudTooltip Text="@SyncRuleText.ScopingDeleteGroup" Arrow="true" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" DropShadow="false" aria-label="@SyncRuleText.ScopingDeleteAria" OnClick="@(() => HandleScopingCriteriaGroupDeleteClick(SyncRuleScopingCriteriaGroup))"></MudIconButton>
             </MudTooltip>
         </MudItem>
     </MudGrid>
@@ -31,16 +32,16 @@
                Variant="Variant.Filled"
                Class="me-3"
                OnClick="HandleOpenAddCriteriaGroupDialog"
-               DropShadow="false">Add Criteria Group</MudButton>
+               DropShadow="false">@SyncRuleText.ScopeAddCriteriaGroup</MudButton>
 
     <MudButton StartIcon="@Icons.Material.Filled.Add"
                Variant="Variant.Filled"
                OnClick="HandleShowAddCriteriaDialogButtonClick"
-               DropShadow="false">Add Criteria</MudButton>
+               DropShadow="false">@SyncRuleText.ScopingAddCriteria</MudButton>
 
     @if (SyncRuleScopingCriteriaGroup.ChildGroups.Count == 0 && SyncRuleScopingCriteriaGroup.Criteria.Count == 0)
     {
-        <MudAlert Severity="Severity.Info" Class="mt-5">Add your first criteria...</MudAlert>
+        <MudAlert Severity="Severity.Info" Class="mt-5">@SyncRuleText.ScopingAddFirstCriteria</MudAlert>
     }
 
     @foreach (var criteria in SyncRuleScopingCriteriaGroup.Criteria)
@@ -51,8 +52,8 @@
                 @* A connection criterion (#2021): whether the identity is joined to an object of the type, read as a sentence *@
                 var connectedType = criteria.ConnectedObjectType;
                 <MudChip T="string">@ConnectionOperatorLabel(criteria.ComparisonType)</MudChip>
-                <MudChip T="string" data-testid="jim-scoping-criterion-connection-type">@(connectedType?.Name ?? $"Object Type {criteria.ConnectedObjectTypeId}")</MudChip>
-                <span class="mx-1">in</span>
+                <MudChip T="string" data-testid="jim-scoping-criterion-connection-type">@(connectedType?.Name ?? string.Format(CultureInfo.CurrentCulture, SyncRuleText.ScopingObjectTypeFallback, criteria.ConnectedObjectTypeId))</MudChip>
+                <span class="mx-1">@SyncRuleText.ScopingConnectionIn</span>
                 <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@connectedType?.ConnectedSystem?.Name"
                             Href="@(connectedType != null ? $"/admin/connected-systems/{connectedType.ConnectedSystemId}" : null)" />
             }
@@ -61,7 +62,7 @@
                 @if (criteria.IsExpression)
                 {
                     <AttributeChip Kind="AttributeChipKind.Expression" Expression="@criteria.Expression"
-                                   Tooltip="@($"Expression, compared as {criteria.CompareAs?.ToString().SplitOnCapitalLetters()}")" />
+                                   Tooltip="@string.Format(CultureInfo.CurrentCulture, SyncRuleText.ScopingExpressionComparedAs, criteria.CompareAs?.ForDisplay())" />
                 }
                 else
                 {
@@ -74,12 +75,12 @@
                     <MudChip T="string">@criteria.ToString()</MudChip>
                 }
             }
-            <MudTooltip Text="Delete criteria" Arrow="true" Placement="Placement.Top">
+            <MudTooltip Text="@SyncRuleText.ScopingDeleteCriteria" Arrow="true" Placement="Placement.Top">
                 <MudIconButton
                     Icon="@Icons.Material.Outlined.Delete"
                     Size="Size.Small"
                     DropShadow="false"
-                    aria-label="delete"
+                    aria-label="@SyncRuleText.ScopingDeleteAria"
                     OnClick="@(() => HandleDeleteCriteria(criteria))"></MudIconButton>
             </MudTooltip>
         </div>
@@ -94,29 +95,30 @@
     <MudDialog @bind-Visible="_addCriteriaGroupDialogVisible" Options="_dialogOptions">
         <TitleContent>
             <MudText Typo="Typo.h6">
-                <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-3" /> Add Criteria Group
+                <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-3" /> @SyncRuleText.ScopeAddCriteriaGroup
             </MudText>
         </TitleContent>
         <DialogContent>
             <MudSelect T="string"
-                       Label="Please choose a group type"
+                       Label="@SyncRuleText.ScopeChooseGroupType"
                        Required="true"
                        Variant="Variant.Outlined"
+                       ToStringFunc="@(name => EnumDisplay.NameForDisplay<SearchGroupType>(name))"
                        @bind-Value="_criteriaGroupTypeText">
-                @foreach (var type in Enum.GetValues(typeof(SearchGroupType)))
+                @foreach (var type in Enum.GetValues<SearchGroupType>())
                 {
-                    <MudSelectItem Value="@type.ToString()" />
+                    <MudSelectItem Value="@type.ToString()">@type.ForDisplay()</MudSelectItem>
                 }
             </MudSelect>
         </DialogContent>
         <DialogActions>
             <MudButton DropShadow="false"
-                       OnClick="@(() => _addCriteriaGroupDialogVisible = false)" Class="me-2">Cancel</MudButton>
+                       OnClick="@(() => _addCriteriaGroupDialogVisible = false)" Class="me-2">@CommonText.Cancel</MudButton>
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        OnClick="HandleAddCriteriaGroupButtonClick"
                        Disabled="DisableAddCriteriaGroupFormButton()"
-                       DropShadow="false">Add Group</MudButton>
+                       DropShadow="false">@SyncRuleText.ScopeAddGroup</MudButton>
         </DialogActions>
     </MudDialog>
 
@@ -125,24 +127,24 @@
 <MudDialog @bind-Visible="_addCriteriaDialogVisible" Options="_dialogOptions">
     <TitleContent>
         <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.Compare" Class="mr-3" /> Add Criteria
+            <MudIcon Icon="@Icons.Material.Filled.Compare" Class="mr-3" /> @SyncRuleText.ScopingAddCriteria
         </MudText>
     </TitleContent>
     <DialogContent>
         @if (_newSyncRuleScopingCriteria != null)
         {
             <div class="d-flex align-center flex-wrap gap-3">
-                <MudText Typo="Typo.button" Class="mud-text-secondary">Compare</MudText>
+                <MudText Typo="Typo.button" Class="mud-text-secondary">@SyncRuleText.ScopingCompare</MudText>
                 <SegmentedToggle TValue="CriterionKind" Options="CompareOptions" Value="_kind" ValueChanged="SetKindAsync"
-                                 AriaLabel="Compare" TestId="jim-scoping-criterion-compare" />
+                                 AriaLabel="@SyncRuleText.ScopingCompare" TestId="jim-scoping-criterion-compare" />
             </div>
 
             @if (_kind == CriterionKind.Connection)
             {
                 <MudSelect T="int?" Value="_connectionSystemId" ValueChanged="SetConnectionSystemAsync"
-                           Label="Connected System"
-                           Placeholder="Please select a Connected System"
-                           HelperText="The system whose objects the identity must, or must not, be joined to"
+                           Label="@SyncRuleText.ScopingConnectedSystem"
+                           Placeholder="@SyncRuleText.ScopingSelectConnectedSystem"
+                           HelperText="@SyncRuleText.ScopingConnectedSystemHelp"
                            Required="true"
                            Class="mt-5"
                            Variant="Variant.Outlined"
@@ -154,8 +156,8 @@
                     }
                 </MudSelect>
                 <MudSelect T="int?" Value="_newSyncRuleScopingCriteria.ConnectedObjectTypeId" ValueChanged="SetConnectedObjectType"
-                           Label="Object Type"
-                           Placeholder="Please select an Object Type"
+                           Label="@SyncRuleText.ScopingObjectType"
+                           Placeholder="@SyncRuleText.ScopingSelectObjectType"
                            Required="true"
                            Disabled="@(_connectionSystemId == null)"
                            Class="mt-5"
@@ -171,7 +173,7 @@
             else if (_kind == CriterionKind.Expression)
             {
                 <ExpressionEditor @ref="_expressionEditor" @bind-Value="_newSyncRuleScopingCriteria.Expression"
-                                  Id="scoping-criterion-expression" Label="Expression" Required="true" Class="mt-5"
+                                  Id="scoping-criterion-expression" Label="@SyncRuleText.ScopingExpressionLabel" Required="true" Class="mt-5"
                                   Placeholder="@ExpressionPlaceholder" HelperText="@ExpressionHelperText"
                                   MetaverseAttributeNames="@(Exporting ? ScopedAttributeNames : null)"
                                   ConnectedSystemAttributeNames="@(Exporting ? null : ScopedAttributeNames)" />
@@ -185,14 +187,14 @@
                 </div>
                 <MudSelect T="AttributeDataType" Value="@(_newSyncRuleScopingCriteria.CompareAs ?? AttributeDataType.Text)"
                            ValueChanged="SetCompareAs"
-                           Label="Compare as"
-                           HelperText="The type the computed value is converted to before it is compared"
+                           Label="@SyncRuleText.ScopingCompareAs"
+                           HelperText="@SyncRuleText.ScopingCompareAsHelp"
                            Class="mt-5"
                            Variant="Variant.Outlined"
-                           ToStringFunc="@(t => t.ToString().SplitOnCapitalLetters())">
+                           ToStringFunc="@(t => t.ForDisplay())">
                     @foreach (var type in ScopingCriterionExpressionValidator.CompareAsTypes)
                     {
-                        <MudSelectItem Value="@type">@type.ToString().SplitOnCapitalLetters()</MudSelectItem>
+                        <MudSelectItem Value="@type">@type.ForDisplay()</MudSelectItem>
                     }
                 </MudSelect>
                 @if (ExpressionProblem() is { } problem)
@@ -205,8 +207,8 @@
                 <MudSelect T="MetaverseAttribute"
                            @bind-Value="_newSyncRuleScopingCriteria.MetaverseAttribute"
                            @bind-Value:after="HandleAttributeChanged"
-                           Label="Metaverse Attribute"
-                           Placeholder="Please select a Metaverse attribute"
+                           Label="@SyncRuleText.ScopingMetaverseAttribute"
+                           Placeholder="@SyncRuleText.ScopingSelectMetaverseAttribute"
                            Required="true"
                            Class="mt-5"
                            Variant="Variant.Outlined"
@@ -222,8 +224,8 @@
                 <MudSelect T="ConnectedSystemObjectTypeAttribute"
                            @bind-Value="_newSyncRuleScopingCriteria.ConnectedSystemAttribute"
                            @bind-Value:after="HandleAttributeChanged"
-                           Label="Connected System Attribute"
-                           Placeholder="Please select a Connected System attribute"
+                           Label="@SyncRuleText.ScopingConnectedSystemAttribute"
+                           Placeholder="@SyncRuleText.ScopingSelectConnectedSystemAttribute"
                            Required="true"
                            Class="mt-5"
                            Variant="Variant.Outlined">
@@ -237,8 +239,8 @@
         }
 
         <MudSelect T="SearchComparisonType?"
-                    Label="Comparison Type"
-                    Placeholder="Please select the type of comparison to make"
+                    Label="@SyncRuleText.ScopingComparisonType"
+                    Placeholder="@SyncRuleText.ScopingSelectComparisonType"
                     Required="true"
                     @bind-Value="NewScopingComparisonType"
                     Class="mt-5"
@@ -270,9 +272,9 @@
     </DialogContent>
     <DialogActions>
         <MudButton DropShadow="false"
-            OnClick="@(() => _addCriteriaDialogVisible = false)" Class="me-2">Cancel</MudButton>
+            OnClick="@(() => _addCriteriaDialogVisible = false)" Class="me-2">@CommonText.Cancel</MudButton>
         <MudButton Disabled="DisableAddCriteriaButton()" Variant="Variant.Filled" DropShadow="false"
-            Color="Color.Primary" OnClick="HandleAddCriteriaButtonClick">Add Criteria</MudButton>
+            Color="Color.Primary" OnClick="HandleAddCriteriaButtonClick">@SyncRuleText.ScopingAddCriteria</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -306,16 +308,17 @@
     private ExpressionEditor? _expressionEditor;
     private ScopingCriterionExpressionValidator? _expressionValidator;
 
-    private static readonly SegmentedToggleOption<CriterionKind> AttributeOption =
-        new(CriterionKind.Attribute, "Attribute", "jim-scoping-criterion-compare-attribute", Tooltip: "Compare the values an attribute holds");
+    // Built on each read, not held in static fields: the labels follow the reader's language, which a static would fix at first use.
+    private static SegmentedToggleOption<CriterionKind> AttributeOption =>
+        new(CriterionKind.Attribute, SyncRuleText.ScopingOptionAttribute, "jim-scoping-criterion-compare-attribute", Tooltip: SyncRuleText.ScopingOptionAttributeTooltip);
 
-    private static readonly SegmentedToggleOption<CriterionKind> ExpressionOption =
-        new(CriterionKind.Expression, "Expression", "jim-scoping-criterion-compare-expression",
-            Tooltip: "Compare a value worked out from the object, for values the source stores in a different shape");
+    private static SegmentedToggleOption<CriterionKind> ExpressionOption =>
+        new(CriterionKind.Expression, SyncRuleText.ScopingOptionExpression, "jim-scoping-criterion-compare-expression",
+            Tooltip: SyncRuleText.ScopingOptionExpressionTooltip);
 
-    private static readonly SegmentedToggleOption<CriterionKind> ConnectionOption =
-        new(CriterionKind.Connection, "Connection", "jim-scoping-criterion-compare-connection",
-            Tooltip: "Test whether the identity is joined to an object of a type in a Connected System");
+    private static SegmentedToggleOption<CriterionKind> ConnectionOption =>
+        new(CriterionKind.Connection, SyncRuleText.ScopingOptionConnection, "jim-scoping-criterion-compare-connection",
+            Tooltip: SyncRuleText.ScopingOptionConnectionTooltip);
 
     /// <summary>A connection is a Metaverse Object's, so only an export rule can test one.</summary>
     private IReadOnlyList<SegmentedToggleOption<CriterionKind>> CompareOptions => Exporting
@@ -323,15 +326,15 @@
         : [AttributeOption, ExpressionOption];
 
     private static string ConnectionOperatorLabel(SearchComparisonType comparisonType) =>
-        comparisonType == SearchComparisonType.HasNoValue ? "Has no" : "Has";
+        comparisonType == SearchComparisonType.HasNoValue ? SyncRuleText.ScopingConnectionHasNo : SyncRuleText.ScopingConnectionHas;
 
     private bool Exporting => SyncRule.Direction == SyncRuleDirection.Export;
 
-    private string ExpressionPlaceholder => Exporting ? "e.g. Lower(Trim(mv[\"Department\"]))" : "e.g. Lower(Trim(cs[\"department\"]))";
+    private string ExpressionPlaceholder => Exporting ? SyncRuleText.ScopingExpressionPlaceholderExport : SyncRuleText.ScopingExpressionPlaceholderImport;
 
     private string ExpressionHelperText => Exporting
-        ? "Reads the Metaverse Object only, as mv[\"Attribute Name\"]."
-        : "Reads the Connected System Object only, as cs[\"attributeName\"].";
+        ? SyncRuleText.ScopingExpressionHelpExport
+        : SyncRuleText.ScopingExpressionHelpImport;
 
     /// <summary>The Connected System attributes an expression can read: those JIM imports, never a credential.</summary>
     private IReadOnlyList<ConnectedSystemObjectTypeAttribute> SelectableConnectedSystemAttributes =>
@@ -514,7 +517,7 @@
             return null;
 
         _expressionValidator ??= new ScopingCriterionExpressionValidator(ExpressionEvaluator);
-        var objectTypeName = (Exporting ? SyncRule.MetaverseObjectType?.Name : SyncRule.ConnectedSystemObjectType?.Name) ?? "the scoped object type";
+        var objectTypeName = (Exporting ? SyncRule.MetaverseObjectType?.Name : SyncRule.ConnectedSystemObjectType?.Name) ?? SyncRuleText.ScopingScopedTypeFallback;
         return _expressionValidator.DescribeProblem(criterion, SyncRule.Direction, ScopedAttributeNames, objectTypeName);
     }
 
@@ -551,7 +554,7 @@
         var attributeType = GetSelectedAttributeType();
         return attributeType == null ||
                CriterionValidation.Validate(_newSyncRuleScopingCriteria, attributeType.Value, CriterionContext.Scoping,
-                   _newSyncRuleScopingCriteria.GetAttributeName() ?? "attribute") != null;
+                   _newSyncRuleScopingCriteria.GetAttributeName() ?? SyncRuleText.ScopingAttributeFallback) != null;
     }
 
     /// <summary>
