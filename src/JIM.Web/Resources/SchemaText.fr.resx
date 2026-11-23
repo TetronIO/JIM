@@ -1508,7 +1508,7 @@
   <data name="RemovedPartitionItOther" xml:space="preserve">
     <value>elles</value>
   </data>
-  <data name="RemovedPartitionThatOne" xml:space="preserve">
+  <data name="RemovedPartitionThatSingle" xml:space="preserve">
     <value>ce profil d’exécution</value>
   </data>
   <data name="RemovedPartitionThoseOther" xml:space="preserve">

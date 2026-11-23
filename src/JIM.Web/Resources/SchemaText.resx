@@ -2006,7 +2006,7 @@
     <value>them</value>
     <comment>Pronoun for several partitions.</comment>
   </data>
-  <data name="RemovedPartitionThatOne" xml:space="preserve">
+  <data name="RemovedPartitionThatSingle" xml:space="preserve">
     <value>that Run Profile</value>
     <comment>Reference to one Run Profile.</comment>
   </data>

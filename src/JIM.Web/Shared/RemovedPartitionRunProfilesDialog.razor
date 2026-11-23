@@ -16,7 +16,7 @@
                 RunProfileCountText,
                 PluralRules.Choose(RunProfiles.Count, SchemaText.RemovedPartitionTargetsOne, SchemaText.RemovedPartitionTargetsOther),
                 PluralRules.Choose(PartitionCount, SchemaText.RemovedPartitionItOne, SchemaText.RemovedPartitionItOther),
-                PluralRules.Choose(RunProfiles.Count, SchemaText.RemovedPartitionThatOne, SchemaText.RemovedPartitionThoseOther))
+                PluralRules.Choose(RunProfiles.Count, SchemaText.RemovedPartitionThatSingle, SchemaText.RemovedPartitionThoseOther))
         </MudText>
 
         <MudSimpleTable Dense="true" Outlined="true" Class="mb-4" data-testid="jim-removed-partition-run-profiles">
