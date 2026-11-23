@@ -1,0 +1,798 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="FailureWithCause" xml:space="preserve">
+    <value>{0} --&gt; {1}</value>
+    <comment>An error followed by the error that caused it. {0}: the error, {1}: its cause. Keep the arrow.</comment>
+  </data>
+  <data name="Verbatim" xml:space="preserve">
+    <value>{0}</value>
+    <comment>Text JIM did not write, shown as it is: an earlier warning stored as English only, or another system's own error. {0}: the text.</comment>
+  </data>
+  <data name="JoinedBySpace" xml:space="preserve">
+    <value>{0} {1}</value>
+    <comment>Two messages one after the other. Keep the space.</comment>
+  </data>
+  <data name="JoinedByComma" xml:space="preserve">
+    <value>{0}, {1}</value>
+    <comment>Two messages in a list. Keep the comma and the space.</comment>
+  </data>
+  <data name="RoleCreated" xml:space="preserve">
+    <value>Created Role '{0}'</value>
+    <comment>Activity summary. {0}: the Role's name.</comment>
+  </data>
+  <data name="RoleMemberAdded" xml:space="preserve">
+    <value>Added '{0}' to Role '{1}'</value>
+    <comment>Activity summary. {0}: who was added, {1}: the Role's name.</comment>
+  </data>
+  <data name="RoleMemberRemoved" xml:space="preserve">
+    <value>Removed '{0}' from Role '{1}'</value>
+    <comment>Activity summary. {0}: who was removed, {1}: the Role's name.</comment>
+  </data>
+  <data name="ApiKeyCreated" xml:space="preserve">
+    <value>Created API key '{0}'</value>
+    <comment>Activity summary. {0}: the API Key's name.</comment>
+  </data>
+  <data name="ApiKeyUpdated" xml:space="preserve">
+    <value>Updated API key '{0}'</value>
+    <comment>Activity summary. {0}: the API Key's name.</comment>
+  </data>
+  <data name="ApiKeyDeleted" xml:space="preserve">
+    <value>Deleted API key '{0}'</value>
+    <comment>Activity summary. {0}: the API Key's name.</comment>
+  </data>
+  <data name="PredefinedSearchUpdated" xml:space="preserve">
+    <value>Updated Predefined Search '{0}'</value>
+    <comment>Activity summary. {0}: the Predefined Search's name.</comment>
+  </data>
+  <data name="SearchCriteriaGroupAdded" xml:space="preserve">
+    <value>Added a criteria group to Predefined Search '{0}'</value>
+    <comment>Activity summary. {0}: the Predefined Search's name.</comment>
+  </data>
+  <data name="SearchCriteriaGroupUpdated" xml:space="preserve">
+    <value>Updated a criteria group on Predefined Search '{0}'</value>
+    <comment>Activity summary. {0}: the Predefined Search's name.</comment>
+  </data>
+  <data name="SearchCriteriaGroupDeleted" xml:space="preserve">
+    <value>Deleted a criteria group from Predefined Search '{0}'</value>
+    <comment>Activity summary. {0}: the Predefined Search's name.</comment>
+  </data>
+  <data name="SearchCriteriaGroupNotFound" xml:space="preserve">
+    <value>No criteria group found to delete on Predefined Search '{0}'</value>
+    <comment>Activity summary. {0}: the Predefined Search's name.</comment>
+  </data>
+  <data name="SearchCriterionAdded" xml:space="preserve">
+    <value>Added a criterion to Predefined Search '{0}'</value>
+    <comment>Activity summary. {0}: the Predefined Search's name.</comment>
+  </data>
+  <data name="SearchCriterionUpdated" xml:space="preserve">
+    <value>Updated a criterion on Predefined Search '{0}'</value>
+    <comment>Activity summary. {0}: the Predefined Search's name.</comment>
+  </data>
+  <data name="SearchCriterionDeleted" xml:space="preserve">
+    <value>Deleted a criterion from Predefined Search '{0}'</value>
+    <comment>Activity summary. {0}: the Predefined Search's name.</comment>
+  </data>
+  <data name="SearchCriterionNotFound" xml:space="preserve">
+    <value>No criterion found to delete on Predefined Search '{0}'</value>
+    <comment>Activity summary. {0}: the Predefined Search's name.</comment>
+  </data>
+  <data name="CertificateAdded" xml:space="preserve">
+    <value>Added trusted certificate '{0}' (Subject: {1})</value>
+    <comment>Activity summary. {0}: the name given, {1}: the certificate's subject.</comment>
+  </data>
+  <data name="CertificateAddedFromFile" xml:space="preserve">
+    <value>Added trusted certificate '{0}' from file (Subject: {1})</value>
+    <comment>Activity summary. {0}: the name given, {1}: the certificate's subject.</comment>
+  </data>
+  <data name="CertificateUpdated" xml:space="preserve">
+    <value>Updated trusted certificate: {0}</value>
+    <comment>Activity summary. {0}: the list of changes made.</comment>
+  </data>
+  <data name="CertificateUnchanged" xml:space="preserve">
+    <value>No changes made to trusted certificate</value>
+    <comment>Activity summary.</comment>
+  </data>
+  <data name="CertificateDeleted" xml:space="preserve">
+    <value>Deleted trusted certificate '{0}'</value>
+    <comment>Activity summary. {0}: the certificate's name.</comment>
+  </data>
+  <data name="InitialAdministratorRoleAssigned" xml:space="preserve">
+    <value>Assigned {0} role to initial administrator</value>
+    <comment>Activity summary. {0}: the name of the built-in Administrator Role.</comment>
+  </data>
+  <data name="InitialAdministratorCreated" xml:space="preserve">
+    <value>Created initial administrator '{0}'</value>
+    <comment>Activity summary. {0}: the administrator's name.</comment>
+  </data>
+  <data name="BuiltInConfigurationApplied" xml:space="preserve">
+    <value>Applied built-in configuration</value>
+    <comment>Activity summary of the start-up seeding.</comment>
+  </data>
+  <data name="SynchronisedDeprovisioningAbandoned" xml:space="preserve">
+    <value>A Synchronised Deprovisioning run was abandoned partway and the deletion completed immediately. The remaining contributed attribute values were kept without provenance (they can no longer be recalled), surviving contributors were not re-elected, and downstream systems were not corrected.</value>
+    <comment>Activity summary of a Connected System deleted while its Deprovisioning run was still going.</comment>
+  </data>
+  <data name="JoinedByLine" xml:space="preserve">
+    <value>{0}
+{1}</value>
+    <comment>Two messages, each on its own line. Keep the line break.</comment>
+  </data>
+  <data name="SchemaRefreshRemovalCompleted" xml:space="preserve">
+    <value>Marked {0} Connected System Object(s) Obsolete, removed {1} Pending Export(s) and deleted {2} stored attribute value(s).</value>
+    <comment>Activity summary of a schema refresh that removed Object Types or attributes. {0}: Connected System Objects marked Obsolete, {1}: Pending Exports removed, {2}: stored attribute values deleted.</comment>
+  </data>
+  <data name="ContainersAutoSelected" xml:space="preserve">
+    <value>Auto-selected {0} container(s) created during export</value>
+    <comment>Activity summary. {0}: how many Containers.</comment>
+  </data>
+  <data name="HierarchyAdded" xml:space="preserve">
+    <value>{0} added</value>
+    <comment>Part of a hierarchy refresh summary, in a comma-separated list. {0}: how many partitions and containers.</comment>
+  </data>
+  <data name="HierarchyRemoved" xml:space="preserve">
+    <value>{0} removed</value>
+    <comment>Part of a hierarchy refresh summary. {0}: how many partitions and containers.</comment>
+  </data>
+  <data name="HierarchyUpdated" xml:space="preserve">
+    <value>{0} updated</value>
+    <comment>Part of a hierarchy refresh summary. {0}: how many partitions and containers renamed or moved.</comment>
+  </data>
+  <data name="HierarchyPartitionsSelectedOne" xml:space="preserve">
+    <value>{0} partition selected</value>
+    <comment>Part of a hierarchy refresh summary.</comment>
+  </data>
+  <data name="HierarchyPartitionsSelectedOther" xml:space="preserve">
+    <value>{0} partitions selected</value>
+    <comment>Part of a hierarchy refresh summary.</comment>
+  </data>
+  <data name="HierarchyNoChanges" xml:space="preserve">
+    <value>No changes</value>
+    <comment>A hierarchy refresh summary when nothing changed.</comment>
+  </data>
+  <data name="ContributedValuesKept" xml:space="preserve">
+    <value>Contributed attribute values were kept: {0} value(s) across {1} Metaverse Object(s) remain in place with no Synchronisation Rule provenance.</value>
+    <comment>Activity summary of a Synchronisation Rule change that kept the values the rule had contributed. {0}: values kept, {1}: Metaverse Objects holding them.</comment>
+  </data>
+  <data name="ContributedValuesKeptForFlow" xml:space="preserve">
+    <value>Contributed attribute values were kept for the removed {0} Attribute Flow: {1} value(s) across {2} Metaverse Object(s) remain in place with no Synchronisation Rule provenance.</value>
+    <comment>Activity summary. {0}: the Metaverse Attribute the removed Attribute Flow targeted, {1}: values kept, {2}: Metaverse Objects holding them.</comment>
+  </data>
+  <data name="SyncRuleDeletionRecalled" xml:space="preserve">
+    <value>Recalled {0} attribute value(s) across {1} Metaverse Object(s): {2} re-elected to a surviving contributor, {3} cleared (no remaining contributor); {4} Pending Export(s) staged. The Synchronisation Rule has been deleted.</value>
+    <comment>Activity summary of a Synchronisation Rule deletion that recalled its values. {0}: values recalled, {1}: Metaverse Objects processed, {2}: attributes re-elected, {3}: attributes cleared, {4}: Pending Exports staged.</comment>
+  </data>
+  <data name="AllItemsFailed" xml:space="preserve">
+    <value>All Run Profile execution items experienced an error. Review the items for more information.</value>
+    <comment>Why a run failed: every item it processed errored.</comment>
+  </data>
+  <data name="UnhandledErrors" xml:space="preserve">
+    <value>{0} unhandled error(s) occurred during processing. Review the items for more information.</value>
+    <comment>Why a run completed with an error. {0}: how many unhandled errors.</comment>
+  </data>
+  <data name="PartitionCountOne" xml:space="preserve">
+    <value>{0} partition</value>
+    <comment>A number of partitions, as part of a longer sentence.</comment>
+  </data>
+  <data name="PartitionCountOther" xml:space="preserve">
+    <value>{0} partitions</value>
+    <comment>A number of partitions, as part of a longer sentence.</comment>
+  </data>
+  <data name="DeltaImportResetBoth" xml:space="preserve">
+    <value>Removed the Connected System's Delta Import watermark and those of {0}, so the next Delta Import reads every object, as a Full Import does.</value>
+    <comment>Activity summary of clearing a Connected System. {0}: a number of partitions.</comment>
+  </data>
+  <data name="DeltaImportResetSystem" xml:space="preserve">
+    <value>Removed the Connected System's Delta Import watermark, so the next Delta Import reads every object, as a Full Import does.</value>
+    <comment>Activity summary of clearing a Connected System.</comment>
+  </data>
+  <data name="DeltaImportResetPartitions" xml:space="preserve">
+    <value>Removed the Delta Import watermarks of {0}, so the next Delta Import reads every object in them, as a Full Import does.</value>
+    <comment>Activity summary of clearing a Connected System. {0}: a number of partitions.</comment>
+  </data>
+  <data name="ScopeReconciliationFullPass" xml:space="preserve">
+    <value>Evaluated {0} object(s) in full for {1} Synchronisation Rule(s) whose expression criteria compare against a relative date, which no stored value can narrow.</value>
+    <comment>Activity summary of a Temporal Scope Reconciliation sweep. {0}: objects evaluated, {1}: Synchronisation Rules.</comment>
+  </data>
+  <data name="ScopeReconciliationUndecidable" xml:space="preserve">
+    <value>Left {0} object(s) as they were because a scoping criterion could not be evaluated for them; the service log names each one and why.</value>
+    <comment>Activity summary of a Temporal Scope Reconciliation sweep. {0}: objects left as they were.</comment>
+  </data>
+  <data name="RetentionRemoved" xml:space="preserve">
+    <value>Removed {0}.</value>
+    <comment>Activity summary of the history retention clean-up. {0}: a list of what was removed, such as '12 Activities, 3 queued password changes'.</comment>
+  </data>
+  <data name="RetentionNothing" xml:space="preserve">
+    <value>Nothing had reached its retention period.</value>
+    <comment>Activity summary of the history retention clean-up when nothing was removed.</comment>
+  </data>
+  <data name="RetentionCsoChangesOne" xml:space="preserve">
+    <value>{0} Connected System Object change</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RetentionCsoChangesOther" xml:space="preserve">
+    <value>{0} Connected System Object changes</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RetentionMvoChangesOne" xml:space="preserve">
+    <value>{0} Metaverse Object change</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RetentionMvoChangesOther" xml:space="preserve">
+    <value>{0} Metaverse Object changes</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RetentionPreviewsOne" xml:space="preserve">
+    <value>{0} configuration change preview</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RetentionPreviewsOther" xml:space="preserve">
+    <value>{0} configuration change previews</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RetentionActivitiesOne" xml:space="preserve">
+    <value>{0} Activity</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RetentionActivitiesOther" xml:space="preserve">
+    <value>{0} Activities</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RetentionConfigurationActivitiesOne" xml:space="preserve">
+    <value>{0} configuration change Activity</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RetentionConfigurationActivitiesOther" xml:space="preserve">
+    <value>{0} configuration change Activities</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RetentionSecurityActivitiesOne" xml:space="preserve">
+    <value>{0} security event Activity</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RetentionSecurityActivitiesOther" xml:space="preserve">
+    <value>{0} security event Activities</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RetentionPasswordActivitiesOne" xml:space="preserve">
+    <value>{0} Password Synchronisation Activity</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RetentionPasswordActivitiesOther" xml:space="preserve">
+    <value>{0} Password Synchronisation Activities</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RetentionPasswordQueueOne" xml:space="preserve">
+    <value>{0} queued password change</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RetentionPasswordQueueOther" xml:space="preserve">
+    <value>{0} queued password changes</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RetentionExchangeQueueOne" xml:space="preserve">
+    <value>{0} queued Exchange change</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RetentionExchangeQueueOther" xml:space="preserve">
+    <value>{0} queued Exchange changes</value>
+    <comment>Part of the retention clean-up summary.</comment>
+  </data>
+  <data name="RunRefusal" xml:space="preserve">
+    <value>Run Profile '{0}' is disabled, so it cannot run. {1} {2}</value>
+    <comment>Why a run of a disabled Run Profile is refused. {0}: the Run Profile's name, {1}: why it is disabled, {2}: what to do.</comment>
+  </data>
+  <data name="DisabledPartitionRemoved" xml:space="preserve">
+    <value>A hierarchy refresh removed the partition it targeted, '{0}', because the Connected System no longer has it.</value>
+    <comment>Why a Run Profile is disabled. {0}: the partition's name.</comment>
+  </data>
+  <data name="DisabledByAdministrator" xml:space="preserve">
+    <value>An administrator disabled it.</value>
+    <comment>Why a Run Profile is disabled.</comment>
+  </data>
+  <data name="RemedyEnableChoosingPartition" xml:space="preserve">
+    <value>Enable it again, choosing the partition it reads, to run it.</value>
+    <comment>What to do about a disabled Run Profile whose partition was removed.</comment>
+  </data>
+  <data name="RemedyEnable" xml:space="preserve">
+    <value>Enable it again to run it.</value>
+    <comment>What to do about a disabled Run Profile.</comment>
+  </data>
+  <data name="ImportIncompleteRefusal" xml:space="preserve">
+    <value>Run Profile '{0}' cannot run: an import of Connected System '{1}' stopped part-way through saving what it read{2}, so the Connector Space holds only part of that import. Synchronising it now could remove Metaverse references to objects the import had not yet saved, and export those removals. {3}</value>
+    <comment>Why a synchronisation is refused. {0}: Run Profile, {1}: Connected System, {2}: when the import began writing (or nothing), {3}: what to do.</comment>
+  </data>
+  <data name="ImportIncompleteBeganWriting" xml:space="preserve">
+    <value> (it began writing on {0})</value>
+    <comment>Inserted in a longer sentence. {0}: a date and time in UTC. Keep the leading space.</comment>
+  </data>
+  <data name="ImportIncompleteRemedy" xml:space="preserve">
+    <value>Run a Full Import of this Connected System to completion{0}; synchronisation can run once one has.</value>
+    <comment>What to do about an incomplete import. {0}: nothing, or the partitions clause.</comment>
+  </data>
+  <data name="ImportIncompleteRemedyPartitions" xml:space="preserve">
+    <value>, reading all selected partitions (a Run Profile that targets one partition is not enough)</value>
+    <comment>Inserted in a longer sentence. Keep the leading comma.</comment>
+  </data>
+  <data name="ImportStillIncomplete" xml:space="preserve">
+    <value>An earlier import stopped part-way through saving what it read{0}, so synchronisation of this Connected System is refused. {1}, so it cannot repair that. {2}</value>
+    <comment>Warning on an import that could not clear the incomplete marker. {0}: when the earlier import began writing (or nothing), {1}: what this run read, {2}: what to do.</comment>
+  </data>
+  <data name="ImportStillIncompleteDelta" xml:space="preserve">
+    <value>This Delta Import read only what changed</value>
+    <comment>Start of a sentence completed by the previous key's text.</comment>
+  </data>
+  <data name="ImportStillIncompleteOnePartition" xml:space="preserve">
+    <value>This import read only one partition</value>
+    <comment>Start of a sentence.</comment>
+  </data>
+  <data name="ImportStillIncompleteNoObjects" xml:space="preserve">
+    <value>This import read no objects</value>
+    <comment>Start of a sentence.</comment>
+  </data>
+  <data name="AuxiliaryClassDiscoveryCompleted" xml:space="preserve">
+    <value>Read {0} object(s) and found {1} auxiliary class suggestion(s).</value>
+    <comment>Activity summary of an auxiliary class discovery. {0}: objects read, {1}: suggestions.</comment>
+  </data>
+  <data name="ImportCreated" xml:space="preserve">
+    <value>{0} created</value>
+    <comment>Part of an import's summary, in a comma-separated list. {0}: a count.</comment>
+  </data>
+  <data name="ImportUpdated" xml:space="preserve">
+    <value>{0} updated</value>
+    <comment>Part of an import's summary.</comment>
+  </data>
+  <data name="ImportUnchanged" xml:space="preserve">
+    <value>{0} unchanged</value>
+    <comment>Part of an import's summary.</comment>
+  </data>
+  <data name="ImportDeleted" xml:space="preserve">
+    <value>{0} deleted</value>
+    <comment>Part of an import's summary.</comment>
+  </data>
+  <data name="ImportWithheldOne" xml:space="preserve">
+    <value>{0} deletion withheld</value>
+    <comment>Part of an import's summary.</comment>
+  </data>
+  <data name="ImportWithheldOther" xml:space="preserve">
+    <value>{0} deletions withheld</value>
+    <comment>Part of an import's summary.</comment>
+  </data>
+  <data name="ImportErrorsOne" xml:space="preserve">
+    <value>{0} error</value>
+    <comment>Part of an import's summary.</comment>
+  </data>
+  <data name="ImportErrorsOther" xml:space="preserve">
+    <value>{0} errors</value>
+    <comment>Part of an import's summary.</comment>
+  </data>
+  <data name="ImportDetectedDeletions" xml:space="preserve">
+    <value>; {0} no longer found and marked as deleted</value>
+    <comment>End of an import's summary. {0}: a count. Keep the leading separator.</comment>
+  </data>
+  <data name="ImportCompleteOne" xml:space="preserve">
+    <value>Import complete: {0} object ({1}){2}{3}</value>
+    <comment>An import's summary. {0}: objects read, {1}: the breakdown, {2}: how long it took (already worded), {3}: the detected deletions or nothing.</comment>
+  </data>
+  <data name="ImportCompleteOther" xml:space="preserve">
+    <value>Import complete: {0} objects ({1}){2}{3}</value>
+    <comment>An import's summary. {0}: objects read, {1}: the breakdown, {2}: how long it took (already worded), {3}: the detected deletions or nothing.</comment>
+  </data>
+  <data name="LimitBoth" xml:space="preserve">
+    <value>limits of {0} and {1}%</value>
+    <comment>Which Run Profile deletion limits were exceeded, inside a sentence. {0}: a count, {1}: a percentage.</comment>
+  </data>
+  <data name="LimitCount" xml:space="preserve">
+    <value>limit of {0}</value>
+    <comment>Which Run Profile deletion limit was exceeded, inside a sentence.</comment>
+  </data>
+  <data name="LimitPercent" xml:space="preserve">
+    <value>limit of {0}%</value>
+    <comment>Which Run Profile deletion limit was exceeded, inside a sentence.</comment>
+  </data>
+  <data name="LimitConfigured" xml:space="preserve">
+    <value>configured limit</value>
+    <comment>Which Run Profile deletion limit was exceeded, inside a sentence.</comment>
+  </data>
+  <data name="DeletionDetectionNextDelta" xml:space="preserve">
+    <value>or raise the limit. Each Delta Import will read every object and check again until this is resolved.</value>
+    <comment>End of a sentence about refused deletion detection.</comment>
+  </data>
+  <data name="DeletionDetectionNextFull" xml:space="preserve">
+    <value>or raise the limit, then run the Full Import again.</value>
+    <comment>End of a sentence about refused deletion detection.</comment>
+  </data>
+  <data name="DeletionDetectionRefusedOne" xml:space="preserve">
+    <value>Deletion detection found {0} object ({1}% of {2}) no longer in the Connected System, above this Run Profile's {3}; none were marked as deleted. Check the Connected System's scope and the connector's filters, {4}</value>
+    <comment>A Warning on an import. {0}: objects, {1}: their share of the scope, {2}: objects in scope, {3}: the limit or limits exceeded (such as 'limit of 500'), {4}: what to do.</comment>
+  </data>
+  <data name="DeletionDetectionRefusedOther" xml:space="preserve">
+    <value>Deletion detection found {0} objects ({1}% of {2}) no longer in the Connected System, above this Run Profile's {3}; none were marked as deleted. Check the Connected System's scope and the connector's filters, {4}</value>
+    <comment>A Warning on an import. {0}: objects, {1}: their share of the scope, {2}: objects in scope, {3}: the limit or limits exceeded, {4}: what to do. French: {3} carries its own article.</comment>
+  </data>
+  <data name="DeletesWithheldOne" xml:space="preserve">
+    <value>The Connected System reported {0} object ({1}% of {2}) as deleted, above this Run Profile's {3}; none were marked as deleted. Each Delta Import will report them again until this is resolved. Check what deleted them in the Connected System. If the deletions are intended, raise the limit, or run a Delta Import Run Profile without these limits to let them through.</value>
+    <comment>A Warning on a Delta Import. {0}: objects, {1}: their share of the scope, {2}: objects in scope, {3}: the limit or limits exceeded.</comment>
+  </data>
+  <data name="DeletesWithheldOther" xml:space="preserve">
+    <value>The Connected System reported {0} objects ({1}% of {2}) as deleted, above this Run Profile's {3}; none were marked as deleted. Each Delta Import will report them again until this is resolved. Check what deleted them in the Connected System. If the deletions are intended, raise the limit, or run a Delta Import Run Profile without these limits to let them through.</value>
+    <comment>A Warning on a Delta Import. {0}: objects, {1}: their share of the scope, {2}: objects in scope, {3}: the limit or limits exceeded.</comment>
+  </data>
+  <data name="DeselectedBecauseOne" xml:space="preserve">
+    <value>an enabled Synchronisation Rule still manages it: {1}.</value>
+    <comment>Inside a sentence. {0}: how many rules (not shown in the singular), {1}: their names.</comment>
+  </data>
+  <data name="DeselectedBecauseOther" xml:space="preserve">
+    <value>{0} enabled Synchronisation Rules still manage it: {1}.</value>
+    <comment>Inside a sentence. {0}: how many rules, {1}: their names.</comment>
+  </data>
+  <data name="DeselectedDisableOne" xml:space="preserve">
+    <value>that Synchronisation Rule</value>
+    <comment>Inside a sentence.</comment>
+  </data>
+  <data name="DeselectedDisableOther" xml:space="preserve">
+    <value>those Synchronisation Rules</value>
+    <comment>Inside a sentence.</comment>
+  </data>
+  <data name="DeselectedHeldBack" xml:space="preserve">
+    <value>Object Type '{0}' is deselected, but its objects were not checked for deletion because {1} They stay joined and are no longer refreshed. Disable {2} to take the Object Type out of management, or select the Object Type again.</value>
+    <comment>A Warning on an import. {0}: the Object Type's name, {1}: why, {2}: which rules to disable.</comment>
+  </data>
+  <data name="UnresolvedOnAttribute" xml:space="preserve">
+    <value>{0} on {1}</value>
+    <comment>One part of a breakdown of unresolved references. {0}: a count, {1}: an attribute name.</comment>
+  </data>
+  <data name="UnresolvedMissingOne" xml:space="preserve">
+    <value>{0} matches no Connected System Object, for example {1}.</value>
+    <comment>Part of an error on an object. {0}: how many references, {1}: an example value.</comment>
+  </data>
+  <data name="UnresolvedMissingOther" xml:space="preserve">
+    <value>{0} match no Connected System Object, for example {1}.</value>
+    <comment>Part of an error on an object. {0}: how many references, {1}: an example value.</comment>
+  </data>
+  <data name="UnresolvedExample" xml:space="preserve">
+    <value>For example: {0}.</value>
+    <comment>Part of an error on an object. {0}: an example value.</comment>
+  </data>
+  <data name="UnresolvedAmbiguousAll" xml:space="preserve">
+    <value>Each matches objects of more than one Object Type ({0}) on an attribute that does not declare which Object Type it references.</value>
+    <comment>Part of an error on an object. {0}: the Object Type names.</comment>
+  </data>
+  <data name="UnresolvedAmbiguousSomeOne" xml:space="preserve">
+    <value>{0} matches objects of more than one Object Type ({1}) on an attribute that does not declare which Object Type it references.</value>
+    <comment>Part of an error on an object. {0}: how many references, {1}: the Object Type names.</comment>
+  </data>
+  <data name="UnresolvedAmbiguousSomeOther" xml:space="preserve">
+    <value>{0} match objects of more than one Object Type ({1}) on an attribute that does not declare which Object Type it references.</value>
+    <comment>Part of an error on an object. {0}: how many references, {1}: the Object Type names.</comment>
+  </data>
+  <data name="UnresolvedSingleMissing" xml:space="preserve">
+    <value>Couldn't resolve a reference on {0} to a Connected System Object: {1}. {2}</value>
+    <comment>An error on an object. {0}: the attribute, {1}: the value, {2}: what to do.</comment>
+  </data>
+  <data name="UnresolvedSingleAmbiguous" xml:space="preserve">
+    <value>A reference value ({0}) matches objects of more than one Object Type ({1}), and attribute '{2}' does not declare which Object Type it references, so the reference cannot be resolved. {3}</value>
+    <comment>An error on an object. {0}: the value, {1}: the Object Type names, {2}: the attribute, {3}: what to do.</comment>
+  </data>
+  <data name="UnresolvedMany" xml:space="preserve">
+    <value>Couldn't resolve {0} references to Connected System Objects ({1}).</value>
+    <comment>Start of an error on an object. {0}: a count, {1}: the breakdown by attribute.</comment>
+  </data>
+  <data name="UnresolvedListsEvery" xml:space="preserve">
+    <value>The Connected System Object lists every unresolved value.</value>
+    <comment>End of an error on an object.</comment>
+  </data>
+  <data name="UnresolvedScopeRemedyOne" xml:space="preserve">
+    <value>Make sure that Container Scope for the Connected System includes the location of the referenced object, and that no Container excludes it.</value>
+    <comment>What to do about an unresolved reference.</comment>
+  </data>
+  <data name="UnresolvedScopeRemedyOther" xml:space="preserve">
+    <value>Make sure that Container Scope for the Connected System includes the locations of the referenced objects, and that no Container excludes them.</value>
+    <comment>What to do about unresolved references.</comment>
+  </data>
+  <data name="UnresolvedSchemaRemedy" xml:space="preserve">
+    <value>Declare the reference's target Object Type in the Connected System's schema configuration if the Connector supports doing so.</value>
+    <comment>What to do about an ambiguous reference.</comment>
+  </data>
+  <data name="VerbImport" xml:space="preserve">
+    <value>import</value>
+    <comment>A verb inside a sentence: 'Couldn't import a value'. French: the infinitive.</comment>
+  </data>
+  <data name="VerbRead" xml:space="preserve">
+    <value>read</value>
+    <comment>A verb inside a sentence: 'Couldn't read a value'. French: the infinitive.</comment>
+  </data>
+  <data name="UnreadableValuesMany" xml:space="preserve">
+    <value>Couldn't {0} {1} values ({2}), so JIM left those attributes as it already held them.</value>
+    <comment>Start of an error on an object. {0}: a verb (import or read), {1}: a count, {2}: the breakdown by attribute.</comment>
+  </data>
+  <data name="UnreadableAndMore" xml:space="preserve">
+    <value>And {0} more.</value>
+    <comment>An error on an object. {0}: a count.</comment>
+  </data>
+  <data name="UnreadableCorrectMany" xml:space="preserve">
+    <value>Correct the values in the Connected System, then run the import again.</value>
+    <comment>End of an error on an object.</comment>
+  </data>
+  <data name="ExternalIdsNextDelta" xml:space="preserve">
+    <value>Correct the External IDs in the Connected System. Each Delta Import will read every object and check again until they can be read.</value>
+    <comment>What to do about External IDs that cannot be read.</comment>
+  </data>
+  <data name="ExternalIdsNextFull" xml:space="preserve">
+    <value>Correct the External IDs in the Connected System, then run the Full Import again.</value>
+    <comment>What to do about External IDs that cannot be read.</comment>
+  </data>
+  <data name="ObjectsCountOne" xml:space="preserve">
+    <value>{0} object</value>
+    <comment>A count of objects inside a sentence.</comment>
+  </data>
+  <data name="ObjectsCountOther" xml:space="preserve">
+    <value>{0} objects</value>
+    <comment>A count of objects inside a sentence.</comment>
+  </data>
+  <data name="ExternalIdsUnreadable" xml:space="preserve">
+    <value>Object Type '{0}' was not checked for deleted objects, because the External ID of {1} could not be read and JIM could not tell which objects they were. None of its objects were marked as deleted. {2}</value>
+    <comment>A Warning on an import. {0}: the Object Type, {1}: a count of objects, {2}: what to do.</comment>
+  </data>
+  <data name="ExternalIdsMissingOne" xml:space="preserve">
+    <value>Object Type '{0}' was not checked for deleted objects, because 1 object arrived with no External ID and JIM could not tell which object it was. None of its objects were marked as deleted. {1}</value>
+    <comment>A Warning on an import. {0}: the Object Type, {1}: what to do.</comment>
+  </data>
+  <data name="ExternalIdsMissingOther" xml:space="preserve">
+    <value>Object Type '{0}' was not checked for deleted objects, because {2} objects arrived with no External ID and JIM could not tell which objects they were. None of its objects were marked as deleted. {1}</value>
+    <comment>A Warning on an import. {0}: the Object Type, {1}: what to do, {2}: a count.</comment>
+  </data>
+  <data name="ExternalIdsMissingNextDeltaOne" xml:space="preserve">
+    <value>Give it an External ID in the Connected System. Each Delta Import will read every object and check again until every object has one.</value>
+    <comment>What to do about an object with no External ID.</comment>
+  </data>
+  <data name="ExternalIdsMissingNextDeltaOther" xml:space="preserve">
+    <value>Give them External IDs in the Connected System. Each Delta Import will read every object and check again until every object has one.</value>
+    <comment>What to do about objects with no External ID.</comment>
+  </data>
+  <data name="ExternalIdsMissingNextFullOne" xml:space="preserve">
+    <value>Give it an External ID in the Connected System, then run the Full Import again.</value>
+    <comment>What to do about an object with no External ID.</comment>
+  </data>
+  <data name="ExternalIdsMissingNextFullOther" xml:space="preserve">
+    <value>Give them External IDs in the Connected System, then run the Full Import again.</value>
+    <comment>What to do about objects with no External ID.</comment>
+  </data>
+  <data name="ExternalIdMissing" xml:space="preserve">
+    <value>The object has no value for its External ID attribute '{0}', so JIM cannot tell which object it is, and it was not imported. Give it a value in the Connected System, then run the import again.</value>
+    <comment>An error on an object. {0}: the External ID attribute's name.</comment>
+  </data>
+  <data name="AmbiguousReferencesWarning" xml:space="preserve">
+    <value>{0} reference value(s) matched objects of more than one Object Type and could not be resolved. Declare each Reference attribute's target Object Type in the Connected System's schema configuration if the Connector supports doing so.</value>
+    <comment>A Warning on an import. {0}: a count.</comment>
+  </data>
+  <data name="UnresolvedReferencesWarning" xml:space="preserve">
+    <value>{0} reference value(s) could not be resolved to Connected System Objects. The referenced objects may be outside the configured Container Scope, or inside a Container it excludes. View the affected Connected System Objects for details.</value>
+    <comment>A Warning on an import. {0}: a count.</comment>
+  </data>
+  <data name="ThroughputCompletion" xml:space="preserve">
+    <value> in {0} (avg {1} obj/s)</value>
+    <comment>The end of a run's summary. {0}: how long it took (such as '3 min 12 sec'), {1}: the average objects per second. Keep the leading space.</comment>
+  </data>
+  <data name="DurationSeconds" xml:space="preserve">
+    <value>{0} sec</value>
+    <comment>How long a run took.</comment>
+  </data>
+  <data name="DurationMinutesSeconds" xml:space="preserve">
+    <value>{0} min {1} sec</value>
+    <comment>How long a run took.</comment>
+  </data>
+  <data name="DurationMinutes" xml:space="preserve">
+    <value>{0} min</value>
+    <comment>How long a run took.</comment>
+  </data>
+  <data name="DurationHoursMinutes" xml:space="preserve">
+    <value>{0} hr {1} min</value>
+    <comment>How long a run took.</comment>
+  </data>
+  <data name="DurationHours" xml:space="preserve">
+    <value>{0} hr</value>
+    <comment>How long a run took.</comment>
+  </data>
+  <data name="SyncComplete" xml:space="preserve">
+    <value>Sync complete: {0} objects{1}</value>
+    <comment>A synchronisation's summary. {0}: objects processed, {1}: how long it took (already worded) or nothing.</comment>
+  </data>
+  <data name="NoChangesToProcess" xml:space="preserve">
+    <value>No changes to process</value>
+    <comment>A run's outcome when there was nothing to do.</comment>
+  </data>
+  <data name="NoExportsToProcess" xml:space="preserve">
+    <value>No exports to process</value>
+    <comment>An export's outcome when there was nothing to do.</comment>
+  </data>
+  <data name="ExportCancelledBeforeStart" xml:space="preserve">
+    <value>Cancelled before export</value>
+    <comment>An export's outcome when it was cancelled before it began.</comment>
+  </data>
+  <data name="ExportCancelled" xml:space="preserve">
+    <value>Export cancelled</value>
+    <comment>An export's outcome when it was cancelled.</comment>
+  </data>
+  <data name="ExportComplete" xml:space="preserve">
+    <value>Export complete: {0} succeeded, {1} failed, {2} deferred{3}</value>
+    <comment>An export's summary. {0}: succeeded, {1}: failed, {2}: deferred, {3}: how long it took (already worded) or nothing.</comment>
+  </data>
+  <data name="ExportCompleteWithPartial" xml:space="preserve">
+    <value>Export complete: {0} succeeded ({1} written in part, awaiting references), {2} failed, {3} deferred{4}</value>
+    <comment>An export's summary. {0}: succeeded, {1}: written in part, {2}: failed, {3}: deferred, {4}: how long it took or nothing.</comment>
+  </data>
+  <data name="PreviewComplete" xml:space="preserve">
+    <value>Preview complete: {0} export(s) would be processed</value>
+    <comment>A preview's summary. {0}: a count.</comment>
+  </data>
+  <data name="ConnectorDoesNotSupportExport" xml:space="preserve">
+    <value>Connector {0} does not support export operations</value>
+    <comment>Why an export failed. {0}: the Connector's name.</comment>
+  </data>
+  <data name="ExportFailedAfterAttempts" xml:space="preserve">
+    <value>Export failed after {0} attempts: {1}</value>
+    <comment>An error on an object. {0}: attempts, {1}: what the connected system said.</comment>
+  </data>
+  <data name="ExportFailed" xml:space="preserve">
+    <value>Export failed: {0}</value>
+    <comment>An error on an object. {0}: what the connected system said.</comment>
+  </data>
+  <data name="ExportWithheldCreatesOne" xml:space="preserve">
+    <value>Max creates is {0}, but 1 create was pending, so it was not attempted and remains pending. Check what staged it, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit.</value>
+    <comment>A Warning on an export. {0}: the limit.</comment>
+  </data>
+  <data name="ExportWithheldCreatesOther" xml:space="preserve">
+    <value>Max creates is {0}, but {1} creates were pending, so none were attempted and all {1} remain pending. Check what staged them, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit.</value>
+    <comment>A Warning on an export. {0}: the limit, {1}: how many were pending.</comment>
+  </data>
+  <data name="ExportWithheldUpdatesOne" xml:space="preserve">
+    <value>Max updates is {0}, but 1 update was pending, so it was not attempted and remains pending. Check what staged it, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit.</value>
+    <comment>A Warning on an export. {0}: the limit.</comment>
+  </data>
+  <data name="ExportWithheldUpdatesOther" xml:space="preserve">
+    <value>Max updates is {0}, but {1} updates were pending, so none were attempted and all {1} remain pending. Check what staged them, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit.</value>
+    <comment>A Warning on an export. {0}: the limit, {1}: how many were pending.</comment>
+  </data>
+  <data name="ExportWithheldDeletesOne" xml:space="preserve">
+    <value>Max deletes is {0}, but 1 delete or disable was pending, so it was not attempted and remains pending. Check what staged it, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit.</value>
+    <comment>A Warning on an export. {0}: the limit.</comment>
+  </data>
+  <data name="ExportWithheldDeletesOther" xml:space="preserve">
+    <value>Max deletes is {0}, but {1} deletes and disables were pending, so none were attempted and all {1} remain pending. Check what staged them, then raise or clear the limit on this Run Profile, or run an Export Run Profile without the limit.</value>
+    <comment>A Warning on an export. {0}: the limit, {1}: how many were pending.</comment>
+  </data>
+  <data name="ExportWithdrawnOne" xml:space="preserve">
+    <value>1 queued change was withdrawn instead of exported, because no enabled Synchronisation Rule or Attribute Flow authorised it any more, or the object was no longer joined{1}</value>
+    <comment>A Warning on an export. {1}: how the sentence ends (a full stop, or a clause about Pending Exports removed).</comment>
+  </data>
+  <data name="ExportWithdrawnOther" xml:space="preserve">
+    <value>{0} queued changes were withdrawn instead of exported, because no enabled Synchronisation Rule or Attribute Flow authorised them any more, or the object was no longer joined{1}</value>
+    <comment>A Warning on an export. {0}: how many, {1}: how the sentence ends.</comment>
+  </data>
+  <data name="ExportWithdrawnEnd" xml:space="preserve">
+    <value>.</value>
+    <comment>The end of a sentence.</comment>
+  </data>
+  <data name="ExportWithdrawnRemovalOne" xml:space="preserve">
+    <value>; 1 Pending Export left empty was removed.</value>
+    <comment>The end of a sentence.</comment>
+  </data>
+  <data name="ExportWithdrawnRemovalOther" xml:space="preserve">
+    <value>; {0} Pending Exports left empty were removed.</value>
+    <comment>The end of a sentence. {0}: how many.</comment>
+  </data>
+  <data name="ExportUnrecordedOne" xml:space="preserve">
+    <value>1 export was written, but JIM could not record the values it wrote, so it was left unconfirmed and the next export run will send it again. The service log names the cause.</value>
+    <comment>A Warning on an export.</comment>
+  </data>
+  <data name="ExportUnrecordedOther" xml:space="preserve">
+    <value>{0} exports were written, but JIM could not record the values they wrote, so they were left unconfirmed and the next export run will send them again. The service log names the cause.</value>
+    <comment>A Warning on an export. {0}: how many.</comment>
+  </data>
+  <data name="InitialPasswordsNotStagedOne" xml:space="preserve">
+    <value>1 newly provisioned account may be owed an Initial Password that JIM could not record, so none will be delivered to it, and exporting again will not queue one. Set its password with the set-password action on its Connected System Object; the service log names the account and the cause.</value>
+    <comment>A Warning on an export.</comment>
+  </data>
+  <data name="InitialPasswordsNotStagedOther" xml:space="preserve">
+    <value>{0} newly provisioned accounts may be owed an Initial Password that JIM could not record, so none will be delivered to them, and exporting again will not queue one. Set each one's password with the set-password action on its Connected System Object; the service log names the accounts and the cause.</value>
+    <comment>A Warning on an export. {0}: how many.</comment>
+  </data>
+  <data name="ExchangeChangesNotStagedOne" xml:space="preserve">
+    <value>1 exported object declares Exchange recipient state that JIM could not queue or report, so nothing will reach Exchange for it until its declared state is exported again. The service log names the object and the cause.</value>
+    <comment>A Warning on an export.</comment>
+  </data>
+  <data name="ExchangeChangesNotStagedOther" xml:space="preserve">
+    <value>{0} exported objects declare Exchange recipient state that JIM could not queue or report, so nothing will reach Exchange for them until their declared state is exported again. The service log names the objects and the cause.</value>
+    <comment>A Warning on an export. {0}: how many.</comment>
+  </data>
+  <data name="PartitionsNotRecordedOne" xml:space="preserve">
+    <value>1 object an export created or renamed was written, but JIM could not record which partition it is in, so a partition-targeted import cannot see it there until the next import that reads it records where it is. The service log names the object and the cause.</value>
+    <comment>A Warning on an export.</comment>
+  </data>
+  <data name="PartitionsNotRecordedOther" xml:space="preserve">
+    <value>{0} objects an export created or renamed were written, but JIM could not record which partition they are in, so a partition-targeted import cannot see them there until the next import that reads them records where they are. The service log names the objects and the cause.</value>
+    <comment>A Warning on an export. {0}: how many.</comment>
+  </data>
+  <data name="InitialPasswordMarkingFailedOne" xml:space="preserve">
+    <value>1 account had its enabled state written by this export, but JIM could not check whether an Initial Password is still owed to it. If one is, delivering it may follow its Synchronisation Rule rather than the Attribute Flow; the service log names the account, and Operations &gt; Passwords shows whether a password is waiting for it.</value>
+    <comment>A Warning on an export.</comment>
+  </data>
+  <data name="InitialPasswordMarkingFailedOther" xml:space="preserve">
+    <value>{0} accounts had their enabled state written by this export, but JIM could not check whether an Initial Password is still owed to any of them. Where one is, delivering it may follow its Synchronisation Rule rather than the Attribute Flow; the service log names the accounts, and Operations &gt; Passwords shows which have a password waiting.</value>
+    <comment>A Warning on an export. {0}: how many.</comment>
+  </data>
+  <data name="UnresolvableReferencesWarning" xml:space="preserve">
+    <value>{0} reference value(s) could not be written because the referenced Metaverse Object has no Connected System Object in this Connected System. The referenced objects are out of scope for every Synchronisation Rule into this system, or have not been provisioned yet; view the affected Pending Exports for details.</value>
+    <comment>A Warning on an export. {0}: a count.</comment>
+  </data>
+  <data name="UnreadableSingleValue" xml:space="preserve">
+    <value>Couldn't {0} a value of {1}{2}: {3} JIM left {1} as it already held it. Correct the value in the Connected System, then run the import again.</value>
+    <comment>An error on an object. {0}: a verb (import or read), {1}: the attribute, {2}: the value in quotes (or nothing), {3}: why, as a sentence.</comment>
+  </data>
+  <data name="WorkerTaskAbandoned" xml:space="preserve">
+    <value>Task was abandoned due to worker crash or restart. The task was in progress when the worker stopped responding. {0}This does not indicate a data integrity issue - the next sync run will process from the current state.</value>
+    <comment>Why a run failed. {0}: a sentence about memory, followed by a space, or nothing.</comment>
+  </data>
+  <data name="NotQueued" xml:space="preserve">
+    <value>Could not be queued: {0}</value>
+    <comment>Why a Schedule step did not start. {0}: the reason, as a sentence.</comment>
+  </data>
+  <data name="CleanupFailed" xml:space="preserve">
+    <value>Cleanup failed: {0}</value>
+    <comment>Why the history retention clean-up failed. {0}: what went wrong.</comment>
+  </data>
+  <data name="ConfigurationChangeNotRecorded" xml:space="preserve">
+    <value>The change was saved, but JIM could not record that the next synchronisation of {0} must process every {1} object, so it may not reach the objects that already exist. Run a Full Synchronisation of {0} to apply it.</value>
+    <comment>Why a configuration change's Activity failed. {0}: the Connected System, {1}: the Object Type.</comment>
+  </data>
+  <data name="StepNotRunEarlierStepStopped" xml:space="preserve">
+    <value>Not run: an earlier step stopped the Schedule.</value>
+    <comment>Why a Schedule step did not run.</comment>
+  </data>
+  <data name="StepNotRunScheduleCouldNotStart" xml:space="preserve">
+    <value>Not run: the Schedule could not start.</value>
+    <comment>Why a Schedule step did not run.</comment>
+  </data>
+  <data name="StepNotRunExecutionCancelled" xml:space="preserve">
+    <value>Not run: the Schedule Execution was cancelled.</value>
+    <comment>Why a Schedule step did not run.</comment>
+  </data>
+  <data name="GeneratedValuesHeldBackOne" xml:space="preserve">
+    <value>JIM held back {0} {1} value until the values built from it can be worked out. It waits for {2}{3}.</value>
+    <comment>A Warning on a synchronisation. {0}: a count, {1}: the attribute's name, {2}: what it waits for (a list), {3}: '; and more' or nothing.</comment>
+  </data>
+  <data name="GeneratedValuesHeldBackOther" xml:space="preserve">
+    <value>JIM held back {0} {1} values until the values built from them can be worked out. They wait for {2}{3}.</value>
+    <comment>A Warning on a synchronisation. {0}: a count, {1}: the attribute's name, {2}: what they wait for (a list), {3}: '; and more' or nothing.</comment>
+  </data>
+  <data name="GeneratedValuesAndMore" xml:space="preserve">
+    <value>; and more</value>
+    <comment>The end of a list inside a sentence. Keep the leading separator.</comment>
+  </data>
+  <data name="UnreadableRecordsOne" xml:space="preserve">
+    <value>1 Metaverse Object recorded changes made outside synchronisation that could not be read; it was reviewed for export scope only, and those changes were not delivered to Connected Systems. Edit the affected object again to deliver its values.</value>
+    <comment>A Warning on a synchronisation.</comment>
+  </data>
+  <data name="UnreadableRecordsOther" xml:space="preserve">
+    <value>{0} Metaverse Objects recorded changes made outside synchronisation that could not be read; they were reviewed for export scope only, and those changes were not delivered to Connected Systems. Edit the affected objects again to deliver their values.</value>
+    <comment>A Warning on a synchronisation. {0}: a count.</comment>
+  </data>
+  <data name="DeselectedAttributeStillRead" xml:space="preserve">
+    <value>A deselected attribute is still read by: {0}. It is no longer imported, so these read values that are never refreshed, and no value for objects imported from now on.</value>
+    <comment>A Warning on a Connected System schema change. {0}: what still reads the attribute (a list).</comment>
+  </data>
+</root>

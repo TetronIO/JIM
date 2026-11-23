@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using JIM.Connectors.File;
 using JIM.Connectors.Graph;
 using JIM.Connectors.LDAP;
@@ -857,7 +859,7 @@ internal class SeedingServer
         if (_seedingActivity == null)
             return;
 
-        _seedingActivity.Message = "Applied built-in configuration";
+        _seedingActivity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.BuiltInConfigurationApplied));
         await Application.Activities.CompleteActivityAsync(_seedingActivity);
         _seedingActivity = null;
     }

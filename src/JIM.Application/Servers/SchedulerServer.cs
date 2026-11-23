@@ -519,11 +519,13 @@ public class SchedulerServer
                         ? activity.Executed + (activity.TotalActivityTime ?? TimeSpan.Zero)
                         : null,
                     ErrorMessage = activity?.ErrorMessage,
+                    ErrorMessageDetail = activity?.ErrorMessageDetail,
                     // Only the reasons JIM writes when it cancels a step that had not started. A step cancelled while
                     // running did run, and its message is whatever progress it last reported.
                     CancellationReason = activity is { Status: ActivityStatus.Cancelled } && ScheduleStepNotRunReasons.IsNotRunReason(activity.Message)
                         ? activity.Message
                         : null,
+                    CancellationReasonDetail = activity is { Status: ActivityStatus.Cancelled } ? ActivityMessage.StepNotRunReason(activity.Message) : null,
                     ActivityId = activity?.Id,
                     ActivityStatus = activity?.Status,
                     // The effective behaviour, from the step's own setting or its Schedule's (#1787), and where it comes from.
@@ -1406,7 +1408,7 @@ public class SchedulerServer
     {
         try
         {
-            return await Application.Tasking.RecordWorkerTaskNotQueuedAsync(workerTask, $"Could not be queued: {AsSentence(reason)}");
+            return await Application.Tasking.RecordWorkerTaskNotQueuedAsync(workerTask, ActivityMessage.Create(nameof(ActivityMessages.NotQueued), AsSentence(reason)));
         }
         catch (Exception ex)
         {

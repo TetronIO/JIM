@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Localisation;
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -238,7 +241,7 @@ namespace JIM.Application.Servers
                 // Deprovisioning work (#809); record that on the Activity at queue time so the audit trail
                 // says so however the task ends.
                 if (deleteConnectedSystemTask.AbandonsDeprovisioningRun)
-                    activity.Message = ConnectedSystemServer.SynchronisedDeprovisioningAbandonedMessage;
+                    activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SynchronisedDeprovisioningAbandoned));
 
                 await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
@@ -363,7 +366,7 @@ namespace JIM.Application.Servers
         /// <param name="workerTask">The task that was built for the step but could not be queued.</param>
         /// <param name="errorMessage">The reason, as the administrator should read it.</param>
         /// <returns>The Activity recorded.</returns>
-        internal async Task<Activity> RecordWorkerTaskNotQueuedAsync(WorkerTask workerTask, string errorMessage)
+        internal async Task<Activity> RecordWorkerTaskNotQueuedAsync(WorkerTask workerTask, JimMessage errorMessage)
         {
             var activity = workerTask switch
             {
@@ -772,9 +775,7 @@ namespace JIM.Application.Servers
                 return 0;
 
             var outOfMemory = await DescribeLikelyOutOfMemoryAsync();
-            var errorMessage = "Task was abandoned due to worker crash or restart. The task was in progress when the worker stopped responding. " +
-                               (outOfMemory == null ? string.Empty : $"{outOfMemory} ") +
-                               "This does not indicate a data integrity issue - the next sync run will process from the current state.";
+            var errorMessage = ActivityMessage.Create(nameof(ActivityMessages.WorkerTaskAbandoned), outOfMemory == null ? string.Empty : $"{outOfMemory} ");
 
             foreach (var staleTask in staleTasks)
             {

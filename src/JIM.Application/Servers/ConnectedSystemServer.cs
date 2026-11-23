@@ -1,6 +1,8 @@
 ﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Resources;
+using JIM.Application.Localisation;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
@@ -1644,7 +1646,7 @@ public partial class ConnectedSystemServer
             var errorMessage = GetFullExceptionMessage(ex);
 
             // Mark activity as failed
-            await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage);
+            await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage, ex);
 
             if (alreadyFenced)
             {
@@ -1794,7 +1796,7 @@ public partial class ConnectedSystemServer
             Log.Error(ex, "DeleteAsync: Failed to delete Connected System {Id}", connectedSystemId);
 
             var errorMessage = GetFullExceptionMessage(ex);
-            await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage);
+            await Application.Activities.FailActivityWithErrorAsync(activity, errorMessage, ex);
 
             if (alreadyFenced)
             {
@@ -2376,9 +2378,8 @@ public partial class ConnectedSystemServer
             return;
         }
 
-        activity.WarningMessage = "A deselected attribute is still read by: " +
-            string.Join("; ", deselectionWarnings.Select(reader => reader.Description)) +
-            ". It is no longer imported, so these read values that are never refreshed, and no value for objects imported from now on.";
+        activity.WarningMessageDetail = ActivityMessage.Create(nameof(ActivityMessages.DeselectedAttributeStillRead),
+            string.Join("; ", deselectionWarnings.Select(reader => reader.Description)));
         await Application.Activities.CompleteActivityWithWarningAsync(activity);
     }
 
@@ -3056,7 +3057,7 @@ public partial class ConnectedSystemServer
             result.AttributeValuesRemoved = await Application.Repository.ConnectedSystems.DeleteConnectedSystemAttributeValuesByAttributeIdsAsync(task.ConnectedSystemId, task.RemovedAttributeIds);
 
         activity.TotalDeleted = result.ConnectedSystemObjectsObsoleted;
-        activity.Message = $"Marked {result.ConnectedSystemObjectsObsoleted:N0} Connected System Object(s) Obsolete, removed {result.PendingExportsRemoved:N0} Pending Export(s) and deleted {result.AttributeValuesRemoved:N0} stored attribute value(s).";
+        activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.SchemaRefreshRemovalCompleted), result.ConnectedSystemObjectsObsoleted, result.PendingExportsRemoved, result.AttributeValuesRemoved);
 
         Log.Information(
             "ExecuteSchemaRefreshRemovalAsync: Connected System {ConnectedSystemId}: {ObsoletedCount} Connected System Object(s) marked Obsolete across {TypeCount} removed Object Type(s), {PendingExportCount} Pending Export(s) removed, {ValueCount} stored value(s) deleted across {AttributeCount} removed attribute(s).",
@@ -4959,7 +4960,7 @@ public partial class ConnectedSystemServer
             else
                 await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedByUser);
 
-            activity.Message = $"Auto-selected {containersAdded} container(s) created during export";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ContainersAutoSelected), ActivityMessage.Plain(containersAdded));
 
             // Container additions change the system's import scope; capture the configuration change onto this
             // activity so it is versioned in the system's history. Reloaded, as container ids are assigned on save.
@@ -5069,7 +5070,7 @@ public partial class ConnectedSystemServer
         if (containersAdded > 0)
         {
             await PersistConnectedSystemUpdateAsync(connectedSystem, initiatorType, initiatorId, initiatorName);
-            activity.Message = $"Auto-selected {containersAdded} container(s) created during export";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ContainersAutoSelected), ActivityMessage.Plain(containersAdded));
 
             // Container additions change the system's import scope; capture the configuration change onto this
             // activity so it is versioned in the system's history. Reloaded, as container ids are assigned on save.
@@ -5764,7 +5765,7 @@ public partial class ConnectedSystemServer
                     result.RemovedPartitions.Where(p => p.WasSelected).Select(p => p.Name),
                     result.RemovedContainers.Where(c => c.WasSelected).Select(c => c.Name));
             }
-            activity.Message = result.GetSummary();
+            activity.MessageDetail = ActivityMessage.HierarchyRefreshSummary(result);
         }
 
         return result;
@@ -7181,7 +7182,7 @@ public partial class ConnectedSystemServer
         Log.Error(ex, "{Caller}: could not build the change record for Connected System Object {CsoId}; " +
             "the object is errored on its Run Profile Execution Item and the run continues.", callerName, cso.Id);
         rpei.ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError;
-        rpei.ErrorMessage = ex.Message;
+        ActivityMessage.SetError(rpei, ex);
         rpei.ErrorStackTrace = ex.ToString();
     }
 
@@ -8789,8 +8790,7 @@ public partial class ConnectedSystemServer
         // the rule-level deletion's wording.
         if (keepContributedValues && result.AffectedValueCount > 0)
         {
-            activity.Message = $"Contributed attribute values were kept: {result.AffectedValueCount:N0} value(s) across " +
-                $"{result.AffectedObjectCount:N0} Metaverse Object(s) remain in place with no Synchronisation Rule provenance.";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ContributedValuesKept), result.AffectedValueCount, result.AffectedObjectCount);
         }
 
         if (initiatedByApiKey != null)
@@ -10839,7 +10839,7 @@ public partial class ConnectedSystemServer
 
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
             if (keepMessages.Count > 0)
-                activity.Message = string.Join(" ", keepMessages);
+                activity.MessageDetail = ActivityMessage.Spaced(keepMessages);
 
             await UpdateSyncRuleAndReleaseParkedInitialPasswordsAsync(syncRule, previousInitialPassword);
         }
@@ -11084,7 +11084,7 @@ public partial class ConnectedSystemServer
 
             await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
             if (keepMessages.Count > 0)
-                activity.Message = string.Join(" ", keepMessages);
+                activity.MessageDetail = ActivityMessage.Spaced(keepMessages);
 
             await UpdateSyncRuleAndReleaseParkedInitialPasswordsAsync(syncRule, previousInitialPassword);
         }
@@ -11263,8 +11263,7 @@ public partial class ConnectedSystemServer
         // them.
         if (!recallContributedValues && result.AffectedValueCount > 0)
         {
-            activity.Message = $"Contributed attribute values were kept: {result.AffectedValueCount:N0} value(s) across " +
-                $"{result.AffectedObjectCount:N0} Metaverse Object(s) remain in place with no Synchronisation Rule provenance.";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.ContributedValuesKept), result.AffectedValueCount, result.AffectedObjectCount);
         }
 
         if (initiatedByApiKey != null)
@@ -11348,7 +11347,7 @@ public partial class ConnectedSystemServer
     /// the safe default (recall).
     /// </para>
     /// </summary>
-    private async Task<List<string>> ApplyStagedMappingRemovalChoicesAsync(SyncRule syncRule, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices)
+    private async Task<List<JimMessage>> ApplyStagedMappingRemovalChoicesAsync(SyncRule syncRule, IReadOnlyCollection<SyncRuleMappingRemovalChoice>? mappingRemovalChoices)
     {
         if (mappingRemovalChoices == null || mappingRemovalChoices.Count == 0)
             return [];
@@ -11377,7 +11376,7 @@ public partial class ConnectedSystemServer
         // deletes every severed row (and cascades its sources), and the rule save advances the configuration
         // watermark, so the #1536 orphan recall re-evaluates every object at the next synchronisation (the save records the
         // rule's Object Type as awaiting synchronisation, so a Delta processes the whole type).
-        var keepMessages = new List<string>();
+        var keepMessages = new List<JimMessage>();
         foreach (var (choice, removedMapping) in removedMappings)
         {
             var targetMetaverseAttributeId = GetTargetMetaverseAttributeId(removedMapping);
@@ -11394,9 +11393,7 @@ public partial class ConnectedSystemServer
 
             await Application.Repository.Metaverse.SeverContributedValueProvenanceAsync(syncRule.Id, severedAttributeId);
             var attributeName = removedMapping.TargetMetaverseAttribute?.Name ?? $"attribute {severedAttributeId}";
-            keepMessages.Add($"Contributed attribute values were kept for the removed {attributeName} Attribute Flow: " +
-                $"{summary.TotalValues:N0} value(s) across {summary.TotalObjects:N0} Metaverse Object(s) remain in place " +
-                "with no Synchronisation Rule provenance.");
+            keepMessages.Add(ActivityMessage.Create(nameof(ActivityMessages.ContributedValuesKeptForFlow), attributeName, summary.TotalValues, summary.TotalObjects));
             Log.Information(
                 "ApplyStagedMappingRemovalChoicesAsync: keep chosen for staged removal of mapping {MappingId} (Synchronisation Rule {SyncRuleId}, " +
                 "Metaverse attribute {AttributeId}); severed provenance on {ValueCount} value(s) across {ObjectCount} Metaverse Object(s).",

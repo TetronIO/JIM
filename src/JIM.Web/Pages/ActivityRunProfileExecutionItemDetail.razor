@@ -345,7 +345,7 @@
                 </MudText>
                 @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorMessage))
                 {
-                    <MudText Typo="Typo.body1" Class="mt-2">@_activityRunProfileExecutionItem.ErrorMessage</MudText>
+                    <MudText Typo="Typo.body1" Class="mt-2">@MessageDisplay.Show(_activityRunProfileExecutionItem.ErrorMessageDetail, _activityRunProfileExecutionItem.ErrorMessage)</MudText>
                 }
             </MudAlert>
 
@@ -388,7 +388,7 @@
                                          Tone="@_unresolvedReferenceTone"
                                          RunCount="@_activityRunProfileExecutionItem.UnresolvedReferenceCount"
                                          ItemErrorType="@_activityRunProfileExecutionItem.ErrorType"
-                                         RecordedMessage="@_activityRunProfileExecutionItem.ErrorMessage"
+                                         RecordedMessage="@MessageDisplay.Show(_activityRunProfileExecutionItem.ErrorMessageDetail, _activityRunProfileExecutionItem.ErrorMessage)"
                                          ObjectTypeName="@(_liveRecord?.ObjectTypeName ?? _activityRunProfileExecutionItem.ObjectTypeSnapshot)"
                                          Class="mb-5" />
         }

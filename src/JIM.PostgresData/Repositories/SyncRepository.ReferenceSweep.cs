@@ -442,8 +442,8 @@ public partial class SyncRepository
 
         // A narrow statement of its own rather than the bulk field update (RpeiBulkColumns): it writes the one column the
         // bulk update leaves out on purpose, and the error columns only where the report carries an error, which then
-        // holds the item's error slot (they are always written together; the report's error is English only, so the
-        // message detail is cleared and the portal shows the English).
+        // holds the item's error slot (they are always written together; a report with no message detail clears the
+        // item's, so the portal shows the English written beside it).
         foreach (var chunk in reports.Chunk(ReferenceSweepWriteChunkSize))
         {
             await using var command = new NpgsqlCommand("""
@@ -452,14 +452,15 @@ public partial class SyncRepository
                     "ErrorType" = CASE WHEN r.error_type IS NULL THEN item."ErrorType" ELSE r.error_type END,
                     "ErrorMessage" = CASE WHEN r.error_type IS NULL THEN item."ErrorMessage" ELSE r.error_message END,
                     "ErrorStackTrace" = CASE WHEN r.error_type IS NULL THEN item."ErrorStackTrace" ELSE NULL END,
-                    "ErrorMessageDetailJson" = CASE WHEN r.error_type IS NULL THEN item."ErrorMessageDetailJson" ELSE NULL END
-                FROM unnest(@itemIds, @counts, @errorTypes, @errorMessages) AS r(item_id, unresolved_count, error_type, error_message)
+                    "ErrorMessageDetailJson" = CASE WHEN r.error_type IS NULL THEN item."ErrorMessageDetailJson" ELSE r.error_detail END
+                FROM unnest(@itemIds, @counts, @errorTypes, @errorMessages, @errorDetails) AS r(item_id, unresolved_count, error_type, error_message, error_detail)
                 WHERE item."Id" = r.item_id
                 """, connection, transaction) { CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds };
             command.Parameters.Add(new NpgsqlParameter("itemIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = chunk.Select(r => r.ExecutionItemId).ToArray() });
             command.Parameters.Add(new NpgsqlParameter("counts", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = chunk.Select(r => r.UnresolvedReferenceCount).ToArray() });
             command.Parameters.Add(new NpgsqlParameter("errorTypes", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = chunk.Select(r => (int?)r.ErrorType).ToArray() });
             command.Parameters.Add(new NpgsqlParameter("errorMessages", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = chunk.Select(r => r.ErrorMessage).ToArray() });
+            command.Parameters.Add(new NpgsqlParameter("errorDetails", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = chunk.Select(r => r.ErrorMessageDetailJson).ToArray() });
             await command.ExecuteNonQueryAsync();
         }
 
@@ -480,6 +481,7 @@ public partial class SyncRepository
 
                 SetUnchanged(entry.Property(item => item.ErrorType), report.ErrorType);
                 SetUnchanged(entry.Property(item => item.ErrorMessage), report.ErrorMessage);
+                SetUnchanged(entry.Property(item => item.ErrorMessageDetailJson), report.ErrorMessageDetailJson);
                 SetUnchanged(entry.Property(item => item.ErrorStackTrace), null);
             }
         }

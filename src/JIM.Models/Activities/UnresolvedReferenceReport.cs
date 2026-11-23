@@ -13,8 +13,11 @@ namespace JIM.Models.Activities;
 /// Connected System reports unresolved references as errors and the item recorded no error of its own when it was
 /// written.</param>
 /// <param name="ErrorMessage">The error's message, written with <paramref name="ErrorType"/>.</param>
+/// <param name="ErrorMessageDetailJson">The same error as a stored message the portal shows in the viewer's language (#3039),
+/// written with it; null where the error is English only.</param>
 public sealed record UnresolvedReferenceReport(
     Guid ExecutionItemId,
     int UnresolvedReferenceCount,
     ActivityRunProfileExecutionItemErrorType? ErrorType,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    string? ErrorMessageDetailJson = null);

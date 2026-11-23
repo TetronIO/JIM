@@ -126,7 +126,7 @@
                         </MudText>
                         @if (!string.IsNullOrEmpty(activity.ErrorMessage))
                         {
-                            <MudText Typo="Typo.body2" Class="mt-2">@activity.ErrorMessage</MudText>
+                            <MudText Typo="Typo.body2" Class="mt-2">@MessageDisplay.Show(activity.ErrorMessageDetail, activity.ErrorMessage)</MudText>
                         }
                     </MudAlert>
                 }

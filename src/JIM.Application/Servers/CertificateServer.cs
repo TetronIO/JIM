@@ -137,7 +137,7 @@ public class CertificateServer : ICertificateProvider
             var result = await Application.Repository.TrustedCertificates.CreateAsync(certificate);
 
             await CaptureConfigurationChangeAsync(activity, result.Id, changeReason);
-            activity.Message = $"Added trusted certificate '{name}' (Subject: {x509Cert.Subject})";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CertificateAdded), name, x509Cert.Subject);
             await Application.Activities.CompleteActivityAsync(activity);
 
             return result;
@@ -223,7 +223,7 @@ public class CertificateServer : ICertificateProvider
             var result = await Application.Repository.TrustedCertificates.CreateAsync(certificate);
 
             await CaptureConfigurationChangeAsync(activity, result.Id, changeReason);
-            activity.Message = $"Added trusted certificate '{name}' from file (Subject: {x509Cert.Subject})";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CertificateAddedFromFile), name, x509Cert.Subject);
             await Application.Activities.CompleteActivityAsync(activity);
 
             return result;
@@ -306,9 +306,9 @@ public class CertificateServer : ICertificateProvider
             await Application.Repository.TrustedCertificates.UpdateAsync(certificate);
 
             await CaptureConfigurationChangeAsync(activity, id, changeReason);
-            activity.Message = changes.Count > 0
-                ? $"Updated trusted certificate: {string.Join(", ", changes)}"
-                : "No changes made to trusted certificate";
+            activity.MessageDetail = changes.Count > 0
+                ? ActivityMessage.Create(nameof(ActivityMessages.CertificateUpdated), string.Join(", ", changes))
+                : ActivityMessage.Create(nameof(ActivityMessages.CertificateUnchanged));
             await Application.Activities.CompleteActivityAsync(activity);
         }
         catch (Exception ex)
@@ -360,7 +360,7 @@ public class CertificateServer : ICertificateProvider
 
             await Application.Repository.TrustedCertificates.DeleteAsync(id);
 
-            activity.Message = $"Deleted trusted certificate '{certificateName}'";
+            activity.MessageDetail = ActivityMessage.Create(nameof(ActivityMessages.CertificateDeleted), certificateName);
             await Application.Activities.CompleteActivityAsync(activity);
         }
         catch (Exception ex)
