@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Application
 @using JIM.Application.Expressions
 @using JIM.Models.Core
@@ -27,7 +28,7 @@
 {
     <MudPaper Outlined="true" Class="pa-3 mt-5">
         <div class="d-flex align-center flex-wrap gap-1">
-            <MudText Typo="Typo.subtitle2">Result</MudText>
+            <MudText Typo="Typo.subtitle2">@GeneratedValueText.PreviewResult</MudText>
             @if (!string.IsNullOrEmpty(_sampleSourceCaption))
             {
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">&middot; @_sampleSourceCaption</MudText>
@@ -44,33 +45,33 @@
         {
             case GeneratedValueTokenKind.OnlyIfTaken:
                 <div class="mt-2">
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">First value</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@GeneratedValueText.PreviewFirstValue</MudText>
                     <MudText Typo="Typo.body1" Class="jim-text-code">@(_preview?.FirstValue ?? "-")</MudText>
                 </div>
                 <div class="mt-2">
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">If taken</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@GeneratedValueText.PreviewIfTaken</MudText>
                     <MudText Typo="Typo.body1" Class="jim-text-code">@CandidatesText</MudText>
                 </div>
                 break;
 
             case GeneratedValueTokenKind.Sequence:
                 <div class="mt-2">
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Next values</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@GeneratedValueText.PreviewNextValues</MudText>
                     <MudText Typo="Typo.body1" Class="jim-text-code">@CandidatesText</MudText>
                 </div>
                 <div class="mt-2">
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">If a number is taken</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@GeneratedValueText.PreviewIfNumberTaken</MudText>
                     <MudText Typo="Typo.body1">@GeneratedValuePreviewHelpers.SequenceTakenExplanation</MudText>
                 </div>
                 break;
 
             case GeneratedValueTokenKind.Random:
                 <div class="mt-2">
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Example</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@GeneratedValueText.PreviewExample</MudText>
                     <MudText Typo="Typo.body1" Class="jim-text-code">@(_preview?.Example ?? "-")</MudText>
                 </div>
                 <div class="mt-2">
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Source of randomness</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@GeneratedValueText.PreviewSourceOfRandomness</MudText>
                     <MudText Typo="Typo.body1">@GeneratedValuePreviewHelpers.RandomSourceOfRandomness</MudText>
                 </div>
                 break;
@@ -81,11 +82,11 @@
         @if (_builtValueRows.Count > 0)
         {
             <div class="mt-2" data-testid="jim-generated-value-built-values-preview">
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">Checked with each candidate</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@GeneratedValueText.PreviewCheckedWithEach</MudText>
                 <MudSimpleTable Dense="true" Elevation="0" Outlined="true" Class="mt-1">
                     <thead>
                         <tr>
-                            <th>@(TargetName ?? "Value")</th>
+                            <th>@(TargetName ?? GeneratedValueText.PreviewValueColumn)</th>
                             @foreach (var builtValue in _builtValueRows[0].Values)
                             {
                                 <th @key="builtValue.Name">@builtValue.Name</th>
@@ -102,7 +103,7 @@
                                     <td @key="builtValue.Name" class="jim-text-code">
                                         @if (builtValue.Error != null)
                                         {
-                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" title="@builtValue.Error">Could not be worked out</MudText>
+                                            <MudText Typo="Typo.body2" Class="mud-text-secondary" title="@builtValue.Error">@GeneratedValueText.PreviewCouldNotWorkOut</MudText>
                                         }
                                         else
                                         {
@@ -120,7 +121,7 @@
         @if (_placementText != null)
         {
             <div class="mt-2">
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">Where the number goes</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@GeneratedValueText.PreviewWhereNumberGoes</MudText>
                 <MudText Typo="Typo.body1">@_placementText</MudText>
             </div>
         }
@@ -128,7 +129,7 @@
         @if (_evaluationError != null)
         {
             <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
-                The sample base value could not be evaluated (@_evaluationError); previewing the token on its own.
+                @string.Format(CultureInfo.CurrentCulture, GeneratedValueText.PreviewEvaluationError, _evaluationError)
             </MudText>
         }
     </MudPaper>
@@ -139,7 +140,7 @@
             @if (_ioLoading && _existingObjectCountText == null)
             {
                 <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" Style="vertical-align: middle;" />
-                <span>Counting existing Metaverse Objects</span>
+                <span>@GeneratedValueText.PreviewCountingExisting</span>
             }
             else
             {
@@ -151,7 +152,7 @@
     @if (ShowSequenceStatePanel)
     {
         <MudPaper Outlined="true" Class="pa-3 mt-3" data-testid="jim-generated-value-sequence-state">
-            <MudText Typo="Typo.subtitle2" Class="mb-2">Sequence state</MudText>
+            <MudText Typo="Typo.subtitle2" Class="mb-2">@GeneratedValueText.PreviewSequenceState</MudText>
             @if (_ioLoading && _sequenceState == null)
             {
                 <MudProgressCircular Size="Size.Small" Indeterminate="true" />
@@ -160,7 +161,7 @@
             {
                 @if (_sequenceState.IsSeeded)
                 {
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Next number</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@GeneratedValueText.PreviewNextNumber</MudText>
                     <MudText Typo="Typo.h5" Class="jim-text-code">@_sequenceState.NextNumberFormatted</MudText>
                     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">
                         @GeneratedValuePreviewHelpers.DescribeAssignedSoFar(_sequenceState.AssignedCount, _sequenceState.AttributeName)
@@ -168,7 +169,7 @@
                     @if (_sequenceState.NextNumberWidthExceeded)
                     {
                         <MudAlert Severity="Severity.Warning" Class="mt-2" Dense="true">
-                            The next number no longer fits the configured width; generation will fail for this attribute until the width or the counter is corrected.
+                            @GeneratedValueText.PreviewWidthExceeded
                         </MudAlert>
                     }
                 }
@@ -422,7 +423,7 @@
             var count = await jim.UniqueValues.CountObjectsAwaitingValueAsync(MetaverseObjectTypeId, ConnectedSystemId, targetAttributeId);
             if (token.IsCancellationRequested)
                 return;
-            _existingObjectCountText = GeneratedValuePreviewHelpers.DescribeExistingObjectCount(count, TargetName ?? "this attribute");
+            _existingObjectCountText = GeneratedValuePreviewHelpers.DescribeExistingObjectCount(count, TargetName ?? GeneratedValueText.ImportTargetFallback);
         }
         else
         {

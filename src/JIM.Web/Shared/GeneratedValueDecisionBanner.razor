@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Transactional
 @using JIM.Models.Transactional.DTOs
 @using JIM.Web.Models
@@ -17,7 +18,9 @@
     var severity = waiting ? Severity.Warning : Severity.Info;
     <MudAlert @key="decision.AssignmentId" Severity="@severity" Class="@Class" data-testid="generated-value-banner">
         <MudText Typo="Typo.subtitle2">
-            @decision.AttributeName @(waiting ? "needs a decision" : "will be renamed at the next export")
+            @(waiting
+                ? string.Format(CultureInfo.CurrentCulture, GeneratedValueText.BannerNeedsDecision, decision.AttributeName)
+                : string.Format(CultureInfo.CurrentCulture, GeneratedValueText.BannerWillRename, decision.AttributeName))
             <code class="jim-code-inline ml-1">@decision.Value</code>
         </MudText>
         <div class="mt-1">
@@ -28,11 +31,11 @@
             <MudStack Row="true" Spacing="2" Class="mt-2">
                 <AlertButton Severity="@severity" Size="Size.Small" Disabled="Busy"
                            OnClick="@(() => OnAllowRename.InvokeAsync(decision))" data-testid="generated-value-allow-rename">
-                    Allow the rename…
+                    @GeneratedValueText.BannerAllowRename
                 </AlertButton>
                 <AlertButton Severity="@severity" Secondary="true" Size="Size.Small" Disabled="Busy"
                            OnClick="@(() => OnTryAgain.InvokeAsync(decision))" data-testid="generated-value-try-again">
-                    Try again
+                    @GeneratedValueText.TryAgainTitle
                 </AlertButton>
             </MudStack>
         }

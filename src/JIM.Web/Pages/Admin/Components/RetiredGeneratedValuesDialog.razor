@@ -1,3 +1,4 @@
+@using System.Globalization
 @using JIM.Models.Transactional
 @using JIM.Utilities
 @using JIM.Web.Models
@@ -15,13 +16,12 @@
 <MudDialog data-testid="jim-retired-values-dialog">
     <TitleContent>
         <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Outlined.Archive" Class="me-3" /> Retired values: @AttributeName
+            <MudIcon Icon="@Icons.Material.Outlined.Archive" Class="me-3" /> @string.Format(CultureInfo.CurrentCulture, GeneratedValueText.RetiredTitle, AttributeName)
         </MudText>
     </TitleContent>
     <DialogContent>
         <MudText Typo="Typo.body1">
-            JIM will never issue these values for @AttributeName again, whichever Attribute Flow generates it. A value
-            is retired when the object that held it is deleted, or when the value stops being JIM's to manage.
+            @string.Format(CultureInfo.CurrentCulture, GeneratedValueText.RetiredIntro, AttributeName)
         </MudText>
 
         <VirtualisedDataGrid T="RetiredGeneratedValueHeader"
@@ -33,23 +33,23 @@
                              ExpectedItemCount="@ExpectedCount"
                              DefaultSortBy="@NewestFirstSort"
                              LoadWindow="LoadWindowAsync"
-                             SearchPlaceholder="Search retired values"
-                             SingularName="retired value"
-                             PluralName="retired values">
+                             SearchPlaceholder="@GeneratedValueText.RetiredSearchPlaceholder"
+                             SingularName="@GeneratedValueText.RetiredValueSingular"
+                             PluralName="@GeneratedValueText.RetiredValuePlural">
             <Columns>
-                <TemplateColumn Title="Value" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+                <TemplateColumn Title="@GeneratedValueText.RetiredColumnValue" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
                     <CellTemplate>
                         <div class="jim-one-line" title="@context.Item.Value"><code class="jim-code-inline">@context.Item.Value</code></div>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Retired" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn Title="@GeneratedValueText.RetiredColumnRetired" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <CellTemplate>
                         <MudTooltip Text="@context.Item.RetiredAt.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                             @context.Item.RetiredAt.ToRelativeTime()
                         </MudTooltip>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Why" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn Title="@GeneratedValueText.RetiredColumnWhy" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <CellTemplate>
                         <MudTooltip Arrow="true" Placement="Placement.Top">
                             <ChildContent>
@@ -63,7 +63,7 @@
                         </MudTooltip>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn Title="Held by" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+                <TemplateColumn Title="@GeneratedValueText.RetiredColumnHeldBy" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
                     <CellTemplate>
                         @{
                             // Captured once, so the guards below read locals rather than chained dereferences.
@@ -79,7 +79,7 @@
                         }
                         else if (!string.IsNullOrEmpty(item.FromObjectDisplayName))
                         {
-                            <span class="mud-text-disabled" title="The object that held this value has been deleted.">@item.FromObjectDisplayName (deleted)</span>
+                            <span class="mud-text-disabled" title="@GeneratedValueText.RetiredHeldByDeletedHint">@string.Format(CultureInfo.CurrentCulture, GeneratedValueText.RetiredHeldByDeleted, item.FromObjectDisplayName)</span>
                         }
                         else
                         {
@@ -92,25 +92,25 @@
                 @if (!string.IsNullOrEmpty(context.SearchText))
                 {
                     <TableEmptyState Icon="@Icons.Material.Outlined.SearchOff"
-                                     PrimaryText="@($"No retired values match \"{context.SearchText}\".")"
-                                     ActionText="Clear Search"
+                                     PrimaryText="@string.Format(CultureInfo.CurrentCulture, GeneratedValueText.RetiredNoSearchMatch, context.SearchText)"
+                                     ActionText="@CommonText.ClearSearch"
                                      OnAction="@context.ClearSearchAsync" />
                 }
                 else
                 {
                     <TableEmptyState Icon="@Icons.Material.Outlined.Archive"
-                                     PrimaryText="@($"No values of {AttributeName} have been retired.")"
-                                     SecondaryText="A value is retired when the object that held it is deleted, or when JIM stops managing it." />
+                                     PrimaryText="@string.Format(CultureInfo.CurrentCulture, GeneratedValueText.RetiredNoValuesForAttribute, AttributeName)"
+                                     SecondaryText="@GeneratedValueText.RetiredEmptyHint" />
                 }
             </EmptyContent>
         </VirtualisedDataGrid>
 
         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">
-            Retired values are kept permanently. On a Sequence flow, Start again is the only thing that clears them.
+            @GeneratedValueText.RetiredKeptPermanently
         </MudText>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Close">Close</MudButton>
+        <MudButton OnClick="Close">@CommonText.Close</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -183,7 +183,8 @@
             { x => x.ExpectedCount, expectedCount }
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true, CloseButton = true };
-        var dialog = await dialogService.ShowAsync<RetiredGeneratedValuesDialog>($"Retired values: {attributeName}", parameters, options);
+        var title = string.Format(CultureInfo.CurrentCulture, GeneratedValueText.RetiredTitle, attributeName);
+        var dialog = await dialogService.ShowAsync<RetiredGeneratedValuesDialog>(title, parameters, options);
         await dialog.Result;
     }
 }

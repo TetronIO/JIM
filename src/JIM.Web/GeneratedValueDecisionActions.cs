@@ -1,9 +1,12 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Application.Interfaces;
+using JIM.Web.Localisation;
+using JIM.Web.Resources;
 using JIM.Web.Shared;
 using Microsoft.AspNetCore.Components.Authorization;
 using MudBlazor;
@@ -46,8 +49,8 @@ public static class GeneratedValueDecisionActions
         var outcome = await jim.GeneratedValueDecisions.TryAgainAsync(assignmentId, user, null);
         var done = outcome == GeneratedValueDecisionActionOutcome.Done;
         snackbar.Add(done
-                ? "Released. The next export run tries the same value again."
-                : "Nothing was changed; the value is no longer waiting on a decision.",
+                ? GeneratedValueText.TryAgainReleased
+                : GeneratedValueText.RenameNothingChanged,
             done ? Severity.Success : Severity.Info);
         return done;
     }
@@ -65,10 +68,10 @@ public static class GeneratedValueDecisionActions
         ArgumentNullException.ThrowIfNull(filter);
 
         var confirmed = await dialogService.ShowMessageBoxAsync(
-            "Try again",
-            $"Release {Describe(count)} so the next export run tries the same value again? Any the target rejects again come back here.",
-            yesText: "Try again",
-            cancelText: "Cancel");
+            GeneratedValueText.TryAgainTitle,
+            string.Format(CultureInfo.CurrentCulture, GeneratedValueText.TryAgainConfirm, Describe(count)),
+            yesText: GeneratedValueText.TryAgainTitle,
+            cancelText: CommonText.Cancel);
         if (confirmed != true)
             return false;
 
@@ -76,11 +79,15 @@ public static class GeneratedValueDecisionActions
         var user = await Helpers.GetUserAsync(jim, authenticationStateTask);
         var released = await jim.GeneratedValueDecisions.TryAgainAsync(filter, user, null);
         snackbar.Add(released == 0
-                ? "Nothing was released; no value matching these filters needs a decision."
-                : $"{Describe(released)} released. The next export run tries them again.",
+                ? GeneratedValueText.TryAgainNothingReleased
+                : string.Format(CultureInfo.CurrentCulture,
+                    PluralRules.Choose(released, GeneratedValueText.TryAgainReleasedOne, GeneratedValueText.TryAgainReleasedOther),
+                    released.ToString("N0", CultureInfo.CurrentCulture)),
             released == 0 ? Severity.Info : Severity.Success);
         return released > 0;
     }
 
-    private static string Describe(int count) => count == 1 ? "1 held value" : $"{count:N0} held values";
+    private static string Describe(int count) => string.Format(CultureInfo.CurrentCulture,
+        PluralRules.Choose(count, GeneratedValueText.TryAgainHeldOne, GeneratedValueText.TryAgainHeldOther),
+        count.ToString("N0", CultureInfo.CurrentCulture));
 }

@@ -6,6 +6,7 @@ using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Web.Models;
+using JIM.Web.Resources;
 
 namespace JIM.Web;
 
@@ -59,7 +60,7 @@ public static class GeneratedValueBuiltValuePreview
             var result = evaluator.Test(expression, new ExpressionContext(metaverseInputs, connectedSystemInputs));
             // In JIM's text form (#2153, N1), as the engine writes the value; a value with no text form gives none.
             var text = result.IsValid && ExpressionText.TryFormat(result.Result, out var formatted) ? formatted : null;
-            worked.Add(new GeneratedValueBuiltValuePreviewValue(NameOf(value), text, result.IsValid ? null : result.ErrorMessage ?? "The expression could not be evaluated."));
+            worked.Add(new GeneratedValueBuiltValuePreviewValue(NameOf(value), text, result.IsValid ? null : result.ErrorMessage ?? GeneratedValueText.BuiltValueEvaluationFailed));
 
             if (value.MetaverseAttributeName != null)
                 metaverse[value.MetaverseAttributeName] = text;

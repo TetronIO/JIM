@@ -1,3 +1,5 @@
+@using System.Globalization
+
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
@@ -12,17 +14,17 @@
         <MudText Typo="Typo.body1">
             <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@ConnectedSystemName"
                         Href="@(ConnectedSystemId.HasValue ? $"/admin/connected-systems/{ConnectedSystemId}" : null)" Class="ma-0" />
-            rejected @Values(Corrected + NeedingDecision) as already in use@(Clauses).
+            @RejectedSentence
         </MudText>
         <MudStack Row="true" Spacing="2" Class="mt-2">
             @if (Corrected > 0)
             {
-                <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Class="ma-0" data-testid="generated-value-export-corrected">@Corrected.ToString("N0") corrected</MudChip>
+                <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Class="ma-0" data-testid="generated-value-export-corrected">@CorrectedChipText</MudChip>
             }
             @if (NeedingDecision > 0)
             {
                 <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="ma-0" data-testid="generated-value-export-needs-decision">
-                    @NeedingDecision.ToString("N0") @(NeedingDecision == 1 ? "needs" : "need") a decision
+                    @NeedsDecisionChipText
                 </MudChip>
             }
         </MudStack>
@@ -49,7 +51,24 @@
     [Parameter]
     public string? Class { get; set; }
 
-    private static string Values(int count) => count == 1 ? "1 generated value" : $"{count:N0} generated values";
+    /// <summary>
+    /// The sentence after the Connected System chip: the values rejected, and what the run did about them. Each clause is
+    /// a whole sentence fragment chosen by its own count, so each language reads naturally on its own.
+    /// </summary>
+    private string RejectedSentence => string.Format(CultureInfo.CurrentCulture, GeneratedValueText.ExportRejected,
+        Values(Corrected + NeedingDecision), Clauses);
+
+    private string CorrectedChipText => string.Format(CultureInfo.CurrentCulture,
+        PluralRules.Choose(Corrected, GeneratedValueText.ExportChipCorrectedOne, GeneratedValueText.ExportChipCorrectedOther),
+        Corrected.ToString("N0", CultureInfo.CurrentCulture));
+
+    private string NeedsDecisionChipText => string.Format(CultureInfo.CurrentCulture,
+        PluralRules.Choose(NeedingDecision, GeneratedValueText.ExportChipNeedsOne, GeneratedValueText.ExportChipNeedsOther),
+        NeedingDecision.ToString("N0", CultureInfo.CurrentCulture));
+
+    private static string Values(int count) => string.Format(CultureInfo.CurrentCulture,
+        PluralRules.Choose(count, GeneratedValueText.ExportValuesOne, GeneratedValueText.ExportValuesOther),
+        count.ToString("N0", CultureInfo.CurrentCulture));
 
     private string Clauses
     {
@@ -57,16 +76,21 @@
         {
             var corrected = Corrected switch
             {
-                0 => null,
-                1 when NeedingDecision == 0 => "; JIM corrected it, and the next synchronisation will export the new value",
-                _ when NeedingDecision == 0 => "; JIM corrected them, and the next synchronisation will export the new values",
-                _ => $": JIM corrected {Corrected:N0}, and the next synchronisation will export the new {(Corrected == 1 ? "value" : "values")}"
+                0 => string.Empty,
+                _ when NeedingDecision == 0 => PluralRules.Choose(Corrected,
+                    GeneratedValueText.ExportCorrectedOnlyOne, GeneratedValueText.ExportCorrectedOnlyOther),
+                _ => string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(Corrected,
+                        GeneratedValueText.ExportCorrectedWithHeldOne, GeneratedValueText.ExportCorrectedWithHeldOther),
+                    Corrected.ToString("N0", CultureInfo.CurrentCulture))
             };
             var held = NeedingDecision switch
             {
-                0 => null,
-                _ when Corrected == 0 => $", and {(NeedingDecision == 1 ? "it needs" : "they need")} a decision before JIM exports {(NeedingDecision == 1 ? "it" : "them")}",
-                _ => $"; {NeedingDecision:N0} {(NeedingDecision == 1 ? "needs" : "need")} a decision"
+                0 => string.Empty,
+                _ when Corrected == 0 => PluralRules.Choose(NeedingDecision,
+                    GeneratedValueText.ExportHeldOnlyOne, GeneratedValueText.ExportHeldOnlyOther),
+                _ => string.Format(CultureInfo.CurrentCulture, PluralRules.Choose(NeedingDecision,
+                        GeneratedValueText.ExportHeldAfterOne, GeneratedValueText.ExportHeldAfterOther),
+                    NeedingDecision.ToString("N0", CultureInfo.CurrentCulture))
             };
             return corrected + held;
         }
