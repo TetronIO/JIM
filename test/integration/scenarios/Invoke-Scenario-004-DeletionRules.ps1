@@ -1200,6 +1200,7 @@ try {
         "test.manual.recall", "test.manual.norecall",
         "test.deprov.provdel", "test.deprov.provdisc",
         "test.deprov.joindel", "test.deprov.joindisc",
+        "test.deprov.provdsbl",
         "test.trigger.allsrc", "test.trigger.rejoin",
         "baseline.user1"
     )
@@ -2340,9 +2341,10 @@ try {
         Write-Host "Expected: a Disable Pending Export, the account disabled and kept, the CSO disconnected; the rehire rejoins it" -ForegroundColor Gray
         Write-Host ""
 
+        # sAMAccountName is at most 20 characters: Active Directory refuses a longer one (0x523), Samba does not.
         Invoke-DeprovisionActionTest -Config $config -UserObjectTypeId $userObjectType.id `
             -CsoOrigin Provisioned -DeprovisionAction Disable `
-            -EmployeeId "DEPROV005" -SamAccountName "test.deprov.provdisable" `
+            -EmployeeId "DEPROV005" -SamAccountName "test.deprov.provdsbl" `
             -DisplayName "Test Deprov ProvDisable" -TestName "Test11b" `
             -StepName "DeprovisionProvisionedDisable"
     }
