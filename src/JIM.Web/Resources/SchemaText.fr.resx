@@ -965,4 +965,181 @@
   <data name="PreviewViaExpression" xml:space="preserve">
     <value> (lu par son expression)</value>
   </data>
+  <data name="MatchingRulesSharedIntro" xml:space="preserve">
+    <value>Les règles de correspondance sont définies ici par type d’objet et partagées entre toutes les règles de synchronisation.</value>
+  </data>
+  <data name="MatchingRulesPerRuleIntro" xml:space="preserve">
+    <value>Les règles de correspondance sont configurées sur chaque règle de synchronisation.</value>
+  </data>
+  <data name="AdvancedModeInfo" xml:space="preserve">
+    <value>En mode avancé, les règles de correspondance sont configurées sur chaque règle de synchronisation. Cela permet d’appliquer une logique de correspondance différente selon les scénarios.</value>
+  </data>
+  <data name="GoToSyncRules" xml:space="preserve">
+    <value>Aller aux règles de synchronisation</value>
+  </data>
+  <data name="NoObjectTypesConfigured" xml:space="preserve">
+    <value>Aucun type d’objet n’est configuré. Importez d’abord le schéma pour configurer les règles de correspondance d’objets.</value>
+  </data>
+  <data name="NoObjectTypesSelected" xml:space="preserve">
+    <value>Aucun type d’objet n’est sélectionné. Sélectionnez d’abord des types d’objets dans l’onglet Schéma.</value>
+  </data>
+  <data name="SwitchToMode" xml:space="preserve">
+    <value>Passer en mode {0}</value>
+  </data>
+  <data name="AdvancedModeName" xml:space="preserve">
+    <value>Mode avancé</value>
+  </data>
+  <data name="SimpleModeName" xml:space="preserve">
+    <value>Mode simple</value>
+  </data>
+  <data name="SwitchingToAdvancedBody" xml:space="preserve">
+    <value>Passer en {0} vous permettra de configurer des règles de correspondance différentes pour chaque règle de synchronisation.</value>
+  </data>
+  <data name="MatchingRulesCopiedNote" xml:space="preserve">
+    <value>Les règles de correspondance actuelles seront copiées vers toutes les règles de synchronisation d’importation existantes de ce système connecté, pour vous donner un point de départ à personnaliser.</value>
+  </data>
+  <data name="SwitchingToSimpleBody" xml:space="preserve">
+    <value>Passer en {0} configurera ici les règles de correspondance, partagées entre toutes les règles de synchronisation.</value>
+  </data>
+  <data name="MigrationLabel" xml:space="preserve">
+    <value>Migration :</value>
+  </data>
+  <data name="MigrationBody" xml:space="preserve">
+    <value>Les règles de correspondance issues des règles de synchronisation seront analysées et migrées au niveau du type d’objet :</value>
+  </data>
+  <data name="MigrationSame" xml:space="preserve">
+    <value>Si toutes les règles de synchronisation ont les mêmes règles de correspondance, elles seront utilisées directement.</value>
+  </data>
+  <data name="MigrationDifferent" xml:space="preserve">
+    <value>Si les règles de synchronisation ont des règles de correspondance différentes, la configuration la plus courante sera retenue.</value>
+  </data>
+  <data name="MigrationCleared" xml:space="preserve">
+    <value>Les règles de correspondance seront effacées de toutes les règles de synchronisation après la migration.</value>
+  </data>
+  <data name="ObjectMatchingPreviewImpact" xml:space="preserve">
+    <value>Aperçu de l’impact</value>
+  </data>
+  <data name="SwitchingMode" xml:space="preserve">
+    <value>Changement en cours…</value>
+  </data>
+  <data name="SwitchMode" xml:space="preserve">
+    <value>Changer de mode</value>
+  </data>
+  <data name="PreviewObjectMatchingTitle" xml:space="preserve">
+    <value>Aperçu : impact sur la correspondance d’objets</value>
+  </data>
+  <data name="AddMatchingRule" xml:space="preserve">
+    <value>Ajouter une règle de correspondance</value>
+  </data>
+  <data name="MatchingRulesFor" xml:space="preserve">
+    <value>Règles de correspondance pour {0}</value>
+  </data>
+  <data name="UnworkableOne" xml:space="preserve">
+    <value>{0} règle de correspondance ne peut correspondre à rien.</value>
+  </data>
+  <data name="UnworkableOther" xml:space="preserve">
+    <value>{0} règles de correspondance ne peuvent correspondre à rien.</value>
+  </data>
+  <data name="UnworkableBodyOne" xml:space="preserve">
+    <value>Les objets qui devraient rejoindre un objet Metaverse existant en créeront un nouveau à la place. Supprimez-la et recréez-la :</value>
+  </data>
+  <data name="UnworkableBodyOther" xml:space="preserve">
+    <value>Les objets qui devraient rejoindre un objet Metaverse existant en créeront un nouveau à la place. Supprimez-les et recréez-les :</value>
+  </data>
+  <data name="UnworkableRuleLine" xml:space="preserve">
+    <value>Règle {0} : {1}</value>
+  </data>
+  <data name="ObjectMatchingRuleSingular" xml:space="preserve">
+    <value>règle de correspondance d’objets</value>
+  </data>
+  <data name="ObjectMatchingRulePlural" xml:space="preserve">
+    <value>règles de correspondance d’objets</value>
+  </data>
+  <data name="SearchByAttributeOrExpression" xml:space="preserve">
+    <value>Rechercher par nom d’attribut ou expression</value>
+  </data>
+  <data name="MatchValueColumn" xml:space="preserve">
+    <value>Valeur comparée</value>
+  </data>
+  <data name="OperatorColumn" xml:space="preserve">
+    <value>Opérateur</value>
+  </data>
+  <data name="EqualsOperator" xml:space="preserve">
+    <value>égale à</value>
+  </data>
+  <data name="MetaverseAttributeColumn" xml:space="preserve">
+    <value>Attribut Metaverse</value>
+  </data>
+  <data name="CaseSensitiveColumn" xml:space="preserve">
+    <value>Sensible à la casse</value>
+  </data>
+  <data name="ActionsColumn" xml:space="preserve">
+    <value>Actions</value>
+  </data>
+  <data name="MoveUp" xml:space="preserve">
+    <value>Monter</value>
+  </data>
+  <data name="MoveDown" xml:space="preserve">
+    <value>Descendre</value>
+  </data>
+  <data name="NoRulesMatchSearch" xml:space="preserve">
+    <value>Aucune règle de correspondance d’objets ne correspond à « {0} »</value>
+  </data>
+  <data name="NoRulesConfigured" xml:space="preserve">
+    <value>Aucune règle de correspondance d’objets configurée</value>
+  </data>
+  <data name="NoRulesHint" xml:space="preserve">
+    <value>Les objets de ce type ne correspondront que s’ils sont joints manuellement. Utilisez le panneau Ajouter une règle de correspondance ci-dessus pour en définir une.</value>
+  </data>
+  <data name="MatchingRuleCreated" xml:space="preserve">
+    <value>La règle de correspondance a été créée.</value>
+  </data>
+  <data name="MatchingRuleCreateFailed" xml:space="preserve">
+    <value>Échec de la création de la règle de correspondance. Réessayez ou consultez les journaux du serveur pour plus de détails.</value>
+  </data>
+  <data name="DeleteMatchingRuleTitle" xml:space="preserve">
+    <value>Supprimer la règle de correspondance</value>
+  </data>
+  <data name="DeleteMatchingRuleMessage" xml:space="preserve">
+    <value>Voulez-vous vraiment supprimer cette règle de correspondance ? Cette action est irréversible.</value>
+  </data>
+  <data name="MatchingRuleDeleted" xml:space="preserve">
+    <value>La règle de correspondance a été supprimée.</value>
+  </data>
+  <data name="MatchingRuleDeleteFailed" xml:space="preserve">
+    <value>Échec de la suppression de la règle de correspondance. Réessayez ou consultez les journaux du serveur pour plus de détails.</value>
+  </data>
+  <data name="MatchingRuleCaseState" xml:space="preserve">
+    <value>La règle de correspondance est désormais {0}.</value>
+  </data>
+  <data name="CaseSensitiveWord" xml:space="preserve">
+    <value>sensible à la casse</value>
+  </data>
+  <data name="CaseInsensitiveWord" xml:space="preserve">
+    <value>insensible à la casse</value>
+  </data>
+  <data name="MatchingRuleUpdateFailed" xml:space="preserve">
+    <value>Échec de la mise à jour de la règle de correspondance. Réessayez ou consultez les journaux du serveur pour plus de détails.</value>
+  </data>
+  <data name="MatchingRulesReorderFailed" xml:space="preserve">
+    <value>Échec du réordonnancement des règles de correspondance. Réessayez ou consultez les journaux du serveur pour plus de détails.</value>
+  </data>
+  <data name="ModeSwitchFailed" xml:space="preserve">
+    <value>Échec du changement de mode : {0}</value>
+  </data>
+  <data name="ModeSwitchFailedGeneric" xml:space="preserve">
+    <value>Échec du changement de mode. Réessayez ou consultez les journaux du serveur pour plus de détails.</value>
+  </data>
+  <data name="SwitchedToAdvancedOne" xml:space="preserve">
+    <value>Passage en mode avancé. Règles de correspondance copiées vers {0} règle de synchronisation.</value>
+  </data>
+  <data name="SwitchedToAdvancedOther" xml:space="preserve">
+    <value>Passage en mode avancé. Règles de correspondance copiées vers {0} règles de synchronisation.</value>
+  </data>
+  <data name="SwitchedToSimpleOne" xml:space="preserve">
+    <value>Passage en mode simple. Règles de correspondance définies sur {0} type d’objet.</value>
+  </data>
+  <data name="SwitchedToSimpleOther" xml:space="preserve">
+    <value>Passage en mode simple. Règles de correspondance définies sur {0} types d’objets.</value>
+  </data>
 </root>

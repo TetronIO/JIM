@@ -1282,4 +1282,240 @@
     <value> (read by its Expression)</value>
     <comment>Suffix on a mapping line that is read by an Expression. Starts with a space.</comment>
   </data>
+  <data name="MatchingRulesSharedIntro" xml:space="preserve">
+    <value>Matching Rules are defined here per object type and shared across all Synchronisation Rules.</value>
+    <comment>Intro on the Object Matching tab in Simple mode.</comment>
+  </data>
+  <data name="MatchingRulesPerRuleIntro" xml:space="preserve">
+    <value>Matching Rules are configured on each individual Synchronisation Rule.</value>
+    <comment>Intro on the Object Matching tab in Advanced mode.</comment>
+  </data>
+  <data name="AdvancedModeInfo" xml:space="preserve">
+    <value>In Advanced Mode, matching rules are configured on each individual Synchronisation Rule. This allows different matching logic for different scenarios.</value>
+    <comment>Info alert in Advanced mode.</comment>
+  </data>
+  <data name="GoToSyncRules" xml:space="preserve">
+    <value>Go to Synchronisation Rules</value>
+    <comment>Button.</comment>
+  </data>
+  <data name="NoObjectTypesConfigured" xml:space="preserve">
+    <value>No object types have been configured. Import the schema first to configure Object Matching Rules.</value>
+    <comment>Warning when there is no schema.</comment>
+  </data>
+  <data name="NoObjectTypesSelected" xml:space="preserve">
+    <value>No object types have been selected. Select object types in the Schema tab first.</value>
+    <comment>Warning when no object type is selected.</comment>
+  </data>
+  <data name="SwitchToMode" xml:space="preserve">
+    <value>Switch to {0} Mode</value>
+    <comment>Mode switch dialog title. {0} is Simple or Advanced.</comment>
+  </data>
+  <data name="AdvancedModeName" xml:space="preserve">
+    <value>Advanced Mode</value>
+    <comment>The mode's name, inside the switch dialog's text.</comment>
+  </data>
+  <data name="SimpleModeName" xml:space="preserve">
+    <value>Simple Mode</value>
+    <comment>The mode's name, inside the switch dialog's text.</comment>
+  </data>
+  <data name="SwitchingToAdvancedBody" xml:space="preserve">
+    <value>Switching to {0} will allow you to configure different matching rules for each Synchronisation Rule.</value>
+    <comment>Switch dialog body. {0} is the mode name (markup).</comment>
+  </data>
+  <data name="MatchingRulesCopiedNote" xml:space="preserve">
+    <value>The current matching rules will be copied to all existing import Synchronisation Rules for this Connected System, giving you a starting point to customise.</value>
+    <comment>Info in the switch to Advanced dialog.</comment>
+  </data>
+  <data name="SwitchingToSimpleBody" xml:space="preserve">
+    <value>Switching to {0} will configure matching rules here, shared across all Synchronisation Rules.</value>
+    <comment>Switch dialog body. {0} is the mode name (markup).</comment>
+  </data>
+  <data name="MigrationLabel" xml:space="preserve">
+    <value>Migration:</value>
+    <comment>Warning alert lead-in.</comment>
+  </data>
+  <data name="MigrationBody" xml:space="preserve">
+    <value>Matching rules from Synchronisation Rules will be analysed and migrated to the object type level:</value>
+    <comment>Warning alert body.</comment>
+  </data>
+  <data name="MigrationSame" xml:space="preserve">
+    <value>If all Synchronisation Rules have the same matching rules, they will be used directly.</value>
+    <comment>Migration case.</comment>
+  </data>
+  <data name="MigrationDifferent" xml:space="preserve">
+    <value>If Synchronisation Rules have different matching rules, the most common configuration will be selected.</value>
+    <comment>Migration case.</comment>
+  </data>
+  <data name="MigrationCleared" xml:space="preserve">
+    <value>Matching rules will be cleared from all Synchronisation Rules after migration.</value>
+    <comment>Migration outcome.</comment>
+  </data>
+  <data name="ObjectMatchingPreviewImpact" xml:space="preserve">
+    <value>Preview Impact</value>
+    <comment>Button: previews the change before it is saved.</comment>
+  </data>
+  <data name="SwitchingMode" xml:space="preserve">
+    <value>Switching...</value>
+    <comment>Button while the mode switches.</comment>
+  </data>
+  <data name="SwitchMode" xml:space="preserve">
+    <value>Switch Mode</value>
+    <comment>Confirm button of the mode switch dialog.</comment>
+  </data>
+  <data name="PreviewObjectMatchingTitle" xml:space="preserve">
+    <value>Preview: Object Matching Impact</value>
+    <comment>Preview panel title.</comment>
+  </data>
+  <data name="AddMatchingRule" xml:space="preserve">
+    <value>Add Matching Rule</value>
+    <comment>Panel heading and button.</comment>
+  </data>
+  <data name="MatchingRulesFor" xml:space="preserve">
+    <value>Matching Rules for {0}</value>
+    <comment>Heading. {0} is the Object Type name (markup, in an accent span).</comment>
+  </data>
+  <data name="UnworkableOne" xml:space="preserve">
+    <value>{0} matching rule cannot match anything.</value>
+    <comment>Error alert lead-in. Plural rule: one form.</comment>
+  </data>
+  <data name="UnworkableOther" xml:space="preserve">
+    <value>{0} matching rules cannot match anything.</value>
+    <comment>Error alert lead-in. {0} is the count.</comment>
+  </data>
+  <data name="UnworkableBodyOne" xml:space="preserve">
+    <value>Objects that should join an existing Metaverse Object will project a new one instead. Remove and recreate it:</value>
+    <comment>Error alert body, one rule.</comment>
+  </data>
+  <data name="UnworkableBodyOther" xml:space="preserve">
+    <value>Objects that should join an existing Metaverse Object will project a new one instead. Remove and recreate them:</value>
+    <comment>Error alert body, several rules.</comment>
+  </data>
+  <data name="UnworkableRuleLine" xml:space="preserve">
+    <value>Rule {0}: {1}</value>
+    <comment>One unworkable rule. {0} is its position, {1} the reason.</comment>
+  </data>
+  <data name="ObjectMatchingRuleSingular" xml:space="preserve">
+    <value>Object Matching Rule</value>
+    <comment>Noun in the grid's row count.</comment>
+  </data>
+  <data name="ObjectMatchingRulePlural" xml:space="preserve">
+    <value>Object Matching Rules</value>
+    <comment>Noun in the grid's row count.</comment>
+  </data>
+  <data name="SearchByAttributeOrExpression" xml:space="preserve">
+    <value>Search by attribute name or expression</value>
+    <comment>Search box placeholder.</comment>
+  </data>
+  <data name="MatchValueColumn" xml:space="preserve">
+    <value>Match Value</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="OperatorColumn" xml:space="preserve">
+    <value>Operator</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="EqualsOperator" xml:space="preserve">
+    <value>equals</value>
+    <comment>The operator in each rule row.</comment>
+  </data>
+  <data name="MetaverseAttributeColumn" xml:space="preserve">
+    <value>Metaverse Attribute</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="CaseSensitiveColumn" xml:space="preserve">
+    <value>Case Sensitive</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="ActionsColumn" xml:space="preserve">
+    <value>Actions</value>
+    <comment>Column heading.</comment>
+  </data>
+  <data name="MoveUp" xml:space="preserve">
+    <value>Move up</value>
+    <comment>Tooltip on the move-up button.</comment>
+  </data>
+  <data name="MoveDown" xml:space="preserve">
+    <value>Move down</value>
+    <comment>Tooltip on the move-down button.</comment>
+  </data>
+  <data name="NoRulesMatchSearch" xml:space="preserve">
+    <value>No Object Matching Rules match "{0}"</value>
+    <comment>Empty state heading when the search matches nothing. {0} is the search text.</comment>
+  </data>
+  <data name="NoRulesConfigured" xml:space="preserve">
+    <value>No Object Matching Rules configured</value>
+    <comment>Empty state heading.</comment>
+  </data>
+  <data name="NoRulesHint" xml:space="preserve">
+    <value>Objects of this type will only match if they are manually joined. Use the Add Matching Rule panel above to define one.</value>
+    <comment>Empty state detail.</comment>
+  </data>
+  <data name="MatchingRuleCreated" xml:space="preserve">
+    <value>Matching rule has been created.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="MatchingRuleCreateFailed" xml:space="preserve">
+    <value>Failed to create matching rule. Please try again or check the server logs for details.</value>
+    <comment>Error snackbar.</comment>
+  </data>
+  <data name="DeleteMatchingRuleTitle" xml:space="preserve">
+    <value>Delete Matching Rule</value>
+    <comment>Confirmation dialog title.</comment>
+  </data>
+  <data name="DeleteMatchingRuleMessage" xml:space="preserve">
+    <value>Are you sure you want to delete this matching rule? This action cannot be undone.</value>
+    <comment>Confirmation dialog body.</comment>
+  </data>
+  <data name="MatchingRuleDeleted" xml:space="preserve">
+    <value>Matching rule has been deleted.</value>
+    <comment>Success snackbar.</comment>
+  </data>
+  <data name="MatchingRuleDeleteFailed" xml:space="preserve">
+    <value>Failed to delete matching rule. Please try again or check the server logs for details.</value>
+    <comment>Error snackbar.</comment>
+  </data>
+  <data name="MatchingRuleCaseState" xml:space="preserve">
+    <value>Matching rule is now {0}.</value>
+    <comment>Success snackbar. {0} is the case-sensitivity.</comment>
+  </data>
+  <data name="CaseSensitiveWord" xml:space="preserve">
+    <value>case-sensitive</value>
+    <comment>Used in the case-sensitivity message.</comment>
+  </data>
+  <data name="CaseInsensitiveWord" xml:space="preserve">
+    <value>case-insensitive</value>
+    <comment>Used in the case-sensitivity message.</comment>
+  </data>
+  <data name="MatchingRuleUpdateFailed" xml:space="preserve">
+    <value>Failed to update matching rule. Please try again or check the server logs for details.</value>
+    <comment>Error snackbar.</comment>
+  </data>
+  <data name="MatchingRulesReorderFailed" xml:space="preserve">
+    <value>Failed to reorder matching rules. Please try again or check the server logs for details.</value>
+    <comment>Error snackbar.</comment>
+  </data>
+  <data name="ModeSwitchFailed" xml:space="preserve">
+    <value>Failed to switch mode: {0}</value>
+    <comment>Error snackbar. {0} is the reason.</comment>
+  </data>
+  <data name="ModeSwitchFailedGeneric" xml:space="preserve">
+    <value>Failed to switch mode. Please try again or check the server logs for details.</value>
+    <comment>Error snackbar.</comment>
+  </data>
+  <data name="SwitchedToAdvancedOne" xml:space="preserve">
+    <value>Switched to Advanced Mode. Matching rules copied to {0} Synchronisation Rule.</value>
+    <comment>Success snackbar. Plural rule: one form.</comment>
+  </data>
+  <data name="SwitchedToAdvancedOther" xml:space="preserve">
+    <value>Switched to Advanced Mode. Matching rules copied to {0} Synchronisation Rules.</value>
+    <comment>Success snackbar. {0} is the count.</comment>
+  </data>
+  <data name="SwitchedToSimpleOne" xml:space="preserve">
+    <value>Switched to Simple Mode. Matching rules set on {0} object type.</value>
+    <comment>Success snackbar. Plural rule: one form.</comment>
+  </data>
+  <data name="SwitchedToSimpleOther" xml:space="preserve">
+    <value>Switched to Simple Mode. Matching rules set on {0} object types.</value>
+    <comment>Success snackbar. {0} is the count.</comment>
+  </data>
 </root>
