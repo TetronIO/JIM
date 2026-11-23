@@ -161,4 +161,10 @@
   <data name="SyncRuleDeletionQueued" xml:space="preserve">
     <value>Synchronization Rule deletion queued: recalling values from {0:N0} Metaverse Object(s).</value>
   </data>
+  <data name="TryItIntro" xml:space="preserve">
+    <value>Give each attribute the rule reads a value, or load them from an object, and see what it would match on and which Metaverse Object a synchronization would join, worked out exactly as a synchronization would. Tick No value to see what happens to an object that holds none.</value>
+  </data>
+  <data name="LookupCheckbox" xml:space="preserve">
+    <value>Also find the Metaverse Object a synchronization would join</value>
+  </data>
 </root>

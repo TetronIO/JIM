@@ -1241,4 +1241,152 @@
     <value>View Activity</value>
     <comment>Snackbar action opening the Activity.</comment>
   </data>
+  <data name="MatchOnLabel" xml:space="preserve">
+    <value>Match on</value>
+    <comment>Label of the source kind toggle, and its accessible name.</comment>
+  </data>
+  <data name="HelperEveryValue" xml:space="preserve">
+    <value>Every value it holds is looked up</value>
+    <comment>Helper text under the Connected System Attribute field.</comment>
+  </data>
+  <data name="ExpressionPlaceholderMatching" xml:space="preserve">
+    <value>e.g. "E" + Trim(cs["employeeId"])</value>
+    <comment>Example expression shown as a placeholder.</comment>
+  </data>
+  <data name="ExpressionHelperMatching" xml:space="preserve">
+    <value>Reads the Connected System Object only, as cs["attributeName"]. Its result is converted to the Metaverse attribute's type.</value>
+    <comment>Helper text under the expression field.</comment>
+  </data>
+  <data name="EqualsLabel" xml:space="preserve">
+    <value>equals</value>
+    <comment>Word between the source and the Metaverse attribute.</comment>
+  </data>
+  <data name="HelperMvCompared" xml:space="preserve">
+    <value>The Metaverse attribute the value is compared with</value>
+    <comment>Helper text under the Metaverse Attribute field.</comment>
+  </data>
+  <data name="MatchableTypeLabel" xml:space="preserve">
+    <value>({0})</value>
+    <comment>A Metaverse attribute's data type, in a select. {0} is the type.</comment>
+  </data>
+  <data name="UnmatchableTypeLabel" xml:space="preserve">
+    <value>({0}, cannot be matched on)</value>
+    <comment>A Metaverse attribute's data type, when it cannot be matched on. {0} is the type.</comment>
+  </data>
+  <data name="MetaverseObjectTypeLabel" xml:space="preserve">
+    <value>Metaverse Object Type</value>
+    <comment>Label of the Metaverse Object Type field.</comment>
+  </data>
+  <data name="HelperMvType" xml:space="preserve">
+    <value>The type of Metaverse Object this rule searches</value>
+    <comment>Helper text under the Metaverse Object Type field.</comment>
+  </data>
+  <data name="CaseSensitiveLabel" xml:space="preserve">
+    <value>Case sensitive</value>
+    <comment>Checkbox label.</comment>
+  </data>
+  <data name="CaseSensitiveHelp" xml:space="preserve">
+    <value>Follows the source: on when the source attribute's values are case-exact, otherwise off, so "John" matches "JOHN". Turn it on only when this system treats identifiers differing only in case as different objects.</value>
+    <comment>Explains the case sensitive option.</comment>
+  </data>
+  <data name="TryItIntro" xml:space="preserve">
+    <value>Give each attribute the rule reads a value, or load them from an object, and see what it would match on and which Metaverse Object a synchronisation would join, worked out exactly as a synchronisation would. Tick No value to see what happens to an object that holds none.</value>
+    <comment>Explains the Try it pane.</comment>
+  </data>
+  <data name="SampleValues" xml:space="preserve">
+    <value>Sample values</value>
+    <comment>Option: values typed in by hand.</comment>
+  </data>
+  <data name="FromAnObject" xml:space="preserve">
+    <value>From an object</value>
+    <comment>Option: values loaded from a Connected System Object.</comment>
+  </data>
+  <data name="ValuesFromAria" xml:space="preserve">
+    <value>Where the values come from</value>
+    <comment>Accessible name of the values source toggle.</comment>
+  </data>
+  <data name="SourceKindAttributeTooltip" xml:space="preserve">
+    <value>Match on the values a Connected System attribute holds</value>
+    <comment>Tooltip on the Attribute source kind.</comment>
+  </data>
+  <data name="SourceKindExpressionTooltip" xml:space="preserve">
+    <value>Match on a value worked out from the Connected System Object, for identifiers that differ in format between systems</value>
+    <comment>Tooltip on the Expression source kind.</comment>
+  </data>
+  <data name="TryItColumnInput" xml:space="preserve">
+    <value>Input</value>
+    <comment>Table heading: the attribute a test value is given for.</comment>
+  </data>
+  <data name="TryItColumnValue" xml:space="preserve">
+    <value>Value</value>
+    <comment>Table heading: the test value.</comment>
+  </data>
+  <data name="TryItColumnNoValue" xml:space="preserve">
+    <value>No value</value>
+    <comment>Table heading: ticked to test an object with no value.</comment>
+  </data>
+  <data name="PluralitySingleValuedLower" xml:space="preserve">
+    <value>single-valued</value>
+    <comment>Plurality shown beside an attribute in lower case, in a table.</comment>
+  </data>
+  <data name="PluralityMultiValuedLower" xml:space="preserve">
+    <value>multi-valued</value>
+    <comment>Plurality shown beside an attribute in lower case, in a table.</comment>
+  </data>
+  <data name="HasNoValueAria" xml:space="preserve">
+    <value>{0} has no value</value>
+    <comment>Accessible name of the No value checkbox. {0} is the accessor, for example cs["name"].</comment>
+  </data>
+  <data name="LookupCheckbox" xml:space="preserve">
+    <value>Also find the Metaverse Object a synchronisation would join</value>
+    <comment>Checkbox label.</comment>
+  </data>
+  <data name="WouldMatchOn" xml:space="preserve">
+    <value>Would match on</value>
+    <comment>Caption above the values a test would match on.</comment>
+  </data>
+  <data name="TypeWithValue" xml:space="preserve">
+    <value>Type: {0}</value>
+    <comment>Caption showing the data type. {0} is the data type name.</comment>
+  </data>
+  <data name="NoValueToMatch" xml:space="preserve">
+    <value>No value to match on, so this rule would be skipped for an object like this and the next rule tried.</value>
+    <comment>Shown when the test has no value to match on.</comment>
+  </data>
+  <data name="TestFailureMessage" xml:space="preserve">
+    <value>An object like this would stop with an Object Matching Rule Failed error, neither joined nor projected: {0}</value>
+    <comment>Shown when the test fails. {0} is the failure message.</comment>
+  </data>
+  <data name="InTheMetaverse" xml:space="preserve">
+    <value>In the Metaverse</value>
+    <comment>Caption above the lookup result.</comment>
+  </data>
+  <data name="LookupWouldJoin" xml:space="preserve">
+    <value>Would join</value>
+    <comment>Lookup outcome: the object would join this Metaverse Object.</comment>
+  </data>
+  <data name="LookupAlreadyJoined" xml:space="preserve">
+    <value>Already joined</value>
+    <comment>Lookup outcome: the object is already joined.</comment>
+  </data>
+  <data name="LookupJoinedToAnother" xml:space="preserve">
+    <value>Joined to another</value>
+    <comment>Lookup outcome: the object is joined to a different Metaverse Object.</comment>
+  </data>
+  <data name="LookupNoMatch" xml:space="preserve">
+    <value>No match</value>
+    <comment>Lookup outcome: no Metaverse Object matches.</comment>
+  </data>
+  <data name="LookupAmbiguous" xml:space="preserve">
+    <value>Ambiguous</value>
+    <comment>Lookup outcome: more than one Metaverse Object matches.</comment>
+  </data>
+  <data name="FindObjectInSystem" xml:space="preserve">
+    <value>Find a {0} in {1}</value>
+    <comment>Label of the object picker. {0} is the object type name, {1} the Connected System name.</comment>
+  </data>
+  <data name="TheConnectedSystem" xml:space="preserve">
+    <value>the Connected System</value>
+    <comment>Stands in for the Connected System name when it is not known.</comment>
+  </data>
 </root>

@@ -950,4 +950,115 @@
   <data name="ViewActivityAction" xml:space="preserve">
     <value>Voir l’activité</value>
   </data>
+  <data name="MatchOnLabel" xml:space="preserve">
+    <value>Correspondance sur</value>
+  </data>
+  <data name="HelperEveryValue" xml:space="preserve">
+    <value>Chacune de ses valeurs est recherchée</value>
+  </data>
+  <data name="ExpressionPlaceholderMatching" xml:space="preserve">
+    <value>Par exemple : "E" + Trim(cs["employeeId"])</value>
+  </data>
+  <data name="ExpressionHelperMatching" xml:space="preserve">
+    <value>Lit uniquement l’objet de système connecté, sous la forme cs["attributeName"]. Son résultat est converti au type de l’attribut Metaverse.</value>
+  </data>
+  <data name="EqualsLabel" xml:space="preserve">
+    <value>égale à</value>
+  </data>
+  <data name="HelperMvCompared" xml:space="preserve">
+    <value>L’attribut Metaverse avec lequel la valeur est comparée</value>
+  </data>
+  <data name="MatchableTypeLabel" xml:space="preserve">
+    <value>({0})</value>
+  </data>
+  <data name="UnmatchableTypeLabel" xml:space="preserve">
+    <value>({0}, ne peut pas être comparé)</value>
+  </data>
+  <data name="MetaverseObjectTypeLabel" xml:space="preserve">
+    <value>Type d’objet Metaverse</value>
+  </data>
+  <data name="HelperMvType" xml:space="preserve">
+    <value>Le type d’objet Metaverse que cette règle recherche</value>
+  </data>
+  <data name="CaseSensitiveLabel" xml:space="preserve">
+    <value>Sensible à la casse</value>
+  </data>
+  <data name="CaseSensitiveHelp" xml:space="preserve">
+    <value>Suit la source : activé lorsque les valeurs de l’attribut source sont exactes quant à la casse, désactivé sinon, de sorte que « John » correspond à « JOHN ». Activez-le uniquement lorsque ce système traite comme des objets différents des identifiants qui ne diffèrent que par la casse.</value>
+  </data>
+  <data name="TryItIntro" xml:space="preserve">
+    <value>Donnez une valeur à chaque attribut lu par la règle, ou chargez-les depuis un objet, puis voyez sur quoi elle correspondrait et quel objet Metaverse une synchronisation rattacherait, calculé exactement comme le ferait une synchronisation. Cochez Aucune valeur pour voir ce qui arrive à un objet qui n’en contient aucune.</value>
+  </data>
+  <data name="SampleValues" xml:space="preserve">
+    <value>Valeurs d’exemple</value>
+  </data>
+  <data name="FromAnObject" xml:space="preserve">
+    <value>Depuis un objet</value>
+  </data>
+  <data name="ValuesFromAria" xml:space="preserve">
+    <value>D’où viennent les valeurs</value>
+  </data>
+  <data name="SourceKindAttributeTooltip" xml:space="preserve">
+    <value>Correspond aux valeurs qu’un attribut de système connecté contient</value>
+  </data>
+  <data name="SourceKindExpressionTooltip" xml:space="preserve">
+    <value>Correspond à une valeur calculée à partir de l’objet de système connecté, pour des identifiants dont le format diffère d’un système à l’autre</value>
+  </data>
+  <data name="TryItColumnInput" xml:space="preserve">
+    <value>Entrée</value>
+  </data>
+  <data name="TryItColumnValue" xml:space="preserve">
+    <value>Valeur</value>
+  </data>
+  <data name="TryItColumnNoValue" xml:space="preserve">
+    <value>Aucune valeur</value>
+  </data>
+  <data name="PluralitySingleValuedLower" xml:space="preserve">
+    <value>monovaleur</value>
+  </data>
+  <data name="PluralityMultiValuedLower" xml:space="preserve">
+    <value>multivaleur</value>
+  </data>
+  <data name="HasNoValueAria" xml:space="preserve">
+    <value>{0} n’a aucune valeur</value>
+  </data>
+  <data name="LookupCheckbox" xml:space="preserve">
+    <value>Rechercher aussi l’objet Metaverse qu’une synchronisation rattacherait</value>
+  </data>
+  <data name="WouldMatchOn" xml:space="preserve">
+    <value>Correspondrait sur</value>
+  </data>
+  <data name="TypeWithValue" xml:space="preserve">
+    <value>Type : {0}</value>
+  </data>
+  <data name="NoValueToMatch" xml:space="preserve">
+    <value>Aucune valeur sur laquelle correspondre : cette règle serait ignorée pour un objet de ce type, puis la règle suivante serait essayée.</value>
+  </data>
+  <data name="TestFailureMessage" xml:space="preserve">
+    <value>Un objet de ce type s’arrêterait avec une erreur d’échec de la règle de correspondance d’objets, ni rattaché ni projeté : {0}</value>
+  </data>
+  <data name="InTheMetaverse" xml:space="preserve">
+    <value>Dans le Metaverse</value>
+  </data>
+  <data name="LookupWouldJoin" xml:space="preserve">
+    <value>Rattacherait</value>
+  </data>
+  <data name="LookupAlreadyJoined" xml:space="preserve">
+    <value>Déjà rattaché</value>
+  </data>
+  <data name="LookupJoinedToAnother" xml:space="preserve">
+    <value>Rattaché à un autre</value>
+  </data>
+  <data name="LookupNoMatch" xml:space="preserve">
+    <value>Aucune correspondance</value>
+  </data>
+  <data name="LookupAmbiguous" xml:space="preserve">
+    <value>Ambigu</value>
+  </data>
+  <data name="FindObjectInSystem" xml:space="preserve">
+    <value>Rechercher un {0} dans {1}</value>
+  </data>
+  <data name="TheConnectedSystem" xml:space="preserve">
+    <value>le système connecté</value>
+  </data>
 </root>
