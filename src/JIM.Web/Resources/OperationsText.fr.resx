@@ -1,0 +1,332 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ScheduleEditorEditTitle" xml:space="preserve">
+    <value>Modifier la planification</value>
+  </data>
+  <data name="ScheduleEditorNewTitle" xml:space="preserve">
+    <value>Nouvelle planification</value>
+  </data>
+  <data name="ScheduleEditorBuiltInNotice" xml:space="preserve">
+    <value>Il s’agit d’une planification intégrée. Vous pouvez modifier son moment d’exécution, l’activer ou la désactiver, mais son nom ne peut pas être modifié et elle ne peut pas être supprimée.</value>
+  </data>
+  <data name="ScheduleEditorDetailsTab" xml:space="preserve">
+    <value>Détails</value>
+  </data>
+  <data name="ScheduleEditorNameRequired" xml:space="preserve">
+    <value>Le nom est obligatoire</value>
+  </data>
+  <data name="ScheduleEditorNameBuiltInHelp" xml:space="preserve">
+    <value>Il s’agit d’une planification intégrée ; son nom ne peut pas être modifié.</value>
+  </data>
+  <data name="ScheduleEditorNameHelp" xml:space="preserve">
+    <value>Un nom descriptif pour cette planification</value>
+  </data>
+  <data name="ScheduleEditorDescriptionHelp" xml:space="preserve">
+    <value>Description facultative de l’action de cette planification</value>
+  </data>
+  <data name="ScheduleEditorEnabledOn" xml:space="preserve">
+    <value>La planification est activée</value>
+  </data>
+  <data name="ScheduleEditorEnabledOff" xml:space="preserve">
+    <value>La planification est désactivée</value>
+  </data>
+  <data name="ScheduleEditorTriggerTab" xml:space="preserve">
+    <value>Déclencheur</value>
+  </data>
+  <data name="ScheduleEditorScheduled" xml:space="preserve">
+    <value>Planifiée</value>
+  </data>
+  <data name="ScheduleEditorScheduledHelp" xml:space="preserve">
+    <value>Exécuter automatiquement selon une planification</value>
+  </data>
+  <data name="ScheduleEditorManualOnly" xml:space="preserve">
+    <value>Manuelle uniquement</value>
+  </data>
+  <data name="ScheduleEditorManualOnlyHelp" xml:space="preserve">
+    <value>Exécuter uniquement lorsqu’elle est déclenchée manuellement</value>
+  </data>
+  <data name="ScheduleEditorConfigurationTitle" xml:space="preserve">
+    <value>Configuration de la planification</value>
+  </data>
+  <data name="ScheduleEditorRunPattern" xml:space="preserve">
+    <value>Mode d’exécution</value>
+  </data>
+  <data name="ScheduleEditorPatternSpecificTimes" xml:space="preserve">
+    <value>À des heures précises</value>
+  </data>
+  <data name="ScheduleEditorPatternInterval" xml:space="preserve">
+    <value>À intervalles réguliers</value>
+  </data>
+  <data name="ScheduleEditorPatternCustom" xml:space="preserve">
+    <value>Personnalisé (expression cron)</value>
+  </data>
+  <data name="ScheduleEditorDays" xml:space="preserve">
+    <value>Jours</value>
+  </data>
+  <data name="ScheduleEditorEveryDay" xml:space="preserve">
+    <value>Tous les jours</value>
+  </data>
+  <data name="ScheduleEditorWeekdays" xml:space="preserve">
+    <value>Jours ouvrés</value>
+  </data>
+  <data name="ScheduleEditorWeekends" xml:space="preserve">
+    <value>Week-ends</value>
+  </data>
+  <data name="ScheduleEditorTimes" xml:space="preserve">
+    <value>Heures</value>
+  </data>
+  <data name="ScheduleEditorAddTime" xml:space="preserve">
+    <value>Ajouter une heure</value>
+  </data>
+  <data name="ScheduleEditorAddTimeRequired" xml:space="preserve">
+    <value>Ajoutez au moins une heure d’exécution</value>
+  </data>
+  <data name="ScheduleEditorInterval" xml:space="preserve">
+    <value>Intervalle</value>
+  </data>
+  <data name="ScheduleEditorEvery" xml:space="preserve">
+    <value>Toutes les</value>
+  </data>
+  <data name="ScheduleEditorUnitMinutes" xml:space="preserve">
+    <value>minutes</value>
+  </data>
+  <data name="ScheduleEditorUnitHours" xml:space="preserve">
+    <value>heures</value>
+  </data>
+  <data name="ScheduleEditorRestrictWindow" xml:space="preserve">
+    <value>Limiter à une plage horaire</value>
+  </data>
+  <data name="ScheduleEditorStartTime" xml:space="preserve">
+    <value>Heure de début</value>
+  </data>
+  <data name="ScheduleEditorEndTime" xml:space="preserve">
+    <value>Heure de fin</value>
+  </data>
+  <data name="ScheduleEditorCronExpression" xml:space="preserve">
+    <value>Expression cron</value>
+  </data>
+  <data name="ScheduleEditorCronHelp" xml:space="preserve">
+    <value>Format : minute heure jour-du-mois mois jour-de-la-semaine (par exemple, 0 9,12,15,18 * * 1-5)</value>
+  </data>
+  <data name="ScheduleEditorAdvancedCron" xml:space="preserve">
+    <value>Avancé : expression cron</value>
+  </data>
+  <data name="ScheduleEditorCronGenerated" xml:space="preserve">
+    <value>Générée à partir de la configuration de la planification ci-dessus</value>
+  </data>
+  <data name="ScheduleEditorStepsTab" xml:space="preserve">
+    <value>Étapes</value>
+  </data>
+  <data name="ScheduleEditorAddStep" xml:space="preserve">
+    <value>Ajouter une étape</value>
+  </data>
+  <data name="ScheduleEditorEditStepHeading" xml:space="preserve">
+    <value>Modifier l’étape</value>
+  </data>
+  <data name="ScheduleEditorEditStep" xml:space="preserve">
+    <value>Modifier l’étape</value>
+  </data>
+  <data name="ScheduleEditorStepType" xml:space="preserve">
+    <value>Type d’étape</value>
+  </data>
+  <data name="ScheduleEditorRunProfile" xml:space="preserve">
+    <value>Profil d’exécution</value>
+  </data>
+  <data name="ScheduleEditorSelectConnectedSystem" xml:space="preserve">
+    <value>-- Sélectionner un système connecté --</value>
+  </data>
+  <data name="ScheduleEditorConnectedSystem" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="ScheduleEditorSelectRunProfile" xml:space="preserve">
+    <value>-- Sélectionner un profil d’exécution --</value>
+  </data>
+  <data name="ScheduleEditorStepTypePowerShellSoon" xml:space="preserve">
+    <value>Script PowerShell (bientôt disponible)</value>
+  </data>
+  <data name="ScheduleEditorStepTypePowerShell" xml:space="preserve">
+    <value>Script PowerShell</value>
+  </data>
+  <data name="ScheduleEditorStepTypeExecutableSoon" xml:space="preserve">
+    <value>Exécutable (bientôt disponible)</value>
+  </data>
+  <data name="ScheduleEditorStepTypeExecutable" xml:space="preserve">
+    <value>Exécutable</value>
+  </data>
+  <data name="ScheduleEditorStepTypeSqlSoon" xml:space="preserve">
+    <value>Script SQL (bientôt disponible)</value>
+  </data>
+  <data name="ScheduleEditorStepTypeSql" xml:space="preserve">
+    <value>Script SQL</value>
+  </data>
+  <data name="ScheduleEditorStepTypeTemporal" xml:space="preserve">
+    <value>Réconciliation de la portée temporelle</value>
+  </data>
+  <data name="ScheduleEditorStepTypeHistory" xml:space="preserve">
+    <value>Nettoyage de la rétention de l’historique</value>
+  </data>
+  <data name="ScheduleEditorStepName" xml:space="preserve">
+    <value>Nom de l’étape</value>
+  </data>
+  <data name="ScheduleEditorStepNameHelp" xml:space="preserve">
+    <value>Un nom descriptif pour cette étape</value>
+  </data>
+  <data name="ScheduleEditorStepNameRequired" xml:space="preserve">
+    <value>Le nom est obligatoire pour ce type d’étape</value>
+  </data>
+  <data name="ScheduleEditorOnFailure" xml:space="preserve">
+    <value>En cas d’échec de cette étape</value>
+  </data>
+  <data name="ScheduleEditorOnFailureHelp" xml:space="preserve">
+    <value>Suivre la planification, sauf si cette étape doit se comporter différemment.</value>
+  </data>
+  <data name="ScheduleEditorSaveStep" xml:space="preserve">
+    <value>Enregistrer l’étape</value>
+  </data>
+  <data name="ScheduleEditorBuiltInSteps" xml:space="preserve">
+    <value>Il s’agit d’une planification intégrée ; ses étapes sont gérées par JIM et ne peuvent être ajoutées, modifiées, réordonnées ni supprimées.</value>
+  </data>
+  <data name="ScheduleEditorOnFailureLabel" xml:space="preserve">
+    <value>En cas d’échec d’une étape</value>
+  </data>
+  <data name="ScheduleEditorBuiltInFailure" xml:space="preserve">
+    <value>Il s’agit d’une planification intégrée ; JIM gère la conduite à tenir en cas d’échec de l’une de ses étapes.</value>
+  </data>
+  <data name="ScheduleEditorFailureApplies" xml:space="preserve">
+    <value>S’applique à chaque étape, sauf si une étape définit la sienne.</value>
+  </data>
+  <data name="ScheduleEditorNoSteps" xml:space="preserve">
+    <value>Aucune étape n’a encore été ajoutée. Cliquez sur « Ajouter une étape » pour créer la première étape.</value>
+  </data>
+  <data name="ScheduleEditorStepNumber" xml:space="preserve">
+    <value>Étape {0}</value>
+  </data>
+  <data name="ScheduleEditorStepNumberParallel" xml:space="preserve">
+    <value>Étape {0} : parallèle</value>
+  </data>
+  <data name="ScheduleEditorStepsRunTogether" xml:space="preserve">
+    <value>{0} étapes exécutées ensemble</value>
+  </data>
+  <data name="ScheduleEditorRunInParallel" xml:space="preserve">
+    <value>Exécuter en parallèle avec cette étape</value>
+  </data>
+  <data name="ScheduleEditorMoveUp" xml:space="preserve">
+    <value>Monter</value>
+  </data>
+  <data name="ScheduleEditorMoveDown" xml:space="preserve">
+    <value>Descendre</value>
+  </data>
+  <data name="ScheduleEditorDeleteStep" xml:space="preserve">
+    <value>Supprimer l’étape</value>
+  </data>
+  <data name="ScheduleEditorDeleteGroup" xml:space="preserve">
+    <value>Supprimer tout le groupe</value>
+  </data>
+  <data name="ScheduleEditorAddParallelStep" xml:space="preserve">
+    <value>Ajouter une étape parallèle</value>
+  </data>
+  <data name="ScheduleEditorRemoveFromGroup" xml:space="preserve">
+    <value>Retirer du groupe</value>
+  </data>
+  <data name="ScheduleEditorRunProfileDisabled" xml:space="preserve">
+    <value>Ce profil d’exécution est désactivé ; cette étape échouera donc à l’exécution de la planification. {0}</value>
+  </data>
+  <data name="ScheduleEditorChanges" xml:space="preserve">
+    <value>Modifications</value>
+  </data>
+  <data name="ScheduleEditorObjectTypeLabel" xml:space="preserve">
+    <value>Planification</value>
+  </data>
+  <data name="ScheduleEditorSaving" xml:space="preserve">
+    <value>Enregistrement en cours</value>
+  </data>
+  <data name="ScheduleEditorEnterCron" xml:space="preserve">
+    <value>Saisissez une expression cron valide</value>
+  </data>
+  <data name="ScheduleEditorCustomPreview" xml:space="preserve">
+    <value>Planification personnalisée : {0}</value>
+  </data>
+  <data name="ScheduleEditorSelectDay" xml:space="preserve">
+    <value>Sélectionnez au moins un jour</value>
+  </data>
+  <data name="ScheduleEditorDaysEveryDay" xml:space="preserve">
+    <value>tous les jours</value>
+  </data>
+  <data name="ScheduleEditorDaysWeekdays" xml:space="preserve">
+    <value>jours ouvrés</value>
+  </data>
+  <data name="ScheduleEditorDaysWeekends" xml:space="preserve">
+    <value>week-ends</value>
+  </data>
+  <data name="ScheduleEditorPreviewRunsAt" xml:space="preserve">
+    <value>S’exécute {0} à {1}</value>
+  </data>
+  <data name="ScheduleEditorIntervalMinutesOne" xml:space="preserve">
+    <value>toutes les {0} minute</value>
+  </data>
+  <data name="ScheduleEditorIntervalMinutesOther" xml:space="preserve">
+    <value>toutes les {0} minutes</value>
+  </data>
+  <data name="ScheduleEditorIntervalHoursOne" xml:space="preserve">
+    <value>toutes les {0} heure</value>
+  </data>
+  <data name="ScheduleEditorIntervalHoursOther" xml:space="preserve">
+    <value>toutes les {0} heures</value>
+  </data>
+  <data name="ScheduleEditorPreviewInterval" xml:space="preserve">
+    <value>S’exécute {0}, {1}</value>
+  </data>
+  <data name="ScheduleEditorPreviewIntervalWindow" xml:space="preserve">
+    <value>S’exécute {0}, {1} entre {2} et {3}</value>
+  </data>
+  <data name="ScheduleEditorNotConfigured" xml:space="preserve">
+    <value>Planification non configurée</value>
+  </data>
+  <data name="ScheduleEditorNameMissing" xml:space="preserve">
+    <value>Saisissez un nom pour la planification.</value>
+  </data>
+  <data name="ScheduleEditorDayMissing" xml:space="preserve">
+    <value>Sélectionnez au moins un jour.</value>
+  </data>
+  <data name="ScheduleEditorTimeMissing" xml:space="preserve">
+    <value>Ajoutez au moins une heure d’exécution.</value>
+  </data>
+  <data name="ScheduleEditorNotFound" xml:space="preserve">
+    <value>Planification introuvable.</value>
+  </data>
+  <data name="ScheduleEditorUpdated" xml:space="preserve">
+    <value>Planification mise à jour.</value>
+  </data>
+  <data name="ScheduleEditorCreated" xml:space="preserve">
+    <value>Planification créée.</value>
+  </data>
+  <data name="ScheduleEditorSaveFailed" xml:space="preserve">
+    <value>Échec de l’enregistrement de la planification : {0}</value>
+  </data>
+  <data name="ScheduleEditorConnectedSystemRequired" xml:space="preserve">
+    <value>Sélectionnez un système connecté et un profil d’exécution.</value>
+  </data>
+  <data name="ScheduleEditorStepNameMissing" xml:space="preserve">
+    <value>Saisissez un nom pour cette étape.</value>
+  </data>
+  <data name="ScheduleEditorUnknownSystem" xml:space="preserve">
+    <value>Système inconnu</value>
+  </data>
+  <data name="ScheduleEditorUnknownProfile" xml:space="preserve">
+    <value>Profil inconnu</value>
+  </data>
+</root>

@@ -1,0 +1,435 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="ScheduleEditorEditTitle" xml:space="preserve">
+    <value>Edit Schedule</value>
+  </data>
+  <data name="ScheduleEditorNewTitle" xml:space="preserve">
+    <value>New Schedule</value>
+  </data>
+  <data name="ScheduleEditorBuiltInNotice" xml:space="preserve">
+    <value>This is a built-in schedule. You can change when it runs and enable or disable it, but its name cannot be changed and it cannot be deleted.</value>
+    <comment>Shown at the top of a built-in Schedule's editor.</comment>
+  </data>
+  <data name="ScheduleEditorDetailsTab" xml:space="preserve">
+    <value>Details</value>
+    <comment>Tab heading.</comment>
+  </data>
+  <data name="ScheduleEditorNameRequired" xml:space="preserve">
+    <value>Name is required</value>
+    <comment>Validation message for the Schedule name.</comment>
+  </data>
+  <data name="ScheduleEditorNameBuiltInHelp" xml:space="preserve">
+    <value>This is a built-in schedule; its name cannot be changed.</value>
+    <comment>Helper text under the name of a built-in Schedule.</comment>
+  </data>
+  <data name="ScheduleEditorNameHelp" xml:space="preserve">
+    <value>A descriptive name for this schedule</value>
+    <comment>Helper text under the Schedule name field.</comment>
+  </data>
+  <data name="ScheduleEditorDescriptionHelp" xml:space="preserve">
+    <value>Optional description of what this schedule does</value>
+    <comment>Helper text under the description field.</comment>
+  </data>
+  <data name="ScheduleEditorEnabledOn" xml:space="preserve">
+    <value>Schedule is Enabled</value>
+    <comment>Switch label when the Schedule is on.</comment>
+  </data>
+  <data name="ScheduleEditorEnabledOff" xml:space="preserve">
+    <value>Schedule is Disabled</value>
+    <comment>Switch label when the Schedule is off.</comment>
+  </data>
+  <data name="ScheduleEditorTriggerTab" xml:space="preserve">
+    <value>Trigger</value>
+    <comment>Tab heading for how the Schedule starts.</comment>
+  </data>
+  <data name="ScheduleEditorScheduled" xml:space="preserve">
+    <value>Scheduled</value>
+    <comment>Radio option: the Schedule runs on a timetable.</comment>
+  </data>
+  <data name="ScheduleEditorScheduledHelp" xml:space="preserve">
+    <value>Run automatically on a schedule</value>
+    <comment>Description under the Scheduled option.</comment>
+  </data>
+  <data name="ScheduleEditorManualOnly" xml:space="preserve">
+    <value>Manual Only</value>
+    <comment>Radio option: the Schedule runs only when started by hand.</comment>
+  </data>
+  <data name="ScheduleEditorManualOnlyHelp" xml:space="preserve">
+    <value>Only run when triggered manually</value>
+    <comment>Description under the Manual Only option. 'elle' is the planification.</comment>
+  </data>
+  <data name="ScheduleEditorConfigurationTitle" xml:space="preserve">
+    <value>Schedule Configuration</value>
+    <comment>Heading of the trigger configuration panel.</comment>
+  </data>
+  <data name="ScheduleEditorRunPattern" xml:space="preserve">
+    <value>Run Pattern</value>
+    <comment>Label above the run pattern choices.</comment>
+  </data>
+  <data name="ScheduleEditorPatternSpecificTimes" xml:space="preserve">
+    <value>At specific times</value>
+    <comment>Run pattern option.</comment>
+  </data>
+  <data name="ScheduleEditorPatternInterval" xml:space="preserve">
+    <value>At regular intervals</value>
+    <comment>Run pattern option.</comment>
+  </data>
+  <data name="ScheduleEditorPatternCustom" xml:space="preserve">
+    <value>Custom (Cron Expression)</value>
+    <comment>Run pattern option.</comment>
+  </data>
+  <data name="ScheduleEditorDays" xml:space="preserve">
+    <value>Days</value>
+    <comment>Label above the day chips.</comment>
+  </data>
+  <data name="ScheduleEditorEveryDay" xml:space="preserve">
+    <value>Every Day</value>
+    <comment>Button: select all seven days.</comment>
+  </data>
+  <data name="ScheduleEditorWeekdays" xml:space="preserve">
+    <value>Weekdays</value>
+    <comment>Button: select Monday to Friday.</comment>
+  </data>
+  <data name="ScheduleEditorWeekends" xml:space="preserve">
+    <value>Weekends</value>
+    <comment>Button: select Saturday and Sunday.</comment>
+  </data>
+  <data name="ScheduleEditorTimes" xml:space="preserve">
+    <value>Times</value>
+    <comment>Label above the run times.</comment>
+  </data>
+  <data name="ScheduleEditorAddTime" xml:space="preserve">
+    <value>Add time</value>
+    <comment>Label of the time picker that adds a run time.</comment>
+  </data>
+  <data name="ScheduleEditorAddTimeRequired" xml:space="preserve">
+    <value>Add at least one run time</value>
+    <comment>Shown when no run time is set; also the schedule preview.</comment>
+  </data>
+  <data name="ScheduleEditorInterval" xml:space="preserve">
+    <value>Interval</value>
+    <comment>Label above the interval controls.</comment>
+  </data>
+  <data name="ScheduleEditorEvery" xml:space="preserve">
+    <value>Every</value>
+    <comment>Words before the interval number.</comment>
+  </data>
+  <data name="ScheduleEditorUnitMinutes" xml:space="preserve">
+    <value>minutes</value>
+    <comment>Interval unit option.</comment>
+  </data>
+  <data name="ScheduleEditorUnitHours" xml:space="preserve">
+    <value>hours</value>
+    <comment>Interval unit option.</comment>
+  </data>
+  <data name="ScheduleEditorRestrictWindow" xml:space="preserve">
+    <value>Restrict to time window</value>
+    <comment>Checkbox: run only between two times.</comment>
+  </data>
+  <data name="ScheduleEditorStartTime" xml:space="preserve">
+    <value>Start time</value>
+    <comment>Time window start.</comment>
+  </data>
+  <data name="ScheduleEditorEndTime" xml:space="preserve">
+    <value>End time</value>
+    <comment>Time window end.</comment>
+  </data>
+  <data name="ScheduleEditorCronExpression" xml:space="preserve">
+    <value>Cron Expression</value>
+    <comment>Field label for a cron expression.</comment>
+  </data>
+  <data name="ScheduleEditorCronHelp" xml:space="preserve">
+    <value>Format: minute hour day-of-month month day-of-week (e.g., 0 9,12,15,18 * * 1-5)</value>
+    <comment>Helper text showing the cron field order. Keep the field order and the example as they are.</comment>
+  </data>
+  <data name="ScheduleEditorAdvancedCron" xml:space="preserve">
+    <value>Advanced: Cron Expression</value>
+    <comment>Expansion panel heading showing the generated cron expression.</comment>
+  </data>
+  <data name="ScheduleEditorCronGenerated" xml:space="preserve">
+    <value>Generated from schedule configuration above</value>
+    <comment>Helper text: the cron expression is read-only and generated.</comment>
+  </data>
+  <data name="ScheduleEditorStepsTab" xml:space="preserve">
+    <value>Steps</value>
+    <comment>Tab heading for the Schedule's steps.</comment>
+  </data>
+  <data name="ScheduleEditorAddStep" xml:space="preserve">
+    <value>Add Step</value>
+    <comment>Button and heading for adding a step.</comment>
+  </data>
+  <data name="ScheduleEditorEditStepHeading" xml:space="preserve">
+    <value>Edit Step</value>
+    <comment>Heading of the step editor when editing an existing step.</comment>
+  </data>
+  <data name="ScheduleEditorEditStep" xml:space="preserve">
+    <value>Edit step</value>
+    <comment>Tooltip on the edit button of a step.</comment>
+  </data>
+  <data name="ScheduleEditorStepType" xml:space="preserve">
+    <value>Step Type</value>
+    <comment>Label of the step type select.</comment>
+  </data>
+  <data name="ScheduleEditorRunProfile" xml:space="preserve">
+    <value>Run Profile</value>
+    <comment>Step type option, the Run Profile field label, and the step type name.</comment>
+  </data>
+  <data name="ScheduleEditorSelectConnectedSystem" xml:space="preserve">
+    <value>-- Select Connected System --</value>
+    <comment>Placeholder option of the Connected System select.</comment>
+  </data>
+  <data name="ScheduleEditorConnectedSystem" xml:space="preserve">
+    <value>Connected System</value>
+    <comment>Label of the Connected System select.</comment>
+  </data>
+  <data name="ScheduleEditorSelectRunProfile" xml:space="preserve">
+    <value>-- Select Run Profile --</value>
+    <comment>Placeholder option of the Run Profile select.</comment>
+  </data>
+  <data name="ScheduleEditorStepTypePowerShellSoon" xml:space="preserve">
+    <value>PowerShell Script (Coming soon)</value>
+    <comment>Step type option that is not yet available.</comment>
+  </data>
+  <data name="ScheduleEditorStepTypePowerShell" xml:space="preserve">
+    <value>PowerShell Script</value>
+    <comment>Step type name shown on a step.</comment>
+  </data>
+  <data name="ScheduleEditorStepTypeExecutableSoon" xml:space="preserve">
+    <value>Executable (Coming soon)</value>
+    <comment>Step type option that is not yet available.</comment>
+  </data>
+  <data name="ScheduleEditorStepTypeExecutable" xml:space="preserve">
+    <value>Executable</value>
+    <comment>Step type name shown on a step.</comment>
+  </data>
+  <data name="ScheduleEditorStepTypeSqlSoon" xml:space="preserve">
+    <value>SQL Script (Coming soon)</value>
+    <comment>Step type option that is not yet available.</comment>
+  </data>
+  <data name="ScheduleEditorStepTypeSql" xml:space="preserve">
+    <value>SQL Script</value>
+    <comment>Step type name shown on a step.</comment>
+  </data>
+  <data name="ScheduleEditorStepTypeTemporal" xml:space="preserve">
+    <value>Temporal Scope Reconciliation</value>
+    <comment>Name of a built-in step type shown on a step.</comment>
+  </data>
+  <data name="ScheduleEditorStepTypeHistory" xml:space="preserve">
+    <value>History Retention Cleanup</value>
+    <comment>Name of a built-in step type shown on a step.</comment>
+  </data>
+  <data name="ScheduleEditorStepName" xml:space="preserve">
+    <value>Step Name</value>
+    <comment>Label of the name field for a non-Run Profile step.</comment>
+  </data>
+  <data name="ScheduleEditorStepNameHelp" xml:space="preserve">
+    <value>A descriptive name for this step</value>
+    <comment>Helper text under the step name field.</comment>
+  </data>
+  <data name="ScheduleEditorStepNameRequired" xml:space="preserve">
+    <value>Name is required for this step type</value>
+    <comment>Validation message for the step name.</comment>
+  </data>
+  <data name="ScheduleEditorOnFailure" xml:space="preserve">
+    <value>When this step fails</value>
+    <comment>Label of the step's failure behaviour select.</comment>
+  </data>
+  <data name="ScheduleEditorOnFailureHelp" xml:space="preserve">
+    <value>Follow the Schedule unless this step needs to behave differently.</value>
+    <comment>Helper text: the step follows the Schedule's setting by default.</comment>
+  </data>
+  <data name="ScheduleEditorSaveStep" xml:space="preserve">
+    <value>Save Step</value>
+    <comment>Button that saves the step being edited.</comment>
+  </data>
+  <data name="ScheduleEditorBuiltInSteps" xml:space="preserve">
+    <value>This is a built-in schedule; its steps are managed by JIM and cannot be added, edited, reordered or removed.</value>
+    <comment>Notice on a built-in Schedule's steps tab.</comment>
+  </data>
+  <data name="ScheduleEditorOnFailureLabel" xml:space="preserve">
+    <value>When a step fails</value>
+    <comment>Label of the Schedule's failure behaviour select.</comment>
+  </data>
+  <data name="ScheduleEditorBuiltInFailure" xml:space="preserve">
+    <value>This is a built-in Schedule; JIM manages what happens when one of its steps fails.</value>
+    <comment>Helper text on a built-in Schedule's failure select.</comment>
+  </data>
+  <data name="ScheduleEditorFailureApplies" xml:space="preserve">
+    <value>Applies to every step, unless a step sets its own.</value>
+    <comment>Helper text on the Schedule's failure select.</comment>
+  </data>
+  <data name="ScheduleEditorNoSteps" xml:space="preserve">
+    <value>No steps have been added yet. Click "Add Step" to create the first step.</value>
+    <comment>Shown when a Schedule has no steps.</comment>
+  </data>
+  <data name="ScheduleEditorStepNumber" xml:space="preserve">
+    <value>Step {0}</value>
+    <comment>{0} is the 1-based step number.</comment>
+  </data>
+  <data name="ScheduleEditorStepNumberParallel" xml:space="preserve">
+    <value>Step {0}: Parallel</value>
+    <comment>{0} is the 1-based step number of a parallel group.</comment>
+  </data>
+  <data name="ScheduleEditorStepsRunTogether" xml:space="preserve">
+    <value>{0} steps run together</value>
+    <comment>{0} is the number of steps in a parallel group; always two or more, so one form is enough.</comment>
+  </data>
+  <data name="ScheduleEditorRunInParallel" xml:space="preserve">
+    <value>Run in parallel with this step</value>
+    <comment>Tooltip on the button that adds a parallel step.</comment>
+  </data>
+  <data name="ScheduleEditorMoveUp" xml:space="preserve">
+    <value>Move up</value>
+    <comment>Tooltip on the move up button.</comment>
+  </data>
+  <data name="ScheduleEditorMoveDown" xml:space="preserve">
+    <value>Move down</value>
+    <comment>Tooltip on the move down button.</comment>
+  </data>
+  <data name="ScheduleEditorDeleteStep" xml:space="preserve">
+    <value>Delete step</value>
+    <comment>Tooltip on the delete button of a step.</comment>
+  </data>
+  <data name="ScheduleEditorDeleteGroup" xml:space="preserve">
+    <value>Delete entire group</value>
+    <comment>Tooltip on the delete button of a parallel group.</comment>
+  </data>
+  <data name="ScheduleEditorAddParallelStep" xml:space="preserve">
+    <value>Add parallel step</value>
+    <comment>Tooltip on the add parallel step button.</comment>
+  </data>
+  <data name="ScheduleEditorRemoveFromGroup" xml:space="preserve">
+    <value>Remove from group</value>
+    <comment>Tooltip on the button that removes a step from its parallel group.</comment>
+  </data>
+  <data name="ScheduleEditorRunProfileDisabled" xml:space="preserve">
+    <value>This Run Profile is disabled, so this step fails when the Schedule runs. {0}</value>
+    <comment>{0} is the explanation of why the Run Profile is disabled.</comment>
+  </data>
+  <data name="ScheduleEditorChanges" xml:space="preserve">
+    <value>Changes</value>
+    <comment>Tab heading for the configuration change history.</comment>
+  </data>
+  <data name="ScheduleEditorObjectTypeLabel" xml:space="preserve">
+    <value>Schedule</value>
+    <comment>Object type name used in the configuration change history.</comment>
+  </data>
+  <data name="ScheduleEditorSaving" xml:space="preserve">
+    <value>Saving</value>
+    <comment>Text beside the spinner while the Schedule saves.</comment>
+  </data>
+  <data name="ScheduleEditorEnterCron" xml:space="preserve">
+    <value>Enter a valid cron expression</value>
+    <comment>Schedule preview for an empty custom expression.</comment>
+  </data>
+  <data name="ScheduleEditorCustomPreview" xml:space="preserve">
+    <value>Custom schedule: {0}</value>
+    <comment>Schedule preview. {0} is the cron expression.</comment>
+  </data>
+  <data name="ScheduleEditorSelectDay" xml:space="preserve">
+    <value>Select at least one day</value>
+    <comment>Schedule preview when no day is chosen.</comment>
+  </data>
+  <data name="ScheduleEditorDaysEveryDay" xml:space="preserve">
+    <value>every day</value>
+    <comment>Used inside the schedule preview sentence.</comment>
+  </data>
+  <data name="ScheduleEditorDaysWeekdays" xml:space="preserve">
+    <value>weekdays</value>
+    <comment>Used inside the schedule preview sentence.</comment>
+  </data>
+  <data name="ScheduleEditorDaysWeekends" xml:space="preserve">
+    <value>weekends</value>
+    <comment>Used inside the schedule preview sentence.</comment>
+  </data>
+  <data name="ScheduleEditorPreviewRunsAt" xml:space="preserve">
+    <value>Runs {0} at {1}</value>
+    <comment>Schedule preview. {0} is the days, {1} the times.</comment>
+  </data>
+  <data name="ScheduleEditorIntervalMinutesOne" xml:space="preserve">
+    <value>every {0} minute</value>
+    <comment>Interval phrase for one minute. {0} is the count.</comment>
+  </data>
+  <data name="ScheduleEditorIntervalMinutesOther" xml:space="preserve">
+    <value>every {0} minutes</value>
+    <comment>Interval phrase for several minutes. {0} is the count.</comment>
+  </data>
+  <data name="ScheduleEditorIntervalHoursOne" xml:space="preserve">
+    <value>every {0} hour</value>
+    <comment>Interval phrase for one hour. {0} is the count.</comment>
+  </data>
+  <data name="ScheduleEditorIntervalHoursOther" xml:space="preserve">
+    <value>every {0} hours</value>
+    <comment>Interval phrase for several hours. {0} is the count.</comment>
+  </data>
+  <data name="ScheduleEditorPreviewInterval" xml:space="preserve">
+    <value>Runs {0}, {1}</value>
+    <comment>Schedule preview. {0} is the days, {1} the interval phrase.</comment>
+  </data>
+  <data name="ScheduleEditorPreviewIntervalWindow" xml:space="preserve">
+    <value>Runs {0}, {1} between {2} and {3}</value>
+    <comment>Schedule preview with a time window. {0} days, {1} interval phrase, {2} and {3} times.</comment>
+  </data>
+  <data name="ScheduleEditorNotConfigured" xml:space="preserve">
+    <value>Schedule not configured</value>
+    <comment>Schedule preview for an unknown pattern.</comment>
+  </data>
+  <data name="ScheduleEditorNameMissing" xml:space="preserve">
+    <value>Please enter a name for the schedule.</value>
+    <comment>Snackbar when the name is empty.</comment>
+  </data>
+  <data name="ScheduleEditorDayMissing" xml:space="preserve">
+    <value>Please select at least one day.</value>
+    <comment>Snackbar when no day is chosen.</comment>
+  </data>
+  <data name="ScheduleEditorTimeMissing" xml:space="preserve">
+    <value>Please add at least one run time.</value>
+    <comment>Snackbar when no run time is set.</comment>
+  </data>
+  <data name="ScheduleEditorNotFound" xml:space="preserve">
+    <value>Schedule not found.</value>
+    <comment>Snackbar when the Schedule cannot be loaded.</comment>
+  </data>
+  <data name="ScheduleEditorUpdated" xml:space="preserve">
+    <value>Schedule updated successfully.</value>
+    <comment>Snackbar on a successful update.</comment>
+  </data>
+  <data name="ScheduleEditorCreated" xml:space="preserve">
+    <value>Schedule created successfully.</value>
+    <comment>Snackbar on a successful create.</comment>
+  </data>
+  <data name="ScheduleEditorSaveFailed" xml:space="preserve">
+    <value>Failed to save schedule: {0}</value>
+    <comment>Snackbar on a failed save. {0} is the error message.</comment>
+  </data>
+  <data name="ScheduleEditorConnectedSystemRequired" xml:space="preserve">
+    <value>Please select a Connected System and Run Profile.</value>
+    <comment>Snackbar when a step has no Connected System or Run Profile.</comment>
+  </data>
+  <data name="ScheduleEditorStepNameMissing" xml:space="preserve">
+    <value>Please enter a name for this step.</value>
+    <comment>Snackbar when a non-Run Profile step has no name.</comment>
+  </data>
+  <data name="ScheduleEditorUnknownSystem" xml:space="preserve">
+    <value>Unknown System</value>
+    <comment>Shown for a step whose Connected System is not found.</comment>
+  </data>
+  <data name="ScheduleEditorUnknownProfile" xml:space="preserve">
+    <value>Unknown Profile</value>
+    <comment>Shown for a step whose Run Profile is not found.</comment>
+  </data>
+</root>
