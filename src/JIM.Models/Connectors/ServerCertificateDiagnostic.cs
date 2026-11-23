@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text.Json.Serialization;
 using JIM.Models.Localisation;
 
 namespace JIM.Models.Connectors;
@@ -108,6 +109,11 @@ public class ServerCertificateDiagnostic
     /// <see cref="Remediation"/> is always its British English, which the REST API and Activities keep reading. Null
     /// where the remediation was written by something other than the probe.
     /// </summary>
+    /// <remarks>
+    /// Not serialised: this type is returned by the REST API as it is and stored in an Activity's error detail, and
+    /// neither changes shape for the portal's translation. A remediation read back from an Activity shows its English.
+    /// </remarks>
+    [JsonIgnore]
     public JimMessage? RemediationDetail { get; set; }
 
     /// <summary>Sets <see cref="RemediationDetail"/> and <see cref="Remediation"/> (its English) together.</summary>
