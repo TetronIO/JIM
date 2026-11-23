@@ -16,13 +16,13 @@
 {
     <div @key="group.ConnectedSystemObjectTypeId" class="mt-5" data-testid="jim-processed-in-full-section">
         <div class="d-flex align-center flex-wrap gap-3">
-            <MudText Typo="Typo.h5">Processed every @group.ObjectTypeName object</MudText>
+            <MudText Typo="Typo.h5">@string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityProcessedEveryObject, group.ObjectTypeName)</MudText>
             @switch (group.GetApplication(RunStatus))
             {
                 case ConfigurationChangeApplication.Applied:
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Success" Icon="@Icons.Material.Filled.Check"
                              data-testid="jim-processed-in-full-applied">
-                        Changes applied
+                        @ActivityText.ActivityChangesApplied
                     </MudChip>
                     break;
                 case ConfigurationChangeApplication.NotApplied:
@@ -30,11 +30,11 @@
                         <ChildContent>
                             <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Icon="@Icons.Material.Filled.Replay"
                                      data-testid="jim-processed-in-full-not-applied">
-                                Changes not applied
+                                @ActivityText.ActivityChangesNotApplied
                             </MudChip>
                         </ChildContent>
                         <TooltipContent>
-                            <TooltipText Text="This synchronisation did not complete. The next one will claim these changes again." />
+                            <TooltipText Text="@ActivityText.ActivityChangesNotAppliedTooltip" />
                         </TooltipContent>
                     </MudTooltip>
                     break;
@@ -72,7 +72,9 @@
         var count = group.ObjectCount is { } objectCount ? $"{objectCount:N0} " : string.Empty;
         var running = RunStatus == ActivityStatus.InProgress;
         return RunType == ConnectedSystemRunType.FullSynchronisation
-            ? $"A Full Synchronisation processes every object. This one also {(running ? "covers" : "covered")} the following changes, made before it started, to all {count}{group.ObjectTypeName} objects:"
-            : $"A Delta Synchronisation processes changed objects only. This one {(running ? "is also processing" : "also processed")} all {count}{group.ObjectTypeName} objects, because the following changes were made before it started:";
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture,
+                running ? ActivityText.ActivityProcessedFullCovers : ActivityText.ActivityProcessedFullCovered, count, group.ObjectTypeName)
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture,
+                running ? ActivityText.ActivityProcessedDeltaProcessing : ActivityText.ActivityProcessedDeltaProcessed, count, group.ObjectTypeName);
     }
 }

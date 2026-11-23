@@ -300,7 +300,7 @@
     <value>Activité</value>
   </data>
   <data name="ActivityPageDescription" xml:space="preserve">
-    <value>Une activité enregistre une action effectuée par JIM : ce qui l’a déclenchée, quand et comment elle s’est terminée. L’activité d’une exécution de profil liste aussi ce que l’exécution a fait à chaque objet traité.</value>
+    <value>Une activité enregistre une action effectuée par JIM : ce qui l’a déclenchée, quand et comment elle s’est terminée. L’activité d’un profil d’exécution liste aussi ce que l’exécution a fait à chaque objet traité.</value>
   </data>
   <data name="ActivitySummaryHeading" xml:space="preserve">
     <value>Résumé</value>
@@ -669,7 +669,7 @@
     <value>Erreurs</value>
   </data>
   <data name="ActivityDiscardedEntriesHeading" xml:space="preserve">
-    <value>Entrées écartées par le périmètre des conteneurs</value>
+    <value>Entrées écartées par la portée du conteneur</value>
   </data>
   <data name="ActivityDiscardedEntriesDescription" xml:space="preserve">
     <value>Un système connecté ne peut pas être interrogé sur une branche moins une partie d’elle-même en une seule recherche ; JIM lit donc les entrées couvertes par un conteneur exclu, puis les écarte. Ces entrées ont été transférées et jamais importées. Lorsque leur nombre est élevé, déplacer la branche exclue hors de la branche sélectionnée supprime entièrement ce coût.</value>
@@ -702,10 +702,10 @@
     <value>Filtrer par type d’erreur :</value>
   </data>
   <data name="ActivityExecutionItemSingular" xml:space="preserve">
-    <value>Élément d’exécution de profil</value>
+    <value>Élément de profil d’exécution</value>
   </data>
   <data name="ActivityExecutionItemPlural" xml:space="preserve">
-    <value>Éléments d’exécution de profil</value>
+    <value>Éléments de profil d’exécution</value>
   </data>
   <data name="ActivitySearchExecutionItems" xml:space="preserve">
     <value>Rechercher par nom ou identifiant externe</value>
@@ -726,7 +726,7 @@
     <value>Résultats</value>
   </data>
   <data name="ActivityNoItemsMatchSearch" xml:space="preserve">
-    <value>Aucun élément d’exécution de profil ne correspond à « {0} »</value>
+    <value>Aucun élément de profil d’exécution ne correspond à « {0} »</value>
   </data>
   <data name="ActivitySearchTryAgain" xml:space="preserve">
     <value>Essayez un autre terme de recherche, ou effacez la recherche.</value>
@@ -735,7 +735,7 @@
     <value>Effacer la recherche</value>
   </data>
   <data name="ActivityNoItemsMatchFilters" xml:space="preserve">
-    <value>Aucun élément d’exécution de profil ne correspond aux filtres actuels</value>
+    <value>Aucun élément de profil d’exécution ne correspond aux filtres actuels</value>
   </data>
   <data name="ActivityAdjustFilters" xml:space="preserve">
     <value>Modifiez ou effacez les filtres ci-dessus pour voir davantage d’éléments.</value>
@@ -744,13 +744,13 @@
     <value>Effacer les filtres</value>
   </data>
   <data name="ActivityNoItemsYet" xml:space="preserve">
-    <value>Aucun élément d’exécution de profil pour l’instant</value>
+    <value>Aucun élément de profil d’exécution pour l’instant</value>
   </data>
   <data name="ActivityItemsAppearAsSaved" xml:space="preserve">
     <value>Les éléments apparaissent ici au fur et à mesure que l’exécution les enregistre.</value>
   </data>
   <data name="ActivityNoItemsRecorded" xml:space="preserve">
-    <value>Cette activité n’a enregistré aucun élément d’exécution de profil</value>
+    <value>Cette activité n’a enregistré aucun élément de profil d’exécution</value>
   </data>
   <data name="ActivityItemsAppearForEveryObject" xml:space="preserve">
     <value>Les éléments apparaissent ici pour chaque objet que l’exécution a ajouté, mis à jour, rattaché, projeté, exporté ou pour lequel elle a échoué.</value>
@@ -876,7 +876,7 @@
     <value>Déconnectés</value>
   </data>
   <data name="ActivityOutcomeDriftCorrections" xml:space="preserve">
-    <value>Corrections de dérive</value>
+    <value>Correction de dérive</value>
   </data>
   <data name="ActivityOutcomeProvisioned" xml:space="preserve">
     <value>Provisionnés</value>
@@ -1110,7 +1110,7 @@
     <value>Élément d’exécution</value>
   </data>
   <data name="ActivityItemPageDescription" xml:space="preserve">
-    <value>Ce qu’une exécution de profil a fait à un objet : ce qui s’est passé, ce que cela a entraîné et l’erreur éventuellement rencontrée.</value>
+    <value>Ce qu’un profil d’exécution a fait à un objet : ce qui s’est passé, ce que cela a entraîné et l’erreur éventuellement rencontrée.</value>
   </data>
   <data name="ActivityItemTabOverview" xml:space="preserve">
     <value>Vue d’ensemble</value>
@@ -1155,7 +1155,7 @@
     <value>Source</value>
   </data>
   <data name="ActivityItemDeletionAlert" xml:space="preserve">
-    <value>L’objet de système connecté a été détecté comme supprimé du système source et marqué pour suppression. Lorsqu’un profil d’exécution de synchronisation complète ou delta est exécuté, JIM déconnecte cet objet du Metaverse et évalue la règle de suppression pour son type d’objet Metaverse.</value>
+    <value>L’objet de système connecté a été détecté comme supprimé du système source et marqué pour suppression. Lorsqu’un profil d’exécution de synchronisation complète ou de synchronisation delta est exécuté, JIM déconnecte cet objet du Metaverse et évalue la règle de suppression pour son type d’objet Metaverse.</value>
   </data>
   <data name="ActivityItemCausalityHeading" xml:space="preserve">
     <value>Causalité</value>
@@ -1777,5 +1777,179 @@
   </data>
   <data name="ActivityPendingViewDetails" xml:space="preserve">
     <value>Afficher le détail complet de l’exportation en attente</value>
+  </data>
+  <data name="ActivityScheduleHeading" xml:space="preserve">
+    <value>Planification</value>
+  </data>
+  <data name="ActivityScheduleCompactWithStep" xml:space="preserve">
+    <value>Fait partie de {0}, étape {1} sur {2}</value>
+  </data>
+  <data name="ActivityScheduleCompact" xml:space="preserve">
+    <value>Fait partie de {0}</value>
+  </data>
+  <data name="ActivityScheduleHeadingPanel" xml:space="preserve">
+    <value>Fait partie d’une planification</value>
+  </data>
+  <data name="ActivityScheduleFieldSchedule" xml:space="preserve">
+    <value>Planification :</value>
+  </data>
+  <data name="ActivityScheduleFieldStep" xml:space="preserve">
+    <value>Étape :</value>
+  </data>
+  <data name="ActivityScheduleStepOf" xml:space="preserve">
+    <value>{0} sur {1}</value>
+  </data>
+  <data name="ActivityScheduleFieldExecution" xml:space="preserve">
+    <value>Exécution de planification :</value>
+  </data>
+  <data name="ActivityScheduleViewExecution" xml:space="preserve">
+    <value>Voir l’exécution de planification</value>
+  </data>
+  <data name="ActivityScheduleStatusQueued" xml:space="preserve">
+    <value>En file d’attente</value>
+  </data>
+  <data name="ActivityScheduleStatusInProgress" xml:space="preserve">
+    <value>En cours</value>
+  </data>
+  <data name="ActivityScheduleStatusPaused" xml:space="preserve">
+    <value>Suspendue</value>
+  </data>
+  <data name="ActivityProcessedEveryObject" xml:space="preserve">
+    <value>Tous les objets {0} ont été traités</value>
+  </data>
+  <data name="ActivityChangesApplied" xml:space="preserve">
+    <value>Modifications appliquées</value>
+  </data>
+  <data name="ActivityChangesNotApplied" xml:space="preserve">
+    <value>Modifications non appliquées</value>
+  </data>
+  <data name="ActivityChangesNotAppliedTooltip" xml:space="preserve">
+    <value>Cette synchronisation ne s’est pas terminée. La suivante reprendra ces modifications.</value>
+  </data>
+  <data name="ActivityProcessedFullCovers" xml:space="preserve">
+    <value>Une synchronisation complète traite tous les objets. Celle-ci couvre aussi les modifications suivantes, effectuées avant son démarrage, sur l’ensemble des {0}objets {1} :</value>
+  </data>
+  <data name="ActivityProcessedFullCovered" xml:space="preserve">
+    <value>Une synchronisation complète traite tous les objets. Celle-ci a aussi couvert les modifications suivantes, effectuées avant son démarrage, sur l’ensemble des {0}objets {1} :</value>
+  </data>
+  <data name="ActivityProcessedDeltaProcessing" xml:space="preserve">
+    <value>Une synchronisation delta ne traite que les objets modifiés. Celle-ci traite aussi l’ensemble des {0}objets {1}, car les modifications suivantes ont été effectuées avant son démarrage :</value>
+  </data>
+  <data name="ActivityProcessedDeltaProcessed" xml:space="preserve">
+    <value>Une synchronisation delta ne traite que les objets modifiés. Celle-ci a aussi traité l’ensemble des {0}objets {1}, car les modifications suivantes ont été effectuées avant son démarrage :</value>
+  </data>
+  <data name="ActivityApplyingThisChange" xml:space="preserve">
+    <value>Application de cette modification</value>
+  </data>
+  <data name="ActivityAppliedBy" xml:space="preserve">
+    <value>Appliquée par</value>
+  </data>
+  <data name="ActivityApplySyncName" xml:space="preserve">
+    <value>Synchronisation</value>
+  </data>
+  <data name="ActivityAppliedBySynchronisation" xml:space="preserve">
+    <value>une synchronisation{0}</value>
+  </data>
+  <data name="ActivityPredictionNote" xml:space="preserve">
+    <value>Ce que l’aperçu a prévu, et ce que la synchronisation a fait. Le décompte réel comprend les objets de ce type modifiés pour d’autres raisons depuis l’aperçu.</value>
+  </data>
+  <data name="ActivityPredictionLine" xml:space="preserve">
+    <value>{0} : prévu {1}, réel {2}</value>
+  </data>
+  <data name="ActivityAwaitingNextSynchronisation" xml:space="preserve">
+    <value>En attente de la prochaine synchronisation de</value>
+  </data>
+  <data name="ActivityOpenMetaverseObject" xml:space="preserve">
+    <value>Ouvrir l’objet Metaverse</value>
+  </data>
+  <data name="ActivityValueChanges" xml:space="preserve">
+    <value>{0} modifications de valeur</value>
+  </data>
+  <data name="ActivityConfigPriorityNoteBefore" xml:space="preserve">
+    <value>Les modifications de priorité des attributs ne sont pas affichées ici ; la priorité est stockée sur les règles de synchronisation contributrices. Retrouvez-les dans la page</value>
+  </data>
+  <data name="ActivityConfigPriorityNoteAfter" xml:space="preserve">
+    <value>, sous la forme « Ordre de priorité des attributs pour ... ».</value>
+  </data>
+  <data name="ActivityConfigNoChangesYet" xml:space="preserve">
+    <value>Aucune modification de configuration n’a encore été enregistrée pour : {0}.</value>
+  </data>
+  <data name="ActivityConfigCompareVersions" xml:space="preserve">
+    <value>Comparer les versions</value>
+  </data>
+  <data name="ActivityConfigFrom" xml:space="preserve">
+    <value>De</value>
+  </data>
+  <data name="ActivityConfigTo" xml:space="preserve">
+    <value>À</value>
+  </data>
+  <data name="ActivityConfigCompare" xml:space="preserve">
+    <value>Comparer</value>
+  </data>
+  <data name="ActivityConfigClear" xml:space="preserve">
+    <value>Effacer</value>
+  </data>
+  <data name="ActivityConfigOpCreated" xml:space="preserve">
+    <value>Créé</value>
+  </data>
+  <data name="ActivityConfigOpUpdated" xml:space="preserve">
+    <value>Mis à jour</value>
+  </data>
+  <data name="ActivityConfigOpDeleted" xml:space="preserve">
+    <value>Supprimé</value>
+  </data>
+  <data name="ActivityConfigOpReverted" xml:space="preserve">
+    <value>Rétabli</value>
+  </data>
+  <data name="ActivityConfigShowAll" xml:space="preserve">
+    <value>Afficher toutes les modifications</value>
+  </data>
+  <data name="ActivityConfigShowLess" xml:space="preserve">
+    <value>Afficher moins</value>
+  </data>
+  <data name="ActivityConfigLoadMore" xml:space="preserve">
+    <value>Charger la suite ({0} restantes)</value>
+  </data>
+  <data name="ActivityAckSaveChanges" xml:space="preserve">
+    <value>Enregistrer les modifications</value>
+  </data>
+  <data name="ActivityAckSaving" xml:space="preserve">
+    <value>Enregistrement…</value>
+  </data>
+  <data name="ActivityAckFromPreview" xml:space="preserve">
+    <value>D’après l’aperçu.</value>
+  </data>
+  <data name="ActivityAckChangeTo" xml:space="preserve">
+    <value>Modification de</value>
+  </data>
+  <data name="ActivityAckChangesTo" xml:space="preserve">
+    <value>Modifications de</value>
+  </data>
+  <data name="ActivityAckChanged" xml:space="preserve">
+    <value>Modifié</value>
+  </data>
+  <data name="ActivityAckAdded" xml:space="preserve">
+    <value>Ajouté</value>
+  </data>
+  <data name="ActivityAckRemoved" xml:space="preserve">
+    <value>Supprimé</value>
+  </data>
+  <data name="ActivityAckAndMore" xml:space="preserve">
+    <value>et {0} autre(s) modification(s).</value>
+  </data>
+  <data name="ActivityAckWhenTakesEffect" xml:space="preserve">
+    <value>Quand cela prend effet</value>
+  </data>
+  <data name="ActivityAckGeneralEffect" xml:space="preserve">
+    <value>Enregistrer ne l’applique pas aux objets existants. Lancez une synchronisation complète pour les systèmes connectés concernés afin de la mettre en effet.</value>
+  </data>
+  <data name="ActivityAckConfirmRemoval" xml:space="preserve">
+    <value>Confirmer une modification de la suppression d’objets</value>
+  </data>
+  <data name="ActivityAckConfirmChange" xml:space="preserve">
+    <value>Confirmer une modification de configuration</value>
+  </data>
+  <data name="ActivityAckDefaultLabel" xml:space="preserve">
+    <value>configuration</value>
   </data>
 </root>

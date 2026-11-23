@@ -11,7 +11,7 @@
 <div class="jim-object-change-detail" tabindex="-1" @ref="_root" @onkeydown="OnKeyDownAsync">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
         <MudText Typo="Typo.h6">@Result.Change.ChangeType.ToString().SplitOnCapitalLetters()</MudText>
-        <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="Close" data-testid="close-detail" OnClick="OnClose" />
+        <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="@CommonText.Close" data-testid="close-detail" OnClick="OnClose" />
     </MudStack>
 
     <div>
@@ -21,24 +21,24 @@
     </div>
 
     <dl class="jim-object-change-detail-fields">
-        <dt>Changed</dt>
+        <dt>@ActivityText.ActivityObjectChangesChanged</dt>
         <dd>
             <MudTooltip Text="@Result.Change.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                 @Result.Change.ChangeTime.ToRelativeTime()
             </MudTooltip>
         </dd>
-        <dt>Made by</dt>
+        <dt>@ActivityText.ActivityObjectChangesMadeBy</dt>
         <dd>
             <InitiatorChip InitiatedByType="@Result.Change.InitiatedByType" InitiatedById="@Result.Change.InitiatedById"
                            InitiatedByName="@Result.Change.InitiatedByName" ChangeInitiatorType="@Result.Change.ChangeInitiatorType"
                            SyncRuleId="@Result.Change.SyncRuleId" SyncRuleName="@Result.Change.SyncRuleName"
                            ConnectedSystemId="@Result.Change.ConnectedSystemId" ConnectedSystemName="@Result.Change.ConnectedSystemName" />
         </dd>
-        <dt>Activity</dt>
+        <dt>@ActivityText.ActivityFieldActivity</dt>
         <dd>
             @if (Result.Change.ActivityId is { } activityId)
             {
-                <MudLink Href="@($"/activity/{activityId}")" data-testid="activity-link">View Activity</MudLink>
+                <MudLink Href="@($"/activity/{activityId}")" data-testid="activity-link">@ActivityText.ActivityViewActivity</MudLink>
             }
             else
             {
@@ -49,10 +49,10 @@
 
     @if (IsDeletion)
     {
-        <MudText Typo="Typo.subtitle2" data-testid="final-values">Final values</MudText>
+        <MudText Typo="Typo.subtitle2" data-testid="final-values">@ActivityText.ActivityObjectChangesFinalValues</MudText>
         <MudSimpleTable Dense="true" Outlined="true" Class="jim-object-change-detail-table">
             <thead>
-                <tr><th>Attribute</th><th>Value</th></tr>
+                <tr><th>@ActivityText.ActivityColumnAttribute</th><th>@ActivityText.ActivityColumnValue</th></tr>
             </thead>
             <tbody>
                 @foreach (var change in _displayChanges)
@@ -77,7 +77,7 @@
     {
         <MudSimpleTable Dense="true" Outlined="true" Class="jim-object-change-detail-table">
             <thead>
-                <tr><th>Attribute</th><th>Change</th><th>Value</th></tr>
+                <tr><th>@ActivityText.ActivityColumnAttribute</th><th>@ActivityText.ActivityColumnChange</th><th>@ActivityText.ActivityColumnValue</th></tr>
             </thead>
             <tbody>
                 @foreach (var change in _displayChanges)
@@ -112,7 +112,7 @@
     @if (ObjectHref is { } objectHref)
     {
         <div>
-            <MudButton Variant="Variant.Filled" Href="@objectHref" data-testid="open-object">Open Metaverse Object</MudButton>
+            <MudButton Variant="Variant.Filled" Href="@objectHref" data-testid="open-object">@ActivityText.ActivityOpenMetaverseObject</MudButton>
         </div>
     }
 </div>
@@ -148,7 +148,7 @@
         }
         else
         {
-            <span class="mud-text-secondary">@total.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) value changes</span>
+            <span class="mud-text-secondary">@string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityValueChanges, total.ToString("N0", System.Globalization.CultureInfo.CurrentCulture))</span>
         }
     };
 
@@ -164,7 +164,7 @@
             : null;
 
     private string? DeletedTooltip => Result.MetaverseObjectDeletedAt is { } deletedAt
-        ? $"Deleted {deletedAt.ToRelativeTime()}"
+        ? string.Format(System.Globalization.CultureInfo.CurrentCulture, ActivityText.ActivityObjectChangesDeleted, deletedAt.ToRelativeTime())
         : null;
 
     protected override void OnParametersSet()

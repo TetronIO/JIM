@@ -79,11 +79,11 @@
     <comment>Follow-up state: carried by a password change already waiting for the account</comment>
   </data>
   <data name="ActivityStatusNotSet" xml:space="preserve">
-    <value>Not set</value>
+    <value>Not Set</value>
     <comment>Activity status: not yet set</comment>
   </data>
   <data name="ActivityStatusInProgress" xml:space="preserve">
-    <value>In progress</value>
+    <value>In Progress</value>
     <comment>Activity status</comment>
   </data>
   <data name="ActivityStatusComplete" xml:space="preserve">
@@ -91,15 +91,15 @@
     <comment>Activity status</comment>
   </data>
   <data name="ActivityStatusCompleteWithWarning" xml:space="preserve">
-    <value>Complete with warning</value>
+    <value>Complete With Warning</value>
     <comment>Activity status</comment>
   </data>
   <data name="ActivityStatusCompleteWithError" xml:space="preserve">
-    <value>Complete with error</value>
+    <value>Complete With Error</value>
     <comment>Activity status</comment>
   </data>
   <data name="ActivityStatusFailedWithError" xml:space="preserve">
-    <value>Failed with error</value>
+    <value>Failed With Error</value>
     <comment>Activity status</comment>
   </data>
   <data name="ActivityStatusCancelled" xml:space="preserve">
@@ -2365,5 +2365,237 @@
   <data name="ActivityPendingViewDetails" xml:space="preserve">
     <value>View Full Pending Export Details</value>
     <comment>Button linking to the full Pending Export page</comment>
+  </data>
+  <data name="ActivityScheduleHeading" xml:space="preserve">
+    <value>Schedule</value>
+    <comment>Heading of the Schedule context in a compact panel</comment>
+  </data>
+  <data name="ActivityScheduleCompactWithStep" xml:space="preserve">
+    <value>Part of {0}, step {1} of {2}</value>
+    <comment>Sentence saying an Activity was part of a Schedule's step; {0} schedule name, {1} step, {2} total steps</comment>
+  </data>
+  <data name="ActivityScheduleCompact" xml:space="preserve">
+    <value>Part of {0}</value>
+    <comment>Sentence saying an Activity was part of a Schedule; {0} is the schedule name</comment>
+  </data>
+  <data name="ActivityScheduleHeadingPanel" xml:space="preserve">
+    <value>Part of a Schedule</value>
+    <comment>Heading of the Schedule context panel on an Activity page</comment>
+  </data>
+  <data name="ActivityScheduleFieldSchedule" xml:space="preserve">
+    <value>Schedule:</value>
+    <comment>Label of the Schedule that produced an Activity</comment>
+  </data>
+  <data name="ActivityScheduleFieldStep" xml:space="preserve">
+    <value>Step:</value>
+    <comment>Label of the step of a Schedule that produced an Activity</comment>
+  </data>
+  <data name="ActivityScheduleStepOf" xml:space="preserve">
+    <value>{0} of {1}</value>
+    <comment>A step's position in its Schedule; {0} is the step, {1} the total</comment>
+  </data>
+  <data name="ActivityScheduleFieldExecution" xml:space="preserve">
+    <value>Schedule Execution:</value>
+    <comment>Label of the Schedule Execution's status</comment>
+  </data>
+  <data name="ActivityScheduleViewExecution" xml:space="preserve">
+    <value>View Schedule Execution</value>
+    <comment>Link to the Schedule Execution that produced an Activity</comment>
+  </data>
+  <data name="ActivityScheduleStatusQueued" xml:space="preserve">
+    <value>Queued</value>
+    <comment>Schedule Execution status: waiting to start</comment>
+  </data>
+  <data name="ActivityScheduleStatusInProgress" xml:space="preserve">
+    <value>In Progress</value>
+    <comment>Schedule Execution status: running</comment>
+  </data>
+  <data name="ActivityScheduleStatusPaused" xml:space="preserve">
+    <value>Paused</value>
+    <comment>Schedule Execution status: paused</comment>
+  </data>
+  <data name="ActivityProcessedEveryObject" xml:space="preserve">
+    <value>Processed every {0} object</value>
+    <comment>Heading of a section for an object type a run processed in full; {0} is the object type name</comment>
+  </data>
+  <data name="ActivityChangesApplied" xml:space="preserve">
+    <value>Changes applied</value>
+    <comment>Chip: a run applied the saved configuration changes</comment>
+  </data>
+  <data name="ActivityChangesNotApplied" xml:space="preserve">
+    <value>Changes not applied</value>
+    <comment>Chip: a run that did not complete left the saved configuration changes unapplied</comment>
+  </data>
+  <data name="ActivityChangesNotAppliedTooltip" xml:space="preserve">
+    <value>This synchronisation did not complete. The next one will claim these changes again.</value>
+    <comment>Tooltip on the Changes not applied chip</comment>
+  </data>
+  <data name="ActivityProcessedFullCovers" xml:space="preserve">
+    <value>A Full Synchronisation processes every object. This one also covers the following changes, made before it started, to all {0}{1} objects:</value>
+    <comment>Introduction to the changes a running Full Synchronisation covers; {0} is the count with its trailing space, or nothing; {1} the object type name</comment>
+  </data>
+  <data name="ActivityProcessedFullCovered" xml:space="preserve">
+    <value>A Full Synchronisation processes every object. This one also covered the following changes, made before it started, to all {0}{1} objects:</value>
+    <comment>Introduction to the changes a finished Full Synchronisation covered; {0} and {1} as above</comment>
+  </data>
+  <data name="ActivityProcessedDeltaProcessing" xml:space="preserve">
+    <value>A Delta Synchronisation processes changed objects only. This one is also processing all {0}{1} objects, because the following changes were made before it started:</value>
+    <comment>Introduction to the changes a running Delta Synchronisation processes in full; {0} and {1} as above</comment>
+  </data>
+  <data name="ActivityProcessedDeltaProcessed" xml:space="preserve">
+    <value>A Delta Synchronisation processes changed objects only. This one also processed all {0}{1} objects, because the following changes were made before it started:</value>
+    <comment>Introduction to the changes a finished Delta Synchronisation processed in full; {0} and {1} as above</comment>
+  </data>
+  <data name="ActivityApplyingThisChange" xml:space="preserve">
+    <value>Applying this change</value>
+    <comment>Heading of the section saying what became of a configuration change</comment>
+  </data>
+  <data name="ActivityAppliedBy" xml:space="preserve">
+    <value>Applied by</value>
+    <comment>Lead-in before the synchronisation that applied a configuration change</comment>
+  </data>
+  <data name="ActivityApplySyncName" xml:space="preserve">
+    <value>Synchronisation</value>
+    <comment>Name of the link to the run that applied a configuration change</comment>
+  </data>
+  <data name="ActivityAppliedBySynchronisation" xml:space="preserve">
+    <value>a synchronisation{0}</value>
+    <comment>Applied by a synchronisation with no link; {0} is the date, with its leading comma, or nothing</comment>
+  </data>
+  <data name="ActivityPredictionNote" xml:space="preserve">
+    <value>What the preview predicted, and what the synchronisation did. The actual count includes objects of this type that changed for other reasons since the preview.</value>
+    <comment>Note above a comparison of a preview's prediction with what the synchronisation did</comment>
+  </data>
+  <data name="ActivityPredictionLine" xml:space="preserve">
+    <value>{0}: predicted {1}, actual {2}</value>
+    <comment>One line of a prediction comparison; {0} the outcome, {1} the predicted count, {2} the actual count</comment>
+  </data>
+  <data name="ActivityAwaitingNextSynchronisation" xml:space="preserve">
+    <value>Awaiting the next synchronisation of</value>
+    <comment>Lead-in before the Connected System a configuration change is waiting on; followed by the system's name</comment>
+  </data>
+  <data name="ActivityOpenMetaverseObject" xml:space="preserve">
+    <value>Open Metaverse Object</value>
+    <comment>Button opening the Metaverse Object a change belongs to</comment>
+  </data>
+  <data name="ActivityValueChanges" xml:space="preserve">
+    <value>{0} value changes</value>
+    <comment>Count of value changes an attribute has beyond those listed; {0} is the count</comment>
+  </data>
+  <data name="ActivityConfigPriorityNoteBefore" xml:space="preserve">
+    <value>Attribute Priority changes are not shown here; priority is stored on the contributing Synchronisation Rules. Find them on the</value>
+    <comment>Note above the configuration changes; a link to the Activities page follows this text</comment>
+  </data>
+  <data name="ActivityConfigPriorityNoteAfter" xml:space="preserve">
+    <value>page, listed as "Attribute priority order for ...".</value>
+    <comment>Note above the configuration changes, after the Activities link</comment>
+  </data>
+  <data name="ActivityConfigNoChangesYet" xml:space="preserve">
+    <value>No configuration changes have been recorded for this {0} yet.</value>
+    <comment>Empty state of a configuration object; {0} is the kind of object</comment>
+  </data>
+  <data name="ActivityConfigCompareVersions" xml:space="preserve">
+    <value>Compare versions</value>
+    <comment>Heading of the version comparison</comment>
+  </data>
+  <data name="ActivityConfigFrom" xml:space="preserve">
+    <value>From</value>
+    <comment>Label of the older version in a comparison</comment>
+  </data>
+  <data name="ActivityConfigTo" xml:space="preserve">
+    <value>To</value>
+    <comment>Label of the newer version in a comparison</comment>
+  </data>
+  <data name="ActivityConfigCompare" xml:space="preserve">
+    <value>Compare</value>
+    <comment>Button comparing two versions</comment>
+  </data>
+  <data name="ActivityConfigClear" xml:space="preserve">
+    <value>Clear</value>
+    <comment>Button clearing a version comparison</comment>
+  </data>
+  <data name="ActivityConfigOpCreated" xml:space="preserve">
+    <value>Created</value>
+    <comment>Operation of a configuration version: created</comment>
+  </data>
+  <data name="ActivityConfigOpUpdated" xml:space="preserve">
+    <value>Updated</value>
+    <comment>Operation of a configuration version: updated</comment>
+  </data>
+  <data name="ActivityConfigOpDeleted" xml:space="preserve">
+    <value>Deleted</value>
+    <comment>Operation of a configuration version: deleted</comment>
+  </data>
+  <data name="ActivityConfigOpReverted" xml:space="preserve">
+    <value>Reverted</value>
+    <comment>Operation of a configuration version: reverted</comment>
+  </data>
+  <data name="ActivityConfigShowAll" xml:space="preserve">
+    <value>Show all changes</value>
+    <comment>Button expanding a long configuration change</comment>
+  </data>
+  <data name="ActivityConfigShowLess" xml:space="preserve">
+    <value>Show less</value>
+    <comment>Button collapsing a long configuration change</comment>
+  </data>
+  <data name="ActivityConfigLoadMore" xml:space="preserve">
+    <value>Load more ({0} remaining)</value>
+    <comment>Button loading older versions; {0} is how many remain</comment>
+  </data>
+  <data name="ActivityAckSaveChanges" xml:space="preserve">
+    <value>Save changes</value>
+    <comment>Button confirming a configuration change</comment>
+  </data>
+  <data name="ActivityAckSaving" xml:space="preserve">
+    <value>Saving...</value>
+    <comment>Text on the confirm button while the change saves</comment>
+  </data>
+  <data name="ActivityAckFromPreview" xml:space="preserve">
+    <value>From the preview.</value>
+    <comment>Caption under the verdict of a preview</comment>
+  </data>
+  <data name="ActivityAckChangeTo" xml:space="preserve">
+    <value>Change to</value>
+    <comment>Lead-in before the object kind and name when one change is listed</comment>
+  </data>
+  <data name="ActivityAckChangesTo" xml:space="preserve">
+    <value>Changes to</value>
+    <comment>Lead-in before the object kind and name when several changes are listed</comment>
+  </data>
+  <data name="ActivityAckChanged" xml:space="preserve">
+    <value>Changed</value>
+    <comment>Value shown for a secret that changed, never by value</comment>
+  </data>
+  <data name="ActivityAckAdded" xml:space="preserve">
+    <value>Added</value>
+    <comment>Verb for a whole item joining a collection, when none more specific is recorded</comment>
+  </data>
+  <data name="ActivityAckRemoved" xml:space="preserve">
+    <value>Removed</value>
+    <comment>Verb for a whole item leaving a collection, when none more specific is recorded</comment>
+  </data>
+  <data name="ActivityAckAndMore" xml:space="preserve">
+    <value>and {0} more change(s).</value>
+    <comment>Note after the listed changes when there are more; {0} is how many more</comment>
+  </data>
+  <data name="ActivityAckWhenTakesEffect" xml:space="preserve">
+    <value>When this takes effect</value>
+    <comment>Heading of the section saying when a configuration change applies</comment>
+  </data>
+  <data name="ActivityAckGeneralEffect" xml:space="preserve">
+    <value>Saving does not apply this to existing objects. Run a Full Synchronisation for the Connected Systems concerned to put it into effect.</value>
+    <comment>Note when a save does not say what it affects: a Full Synchronisation applies it</comment>
+  </data>
+  <data name="ActivityAckConfirmRemoval" xml:space="preserve">
+    <value>Confirm a change to object removal</value>
+    <comment>Title of the dialog confirming a change that affects object removal</comment>
+  </data>
+  <data name="ActivityAckConfirmChange" xml:space="preserve">
+    <value>Confirm a configuration change</value>
+    <comment>Title of the dialog confirming a configuration change</comment>
+  </data>
+  <data name="ActivityAckDefaultLabel" xml:space="preserve">
+    <value>configuration</value>
+    <comment>Words for the kind of object when none is named</comment>
   </data>
 </root>
