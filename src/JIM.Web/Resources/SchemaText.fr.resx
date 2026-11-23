@@ -65,4 +65,442 @@
   <data name="WatermarkNone" xml:space="preserve">
     <value>Aucune marque de progression enregistrée. La prochaine importation delta lit chaque objet de cette partition, comme le fait une importation complète, et en enregistre une.</value>
   </data>
+  <data name="RetrieveSchemaIntro" xml:space="preserve">
+    <value>Récupérez le schéma du système connecté pour pouvoir choisir les types d’objets et les attributs que vous voulez gérer avec JIM.</value>
+  </data>
+  <data name="RetrievingSchema" xml:space="preserve">
+    <value>Récupération du schéma…</value>
+  </data>
+  <data name="RetrieveSchema" xml:space="preserve">
+    <value>Récupérer le schéma</value>
+  </data>
+  <data name="RefreshCompleteTitle" xml:space="preserve">
+    <value>Actualisation du schéma terminée</value>
+  </data>
+  <data name="RefreshFailedTitle" xml:space="preserve">
+    <value>Échec de l’actualisation du schéma</value>
+  </data>
+  <data name="FoundSummary" xml:space="preserve">
+    <value>Trouvé : {0}, avec {1}.</value>
+  </data>
+  <data name="ObjectTypeCountOne" xml:space="preserve">
+    <value>&lt;strong&gt;{0}&lt;/strong&gt; type d’objet</value>
+  </data>
+  <data name="ObjectTypeCountOther" xml:space="preserve">
+    <value>&lt;strong&gt;{0}&lt;/strong&gt; types d’objets</value>
+  </data>
+  <data name="AttributeCountOne" xml:space="preserve">
+    <value>&lt;strong&gt;{0}&lt;/strong&gt; attribut</value>
+  </data>
+  <data name="AttributeCountOther" xml:space="preserve">
+    <value>&lt;strong&gt;{0}&lt;/strong&gt; attributs</value>
+  </data>
+  <data name="SelectedByConnector" xml:space="preserve">
+    <value>Sélectionnés parce que le connecteur les exige :</value>
+  </data>
+  <data name="SelectedByConnectorExplain" xml:space="preserve">
+    <value>Le connecteur ne peut pas fonctionner sans les valeurs de ces attributs : ils sont donc toujours importés et ne peuvent pas être désélectionnés.</value>
+  </data>
+  <data name="CredentialAttributesBlockedOne" xml:space="preserve">
+    <value>{0} attribut d’identifiants bloqué :</value>
+  </data>
+  <data name="CredentialAttributesBlockedOther" xml:space="preserve">
+    <value>{0} attributs d’identifiants bloqués :</value>
+  </data>
+  <data name="CredentialAttributesExplain" xml:space="preserve">
+    <value>Ils contiennent des éléments d’identification et ne sont jamais gérés par JIM. Les mots de passe sont synchronisés par le canal dédié de JIM, qui écrit dans le système connecté sans jamais relire la valeur dans le Metaverse.</value>
+  </data>
+  <data name="DiscoveryWarningsLabel" xml:space="preserve">
+    <value>Avertissements de découverte :</value>
+  </data>
+  <data name="DiscoveryWarningsText" xml:space="preserve">
+    <value>Le connecteur n’a pas tout découvert et a contourné les lacunes ci-dessous. Examinez-les pour qu’un attribut manquant soit imputé au système connecté et non à JIM.</value>
+  </data>
+  <data name="NoChangesDetected" xml:space="preserve">
+    <value>Aucune modification détectée. Le schéma est à jour.</value>
+  </data>
+  <data name="ActionRequiredLabel" xml:space="preserve">
+    <value>Action requise :</value>
+  </data>
+  <data name="ActionRequiredText" xml:space="preserve">
+    <value>Certains attributs supprimés sont encore référencés par des règles de synchronisation. Mettez à jour vos règles de synchronisation pour supprimer les références à ces attributs.</value>
+  </data>
+  <data name="EditSchemaAttributeTitle" xml:space="preserve">
+    <value>Modifier l’attribut de schéma :</value>
+  </data>
+  <data name="DataTypeLockedPlural" xml:space="preserve">
+    <value>Le type de données et la pluralité de cet attribut du système connecté ne peuvent pas être modifiés, car il est référencé par une règle de synchronisation ou contient déjà des valeurs.</value>
+  </data>
+  <data name="DataTypeLocked" xml:space="preserve">
+    <value>Le type de données de cet attribut du système connecté ne peut pas être modifié, car il est référencé par une règle de synchronisation ou contient déjà des valeurs.</value>
+  </data>
+  <data name="DataTypeChangeable" xml:space="preserve">
+    <value>Ce connecteur permet de modifier le type de données d’un attribut du système connecté. Ce type a pu être détecté automatiquement et doit éventuellement être ajusté s’il est incorrect.</value>
+  </data>
+  <data name="ChooseDataType" xml:space="preserve">
+    <value>Choisissez un type de données</value>
+  </data>
+  <data name="ValuesPerObject" xml:space="preserve">
+    <value>Valeurs par objet</value>
+  </data>
+  <data name="SingleValued" xml:space="preserve">
+    <value>Monovalué</value>
+  </data>
+  <data name="MultiValued" xml:space="preserve">
+    <value>Multivalué</value>
+  </data>
+  <data name="MultiValuedColumnHelp" xml:space="preserve">
+    <value>Une colonne multivaluée contient ses valeurs séparées par le délimiteur de valeurs multiples, par exemple {0}.</value>
+  </data>
+  <data name="SetByAdministrator" xml:space="preserve">
+    <value>Un administrateur l’a défini : une actualisation du schéma le conservera.</value>
+  </data>
+  <data name="CurrentlyDiscoveredFromFile" xml:space="preserve">
+    <value>Actuellement tel que découvert dans le fichier. La modifier vous l’approprie, et une actualisation du schéma la conservera.</value>
+  </data>
+  <data name="CurrentlyDiscoveredFromSchema" xml:space="preserve">
+    <value>Actuellement tel que découvert dans le schéma du système connecté. La modifier vous l’approprie, et une actualisation du schéma la conservera.</value>
+  </data>
+  <data name="CaseExactHelp" xml:space="preserve">
+    <value>Lorsque la case est cochée, des valeurs ne différant que par la casse désignent des choses différentes : {0} et {1} sont deux valeurs. Lorsqu’elle est décochée, ce sont la même valeur, comme pour la plupart des identifiants.</value>
+  </data>
+  <data name="ValuesCaseExact" xml:space="preserve">
+    <value>Valeurs sensibles à la casse</value>
+  </data>
+  <data name="DatesHeldTo" xml:space="preserve">
+    <value>Précision des dates</value>
+  </data>
+  <data name="ResolutionHelp" xml:space="preserve">
+    <value>Le plus petit intervalle de temps que le système connecté conserve. JIM envoie chaque date arrondie à cet intervalle et compare à ce niveau, afin qu’une fraction que le système connecté ne peut pas conserver ne soit jamais réexportée encore et encore.</value>
+  </data>
+  <data name="ConfirmChange" xml:space="preserve">
+    <value>Confirmer la modification</value>
+  </data>
+  <data name="ObjectTypesAndSelected" xml:space="preserve">
+    <value>{0} types d’objets, {1} sélectionnés</value>
+  </data>
+  <data name="SchemaInfoTitle" xml:space="preserve">
+    <value>Schéma</value>
+  </data>
+  <data name="SchemaInfoBody" xml:space="preserve">
+    <value>Les types d’objets et les attributs que JIM a lus dans le système connecté. Une actualisation récupère les plus récents et vous montre ce qui a changé avant qu’une modification soit appliquée. Une actualisation ne supprime rien : les entrées que le système connecté ne signale plus sont conservées dans JIM et signalées à votre attention. Vérifiez que l’identité du système connecté dispose des autorisations nécessaires pour lire le schéma complet ; une lecture partielle peut faire apparaître des entrées comme supprimées alors qu’elles ne le sont pas.</value>
+  </data>
+  <data name="RefreshingSchema" xml:space="preserve">
+    <value>Actualisation du schéma…</value>
+  </data>
+  <data name="RefreshSchema" xml:space="preserve">
+    <value>Actualiser le schéma</value>
+  </data>
+  <data name="ChooseObjectTypes" xml:space="preserve">
+    <value>Choisissez les types d’objets que JIM doit gérer</value>
+  </data>
+  <data name="ChooseObjectTypesHelp" xml:space="preserve">
+    <value>Chaque type que vous sélectionnez obtient son propre onglet ci-dessus, où vous choisissez les attributs à importer ou exporter. Pour optimiser les performances du système, ne sélectionnez que les types dont vous avez réellement besoin.</value>
+  </data>
+  <data name="SearchObjectTypes" xml:space="preserve">
+    <value>Rechercher des types d’objets</value>
+  </data>
+  <data name="SearchObjectTypesHelp" xml:space="preserve">
+    <value>Afficher uniquement les types dont le nom contient une valeur donnée</value>
+  </data>
+  <data name="ChipAll" xml:space="preserve">
+    <value>Tous ({0})</value>
+  </data>
+  <data name="ChipSelected" xml:space="preserve">
+    <value>Sélectionnés ({0})</value>
+  </data>
+  <data name="NoObjectTypesMatch" xml:space="preserve">
+    <value>Aucun type d’objet ne correspond au filtre actuel.</value>
+  </data>
+  <data name="AttributesSelectedOf" xml:space="preserve">
+    <value>{0} attributs sur {1} sélectionnés</value>
+  </data>
+  <data name="ShowingObjectTypes" xml:space="preserve">
+    <value>Affichage de {0} types d’objets sur {1}</value>
+  </data>
+  <data name="InternalTypesHiddenOne" xml:space="preserve">
+    <value>{0} type d’objet interne est masqué.</value>
+  </data>
+  <data name="InternalTypesHiddenOther" xml:space="preserve">
+    <value>{0} types d’objets internes sont masqués.</value>
+  </data>
+  <data name="InternalTypesExplain" xml:space="preserve">
+    <value>Il s’agit de classes que le système connecté utilise pour sa propre configuration ou son fonctionnement.</value>
+  </data>
+  <data name="ShowInternalTypes" xml:space="preserve">
+    <value>Afficher les types d’objets internes</value>
+  </data>
+  <data name="InternalTypesShown" xml:space="preserve">
+    <value>Les types d’objets internes sont affichés.</value>
+  </data>
+  <data name="HideInternalTypes" xml:space="preserve">
+    <value>Masquer les types d’objets internes</value>
+  </data>
+  <data name="AttributeSelection" xml:space="preserve">
+    <value>Sélection des attributs</value>
+  </data>
+  <data name="AttributeSelectionHelp" xml:space="preserve">
+    <value>Sélectionnez les attributs que JIM doit importer ou exporter pour ce type d’objet. Pour optimiser les performances du système, ne sélectionnez que ceux dont vous avez réellement besoin.</value>
+  </data>
+  <data name="FilterByClass" xml:space="preserve">
+    <value>Filtrer par classe</value>
+  </data>
+  <data name="FilterByClassHelp" xml:space="preserve">
+    <value>Afficher uniquement les attributs d’une classe donnée</value>
+  </data>
+  <data name="SelectAttributesCsv" xml:space="preserve">
+    <value>Sélectionner les attributs par CSV</value>
+  </data>
+  <data name="SelectAttributesCsvHelp" xml:space="preserve">
+    <value>Sélection rapide par liste séparée par des virgules, par exemple DisplayName,sAMAccountName</value>
+  </data>
+  <data name="TypeFilterLabel" xml:space="preserve">
+    <value>Type :</value>
+  </data>
+  <data name="PluralityFilterLabel" xml:space="preserve">
+    <value>Pluralité :</value>
+  </data>
+  <data name="WritabilityFilterLabel" xml:space="preserve">
+    <value>Modifiabilité :</value>
+  </data>
+  <data name="SelectionFilterLabel" xml:space="preserve">
+    <value>Sélection :</value>
+  </data>
+  <data name="ChipSelectedOnly" xml:space="preserve">
+    <value>Sélectionnés uniquement ({0})</value>
+  </data>
+  <data name="OperationalAttributesHiddenOne" xml:space="preserve">
+    <value>{0} attribut opérationnel est masqué.</value>
+  </data>
+  <data name="OperationalAttributesHiddenOther" xml:space="preserve">
+    <value>{0} attributs opérationnels sont masqués.</value>
+  </data>
+  <data name="OperationalAttributesExplain" xml:space="preserve">
+    <value>Le système connecté les maintient pour son propre fonctionnement, par exemple la date de création d’une entrée ou le dernier échec de connexion ; JIM peut les importer, mais jamais les exporter.</value>
+  </data>
+  <data name="ShowOperationalAttributes" xml:space="preserve">
+    <value>Afficher les attributs opérationnels</value>
+  </data>
+  <data name="OperationalAttributesShown" xml:space="preserve">
+    <value>Les attributs opérationnels sont affichés.</value>
+  </data>
+  <data name="HideOperationalAttributes" xml:space="preserve">
+    <value>Masquer les attributs opérationnels</value>
+  </data>
+  <data name="AttributeSingular" xml:space="preserve">
+    <value>Attribut</value>
+  </data>
+  <data name="AttributePlural" xml:space="preserve">
+    <value>Attributs</value>
+  </data>
+  <data name="SearchByName" xml:space="preserve">
+    <value>Rechercher par nom</value>
+  </data>
+  <data name="ColumnSelected" xml:space="preserve">
+    <value>Sélectionné</value>
+  </data>
+  <data name="ColumnExternalId" xml:space="preserve">
+    <value>ID externe</value>
+  </data>
+  <data name="ColumnClass" xml:space="preserve">
+    <value>Classe</value>
+  </data>
+  <data name="ColumnPlurality" xml:space="preserve">
+    <value>Pluralité</value>
+  </data>
+  <data name="ColumnCaseExact" xml:space="preserve">
+    <value>Sensible à la casse</value>
+  </data>
+  <data name="ColumnDateResolution" xml:space="preserve">
+    <value>Précision des dates</value>
+  </data>
+  <data name="ColumnWritability" xml:space="preserve">
+    <value>Modifiabilité</value>
+  </data>
+  <data name="ColumnAction" xml:space="preserve">
+    <value>Action</value>
+  </data>
+  <data name="CredentialAttributeTooltip" xml:space="preserve">
+    <value>Cet attribut contient des éléments d’identification et ne peut pas être géré par JIM. Les mots de passe sont synchronisés par le canal dédié de JIM, qui écrit dans le système connecté sans jamais relire la valeur dans le Metaverse ; ils ne transitent jamais par un flux d’attributs.</value>
+  </data>
+  <data name="ExternalIdUnselectable" xml:space="preserve">
+    <value>Cet attribut ne peut pas être désélectionné, car il s’agit de l’ID externe ou de l’ID externe secondaire. Ces attributs doivent rester sélectionnés pour que les opérations de synchronisation fonctionnent correctement.</value>
+  </data>
+  <data name="ConnectorNeedsValuesUnselectable" xml:space="preserve">
+    <value>Cet attribut ne peut pas être désélectionné, car le connecteur ne peut pas fonctionner sans ses valeurs : il est donc toujours importé.</value>
+  </data>
+  <data name="SecondaryIdChip" xml:space="preserve">
+    <value>ID secondaire</value>
+  </data>
+  <data name="OperationalTooltip" xml:space="preserve">
+    <value>Un attribut opérationnel : le système connecté le maintient pour son propre fonctionnement, et il n’appartient à aucune classe. JIM peut l’importer, mais jamais l’exporter.</value>
+  </data>
+  <data name="OperationalChip" xml:space="preserve">
+    <value>Opérationnel</value>
+  </data>
+  <data name="ReferenceTypeTooltip" xml:space="preserve">
+    <value>Cet attribut de référence déclare pointer vers le type d’objet « {0} », de sorte que les références ne se résolvent qu’au sein de ce seul type d’objet. Déclaré par le schéma du système connecté ; lecture seule.</value>
+  </data>
+  <data name="ReferenceChip" xml:space="preserve">
+    <value>Référence ({0})</value>
+  </data>
+  <data name="PluralitySetTooltip" xml:space="preserve">
+    <value>Défini par un administrateur : une actualisation du schéma le conservera.</value>
+  </data>
+  <data name="PluralityDiscoveredTooltip" xml:space="preserve">
+    <value>Découvert dans le schéma du système connecté.</value>
+  </data>
+  <data name="CaseExactTooltipSet" xml:space="preserve">
+    <value>Des valeurs ne différant que par la casse désignent des choses différentes. Défini par un administrateur : une actualisation du schéma le conservera.</value>
+  </data>
+  <data name="CaseExactTooltipDiscovered" xml:space="preserve">
+    <value>Des valeurs ne différant que par la casse désignent des choses différentes. Découvert dans le schéma du système connecté.</value>
+  </data>
+  <data name="ResolutionTooltipSet" xml:space="preserve">
+    <value>Le plus petit intervalle de temps auquel le système connecté conserve ces dates. Défini par un administrateur : une actualisation du schéma le conservera.</value>
+  </data>
+  <data name="ResolutionTooltipDiscovered" xml:space="preserve">
+    <value>Le plus petit intervalle de temps auquel le système connecté conserve ces dates. Découvert dans le schéma du système connecté.</value>
+  </data>
+  <data name="ResolutionTooltipUndiscovered" xml:space="preserve">
+    <value>Pas encore découvert : actualisez le schéma pour le découvrir. D’ici là, JIM conserve et envoie ces dates à la microseconde près.</value>
+  </data>
+  <data name="NoAttributesMatch" xml:space="preserve">
+    <value>Aucun attribut ne correspond à « {0} »</value>
+  </data>
+  <data name="TryDifferentSearch" xml:space="preserve">
+    <value>Essayez un autre terme de recherche, ou effacez la recherche.</value>
+  </data>
+  <data name="NoAttributesSelected" xml:space="preserve">
+    <value>Aucun attribut n’est sélectionné pour ce type d’objet</value>
+  </data>
+  <data name="ChooseAllAbove" xml:space="preserve">
+    <value>Choisissez Tous ci-dessus pour voir tout ce que le système connecté a signalé, puis sélectionnez les attributs que JIM doit gérer.</value>
+  </data>
+  <data name="NoAttributesMatchFilters" xml:space="preserve">
+    <value>Aucun attribut ne correspond à ces filtres</value>
+  </data>
+  <data name="ClearFilterToWiden" xml:space="preserve">
+    <value>Effacez un filtre de classe, de type, de pluralité ou de modifiabilité ci-dessus pour élargir la liste.</value>
+  </data>
+  <data name="NoAttributesDiscovered" xml:space="preserve">
+    <value>Aucun attribut n’a été découvert pour ce type d’objet</value>
+  </data>
+  <data name="RetrieveAgainOnceReported" xml:space="preserve">
+    <value>Récupérez de nouveau le schéma une fois que le système connecté signale des attributs pour ce type.</value>
+  </data>
+  <data name="SettingsHeading" xml:space="preserve">
+    <value>Paramètres</value>
+  </data>
+  <data name="ExternalIdSelectRequired" xml:space="preserve">
+    <value>Ce connecteur exige que vous sélectionniez l’attribut utilisé comme ID externe. Veuillez en sélectionner un ci-dessous.</value>
+  </data>
+  <data name="ExternalIdAttributeLabel" xml:space="preserve">
+    <value>Attribut d’ID externe</value>
+  </data>
+  <data name="ExternalIdRequiredError" xml:space="preserve">
+    <value>Vous devez sélectionner un attribut comme ID externe.</value>
+  </data>
+  <data name="RemoveContributedLabel" xml:space="preserve">
+    <value>Supprimer les attributs contribués lorsque les objets source sont supprimés</value>
+  </data>
+  <data name="RemoveContributedHelp" xml:space="preserve">
+    <value>Lorsque cette option est activée, les valeurs d’attributs des objets Metaverse joints que ce système contribue à alimenter, pour ce type d’objet, sont supprimées lorsque l’objet source est supprimé.</value>
+  </data>
+  <data name="PreviewChanges" xml:space="preserve">
+    <value>Aperçu des modifications</value>
+  </data>
+  <data name="PreviewStale" xml:space="preserve">
+    <value>La sélection du schéma a été modifiée depuis cet aperçu : il ne décrit donc plus ce que l’enregistrement ferait. Relancez l’aperçu pour obtenir une réponse sur la sélection actuelle.</value>
+  </data>
+  <data name="SchemaSelectionPreviewTitle" xml:space="preserve">
+    <value>Aperçu : sélection du schéma</value>
+  </data>
+  <data name="ApplyFailed" xml:space="preserve">
+    <value>Échec de l’application des modifications du schéma : {0}</value>
+  </data>
+  <data name="AppliedDisabled" xml:space="preserve">
+    <value>Schéma appliqué ; la configuration dépendante a été désactivée.</value>
+  </data>
+  <data name="AppliedRemoved" xml:space="preserve">
+    <value>Schéma appliqué ; la configuration dépendante a été supprimée.</value>
+  </data>
+  <data name="AppliedRemovedQueued" xml:space="preserve">
+    <value>Schéma appliqué ; la configuration dépendante a été supprimée et la suppression des données mise en file d’attente. Suivez-la depuis l’onglet Opérations.</value>
+  </data>
+  <data name="AppliedRemovedNotQueued" xml:space="preserve">
+    <value>Schéma appliqué et configuration supprimée, mais la suppression des données n’a pas pu être mise en file d’attente : {0}</value>
+  </data>
+  <data name="RemoveObjectTypeQuestion" xml:space="preserve">
+    <value>Supprimer le type d’objet ?</value>
+  </data>
+  <data name="RemoveObjectTypeMessage" xml:space="preserve">
+    <value>Supprimer {0} des types d’objets gérés par JIM ? Cela efface sa sélection d’attributs et sa configuration pour ce système connecté. Vous pourrez l’ajouter de nouveau plus tard, mais il vous faudra le reconfigurer.</value>
+  </data>
+  <data name="ConnectedSystemTermName" xml:space="preserve">
+    <value>Système connecté</value>
+  </data>
+  <data name="AttributeChangesSaved" xml:space="preserve">
+    <value>Vos modifications d’attributs ont été enregistrées.</value>
+  </data>
+  <data name="DeselectedStillRead" xml:space="preserve">
+    <value>Un attribut désélectionné est toujours lu par : {0}. Il n’est plus importé : ces valeurs lues ne sont donc jamais actualisées.</value>
+  </data>
+  <data name="PreviewStartFailed" xml:space="preserve">
+    <value>Échec du démarrage de l’aperçu : {0}</value>
+  </data>
+  <data name="AttributesSelected" xml:space="preserve">
+    <value>Attributs sélectionnés.</value>
+  </data>
+  <data name="SkippedCredentialAttributes" xml:space="preserve">
+    <value>{0} ignoré : les attributs d’identifiants ne peuvent pas être gérés par JIM. Les mots de passe sont synchronisés par le canal dédié de JIM, et non par un flux d’attributs.</value>
+  </data>
+  <data name="DataTypeNotChanged" xml:space="preserve">
+    <value>Le type de données n’a pas pu être modifié.</value>
+  </data>
+  <data name="PluralityNotChanged" xml:space="preserve">
+    <value>La pluralité n’a pas pu être modifiée.</value>
+  </data>
+  <data name="AttributeUpdatedSingleValued" xml:space="preserve">
+    <value>Attribut mis à jour et rendu monovalué : un booléen ne contient qu’une valeur. Enregistrez vos modifications pour l’appliquer.</value>
+  </data>
+  <data name="AttributeUpdated" xml:space="preserve">
+    <value>Attribut mis à jour. Enregistrez vos modifications pour l’appliquer.</value>
+  </data>
+  <data name="CsvParsingErrorTitle" xml:space="preserve">
+    <value>Erreur d’analyse CSV</value>
+  </data>
+  <data name="DataTypeNotSet" xml:space="preserve">
+    <value>Non défini</value>
+  </data>
+  <data name="DataTypeText" xml:space="preserve">
+    <value>Texte</value>
+  </data>
+  <data name="DataTypeNumber" xml:space="preserve">
+    <value>Nombre</value>
+  </data>
+  <data name="DataTypeDateTime" xml:space="preserve">
+    <value>Date et heure</value>
+  </data>
+  <data name="DataTypeBinary" xml:space="preserve">
+    <value>Binaire</value>
+  </data>
+  <data name="DataTypeReference" xml:space="preserve">
+    <value>Référence</value>
+  </data>
+  <data name="DataTypeGuid" xml:space="preserve">
+    <value>Identifiant unique</value>
+  </data>
+  <data name="DataTypeBoolean" xml:space="preserve">
+    <value>Booléen</value>
+  </data>
+  <data name="DataTypeLongNumber" xml:space="preserve">
+    <value>Grand nombre</value>
+  </data>
+  <data name="DataTypeDecimal" xml:space="preserve">
+    <value>Décimal</value>
+  </data>
+  <data name="ObjectTypesTab" xml:space="preserve">
+    <value>Types d’objets</value>
+  </data>
 </root>

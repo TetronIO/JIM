@@ -20,4 +20,28 @@
   <data name="DataFlowPriorityTooltipOrdered" xml:space="preserve">
     <value>{0} Synchronization Rules contribute to this Metaverse Attribute; the lowest-numbered contribution with a value wins.</value>
   </data>
+  <data name="CredentialAttributesExplain" xml:space="preserve">
+    <value>These hold credential material and are never managed by JIM. Passwords are synchronized through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse.</value>
+  </data>
+  <data name="ActionRequiredText" xml:space="preserve">
+    <value>Some attributes that were removed are still referenced by Synchronization Rules. Please update your Synchronization Rules to remove references to these attributes.</value>
+  </data>
+  <data name="DataTypeLockedPlural" xml:space="preserve">
+    <value>The data type and plurality of this Connected System attribute cannot be changed as it is being referenced by either a Synchronization Rule, or has values already populated.</value>
+  </data>
+  <data name="DataTypeLocked" xml:space="preserve">
+    <value>The data type of this Connected System attribute cannot be changed as it is being referenced by either a Synchronization Rule, or has values already populated.</value>
+  </data>
+  <data name="ChooseObjectTypesHelp" xml:space="preserve">
+    <value>Each type you select gets its own tab above, where you choose the attributes to import or export. To maximize system performance, select only the types you actually need.</value>
+  </data>
+  <data name="AttributeSelectionHelp" xml:space="preserve">
+    <value>Select which attributes you would like JIM to import, or export for this object type. To maximize system performance, only select those you actually need.</value>
+  </data>
+  <data name="CredentialAttributeTooltip" xml:space="preserve">
+    <value>This attribute holds credential material and cannot be managed by JIM. Passwords are synchronized through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse; they never flow through an Attribute Flow.</value>
+  </data>
+  <data name="SkippedCredentialAttributes" xml:space="preserve">
+    <value>Skipped {0}: credential attributes cannot be managed by JIM. Passwords are synchronized through JIM's dedicated password channel, not through Attribute Flow.</value>
+  </data>
 </root>
